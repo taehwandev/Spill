@@ -1,29 +1,50 @@
 feature_id: single-trigger-reset
-status: draft
+status: ready
+
+necessity:
+  decision: build
+  reason: A reliable single trigger is required before panel and provider work.
+  clarification_required: false
+  questions: []
 
 tasks:
   - id: single-trigger-reset-T1
-    title: <task title>
+    title: Remove status item spacer architecture
     owner_role: builder
     state: todo
     depends_on: []
     write_scope:
-      - Sources/Spill/<File.swift>
+      - Sources/Spill/MenuBar/StatusItemController.swift
+      - Sources/Spill/MenuBar/MenuBarNotchGeometry.swift
+      - .agents/runs/single-trigger-reset/
     read_scope:
       - .agents/specs/prd.md
       - .agents/specs/ard.md
+      - .agents/runs/single-trigger-reset/01-prd.md
+      - .agents/runs/single-trigger-reset/02-ard.md
     forbidden_scope:
-      - Sources/Spill/<UnrelatedFile.swift>
+      - Sources/Spill/Panel/
+      - Sources/Spill/Preferences/
+      - Package.swift
     acceptance:
+      - StatusItemController creates exactly one NSStatusItem.
+      - StatusItemController has no spacer logic.
+      - MenuBarNotchGeometry does not expose status item reserve length.
       - swift build passes.
+      - code-gates passes.
     verification:
       commands:
         - swift build
+        - python3 .agents/scripts/workflow.py code-gates
+        - python3 .agents/scripts/workflow.py docs
+        - python3 .agents/scripts/workflow.py run-gates
+        - python3 .agents/scripts/workflow.py language-gates
       manual:
-        - Launch app and verify behavior.
+        - Launch app and confirm the trigger toggles the panel.
+        - Right-click or Control-click the trigger and confirm the menu opens.
 
 parallel_groups:
-  - id: group-1
+  - id: trigger-reset
     tasks:
       - single-trigger-reset-T1
-    rule: Tasks in a group must have disjoint write_scope entries.
+    rule: Run as a serialized architecture reset.

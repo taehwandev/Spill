@@ -251,10 +251,13 @@ def code_gates() -> None:
         else:
             result.ok(f"no {label}")
 
-    status_controller = ROOT / "Sources" / "Spill" / "StatusItemController.swift"
-    if not status_controller.exists():
+    status_controllers = sorted((ROOT / "Sources").rglob("StatusItemController.swift"))
+    if not status_controllers:
         result.fail("missing StatusItemController.swift")
+    elif len(status_controllers) > 1:
+        result.fail("multiple StatusItemController.swift files found")
     else:
+        status_controller = status_controllers[0]
         text = read(status_controller)
         created_items = len(re.findall(r"NSStatusBar\.system\.statusItem", text))
         if created_items == 1:

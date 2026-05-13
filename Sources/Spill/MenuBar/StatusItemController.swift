@@ -3,13 +3,11 @@ import AppKit
 @MainActor
 final class StatusItemController: NSObject {
     private let defaultLength: CGFloat = 26
-    private let settings: SpillSettings
     private let hiddenItemCountProvider: () -> Int
     private let toggleAction: () -> Void
     private let refreshAction: () -> Void
     private let preferencesAction: () -> Void
     private let quitAction: () -> Void
-    private let spacerItem: NSStatusItem
     private let triggerItem: NSStatusItem
     private var isSpillBarVisible = false
 
@@ -21,26 +19,18 @@ final class StatusItemController: NSObject {
         preferencesAction: @escaping () -> Void,
         quitAction: @escaping () -> Void
     ) {
-        self.settings = settings
         self.hiddenItemCountProvider = hiddenItemCountProvider
         self.toggleAction = toggleAction
         self.refreshAction = refreshAction
         self.preferencesAction = preferencesAction
         self.quitAction = quitAction
 
-        // Historical note: older menu bar utilities used a very large spacer
-        // item to push neighboring menu extras away from the notch. Recent
-        // macOS versions can hide or clip that oversized item, so this path is
-        // kept only until the single-trigger reset removes spacer behavior.
         triggerItem = NSStatusBar.system.statusItem(withLength: defaultLength)
-        spacerItem = NSStatusBar.system.statusItem(withLength: 0)
 
         super.init()
         
-        triggerItem.autosaveName = "dev.spill.status-trigger-v3"
-        spacerItem.autosaveName = "dev.spill.status-spacer-v3"
+        triggerItem.autosaveName = "dev.spill.status-trigger"
 
-        configureSpacerItem()
         configureTriggerButton()
         refresh(isSpillBarVisible: false)
     }
@@ -57,30 +47,11 @@ final class StatusItemController: NSObject {
         let hiddenCount = hiddenItemCountProvider()
         triggerItem.isVisible = true
         triggerItem.length = defaultLength
-        refreshSpacerItem()
         configureAppearance(for: button)
         button.state = self.isSpillBarVisible ? .on : .off
         button.toolTip = self.isSpillBarVisible
             ? "Hide Spill Bar"
             : hiddenCount > 0 ? "Show \(hiddenCount) menu bar item(s)" : "Show Spill Bar"
-    }
-
-    private func configureSpacerItem() {
-        spacerItem.isVisible = false
-        spacerItem.length = 0
-
-        guard let button = spacerItem.button else {
-            return
-        }
-
-        button.image = nil
-        button.imagePosition = .noImage
-        button.title = ""
-        button.attributedTitle = NSAttributedString(string: "")
-        button.isBordered = false
-        button.isEnabled = false
-        button.target = nil
-        button.action = nil
     }
 
     private func configureTriggerButton() {
@@ -115,18 +86,6 @@ final class StatusItemController: NSObject {
         button.imagePosition = .noImage
         button.title = "Spill"
         button.attributedTitle = attributedTitle("Spill", fontSize: 12)
-    }
-
-    private func refreshSpacerItem() {
-        let reserveLength = MenuBarNotchGeometry(screen: NSScreen.main).statusItemReserveLength
-        guard reserveLength > 0 else {
-            spacerItem.isVisible = false
-            spacerItem.length = 0
-            return
-        }
-
-        spacerItem.length = reserveLength
-        spacerItem.isVisible = true
     }
 
     private func attributedTitle(_ title: String, fontSize: CGFloat) -> NSAttributedString {

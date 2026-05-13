@@ -30,14 +30,6 @@ struct MenuBarNotchGeometry: Sendable {
         measuredNotchFrame ?? estimatedNotchFrame
     }
 
-    var statusItemReserveLength: CGFloat {
-        guard hasHardwareNotch else {
-            return 0
-        }
-
-        return min(max(notchFrame.width + 56, 180), 320)
-    }
-
     func expandedNotchFrame(horizontalClearance: CGFloat, verticalClearance: CGFloat) -> CGRect {
         notchFrame.insetBy(dx: -horizontalClearance, dy: -verticalClearance)
     }
