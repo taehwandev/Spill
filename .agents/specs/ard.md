@@ -163,12 +163,27 @@ Distribution requirements:
 
 ## Module Boundaries
 
+### Source Layout
+
+Swift source files are grouped by responsibility under `Sources/Spill`:
+
+```text
+Sources/Spill/
+├─ Accessibility/
+├─ App/
+├─ MenuBar/
+├─ Panel/
+├─ Preferences/
+└─ Settings/
+```
+
+Keep future source files inside the closest responsibility folder. Create a new folder only when a feature has a durable ownership boundary that does not fit the existing layout.
+
 ### App Shell
 
 Owns:
 
 - `AppDelegate`
-- status item trigger
 - preferences window
 - app lifecycle
 
@@ -177,6 +192,21 @@ Must not own:
 - provider business logic
 - AX scanning details
 - system metric collection details
+
+### Menu Bar
+
+Owns:
+
+- status item trigger
+- best-effort menu bar scanner
+- menu bar item snapshots
+- notch geometry
+
+Must not own:
+
+- panel visual composition
+- preferences UI
+- provider business logic
 
 ### Panel UI
 

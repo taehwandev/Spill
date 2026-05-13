@@ -1,0 +1,46 @@
+feature_id: source-folder-layout
+status: ready
+
+necessity:
+  decision: build
+  reason: Folder boundaries are required before larger feature work can be split safely.
+  clarification_required: false
+  questions: []
+
+tasks:
+  - id: source-folder-layout-T1
+    title: Move Swift files into responsibility folders
+    owner_role: builder
+    state: todo
+    depends_on: []
+    write_scope:
+      - Sources/Spill/App/
+      - Sources/Spill/Accessibility/
+      - Sources/Spill/MenuBar/
+      - Sources/Spill/Panel/
+      - Sources/Spill/Preferences/
+      - Sources/Spill/Settings/
+      - .agents/specs/ard.md
+    read_scope:
+      - .agents/runs/source-folder-layout/01-prd.md
+      - .agents/runs/source-folder-layout/02-ard.md
+    forbidden_scope:
+      - Package.swift
+    acceptance:
+      - Swift files are grouped by responsibility.
+      - No type names are changed.
+      - swift build passes.
+    verification:
+      commands:
+        - swift build
+        - python3 .agents/scripts/workflow.py docs
+        - python3 .agents/scripts/workflow.py run-gates
+        - python3 .agents/scripts/workflow.py language-gates
+      manual:
+        - Confirm root Sources/Spill contains only folders.
+
+parallel_groups:
+  - id: source-move
+    tasks:
+      - source-folder-layout-T1
+    rule: Run as a serialized move-only task to keep rename review simple.
