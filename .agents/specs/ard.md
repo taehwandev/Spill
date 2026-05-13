@@ -173,6 +173,7 @@ Sources/Spill/
 ├─ App/
 ├─ MenuBar/
 ├─ Panel/
+├─ Providers/
 ├─ Preferences/
 └─ Settings/
 ```
@@ -230,6 +231,7 @@ Own:
 - collecting state
 - converting state into compact display models
 - failure/unavailable messages
+- provider model and protocol contracts
 
 Provider output should be plain models that SwiftUI can render.
 

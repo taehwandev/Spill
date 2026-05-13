@@ -223,6 +223,7 @@ Acceptance:
 For every feature slice:
 
 - `swift build`
+- `swift test` when models, providers, data logic, or package test targets change
 - relevant workflow gates
 - `python3 .agents/scripts/workflow.py runtime-smoke` when app startup, menu bar trigger, app lifecycle, packaging, or permissions could be affected
 - launch app

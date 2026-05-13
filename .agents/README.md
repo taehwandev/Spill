@@ -8,6 +8,7 @@ This folder is the working source of truth for agent-driven implementation.
 - `specs/ard.md`: Architecture requirements, decisions, constraints, and module boundaries.
 - `workflows/implementation.md`: How agents should plan, implement, verify, and ship work.
 - `tasks/roadmap.yml`: Structured implementation milestones and acceptance checks.
+- `design/stitch.md`: Stitch project and screen references for UI-scoped work.
 
 ## Current Product Direction
 
@@ -38,6 +39,7 @@ The app should not:
 6. Before implementing a feature unit, complete a necessity check.
 7. Ask the maintainer concise clarifying questions when intent, scope, value, or feasibility is unclear.
 8. Write repository docs, task artifacts, comments, and scripts in English.
+9. For UI-scoped work, inspect the Stitch source in `design/stitch.md` before implementing SwiftUI changes.
 
 ## Workflow Commands
 

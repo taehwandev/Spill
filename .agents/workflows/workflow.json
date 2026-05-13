@@ -61,6 +61,7 @@
     ".agents/README.md",
     ".agents/specs/prd.md",
     ".agents/specs/ard.md",
+    ".agents/design/stitch.md",
     ".agents/workflows/implementation.md",
     ".agents/workflows/multi-agent.md",
     ".agents/tasks/roadmap.yml",

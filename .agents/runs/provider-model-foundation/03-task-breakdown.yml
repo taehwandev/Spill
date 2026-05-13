@@ -1,0 +1,142 @@
+feature_id: provider-model-foundation
+status: ready
+
+necessity:
+  decision: build
+  reason: Plain provider contracts are required before system, AI, pinned-action, and window providers can be implemented safely.
+  clarification_required: false
+  questions: []
+
+tasks:
+  - id: provider-model-foundation-T1
+    title: Define plain Spill provider models
+    owner_role: builder
+    state: done
+    depends_on: []
+    write_scope:
+      - Sources/Spill/Providers/SpillStatusModels.swift
+      - Sources/Spill/Providers/SpillActionModels.swift
+    read_scope:
+      - .agents/runs/provider-model-foundation/00-intake.md
+      - .agents/runs/provider-model-foundation/01-prd.md
+      - .agents/runs/provider-model-foundation/02-ard.md
+      - Sources/Spill/MenuBar/MenuBarItemSnapshot.swift
+    forbidden_scope:
+      - Sources/Spill/Panel/
+      - Sources/Spill/MenuBar/StatusItemController.swift
+      - Sources/Spill/App/
+      - .agents/specs/
+    acceptance:
+      - SpillStatusItem is a plain Swift value model.
+      - SpillAction is a plain Swift value model.
+      - Models provide stable identity and enabled/unavailable metadata.
+      - Models do not store AppKit views, NSStatusItem instances, or execution closures.
+    verification:
+      commands:
+        - swift build
+        - swift test
+      manual:
+        - Confirm no UI files were edited.
+
+  - id: provider-model-foundation-T2
+    title: Define provider and action execution protocols
+    owner_role: builder
+    state: done
+    depends_on:
+      - provider-model-foundation-T1
+    write_scope:
+      - Sources/Spill/Providers/SpillStatusModels.swift
+      - Sources/Spill/Providers/SpillActionModels.swift
+    read_scope:
+      - .agents/runs/provider-model-foundation/01-prd.md
+      - .agents/runs/provider-model-foundation/02-ard.md
+      - Sources/Spill/MenuBar/AXMenuBarItemScanner.swift
+      - Sources/Spill/MenuBar/MenuBarScanCoordinator.swift
+    forbidden_scope:
+      - Sources/Spill/Panel/
+      - Sources/Spill/MenuBar/StatusItemController.swift
+      - Sources/Spill/App/
+      - .agents/specs/
+    acceptance:
+      - Protocols expose snapshot-style reads for status items and actions.
+      - Action execution is separated from action description.
+      - Protocols do not require SwiftUI or AppKit view types.
+      - Permission and unavailable states can be represented by models or thrown provider errors.
+    verification:
+      commands:
+        - swift build
+      manual:
+        - Confirm no new permission prompts appear when launching the app.
+
+  - id: provider-model-foundation-T3
+    title: Add compile-focused model tests
+    owner_role: verifier-builder
+    state: done
+    depends_on:
+      - provider-model-foundation-T1
+      - provider-model-foundation-T2
+    write_scope:
+      - Package.swift
+      - Tests/SpillTests/SpillProviderModelsTests.swift
+    read_scope:
+      - Package.swift
+      - Sources/Spill/Providers/SpillProviderModels.swift
+      - Sources/Spill/Providers/SpillProviderProtocols.swift
+    forbidden_scope:
+      - Sources/Spill/Panel/
+      - Sources/Spill/MenuBar/StatusItemController.swift
+      - Sources/Spill/App/
+      - .agents/specs/
+    acceptance:
+      - Add focused tests for identity, hashability, disabled state, and action result metadata.
+      - `swift test` passes.
+    verification:
+      commands:
+        - swift build
+        - swift test
+      manual:
+        - If `swift test` is unavailable because no tests target exists, record that as a verification note rather than creating unrelated package structure.
+
+  - id: provider-model-foundation-T4
+    title: Verify no UI behavior change
+    owner_role: verifier
+    state: done
+    depends_on:
+      - provider-model-foundation-T1
+      - provider-model-foundation-T2
+      - provider-model-foundation-T3
+    write_scope: []
+    read_scope:
+      - .agents/runs/provider-model-foundation/01-prd.md
+      - .agents/runs/provider-model-foundation/02-ard.md
+      - Sources/Spill/
+    forbidden_scope:
+      - Sources/Spill/
+      - .agents/specs/
+    acceptance:
+      - Existing menu bar trigger appears unchanged.
+      - Existing panel opens and closes unchanged.
+      - No provider data is rendered in the UI.
+      - No permission prompts or background polling are introduced.
+    verification:
+      commands:
+        - swift build
+        - swift test
+        - ./scripts/build-app.sh
+        - python3 .agents/scripts/workflow.py runtime-smoke
+      manual:
+        - Launch app.
+        - Click the Spill status item.
+        - Confirm panel behavior matches the pre-change behavior.
+
+parallel_groups:
+  - id: foundation-contracts
+    tasks:
+      - provider-model-foundation-T1
+      - provider-model-foundation-T2
+    rule: T2 may draft protocol files after model names are stable; avoid editing the same file concurrently.
+  - id: verification
+    tasks:
+      - provider-model-foundation-T3
+      - provider-model-foundation-T4
+    rule: Run after model and protocol files compile.
