@@ -1,0 +1,87 @@
+{
+  "version": 1,
+  "name": "Spill A-B-C Multi-Agent Workflow",
+  "stages": [
+    {
+      "id": "A0",
+      "name": "Intake",
+      "owner": "Product Agent",
+      "requiredArtifact": "00-intake.md"
+    },
+    {
+      "id": "A0.5",
+      "name": "Necessity and Clarification",
+      "owner": "Product Agent",
+      "requiredArtifact": "00-intake.md"
+    },
+    {
+      "id": "A1",
+      "name": "Detailed PRD",
+      "owner": "Product Agent",
+      "requiredArtifact": "01-prd.md"
+    },
+    {
+      "id": "B1",
+      "name": "Detailed ARD",
+      "owner": "Architecture Agent",
+      "requiredArtifact": "02-ard.md"
+    },
+    {
+      "id": "B2",
+      "name": "Task Breakdown",
+      "owner": "Architecture Agent",
+      "requiredArtifact": "03-task-breakdown.yml"
+    },
+    {
+      "id": "C0",
+      "name": "Agent Briefs",
+      "owner": "Build Coordinator",
+      "requiredArtifact": "04-agent-briefs.md"
+    },
+    {
+      "id": "C1",
+      "name": "Implementation",
+      "owner": "Builder Agent",
+      "requiredArtifact": "code changes"
+    },
+    {
+      "id": "C2",
+      "name": "Review and Verification",
+      "owner": "Verifier Agent",
+      "requiredArtifact": "05-verification.md"
+    },
+    {
+      "id": "C3",
+      "name": "Closeout",
+      "owner": "Coordinator",
+      "requiredArtifact": "06-closeout.md"
+    }
+  ],
+  "requiredDocs": [
+    ".agents/README.md",
+    ".agents/specs/prd.md",
+    ".agents/specs/ard.md",
+    ".agents/workflows/implementation.md",
+    ".agents/workflows/multi-agent.md",
+    ".agents/tasks/roadmap.yml",
+    ".agents/templates/00-intake.md",
+    ".agents/templates/01-prd.md",
+    ".agents/templates/02-ard.md",
+    ".agents/templates/03-task-breakdown.yml",
+    ".agents/templates/04-agent-briefs.md",
+    ".agents/templates/05-verification.md",
+    ".agents/templates/06-closeout.md",
+    ".agents/scripts/workflow.py"
+  ],
+  "hardRules": [
+    "No giant NSStatusItem spacers",
+    "No private APIs in MVP",
+    "One visible menu bar trigger",
+    "Every feature unit must pass a necessity check before implementation",
+    "Agents must ask the maintainer when intent, scope, value, or feasibility is unclear",
+    "Every non-trivial feature must pass PRD and ARD gates before implementation",
+    "Parallel code-edit tasks must have disjoint write scopes",
+    "Feature run files must not contain unresolved template placeholders",
+    "Repository docs, task artifacts, comments, and scripts must be written in English"
+  ]
+}

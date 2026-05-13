@@ -1,0 +1,29 @@
+feature_id: single-trigger-reset
+status: draft
+
+tasks:
+  - id: single-trigger-reset-T1
+    title: <task title>
+    owner_role: builder
+    state: todo
+    depends_on: []
+    write_scope:
+      - Sources/Spill/<File.swift>
+    read_scope:
+      - .agents/specs/prd.md
+      - .agents/specs/ard.md
+    forbidden_scope:
+      - Sources/Spill/<UnrelatedFile.swift>
+    acceptance:
+      - swift build passes.
+    verification:
+      commands:
+        - swift build
+      manual:
+        - Launch app and verify behavior.
+
+parallel_groups:
+  - id: group-1
+    tasks:
+      - single-trigger-reset-T1
+    rule: Tasks in a group must have disjoint write_scope entries.

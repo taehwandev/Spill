@@ -1,0 +1,84 @@
+feature_id: example-control-tray
+status: ready
+
+necessity:
+  decision: build
+  reason: The compact control tray is the smallest useful public-API product direction for Spill.
+  clarification_required: false
+  questions: []
+
+tasks:
+  - id: example-control-tray-T1
+    title: Add panel model types
+    owner_role: builder
+    state: todo
+    depends_on: []
+    write_scope:
+      - Sources/Spill/SpillPanelModels.swift
+    read_scope:
+      - .agents/runs/example-control-tray/01-prd.md
+      - .agents/runs/example-control-tray/02-ard.md
+    forbidden_scope:
+      - Sources/Spill/StatusItemController.swift
+    acceptance:
+      - Models compile.
+      - Models are plain value types.
+    verification:
+      commands:
+        - swift build
+      manual: []
+
+  - id: example-control-tray-T2
+    title: Add provider placeholders
+    owner_role: builder
+    state: todo
+    depends_on:
+      - example-control-tray-T1
+    write_scope:
+      - Sources/Spill/SystemStatusProvider.swift
+      - Sources/Spill/AIStatusProvider.swift
+      - Sources/Spill/WindowActionProvider.swift
+    read_scope:
+      - Sources/Spill/SpillPanelModels.swift
+    forbidden_scope:
+      - Sources/Spill/StatusItemController.swift
+    acceptance:
+      - Providers return placeholder models.
+      - No network calls.
+    verification:
+      commands:
+        - swift build
+      manual: []
+
+  - id: example-control-tray-T3
+    title: Rework panel shell
+    owner_role: builder
+    state: todo
+    depends_on:
+      - example-control-tray-T1
+    write_scope:
+      - Sources/Spill/SpillBarView.swift
+    read_scope:
+      - Sources/Spill/SpillPanelModels.swift
+      - .agents/runs/example-control-tray/01-prd.md
+    forbidden_scope:
+      - Sources/Spill/StatusItemController.swift
+    acceptance:
+      - Panel shows System, AI, Apps, and Window sections.
+      - Panel remains compact.
+    verification:
+      commands:
+        - swift build
+      manual:
+        - Launch app and open panel.
+
+parallel_groups:
+  - id: initial-model
+    tasks:
+      - example-control-tray-T1
+    rule: Must finish before T2/T3.
+  - id: placeholder-and-ui
+    tasks:
+      - example-control-tray-T2
+      - example-control-tray-T3
+    rule: T2 and T3 have disjoint write scopes.

@@ -1,0 +1,137 @@
+version: 1
+product: Spill
+direction: compact macOS control tray
+
+milestones:
+  - id: M0
+    name: Direction reset
+    goal: Remove fragile spacer behavior and align app with PRD.
+    tasks:
+      - id: M0-T1
+        title: Remove spacer status item
+        acceptance:
+          - StatusItemController creates exactly one NSStatusItem.
+          - No status item length depends on notch width.
+          - swift build passes.
+      - id: M0-T2
+        title: Update README positioning
+        acceptance:
+          - README explains public API limitations.
+          - README describes Spill as a compact control tray.
+
+  - id: M1
+    name: Compact panel shell
+    goal: Rework panel into status/action tray.
+    tasks:
+      - id: M1-T1
+        title: Add panel section model
+        acceptance:
+          - Panel can render status strip, AI strip, actions, and window actions.
+      - id: M1-T2
+        title: Clean panel visuals
+        acceptance:
+          - No nested cards.
+          - Compact height target is preserved.
+
+  - id: M2
+    name: Providers
+    goal: Introduce provider model layer.
+    tasks:
+      - id: M2-T1
+        title: Add status/action data models
+        acceptance:
+          - SwiftUI views consume plain models.
+      - id: M2-T2
+        title: Add provider protocol or structs
+        acceptance:
+          - Providers are isolated from panel layout.
+
+  - id: M3
+    name: System strip
+    goal: Add basic Mac status signals.
+    tasks:
+      - id: M3-T1
+        title: Memory status
+        acceptance:
+          - Memory usage displays as a compact pill.
+      - id: M3-T2
+        title: CPU status
+        acceptance:
+          - CPU usage displays without blocking UI.
+      - id: M3-T3
+        title: Battery status
+        acceptance:
+          - Battery percent/state displays when available.
+      - id: M3-T4
+        title: Network status
+        acceptance:
+          - Network availability displays when available.
+
+  - id: M4
+    name: AI strip
+    goal: Add local AI/tooling state.
+    tasks:
+      - id: M4-T1
+        title: Codex state
+        acceptance:
+          - Detects obvious local Codex process/session state when available.
+      - id: M4-T2
+        title: Ollama state
+        acceptance:
+          - Detects Ollama running/not running without network dependency.
+      - id: M4-T3
+        title: OpenAI config state
+        acceptance:
+          - Shows configured/missing without exposing secrets.
+
+  - id: M5
+    name: Actions
+    goal: Make stored actions reliable and understandable.
+    tasks:
+      - id: M5-T1
+        title: Pinned actions UI
+        acceptance:
+          - Pin/unpin works.
+          - Pinned actions render prominently.
+      - id: M5-T2
+        title: Action execution result
+        acceptance:
+          - Success/failure/permission states are visible.
+      - id: M5-T3
+        title: App activation fallback
+        acceptance:
+          - Stale AX item can fallback to opening/activating app.
+
+  - id: M6
+    name: Window quick actions
+    goal: Add small Rectangle-like action row.
+    tasks:
+      - id: M6-T1
+        title: Focused window frame operations
+        acceptance:
+          - Left/right/center/maximize work on normal windows.
+      - id: M6-T2
+        title: Next display
+        acceptance:
+          - Active window can move to next display when multiple displays exist.
+      - id: M6-T3
+        title: Restore frame
+        acceptance:
+          - Previous frame restores best-effort.
+
+  - id: M7
+    name: Distribution
+    goal: Prepare open-source release path.
+    tasks:
+      - id: M7-T1
+        title: Bundle metadata and icon
+        acceptance:
+          - App bundle has production metadata.
+      - id: M7-T2
+        title: Signing and notarization docs
+        acceptance:
+          - Developer ID release checklist exists.
+      - id: M7-T3
+        title: DMG or zip release artifact
+        acceptance:
+          - Release artifact can be created locally.
