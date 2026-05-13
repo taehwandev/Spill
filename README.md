@@ -64,6 +64,22 @@ open .build/Spill.app
 
 During development, avoid rebuilding the `.app` while testing Accessibility permission. macOS can treat a newly rebuilt local app as a new permission target.
 
+## Verify
+
+Run deterministic checks:
+
+```bash
+python3 .agents/scripts/workflow.py verify
+```
+
+Run the bundled app smoke test:
+
+```bash
+python3 .agents/scripts/workflow.py runtime-smoke
+```
+
+The runtime smoke test builds `.build/Spill.app`, launches the app in `SPILL_SMOKE_TEST` mode, verifies startup readiness, and confirms clean shutdown without opening Preferences or requesting Accessibility permission.
+
 ## Roadmap
 
 | Phase | Goal | Scope |

@@ -13,6 +13,7 @@ Default command checks:
 ```bash
 swift build
 ./scripts/build-app.sh
+python3 .agents/scripts/workflow.py runtime-smoke
 open .build/Spill.app
 ```
 
@@ -222,6 +223,8 @@ Acceptance:
 For every feature slice:
 
 - `swift build`
+- relevant workflow gates
+- `python3 .agents/scripts/workflow.py runtime-smoke` when app startup, menu bar trigger, app lifecycle, packaging, or permissions could be affected
 - launch app
 - open panel
 - confirm no UI overlap

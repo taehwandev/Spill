@@ -11,6 +11,7 @@ Commands:
   python3 .agents/scripts/workflow.py language-gates
   python3 .agents/scripts/workflow.py code-gates
   python3 .agents/scripts/workflow.py build
+  python3 .agents/scripts/workflow.py runtime-smoke
   python3 .agents/scripts/workflow.py new-run <feature-id>
 """
 
@@ -277,6 +278,10 @@ def build() -> None:
     subprocess.run(["swift", "build"], cwd=ROOT, check=True)
 
 
+def runtime_smoke() -> None:
+    subprocess.run([str(ROOT / "scripts" / "verify-runtime-smoke.sh")], cwd=ROOT, check=True)
+
+
 def verify_all() -> None:
     verify_docs()
     run_gates()
@@ -294,6 +299,7 @@ def main() -> None:
     commands.add_parser("language-gates")
     commands.add_parser("code-gates")
     commands.add_parser("build")
+    commands.add_parser("runtime-smoke")
     new_run_parser = commands.add_parser("new-run")
     new_run_parser.add_argument("feature_id")
     args = parser.parse_args()
@@ -310,6 +316,8 @@ def main() -> None:
         code_gates()
     elif args.command == "build":
         build()
+    elif args.command == "runtime-smoke":
+        runtime_smoke()
     elif args.command == "new-run":
         new_run(args.feature_id)
 

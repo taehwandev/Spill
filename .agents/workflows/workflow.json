@@ -71,7 +71,8 @@
     ".agents/templates/04-agent-briefs.md",
     ".agents/templates/05-verification.md",
     ".agents/templates/06-closeout.md",
-    ".agents/scripts/workflow.py"
+    ".agents/scripts/workflow.py",
+    "scripts/verify-runtime-smoke.sh"
   ],
   "hardRules": [
     "No giant NSStatusItem spacers",
@@ -80,6 +81,7 @@
     "Every feature unit must pass a necessity check before implementation",
     "Agents must ask the maintainer when intent, scope, value, or feasibility is unclear",
     "Every non-trivial feature must pass PRD and ARD gates before implementation",
+    "App startup, lifecycle, packaging, and status item changes must run runtime smoke verification",
     "Parallel code-edit tasks must have disjoint write scopes",
     "Feature run files must not contain unresolved template placeholders",
     "Repository docs, task artifacts, comments, and scripts must be written in English"

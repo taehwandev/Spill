@@ -18,6 +18,12 @@ milestones:
         acceptance:
           - README explains public API limitations.
           - README describes Spill as a compact control tray.
+      - id: M0-T3
+        title: Add runtime smoke verification
+        acceptance:
+          - Bundled app can launch in smoke mode.
+          - Smoke mode verifies readiness and clean shutdown.
+          - Smoke mode does not request Accessibility permission.
 
   - id: M1
     name: Compact panel shell

@@ -1,0 +1,46 @@
+feature_id: runtime-smoke-verification
+status: ready
+
+necessity:
+  decision: build
+  reason: Runtime startup verification is required before relying on app lifecycle changes.
+  clarification_required: false
+  questions: []
+
+tasks:
+  - id: runtime-smoke-verification-T1
+    title: Add bundled app runtime smoke test
+    owner_role: builder
+    state: todo
+    depends_on: []
+    write_scope:
+      - Sources/Spill/App/AppDelegate.swift
+      - scripts/verify-runtime-smoke.sh
+      - .agents/scripts/workflow.py
+      - .agents/runs/runtime-smoke-verification/
+      - README.md
+      - .agents/
+    read_scope:
+      - .agents/specs/prd.md
+      - .agents/specs/ard.md
+    forbidden_scope:
+      - Sources/Spill/MenuBar/
+      - Sources/Spill/Panel/
+    acceptance:
+      - Smoke mode suppresses startup Preferences and Accessibility prompts.
+      - Runtime smoke command builds and launches the app bundle.
+      - Runtime smoke command verifies readiness and clean shutdown.
+      - Normal startup behavior is unchanged without smoke environment variables.
+    verification:
+      commands:
+        - python3 .agents/scripts/workflow.py runtime-smoke
+        - python3 .agents/scripts/workflow.py verify
+        - python3 .agents/scripts/workflow.py language-gates
+      manual:
+        - Launch app normally and confirm startup UI behavior still exists.
+
+parallel_groups:
+  - id: runtime-smoke
+    tasks:
+      - runtime-smoke-verification-T1
+    rule: Run as a serialized verification infrastructure task.

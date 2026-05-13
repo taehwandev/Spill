@@ -36,5 +36,6 @@ List bugs, regressions, and missing tests before summary.
 ## Verification
 
 - [ ] `swift build`
+- [ ] `python3 .agents/scripts/workflow.py runtime-smoke` when app startup or lifecycle may be affected
 - [ ] Relevant manual checks
 - [ ] Residual risks documented

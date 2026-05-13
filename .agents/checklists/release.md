@@ -4,6 +4,7 @@
 
 - [ ] Clean build.
 - [ ] App bundle generated.
+- [ ] Runtime smoke test passes.
 - [ ] App launches from Finder.
 
 ## Signing

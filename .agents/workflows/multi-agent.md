@@ -266,6 +266,7 @@ Verification tiers:
    - `swift build`
 2. App bundle:
    - `./scripts/build-app.sh`
+   - `python3 .agents/scripts/workflow.py runtime-smoke`
 3. Manual smoke:
    - launch app
    - open panel

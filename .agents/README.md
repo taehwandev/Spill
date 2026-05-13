@@ -70,3 +70,9 @@ Check that repository text content is English-only:
 ```bash
 python3 .agents/scripts/workflow.py language-gates
 ```
+
+Run bundled app runtime smoke verification:
+
+```bash
+python3 .agents/scripts/workflow.py runtime-smoke
+```

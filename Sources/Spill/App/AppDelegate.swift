@@ -43,9 +43,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         observeStateChanges()
 
-        scanCoordinator.start()
-        configureHotKey()
+        if isSmokeTest {
+            startSmokeTestExitTimer()
+        } else {
+            scanCoordinator.start()
+            configureHotKey()
+            showStartupUI()
+        }
+    }
 
+    private func showStartupUI() {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
             guard let self else { return }
             showPreferences()
@@ -53,6 +60,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if !AccessibilityPermission.isTrusted {
                 _ = AccessibilityPermission.request()
             }
+        }
+    }
+
+    private var isSmokeTest: Bool {
+        ProcessInfo.processInfo.environment["SPILL_SMOKE_TEST"] == "1"
+    }
+
+    private func startSmokeTestExitTimer() {
+        print("SPILL_SMOKE_READY")
+
+        let configuredDelay = ProcessInfo.processInfo.environment["SPILL_SMOKE_TEST_EXIT_AFTER"]
+            .flatMap(TimeInterval.init)
+        let exitDelay = max(configuredDelay ?? 1.0, 0.2)
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + exitDelay) {
+            print("SPILL_SMOKE_EXIT")
+            NSApp.terminate(nil)
         }
     }
 
