@@ -1,0 +1,97 @@
+feature_id: visual-panel-verification
+status: ready
+
+necessity:
+  decision: build
+  reason: "Existing panel smoke checks prove visibility, but not compact layout geometry."
+  clarification_required: false
+  questions: []
+
+tasks:
+  - id: visual-panel-verification-T1
+    title: Add smoke-only panel layout report
+    owner_role: builder
+    state: done
+    depends_on: []
+    write_scope:
+      - Sources/Spill/App/AppDelegate.swift
+      - Sources/Spill/Panel/SpillPanelController.swift
+    read_scope:
+      - .agents/specs/prd.md
+      - .agents/specs/ard.md
+      - .agents/runs/visual-panel-verification/01-prd.md
+      - .agents/runs/visual-panel-verification/02-ard.md
+    forbidden_scope:
+      - Sources/Spill/MenuBar/StatusItemController.swift
+      - Sources/Spill/Providers/
+    acceptance:
+      - swift build passes.
+      - App prints layout success/failure markers only in smoke layout mode.
+    verification:
+      commands:
+        - swift build
+      manual:
+        - Run panel layout smoke and inspect log on failure.
+
+  - id: visual-panel-verification-T2
+    title: Add workflow command for panel layout smoke
+    owner_role: builder
+    state: done
+    depends_on:
+      - visual-panel-verification-T1
+    write_scope:
+      - scripts/verify-panel-layout-smoke.sh
+      - .agents/scripts/workflow.py
+      - .agents/README.md
+    read_scope:
+      - scripts/verify-panel-open-smoke.sh
+      - .agents/runs/visual-panel-verification/02-ard.md
+    forbidden_scope:
+      - Sources/Spill/MenuBar/StatusItemController.swift
+    acceptance:
+      - `python3 .agents/scripts/workflow.py panel-layout-smoke` runs the script.
+      - Script fails if `SPILL_PANEL_LAYOUT_OK` is missing.
+      - Existing smoke commands still work.
+    verification:
+      commands:
+        - python3 .agents/scripts/workflow.py panel-layout-smoke
+        - python3 .agents/scripts/workflow.py panel-open-smoke
+      manual: []
+
+  - id: visual-panel-verification-T3
+    title: Verify and close out visual panel verification
+    owner_role: verifier
+    state: done
+    depends_on:
+      - visual-panel-verification-T1
+      - visual-panel-verification-T2
+    write_scope:
+      - .agents/runs/visual-panel-verification/05-verification.md
+      - .agents/runs/visual-panel-verification/06-closeout.md
+      - .agents/tasks/roadmap.yml
+    read_scope:
+      - .agents/runs/visual-panel-verification
+      - .agents/scripts/workflow.py
+    forbidden_scope:
+      - Sources/Spill/MenuBar/StatusItemController.swift
+    acceptance:
+      - Verification results are documented.
+      - Roadmap marks visual panel verification as complete or partial.
+    verification:
+      commands:
+        - python3 .agents/scripts/workflow.py verify
+        - python3 .agents/scripts/workflow.py run-gates
+        - python3 .agents/scripts/workflow.py language-gates
+      manual:
+        - Confirm this slice did not redesign the panel.
+
+parallel_groups:
+  - id: group-1
+    tasks:
+      - visual-panel-verification-T1
+      - visual-panel-verification-T2
+    rule: T2 can start after T1 marker names are stable; write scopes are disjoint.
+  - id: group-2
+    tasks:
+      - visual-panel-verification-T3
+    rule: Tasks in a group must have disjoint write_scope entries.

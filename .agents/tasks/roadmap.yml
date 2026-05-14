@@ -51,11 +51,18 @@ milestones:
           - Compact height target is preserved.
       - id: M1-T3
         title: Add visual panel verification
-        state: next
+        state: partial
         acceptance:
           - A repeatable verification path confirms the panel opens with readable compact layout.
           - Footer status values do not overflow.
           - Results are documented in a run closeout.
+      - id: M1-T4
+        title: Add pixel or accessibility-tree visual regression check
+        state: pending
+        acceptance:
+          - The check can detect text overlap or missing key labels.
+          - The check does not require unreliable manual permission setup.
+          - The limitations are documented.
 
   - id: M2
     name: Providers

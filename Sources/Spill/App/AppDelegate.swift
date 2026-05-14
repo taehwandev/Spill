@@ -79,6 +79,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ProcessInfo.processInfo.environment["SPILL_SMOKE_OPEN_PANEL"] == "1"
     }
 
+    private var shouldValidatePanelLayoutInSmokeTest: Bool {
+        ProcessInfo.processInfo.environment["SPILL_SMOKE_VALIDATE_PANEL_LAYOUT"] == "1"
+    }
+
     private func startSmokeTestExitTimer() {
         print("SPILL_SMOKE_READY")
 
@@ -104,6 +108,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             print("SPILL_PANEL_SMOKE_VISIBLE")
         } else {
             print("SPILL_PANEL_SMOKE_NOT_VISIBLE")
+        }
+
+        if shouldValidatePanelLayoutInSmokeTest {
+            reportPanelLayoutForSmokeTest()
+        }
+    }
+
+    private func reportPanelLayoutForSmokeTest() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+            guard let self else { return }
+
+            let report = spillPanelController.layoutReport
+            print("SPILL_PANEL_LAYOUT \(report.logLine)")
+
+            if report.isValid {
+                print("SPILL_PANEL_LAYOUT_OK")
+            } else {
+                print("SPILL_PANEL_LAYOUT_FAIL")
+            }
         }
     }
 

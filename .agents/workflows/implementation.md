@@ -228,6 +228,7 @@ For every feature slice:
 - `swift test` when models, providers, data logic, or package test targets change
 - relevant workflow gates
 - `python3 .agents/scripts/workflow.py runtime-smoke` when app startup, menu bar trigger, app lifecycle, packaging, or permissions could be affected
+- `python3 .agents/scripts/workflow.py panel-layout-smoke` when panel layout, panel sizing, or visible status/action content could be affected
 - launch app
 - open panel
 - confirm no UI overlap

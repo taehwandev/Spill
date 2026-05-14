@@ -35,6 +35,26 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
         isPresented
     }
 
+    var layoutReport: SpillPanelLayoutReport {
+        guard let panel else {
+            return SpillPanelLayoutReport(
+                isVisible: false,
+                frame: .zero,
+                contentBounds: .zero,
+                visibleFrame: layout.visibleFrame(for: nil)
+            )
+        }
+
+        panel.contentView?.layoutSubtreeIfNeeded()
+
+        return SpillPanelLayoutReport(
+            isVisible: isPresented && panel.isVisible,
+            frame: panel.frame,
+            contentBounds: panel.contentView?.bounds ?? .zero,
+            visibleFrame: layout.visibleFrame(for: panel)
+        )
+    }
+
     func toggle() {
         if isVisible {
             hide(animated: true)
@@ -210,5 +230,63 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
                 completion?()
             }
         }
+    }
+}
+
+struct SpillPanelLayoutReport {
+    let isVisible: Bool
+    let frame: NSRect
+    let contentBounds: NSRect
+    let visibleFrame: NSRect
+
+    var isValid: Bool {
+        isVisible
+            && hasValidFrame
+            && isOnScreen
+            && hasCompactSize
+            && contentMatchesFrame
+    }
+
+    var logLine: String {
+        [
+            "visible=\(isVisible)",
+            "frame=\(format(rect: frame))",
+            "content=\(format(rect: contentBounds))",
+            "visibleFrame=\(format(rect: visibleFrame))",
+            "validFrame=\(hasValidFrame)",
+            "onScreen=\(isOnScreen)",
+            "compactSize=\(hasCompactSize)",
+            "contentMatchesFrame=\(contentMatchesFrame)"
+        ].joined(separator: " ")
+    }
+
+    private var hasValidFrame: Bool {
+        frame.width > 0 && frame.height > 0
+    }
+
+    private var isOnScreen: Bool {
+        visibleFrame.intersects(frame)
+    }
+
+    private var hasCompactSize: Bool {
+        let tolerance: CGFloat = 1
+        return frame.width >= SpillPanelMetrics.minimumSize.width - tolerance
+            && frame.width <= SpillPanelMetrics.maximumWidth + tolerance
+            && frame.height >= SpillPanelMetrics.minimumSize.height - tolerance
+            && frame.height <= SpillPanelMetrics.maximumVerifiedHeight + tolerance
+    }
+
+    private var contentMatchesFrame: Bool {
+        let tolerance: CGFloat = 1
+        return abs(contentBounds.width - frame.width) <= tolerance
+            && abs(contentBounds.height - frame.height) <= tolerance
+    }
+
+    private func format(rect: NSRect) -> String {
+        let values = [rect.minX, rect.minY, rect.width, rect.height]
+            .map { String(format: "%.1f", Double($0)) }
+            .joined(separator: ",")
+
+        return "[\(values)]"
     }
 }

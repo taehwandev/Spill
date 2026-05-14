@@ -78,3 +78,9 @@ Run bundled app runtime smoke verification:
 ```bash
 python3 .agents/scripts/workflow.py runtime-smoke
 ```
+
+Run compact panel layout smoke verification:
+
+```bash
+python3 .agents/scripts/workflow.py panel-layout-smoke
+```

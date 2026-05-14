@@ -13,6 +13,7 @@ Commands:
   python3 .agents/scripts/workflow.py build
   python3 .agents/scripts/workflow.py runtime-smoke
   python3 .agents/scripts/workflow.py panel-open-smoke
+  python3 .agents/scripts/workflow.py panel-layout-smoke
   python3 .agents/scripts/workflow.py new-run <feature-id>
 """
 
@@ -287,6 +288,10 @@ def panel_open_smoke() -> None:
     subprocess.run([str(ROOT / "scripts" / "verify-panel-open-smoke.sh")], cwd=ROOT, check=True)
 
 
+def panel_layout_smoke() -> None:
+    subprocess.run([str(ROOT / "scripts" / "verify-panel-layout-smoke.sh")], cwd=ROOT, check=True)
+
+
 def verify_all() -> None:
     verify_docs()
     run_gates()
@@ -306,6 +311,7 @@ def main() -> None:
     commands.add_parser("build")
     commands.add_parser("runtime-smoke")
     commands.add_parser("panel-open-smoke")
+    commands.add_parser("panel-layout-smoke")
     new_run_parser = commands.add_parser("new-run")
     new_run_parser.add_argument("feature_id")
     args = parser.parse_args()
@@ -326,6 +332,8 @@ def main() -> None:
         runtime_smoke()
     elif args.command == "panel-open-smoke":
         panel_open_smoke()
+    elif args.command == "panel-layout-smoke":
+        panel_layout_smoke()
     elif args.command == "new-run":
         new_run(args.feature_id)
 
