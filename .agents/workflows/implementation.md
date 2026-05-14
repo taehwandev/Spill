@@ -6,7 +6,9 @@ This workflow is for Codex/agents and human contributors.
 
 Work in small vertical slices. Each slice should leave the app buildable and usable.
 
-Before implementing any feature unit, complete the intake necessity check. If intent, scope, product value, UI behavior, permission impact, or distribution impact is unclear, ask the maintainer one to three concise questions and wait for a decision before implementation.
+Before writing a feature PRD, complete the intake necessity and clarification gate. If intent, scope, product value, UI behavior, permission impact, distribution impact, or feasibility is unclear, ask the maintainer one to three concise questions and wait for answers before authoring the PRD, ARD, task breakdown, or implementation.
+
+Do not treat a draft PRD as a place to resolve unknown intent. Unknown intent belongs in `00-intake.md` with `Decision: needs-clarification`.
 
 Default command checks:
 

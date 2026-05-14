@@ -26,14 +26,29 @@ Decision: `build | defer | reject | needs-clarification`
 
 Reason:
 
-## Clarifying Questions
+## PRD Authoring Gate
 
-Ask the maintainer before implementation if any of these are unclear:
+If any of the following are unclear, set the decision to `needs-clarification`, ask the maintainer, and stop before writing `01-prd.md`:
 
 - user intent
 - expected behavior
 - feature value
 - UI scope
+- feasibility
+- permission impact
+- distribution impact
+
+Only write the detailed PRD after the maintainer answers and this intake is updated with `Decision: build`.
+
+## Clarifying Questions
+
+Ask the maintainer before PRD authoring if any of these are unclear:
+
+- user intent
+- expected behavior
+- feature value
+- UI scope
+- feasibility
 - permission or distribution implications
 
 Questions:

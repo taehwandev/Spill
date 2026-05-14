@@ -141,12 +141,24 @@ Exit criteria:
 - tradeoffs are explicit;
 - maintainer questions are resolved when the decision is not obvious.
 
+Hard stop:
+
+- If the decision is `needs-clarification`, do not author the detailed PRD.
+- Leave `01-prd.md`, `02-ard.md`, and `03-task-breakdown.yml` as drafts until the maintainer answers.
+- After the maintainer answers, update `00-intake.md` first, then proceed to the PRD.
+
 ## Gate 1: Detailed PRD
 
 Input:
 
 - intake
 - global PRD
+
+Entry criteria:
+
+- `00-intake.md` has `Decision: build`.
+- Clarifying questions are empty or explicitly marked as resolved.
+- Product intent and UI scope are clear enough to write testable acceptance criteria.
 
 Exit criteria:
 

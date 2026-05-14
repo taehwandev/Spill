@@ -7,11 +7,18 @@
 - Keep the app buildable.
 - Report changed files.
 - Confirm the feature necessity decision before implementation.
-- Ask the maintainer if the goal, scope, value, permission impact, or distribution impact is unclear.
+- Ask the maintainer before PRD authoring if the goal, scope, value, UI behavior, feasibility, permission impact, or distribution impact is unclear.
+- Do not let Agent A write the PRD while `00-intake.md` is still `needs-clarification`.
 
 ## Agent A: Product
 
 Goal:
+
+PRD authoring gate:
+
+- Confirm `.agents/runs/<feature>/00-intake.md` has `Decision: build`.
+- Confirm all clarifying questions are answered or explicitly marked as resolved.
+- If not, ask the maintainer and stop without writing the PRD.
 
 Inputs:
 
