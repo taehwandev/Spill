@@ -97,9 +97,11 @@ milestones:
           - Memory usage displays as a compact pill.
       - id: M3-T2
         title: CPU status
-        state: pending
+        state: partial
         acceptance:
           - CPU usage displays without blocking UI.
+          - CPU provider foundation is implemented.
+          - Visible panel placement is approved before integration.
       - id: M3-T3
         title: Battery status
         state: done

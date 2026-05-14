@@ -1,0 +1,69 @@
+feature_id: system-cpu-provider
+status: ready
+
+necessity:
+  decision: build
+  reason: "CPU is a planned system strip signal, and the provider foundation can be implemented without unresolved UI decisions."
+  clarification_required: false
+  questions: []
+
+tasks:
+  - id: system-cpu-provider-T1
+    title: Add CPU status provider foundation
+    owner_role: builder
+    state: done
+    depends_on: []
+    write_scope:
+      - Sources/Spill/Providers/SystemCPUProvider.swift
+      - Tests/SpillTests/SystemCPUProviderTests.swift
+    read_scope:
+      - .agents/specs/prd.md
+      - .agents/specs/ard.md
+      - Sources/Spill/Providers/SystemMemoryProvider.swift
+      - Sources/Spill/Providers/SpillStatusModels.swift
+    forbidden_scope:
+      - Sources/Spill/Panel/SpillBarView.swift
+      - Sources/Spill/Panel/SpillPanelController.swift
+    acceptance:
+      - swift build passes.
+      - swift test passes.
+      - CPU mapping tests cover normal, active, warning, unavailable, zero-delta, and status item states.
+    verification:
+      commands:
+        - swift build
+        - swift test
+      manual:
+        - No manual UI check required because this slice has no visible UI.
+
+  - id: system-cpu-provider-T2
+    title: Verify and close out CPU provider run
+    owner_role: verifier
+    state: done
+    depends_on:
+      - system-cpu-provider-T1
+    write_scope:
+      - .agents/runs/system-cpu-provider/05-verification.md
+      - .agents/runs/system-cpu-provider/06-closeout.md
+      - .agents/tasks/roadmap.yml
+    read_scope:
+      - .agents/runs/system-cpu-provider
+      - .agents/scripts/workflow.py
+    forbidden_scope:
+      - Sources/Spill/Panel/SpillBarView.swift
+    acceptance:
+      - Verification results are documented.
+      - Roadmap marks CPU provider foundation without claiming visible UI completion.
+    verification:
+      commands:
+        - python3 .agents/scripts/workflow.py verify
+        - python3 .agents/scripts/workflow.py run-gates
+        - python3 .agents/scripts/workflow.py language-gates
+      manual:
+        - Confirm no panel UI was changed.
+
+parallel_groups:
+  - id: group-1
+    tasks:
+      - system-cpu-provider-T1
+      - system-cpu-provider-T2
+    rule: Tasks in a group must have disjoint write_scope entries.
