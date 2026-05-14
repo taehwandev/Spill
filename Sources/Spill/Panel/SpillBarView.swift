@@ -9,6 +9,15 @@ struct SpillBarView: View {
         settings.displayMode.items(from: scanner, settings: settings)
     }
 
+    private var displayedActionItems: [SpillDisplayedActionItem] {
+        displayItems.map { item in
+            SpillDisplayedActionItem(
+                sourceItem: item,
+                action: MenuBarActionAdapter.action(from: item)
+            )
+        }
+    }
+
     private var panelState: SpillPanelState {
         if !AccessibilityPermission.isTrusted {
             return .permissionRequired
@@ -173,15 +182,17 @@ struct SpillBarView: View {
     private var actionScroller: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: max(CGFloat(settings.iconSpacing), 7)) {
-                ForEach(displayItems) { item in
-                    SpillActionButton(item: item) {
-                        if scanner.pressItem(withID: item.id) {
+                ForEach(displayedActionItems) { item in
+                    SpillActionButton(action: item.action) {
+                        if let snapshotID = MenuBarActionAdapter.sourceSnapshotID(for: item.action),
+                           scanner.pressItem(withID: snapshotID)
+                        {
                             dismissAction()
                         }
                     }
-                    .disabled(!item.canPress)
+                    .disabled(!item.action.state.isEnabled)
                     .help(helpText(for: item))
-                    .accessibilityLabel(item.displayTitle)
+                    .accessibilityLabel(item.action.title)
                 }
             }
             .padding(.horizontal, 1)
@@ -260,11 +271,19 @@ struct SpillBarView: View {
         Self.timeFormatter.string(from: Date())
     }
 
-    private func helpText(for item: MenuBarItemSnapshot) -> String {
-        var parts = [item.displayTitle, item.ownerName]
+    private func helpText(for item: SpillDisplayedActionItem) -> String {
+        var parts = [item.action.title]
 
-        if item.isNotchCandidate {
+        if let subtitle = item.action.subtitle, !subtitle.isEmpty {
+            parts.append(subtitle)
+        }
+
+        if item.sourceItem.isNotchCandidate {
             parts.append("near notch estimate")
+        }
+
+        if let disabledReason = item.action.state.disabledReason {
+            parts.append(disabledReason)
         }
 
         return parts.joined(separator: " - ")
@@ -275,6 +294,15 @@ struct SpillBarView: View {
         formatter.dateFormat = "h:mm a"
         return formatter
     }()
+}
+
+private struct SpillDisplayedActionItem: Identifiable {
+    let sourceItem: MenuBarItemSnapshot
+    let action: SpillAction
+
+    var id: String {
+        action.id
+    }
 }
 
 private enum SpillPanelState {
@@ -337,25 +365,25 @@ private enum SpillPanelState {
 }
 
 private struct SpillActionButton: View {
-    let item: MenuBarItemSnapshot
-    let action: () -> Void
+    let action: SpillAction
+    let perform: () -> Void
 
     @Environment(\.isEnabled) private var isEnabled
     @State private var isHovered = false
 
     var body: some View {
-        Button(action: action) {
+        Button(action: perform) {
             ZStack(alignment: .topTrailing) {
                 RoundedRectangle(cornerRadius: 11, style: .continuous)
                     .fill(backgroundColor)
                     .overlay {
                         RoundedRectangle(cornerRadius: 11, style: .continuous)
-                            .stroke(borderColor, lineWidth: item.isNotchCandidate ? 1.2 : 0.8)
+                            .stroke(borderColor, lineWidth: action.role == .primary ? 1.2 : 0.8)
                     }
 
                 icon
 
-                if item.isNotchCandidate {
+                if action.role == .primary {
                     Circle()
                         .fill(Color.accentColor)
                         .frame(width: 5, height: 5)
@@ -372,18 +400,26 @@ private struct SpillActionButton: View {
 
     private var icon: some View {
         Group {
-            if let image = item.iconImage {
+            if let image = iconImage {
                 Image(nsImage: image)
                     .resizable()
                     .scaledToFit()
                     .frame(width: 22, height: 22)
                     .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
             } else {
-                Text(item.shortLabel)
+                Text(action.shortLabel)
                     .font(.system(size: 12, weight: .semibold, design: .rounded))
                     .foregroundStyle(isEnabled ? .primary : .secondary)
             }
         }
+    }
+
+    private var iconImage: NSImage? {
+        guard let iconData = action.iconData else {
+            return nil
+        }
+
+        return NSImage(data: iconData)
     }
 
     private var backgroundColor: Color {
@@ -395,11 +431,22 @@ private struct SpillActionButton: View {
     }
 
     private var borderColor: Color {
-        if item.isNotchCandidate {
+        if action.role == .primary {
             return Color.accentColor.opacity(isHovered ? 0.95 : 0.7)
         }
 
         return .primary.opacity(isHovered ? 0.16 : 0.08)
+    }
+}
+
+private extension SpillAction {
+    var shortLabel: String {
+        let source = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let first = source.first else {
+            return "?"
+        }
+
+        return String(first).uppercased()
     }
 }
 

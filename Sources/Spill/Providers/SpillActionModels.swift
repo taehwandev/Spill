@@ -42,6 +42,21 @@ enum SpillActionState: Hashable, Sendable {
     case enabled
     case disabled(reason: String)
     case permissionRequired(String)
+
+    var isEnabled: Bool {
+        self == .enabled
+    }
+
+    var disabledReason: String? {
+        switch self {
+        case .enabled:
+            return nil
+        case let .disabled(reason):
+            return reason
+        case let .permissionRequired(permission):
+            return "\(permission) permission required"
+        }
+    }
 }
 
 enum SpillActionRole: Hashable, Sendable {

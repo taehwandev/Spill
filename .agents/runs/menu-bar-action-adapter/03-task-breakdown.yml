@@ -1,0 +1,122 @@
+feature_id: menu-bar-action-adapter
+status: ready
+
+necessity:
+  decision: build
+  reason: Existing menu bar actions need a shared SpillAction representation before provider-backed sections are added.
+  clarification_required: false
+  questions: []
+
+tasks:
+  - id: menu-bar-action-adapter-T1
+    title: Document adapter scope
+    owner_role: product-architect
+    state: done
+    depends_on: []
+    write_scope:
+      - .agents/runs/menu-bar-action-adapter/
+    read_scope:
+      - .agents/specs/prd.md
+      - .agents/specs/ard.md
+      - .agents/runs/stitch-panel-shell/
+    forbidden_scope:
+      - Sources/Spill/MenuBar/StatusItemController.swift
+    acceptance:
+      - Necessity is approved for build.
+      - Non-goals exclude new system, AI, and window providers.
+      - Verification plan includes build, tests, gates, and runtime smoke.
+    verification:
+      commands:
+        - python3 .agents/scripts/workflow.py run-gates
+      manual: []
+
+  - id: menu-bar-action-adapter-T2
+    title: Add menu bar action mapping
+    owner_role: builder
+    state: done
+    depends_on:
+      - menu-bar-action-adapter-T1
+    write_scope:
+      - Sources/Spill/Providers/SpillActionModels.swift
+      - Sources/Spill/Providers/MenuBarActionAdapter.swift
+    read_scope:
+      - Sources/Spill/MenuBar/MenuBarItemSnapshot.swift
+      - Sources/Spill/Providers/SpillActionModels.swift
+    forbidden_scope:
+      - Sources/Spill/MenuBar/StatusItemController.swift
+      - Sources/Spill/Accessibility/
+    acceptance:
+      - Snapshots map into SpillAction values.
+      - Source snapshot IDs can be recovered from action IDs.
+      - Non-pressable snapshots map to disabled actions.
+    verification:
+      commands:
+        - swift build
+        - swift test
+      manual: []
+
+  - id: menu-bar-action-adapter-T3
+    title: Render action tiles from SpillAction
+    owner_role: builder
+    state: done
+    depends_on:
+      - menu-bar-action-adapter-T2
+    write_scope:
+      - Sources/Spill/Panel/SpillBarView.swift
+    read_scope:
+      - Sources/Spill/Providers/MenuBarActionAdapter.swift
+      - Sources/Spill/MenuBar/AXMenuBarItemScanner.swift
+    forbidden_scope:
+      - Sources/Spill/MenuBar/StatusItemController.swift
+      - Sources/Spill/Preferences/
+    acceptance:
+      - Action tile labels and icons come from SpillAction metadata.
+      - Scanner press behavior still uses the source snapshot ID.
+      - Disabled action state controls button disabled styling.
+    verification:
+      commands:
+        - swift build
+        - swift test
+      manual:
+        - Open panel and confirm action clicking remains unchanged.
+
+  - id: menu-bar-action-adapter-T4
+    title: Verify adapter behavior
+    owner_role: verifier
+    state: done
+    depends_on:
+      - menu-bar-action-adapter-T2
+      - menu-bar-action-adapter-T3
+    write_scope:
+      - Tests/SpillTests/MenuBarActionAdapterTests.swift
+      - .agents/runs/menu-bar-action-adapter/05-verification.md
+      - .agents/runs/menu-bar-action-adapter/06-closeout.md
+    read_scope:
+      - Sources/Spill/Providers/
+      - Sources/Spill/Panel/SpillBarView.swift
+    forbidden_scope:
+      - Sources/Spill/MenuBar/StatusItemController.swift
+    acceptance:
+      - Adapter unit tests pass.
+      - Workflow gates pass.
+      - Runtime smoke passes.
+    verification:
+      commands:
+        - swift build
+        - swift test
+        - python3 .agents/scripts/workflow.py verify
+        - python3 .agents/scripts/workflow.py runtime-smoke
+      manual:
+        - Record manual visual gaps if panel is not inspected.
+
+parallel_groups:
+  - id: docs-and-adapter
+    tasks:
+      - menu-bar-action-adapter-T1
+      - menu-bar-action-adapter-T2
+    rule: Documentation and pure adapter work can proceed independently after scope is understood.
+  - id: ui-and-tests
+    tasks:
+      - menu-bar-action-adapter-T3
+      - menu-bar-action-adapter-T4
+    rule: Run after adapter API is stable.
