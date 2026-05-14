@@ -19,6 +19,10 @@ struct SpillBarView: View {
         }
     }
 
+    private var visibleStatusModules: [SpillStatusModule] {
+        settings.statusModuleOrder.filter { settings.isStatusModuleEnabled($0) }
+    }
+
     private var panelState: SpillPanelState {
         if !AccessibilityPermission.isTrusted {
             return .permissionRequired
@@ -38,16 +42,15 @@ struct SpillBarView: View {
     var body: some View {
         VStack(spacing: 14) {
             header
-            statusSection
+            if !visibleStatusModules.isEmpty {
+                statusSection
+            }
             actionsSection
             footer
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 13)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onAppear {
-            statusStore.refresh()
-        }
     }
 
     private var header: some View {
@@ -95,27 +98,37 @@ struct SpillBarView: View {
             sectionHeader("STATUS", symbolName: "waveform.path.ecg")
 
             VStack(spacing: 8) {
-                memoryMeter
-
-                statusMeter(
-                    title: "ACTIONS",
-                    value: "\(displayItems.count)",
-                    progress: min(Double(displayItems.count) / 8.0, 1),
-                    tint: displayItems.isEmpty ? .secondary : .green
-                )
+                ForEach(visibleStatusModules) { module in
+                    statusMeter(for: module)
+                }
             }
         }
     }
 
-    private var memoryMeter: some View {
-        let status = statusStore.memory
-
-        return statusMeter(
-            title: "MEMORY",
-            value: status.value,
-            progress: status.usageRatio,
-            tint: statusTint(for: status.state)
-        )
+    @ViewBuilder
+    private func statusMeter(for module: SpillStatusModule) -> some View {
+        switch module {
+        case .cpu:
+            let status = statusStore.cpu
+            statusMeter(
+                title: module.meterTitle,
+                value: status.value,
+                progress: status.usageRatio,
+                tint: statusTint(for: status.state)
+            )
+            .help(statusHelpText(title: module.title, value: status.value, subtitle: status.subtitle))
+            .accessibilityLabel(statusHelpText(title: module.title, value: status.value, subtitle: status.subtitle))
+        case .memory:
+            let status = statusStore.memory
+            statusMeter(
+                title: module.meterTitle,
+                value: status.value,
+                progress: status.usageRatio,
+                tint: statusTint(for: status.state)
+            )
+            .help(statusHelpText(title: module.title, value: status.value, subtitle: status.subtitle))
+            .accessibilityLabel(statusHelpText(title: module.title, value: status.value, subtitle: status.subtitle))
+        }
     }
 
     private func statusTint(for state: SpillStatusState) -> Color {
@@ -319,6 +332,16 @@ struct SpillBarView: View {
         var parts = ["Power", status.value]
 
         if let subtitle = status.subtitle, !subtitle.isEmpty {
+            parts.append(subtitle)
+        }
+
+        return parts.joined(separator: " - ")
+    }
+
+    private func statusHelpText(title: String, value: String, subtitle: String?) -> String {
+        var parts = [title, value]
+
+        if let subtitle, !subtitle.isEmpty {
             parts.append(subtitle)
         }
 

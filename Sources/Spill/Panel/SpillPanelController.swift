@@ -68,7 +68,7 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
         let finalFrame = panelFrame()
         let startFrame = finalFrame.offsetBy(dx: 0, dy: 8)
 
-        statusStore.refresh()
+        refreshStatusStore()
         isPresented = true
         visibilityChanged(true)
         panel.setFrame(settings.useSpillAnimation ? startFrame : finalFrame, display: false)
@@ -202,12 +202,34 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
             }
             .store(in: &cancellables)
 
+        settings.$statusModuleOrder
+            .dropFirst()
+            .sink { [weak self] _ in
+                self?.resizePanelIfVisible()
+            }
+            .store(in: &cancellables)
+
+        settings.$enabledStatusModules
+            .dropFirst()
+            .sink { [weak self] _ in
+                self?.refreshStatusStore()
+                self?.resizePanelIfVisible()
+            }
+            .store(in: &cancellables)
+
         settings.$selectedItemKeys
             .dropFirst()
             .sink { [weak self] _ in
                 self?.resizePanelIfVisible()
             }
             .store(in: &cancellables)
+    }
+
+    private func refreshStatusStore() {
+        let enabledModules = settings.enabledStatusModules
+        Task { @MainActor [statusStore] in
+            await statusStore.refresh(enabledModules: enabledModules)
+        }
     }
 
     func windowWillClose(_ notification: Notification) {

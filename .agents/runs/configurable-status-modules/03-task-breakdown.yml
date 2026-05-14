@@ -1,0 +1,131 @@
+feature_id: configurable-status-modules
+status: ready
+
+necessity:
+  decision: build
+  reason: "Configurable status modules keep the compact panel useful as CPU, memory, and future provider signals are added."
+  clarification_required: false
+  questions: []
+
+tasks:
+  - id: configurable-status-modules-T1
+    title: Add status module settings model
+    owner_role: builder
+    state: done
+    depends_on: []
+    write_scope:
+      - Sources/Spill/Providers/SpillStatusModule.swift
+      - Sources/Spill/Settings/SpillSettings.swift
+      - Tests/SpillTests/SpillSettingsTests.swift
+    read_scope:
+      - .agents/runs/configurable-status-modules/01-prd.md
+      - .agents/runs/configurable-status-modules/02-ard.md
+    forbidden_scope:
+      - Sources/Spill/MenuBar/StatusItemController.swift
+    acceptance:
+      - Status module order persists.
+      - Status module enabled state persists.
+      - Invalid persisted module lists are normalized.
+    verification:
+      commands:
+        - swift test
+      manual:
+        - Open Preferences and confirm CPU and memory rows are present.
+
+  - id: configurable-status-modules-T2
+    title: Wire refresh and panel rendering to enabled modules
+    owner_role: builder
+    state: done
+    depends_on:
+      - configurable-status-modules-T1
+    write_scope:
+      - Sources/Spill/Providers/SystemStatusStore.swift
+      - Sources/Spill/Providers/SystemCPUProvider.swift
+      - Sources/Spill/Panel/SpillBarView.swift
+      - Sources/Spill/Panel/SpillPanelController.swift
+      - Tests/SpillTests/SystemStatusStoreTests.swift
+    read_scope:
+      - Sources/Spill/Providers/SystemMemoryProvider.swift
+      - Sources/Spill/Settings/SpillSettings.swift
+    forbidden_scope:
+      - Sources/Spill/MenuBar/StatusItemController.swift
+    acceptance:
+      - CPU and memory meters render in configured order.
+      - Disabled CPU does not run its reader.
+      - Disabled memory does not run its reader.
+      - CPU refresh does not block panel presentation.
+    verification:
+      commands:
+        - swift build
+        - swift test
+      manual:
+        - Toggle each status module and confirm the panel updates.
+
+  - id: configurable-status-modules-T3
+    title: Add Preferences controls
+    owner_role: builder
+    state: done
+    depends_on:
+      - configurable-status-modules-T1
+    write_scope:
+      - Sources/Spill/Preferences/StatusModulesPreferencesSection.swift
+      - Sources/Spill/Preferences/PreferencesView.swift
+    read_scope:
+      - Sources/Spill/Settings/SpillSettings.swift
+      - Sources/Spill/Providers/SpillStatusModule.swift
+    forbidden_scope:
+      - Sources/Spill/MenuBar/StatusItemController.swift
+    acceptance:
+      - Preferences exposes on/off toggles.
+      - Preferences exposes up/down reorder controls.
+      - Controls use icon buttons for ordering.
+    verification:
+      commands:
+        - swift build
+      manual:
+        - Open Preferences and adjust module order.
+
+  - id: configurable-status-modules-T4
+    title: Verify and close out configurable status modules
+    owner_role: verifier
+    state: done
+    depends_on:
+      - configurable-status-modules-T1
+      - configurable-status-modules-T2
+      - configurable-status-modules-T3
+    write_scope:
+      - .agents/runs/configurable-status-modules/05-verification.md
+      - .agents/runs/configurable-status-modules/06-closeout.md
+      - .agents/tasks/roadmap.yml
+    read_scope:
+      - .agents/runs/configurable-status-modules
+      - .agents/scripts/workflow.py
+    forbidden_scope:
+      - Sources/Spill/MenuBar/StatusItemController.swift
+    acceptance:
+      - Verification results are documented.
+      - Roadmap reflects configurable status module progress.
+      - Workflow gates pass.
+    verification:
+      commands:
+        - python3 .agents/scripts/workflow.py verify
+        - python3 .agents/scripts/workflow.py run-gates
+        - python3 .agents/scripts/workflow.py language-gates
+        - python3 .agents/scripts/workflow.py code-gates
+      manual:
+        - Confirm no spacer behavior was reintroduced.
+
+parallel_groups:
+  - id: group-1
+    tasks:
+      - configurable-status-modules-T1
+    rule: The settings model must land before dependent UI and store work.
+  - id: group-2
+    tasks:
+      - configurable-status-modules-T2
+      - configurable-status-modules-T3
+    rule: Store wiring and Preferences controls have disjoint write scopes after the settings API is stable.
+  - id: group-3
+    tasks:
+      - configurable-status-modules-T4
+    rule: Verification runs after implementation tasks.

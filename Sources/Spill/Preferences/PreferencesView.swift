@@ -39,6 +39,10 @@ struct PreferencesView: View {
 
                 Divider()
 
+                StatusModulesPreferencesSection(settings: settings)
+
+                Divider()
+
                 DetectionPreferencesSection(
                     settings: settings,
                     scanner: scanner,

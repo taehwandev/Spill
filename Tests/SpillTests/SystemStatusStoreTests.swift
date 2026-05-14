@@ -5,17 +5,24 @@ import XCTest
 final class SystemStatusStoreTests: XCTestCase {
     func testDefaultStoreStartsWithUnavailableStatuses() {
         let store = SystemStatusStore(
+            cpuReader: { XCTFail("CPU reader should not run during initialization"); return .unavailableTestValue },
             memoryReader: { XCTFail("Memory reader should not run during initialization"); return .unavailableTestValue },
             powerReader: { XCTFail("Power reader should not run during initialization"); return .unavailableTestValue }
         )
 
+        XCTAssertEqual(store.cpu.state, .unavailable)
+        XCTAssertEqual(store.cpu.value, "N/A")
         XCTAssertEqual(store.memory.state, .unavailable)
         XCTAssertEqual(store.memory.value, "N/A")
         XCTAssertEqual(store.power.state, .unavailable)
         XCTAssertEqual(store.power.value, "N/A")
     }
 
-    func testRefreshUsesInjectedReaders() {
+    func testRefreshUsesInjectedReaders() async {
+        let cpu = SystemCPUProvider.status(
+            previous: SystemCPUReading(userTicks: 10, systemTicks: 10, idleTicks: 80, niceTicks: 0),
+            current: SystemCPUReading(userTicks: 20, systemTicks: 20, idleTicks: 160, niceTicks: 0)
+        )
         let memory = SystemMemoryProvider.status(
             from: SystemMemoryReading(
                 totalBytes: gib(16),
@@ -35,20 +42,35 @@ final class SystemStatusStoreTests: XCTestCase {
                 hasBattery: true
             )
         )
-        let store = SystemStatusStore(memoryReader: { memory }, powerReader: { power })
+        let store = SystemStatusStore(cpuReader: { cpu }, memoryReader: { memory }, powerReader: { power })
 
-        store.refresh()
+        await store.refresh()
 
+        XCTAssertEqual(store.cpu.value, "20%")
+        XCTAssertEqual(store.cpu.state, .normal)
         XCTAssertEqual(store.memory.value, "44%")
         XCTAssertEqual(store.memory.state, .normal)
         XCTAssertEqual(store.power.value, "80%")
         XCTAssertEqual(store.power.subtitle, "On Battery")
     }
 
-    func testRepeatedRefreshUpdatesCachedValues() {
+    func testRepeatedRefreshUpdatesCachedValues() async {
+        var cpuReadCount = 0
         var memoryReadCount = 0
         var powerReadCount = 0
         let store = SystemStatusStore(
+            cpuReader: {
+                cpuReadCount += 1
+                return SystemCPUProvider.status(
+                    previous: SystemCPUReading(userTicks: 0, systemTicks: 0, idleTicks: 0, niceTicks: 0),
+                    current: SystemCPUReading(
+                        userTicks: UInt64(cpuReadCount),
+                        systemTicks: UInt64(cpuReadCount),
+                        idleTicks: UInt64(8 * cpuReadCount),
+                        niceTicks: 0
+                    )
+                )
+            },
             memoryReader: {
                 memoryReadCount += 1
                 return SystemMemoryProvider.status(
@@ -76,13 +98,43 @@ final class SystemStatusStoreTests: XCTestCase {
             }
         )
 
-        store.refresh()
+        await store.refresh()
+        XCTAssertEqual(store.cpu.value, "20%")
         XCTAssertEqual(store.memory.value, "10%")
         XCTAssertEqual(store.power.value, "51%")
 
-        store.refresh()
+        await store.refresh()
+        XCTAssertEqual(store.cpu.value, "20%")
         XCTAssertEqual(store.memory.value, "20%")
         XCTAssertEqual(store.power.value, "52%")
+    }
+
+    func testDisabledModulesDoNotRunReaders() async {
+        var cpuReadCount = 0
+        var memoryReadCount = 0
+        var powerReadCount = 0
+        let store = SystemStatusStore(
+            cpuReader: {
+                cpuReadCount += 1
+                return .unavailableTestValue
+            },
+            memoryReader: {
+                memoryReadCount += 1
+                return .unavailableTestValue
+            },
+            powerReader: {
+                powerReadCount += 1
+                return .unavailableTestValue
+            }
+        )
+
+        await store.refresh(enabledModules: [])
+
+        XCTAssertEqual(cpuReadCount, 0)
+        XCTAssertEqual(memoryReadCount, 0)
+        XCTAssertEqual(powerReadCount, 1)
+        XCTAssertEqual(store.cpu.state, .unavailable)
+        XCTAssertEqual(store.memory.state, .unavailable)
     }
 
     private func gib(_ value: UInt64) -> UInt64 {
@@ -96,4 +148,8 @@ private extension SystemMemoryStatus {
 
 private extension SystemPowerStatus {
     static let unavailableTestValue = SystemPowerProvider.status(from: nil)
+}
+
+private extension SystemCPUStatus {
+    static let unavailableTestValue = SystemCPUProvider.status(previous: nil, current: nil)
 }

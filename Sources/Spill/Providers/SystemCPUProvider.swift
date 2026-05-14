@@ -45,11 +45,15 @@ struct SystemCPUProvider: SpillStatusProvider {
     let title = "CPU"
 
     func snapshot() async -> [SpillStatusItem] {
+        [(await Self.status()).statusItem]
+    }
+
+    static func status(sampleIntervalNanoseconds: UInt64 = 120_000_000) async -> SystemCPUStatus {
         let previous = SystemCPUReader.current()
-        try? await Task.sleep(nanoseconds: 120_000_000)
+        try? await Task.sleep(nanoseconds: sampleIntervalNanoseconds)
         let current = SystemCPUReader.current()
 
-        return [Self.status(previous: previous, current: current).statusItem]
+        return status(previous: previous, current: current)
     }
 
     static func status(previous: SystemCPUReading?, current: SystemCPUReading?) -> SystemCPUStatus {
