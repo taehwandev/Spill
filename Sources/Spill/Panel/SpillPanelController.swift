@@ -145,12 +145,7 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
     private func panelFrame() -> NSRect {
         let screen = panel?.screen ?? NSScreen.main ?? NSScreen.screens.first
         let visibleFrame = layout.visibleFrame(for: panel)
-        let fallback = layout.defaultFrame(
-            in: visibleFrame,
-            screen: screen,
-            itemCount: settings.displayMode.items(from: scanner, settings: settings).count,
-            iconSpacing: settings.iconSpacing
-        )
+        let fallback = layout.defaultFrame(in: visibleFrame, screen: screen)
 
         return fallback
     }

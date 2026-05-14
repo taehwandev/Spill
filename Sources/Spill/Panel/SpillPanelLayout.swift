@@ -9,22 +9,13 @@ struct SpillPanelLayout {
 
     func defaultFrame(
         in visibleFrame: NSRect,
-        screen: NSScreen?,
-        itemCount: Int,
-        iconSpacing: Double
+        screen: NSScreen?
     ) -> NSRect {
-        let count = max(itemCount, 1)
-        let spacing = CGFloat(iconSpacing)
-        let itemsWidth = CGFloat(count) * SpillPanelMetrics.itemWidth
-            + CGFloat(max(count - 1, 0)) * spacing
         let maximumWidth = min(
             SpillPanelMetrics.maximumWidth,
             visibleFrame.width - SpillPanelMetrics.edgeInset * 2
         )
-        let width = min(
-            max(itemsWidth + SpillPanelMetrics.widthPadding, SpillPanelMetrics.minimumWidth),
-            maximumWidth
-        )
+        let width = min(SpillPanelMetrics.defaultWidth, maximumWidth)
         let geometry = MenuBarNotchGeometry(screen: screen)
         let anchorX = geometry.hasHardwareNotch ? geometry.notchFrame.midX : visibleFrame.midX
         let minX = visibleFrame.minX + SpillPanelMetrics.edgeInset

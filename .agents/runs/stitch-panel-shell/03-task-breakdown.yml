@@ -1,0 +1,112 @@
+feature_id: stitch-panel-shell
+status: ready
+
+necessity:
+  decision: build
+  reason: The compact panel is the primary Spill surface and needs a stateful native shell before provider-backed features are added.
+  clarification_required: false
+  questions: []
+
+tasks:
+  - id: stitch-panel-shell-T1
+    title: Document Stitch to SwiftUI panel mapping
+    owner_role: product-architect
+    state: done
+    depends_on: []
+    write_scope:
+      - .agents/runs/stitch-panel-shell/
+      - .agents/design/stitch.md
+    read_scope:
+      - .agents/specs/prd.md
+      - .agents/specs/ard.md
+      - .agents/design/stitch.md
+    forbidden_scope:
+      - Sources/Spill/App/
+      - Sources/Spill/MenuBar/StatusItemController.swift
+    acceptance:
+      - Stitch project and screen are referenced.
+      - Mapping avoids fake provider data.
+      - Non-goals are explicit.
+    verification:
+      commands:
+        - python3 .agents/scripts/workflow.py run-gates
+        - python3 .agents/scripts/workflow.py language-gates
+      manual:
+        - Confirm the run documents describe native SwiftUI implementation.
+
+  - id: stitch-panel-shell-T2
+    title: Implement compact stateful panel shell
+    owner_role: builder
+    state: done
+    depends_on:
+      - stitch-panel-shell-T1
+    write_scope:
+      - Sources/Spill/Panel/SpillBarView.swift
+      - Sources/Spill/Panel/SpillPanelController.swift
+      - Sources/Spill/Panel/SpillPanelLayout.swift
+      - Sources/Spill/Panel/SpillPanelMetrics.swift
+    read_scope:
+      - .agents/runs/stitch-panel-shell/01-prd.md
+      - .agents/runs/stitch-panel-shell/02-ard.md
+      - Sources/Spill/MenuBar/AXMenuBarItemScanner.swift
+      - Sources/Spill/Accessibility/AccessibilityPermission.swift
+      - Sources/Spill/Settings/SpillSettings.swift
+    forbidden_scope:
+      - Sources/Spill/MenuBar/StatusItemController.swift
+      - Sources/Spill/Providers/
+      - Sources/Spill/Preferences/
+    acceptance:
+      - Header, status, action, and footer sections exist.
+      - Permission, scanning, empty, and ready states are visible.
+      - Detected menu bar actions remain clickable through the scanner.
+      - No CPU, memory, battery, AI, or provider values are faked.
+    verification:
+      commands:
+        - swift build
+        - swift test
+      manual:
+        - Open the panel and inspect the compact layout.
+
+  - id: stitch-panel-shell-T3
+    title: Verify workflow and runtime behavior
+    owner_role: verifier
+    state: done
+    depends_on:
+      - stitch-panel-shell-T1
+      - stitch-panel-shell-T2
+    write_scope:
+      - .agents/runs/stitch-panel-shell/05-verification.md
+      - .agents/runs/stitch-panel-shell/06-closeout.md
+    read_scope:
+      - .agents/runs/stitch-panel-shell/
+      - Sources/Spill/Panel/
+      - scripts/verify-runtime-smoke.sh
+    forbidden_scope:
+      - Sources/Spill/MenuBar/StatusItemController.swift
+      - Sources/Spill/Providers/
+    acceptance:
+      - Build and tests pass.
+      - Workflow gates pass.
+      - Runtime smoke passes.
+      - Visual verification gaps are documented.
+    verification:
+      commands:
+        - swift build
+        - swift test
+        - python3 .agents/scripts/workflow.py verify
+        - python3 .agents/scripts/workflow.py run-gates
+        - python3 .agents/scripts/workflow.py language-gates
+        - python3 .agents/scripts/workflow.py runtime-smoke
+      manual:
+        - If a notched Mac visual pass is not performed, record it as residual risk.
+
+parallel_groups:
+  - id: design-and-implementation
+    tasks:
+      - stitch-panel-shell-T1
+      - stitch-panel-shell-T2
+    rule: Documentation and panel SwiftUI edits may proceed together after the Stitch reference is known.
+  - id: verification
+    tasks:
+      - stitch-panel-shell-T3
+    rule: Verification runs after docs and implementation are ready.

@@ -27,3 +27,14 @@ Do not commit API keys, access tokens, or MCP configuration values to this repos
 Do not implement or redesign panel UI from inference alone. Before a UI-scoped feature, inspect the relevant Stitch screen and document the mapping from Stitch sections to SwiftUI components in that feature run.
 
 Non-UI foundation work, such as provider models and test infrastructure, may proceed without changing panel UI.
+
+## Current Panel Mapping
+
+The first native panel shell maps `Spill Multi-Widget Panel` to current app state only:
+
+- Stitch header becomes `SpillPanelState` in `SpillBarView`.
+- Stitch performance cards become `ACCESS` and `ACTIONS` status meters until real providers exist.
+- Stitch active-app row becomes the current detected action strip.
+- Stitch quick status pill becomes the footer with Accessibility, scan, count, and time indicators.
+
+Do not render CPU, memory, battery, AI, or window-management values until real providers are implemented and verified.

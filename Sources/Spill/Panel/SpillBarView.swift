@@ -9,30 +9,155 @@ struct SpillBarView: View {
         settings.displayMode.items(from: scanner, settings: settings)
     }
 
+    private var panelState: SpillPanelState {
+        if !AccessibilityPermission.isTrusted {
+            return .permissionRequired
+        }
+
+        if scanner.isScanning {
+            return .scanning
+        }
+
+        if displayItems.isEmpty {
+            return .empty
+        }
+
+        return .ready
+    }
+
     var body: some View {
-        detectedSection
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
+        VStack(spacing: 14) {
+            header
+            statusSection
+            actionsSection
+            footer
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 13)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .overlay(alignment: .top) {
-            Capsule()
-                .fill(.primary.opacity(0.14))
-                .frame(width: 42, height: 3)
-                .padding(.top, 3)
+    }
+
+    private var header: some View {
+        HStack(spacing: 10) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .fill(Color.accentColor.opacity(0.18))
+
+                Image(systemName: panelState.symbolName)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(panelState.tint)
+            }
+            .frame(width: 34, height: 34)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Spill Flow")
+                    .font(.system(size: 13, weight: .semibold))
+                    .lineLimit(1)
+
+                Text(panelState.subtitle(count: displayItems.count))
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 8)
+
+            statusDot
         }
     }
 
-    private var detectedSection: some View {
-        Group {
-            if !AccessibilityPermission.isTrusted {
-                statusContent(systemImage: "lock.fill", title: "Accessibility Required")
-            } else if scanner.isScanning && displayItems.isEmpty {
-                scanningContent
-            } else if displayItems.isEmpty {
-                statusContent(systemImage: "magnifyingglass", title: emptyStateTitle)
-            } else {
-                detectedItemsContent
+    private var statusDot: some View {
+        Circle()
+            .fill(panelState.tint)
+            .frame(width: 8, height: 8)
+            .overlay {
+                Circle()
+                    .stroke(panelState.tint.opacity(0.22), lineWidth: 5)
             }
+            .accessibilityLabel(panelState.accessibilityLabel)
+    }
+
+    private var statusSection: some View {
+        VStack(spacing: 9) {
+            sectionHeader("STATUS", symbolName: "waveform.path.ecg")
+
+            VStack(spacing: 8) {
+                statusMeter(
+                    title: "ACCESS",
+                    value: AccessibilityPermission.isTrusted ? "Ready" : "Needed",
+                    progress: AccessibilityPermission.isTrusted ? 1 : 0,
+                    tint: AccessibilityPermission.isTrusted ? .accentColor : .orange
+                )
+
+                statusMeter(
+                    title: "ACTIONS",
+                    value: "\(displayItems.count)",
+                    progress: min(Double(displayItems.count) / 8.0, 1),
+                    tint: displayItems.isEmpty ? .secondary : .green
+                )
+            }
+        }
+    }
+
+    private func sectionHeader(_ title: String, symbolName: String) -> some View {
+        HStack {
+            Text(title)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.secondary)
+
+            Spacer()
+
+            Image(systemName: symbolName)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func statusMeter(title: String, value: String, progress: Double, tint: Color) -> some View {
+        VStack(spacing: 4) {
+            HStack {
+                Text(title)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.secondary)
+
+                Spacer()
+
+                Text(value)
+                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.primary.opacity(0.82))
+                    .lineLimit(1)
+            }
+
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(.primary.opacity(0.08))
+
+                    Capsule()
+                        .fill(tint.opacity(0.86))
+                        .frame(width: max(4, proxy.size.width * progress.clamped(to: 0...1)))
+                }
+            }
+            .frame(height: 5)
+        }
+    }
+
+    private var actionsSection: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            sectionHeader("ACTIONS", symbolName: "square.grid.2x2")
+
+            Group {
+                if !AccessibilityPermission.isTrusted {
+                    inlineState(symbolName: "lock.fill", title: "Accessibility Required")
+                } else if scanner.isScanning && displayItems.isEmpty {
+                    scanningState
+                } else if displayItems.isEmpty {
+                    inlineState(symbolName: "magnifyingglass", title: emptyStateTitle)
+                } else {
+                    actionScroller
+                }
+            }
+            .frame(height: 38)
         }
     }
 
@@ -45,103 +170,94 @@ struct SpillBarView: View {
         }
     }
 
-    private var detectedItemsContent: some View {
-        HStack(spacing: 9) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(itemGroups) { group in
-                        SpillItemGroup(group: group, iconSpacing: settings.iconSpacing) { item in
-                            if scanner.pressItem(withID: item.id) {
-                                dismissAction()
-                            }
-                        } helpText: { item in
-                            helpText(for: item)
+    private var actionScroller: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: max(CGFloat(settings.iconSpacing), 7)) {
+                ForEach(displayItems) { item in
+                    SpillActionButton(item: item) {
+                        if scanner.pressItem(withID: item.id) {
+                            dismissAction()
                         }
                     }
+                    .disabled(!item.canPress)
+                    .help(helpText(for: item))
+                    .accessibilityLabel(item.displayTitle)
                 }
-                .padding(.horizontal, 1)
             }
-            .frame(maxWidth: .infinity)
-
-            if settings.showCountBadge {
-                countBadge(displayItems.count)
-            }
+            .padding(.horizontal, 1)
         }
     }
 
-    private var itemGroups: [SpillItemGroupModel] {
-        let systemItems = displayItems.filter(isSystemStatusItem)
-        let appItems = displayItems.filter { !isSystemStatusItem($0) }
-
-        guard !appItems.isEmpty, !systemItems.isEmpty else {
-            return [
-                SpillItemGroupModel(
-                    kind: systemItems.isEmpty ? .apps : .system,
-                    items: displayItems
-                )
-            ]
-        }
-
-        return [
-            SpillItemGroupModel(kind: .apps, items: appItems),
-            SpillItemGroupModel(kind: .system, items: systemItems)
-        ]
-    }
-
-    private func isSystemStatusItem(_ item: MenuBarItemSnapshot) -> Bool {
-        guard let bundleIdentifier = item.bundleIdentifier else {
-            return false
-        }
-
-        return bundleIdentifier == "com.apple.systemuiserver"
-            || bundleIdentifier == "com.apple.controlcenter"
-            || bundleIdentifier.hasPrefix("com.apple.")
-    }
-
-    private var scanningContent: some View {
-        HStack(spacing: 9) {
+    private var scanningState: some View {
+        HStack(spacing: 8) {
             ProgressView()
                 .controlSize(.small)
-                .scaleEffect(0.72)
+                .scaleEffect(0.68)
 
             Text("Scanning")
-                .font(.system(size: 13, weight: .medium))
-                .lineLimit(1)
+                .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(.secondary)
+                .lineLimit(1)
         }
     }
 
-    private func statusContent(systemImage: String, title: String) -> some View {
+    private func inlineState(symbolName: String, title: String) -> some View {
         HStack(spacing: 8) {
-            Image(systemName: systemImage)
-                .font(.system(size: 14, weight: .semibold))
+            Image(systemName: symbolName)
+                .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.secondary)
 
             Text(title)
-                .font(.system(size: 13, weight: .medium))
-                .lineLimit(1)
+                .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(.secondary)
+                .lineLimit(1)
+
+            Spacer()
         }
     }
 
-    private func countBadge(_ count: Int) -> some View {
-        HStack(spacing: 5) {
-            Image(systemName: "square.grid.2x2.fill")
-                .font(.system(size: 9, weight: .bold))
+    private var footer: some View {
+        HStack(spacing: 12) {
+            footerItem(symbolName: AccessibilityPermission.isTrusted ? "checkmark.shield.fill" : "exclamationmark.shield.fill")
+                .foregroundStyle(AccessibilityPermission.isTrusted ? .green : .orange)
+
+            footerItem(symbolName: scanner.isScanning ? "arrow.triangle.2.circlepath" : "bolt.horizontal.fill")
+                .foregroundStyle(scanner.isScanning ? Color.accentColor : Color.secondary)
+
+            if settings.showCountBadge {
+                HStack(spacing: 4) {
+                    Image(systemName: "square.grid.2x2.fill")
+                    Text("\(displayItems.count)")
+                        .monospacedDigit()
+                }
+                .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(.secondary)
-            Text("\(count)")
-                .font(.system(size: 11, weight: .semibold, design: .rounded))
+            }
+
+            Spacer()
+
+            Text(shortTime)
+                .font(.system(size: 10, weight: .semibold, design: .rounded))
+                .foregroundStyle(.secondary)
                 .monospacedDigit()
-                .foregroundStyle(.secondary)
         }
-        .padding(.horizontal, 9)
-        .frame(height: 30)
-        .background(.primary.opacity(0.07), in: Capsule())
-        .overlay(
+        .padding(.horizontal, 11)
+        .frame(height: 28)
+        .background(.primary.opacity(0.06), in: Capsule())
+        .overlay {
             Capsule()
                 .stroke(.primary.opacity(0.08), lineWidth: 0.8)
-        )
-        .accessibilityLabel("\(count) detected menu bar items")
+        }
+    }
+
+    private func footerItem(symbolName: String) -> some View {
+        Image(systemName: symbolName)
+            .font(.system(size: 11, weight: .semibold))
+            .frame(width: 13, height: 13)
+    }
+
+    private var shortTime: String {
+        Self.timeFormatter.string(from: Date())
     }
 
     private func helpText(for item: MenuBarItemSnapshot) -> String {
@@ -153,79 +269,74 @@ struct SpillBarView: View {
 
         return parts.joined(separator: " - ")
     }
+
+    private static let timeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "h:mm a"
+        return formatter
+    }()
 }
 
-private struct SpillItemGroupModel: Identifiable {
-    let kind: SpillItemGroupKind
-    let items: [MenuBarItemSnapshot]
-
-    var id: SpillItemGroupKind { kind }
-}
-
-private enum SpillItemGroupKind {
-    case apps
-    case system
+private enum SpillPanelState {
+    case permissionRequired
+    case scanning
+    case empty
+    case ready
 
     var symbolName: String {
         switch self {
-        case .apps:
-            return "app.dashed"
-        case .system:
-            return "switch.2"
+        case .permissionRequired:
+            return "lock.fill"
+        case .scanning:
+            return "arrow.triangle.2.circlepath"
+        case .empty:
+            return "tray"
+        case .ready:
+            return "drop.fill"
         }
     }
 
-    var accentOpacity: Double {
+    var tint: Color {
         switch self {
-        case .apps:
-            return 0.06
-        case .system:
-            return 0.085
+        case .permissionRequired:
+            return .orange
+        case .scanning:
+            return .accentColor
+        case .empty:
+            return .secondary
+        case .ready:
+            return .green
+        }
+    }
+
+    var accessibilityLabel: String {
+        switch self {
+        case .permissionRequired:
+            return "Accessibility required"
+        case .scanning:
+            return "Scanning"
+        case .empty:
+            return "No actions ready"
+        case .ready:
+            return "Ready"
+        }
+    }
+
+    func subtitle(count: Int) -> String {
+        switch self {
+        case .permissionRequired:
+            return "Permission needed"
+        case .scanning:
+            return "Refreshing actions"
+        case .empty:
+            return "No actions ready"
+        case .ready:
+            return "\(count) action\(count == 1 ? "" : "s") ready"
         }
     }
 }
 
-private struct SpillItemGroup: View {
-    let group: SpillItemGroupModel
-    let iconSpacing: Double
-    let action: (MenuBarItemSnapshot) -> Void
-    let helpText: (MenuBarItemSnapshot) -> String
-
-    var body: some View {
-        HStack(spacing: max(CGFloat(iconSpacing), 6)) {
-            groupGlyph
-
-            ForEach(group.items) { item in
-                SpillItemButton(item: item) {
-                    action(item)
-                }
-                .disabled(!item.canPress)
-                .help(helpText(item))
-                .accessibilityLabel(item.displayTitle)
-            }
-        }
-        .padding(.horizontal, 7)
-        .frame(height: 46)
-        .background(
-            RoundedRectangle(cornerRadius: 15, style: .continuous)
-                .fill(.primary.opacity(group.kind.accentOpacity))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 15, style: .continuous)
-                .stroke(.primary.opacity(0.08), lineWidth: 0.8)
-        )
-    }
-
-    private var groupGlyph: some View {
-        Image(systemName: group.kind.symbolName)
-            .font(.system(size: 12, weight: .semibold))
-            .foregroundStyle(.secondary)
-            .frame(width: 16, height: 34)
-            .accessibilityHidden(true)
-    }
-}
-
-private struct SpillItemButton: View {
+private struct SpillActionButton: View {
     let item: MenuBarItemSnapshot
     let action: () -> Void
 
@@ -234,28 +345,28 @@ private struct SpillItemButton: View {
 
     var body: some View {
         Button(action: action) {
-            ZStack(alignment: .bottom) {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+            ZStack(alignment: .topTrailing) {
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
                     .fill(backgroundColor)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .stroke(borderColor, lineWidth: item.isNotchCandidate ? 1.4 : 0.8)
-                    )
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 11, style: .continuous)
+                            .stroke(borderColor, lineWidth: item.isNotchCandidate ? 1.2 : 0.8)
+                    }
 
                 icon
 
                 if item.isNotchCandidate {
-                    Capsule()
+                    Circle()
                         .fill(Color.accentColor)
-                        .frame(width: 14, height: 3)
-                        .padding(.bottom, 3)
+                        .frame(width: 5, height: 5)
+                        .padding(5)
                 }
             }
-            .frame(width: 38, height: 38)
-            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .frame(width: 36, height: 36)
+            .contentShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
         }
         .buttonStyle(.plain)
-        .opacity(isEnabled ? 1 : 0.45)
+        .opacity(isEnabled ? 1 : 0.44)
         .onHover { isHovered = $0 }
     }
 
@@ -265,11 +376,11 @@ private struct SpillItemButton: View {
                 Image(nsImage: image)
                     .resizable()
                     .scaledToFit()
-                    .frame(width: 24, height: 24)
+                    .frame(width: 22, height: 22)
                     .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
             } else {
                 Text(item.shortLabel)
-                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
                     .foregroundStyle(isEnabled ? .primary : .secondary)
             }
         }
@@ -289,5 +400,11 @@ private struct SpillItemButton: View {
         }
 
         return .primary.opacity(isHovered ? 0.16 : 0.08)
+    }
+}
+
+private extension Comparable {
+    func clamped(to limits: ClosedRange<Self>) -> Self {
+        min(max(self, limits.lowerBound), limits.upperBound)
     }
 }
