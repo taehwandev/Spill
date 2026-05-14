@@ -13,6 +13,14 @@ final class SpillSettings: ObservableObject {
         didSet { defaults.set(showCountBadge, forKey: Keys.showCountBadge) }
     }
 
+    @Published var showPowerFooter: Bool {
+        didSet { defaults.set(showPowerFooter, forKey: Keys.showPowerFooter) }
+    }
+
+    @Published var sleepGuardKeepsDisplayAwake: Bool {
+        didSet { defaults.set(sleepGuardKeepsDisplayAwake, forKey: Keys.sleepGuardKeepsDisplayAwake) }
+    }
+
     @Published var useSpillAnimation: Bool {
         didSet { defaults.set(useSpillAnimation, forKey: Keys.useSpillAnimation) }
     }
@@ -60,6 +68,8 @@ final class SpillSettings: ObservableObject {
         self.defaults = defaults
         iconSpacing = defaults.object(forKey: Keys.iconSpacing) as? Double ?? 8
         showCountBadge = defaults.object(forKey: Keys.showCountBadge) as? Bool ?? true
+        showPowerFooter = defaults.object(forKey: Keys.showPowerFooter) as? Bool ?? true
+        sleepGuardKeepsDisplayAwake = defaults.object(forKey: Keys.sleepGuardKeepsDisplayAwake) as? Bool ?? false
         useSpillAnimation = defaults.object(forKey: Keys.useSpillAnimation) as? Bool ?? true
         autoRefreshEnabled = defaults.object(forKey: Keys.autoRefreshEnabled) as? Bool ?? true
         refreshInterval = max(defaults.object(forKey: Keys.refreshInterval) as? Double ?? 15, 5)
@@ -127,6 +137,8 @@ final class SpillSettings: ObservableObject {
 private enum Keys {
     static let iconSpacing = "iconSpacing"
     static let showCountBadge = "showCountBadge"
+    static let showPowerFooter = "showPowerFooter"
+    static let sleepGuardKeepsDisplayAwake = "sleepGuardKeepsDisplayAwake"
     static let useSpillAnimation = "useSpillAnimation"
     static let autoRefreshEnabled = "autoRefreshEnabled"
     static let refreshInterval = "refreshInterval"

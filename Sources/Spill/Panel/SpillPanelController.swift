@@ -9,6 +9,7 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
     private let layout = SpillPanelLayout()
     private let settings: SpillSettings
     private let scanner: AXMenuBarItemScanner
+    private let sleepGuard: SleepGuardController
     private let statusStore = SystemStatusStore()
     private let visibilityChanged: (Bool) -> Void
     private var panel: NSPanel?
@@ -22,10 +23,12 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
     init(
         settings: SpillSettings,
         scanner: AXMenuBarItemScanner,
+        sleepGuard: SleepGuardController,
         visibilityChanged: @escaping (Bool) -> Void = { _ in }
     ) {
         self.settings = settings
         self.scanner = scanner
+        self.sleepGuard = sleepGuard
         self.visibilityChanged = visibilityChanged
         super.init()
         observeLayoutChanges()
@@ -144,7 +147,7 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
         visualEffectView.layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.45).cgColor
 
         let hostingView = NSHostingView(
-            rootView: SpillBarView(settings: settings, scanner: scanner, statusStore: statusStore) { [weak self] in
+            rootView: SpillBarView(settings: settings, scanner: scanner, statusStore: statusStore, sleepGuard: sleepGuard) { [weak self] in
                 self?.hide(animated: true)
             }
         )
@@ -217,6 +220,14 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
             }
             .store(in: &cancellables)
 
+        settings.$showPowerFooter
+            .dropFirst()
+            .sink { [weak self] _ in
+                self?.refreshStatusStore()
+                self?.resizePanelIfVisible()
+            }
+            .store(in: &cancellables)
+
         settings.$selectedItemKeys
             .dropFirst()
             .sink { [weak self] _ in
@@ -227,8 +238,9 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
 
     private func refreshStatusStore() {
         let enabledModules = settings.enabledStatusModules
+        let readsPower = settings.showPowerFooter
         Task { @MainActor [statusStore] in
-            await statusStore.refresh(enabledModules: enabledModules)
+            await statusStore.refresh(enabledModules: enabledModules, readsPower: readsPower)
         }
     }
 

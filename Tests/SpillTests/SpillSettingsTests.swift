@@ -11,6 +11,25 @@ final class SpillSettingsTests: XCTestCase {
         XCTAssertEqual(settings.enabledStatusModules, [.cpu, .memory])
     }
 
+    func testPowerFooterDefaultsToVisibleAndSleepGuardDisplayAwakeDefaultsOff() {
+        let defaults = makeDefaults()
+        let settings = SpillSettings(defaults: defaults)
+
+        XCTAssertTrue(settings.showPowerFooter)
+        XCTAssertFalse(settings.sleepGuardKeepsDisplayAwake)
+    }
+
+    func testPowerAndSleepGuardSettingsPersist() {
+        let defaults = makeDefaults()
+        let settings = SpillSettings(defaults: defaults)
+
+        settings.showPowerFooter = false
+        settings.sleepGuardKeepsDisplayAwake = true
+
+        XCTAssertFalse(defaults.bool(forKey: "showPowerFooter"))
+        XCTAssertTrue(defaults.bool(forKey: "sleepGuardKeepsDisplayAwake"))
+    }
+
     func testStatusModuleOrderNormalizesUnknownDuplicateAndMissingValues() {
         let defaults = makeDefaults()
         defaults.set(["memory", "unknown", "memory"], forKey: "statusModuleOrder")

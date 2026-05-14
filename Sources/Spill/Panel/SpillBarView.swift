@@ -4,6 +4,7 @@ struct SpillBarView: View {
     @ObservedObject var settings: SpillSettings
     @ObservedObject var scanner: AXMenuBarItemScanner
     @ObservedObject var statusStore: SystemStatusStore
+    @ObservedObject var sleepGuard: SleepGuardController
     let dismissAction: () -> Void
 
     private var displayItems: [MenuBarItemSnapshot] {
@@ -273,7 +274,11 @@ struct SpillBarView: View {
             footerItem(symbolName: scanner.isScanning ? "arrow.triangle.2.circlepath" : "bolt.horizontal.fill")
                 .foregroundStyle(scanner.isScanning ? Color.accentColor : Color.secondary)
 
-            powerFooter(status: statusStore.power)
+            sleepGuardFooter
+
+            if settings.showPowerFooter {
+                powerFooter(status: statusStore.power)
+            }
 
             if settings.showCountBadge {
                 HStack(spacing: 4) {
@@ -307,6 +312,60 @@ struct SpillBarView: View {
             .frame(width: 13, height: 13)
     }
 
+    private var sleepGuardFooter: some View {
+        Menu {
+            if sleepGuard.isActive {
+                Button(role: .destructive) {
+                    sleepGuard.stop()
+                } label: {
+                    Text("Stop Sleep Guard")
+                }
+
+                Divider()
+            }
+
+            ForEach(SleepGuardDuration.allCases) { duration in
+                Button(duration.menuTitle) {
+                    sleepGuard.start(
+                        duration: duration,
+                        keepDisplayAwake: settings.sleepGuardKeepsDisplayAwake
+                    )
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: sleepGuard.isActive ? "moon.fill" : "moon")
+                    .font(.system(size: 10, weight: .semibold))
+                    .frame(width: 13, height: 13)
+
+                if sleepGuard.isActive {
+                    Text(sleepGuard.remainingLabel)
+                        .font(.system(size: 10, weight: .semibold, design: .rounded))
+                        .monospacedDigit()
+                        .lineLimit(1)
+                }
+            }
+            .foregroundStyle(sleepGuardTint)
+            .contentShape(Rectangle())
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help(sleepGuardHelpText)
+        .accessibilityLabel(sleepGuardHelpText)
+    }
+
+    private var sleepGuardTint: Color {
+        if sleepGuard.isActive {
+            return .accentColor
+        }
+
+        if sleepGuard.errorMessage != nil {
+            return .orange
+        }
+
+        return .secondary
+    }
+
     private func powerFooter(status: SystemPowerStatus) -> some View {
         HStack(spacing: 4) {
             Image(systemName: status.symbolName)
@@ -326,6 +385,18 @@ struct SpillBarView: View {
 
     private var shortTime: String {
         Self.timeFormatter.string(from: Date())
+    }
+
+    private var sleepGuardHelpText: String {
+        if let errorMessage = sleepGuard.errorMessage {
+            return "Sleep Guard - \(errorMessage)"
+        }
+
+        guard sleepGuard.isActive else {
+            return "Sleep Guard Off"
+        }
+
+        return "Sleep Guard - \(sleepGuard.remainingLabel) remaining"
     }
 
     private func powerHelpText(for status: SystemPowerStatus) -> String {

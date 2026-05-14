@@ -43,6 +43,10 @@ struct PreferencesView: View {
 
                 Divider()
 
+                PowerPreferencesSection(settings: settings)
+
+                Divider()
+
                 DetectionPreferencesSection(
                     settings: settings,
                     scanner: scanner,

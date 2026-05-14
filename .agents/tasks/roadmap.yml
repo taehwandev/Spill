@@ -114,6 +114,12 @@ milestones:
         state: done
         acceptance:
           - Battery percent/state displays when available.
+      - id: M3-T5
+        title: Power footer visibility
+        state: done
+        acceptance:
+          - Power footer can be hidden by user setting.
+          - Hidden power footer state does not run the power reader.
       - id: M3-T4
         title: Network status
         state: pending
@@ -160,6 +166,13 @@ milestones:
         state: pending
         acceptance:
           - Stale AX item can fallback to opening/activating app.
+      - id: M5-T4
+        title: Time-based Sleep Guard
+        state: done
+        acceptance:
+          - Sleep Guard is off by default.
+          - User selects a fixed duration before assertion creation.
+          - Stop and expiry release power assertions.
 
   - id: M6
     name: Window quick actions

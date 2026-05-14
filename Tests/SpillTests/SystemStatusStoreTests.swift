@@ -137,6 +137,23 @@ final class SystemStatusStoreTests: XCTestCase {
         XCTAssertEqual(store.memory.state, .unavailable)
     }
 
+    func testHiddenPowerFooterDoesNotRunPowerReader() async {
+        var powerReadCount = 0
+        let store = SystemStatusStore(
+            cpuReader: { .unavailableTestValue },
+            memoryReader: { .unavailableTestValue },
+            powerReader: {
+                powerReadCount += 1
+                return .unavailableTestValue
+            }
+        )
+
+        await store.refresh(readsPower: false)
+
+        XCTAssertEqual(powerReadCount, 0)
+        XCTAssertEqual(store.power.state, .unavailable)
+    }
+
     private func gib(_ value: UInt64) -> UInt64 {
         value * 1_073_741_824
     }

@@ -5,6 +5,7 @@ import Combine
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let settings = SpillSettings.shared
     private let scanner = AXMenuBarItemScanner()
+    private let sleepGuard = SleepGuardController()
     private lazy var scanCoordinator = MenuBarScanCoordinator(scanner: scanner, settings: settings)
     private lazy var hotKeyController = HotKeyController(action: { [weak self] in
         self?.toggleSpillBar()
@@ -12,6 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var spillPanelController = SpillPanelController(
         settings: settings,
         scanner: scanner,
+        sleepGuard: sleepGuard,
         visibilityChanged: { [weak self] isVisible in
             self?.statusItemController?.refresh(isSpillBarVisible: isVisible)
         }
@@ -141,6 +143,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         hotKeyController.stop()
         scanCoordinator.stop()
+        sleepGuard.stop()
         spillPanelController.hide(animated: false)
     }
 

@@ -1,0 +1,137 @@
+feature_id: power-footer-sleep-guard
+status: ready
+
+necessity:
+  decision: build
+  reason: "Power footer visibility and a time-based Sleep Guard support compact power control without adding menu bar clutter."
+  clarification_required: false
+  questions: []
+
+tasks:
+  - id: power-footer-sleep-guard-T1
+    title: Add settings and documentation
+    owner_role: builder
+    state: done
+    depends_on: []
+    write_scope:
+      - .agents/runs/power-footer-sleep-guard
+      - Sources/Spill/Settings/SpillSettings.swift
+      - Tests/SpillTests/SpillSettingsTests.swift
+    read_scope:
+      - .agents/templates
+      - Sources/Spill/Providers/SystemPowerProvider.swift
+    forbidden_scope:
+      - Sources/Spill/MenuBar/StatusItemController.swift
+    acceptance:
+      - Power footer visibility defaults to enabled.
+      - Sleep Guard display-awake preference defaults to disabled.
+      - Settings tests cover persistence.
+    verification:
+      commands:
+        - swift test
+      manual:
+        - Open Preferences and confirm settings are present.
+
+  - id: power-footer-sleep-guard-T2
+    title: Add Sleep Guard controller
+    owner_role: builder
+    state: done
+    depends_on:
+      - power-footer-sleep-guard-T1
+    write_scope:
+      - Sources/Spill/App/SleepGuardController.swift
+      - Tests/SpillTests/SleepGuardControllerTests.swift
+    read_scope:
+      - .agents/runs/power-footer-sleep-guard/01-prd.md
+      - .agents/runs/power-footer-sleep-guard/02-ard.md
+    forbidden_scope:
+      - Sources/Spill/MenuBar/StatusItemController.swift
+    acceptance:
+      - Sleep Guard is inactive by default.
+      - Starting creates assertions through an injectable manager.
+      - Stop and expiry release assertions.
+      - Failed display assertion rolls back the system assertion.
+    verification:
+      commands:
+        - swift test
+      manual:
+        - Start a duration and stop it from the panel.
+
+  - id: power-footer-sleep-guard-T3
+    title: Wire panel and preferences UI
+    owner_role: builder
+    state: done
+    depends_on:
+      - power-footer-sleep-guard-T2
+    write_scope:
+      - Sources/Spill/App/AppDelegate.swift
+      - Sources/Spill/Providers/SystemStatusStore.swift
+      - Sources/Spill/Panel/SpillBarView.swift
+      - Sources/Spill/Panel/SpillPanelController.swift
+      - Sources/Spill/Preferences/PowerPreferencesSection.swift
+      - Sources/Spill/Preferences/PreferencesView.swift
+      - Tests/SpillTests/SystemStatusStoreTests.swift
+    read_scope:
+      - Sources/Spill/App/SleepGuardController.swift
+      - Sources/Spill/Settings/SpillSettings.swift
+    forbidden_scope:
+      - Sources/Spill/MenuBar/StatusItemController.swift
+    acceptance:
+      - Footer has one compact Sleep Guard menu control.
+      - Active state shows remaining time.
+      - Power footer respects the visibility setting.
+      - Hidden power footer state does not run the power reader.
+      - Application termination stops Sleep Guard.
+    verification:
+      commands:
+        - swift build
+        - python3 .agents/scripts/workflow.py panel-layout-smoke
+      manual:
+        - Select a duration and stop it.
+
+  - id: power-footer-sleep-guard-T4
+    title: Verify and close out
+    owner_role: verifier
+    state: done
+    depends_on:
+      - power-footer-sleep-guard-T1
+      - power-footer-sleep-guard-T2
+      - power-footer-sleep-guard-T3
+    write_scope:
+      - .agents/runs/power-footer-sleep-guard/05-verification.md
+      - .agents/runs/power-footer-sleep-guard/06-closeout.md
+      - .agents/tasks/roadmap.yml
+    read_scope:
+      - .agents/runs/power-footer-sleep-guard
+      - .agents/scripts/workflow.py
+    forbidden_scope:
+      - Sources/Spill/MenuBar/StatusItemController.swift
+    acceptance:
+      - Verification results are documented.
+      - Roadmap reflects the new control.
+      - Workflow gates pass.
+    verification:
+      commands:
+        - swift build
+        - swift test
+        - python3 .agents/scripts/workflow.py verify
+        - python3 .agents/scripts/workflow.py runtime-smoke
+        - python3 .agents/scripts/workflow.py panel-open-smoke
+        - python3 .agents/scripts/workflow.py panel-layout-smoke
+      manual:
+        - Confirm no extra status item was added.
+
+parallel_groups:
+  - id: group-1
+    tasks:
+      - power-footer-sleep-guard-T1
+      - power-footer-sleep-guard-T2
+    rule: Settings and controller tests can progress independently after the feature scope is documented.
+  - id: group-2
+    tasks:
+      - power-footer-sleep-guard-T3
+    rule: UI wiring starts after the controller API is stable.
+  - id: group-3
+    tasks:
+      - power-footer-sleep-guard-T4
+    rule: Verification runs after implementation.

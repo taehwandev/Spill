@@ -30,14 +30,21 @@ final class SystemStatusStore: ObservableObject {
         self.powerReader = powerReader
     }
 
-    func refresh(enabledModules: Set<SpillStatusModule> = SpillStatusModule.defaultEnabled) async {
+    func refresh(
+        enabledModules: Set<SpillStatusModule> = SpillStatusModule.defaultEnabled,
+        readsPower: Bool = true
+    ) async {
         if enabledModules.contains(.memory) {
             memory = memoryReader()
         } else {
             memory = SystemMemoryProvider.status(from: nil)
         }
 
-        power = powerReader()
+        if readsPower {
+            power = powerReader()
+        } else {
+            power = SystemPowerProvider.status(from: nil)
+        }
 
         if enabledModules.contains(.cpu) {
             cpu = await cpuReader()
