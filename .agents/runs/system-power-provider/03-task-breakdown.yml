@@ -1,0 +1,102 @@
+feature_id: system-power-provider
+status: ready
+
+necessity:
+  decision: build
+  reason: "Power state is compact, useful, public-API compatible, and validates the provider model."
+  clarification_required: false
+  questions: []
+
+tasks:
+  - id: system-power-provider-T1
+    title: Add public API system power provider
+    owner_role: builder
+    state: done
+    depends_on: []
+    write_scope:
+      - Sources/Spill/Providers/SystemPowerProvider.swift
+      - Tests/SpillTests/SystemPowerProviderTests.swift
+    read_scope:
+      - .agents/specs/prd.md
+      - .agents/specs/ard.md
+      - Sources/Spill/Providers/SystemMemoryProvider.swift
+      - Sources/Spill/Providers/SpillStatusModels.swift
+    forbidden_scope:
+      - Sources/Spill/MenuBar/StatusItemController.swift
+      - Sources/Spill/MenuBar/NotchDetector.swift
+    acceptance:
+      - swift build passes.
+      - swift test passes.
+      - Power mapping tests cover battery, charging, AC-only, unavailable, and clamped capacity states.
+    verification:
+      commands:
+        - swift build
+        - swift test
+      manual:
+        - Open the panel and confirm the footer can show a compact power value.
+
+  - id: system-power-provider-T2
+    title: Surface power status in compact panel footer
+    owner_role: builder
+    state: done
+    depends_on:
+      - system-power-provider-T1
+    write_scope:
+      - Sources/Spill/Panel/SpillBarView.swift
+      - .agents/design/stitch.md
+    read_scope:
+      - .agents/design/stitch.md
+      - .agents/runs/system-power-provider/01-prd.md
+      - .agents/runs/system-power-provider/02-ard.md
+    forbidden_scope:
+      - Sources/Spill/MenuBar/StatusItemController.swift
+      - Sources/Spill/MenuBar/NotchDetector.swift
+    acceptance:
+      - Panel footer remains compact.
+      - Power state uses a short icon plus text value.
+      - Unavailable state is visible without disrupting count or time.
+    verification:
+      commands:
+        - swift build
+        - swift test
+      manual:
+        - Open the panel and verify the footer layout remains readable.
+
+  - id: system-power-provider-T3
+    title: Verify workflow and close out run documentation
+    owner_role: verifier
+    state: done
+    depends_on:
+      - system-power-provider-T1
+      - system-power-provider-T2
+    write_scope:
+      - .agents/runs/system-power-provider/05-verification.md
+      - .agents/runs/system-power-provider/06-closeout.md
+    read_scope:
+      - .agents/runs/system-power-provider
+      - .agents/scripts/workflow.py
+    forbidden_scope:
+      - Sources/Spill/MenuBar/StatusItemController.swift
+      - Sources/Spill/MenuBar/NotchDetector.swift
+    acceptance:
+      - Workflow readiness gates pass.
+      - Verification results are documented.
+      - Residual risks are documented.
+    verification:
+      commands:
+        - python3 .agents/scripts/workflow.py run-gates
+        - python3 .agents/scripts/workflow.py language-gates
+        - python3 .agents/scripts/workflow.py code-gates
+      manual:
+        - Confirm no private menu bar APIs were added.
+
+parallel_groups:
+  - id: group-1
+    tasks:
+      - system-power-provider-T1
+      - system-power-provider-T2
+    rule: Provider and UI work have disjoint write_scope entries after the provider API sketch is stable.
+  - id: group-2
+    tasks:
+      - system-power-provider-T3
+    rule: Tasks in a group must have disjoint write_scope entries.

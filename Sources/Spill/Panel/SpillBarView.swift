@@ -22,6 +22,10 @@ struct SpillBarView: View {
         SystemMemoryProvider.status()
     }
 
+    private var powerStatus: SystemPowerStatus {
+        SystemPowerProvider.status()
+    }
+
     private var panelState: SpillPanelState {
         if !AccessibilityPermission.isTrusted {
             return .permissionRequired
@@ -260,6 +264,8 @@ struct SpillBarView: View {
             footerItem(symbolName: scanner.isScanning ? "arrow.triangle.2.circlepath" : "bolt.horizontal.fill")
                 .foregroundStyle(scanner.isScanning ? Color.accentColor : Color.secondary)
 
+            powerFooter(status: powerStatus)
+
             if settings.showCountBadge {
                 HStack(spacing: 4) {
                     Image(systemName: "square.grid.2x2.fill")
@@ -292,8 +298,35 @@ struct SpillBarView: View {
             .frame(width: 13, height: 13)
     }
 
+    private func powerFooter(status: SystemPowerStatus) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: status.symbolName)
+                .font(.system(size: 10, weight: .semibold))
+                .frame(width: 13, height: 13)
+
+            Text(status.value)
+                .font(.system(size: 10, weight: .semibold, design: .rounded))
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.82)
+        }
+        .foregroundStyle(statusTint(for: status.state))
+        .help(powerHelpText(for: status))
+        .accessibilityLabel(powerHelpText(for: status))
+    }
+
     private var shortTime: String {
         Self.timeFormatter.string(from: Date())
+    }
+
+    private func powerHelpText(for status: SystemPowerStatus) -> String {
+        var parts = ["Power", status.value]
+
+        if let subtitle = status.subtitle, !subtitle.isEmpty {
+            parts.append(subtitle)
+        }
+
+        return parts.joined(separator: " - ")
     }
 
     private func helpText(for item: SpillDisplayedActionItem) -> String {

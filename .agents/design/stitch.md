@@ -35,6 +35,6 @@ The first native panel shell maps `Spill Multi-Widget Panel` to current app stat
 - Stitch header becomes `SpillPanelState` in `SpillBarView`.
 - Stitch performance cards become the real `MEMORY` provider meter and current `ACTIONS` meter.
 - Stitch active-app row becomes the current detected action strip.
-- Stitch quick status pill becomes the footer with Accessibility, scan, count, and time indicators.
+- Stitch quick status pill becomes the footer with Accessibility, scan, power, count, and time indicators.
 
-Do not render CPU, memory, battery, AI, or window-management values until real providers are implemented and verified.
+Do not render CPU, battery details beyond compact power state, AI, or window-management values until real providers are implemented and verified.
