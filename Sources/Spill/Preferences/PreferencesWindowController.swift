@@ -9,11 +9,17 @@ final class PreferencesWindowController {
     private let screenPadding: CGFloat = 32
     private let settings: SpillSettings
     private let scanner: AXMenuBarItemScanner
+    private let showPanelAction: () -> Void
     private var window: NSWindow?
 
-    init(settings: SpillSettings, scanner: AXMenuBarItemScanner) {
+    init(
+        settings: SpillSettings,
+        scanner: AXMenuBarItemScanner,
+        showPanelAction: @escaping () -> Void
+    ) {
         self.settings = settings
         self.scanner = scanner
+        self.showPanelAction = showPanelAction
     }
 
     func show() {
@@ -31,7 +37,11 @@ final class PreferencesWindowController {
             return window
         }
 
-        let contentView = PreferencesView(settings: settings, scanner: scanner)
+        let contentView = PreferencesView(
+            settings: settings,
+            scanner: scanner,
+            showPanelAction: showPanelAction
+        )
         let window = NSWindow(
             contentRect: defaultWindowFrame,
             styleMask: [.titled, .closable, .miniaturizable, .resizable],

@@ -4,6 +4,7 @@ import SwiftUI
 struct PreferencesView: View {
     @ObservedObject var settings: SpillSettings
     @ObservedObject var scanner: AXMenuBarItemScanner
+    let showPanelAction: () -> Void
     @State private var accessibilityTrusted = AccessibilityPermission.isTrusted
     @State private var loginItemError: String?
 
@@ -23,6 +24,14 @@ struct PreferencesView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+
+                Divider()
+
+                PanelFallbackPreferencesSection(
+                    scanner: scanner,
+                    accessibilityTrusted: $accessibilityTrusted,
+                    showPanelAction: showPanelAction
+                )
 
                 Divider()
 

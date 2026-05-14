@@ -16,11 +16,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.statusItemController?.refresh(isSpillBarVisible: isVisible)
         }
     )
-    private lazy var preferencesWindowController = PreferencesWindowController(settings: settings, scanner: scanner)
+    private lazy var preferencesWindowController = PreferencesWindowController(
+        settings: settings,
+        scanner: scanner,
+        showPanelAction: { [weak self] in
+            self?.showSpillBar()
+        }
+    )
     private var statusItemController: StatusItemController?
     private var cancellables = Set<AnyCancellable>()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        configureMainMenu()
+
         statusItemController = StatusItemController(
             settings: settings,
             hiddenItemCountProvider: { [weak scanner] in
@@ -95,11 +103,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func toggleSpillBar() {
+        if spillPanelController.isVisible {
+            spillPanelController.hide(animated: true)
+            statusItemController?.refresh(isSpillBarVisible: false)
+            return
+        }
+
+        showSpillBar()
+    }
+
+    private func showSpillBar() {
         if !AccessibilityPermission.isTrusted {
             _ = AccessibilityPermission.request()
         }
 
-        spillPanelController.toggle()
+        spillPanelController.show()
 
         if AccessibilityPermission.isTrusted && scanner.items.isEmpty {
             scanner.refresh()
@@ -161,5 +179,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.statusItemController?.refresh()
             }
             .store(in: &cancellables)
+    }
+
+    private func configureMainMenu() {
+        let mainMenu = NSMenu()
+        let appMenuItem = NSMenuItem()
+        mainMenu.addItem(appMenuItem)
+
+        let appMenu = NSMenu(title: "Spill")
+        appMenuItem.submenu = appMenu
+        appMenu.addItem(mainMenuItem(title: "Show Spill Panel", action: #selector(showSpillPanelFromMainMenu), keyEquivalent: ""))
+        appMenu.addItem(mainMenuItem(title: "Refresh Menu Bar Items", action: #selector(refreshMenuBarItemsFromMainMenu), keyEquivalent: "r"))
+        appMenu.addItem(.separator())
+        appMenu.addItem(mainMenuItem(title: "Preferences...", action: #selector(showPreferencesFromMainMenu), keyEquivalent: ","))
+        appMenu.addItem(.separator())
+        appMenu.addItem(mainMenuItem(title: "Quit Spill", action: #selector(quitFromMainMenu), keyEquivalent: "q"))
+        NSApp.mainMenu = mainMenu
+    }
+
+    private func mainMenuItem(title: String, action: Selector, keyEquivalent: String) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: keyEquivalent)
+        item.target = self
+        return item
+    }
+
+    @objc private func showSpillPanelFromMainMenu() {
+        showSpillBar()
+    }
+
+    @objc private func refreshMenuBarItemsFromMainMenu() {
+        refreshMenuBarItems()
+    }
+
+    @objc private func showPreferencesFromMainMenu() {
+        showPreferences()
+    }
+
+    @objc private func quitFromMainMenu() {
+        NSApp.terminate(nil)
     }
 }

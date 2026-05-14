@@ -1,0 +1,120 @@
+feature_id: panel-fallback-launcher
+status: ready
+
+necessity:
+  decision: build
+  reason: Users need a visible fallback path to open the panel when the menu bar trigger is hard to locate.
+  clarification_required: false
+  questions: []
+
+tasks:
+  - id: panel-fallback-launcher-T1
+    title: Document fallback launcher scope
+    owner_role: product-architect
+    state: done
+    depends_on: []
+    write_scope:
+      - .agents/runs/panel-fallback-launcher/
+    read_scope:
+      - .agents/specs/prd.md
+      - .agents/specs/ard.md
+      - .agents/runs/stitch-panel-shell/
+    forbidden_scope:
+      - Sources/Spill/MenuBar/StatusItemController.swift
+    acceptance:
+      - Necessity is approved for build.
+      - Non-goals exclude additional status items and private APIs.
+      - Verification includes runtime smoke.
+    verification:
+      commands:
+        - python3 .agents/scripts/workflow.py run-gates
+      manual: []
+
+  - id: panel-fallback-launcher-T2
+    title: Add app menu fallback commands
+    owner_role: builder
+    state: done
+    depends_on:
+      - panel-fallback-launcher-T1
+    write_scope:
+      - Sources/Spill/App/AppDelegate.swift
+    read_scope:
+      - Sources/Spill/Panel/SpillPanelController.swift
+      - Sources/Spill/MenuBar/StatusItemController.swift
+    forbidden_scope:
+      - Sources/Spill/MenuBar/StatusItemController.swift
+      - Sources/Spill/Accessibility/
+    acceptance:
+      - App menu includes Show Spill Panel, Refresh Menu Bar Items, Preferences, and Quit.
+      - Show command calls the existing panel controller path.
+      - Status item behavior remains unchanged.
+    verification:
+      commands:
+        - swift build
+      manual:
+        - Activate the app and inspect the app menu.
+
+  - id: panel-fallback-launcher-T3
+    title: Add preferences fallback controls
+    owner_role: builder
+    state: done
+    depends_on:
+      - panel-fallback-launcher-T1
+    write_scope:
+      - Sources/Spill/Preferences/PreferencesView.swift
+      - Sources/Spill/Preferences/PreferencesWindowController.swift
+      - Sources/Spill/Preferences/PanelFallbackPreferencesSection.swift
+    read_scope:
+      - Sources/Spill/Preferences/
+      - Sources/Spill/Accessibility/AccessibilityPermission.swift
+    forbidden_scope:
+      - Sources/Spill/MenuBar/StatusItemController.swift
+      - Sources/Spill/Providers/
+    acceptance:
+      - Preferences has an Open Panel button.
+      - Preferences has a refresh button backed by the scanner.
+      - Accessibility state is visible without tutorial copy.
+    verification:
+      commands:
+        - swift build
+      manual:
+        - Open preferences and click Open Panel.
+
+  - id: panel-fallback-launcher-T4
+    title: Verify fallback launcher
+    owner_role: verifier
+    state: done
+    depends_on:
+      - panel-fallback-launcher-T2
+      - panel-fallback-launcher-T3
+    write_scope:
+      - .agents/runs/panel-fallback-launcher/05-verification.md
+      - .agents/runs/panel-fallback-launcher/06-closeout.md
+    read_scope:
+      - Sources/Spill/App/AppDelegate.swift
+      - Sources/Spill/Preferences/
+    forbidden_scope:
+      - Sources/Spill/MenuBar/StatusItemController.swift
+    acceptance:
+      - Build, tests, workflow gates, and runtime smoke pass.
+      - No private API or status item spacer is introduced.
+    verification:
+      commands:
+        - swift build
+        - swift test
+        - python3 .agents/scripts/workflow.py verify
+        - python3 .agents/scripts/workflow.py runtime-smoke
+      manual:
+        - Record manual visual gaps if panel is not inspected.
+
+parallel_groups:
+  - id: docs-and-implementation
+    tasks:
+      - panel-fallback-launcher-T1
+      - panel-fallback-launcher-T2
+      - panel-fallback-launcher-T3
+    rule: App menu and preferences write scopes are disjoint after the shared closure API is known.
+  - id: verification
+    tasks:
+      - panel-fallback-launcher-T4
+    rule: Run after implementation compiles.
