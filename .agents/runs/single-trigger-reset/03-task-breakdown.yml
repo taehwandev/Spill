@@ -11,7 +11,7 @@ tasks:
   - id: single-trigger-reset-T1
     title: Remove status item spacer architecture
     owner_role: builder
-    state: todo
+    state: done
     depends_on: []
     write_scope:
       - Sources/Spill/MenuBar/StatusItemController.swift

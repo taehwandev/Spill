@@ -11,7 +11,7 @@ tasks:
   - id: source-folder-layout-T1
     title: Move Swift files into responsibility folders
     owner_role: builder
-    state: todo
+    state: done
     depends_on: []
     write_scope:
       - Sources/Spill/App/

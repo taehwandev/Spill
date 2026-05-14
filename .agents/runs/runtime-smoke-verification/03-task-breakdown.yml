@@ -11,7 +11,7 @@ tasks:
   - id: runtime-smoke-verification-T1
     title: Add bundled app runtime smoke test
     owner_role: builder
-    state: todo
+    state: done
     depends_on: []
     write_scope:
       - Sources/Spill/App/AppDelegate.swift

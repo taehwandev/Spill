@@ -1,6 +1,12 @@
 version: 1
 product: Spill
 direction: compact macOS control tray
+status_legend:
+  done: implemented and verified in a completed run.
+  partial: implemented enough to use, but still needs follow-up polish or visual verification.
+  next: recommended near-term work.
+  pending: planned but not started.
+  deferred: valid idea, intentionally not in the near-term path.
 
 milestones:
   - id: M0
@@ -9,17 +15,20 @@ milestones:
     tasks:
       - id: M0-T1
         title: Remove spacer status item
+        state: done
         acceptance:
           - StatusItemController creates exactly one NSStatusItem.
           - No status item length depends on notch width.
           - swift build passes.
       - id: M0-T2
         title: Update README positioning
+        state: done
         acceptance:
           - README explains public API limitations.
           - README describes Spill as a compact control tray.
       - id: M0-T3
         title: Add runtime smoke verification
+        state: done
         acceptance:
           - Bundled app can launch in smoke mode.
           - Smoke mode verifies readiness and clean shutdown.
@@ -31,13 +40,22 @@ milestones:
     tasks:
       - id: M1-T1
         title: Add panel section model
+        state: partial
         acceptance:
           - Panel can render status strip, AI strip, actions, and window actions.
       - id: M1-T2
         title: Clean panel visuals
+        state: partial
         acceptance:
           - No nested cards.
           - Compact height target is preserved.
+      - id: M1-T3
+        title: Add visual panel verification
+        state: next
+        acceptance:
+          - A repeatable verification path confirms the panel opens with readable compact layout.
+          - Footer status values do not overflow.
+          - Results are documented in a run closeout.
 
   - id: M2
     name: Providers
@@ -45,12 +63,21 @@ milestones:
     tasks:
       - id: M2-T1
         title: Add status/action data models
+        state: done
         acceptance:
           - SwiftUI views consume plain models.
       - id: M2-T2
         title: Add provider protocol or structs
+        state: done
         acceptance:
           - Providers are isolated from panel layout.
+      - id: M2-T3
+        title: Add provider refresh store
+        state: next
+        acceptance:
+          - SwiftUI views consume cached provider state.
+          - Expensive providers are not read directly during view rendering.
+          - Refresh cadence is explicit and testable.
 
   - id: M3
     name: System strip
@@ -58,18 +85,22 @@ milestones:
     tasks:
       - id: M3-T1
         title: Memory status
+        state: done
         acceptance:
           - Memory usage displays as a compact pill.
       - id: M3-T2
         title: CPU status
+        state: pending
         acceptance:
           - CPU usage displays without blocking UI.
       - id: M3-T3
         title: Battery status
+        state: done
         acceptance:
           - Battery percent/state displays when available.
       - id: M3-T4
         title: Network status
+        state: pending
         acceptance:
           - Network availability displays when available.
 
@@ -79,14 +110,17 @@ milestones:
     tasks:
       - id: M4-T1
         title: Codex state
+        state: pending
         acceptance:
           - Detects obvious local Codex process/session state when available.
       - id: M4-T2
         title: Ollama state
+        state: pending
         acceptance:
           - Detects Ollama running/not running without network dependency.
       - id: M4-T3
         title: OpenAI config state
+        state: pending
         acceptance:
           - Shows configured/missing without exposing secrets.
 
@@ -96,15 +130,18 @@ milestones:
     tasks:
       - id: M5-T1
         title: Pinned actions UI
+        state: pending
         acceptance:
           - Pin/unpin works.
           - Pinned actions render prominently.
       - id: M5-T2
         title: Action execution result
+        state: pending
         acceptance:
           - Success/failure/permission states are visible.
       - id: M5-T3
         title: App activation fallback
+        state: pending
         acceptance:
           - Stale AX item can fallback to opening/activating app.
 
@@ -114,14 +151,17 @@ milestones:
     tasks:
       - id: M6-T1
         title: Focused window frame operations
+        state: pending
         acceptance:
           - Left/right/center/maximize work on normal windows.
       - id: M6-T2
         title: Next display
+        state: pending
         acceptance:
           - Active window can move to next display when multiple displays exist.
       - id: M6-T3
         title: Restore frame
+        state: pending
         acceptance:
           - Previous frame restores best-effort.
 
@@ -131,13 +171,16 @@ milestones:
     tasks:
       - id: M7-T1
         title: Bundle metadata and icon
+        state: pending
         acceptance:
           - App bundle has production metadata.
       - id: M7-T2
         title: Signing and notarization docs
+        state: pending
         acceptance:
           - Developer ID release checklist exists.
       - id: M7-T3
         title: DMG or zip release artifact
+        state: pending
         acceptance:
           - Release artifact can be created locally.
