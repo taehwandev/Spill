@@ -33,7 +33,7 @@ Non-UI foundation work, such as provider models and test infrastructure, may pro
 The first native panel shell maps `Spill Multi-Widget Panel` to current app state only:
 
 - Stitch header becomes `SpillPanelState` in `SpillBarView`.
-- Stitch performance cards become `ACCESS` and `ACTIONS` status meters until real providers exist.
+- Stitch performance cards become the real `MEMORY` provider meter and current `ACTIONS` meter.
 - Stitch active-app row becomes the current detected action strip.
 - Stitch quick status pill becomes the footer with Accessibility, scan, count, and time indicators.
 

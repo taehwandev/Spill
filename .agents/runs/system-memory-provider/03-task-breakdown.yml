@@ -1,0 +1,118 @@
+feature_id: system-memory-provider
+status: ready
+
+necessity:
+  decision: build
+  reason: The panel needs a real system status signal, and memory usage is the lowest-risk first provider.
+  clarification_required: false
+  questions: []
+
+tasks:
+  - id: system-memory-provider-T1
+    title: Document memory-only provider scope
+    owner_role: product-architect
+    state: done
+    depends_on: []
+    write_scope:
+      - .agents/runs/system-memory-provider/
+    read_scope:
+      - .agents/runs/stitch-panel-shell/
+      - .agents/runs/provider-model-foundation/
+    forbidden_scope:
+      - Sources/Spill/MenuBar/StatusItemController.swift
+    acceptance:
+      - Necessity is approved for build.
+      - Non-goals exclude CPU, battery, AI, and fake values.
+      - Verification includes panel-open smoke.
+    verification:
+      commands:
+        - python3 .agents/scripts/workflow.py run-gates
+      manual: []
+
+  - id: system-memory-provider-T2
+    title: Add memory status provider
+    owner_role: builder
+    state: done
+    depends_on:
+      - system-memory-provider-T1
+    write_scope:
+      - Sources/Spill/Providers/SystemMemoryProvider.swift
+    read_scope:
+      - Sources/Spill/Providers/SpillStatusModels.swift
+    forbidden_scope:
+      - Sources/Spill/MenuBar/StatusItemController.swift
+      - Sources/Spill/Accessibility/
+    acceptance:
+      - Provider reads memory through public APIs.
+      - Provider maps memory into SpillStatusItem.
+      - Provider returns unavailable status when reading fails.
+    verification:
+      commands:
+        - swift build
+        - swift test
+      manual: []
+
+  - id: system-memory-provider-T3
+    title: Render memory status in panel
+    owner_role: builder
+    state: done
+    depends_on:
+      - system-memory-provider-T2
+    write_scope:
+      - Sources/Spill/Panel/SpillBarView.swift
+      - .agents/design/stitch.md
+    read_scope:
+      - Sources/Spill/Providers/SystemMemoryProvider.swift
+      - Sources/Spill/Panel/SpillBarView.swift
+    forbidden_scope:
+      - Sources/Spill/MenuBar/StatusItemController.swift
+    acceptance:
+      - Panel status section shows MEMORY and ACTIONS.
+      - Accessibility state remains visible through panel state and footer.
+      - No fake CPU or battery rows are added.
+    verification:
+      commands:
+        - swift build
+      manual:
+        - Open panel and confirm MEMORY row.
+
+  - id: system-memory-provider-T4
+    title: Add tests and verify
+    owner_role: verifier
+    state: done
+    depends_on:
+      - system-memory-provider-T2
+      - system-memory-provider-T3
+    write_scope:
+      - Tests/SpillTests/SystemMemoryProviderTests.swift
+      - .agents/runs/system-memory-provider/05-verification.md
+      - .agents/runs/system-memory-provider/06-closeout.md
+    read_scope:
+      - Sources/Spill/Providers/SystemMemoryProvider.swift
+      - Sources/Spill/Panel/SpillBarView.swift
+    forbidden_scope:
+      - Sources/Spill/MenuBar/StatusItemController.swift
+    acceptance:
+      - Unit tests cover calculation, thresholds, unavailable fallback, and status item mapping.
+      - Build, tests, workflow, runtime smoke, and panel-open smoke pass.
+    verification:
+      commands:
+        - swift build
+        - swift test
+        - python3 .agents/scripts/workflow.py verify
+        - python3 .agents/scripts/workflow.py runtime-smoke
+        - python3 .agents/scripts/workflow.py panel-open-smoke
+      manual:
+        - Record visual verification gap if panel is not inspected.
+
+parallel_groups:
+  - id: docs-and-provider
+    tasks:
+      - system-memory-provider-T1
+      - system-memory-provider-T2
+    rule: Provider work may start after memory-only scope is clear.
+  - id: ui-and-verification
+    tasks:
+      - system-memory-provider-T3
+      - system-memory-provider-T4
+    rule: Run after provider API compiles.

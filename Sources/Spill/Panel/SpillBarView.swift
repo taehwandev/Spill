@@ -18,6 +18,10 @@ struct SpillBarView: View {
         }
     }
 
+    private var memoryStatus: SystemMemoryStatus {
+        SystemMemoryProvider.status()
+    }
+
     private var panelState: SpillPanelState {
         if !AccessibilityPermission.isTrusted {
             return .permissionRequired
@@ -91,12 +95,7 @@ struct SpillBarView: View {
             sectionHeader("STATUS", symbolName: "waveform.path.ecg")
 
             VStack(spacing: 8) {
-                statusMeter(
-                    title: "ACCESS",
-                    value: AccessibilityPermission.isTrusted ? "Ready" : "Needed",
-                    progress: AccessibilityPermission.isTrusted ? 1 : 0,
-                    tint: AccessibilityPermission.isTrusted ? .accentColor : .orange
-                )
+                memoryMeter
 
                 statusMeter(
                     title: "ACTIONS",
@@ -105,6 +104,32 @@ struct SpillBarView: View {
                     tint: displayItems.isEmpty ? .secondary : .green
                 )
             }
+        }
+    }
+
+    private var memoryMeter: some View {
+        let status = memoryStatus
+
+        return statusMeter(
+            title: "MEMORY",
+            value: status.value,
+            progress: status.usageRatio,
+            tint: statusTint(for: status.state)
+        )
+    }
+
+    private func statusTint(for state: SpillStatusState) -> Color {
+        switch state {
+        case .normal:
+            return .green
+        case .active:
+            return .accentColor
+        case .warning:
+            return .orange
+        case .unavailable:
+            return .secondary
+        case .refreshing:
+            return .accentColor
         }
     }
 
