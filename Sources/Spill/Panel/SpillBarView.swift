@@ -3,6 +3,7 @@ import SwiftUI
 struct SpillBarView: View {
     @ObservedObject var settings: SpillSettings
     @ObservedObject var scanner: AXMenuBarItemScanner
+    @ObservedObject var statusStore: SystemStatusStore
     let dismissAction: () -> Void
 
     private var displayItems: [MenuBarItemSnapshot] {
@@ -16,14 +17,6 @@ struct SpillBarView: View {
                 action: MenuBarActionAdapter.action(from: item)
             )
         }
-    }
-
-    private var memoryStatus: SystemMemoryStatus {
-        SystemMemoryProvider.status()
-    }
-
-    private var powerStatus: SystemPowerStatus {
-        SystemPowerProvider.status()
     }
 
     private var panelState: SpillPanelState {
@@ -52,6 +45,9 @@ struct SpillBarView: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 13)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onAppear {
+            statusStore.refresh()
+        }
     }
 
     private var header: some View {
@@ -112,7 +108,7 @@ struct SpillBarView: View {
     }
 
     private var memoryMeter: some View {
-        let status = memoryStatus
+        let status = statusStore.memory
 
         return statusMeter(
             title: "MEMORY",
@@ -264,7 +260,7 @@ struct SpillBarView: View {
             footerItem(symbolName: scanner.isScanning ? "arrow.triangle.2.circlepath" : "bolt.horizontal.fill")
                 .foregroundStyle(scanner.isScanning ? Color.accentColor : Color.secondary)
 
-            powerFooter(status: powerStatus)
+            powerFooter(status: statusStore.power)
 
             if settings.showCountBadge {
                 HStack(spacing: 4) {

@@ -9,6 +9,7 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
     private let layout = SpillPanelLayout()
     private let settings: SpillSettings
     private let scanner: AXMenuBarItemScanner
+    private let statusStore = SystemStatusStore()
     private let visibilityChanged: (Bool) -> Void
     private var panel: NSPanel?
     private var isPresented = false
@@ -47,6 +48,7 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
         let finalFrame = panelFrame()
         let startFrame = finalFrame.offsetBy(dx: 0, dy: 8)
 
+        statusStore.refresh()
         isPresented = true
         visibilityChanged(true)
         panel.setFrame(settings.useSpillAnimation ? startFrame : finalFrame, display: false)
@@ -122,7 +124,7 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
         visualEffectView.layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.45).cgColor
 
         let hostingView = NSHostingView(
-            rootView: SpillBarView(settings: settings, scanner: scanner) { [weak self] in
+            rootView: SpillBarView(settings: settings, scanner: scanner, statusStore: statusStore) { [weak self] in
                 self?.hide(animated: true)
             }
         )

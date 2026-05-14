@@ -73,7 +73,7 @@ milestones:
           - Providers are isolated from panel layout.
       - id: M2-T3
         title: Add provider refresh store
-        state: next
+        state: done
         acceptance:
           - SwiftUI views consume cached provider state.
           - Expensive providers are not read directly during view rendering.

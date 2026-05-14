@@ -1,0 +1,100 @@
+feature_id: provider-refresh-store
+status: ready
+
+necessity:
+  decision: build
+  reason: "Provider values should be cached before adding more system, AI, and window status sources."
+  clarification_required: false
+  questions: []
+
+tasks:
+  - id: provider-refresh-store-T1
+    title: Add observable system status store
+    owner_role: builder
+    state: done
+    depends_on: []
+    write_scope:
+      - Sources/Spill/Providers/SystemStatusStore.swift
+      - Tests/SpillTests/SystemStatusStoreTests.swift
+    read_scope:
+      - .agents/specs/prd.md
+      - .agents/specs/ard.md
+      - Sources/Spill/Providers/SystemMemoryProvider.swift
+      - Sources/Spill/Providers/SystemPowerProvider.swift
+    forbidden_scope:
+      - Sources/Spill/MenuBar/StatusItemController.swift
+    acceptance:
+      - swift build passes.
+      - swift test passes.
+      - Store tests cover default state and injected refresh values.
+    verification:
+      commands:
+        - swift build
+        - swift test
+      manual:
+        - Open the panel and confirm existing status values still render.
+
+  - id: provider-refresh-store-T2
+    title: Wire panel to cached provider state
+    owner_role: builder
+    state: done
+    depends_on:
+      - provider-refresh-store-T1
+    write_scope:
+      - Sources/Spill/Panel/SpillBarView.swift
+      - Sources/Spill/Panel/SpillPanelController.swift
+    read_scope:
+      - Sources/Spill/Providers/SystemStatusStore.swift
+      - .agents/runs/provider-refresh-store/01-prd.md
+      - .agents/runs/provider-refresh-store/02-ard.md
+    forbidden_scope:
+      - Sources/Spill/MenuBar/StatusItemController.swift
+      - Sources/Spill/MenuBar/NotchDetector.swift
+    acceptance:
+      - SpillBarView observes cached store state.
+      - SpillBarView does not call provider status readers directly.
+      - Panel refreshes store before showing.
+    verification:
+      commands:
+        - swift build
+        - swift test
+      manual:
+        - Open the panel and confirm memory and power values remain visible.
+
+  - id: provider-refresh-store-T3
+    title: Verify and close out provider store run
+    owner_role: verifier
+    state: done
+    depends_on:
+      - provider-refresh-store-T1
+      - provider-refresh-store-T2
+    write_scope:
+      - .agents/runs/provider-refresh-store/05-verification.md
+      - .agents/runs/provider-refresh-store/06-closeout.md
+    read_scope:
+      - .agents/runs/provider-refresh-store
+      - .agents/scripts/workflow.py
+    forbidden_scope:
+      - Sources/Spill/MenuBar/StatusItemController.swift
+    acceptance:
+      - Verification results are documented.
+      - Residual risks are documented.
+      - Workflow gates pass.
+    verification:
+      commands:
+        - python3 .agents/scripts/workflow.py verify
+        - python3 .agents/scripts/workflow.py run-gates
+        - python3 .agents/scripts/workflow.py language-gates
+      manual:
+        - Confirm no visible panel redesign is included.
+
+parallel_groups:
+  - id: group-1
+    tasks:
+      - provider-refresh-store-T1
+      - provider-refresh-store-T2
+    rule: Store and UI wiring have separate write scopes after the store API is stable.
+  - id: group-2
+    tasks:
+      - provider-refresh-store-T3
+    rule: Tasks in a group must have disjoint write_scope entries.
