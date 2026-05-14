@@ -75,8 +75,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ProcessInfo.processInfo.environment["SPILL_SMOKE_TEST"] == "1"
     }
 
+    private var shouldOpenPanelInSmokeTest: Bool {
+        ProcessInfo.processInfo.environment["SPILL_SMOKE_OPEN_PANEL"] == "1"
+    }
+
     private func startSmokeTestExitTimer() {
         print("SPILL_SMOKE_READY")
+
+        if shouldOpenPanelInSmokeTest {
+            openPanelForSmokeTest()
+        }
 
         let configuredDelay = ProcessInfo.processInfo.environment["SPILL_SMOKE_TEST_EXIT_AFTER"]
             .flatMap(TimeInterval.init)
@@ -85,6 +93,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.main.asyncAfter(deadline: .now() + exitDelay) {
             print("SPILL_SMOKE_EXIT")
             NSApp.terminate(nil)
+        }
+    }
+
+    private func openPanelForSmokeTest() {
+        spillPanelController.show()
+        statusItemController?.refresh(isSpillBarVisible: spillPanelController.isVisible)
+
+        if spillPanelController.isVisible {
+            print("SPILL_PANEL_SMOKE_VISIBLE")
+        } else {
+            print("SPILL_PANEL_SMOKE_NOT_VISIBLE")
         }
     }
 

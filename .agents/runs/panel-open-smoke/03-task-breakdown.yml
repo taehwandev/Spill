@@ -1,0 +1,116 @@
+feature_id: panel-open-smoke
+status: ready
+
+necessity:
+  decision: build
+  reason: Panel UI changes need an automated smoke path that exercises panel presentation.
+  clarification_required: false
+  questions: []
+
+tasks:
+  - id: panel-open-smoke-T1
+    title: Document panel smoke scope
+    owner_role: product-architect
+    state: done
+    depends_on: []
+    write_scope:
+      - .agents/runs/panel-open-smoke/
+    read_scope:
+      - .agents/runs/runtime-smoke-verification/
+      - .agents/runs/stitch-panel-shell/
+    forbidden_scope:
+      - Sources/Spill/MenuBar/StatusItemController.swift
+    acceptance:
+      - Necessity is approved for build.
+      - Non-goals exclude screenshot and private APIs.
+      - Verification includes runtime smoke and panel-open smoke.
+    verification:
+      commands:
+        - python3 .agents/scripts/workflow.py run-gates
+      manual: []
+
+  - id: panel-open-smoke-T2
+    title: Add app panel-open smoke mode
+    owner_role: builder
+    state: done
+    depends_on:
+      - panel-open-smoke-T1
+    write_scope:
+      - Sources/Spill/App/AppDelegate.swift
+    read_scope:
+      - Sources/Spill/Panel/SpillPanelController.swift
+      - Sources/Spill/App/AppDelegate.swift
+    forbidden_scope:
+      - Sources/Spill/MenuBar/StatusItemController.swift
+      - Sources/Spill/Accessibility/
+    acceptance:
+      - `SPILL_SMOKE_OPEN_PANEL=1` opens the panel in smoke mode.
+      - Smoke mode does not request Accessibility.
+      - Success and failure log markers are explicit.
+    verification:
+      commands:
+        - swift build
+      manual: []
+
+  - id: panel-open-smoke-T3
+    title: Add script and workflow command
+    owner_role: builder
+    state: done
+    depends_on:
+      - panel-open-smoke-T2
+    write_scope:
+      - scripts/verify-panel-open-smoke.sh
+      - .agents/scripts/workflow.py
+    read_scope:
+      - scripts/verify-runtime-smoke.sh
+      - .agents/scripts/workflow.py
+    forbidden_scope:
+      - Sources/Spill/MenuBar/StatusItemController.swift
+    acceptance:
+      - Script builds app and checks panel-open log marker.
+      - Workflow exposes `panel-open-smoke`.
+      - Existing runtime smoke remains available.
+    verification:
+      commands:
+        - python3 .agents/scripts/workflow.py panel-open-smoke
+      manual: []
+
+  - id: panel-open-smoke-T4
+    title: Verify smoke coverage
+    owner_role: verifier
+    state: done
+    depends_on:
+      - panel-open-smoke-T2
+      - panel-open-smoke-T3
+    write_scope:
+      - .agents/runs/panel-open-smoke/05-verification.md
+      - .agents/runs/panel-open-smoke/06-closeout.md
+    read_scope:
+      - Sources/Spill/App/AppDelegate.swift
+      - scripts/
+      - .agents/scripts/workflow.py
+    forbidden_scope:
+      - Sources/Spill/MenuBar/StatusItemController.swift
+    acceptance:
+      - Build, tests, workflow, runtime smoke, and panel-open smoke pass.
+    verification:
+      commands:
+        - swift build
+        - swift test
+        - python3 .agents/scripts/workflow.py verify
+        - python3 .agents/scripts/workflow.py runtime-smoke
+        - python3 .agents/scripts/workflow.py panel-open-smoke
+      manual:
+        - Record that pixel-level visual verification remains future work.
+
+parallel_groups:
+  - id: docs-and-smoke
+    tasks:
+      - panel-open-smoke-T1
+      - panel-open-smoke-T2
+      - panel-open-smoke-T3
+    rule: Script work depends on final log markers from app smoke mode.
+  - id: verification
+    tasks:
+      - panel-open-smoke-T4
+    rule: Run after smoke command is implemented.
