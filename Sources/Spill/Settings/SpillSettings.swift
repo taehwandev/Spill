@@ -59,6 +59,20 @@ final class SpillSettings: ObservableObject {
         }
     }
 
+    @Published var menuBarStatusDisplayStyle: MenuBarStatusDisplayStyle {
+        didSet { defaults.set(menuBarStatusDisplayStyle.rawValue, forKey: Keys.menuBarStatusDisplayStyle) }
+    }
+
+    @Published var menuBarStatusPrecision: MenuBarStatusPrecision {
+        didSet { defaults.set(menuBarStatusPrecision.rawValue, forKey: Keys.menuBarStatusPrecision) }
+    }
+
+    @Published var menuBarStatusHighlightThreshold: MenuBarStatusHighlightThreshold {
+        didSet {
+            defaults.set(menuBarStatusHighlightThreshold.rawValue, forKey: Keys.menuBarStatusHighlightThreshold)
+        }
+    }
+
     @Published var selectedItemKeys: Set<String> {
         didSet { defaults.set(Array(selectedItemKeys).sorted(), forKey: Keys.selectedItemKeys) }
     }
@@ -93,6 +107,15 @@ final class SpillSettings: ObservableObject {
         enabledMenuBarStatusItems = SpillMenuBarStatusItem.normalizedEnabled(
             from: defaults.stringArray(forKey: Keys.enabledMenuBarStatusItems)
         )
+        let styleRawValue = defaults.string(forKey: Keys.menuBarStatusDisplayStyle)
+            ?? MenuBarStatusDisplayStyle.labelAndPercent.rawValue
+        menuBarStatusDisplayStyle = MenuBarStatusDisplayStyle(rawValue: styleRawValue) ?? .labelAndPercent
+        let precisionRawValue = defaults.object(forKey: Keys.menuBarStatusPrecision) as? Int
+            ?? MenuBarStatusPrecision.whole.rawValue
+        menuBarStatusPrecision = MenuBarStatusPrecision(rawValue: precisionRawValue) ?? .whole
+        let thresholdRawValue = defaults.object(forKey: Keys.menuBarStatusHighlightThreshold) as? Int
+            ?? MenuBarStatusHighlightThreshold.seventy.rawValue
+        menuBarStatusHighlightThreshold = MenuBarStatusHighlightThreshold(rawValue: thresholdRawValue) ?? .seventy
         selectedItemKeys = Set(defaults.stringArray(forKey: Keys.selectedItemKeys) ?? [])
         hotKeyEnabled = defaults.object(forKey: Keys.hotKeyEnabled) as? Bool ?? true
         launchAtLogin = LoginItemController.isEnabled
@@ -179,6 +202,9 @@ private enum Keys {
     static let statusModuleOrder = "statusModuleOrder"
     static let enabledStatusModules = "enabledStatusModules"
     static let enabledMenuBarStatusItems = "enabledMenuBarStatusItems"
+    static let menuBarStatusDisplayStyle = "menuBarStatusDisplayStyle"
+    static let menuBarStatusPrecision = "menuBarStatusPrecision"
+    static let menuBarStatusHighlightThreshold = "menuBarStatusHighlightThreshold"
     static let selectedItemKeys = "selectedItemKeys"
     static let hotKeyEnabled = "hotKeyEnabled"
     static let launchAtLogin = "launchAtLogin"

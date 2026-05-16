@@ -8,7 +8,9 @@ struct MenuBarStatusSegment: Equatable {
 
     let kind: Kind
     let title: String
+    let shortTitle: String
     let value: String
+    let displayText: String
     let usageRatio: Double
     let state: SpillStatusState
     let symbolName: String
@@ -28,13 +30,23 @@ struct MenuBarStatusSummary: Equatable {
     static func make(
         enabledItems: Set<SpillMenuBarStatusItem>,
         cpu: SystemCPUStatus,
-        memory: SystemMemoryStatus
+        memory: SystemMemoryStatus,
+        displayStyle: MenuBarStatusDisplayStyle = .labelAndPercent,
+        precision: MenuBarStatusPrecision = .whole,
+        highlightThreshold: MenuBarStatusHighlightThreshold = .seventy
     ) -> MenuBarStatusSummary {
         let orderedItems = SpillMenuBarStatusItem.defaultOrder.filter {
             enabledItems.contains($0) && SpillMenuBarStatusItem.glanceSupported.contains($0)
         }
         let entries = orderedItems.compactMap {
-            entry(for: $0, cpu: cpu, memory: memory)
+            entry(
+                for: $0,
+                cpu: cpu,
+                memory: memory,
+                displayStyle: displayStyle,
+                precision: precision,
+                highlightThreshold: highlightThreshold
+            )
         }
         guard !entries.isEmpty else {
             return MenuBarStatusSummary(title: "", tooltip: "Show Spill Bar", segments: [])
@@ -50,34 +62,51 @@ struct MenuBarStatusSummary: Equatable {
     private static func entry(
         for item: SpillMenuBarStatusItem,
         cpu: SystemCPUStatus,
-        memory: SystemMemoryStatus
+        memory: SystemMemoryStatus,
+        displayStyle: MenuBarStatusDisplayStyle,
+        precision: MenuBarStatusPrecision,
+        highlightThreshold: MenuBarStatusHighlightThreshold
     ) -> MenuBarStatusEntry? {
         switch item {
         case .cpu:
+            let value = compactCPUValue(cpu, precision: precision)
+            let displayText = displayStyle.text(label: item.shortTitle, value: value)
+            let usageRatio = normalizedRatio(cpu.usageRatio, state: cpu.state)
             let segment = MenuBarStatusSegment(
                 kind: .cpu,
                 title: item.title,
-                value: compactCPUValue(cpu),
-                usageRatio: normalizedRatio(cpu.usageRatio, state: cpu.state),
-                state: cpu.state,
+                shortTitle: item.shortTitle,
+                value: value,
+                displayText: displayText,
+                usageRatio: usageRatio,
+                state: displayState(baseState: cpu.state, ratio: usageRatio, highlightThreshold: highlightThreshold),
                 symbolName: item.symbolName
             )
             return MenuBarStatusEntry(
-                title: "\(item.shortTitle) \(segment.value)",
+                title: displayText,
                 tooltip: details(title: item.title, value: cpu.value, subtitle: cpu.subtitle),
                 segment: segment
             )
         case .memory:
+            let value = compactMemoryValue(memory, precision: precision)
+            let displayText = displayStyle.text(label: item.shortTitle, value: value)
+            let usageRatio = normalizedRatio(memory.usageRatio, state: memory.state)
             let segment = MenuBarStatusSegment(
                 kind: .memory,
                 title: item.title,
-                value: compactMemoryValue(memory),
-                usageRatio: normalizedRatio(memory.usageRatio, state: memory.state),
-                state: memory.state,
+                shortTitle: item.shortTitle,
+                value: value,
+                displayText: displayText,
+                usageRatio: usageRatio,
+                state: displayState(
+                    baseState: memory.state,
+                    ratio: usageRatio,
+                    highlightThreshold: highlightThreshold
+                ),
                 symbolName: item.symbolName
             )
             return MenuBarStatusEntry(
-                title: "\(item.shortTitle) \(segment.value)",
+                title: displayText,
                 tooltip: details(title: item.title, value: memory.value, subtitle: memory.subtitle),
                 segment: segment
             )
@@ -86,24 +115,26 @@ struct MenuBarStatusSummary: Equatable {
         }
     }
 
-    private static func compactValue(_ value: String) -> String {
-        value == "N/A" ? "--" : value
-    }
-
-    private static func compactCPUValue(_ status: SystemCPUStatus) -> String {
+    private static func compactCPUValue(
+        _ status: SystemCPUStatus,
+        precision: MenuBarStatusPrecision
+    ) -> String {
         guard status.state != .unavailable else {
             return "--"
         }
 
-        return compactValue(status.value)
+        return precision.percentText(for: status.usageRatio)
     }
 
-    private static func compactMemoryValue(_ status: SystemMemoryStatus) -> String {
+    private static func compactMemoryValue(
+        _ status: SystemMemoryStatus,
+        precision: MenuBarStatusPrecision
+    ) -> String {
         guard status.state != .unavailable else {
             return "--"
         }
 
-        return compactValue(status.value)
+        return precision.percentText(for: status.usageRatio)
     }
 
     private static func normalizedRatio(_ ratio: Double, state: SpillStatusState) -> Double {
@@ -114,6 +145,26 @@ struct MenuBarStatusSummary: Equatable {
         return min(max(ratio, 0), 1)
     }
 
+    private static func displayState(
+        baseState: SpillStatusState,
+        ratio: Double,
+        highlightThreshold: MenuBarStatusHighlightThreshold
+    ) -> SpillStatusState {
+        guard baseState != .unavailable else {
+            return .unavailable
+        }
+
+        if ratio >= MenuBarStatusHighlightThreshold.ninety.ratio {
+            return .warning
+        }
+
+        if ratio >= highlightThreshold.ratio {
+            return .active
+        }
+
+        return .normal
+    }
+
     private static func details(title: String, value: String, subtitle: String?) -> String {
         guard let subtitle, !subtitle.isEmpty else {
             return "\(title) \(value)"
@@ -121,5 +172,4 @@ struct MenuBarStatusSummary: Equatable {
 
         return "\(title) \(value) - \(subtitle)"
     }
-
 }

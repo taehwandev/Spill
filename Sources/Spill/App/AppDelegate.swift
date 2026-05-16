@@ -21,6 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         windowActionStore: windowActionStore,
         sleepGuard: sleepGuard,
         visibilityChanged: { [weak self] isVisible in
+            self?.isSpillPanelVisible = isVisible
             self?.statusItemController?.refresh(isSpillBarVisible: isVisible)
         }
     )
@@ -33,6 +34,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     )
     private var statusItemController: StatusItemController?
     private var statusRefreshTask: Task<Void, Never>?
+    private var isSpillPanelVisible = false
     private var cancellables = Set<AnyCancellable>()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -67,18 +69,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             scanCoordinator.start()
             configureHotKey()
-            showStartupUI()
-        }
-    }
-
-    private func showStartupUI() {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
-            guard let self else { return }
-            showPreferences()
-
-            if !AccessibilityPermission.isTrusted {
-                _ = AccessibilityPermission.request()
-            }
         }
     }
 
@@ -152,7 +142,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         if !flag {
-            showPreferences()
+            showSpillBar()
         }
 
         return true
@@ -220,10 +210,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .store(in: &cancellables)
 
         statusStore.objectWillChange
+            .debounce(for: .milliseconds(80), scheduler: RunLoop.main)
             .sink { [weak self] _ in
-                DispatchQueue.main.async {
-                    self?.statusItemController?.refresh()
-                }
+                self?.statusItemController?.refresh()
             }
             .store(in: &cancellables)
 
@@ -263,6 +252,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             .store(in: &cancellables)
 
+        settings.$menuBarStatusDisplayStyle
+            .dropFirst()
+            .sink { [weak self] _ in
+                self?.statusItemController?.refresh()
+            }
+            .store(in: &cancellables)
+
+        settings.$menuBarStatusPrecision
+            .dropFirst()
+            .sink { [weak self] _ in
+                self?.statusItemController?.refresh()
+            }
+            .store(in: &cancellables)
+
+        settings.$menuBarStatusHighlightThreshold
+            .dropFirst()
+            .sink { [weak self] _ in
+                self?.statusItemController?.refresh()
+            }
+            .store(in: &cancellables)
+
         settings.$refreshInterval
             .dropFirst()
             .sink { [weak self] _ in
@@ -282,7 +292,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusRefreshTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {
                 guard let self else { return }
-                await refreshStatusData()
+                await refreshMenuBarStatusData()
 
                 let delay = UInt64(max(settings.refreshInterval, 5) * 1_000_000_000)
                 do {
@@ -294,13 +304,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func refreshStatusData() async {
-        aiStatusStore.refresh()
+    private func refreshMenuBarStatusData() async {
+        let enabledModules = isSpillPanelVisible
+            ? settings.statusModulesRequiredForRefresh
+            : menuBarStatusModules
+        let readsPower = isSpillPanelVisible && settings.showPowerFooter
+
         await statusStore.refresh(
-            enabledModules: settings.statusModulesRequiredForRefresh,
-            readsPower: settings.showPowerFooter
+            enabledModules: enabledModules,
+            readsPower: readsPower
         )
         statusItemController?.refresh()
+    }
+
+    private func refreshStatusData() async {
+        if isSpillPanelVisible {
+            aiStatusStore.refresh()
+        }
+
+        await statusStore.refresh(
+            enabledModules: isSpillPanelVisible ? settings.statusModulesRequiredForRefresh : menuBarStatusModules,
+            readsPower: isSpillPanelVisible && settings.showPowerFooter
+        )
+        statusItemController?.refresh()
+    }
+
+    private var menuBarStatusModules: Set<SpillStatusModule> {
+        Set(settings.enabledMenuBarStatusItems.compactMap(\.systemModule))
     }
 
     private func configureMainMenu() {

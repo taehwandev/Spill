@@ -19,7 +19,6 @@ final class MenuBarScanCoordinator {
         observeWorkspaceChanges()
         observeScreenChanges()
         scheduleTimer()
-        refreshIfAllowed()
     }
 
     func stop() {

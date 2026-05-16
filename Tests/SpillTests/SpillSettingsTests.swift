@@ -10,6 +10,9 @@ final class SpillSettingsTests: XCTestCase {
         XCTAssertEqual(settings.statusModuleOrder, [.cpu, .memory, .gpu, .network])
         XCTAssertEqual(settings.enabledStatusModules, [.cpu, .memory, .gpu, .network])
         XCTAssertEqual(settings.enabledMenuBarStatusItems, [.cpu, .memory])
+        XCTAssertEqual(settings.menuBarStatusDisplayStyle, .labelAndPercent)
+        XCTAssertEqual(settings.menuBarStatusPrecision, .whole)
+        XCTAssertEqual(settings.menuBarStatusHighlightThreshold, .seventy)
     }
 
     func testPowerFooterDefaultsToVisibleAndSleepGuardDisplayAwakeDefaultsOff() {
@@ -77,6 +80,37 @@ final class SpillSettingsTests: XCTestCase {
         let settings = SpillSettings(defaults: defaults)
 
         XCTAssertEqual(settings.enabledMenuBarStatusItems, [.cpu])
+    }
+
+    func testMenuBarStatusDisplayOptionsPersist() {
+        let defaults = makeDefaults()
+        let settings = SpillSettings(defaults: defaults)
+
+        settings.menuBarStatusDisplayStyle = .percentOnly
+        settings.menuBarStatusPrecision = .tenths
+        settings.menuBarStatusHighlightThreshold = .eighty
+
+        XCTAssertEqual(defaults.string(forKey: "menuBarStatusDisplayStyle"), "percentOnly")
+        XCTAssertEqual(defaults.integer(forKey: "menuBarStatusPrecision"), 1)
+        XCTAssertEqual(defaults.integer(forKey: "menuBarStatusHighlightThreshold"), 80)
+
+        let reloadedSettings = SpillSettings(defaults: defaults)
+        XCTAssertEqual(reloadedSettings.menuBarStatusDisplayStyle, .percentOnly)
+        XCTAssertEqual(reloadedSettings.menuBarStatusPrecision, .tenths)
+        XCTAssertEqual(reloadedSettings.menuBarStatusHighlightThreshold, .eighty)
+    }
+
+    func testMenuBarStatusDisplayOptionsNormalizeUnknownValues() {
+        let defaults = makeDefaults()
+        defaults.set("bad-style", forKey: "menuBarStatusDisplayStyle")
+        defaults.set(9, forKey: "menuBarStatusPrecision")
+        defaults.set(12, forKey: "menuBarStatusHighlightThreshold")
+
+        let settings = SpillSettings(defaults: defaults)
+
+        XCTAssertEqual(settings.menuBarStatusDisplayStyle, .labelAndPercent)
+        XCTAssertEqual(settings.menuBarStatusPrecision, .whole)
+        XCTAssertEqual(settings.menuBarStatusHighlightThreshold, .seventy)
     }
 
     func testStatusModuleOrderPersistsAfterMove() {

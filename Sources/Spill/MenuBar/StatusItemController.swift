@@ -34,7 +34,7 @@ final class StatusItemController: NSObject {
         triggerItem = NSStatusBar.system.statusItem(withLength: defaultLength)
 
         super.init()
-        
+
         triggerItem.autosaveName = "dev.spill.status-trigger"
 
         configureTriggerButton()
@@ -54,7 +54,10 @@ final class StatusItemController: NSObject {
         let summary = MenuBarStatusSummary.make(
             enabledItems: settings.enabledMenuBarStatusItems,
             cpu: statusStore.cpu,
-            memory: statusStore.memory
+            memory: statusStore.memory,
+            displayStyle: settings.menuBarStatusDisplayStyle,
+            precision: settings.menuBarStatusPrecision,
+            highlightThreshold: settings.menuBarStatusHighlightThreshold
         )
         triggerItem.isVisible = true
         triggerItem.length = summary.segments.isEmpty ? defaultLength : MenuBarStatusContentView.preferredWidth(for: summary.segments)
@@ -74,12 +77,17 @@ final class StatusItemController: NSObject {
             return nil
         }
 
-        let windowFrame = window.frame
-        if windowFrame.width > 0, windowFrame.height > 0 {
-            return windowFrame
+        let buttonFrame = window.convertToScreen(button.convert(button.bounds, to: nil))
+        if buttonFrame.width > 0, buttonFrame.height > 0 {
+            return buttonFrame
         }
 
-        return window.convertToScreen(button.convert(button.bounds, to: nil))
+        let windowFrame = window.frame
+        guard windowFrame.width > 0, windowFrame.height > 0 else {
+            return nil
+        }
+
+        return windowFrame
     }
 
     private func configureTriggerButton() {
