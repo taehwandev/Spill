@@ -58,11 +58,11 @@ milestones:
           - Results are documented in a run closeout.
       - id: M1-T4
         title: Add pixel or accessibility-tree visual regression check
-        state: pending
+        state: done
         acceptance:
-          - The check can detect text overlap or missing key labels.
+          - Panel layout smoke collects panel accessibility labels and fails on missing key labels.
           - The check does not require unreliable manual permission setup.
-          - The limitations are documented.
+          - Pixel-level overlap remains a documented future enhancement.
 
   - id: M2
     name: Providers
@@ -133,11 +133,19 @@ milestones:
           - CPU and memory values can be shown or hidden in the menu bar from the panel.
           - CPU and memory use compact percentage values in the menu bar and richer detail in the panel.
       - id: M3-T7
-        title: GPU availability
+        title: Legacy GPU availability
+        state: deferred
+        acceptance:
+          - GPU is not a primary panel status because the value is low for the compact tray.
+          - Existing provider code can remain as legacy implementation until a stronger GPU use case exists.
+      - id: M3-T8
+        title: Storage status and compact graphs
         state: done
         acceptance:
-          - Metal GPU devices are detected with availability and memory budget details where available.
-          - GPU details stay in the panel and are not part of the default menu bar glance.
+          - Storage replaces GPU in the primary panel status area.
+          - CPU, memory, and storage render as three compact rows.
+          - Each primary row has bounded sparkline history.
+          - Metric refresh is independent from AX menu bar scan cadence.
 
   - id: M4
     name: AI strip
@@ -192,6 +200,13 @@ milestones:
           - Sleep Guard is off by default.
           - User selects a fixed duration before assertion creation.
           - Stop and expiry release power assertions.
+      - id: M5-T5
+        title: Settings item removal
+        state: done
+        acceptance:
+          - Removed detected items are hidden from Spill action surfaces.
+          - Hidden state persists separately from selected item state.
+          - Hidden detected items can be added again from Preferences.
 
   - id: M6
     name: Window quick actions

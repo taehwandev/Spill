@@ -9,7 +9,9 @@ This repository currently contains an MVP shell:
 - menu bar status item
 - click-to-toggle floating Spill Bar anchored to the status item
 - optional CPU and memory menu bar glance chips
+- CPU, memory, and storage panel rows with compact sparklines
 - right-click menu with preferences and quit actions
+- visible panel quit control
 - SwiftUI preferences window
 - Accessibility permission status and diagnostics
 - Launch at Login wiring for packaged `.app` builds
@@ -19,12 +21,13 @@ This repository currently contains an MVP shell:
 - automatic rescanning when apps, Spaces, or displays change
 - optional `Control + Option + Space` global shortcut
 - display mode for notch candidates or all detected items
-- selectable detected items with persisted Spill Bar inclusion
+- selectable detected items with persisted Spill Bar inclusion and removal
 - app-icon based labels for detected menu bar items
-- configurable CPU, memory, GPU, and network status modules
+- configurable CPU, memory, and storage status modules
 - click-to-open status detail popovers with CPU and memory menu bar visibility toggles
 - local AI status strip for Codex, Ollama, and OpenAI configuration
 - pinned menu bar actions with pin/unpin controls, execution feedback, and app activation fallback
+- Sleep Guard with configurable default duration
 
 The current Spill Bar can detect some visible menu bar extras when Accessibility permission is granted. This is best-effort behavior. Spill does not promise to recover every item hidden behind the notch or forcibly rearrange other apps' menu bar items.
 
@@ -85,6 +88,16 @@ python3 .agents/scripts/workflow.py runtime-smoke
 ```
 
 The runtime smoke test builds `.build/Spill.app`, launches the app in `SPILL_SMOKE_TEST` mode, verifies startup readiness, and confirms clean shutdown without opening Preferences or requesting Accessibility permission.
+
+Run the compact panel smoke test:
+
+```bash
+python3 .agents/scripts/workflow.py panel-layout-smoke
+```
+
+The panel smoke test opens the bundled panel in smoke mode and verifies frame,
+content, and key accessibility labels without relying on manual Accessibility
+permission setup.
 
 ## Roadmap
 
