@@ -1,0 +1,96 @@
+feature_id: release-automation-site
+status: completed
+
+necessity:
+  decision: build
+  reason: GitHub release automation and a distribution site are required for the direct macOS distribution path.
+  ambiguity:
+    clarity: clear
+    blockers_resolved: true
+    resolution_sources:
+      - maintainer
+      - repo-research
+      - assumption
+  clarification_required: false
+  questions: []
+
+tasks:
+  - id: release-automation-site-T1
+    title: Add GitHub Release workflow
+    owner_role: builder
+    state: done
+    depends_on: []
+    write_scope:
+      - .github/workflows/release.yml
+    read_scope:
+      - scripts/package-release.sh
+      - .agents/specs/ard.md
+    forbidden_scope:
+      - Sources/Spill
+    acceptance:
+      - Workflow builds release artifacts using the package script.
+      - Workflow supports tag and manual dispatch.
+      - Workflow supports optional Developer ID signing and notarization through secrets.
+    verification:
+      commands:
+        - ./scripts/package-release.sh
+        - hdiutil verify .build/release-artifacts/Spill-2026.20.1-macos.dmg
+      manual:
+        - Review workflow secret names and release upload paths.
+
+  - id: release-automation-site-T2
+    title: Add GitHub Pages distribution site
+    owner_role: builder
+    state: done
+    depends_on: []
+    write_scope:
+      - .github/workflows/pages.yml
+      - docs/index.html
+      - docs/styles.css
+      - docs/assets/spill-icon.png
+    read_scope:
+      - README.md
+      - scripts/generate-app-icon.swift
+    forbidden_scope:
+      - Sources/Spill
+    acceptance:
+      - Site exposes stable latest DMG and ZIP links.
+      - Site uses the Spill icon visual asset.
+      - Pages workflow deploys the `docs` directory.
+    verification:
+      commands:
+        - python3 .agents/scripts/workflow.py verify
+      manual:
+        - Open `docs/index.html` locally and inspect layout.
+
+  - id: release-automation-site-T3
+    title: Update release documentation
+    owner_role: builder
+    state: done
+    depends_on:
+      - release-automation-site-T1
+      - release-automation-site-T2
+    write_scope:
+      - README.md
+      - .agents/runs/release-automation-site/05-verification.md
+      - .agents/runs/release-automation-site/06-closeout.md
+    read_scope:
+      - .agents/runs/release-automation-site/01-prd.md
+      - .agents/runs/release-automation-site/02-ard.md
+    forbidden_scope:
+      - Sources/Spill
+    acceptance:
+      - README documents release triggers and required secrets.
+      - Verification notes are complete.
+    verification:
+      commands:
+        - git diff --check
+      manual:
+        - Confirm docs do not imply notarization works without Apple Developer credentials.
+
+parallel_groups:
+  - id: release-assets
+    tasks:
+      - release-automation-site-T1
+      - release-automation-site-T2
+    rule: Tasks in this group have disjoint write_scope entries.

@@ -1,0 +1,246 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      release_count:
+        description: "Per-week release count. Version becomes ISO-year.ISO-week.count, for example 2026.20.1"
+        required: false
+        default: "1"
+        type: string
+      draft:
+        description: "Create the GitHub Release as a draft"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref_type == 'tag' && github.ref_name || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  macos:
+    name: Build macOS release
+    runs-on: macos-latest
+
+    env:
+      SPILL_BUNDLE_ID: dev.spill.Spill
+      MANUAL_RELEASE_COUNT: ${{ github.event.inputs.release_count }}
+      PUBLISH_DRAFT: ${{ github.event.inputs.draft }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve release version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          version_pattern='^[0-9]{4}\.[0-9]{2}\.[0-9]+$'
+
+          if [[ "${GITHUB_REF_TYPE:-}" == "tag" ]]; then
+            tag="$GITHUB_REF_NAME"
+            version="${tag#v}"
+          else
+            release_count="${MANUAL_RELEASE_COUNT:-1}"
+            if ! [[ "$release_count" =~ ^[1-9][0-9]*$ ]]; then
+              echo "release_count must be a positive integer." >&2
+              exit 2
+            fi
+
+            year="$(date -u +%G)"
+            week="$(date -u +%V)"
+            version="$year.$week.$release_count"
+            tag="v$version"
+          fi
+
+          if ! [[ "$version" =~ $version_pattern ]]; then
+            echo "Release version must use ISO-year.ISO-week.count, for example 2026.20.1." >&2
+            exit 2
+          fi
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "build=$GITHUB_RUN_NUMBER" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare optional Developer ID signing
+        id: signing
+        shell: bash
+        env:
+          CERTIFICATE_BASE64: ${{ secrets.MACOS_DEVELOPER_ID_CERTIFICATE_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.MACOS_DEVELOPER_ID_CERTIFICATE_PASSWORD }}
+          CODESIGN_IDENTITY: ${{ secrets.MACOS_CODESIGN_IDENTITY }}
+          KEYCHAIN_PASSWORD: ${{ secrets.MACOS_SIGNING_KEYCHAIN_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "$CERTIFICATE_BASE64" && -z "$CERTIFICATE_PASSWORD" && -z "$CODESIGN_IDENTITY" ]]; then
+            if [[ -n "$APPLE_ID" || -n "$APPLE_TEAM_ID" || -n "$APPLE_APP_SPECIFIC_PASSWORD" ]]; then
+              echo "Notarization secrets require Developer ID signing secrets too." >&2
+              exit 2
+            fi
+
+            echo "sign_identity=-" >> "$GITHUB_OUTPUT"
+            echo "notary_profile=" >> "$GITHUB_OUTPUT"
+            echo "signing_note=Ad-hoc signed. Gatekeeper warnings can appear." >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ -z "$CERTIFICATE_BASE64" || -z "$CERTIFICATE_PASSWORD" || -z "$CODESIGN_IDENTITY" ]]; then
+            echo "Developer ID signing requires MACOS_DEVELOPER_ID_CERTIFICATE_BASE64, MACOS_DEVELOPER_ID_CERTIFICATE_PASSWORD, and MACOS_CODESIGN_IDENTITY." >&2
+            exit 2
+          fi
+
+          keychain_password="${KEYCHAIN_PASSWORD:-temporary-spill-keychain-password}"
+          keychain_path="$RUNNER_TEMP/spill-signing.keychain-db"
+          certificate_path="$RUNNER_TEMP/developer-id.p12"
+
+          security create-keychain -p "$keychain_password" "$keychain_path"
+          security set-keychain-settings -lut 21600 "$keychain_path"
+          security unlock-keychain -p "$keychain_password" "$keychain_path"
+          security list-keychains -d user -s "$keychain_path"
+          security default-keychain -d user -s "$keychain_path"
+
+          printf "%s" "$CERTIFICATE_BASE64" | base64 -D > "$certificate_path"
+
+          security import "$certificate_path" \
+            -P "$CERTIFICATE_PASSWORD" \
+            -A \
+            -t cert \
+            -f pkcs12 \
+            -k "$keychain_path"
+
+          security set-key-partition-list \
+            -S apple-tool:,apple: \
+            -s \
+            -k "$keychain_password" \
+            "$keychain_path"
+
+          echo "sign_identity=$CODESIGN_IDENTITY" >> "$GITHUB_OUTPUT"
+
+          if [[ -n "$APPLE_ID" || -n "$APPLE_TEAM_ID" || -n "$APPLE_APP_SPECIFIC_PASSWORD" ]]; then
+            if [[ -z "$APPLE_ID" || -z "$APPLE_TEAM_ID" || -z "$APPLE_APP_SPECIFIC_PASSWORD" ]]; then
+              echo "Notarization requires APPLE_ID, APPLE_TEAM_ID, and APPLE_APP_SPECIFIC_PASSWORD." >&2
+              exit 2
+            fi
+
+            notary_profile="spill-notary"
+            xcrun notarytool store-credentials "$notary_profile" \
+              --apple-id "$APPLE_ID" \
+              --team-id "$APPLE_TEAM_ID" \
+              --password "$APPLE_APP_SPECIFIC_PASSWORD"
+
+            echo "notary_profile=$notary_profile" >> "$GITHUB_OUTPUT"
+            echo "signing_note=Developer ID signed and notarized." >> "$GITHUB_OUTPUT"
+          else
+            echo "notary_profile=" >> "$GITHUB_OUTPUT"
+            echo "signing_note=Developer ID signed without notarization. Gatekeeper warnings can still appear." >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Package release
+        shell: bash
+        env:
+          SPILL_VERSION: ${{ steps.version.outputs.version }}
+          SPILL_BUILD: ${{ steps.version.outputs.build }}
+          SPILL_BUNDLE_ID: ${{ env.SPILL_BUNDLE_ID }}
+          SPILL_SIGN_IDENTITY: ${{ steps.signing.outputs.sign_identity }}
+          SPILL_NOTARY_KEYCHAIN_PROFILE: ${{ steps.signing.outputs.notary_profile }}
+        run: ./scripts/package-release.sh
+
+      - name: Add stable website asset names
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${{ steps.version.outputs.version }}"
+          artifacts_dir=".build/release-artifacts"
+
+          cp "$artifacts_dir/Spill-$version-macos.dmg" "$artifacts_dir/Spill-macos.dmg"
+          cp "$artifacts_dir/Spill-$version-macos.zip" "$artifacts_dir/Spill-macos.zip"
+
+          (
+            cd "$artifacts_dir"
+            shasum -a 256 Spill-*.dmg Spill-*.zip > checksums.txt
+          )
+
+      - name: Verify packaged artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${{ steps.version.outputs.version }}"
+
+          codesign --verify --deep --strict --verbose=2 .build/Spill.app
+          hdiutil verify ".build/release-artifacts/Spill-$version-macos.dmg"
+          unzip -t ".build/release-artifacts/Spill-$version-macos.zip"
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Spill-${{ steps.version.outputs.version }}-macos
+          path: |
+            .build/release-artifacts/Spill-${{ steps.version.outputs.version }}-macos.dmg
+            .build/release-artifacts/Spill-${{ steps.version.outputs.version }}-macos.zip
+            .build/release-artifacts/Spill-macos.dmg
+            .build/release-artifacts/Spill-macos.zip
+            .build/release-artifacts/checksums.txt
+
+      - name: Publish GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          version="${{ steps.version.outputs.version }}"
+          tag="${{ steps.version.outputs.tag }}"
+          artifacts_dir=".build/release-artifacts"
+          notes_file="$RUNNER_TEMP/release-notes.md"
+          draft="${PUBLISH_DRAFT:-false}"
+
+          cat > "$notes_file" <<NOTES
+          Spill $version for macOS.
+
+          Artifacts:
+          - Spill-$version-macos.dmg
+          - Spill-$version-macos.zip
+          - Spill-macos.dmg and Spill-macos.zip for stable website download links
+          - checksums.txt
+
+          Signing:
+          ${{ steps.signing.outputs.signing_note }}
+          NOTES
+
+          assets=(
+            "$artifacts_dir/Spill-$version-macos.dmg"
+            "$artifacts_dir/Spill-$version-macos.zip"
+            "$artifacts_dir/Spill-macos.dmg"
+            "$artifacts_dir/Spill-macos.zip"
+            "$artifacts_dir/checksums.txt"
+          )
+
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release edit "$tag" --title "Spill $version" --notes-file "$notes_file"
+            gh release upload "$tag" "${assets[@]}" --clobber
+          else
+            draft_args=()
+            if [[ "$draft" == "true" ]]; then
+              draft_args=(--draft)
+            fi
+
+            gh release create "$tag" \
+              --target "$GITHUB_SHA" \
+              --title "Spill $version" \
+              --notes-file "$notes_file" \
+              "${draft_args[@]}" \
+              "${assets[@]}"
+          fi

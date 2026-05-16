@@ -7,27 +7,29 @@ Spill is an open-source compact control tray for macOS. It keeps one visible men
 This repository currently contains an MVP shell:
 
 - menu bar status item
+- generated app icon applied to bundled `.app` builds
+- GitHub Release and GitHub Pages distribution automation
 - click-to-toggle floating Spill Bar anchored to the status item
-- optional CPU and memory menu bar glance chips
+- optional CPU, memory, and active Caffeine menu bar glance chips, with an opt-in Caffeine countdown
 - CPU, memory, and storage panel rows with compact sparklines
-- right-click menu with preferences and quit actions
-- visible panel quit control
+- right-click menu with preferences and app quit actions
+- visible panel Close control that hides the panel without quitting Spill
 - SwiftUI preferences window
 - Accessibility permission status and diagnostics
 - Launch at Login wiring for packaged `.app` builds
 - Accessibility-based menu bar extra scanner using `AXExtrasMenuBar`
 - best-effort `AXPress` action for detected items
-- focused-window quick actions for left/right/center/maximize/next display/restore
+- focused-window quick actions for halves, corners, center, maximize, display left/right, and restore
 - automatic rescanning when apps, Spaces, or displays change
-- optional `Control + Option + Space` global shortcut
-- display mode for notch candidates or all detected items
-- selectable detected items with persisted Spill Bar inclusion and removal
+- optional `Control + Option + Space` global shortcut, with window action shortcuts grouped under `Control + Option` and display moves under `Control + Option + Command`
+- notch-candidate menu bar actions with advanced detection diagnostics
+- selectable detected items with persisted Spill Bar pinning and removal
 - app-icon based labels for detected menu bar items
-- configurable CPU, memory, and storage status modules
-- click-to-open status detail popovers with CPU and memory menu bar visibility toggles
+- fixed CPU, memory, and storage panel status rows
+- click-to-open status detail popovers with CPU, memory, and Caffeine menu bar visibility toggles
 - local AI status strip for Codex, Ollama, and OpenAI configuration
 - pinned menu bar actions with pin/unpin controls, execution feedback, and app activation fallback
-- Sleep Guard with configurable default duration
+- Caffeine with configurable default duration and an opt-in never-ending duration
 
 The current Spill Bar can detect some visible menu bar extras when Accessibility permission is granted. This is best-effort behavior. Spill does not promise to recover every item hidden behind the notch or forcibly rearrange other apps' menu bar items.
 
@@ -56,7 +58,7 @@ The current scanner is intentionally conservative. It prefers `AXExtrasMenuBar` 
 swift run Spill
 ```
 
-During early development the app uses a normal Dock app activation policy so the preferences window is easier to recover while debugging. The status item still appears in the menu bar.
+Spill runs as a menu bar utility and uses an accessory activation policy, so it does not show a Dock icon. Use the menu bar trigger to open the panel. The panel Close control hides the panel without quitting; to terminate the app, use the menu bar trigger's right-click menu and choose `Quit Spill`.
 
 ## Build
 
@@ -71,7 +73,88 @@ To create a local `.app` bundle:
 open .build/Spill.app
 ```
 
+The bundled app also runs without a Dock icon. If the app appears to do nothing after launch, check the menu bar for the Spill trigger.
+
 During development, avoid rebuilding the `.app` while testing Accessibility permission. macOS can treat a newly rebuilt local app as a new permission target.
+
+## Distribution
+
+Create local release artifacts:
+
+```bash
+./scripts/package-release.sh
+```
+
+This writes:
+
+- `.build/release-artifacts/Spill-2026.20.1-macos.zip`
+- `.build/release-artifacts/Spill-2026.20.1-macos.dmg`
+
+Without Apple credentials these artifacts are ad-hoc signed and useful for local
+testing or trusted manual sharing. Public distribution without Gatekeeper warnings
+requires Apple Developer ID signing and notarization.
+
+Developer ID release example:
+
+```bash
+SPILL_SIGN_IDENTITY="Developer ID Application: Example Name (TEAMID)" \
+SPILL_NOTARY_KEYCHAIN_PROFILE="spill-notary" \
+./scripts/package-release.sh
+```
+
+Before running that command, store notarization credentials with `xcrun notarytool
+store-credentials`. Release versions use `ISO-year.ISO-week.release-count`, such
+as `2026.20.1`. The default local version is the current ISO year/week with
+release count `1`. Use `SPILL_VERSION`, `SPILL_BUILD`, and `SPILL_BUNDLE_ID` to
+override release metadata.
+
+### GitHub Releases
+
+Push a version tag to create or update a GitHub Release:
+
+```bash
+git tag v2026.20.1
+git push origin v2026.20.1
+```
+
+The `Release` workflow builds the macOS app, runs the package script, verifies the
+bundle and archives, and uploads these assets:
+
+- `Spill-2026.20.1-macos.dmg`
+- `Spill-2026.20.1-macos.zip`
+- `Spill-macos.dmg`
+- `Spill-macos.zip`
+- `checksums.txt`
+
+The stable `Spill-macos.*` asset names are used by the download site. The workflow
+can also be started manually from GitHub Actions with a per-week release count.
+Manual runs compute the version from the current UTC ISO year/week plus that count.
+
+Unsigned test releases work without secrets and are ad-hoc signed. For Developer
+ID signing and notarization, configure these repository secrets:
+
+- `MACOS_DEVELOPER_ID_CERTIFICATE_BASE64`: base64-encoded `.p12` certificate.
+- `MACOS_DEVELOPER_ID_CERTIFICATE_PASSWORD`: `.p12` import password.
+- `MACOS_CODESIGN_IDENTITY`: full Developer ID identity, for example `Developer ID Application: Example Name (TEAMID)`.
+- `MACOS_SIGNING_KEYCHAIN_PASSWORD`: optional temporary CI keychain password.
+- `APPLE_ID`: Apple ID used for notarization.
+- `APPLE_TEAM_ID`: Apple Developer Team ID.
+- `APPLE_APP_SPECIFIC_PASSWORD`: app-specific password for `notarytool`.
+
+If the Developer ID certificate secrets are present, the workflow signs with that
+identity. If the Apple notarization secrets are also present, the workflow stores a
+temporary `notarytool` profile and notarizes the app and DMG before publishing.
+
+### Download Site
+
+The static distribution site lives in `docs/` and is deployed by the `Deploy Site`
+workflow to GitHub Pages. It links to the latest stable release assets:
+
+- `https://github.com/taehwandev/Spill/releases/latest/download/Spill-macos.dmg`
+- `https://github.com/taehwandev/Spill/releases/latest/download/Spill-macos.zip`
+
+Enable GitHub Pages for the repository using the GitHub Actions source. A custom
+domain can be added later without changing the release workflow.
 
 ## Verify
 
