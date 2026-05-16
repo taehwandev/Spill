@@ -10,9 +10,12 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
     private let settings: SpillSettings
     private let scanner: AXMenuBarItemScanner
     private let sleepGuard: SleepGuardController
-    private let statusStore = SystemStatusStore()
+    private let statusStore: SystemStatusStore
+    private let aiStatusStore: AIStatusStore
+    private let windowActionStore: WindowActionStore
     private let visibilityChanged: (Bool) -> Void
     private var panel: NSPanel?
+    private var anchorFrame: NSRect?
     private var isPresented = false
     private var cancellables = Set<AnyCancellable>()
 
@@ -23,11 +26,17 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
     init(
         settings: SpillSettings,
         scanner: AXMenuBarItemScanner,
+        statusStore: SystemStatusStore = SystemStatusStore(),
+        aiStatusStore: AIStatusStore = AIStatusStore(),
+        windowActionStore: WindowActionStore = WindowActionStore(),
         sleepGuard: SleepGuardController,
         visibilityChanged: @escaping (Bool) -> Void = { _ in }
     ) {
         self.settings = settings
         self.scanner = scanner
+        self.statusStore = statusStore
+        self.aiStatusStore = aiStatusStore
+        self.windowActionStore = windowActionStore
         self.sleepGuard = sleepGuard
         self.visibilityChanged = visibilityChanged
         super.init()
@@ -66,7 +75,11 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
         }
     }
 
-    func show() {
+    func show(anchorFrame: NSRect? = nil) {
+        if let anchorFrame {
+            self.anchorFrame = anchorFrame
+        }
+
         let panel = ensurePanel()
         let finalFrame = panelFrame()
         let startFrame = finalFrame.offsetBy(dx: 0, dy: 8)
@@ -147,7 +160,14 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
         visualEffectView.layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.45).cgColor
 
         let hostingView = NSHostingView(
-            rootView: SpillBarView(settings: settings, scanner: scanner, statusStore: statusStore, sleepGuard: sleepGuard) { [weak self] in
+            rootView: SpillBarView(
+                settings: settings,
+                scanner: scanner,
+                statusStore: statusStore,
+                aiStatusStore: aiStatusStore,
+                windowActionStore: windowActionStore,
+                sleepGuard: sleepGuard
+            ) { [weak self] in
                 self?.hide(animated: true)
             }
         )
@@ -168,11 +188,20 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
     }
 
     private func panelFrame() -> NSRect {
-        let screen = panel?.screen ?? NSScreen.main ?? NSScreen.screens.first
-        let visibleFrame = layout.visibleFrame(for: panel)
-        let fallback = layout.defaultFrame(in: visibleFrame, screen: screen)
+        let screen = screenForAnchor() ?? panel?.screen ?? NSScreen.main ?? NSScreen.screens.first
+        let visibleFrame = layout.visibleFrame(forScreen: screen)
+        let fallback = layout.defaultFrame(in: visibleFrame, screen: screen, anchorFrame: anchorFrame)
 
         return fallback
+    }
+
+    private func screenForAnchor() -> NSScreen? {
+        guard let anchorFrame else {
+            return nil
+        }
+
+        let anchorPoint = NSPoint(x: anchorFrame.midX, y: anchorFrame.midY)
+        return NSScreen.screens.first { $0.frame.contains(anchorPoint) }
     }
 
     private func resizePanelIfVisible() {
@@ -237,8 +266,10 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
     }
 
     private func refreshStatusStore() {
-        let enabledModules = settings.enabledStatusModules
+        let enabledModules = settings.statusModulesRequiredForRefresh
         let readsPower = settings.showPowerFooter
+        aiStatusStore.refresh()
+        windowActionStore.refresh()
         Task { @MainActor [statusStore] in
             await statusStore.refresh(enabledModules: enabledModules, readsPower: readsPower)
         }

@@ -23,6 +23,12 @@ struct SystemMemoryStatus: Hashable, Sendable {
     let subtitle: String?
     let usageRatio: Double
     let usedBytes: UInt64
+    let availableBytes: UInt64
+    let freeBytes: UInt64
+    let activeBytes: UInt64
+    let inactiveBytes: UInt64
+    let wiredBytes: UInt64
+    let compressedBytes: UInt64
     let totalBytes: UInt64
     let state: SpillStatusState
 
@@ -61,6 +67,12 @@ struct SystemMemoryProvider: SpillStatusProvider {
                 subtitle: nil,
                 usageRatio: 0,
                 usedBytes: 0,
+                availableBytes: 0,
+                freeBytes: 0,
+                activeBytes: 0,
+                inactiveBytes: 0,
+                wiredBytes: 0,
+                compressedBytes: 0,
                 totalBytes: 0,
                 state: .unavailable
             )
@@ -68,13 +80,19 @@ struct SystemMemoryProvider: SpillStatusProvider {
 
         let ratio = (Double(reading.usedBytes) / Double(reading.totalBytes)).clamped(to: 0...1)
         let value = "\(Int((ratio * 100).rounded()))%"
-        let subtitle = "\(formatBytes(reading.usedBytes)) of \(formatBytes(reading.totalBytes))"
+        let subtitle = "\(formatBytes(reading.availableBytes)) available of \(formatBytes(reading.totalBytes))"
 
         return SystemMemoryStatus(
             value: value,
             subtitle: subtitle,
             usageRatio: ratio,
             usedBytes: reading.usedBytes,
+            availableBytes: reading.availableBytes,
+            freeBytes: reading.freeBytes,
+            activeBytes: reading.activeBytes,
+            inactiveBytes: reading.inactiveBytes,
+            wiredBytes: reading.wiredBytes,
+            compressedBytes: reading.compressedBytes,
             totalBytes: reading.totalBytes,
             state: state(for: ratio)
         )

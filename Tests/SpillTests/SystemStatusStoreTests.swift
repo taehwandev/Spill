@@ -7,6 +7,8 @@ final class SystemStatusStoreTests: XCTestCase {
         let store = SystemStatusStore(
             cpuReader: { XCTFail("CPU reader should not run during initialization"); return .unavailableTestValue },
             memoryReader: { XCTFail("Memory reader should not run during initialization"); return .unavailableTestValue },
+            gpuReader: { XCTFail("GPU reader should not run during initialization"); return .unavailableTestValue },
+            networkReader: { XCTFail("Network reader should not run during initialization"); return .unavailableTestValue },
             powerReader: { XCTFail("Power reader should not run during initialization"); return .unavailableTestValue }
         )
 
@@ -14,6 +16,10 @@ final class SystemStatusStoreTests: XCTestCase {
         XCTAssertEqual(store.cpu.value, "N/A")
         XCTAssertEqual(store.memory.state, .unavailable)
         XCTAssertEqual(store.memory.value, "N/A")
+        XCTAssertEqual(store.gpu.state, .unavailable)
+        XCTAssertEqual(store.gpu.value, "N/A")
+        XCTAssertEqual(store.network.state, .unavailable)
+        XCTAssertEqual(store.network.value, "N/A")
         XCTAssertEqual(store.power.state, .unavailable)
         XCTAssertEqual(store.power.value, "N/A")
     }
@@ -42,7 +48,33 @@ final class SystemStatusStoreTests: XCTestCase {
                 hasBattery: true
             )
         )
-        let store = SystemStatusStore(cpuReader: { cpu }, memoryReader: { memory }, powerReader: { power })
+        let network = SystemNetworkProvider.status(
+            from: SystemNetworkReading(
+                isReachable: true,
+                connectionRequired: false,
+                canConnectAutomatically: false,
+                interventionRequired: false
+            )
+        )
+        let gpu = SystemGPUProvider.status(
+            from: [
+                SystemGPUDeviceStatus(
+                    name: "Apple GPU",
+                    isLowPower: true,
+                    isHeadless: false,
+                    isRemovable: false,
+                    hasUnifiedMemory: true,
+                    recommendedMaxWorkingSetBytes: gib(8)
+                )
+            ]
+        )
+        let store = SystemStatusStore(
+            cpuReader: { cpu },
+            memoryReader: { memory },
+            gpuReader: { gpu },
+            networkReader: { network },
+            powerReader: { power }
+        )
 
         await store.refresh()
 
@@ -50,6 +82,10 @@ final class SystemStatusStoreTests: XCTestCase {
         XCTAssertEqual(store.cpu.state, .normal)
         XCTAssertEqual(store.memory.value, "44%")
         XCTAssertEqual(store.memory.state, .normal)
+        XCTAssertEqual(store.gpu.value, "1/1")
+        XCTAssertEqual(store.gpu.state, .normal)
+        XCTAssertEqual(store.network.value, "Online")
+        XCTAssertEqual(store.network.state, .normal)
         XCTAssertEqual(store.power.value, "80%")
         XCTAssertEqual(store.power.subtitle, "On Battery")
     }
@@ -57,6 +93,8 @@ final class SystemStatusStoreTests: XCTestCase {
     func testRepeatedRefreshUpdatesCachedValues() async {
         var cpuReadCount = 0
         var memoryReadCount = 0
+        var gpuReadCount = 0
+        var networkReadCount = 0
         var powerReadCount = 0
         let store = SystemStatusStore(
             cpuReader: {
@@ -84,6 +122,32 @@ final class SystemStatusStoreTests: XCTestCase {
                     )
                 )
             },
+            gpuReader: {
+                gpuReadCount += 1
+                return SystemGPUProvider.status(
+                    from: [
+                        SystemGPUDeviceStatus(
+                            name: "GPU \(gpuReadCount)",
+                            isLowPower: true,
+                            isHeadless: false,
+                            isRemovable: false,
+                            hasUnifiedMemory: true,
+                            recommendedMaxWorkingSetBytes: self.gib(UInt64(gpuReadCount))
+                        )
+                    ]
+                )
+            },
+            networkReader: {
+                networkReadCount += 1
+                return SystemNetworkProvider.status(
+                    from: SystemNetworkReading(
+                        isReachable: networkReadCount.isMultiple(of: 2),
+                        connectionRequired: false,
+                        canConnectAutomatically: false,
+                        interventionRequired: false
+                    )
+                )
+            },
             powerReader: {
                 powerReadCount += 1
                 return SystemPowerProvider.status(
@@ -101,17 +165,23 @@ final class SystemStatusStoreTests: XCTestCase {
         await store.refresh()
         XCTAssertEqual(store.cpu.value, "20%")
         XCTAssertEqual(store.memory.value, "10%")
+        XCTAssertEqual(store.gpu.subtitle, "1.0 GB recommended budget")
+        XCTAssertEqual(store.network.value, "Offline")
         XCTAssertEqual(store.power.value, "51%")
 
         await store.refresh()
         XCTAssertEqual(store.cpu.value, "20%")
         XCTAssertEqual(store.memory.value, "20%")
+        XCTAssertEqual(store.gpu.subtitle, "2.0 GB recommended budget")
+        XCTAssertEqual(store.network.value, "Online")
         XCTAssertEqual(store.power.value, "52%")
     }
 
     func testDisabledModulesDoNotRunReaders() async {
         var cpuReadCount = 0
         var memoryReadCount = 0
+        var gpuReadCount = 0
+        var networkReadCount = 0
         var powerReadCount = 0
         let store = SystemStatusStore(
             cpuReader: {
@@ -120,6 +190,14 @@ final class SystemStatusStoreTests: XCTestCase {
             },
             memoryReader: {
                 memoryReadCount += 1
+                return .unavailableTestValue
+            },
+            gpuReader: {
+                gpuReadCount += 1
+                return .unavailableTestValue
+            },
+            networkReader: {
+                networkReadCount += 1
                 return .unavailableTestValue
             },
             powerReader: {
@@ -132,9 +210,13 @@ final class SystemStatusStoreTests: XCTestCase {
 
         XCTAssertEqual(cpuReadCount, 0)
         XCTAssertEqual(memoryReadCount, 0)
+        XCTAssertEqual(gpuReadCount, 0)
+        XCTAssertEqual(networkReadCount, 0)
         XCTAssertEqual(powerReadCount, 1)
         XCTAssertEqual(store.cpu.state, .unavailable)
         XCTAssertEqual(store.memory.state, .unavailable)
+        XCTAssertEqual(store.gpu.state, .unavailable)
+        XCTAssertEqual(store.network.state, .unavailable)
     }
 
     func testHiddenPowerFooterDoesNotRunPowerReader() async {
@@ -142,6 +224,8 @@ final class SystemStatusStoreTests: XCTestCase {
         let store = SystemStatusStore(
             cpuReader: { .unavailableTestValue },
             memoryReader: { .unavailableTestValue },
+            gpuReader: { .unavailableTestValue },
+            networkReader: { .unavailableTestValue },
             powerReader: {
                 powerReadCount += 1
                 return .unavailableTestValue
@@ -165,6 +249,14 @@ private extension SystemMemoryStatus {
 
 private extension SystemPowerStatus {
     static let unavailableTestValue = SystemPowerProvider.status(from: nil)
+}
+
+private extension SystemNetworkStatus {
+    static let unavailableTestValue = SystemNetworkProvider.status(from: nil)
+}
+
+private extension SystemGPUStatus {
+    static let unavailableTestValue = SystemGPUProvider.status(from: nil)
 }
 
 private extension SystemCPUStatus {

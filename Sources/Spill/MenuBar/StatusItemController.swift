@@ -3,6 +3,9 @@ import AppKit
 @MainActor
 final class StatusItemController: NSObject {
     private let defaultLength: CGFloat = 26
+    private let settings: SpillSettings
+    private let statusStore: SystemStatusStore
+    private let aiStatusStore: AIStatusStore
     private let hiddenItemCountProvider: () -> Int
     private let toggleAction: () -> Void
     private let refreshAction: () -> Void
@@ -10,15 +13,21 @@ final class StatusItemController: NSObject {
     private let quitAction: () -> Void
     private let triggerItem: NSStatusItem
     private var isSpillBarVisible = false
+    private var statusContentView: MenuBarStatusContentView?
 
     init(
         settings: SpillSettings,
+        statusStore: SystemStatusStore,
+        aiStatusStore: AIStatusStore,
         hiddenItemCountProvider: @escaping () -> Int,
         toggleAction: @escaping () -> Void,
         refreshAction: @escaping () -> Void,
         preferencesAction: @escaping () -> Void,
         quitAction: @escaping () -> Void
     ) {
+        self.settings = settings
+        self.statusStore = statusStore
+        self.aiStatusStore = aiStatusStore
         self.hiddenItemCountProvider = hiddenItemCountProvider
         self.toggleAction = toggleAction
         self.refreshAction = refreshAction
@@ -45,13 +54,38 @@ final class StatusItemController: NSObject {
         }
 
         let hiddenCount = hiddenItemCountProvider()
+        let summary = MenuBarStatusSummary.make(
+            enabledItems: settings.enabledMenuBarStatusItems,
+            cpu: statusStore.cpu,
+            memory: statusStore.memory,
+            gpu: statusStore.gpu,
+            network: statusStore.network,
+            aiStatuses: aiStatusStore.statuses
+        )
         triggerItem.isVisible = true
-        triggerItem.length = defaultLength
-        configureAppearance(for: button)
+        triggerItem.length = summary.segments.isEmpty ? defaultLength : MenuBarStatusContentView.preferredWidth(for: summary.segments)
+        configureAppearance(for: button, summary: summary)
         button.state = self.isSpillBarVisible ? .on : .off
-        button.toolTip = self.isSpillBarVisible
-            ? "Hide Spill Bar"
-            : hiddenCount > 0 ? "Show \(hiddenCount) menu bar item(s)" : "Show Spill Bar"
+        button.toolTip = tooltip(
+            summary: summary,
+            hiddenCount: hiddenCount,
+            isSpillBarVisible: self.isSpillBarVisible
+        )
+    }
+
+    var buttonScreenFrame: NSRect? {
+        guard let button = triggerItem.button,
+              let window = button.window
+        else {
+            return nil
+        }
+
+        let windowFrame = window.frame
+        if windowFrame.width > 0, windowFrame.height > 0 {
+            return windowFrame
+        }
+
+        return window.convertToScreen(button.convert(button.bounds, to: nil))
     }
 
     private func configureTriggerButton() {
@@ -61,24 +95,43 @@ final class StatusItemController: NSObject {
 
         triggerItem.isVisible = true
         triggerItem.length = defaultLength
-        configureAppearance(for: button)
+        configureIconAppearance(for: button)
         button.target = self
         button.action = #selector(statusButtonClicked(_:))
         button.sendAction(on: [.leftMouseUp, .rightMouseUp])
     }
 
-    private func configureAppearance(for button: NSStatusBarButton) {
+    private func configureAppearance(for button: NSStatusBarButton, summary: MenuBarStatusSummary) {
         button.image = nil
         button.imagePosition = .noImage
         button.title = ""
         button.attributedTitle = NSAttributedString(string: "")
         button.isBordered = false
 
-        let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .semibold)
-        if let image = NSImage(systemSymbolName: "ellipsis", accessibilityDescription: "Spill")?.withSymbolConfiguration(config) {
+        if !summary.segments.isEmpty {
+            installStatusContentView(on: button, segments: summary.segments)
+            button.setAccessibilityLabel(summary.tooltip)
+            return
+        }
+
+        configureIconAppearance(for: button)
+    }
+
+    private func configureIconAppearance(for button: NSStatusBarButton) {
+        removeStatusContentView()
+        button.image = nil
+        button.imagePosition = .noImage
+        button.title = ""
+        button.attributedTitle = NSAttributedString(string: "")
+        button.isBordered = false
+
+        let symbolName = isSpillBarVisible ? "drop.circle.fill" : "drop.fill"
+        let config = NSImage.SymbolConfiguration(pointSize: 15, weight: .semibold)
+        if let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: "Spill")?.withSymbolConfiguration(config) {
             image.isTemplate = true
             button.image = image
             button.imagePosition = .imageOnly
+            button.setAccessibilityLabel("Spill")
             return
         }
 
@@ -86,16 +139,56 @@ final class StatusItemController: NSObject {
         button.imagePosition = .noImage
         button.title = "Spill"
         button.attributedTitle = attributedTitle("Spill", fontSize: 12)
+        button.setAccessibilityLabel("Spill")
+    }
+
+    private func installStatusContentView(on button: NSStatusBarButton, segments: [MenuBarStatusSegment]) {
+        removeStatusContentView()
+
+        let contentView = MenuBarStatusContentView(segments: segments)
+        button.addSubview(contentView)
+        NSLayoutConstraint.activate([
+            contentView.leadingAnchor.constraint(equalTo: button.leadingAnchor),
+            contentView.trailingAnchor.constraint(equalTo: button.trailingAnchor),
+            contentView.topAnchor.constraint(equalTo: button.topAnchor),
+            contentView.bottomAnchor.constraint(equalTo: button.bottomAnchor)
+        ])
+        statusContentView = contentView
+    }
+
+    private func removeStatusContentView() {
+        statusContentView?.removeFromSuperview()
+        statusContentView = nil
     }
 
     private func attributedTitle(_ title: String, fontSize: CGFloat) -> NSAttributedString {
         NSAttributedString(
             string: title,
             attributes: [
-                .font: NSFont.systemFont(ofSize: fontSize, weight: .semibold),
+                .font: NSFont.monospacedDigitSystemFont(ofSize: fontSize, weight: .semibold),
                 .foregroundColor: NSColor.labelColor
             ]
         )
+    }
+
+    private func tooltip(
+        summary: MenuBarStatusSummary,
+        hiddenCount: Int,
+        isSpillBarVisible: Bool
+    ) -> String {
+        var parts: [String] = []
+
+        if !summary.title.isEmpty {
+            parts.append(summary.tooltip)
+        }
+
+        parts.append(isSpillBarVisible ? "Hide Spill Bar" : "Show Spill Bar")
+
+        if hiddenCount > 0 {
+            parts.append("\(hiddenCount) menu bar item(s)")
+        }
+
+        return parts.joined(separator: "\n")
     }
 
     @objc private func statusButtonClicked(_ sender: NSStatusBarButton) {

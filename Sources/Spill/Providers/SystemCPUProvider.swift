@@ -20,6 +20,11 @@ struct SystemCPUStatus: Hashable, Sendable {
     let value: String
     let subtitle: String?
     let usageRatio: Double
+    let availableRatio: Double
+    let userRatio: Double
+    let systemRatio: Double
+    let idleRatio: Double
+    let niceRatio: Double
     let activeTicks: UInt64
     let totalTicks: UInt64
     let state: SpillStatusState
@@ -69,6 +74,10 @@ struct SystemCPUProvider: SpillStatusProvider {
         }
 
         let activeDelta = current.activeTicks - previous.activeTicks
+        let userDelta = current.userTicks - previous.userTicks
+        let systemDelta = current.systemTicks - previous.systemTicks
+        let idleDelta = current.idleTicks - previous.idleTicks
+        let niceDelta = current.niceTicks - previous.niceTicks
         let totalDelta = current.totalTicks - previous.totalTicks
 
         guard totalDelta > 0 else {
@@ -76,11 +85,17 @@ struct SystemCPUProvider: SpillStatusProvider {
         }
 
         let ratio = (Double(activeDelta) / Double(totalDelta)).clamped(to: 0...1)
+        let idleRatio = (Double(idleDelta) / Double(totalDelta)).clamped(to: 0...1)
 
         return SystemCPUStatus(
             value: "\(Int((ratio * 100).rounded()))%",
-            subtitle: "Active",
+            subtitle: "\(Int((idleRatio * 100).rounded()))% available",
             usageRatio: ratio,
+            availableRatio: idleRatio,
+            userRatio: (Double(userDelta) / Double(totalDelta)).clamped(to: 0...1),
+            systemRatio: (Double(systemDelta) / Double(totalDelta)).clamped(to: 0...1),
+            idleRatio: idleRatio,
+            niceRatio: (Double(niceDelta) / Double(totalDelta)).clamped(to: 0...1),
             activeTicks: activeDelta,
             totalTicks: totalDelta,
             state: state(for: ratio)
@@ -104,6 +119,11 @@ struct SystemCPUProvider: SpillStatusProvider {
             value: "N/A",
             subtitle: nil,
             usageRatio: 0,
+            availableRatio: 0,
+            userRatio: 0,
+            systemRatio: 0,
+            idleRatio: 0,
+            niceRatio: 0,
             activeTicks: 0,
             totalTicks: 0,
             state: .unavailable

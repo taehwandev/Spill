@@ -53,6 +53,11 @@ struct AXElementReader: Sendable {
         return CGRect(origin: position, size: size)
     }
 
+    func setFrame(_ frame: CGRect, of element: AXUIElement) -> Bool {
+        setSize(frame.size, for: element, attribute: AXAttributeName.size)
+            && setPosition(frame.origin, for: element, attribute: AXAttributeName.position)
+    }
+
     func actionNames(for element: AXUIElement) -> [String] {
         prepare(element)
 
@@ -105,6 +110,28 @@ struct AXElementReader: Sendable {
         }
 
         return size
+    }
+
+    private func setPosition(_ point: CGPoint, for element: AXUIElement, attribute: String) -> Bool {
+        prepare(element)
+
+        var point = point
+        guard let value = AXValueCreate(.cgPoint, &point) else {
+            return false
+        }
+
+        return AXUIElementSetAttributeValue(element, attribute as CFString, value) == .success
+    }
+
+    private func setSize(_ size: CGSize, for element: AXUIElement, attribute: String) -> Bool {
+        prepare(element)
+
+        var size = size
+        guard let value = AXValueCreate(.cgSize, &size) else {
+            return false
+        }
+
+        return AXUIElementSetAttributeValue(element, attribute as CFString, value) == .success
     }
 
     private func prepare(_ element: AXUIElement) {

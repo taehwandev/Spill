@@ -13,8 +13,14 @@ final class SystemMemoryProviderTests: XCTestCase {
         let status = SystemMemoryProvider.status(from: reading)
 
         XCTAssertEqual(status.value, "44%")
-        XCTAssertEqual(status.subtitle, "7.0 GB of 16 GB")
+        XCTAssertEqual(status.subtitle, "3.0 GB available of 16 GB")
         XCTAssertEqual(status.usedBytes, gib(7))
+        XCTAssertEqual(status.availableBytes, gib(3))
+        XCTAssertEqual(status.freeBytes, gib(2))
+        XCTAssertEqual(status.activeBytes, gib(4))
+        XCTAssertEqual(status.inactiveBytes, gib(1))
+        XCTAssertEqual(status.wiredBytes, gib(2))
+        XCTAssertEqual(status.compressedBytes, gib(1))
         XCTAssertEqual(status.totalBytes, gib(16))
         XCTAssertEqual(status.state, .normal)
         XCTAssertEqual(status.usageRatio, 0.4375, accuracy: 0.0001)
@@ -89,7 +95,7 @@ final class SystemMemoryProviderTests: XCTestCase {
         XCTAssertEqual(item.providerID.rawValue, "system")
         XCTAssertEqual(item.title, "Memory")
         XCTAssertEqual(item.value, "44%")
-        XCTAssertEqual(item.subtitle, "7.0 GB of 16 GB")
+        XCTAssertEqual(item.subtitle, "3.0 GB available of 16 GB")
         XCTAssertEqual(item.symbolName, "memorychip")
     }
 

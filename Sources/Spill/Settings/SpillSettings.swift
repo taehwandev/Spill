@@ -50,6 +50,15 @@ final class SpillSettings: ObservableObject {
         }
     }
 
+    @Published private(set) var enabledMenuBarStatusItems: Set<SpillMenuBarStatusItem> {
+        didSet {
+            let orderedEnabledItems = SpillMenuBarStatusItem.defaultOrder
+                .filter { enabledMenuBarStatusItems.contains($0) }
+                .map(\.rawValue)
+            defaults.set(orderedEnabledItems, forKey: Keys.enabledMenuBarStatusItems)
+        }
+    }
+
     @Published var selectedItemKeys: Set<String> {
         didSet { defaults.set(Array(selectedItemKeys).sorted(), forKey: Keys.selectedItemKeys) }
     }
@@ -80,6 +89,9 @@ final class SpillSettings: ObservableObject {
         )
         enabledStatusModules = SpillStatusModule.normalizedEnabled(
             from: defaults.stringArray(forKey: Keys.enabledStatusModules)
+        )
+        enabledMenuBarStatusItems = SpillMenuBarStatusItem.normalizedEnabled(
+            from: defaults.stringArray(forKey: Keys.enabledMenuBarStatusItems)
         )
         selectedItemKeys = Set(defaults.stringArray(forKey: Keys.selectedItemKeys) ?? [])
         hotKeyEnabled = defaults.object(forKey: Keys.hotKeyEnabled) as? Bool ?? true
@@ -114,6 +126,27 @@ final class SpillSettings: ObservableObject {
         }
     }
 
+    func isMenuBarStatusItemEnabled(_ item: SpillMenuBarStatusItem) -> Bool {
+        enabledMenuBarStatusItems.contains(item)
+    }
+
+    func setMenuBarStatusItem(_ item: SpillMenuBarStatusItem, enabled: Bool) {
+        guard SpillMenuBarStatusItem.glanceSupported.contains(item) else {
+            return
+        }
+
+        if enabled {
+            enabledMenuBarStatusItems.insert(item)
+        } else {
+            enabledMenuBarStatusItems.remove(item)
+        }
+    }
+
+    var statusModulesRequiredForRefresh: Set<SpillStatusModule> {
+        let menuBarModules = enabledMenuBarStatusItems.compactMap(\.systemModule)
+        return enabledStatusModules.union(menuBarModules)
+    }
+
     func setStatusModuleOrder(_ modules: [SpillStatusModule]) {
         statusModuleOrder = SpillStatusModule.normalizedOrder(modules)
     }
@@ -145,6 +178,7 @@ private enum Keys {
     static let displayMode = "displayMode"
     static let statusModuleOrder = "statusModuleOrder"
     static let enabledStatusModules = "enabledStatusModules"
+    static let enabledMenuBarStatusItems = "enabledMenuBarStatusItems"
     static let selectedItemKeys = "selectedItemKeys"
     static let hotKeyEnabled = "hotKeyEnabled"
     static let launchAtLogin = "launchAtLogin"

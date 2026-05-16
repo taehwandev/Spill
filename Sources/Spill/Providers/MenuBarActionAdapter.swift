@@ -15,7 +15,10 @@ enum MenuBarActionAdapter {
             subtitle: snapshot.ownerName,
             symbolName: snapshot.imageData == nil ? "app.dashed" : nil,
             iconData: snapshot.imageData,
-            kind: .menuBarItem(stableKey: snapshot.stableKey),
+            kind: .menuBarItem(
+                stableKey: snapshot.stableKey,
+                bundleIdentifier: snapshot.bundleIdentifier
+            ),
             role: snapshot.isNotchCandidate ? .primary : .secondary,
             state: snapshot.canPress ? .enabled : .disabled(reason: "Menu bar item cannot be pressed")
         )
@@ -27,6 +30,14 @@ enum MenuBarActionAdapter {
         }
 
         return String(action.id.dropFirst(actionIDPrefix.count))
+    }
+
+    static func sourceBundleIdentifier(for action: SpillAction) -> String? {
+        guard case let .menuBarItem(_, bundleIdentifier) = action.kind else {
+            return nil
+        }
+
+        return bundleIdentifier
     }
 
     private static func actionID(for snapshot: MenuBarItemSnapshot) -> String {

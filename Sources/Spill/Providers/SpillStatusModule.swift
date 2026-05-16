@@ -3,6 +3,8 @@ import Foundation
 enum SpillStatusModule: String, CaseIterable, Identifiable, Sendable {
     case cpu
     case memory
+    case gpu
+    case network
 
     var id: String {
         rawValue
@@ -14,11 +16,22 @@ enum SpillStatusModule: String, CaseIterable, Identifiable, Sendable {
             return "CPU"
         case .memory:
             return "Memory"
+        case .gpu:
+            return "GPU"
+        case .network:
+            return "Network"
         }
     }
 
     var meterTitle: String {
-        title.uppercased()
+        switch self {
+        case .gpu:
+            return "GPU"
+        case .network:
+            return "NET"
+        case .cpu, .memory:
+            return title.uppercased()
+        }
     }
 
     var symbolName: String {
@@ -27,6 +40,10 @@ enum SpillStatusModule: String, CaseIterable, Identifiable, Sendable {
             return "cpu"
         case .memory:
             return "memorychip"
+        case .gpu:
+            return "display"
+        case .network:
+            return "network"
         }
     }
 
@@ -35,11 +52,15 @@ enum SpillStatusModule: String, CaseIterable, Identifiable, Sendable {
         case .cpu:
             return "Processor activity"
         case .memory:
-            return "Used physical memory"
+            return "Used and available physical memory"
+        case .gpu:
+            return "Metal device availability"
+        case .network:
+            return "Default route availability"
         }
     }
 
-    static let defaultOrder: [SpillStatusModule] = [.cpu, .memory]
+    static let defaultOrder: [SpillStatusModule] = [.cpu, .memory, .gpu, .network]
     static let defaultEnabled: Set<SpillStatusModule> = Set(defaultOrder)
 
     static func normalizedOrder(from rawValues: [String]?) -> [SpillStatusModule] {

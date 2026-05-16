@@ -32,7 +32,7 @@ struct SpillAction: Identifiable, Hashable, Sendable {
 }
 
 enum SpillActionKind: Hashable, Sendable {
-    case menuBarItem(stableKey: String)
+    case menuBarItem(stableKey: String, bundleIdentifier: String?)
     case app(bundleIdentifier: String)
     case window(WindowActionKind)
     case command(String)

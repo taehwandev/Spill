@@ -7,8 +7,9 @@ final class SpillSettingsTests: XCTestCase {
         let defaults = makeDefaults()
         let settings = SpillSettings(defaults: defaults)
 
-        XCTAssertEqual(settings.statusModuleOrder, [.cpu, .memory])
-        XCTAssertEqual(settings.enabledStatusModules, [.cpu, .memory])
+        XCTAssertEqual(settings.statusModuleOrder, [.cpu, .memory, .gpu, .network])
+        XCTAssertEqual(settings.enabledStatusModules, [.cpu, .memory, .gpu, .network])
+        XCTAssertEqual(settings.enabledMenuBarStatusItems, [.cpu, .memory])
     }
 
     func testPowerFooterDefaultsToVisibleAndSleepGuardDisplayAwakeDefaultsOff() {
@@ -36,7 +37,7 @@ final class SpillSettingsTests: XCTestCase {
 
         let settings = SpillSettings(defaults: defaults)
 
-        XCTAssertEqual(settings.statusModuleOrder, [.memory, .cpu])
+        XCTAssertEqual(settings.statusModuleOrder, [.memory, .cpu, .gpu, .network])
     }
 
     func testStatusModuleEnabledStatePersists() {
@@ -47,7 +48,35 @@ final class SpillSettingsTests: XCTestCase {
 
         XCTAssertFalse(settings.isStatusModuleEnabled(.cpu))
         XCTAssertTrue(settings.isStatusModuleEnabled(.memory))
-        XCTAssertEqual(defaults.stringArray(forKey: "enabledStatusModules"), ["memory"])
+        XCTAssertTrue(settings.isStatusModuleEnabled(.gpu))
+        XCTAssertTrue(settings.isStatusModuleEnabled(.network))
+        XCTAssertEqual(defaults.stringArray(forKey: "enabledStatusModules"), ["memory", "gpu", "network"])
+    }
+
+    func testMenuBarStatusItemsPersistAndDriveRefreshRequirements() {
+        let defaults = makeDefaults()
+        let settings = SpillSettings(defaults: defaults)
+
+        settings.setStatusModule(.network, enabled: false)
+        settings.setMenuBarStatusItem(.memory, enabled: false)
+        settings.setMenuBarStatusItem(.network, enabled: true)
+
+        XCTAssertTrue(settings.isMenuBarStatusItemEnabled(.cpu))
+        XCTAssertFalse(settings.isMenuBarStatusItemEnabled(.memory))
+        XCTAssertFalse(settings.isMenuBarStatusItemEnabled(.gpu))
+        XCTAssertFalse(settings.isMenuBarStatusItemEnabled(.network))
+        XCTAssertFalse(settings.isMenuBarStatusItemEnabled(.ai))
+        XCTAssertEqual(defaults.stringArray(forKey: "enabledMenuBarStatusItems"), ["cpu"])
+        XCTAssertEqual(settings.statusModulesRequiredForRefresh, [.cpu, .memory, .gpu])
+    }
+
+    func testMenuBarStatusItemsNormalizeUnknownValues() {
+        let defaults = makeDefaults()
+        defaults.set(["ai", "unknown", "cpu"], forKey: "enabledMenuBarStatusItems")
+
+        let settings = SpillSettings(defaults: defaults)
+
+        XCTAssertEqual(settings.enabledMenuBarStatusItems, [.cpu])
     }
 
     func testStatusModuleOrderPersistsAfterMove() {
@@ -56,8 +85,8 @@ final class SpillSettingsTests: XCTestCase {
 
         settings.moveStatusModule(.memory, direction: -1)
 
-        XCTAssertEqual(settings.statusModuleOrder, [.memory, .cpu])
-        XCTAssertEqual(defaults.stringArray(forKey: "statusModuleOrder"), ["memory", "cpu"])
+        XCTAssertEqual(settings.statusModuleOrder, [.memory, .cpu, .gpu, .network])
+        XCTAssertEqual(defaults.stringArray(forKey: "statusModuleOrder"), ["memory", "cpu", "gpu", "network"])
     }
 
     private func makeDefaults() -> UserDefaults {

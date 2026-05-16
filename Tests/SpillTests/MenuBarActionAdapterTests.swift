@@ -23,7 +23,11 @@ final class MenuBarActionAdapterTests: XCTestCase {
         XCTAssertEqual(action.subtitle, "Example")
         XCTAssertEqual(action.iconData, Data([1, 2, 3]))
         XCTAssertNil(action.symbolName)
-        XCTAssertEqual(action.kind, .menuBarItem(stableKey: snapshot.stableKey))
+        XCTAssertEqual(
+            action.kind,
+            .menuBarItem(stableKey: snapshot.stableKey, bundleIdentifier: snapshot.bundleIdentifier)
+        )
+        XCTAssertEqual(MenuBarActionAdapter.sourceBundleIdentifier(for: action), "com.example.Status")
         XCTAssertEqual(action.role, .primary)
         XCTAssertEqual(action.state, .enabled)
         XCTAssertTrue(action.state.isEnabled)
@@ -73,6 +77,7 @@ final class MenuBarActionAdapterTests: XCTestCase {
         )
 
         XCTAssertNil(MenuBarActionAdapter.sourceSnapshotID(for: action))
+        XCTAssertNil(MenuBarActionAdapter.sourceBundleIdentifier(for: action))
     }
 
     private func makeSnapshot(

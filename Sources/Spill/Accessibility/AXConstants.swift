@@ -4,6 +4,7 @@ enum AXAttributeName {
     static let children = "AXChildren"
     static let description = "AXDescription"
     static let extrasMenuBar = "AXExtrasMenuBar"
+    static let focusedWindow = "AXFocusedWindow"
     static let menuBar = "AXMenuBar"
     static let position = "AXPosition"
     static let role = "AXRole"
