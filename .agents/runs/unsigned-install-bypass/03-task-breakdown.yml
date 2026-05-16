@@ -1,0 +1,67 @@
+feature_id: unsigned-install-bypass
+status: ready
+
+necessity:
+  decision: build
+  reason: Provide a command-based install path for trusted ad-hoc signed releases before notarization is configured.
+  ambiguity:
+    clarity: clear
+    blockers_resolved: true
+    resolution_sources:
+      - maintainer
+      - repo-research
+      - assumption
+  clarification_required: false
+  questions: []
+
+tasks:
+  - id: unsigned-install-bypass-T1
+    title: Add hosted terminal installer
+    owner_role: builder
+    state: done
+    depends_on: []
+    write_scope:
+      - docs/install.sh
+    read_scope:
+      - README.md
+      - .github/workflows/release.yml
+    forbidden_scope:
+      - Sources/Spill
+    acceptance:
+      - Script downloads a ZIP, installs Spill.app, removes quarantine, and supports test overrides.
+    verification:
+      commands:
+        - bash -n docs/install.sh
+        - SPILL_DOWNLOAD_URL=file://... SPILL_INSTALL_DIR=... SPILL_OPEN_AFTER_INSTALL=0 docs/install.sh
+      manual: []
+
+  - id: unsigned-install-bypass-T2
+    title: Document unsigned install command
+    owner_role: builder
+    state: done
+    depends_on:
+      - unsigned-install-bypass-T1
+    write_scope:
+      - docs/index.html
+      - docs/styles.css
+      - README.md
+      - .github/workflows/release.yml
+    read_scope:
+      - docs/install.sh
+    forbidden_scope:
+      - Sources/Spill
+    acceptance:
+      - Site, README, and release notes expose the quarantine bypass command.
+    verification:
+      commands:
+        - ruby -e 'require "yaml"; YAML.load_file(".github/workflows/release.yml")'
+        - git diff --check
+      manual:
+        - Confirm deployed site returns HTTP 200.
+
+parallel_groups:
+  - id: group-1
+    tasks:
+      - unsigned-install-bypass-T1
+      - unsigned-install-bypass-T2
+    rule: Tasks have disjoint primary write scopes but are integrated by one coordinator before verification.

@@ -94,6 +94,25 @@ Without Apple credentials these artifacts are ad-hoc signed and useful for local
 testing or trusted manual sharing. Public distribution without Gatekeeper warnings
 requires Apple Developer ID signing and notarization.
 
+### Installing unsigned releases
+
+Current public builds are ad-hoc signed unless Developer ID secrets are
+configured. macOS can show an unsigned downloaded app as damaged and offer to move
+it to Trash. For trusted test installs, use the hosted installer command:
+
+```bash
+/bin/bash -c "$(curl -fsSL https://thdev.app/Spill/install.sh)"
+```
+
+The installer downloads the latest ZIP release, copies `Spill.app` to
+`/Applications`, removes the `com.apple.quarantine` download attribute, and opens
+the app. If Spill is already in Applications, the manual equivalent is:
+
+```bash
+sudo xattr -dr com.apple.quarantine /Applications/Spill.app
+open /Applications/Spill.app
+```
+
 Developer ID release example:
 
 ```bash

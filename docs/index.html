@@ -37,7 +37,7 @@
             <a class="button secondary" href="https://github.com/taehwandev/Spill/releases/latest/download/Spill-macos.zip">Download ZIP</a>
           </div>
           <p class="release-note">
-            Requires macOS 14 or later. Open-source releases are published on GitHub.
+            Requires macOS 14 or later. Current public builds are ad-hoc signed.
           </p>
         </div>
       </section>
@@ -72,13 +72,22 @@
             <h2 id="install-title">Get the current release.</h2>
             <p>
               Download the DMG, drag Spill into Applications, then launch it from
-              Applications. Accessibility permission is only needed for detected
-              menu bar actions and window movement.
+              Applications. If macOS says the app is damaged or should be moved to
+              Trash, use the terminal install command to remove the download
+              quarantine flag.
+            </p>
+            <div class="command-block" aria-label="Terminal install command">
+              <code>/bin/bash -c "$(curl -fsSL https://thdev.app/Spill/install.sh)"</code>
+            </div>
+            <p class="small-note">
+              Already copied it to Applications? Run
+              <code>sudo xattr -dr com.apple.quarantine /Applications/Spill.app</code>
+              and open Spill again.
             </p>
           </div>
           <ol class="steps">
-            <li>Download the latest DMG.</li>
-            <li>Move Spill to Applications.</li>
+            <li>Run the terminal install command or download the latest DMG.</li>
+            <li>Keep Spill in Applications.</li>
             <li>Open Spill and use the menu bar trigger.</li>
           </ol>
         </div>

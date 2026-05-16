@@ -218,6 +218,17 @@ jobs:
 
           Signing:
           ${{ steps.signing.outputs.signing_note }}
+
+          Install unsigned/ad-hoc builds:
+          \`\`\`bash
+          /bin/bash -c "\$(curl -fsSL https://thdev.app/Spill/install.sh)"
+          \`\`\`
+
+          If Spill is already in Applications:
+          \`\`\`bash
+          sudo xattr -dr com.apple.quarantine /Applications/Spill.app
+          open /Applications/Spill.app
+          \`\`\`
           NOTES
 
           assets=(

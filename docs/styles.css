@@ -236,7 +236,8 @@ h3 {
 }
 
 .feature-grid p,
-.install-layout p {
+.install-layout p,
+.small-note {
   color: var(--muted);
 }
 
@@ -281,6 +282,34 @@ h3 {
   font-size: 0.88rem;
   font-weight: 800;
   transform: translateY(-50%);
+}
+
+.command-block {
+  margin: 22px 0 12px;
+  overflow-x: auto;
+  border: 1px solid rgba(45, 224, 207, 0.32);
+  border-radius: 8px;
+  background: #050708;
+}
+
+.command-block code {
+  display: block;
+  min-width: max-content;
+  padding: 16px;
+  color: var(--teal-strong);
+  font-family: "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.92rem;
+  white-space: pre;
+}
+
+.small-note {
+  margin-bottom: 0;
+  font-size: 0.92rem;
+}
+
+.small-note code {
+  color: var(--text);
+  font-family: "SF Mono", Menlo, Consolas, monospace;
 }
 
 .release-layout {
