@@ -1,6 +1,38 @@
 import Carbon.HIToolbox
 import Foundation
 
+enum WindowActionShortcutModifier: Hashable, Sendable {
+    case standard
+    case display
+
+    var carbonFlags: UInt32 {
+        switch self {
+        case .standard:
+            return UInt32(controlKey | optionKey)
+        case .display:
+            return UInt32(controlKey | optionKey | cmdKey)
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .standard:
+            return "Control + Option"
+        case .display:
+            return "Control + Option + Command"
+        }
+    }
+
+    var glyph: String {
+        switch self {
+        case .standard:
+            return "⌃⌥"
+        case .display:
+            return "⌃⌥⌘"
+        }
+    }
+}
+
 enum WindowActionShortcutKey: String, CaseIterable, Identifiable, Sendable {
     case off
     case leftArrow
@@ -9,15 +41,24 @@ enum WindowActionShortcutKey: String, CaseIterable, Identifiable, Sendable {
     case downArrow
     case c
     case d
+    case i
+    case j
+    case k
     case m
     case r
+    case u
     case returnKey
+    case deleteKey
     case one
     case two
     case three
     case four
     case five
     case six
+    case seven
+    case eight
+    case nine
+    case zero
 
     var id: String {
         rawValue
@@ -39,12 +80,22 @@ enum WindowActionShortcutKey: String, CaseIterable, Identifiable, Sendable {
             return UInt32(kVK_ANSI_C)
         case .d:
             return UInt32(kVK_ANSI_D)
+        case .i:
+            return UInt32(kVK_ANSI_I)
+        case .j:
+            return UInt32(kVK_ANSI_J)
+        case .k:
+            return UInt32(kVK_ANSI_K)
         case .m:
             return UInt32(kVK_ANSI_M)
         case .r:
             return UInt32(kVK_ANSI_R)
+        case .u:
+            return UInt32(kVK_ANSI_U)
         case .returnKey:
             return UInt32(kVK_Return)
+        case .deleteKey:
+            return UInt32(kVK_Delete)
         case .one:
             return UInt32(kVK_ANSI_1)
         case .two:
@@ -57,48 +108,86 @@ enum WindowActionShortcutKey: String, CaseIterable, Identifiable, Sendable {
             return UInt32(kVK_ANSI_5)
         case .six:
             return UInt32(kVK_ANSI_6)
+        case .seven:
+            return UInt32(kVK_ANSI_7)
+        case .eight:
+            return UInt32(kVK_ANSI_8)
+        case .nine:
+            return UInt32(kVK_ANSI_9)
+        case .zero:
+            return UInt32(kVK_ANSI_0)
         }
     }
 
     var shortcutLabel: String {
+        shortcutLabel(with: .standard)
+    }
+
+    func shortcutLabel(with modifier: WindowActionShortcutModifier) -> String {
+        guard self != .off else {
+            return keyLabel
+        }
+
+        return "\(modifier.glyph)\(keyLabel)"
+    }
+
+    var keyLabel: String {
         switch self {
         case .off:
             return "Off"
         case .leftArrow:
-            return "⌃⌥←"
+            return "←"
         case .rightArrow:
-            return "⌃⌥→"
+            return "→"
         case .upArrow:
-            return "⌃⌥↑"
+            return "↑"
         case .downArrow:
-            return "⌃⌥↓"
+            return "↓"
         case .c:
-            return "⌃⌥C"
+            return "C"
         case .d:
-            return "⌃⌥D"
+            return "D"
+        case .i:
+            return "I"
+        case .j:
+            return "J"
+        case .k:
+            return "K"
         case .m:
-            return "⌃⌥M"
+            return "M"
         case .r:
-            return "⌃⌥R"
+            return "R"
+        case .u:
+            return "U"
         case .returnKey:
-            return "⌃⌥↩"
+            return "↩"
+        case .deleteKey:
+            return "⌫"
         case .one:
-            return "⌃⌥1"
+            return "1"
         case .two:
-            return "⌃⌥2"
+            return "2"
         case .three:
-            return "⌃⌥3"
+            return "3"
         case .four:
-            return "⌃⌥4"
+            return "4"
         case .five:
-            return "⌃⌥5"
+            return "5"
         case .six:
-            return "⌃⌥6"
+            return "6"
+        case .seven:
+            return "7"
+        case .eight:
+            return "8"
+        case .nine:
+            return "9"
+        case .zero:
+            return "0"
         }
     }
 
     var pickerTitle: String {
-        shortcutLabel
+        keyLabel
     }
 }
 
@@ -109,15 +198,52 @@ extension WindowActionKind {
             return .leftArrow
         case .rightHalf:
             return .rightArrow
+        case .topHalf:
+            return .upArrow
+        case .bottomHalf:
+            return .downArrow
         case .center:
             return .c
         case .maximize:
             return .returnKey
+        case .topLeft:
+            return .off
+        case .topRight:
+            return .off
+        case .bottomLeft:
+            return .off
+        case .bottomRight:
+            return .off
+        case .previousDisplay:
+            return .leftArrow
         case .nextDisplay:
-            return .d
+            return .rightArrow
         case .restore:
-            return .r
+            return .deleteKey
         }
+    }
+
+    var shortcutModifier: WindowActionShortcutModifier {
+        switch self {
+        case .previousDisplay, .nextDisplay:
+            return .display
+        case .leftHalf,
+             .rightHalf,
+             .topHalf,
+             .bottomHalf,
+             .center,
+             .maximize,
+             .topLeft,
+             .topRight,
+             .bottomLeft,
+             .bottomRight,
+             .restore:
+            return .standard
+        }
+    }
+
+    func shortcutLabel(for key: WindowActionShortcutKey) -> String {
+        key.shortcutLabel(with: shortcutModifier)
     }
 
     static var defaultShortcutKeys: [WindowActionKind: WindowActionShortcutKey] {
@@ -134,10 +260,24 @@ extension WindowActionKind {
             return 12
         case .maximize:
             return 13
-        case .nextDisplay:
+        case .topHalf:
             return 14
-        case .restore:
+        case .bottomHalf:
             return 15
+        case .topLeft:
+            return 16
+        case .topRight:
+            return 17
+        case .bottomLeft:
+            return 18
+        case .bottomRight:
+            return 19
+        case .previousDisplay:
+            return 20
+        case .nextDisplay:
+            return 21
+        case .restore:
+            return 22
         }
     }
 }

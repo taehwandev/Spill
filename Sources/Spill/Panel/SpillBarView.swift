@@ -9,16 +9,15 @@ struct SpillBarView: View {
     @ObservedObject var sleepGuard: SleepGuardController
     let dismissAction: () -> Void
     let settingsAction: () -> Void
-    let quitAction: () -> Void
     @State private var actionFeedback: SpillActionFeedback?
     @State private var statusDetailTarget: SpillStatusDetailTarget?
 
     private var displayItems: [MenuBarItemSnapshot] {
-        settings.displayMode.items(from: scanner, settings: settings)
+        SpillDisplayMode.notchCandidateItems(from: scanner, settings: settings)
     }
 
     private var pinnedItems: [MenuBarItemSnapshot] {
-        scanner.items.filter {
+        scanner.notchCandidates.filter {
             settings.selectedItemKeys.contains($0.stableKey)
                 && !settings.isItemHidden($0)
         }
@@ -41,7 +40,7 @@ struct SpillBarView: View {
     }
 
     private var visibleStatusModules: [SpillStatusModule] {
-        SpillStatusModule.primaryPanelModules.filter { settings.isStatusModuleEnabled($0) }
+        SpillStatusModule.primaryPanelModules
     }
 
     private var panelState: SpillPanelState {
@@ -53,29 +52,33 @@ struct SpillBarView: View {
     }
 
     var body: some View {
-        VStack(spacing: 10) {
-            header
-            if !visibleStatusModules.isEmpty {
-                statusSection
+        ScrollView(.vertical, showsIndicators: false) {
+            VStack(spacing: 10) {
+                header
+                if !visibleStatusModules.isEmpty {
+                    statusSection
+                }
+                aiSection
+                actionSections
+                footer
             }
-            aiSection
-            actionSections
-            footer
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, alignment: .top)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
     private var header: some View {
         HStack(spacing: 12) {
             ZStack {
                 RoundedRectangle(cornerRadius: 11, style: .continuous)
-                    .fill(Color.accentColor.opacity(0.18))
+                    .fill(Color.blue)
+                    .shadow(color: Color.blue.opacity(0.3), radius: 3, y: 1)
 
                 Image(systemName: panelState.symbolName)
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(panelState.tint)
+                    .foregroundStyle(.white)
             }
             .frame(width: 34, height: 34)
 
@@ -94,7 +97,7 @@ struct SpillBarView: View {
 
             statusDot
             headerCommand(symbolName: "gearshape.fill", title: "Settings", action: settingsAction)
-            headerCommand(symbolName: "power", title: "Quit", action: quitAction)
+            headerCommand(symbolName: "xmark", title: "Close", action: dismissAction)
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Spill Flow")
@@ -103,15 +106,12 @@ struct SpillBarView: View {
     private func headerCommand(symbolName: String, title: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Label(title, systemImage: symbolName)
-                .font(.system(size: 10.5, weight: .semibold))
+                .font(.system(size: 11.5, weight: .semibold))
                 .lineLimit(1)
                 .padding(.horizontal, 8)
                 .frame(height: 28)
-                .background(.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .stroke(.primary.opacity(0.1), lineWidth: 0.8)
-                }
+                .background(.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .shadow(color: .black.opacity(0.03), radius: 1, y: 0.5)
         }
         .buttonStyle(.plain)
         .help(title)
@@ -121,6 +121,7 @@ struct SpillBarView: View {
         Circle()
             .fill(panelState.tint)
             .frame(width: 8, height: 8)
+            .shadow(color: panelState.tint.opacity(0.4), radius: 2, y: 1)
             .overlay {
                 Circle()
                     .stroke(panelState.tint.opacity(0.22), lineWidth: 5)
@@ -161,17 +162,16 @@ struct SpillBarView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {
                         Text(module.title)
-                            .font(.system(size: 10.5, weight: .semibold))
-                            .foregroundStyle(status.state.panelTint)
+                            .font(.system(size: 11.5, weight: .semibold))
 
                         Text(status.value)
-                            .font(.system(size: 15, weight: .bold, design: .rounded))
+                            .font(.system(size: 16, weight: .bold, design: .rounded))
                             .monospacedDigit()
                             .foregroundStyle(status.state.panelTint)
                     }
 
                     Text(subtitleText(status.subtitle))
-                        .font(.system(size: 9.5, weight: .medium, design: .rounded))
+                        .font(.system(size: 10, weight: .medium, design: .rounded))
                         .lineLimit(1)
                         .minimumScaleFactor(0.72)
                         .foregroundStyle(.secondary)
@@ -187,11 +187,11 @@ struct SpillBarView: View {
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 7)
-            .frame(minHeight: 54)
-            .background(status.state.panelTint.opacity(0.1), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .frame(minHeight: 56)
+            .background(.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(status.state.panelTint.opacity(0.2), lineWidth: 0.8)
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(.primary.opacity(0.05), lineWidth: 0.5)
             }
         }
         .buttonStyle(.plain)
@@ -205,13 +205,13 @@ struct SpillBarView: View {
     private func sectionHeader(_ title: String, symbolName: String) -> some View {
         HStack {
             Text(title)
-                .font(.system(size: 10, weight: .semibold))
+                .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(.secondary)
 
             Spacer()
 
             Image(systemName: symbolName)
-                .font(.system(size: 10, weight: .semibold))
+                .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(.secondary)
         }
         .accessibilityElement(children: .combine)
@@ -281,7 +281,7 @@ struct SpillBarView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 4) {
                         Text(title)
-                            .font(.system(size: 10, weight: .semibold))
+                            .font(.system(size: 11, weight: .semibold))
                             .lineLimit(1)
                             .minimumScaleFactor(0.72)
 
@@ -295,7 +295,7 @@ struct SpillBarView: View {
                     }
 
                     Text(subtitleText(subtitle))
-                        .font(.system(size: 9.5, weight: .medium, design: .rounded))
+                        .font(.system(size: 10, weight: .medium, design: .rounded))
                         .lineLimit(1)
                         .minimumScaleFactor(0.68)
                         .monospacedDigit()
@@ -318,16 +318,11 @@ struct SpillBarView: View {
                 }
             }
         }
-        .foregroundStyle(tint)
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .frame(minHeight: detailRows.isEmpty ? 60 : 92)
         .frame(maxWidth: .infinity)
-        .background(tint.opacity(0.1), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(tint.opacity(0.2), lineWidth: 0.8)
-        }
+        .background(.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     private func statusIconBadge(symbolName: String, tint: Color) -> some View {
@@ -340,10 +335,6 @@ struct SpillBarView: View {
                 .symbolRenderingMode(.hierarchical)
         }
         .frame(width: 30, height: 30)
-        .overlay {
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .stroke(tint.opacity(0.18), lineWidth: 0.8)
-        }
     }
 
     private func inlineRows(for module: SpillStatusModule) -> [SpillStatusDetailRow] {
@@ -462,12 +453,7 @@ struct SpillBarView: View {
     }
 
     private var emptyStateTitle: String {
-        switch settings.displayMode {
-        case .selectedItems:
-            return "No Selected Items"
-        case .notchCandidates, .allDetected:
-            return "No Items Detected"
-        }
+        "No Notch Candidates"
     }
 
     private var actionSections: some View {
@@ -485,7 +471,7 @@ struct SpillBarView: View {
                 inlineState(symbolName: "macwindow", title: "No Focused Window")
                     .frame(height: 50)
             } else {
-                windowActionScroller
+                windowActionGrid
             }
         }
     }
@@ -497,50 +483,67 @@ struct SpillBarView: View {
             Group {
                 if !AccessibilityPermission.isTrusted {
                     inlineState(symbolName: "lock.fill", title: "Accessibility Required")
+                        .frame(height: 48)
                 } else if scanner.isScanning && displayItems.isEmpty {
                     scanningState
+                        .frame(height: 48)
                 } else if actionItems.isEmpty {
                     inlineState(symbolName: "magnifyingglass", title: emptyStateTitle)
+                        .frame(height: 48)
                 } else {
-                    menuBarActionScroller
+                    menuBarActionGrid
                 }
             }
-            .frame(height: 48)
         }
     }
 
-    private var windowActionScroller: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
-                ForEach(windowActionStore.actions) { action in
-                    WindowActionButton(action: action, shortcutKey: shortcutKey(for: action)) {
-                        performWindowAction(action)
-                    }
-                    .help(windowHelpText(for: action))
-                    .accessibilityLabel(action.title)
+    private var windowActionGrid: some View {
+        LazyVGrid(columns: windowActionGridColumns, alignment: .leading, spacing: 6) {
+            ForEach(windowActionStore.actions) { action in
+                WindowActionButton(action: action, shortcutKey: shortcutKey(for: action)) {
+                    performWindowAction(action)
                 }
+                .help(windowHelpText(for: action))
+                .accessibilityLabel(action.title)
             }
-            .padding(.horizontal, 1)
         }
-        .frame(height: 50)
+        .padding(.horizontal, 1)
     }
 
-    private var menuBarActionScroller: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: max(CGFloat(settings.iconSpacing), 7)) {
-                ForEach(actionItems) { item in
-                    SpillActionButton(
-                        action: item.action,
-                        isPinned: item.isPinned,
-                        togglePinned: { togglePinned(item.sourceItem) },
-                        perform: { perform(item) }
-                    )
-                    .help(helpText(for: item))
-                    .accessibilityLabel(item.action.title)
-                }
+    private var windowActionGridColumns: [GridItem] {
+        [
+            GridItem(
+                .adaptive(minimum: 76, maximum: 76),
+                spacing: 6,
+                alignment: .center
+            )
+        ]
+    }
+
+    private var menuBarActionGrid: some View {
+        LazyVGrid(columns: menuBarActionGridColumns, alignment: .leading, spacing: 6) {
+            ForEach(actionItems) { item in
+                SpillActionButton(
+                    action: item.action,
+                    isPinned: item.isPinned,
+                    togglePinned: { togglePinned(item.sourceItem) },
+                    perform: { perform(item) }
+                )
+                .help(helpText(for: item))
+                .accessibilityLabel(item.action.title)
             }
-            .padding(.horizontal, 1)
         }
+        .padding(.horizontal, 1)
+    }
+
+    private var menuBarActionGridColumns: [GridItem] {
+        [
+            GridItem(
+                .adaptive(minimum: 48, maximum: 48),
+                spacing: max(CGFloat(settings.iconSpacing), 7),
+                alignment: .center
+            )
+        ]
     }
 
     private func displayedActionItem(from item: MenuBarItemSnapshot) -> SpillDisplayedActionItem {
@@ -596,11 +599,11 @@ struct SpillBarView: View {
     private func inlineState(symbolName: String, title: String) -> some View {
         HStack(spacing: 8) {
             Image(systemName: symbolName)
-                .font(.system(size: 12, weight: .semibold))
+                .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(.secondary)
 
             Text(title)
-                .font(.system(size: 12, weight: .medium))
+                .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
 
@@ -614,12 +617,12 @@ struct SpillBarView: View {
             isScanning: scanner.isScanning,
             sleepGuard: sleepGuard,
             sleepGuardDefaultDuration: settings.sleepGuardDefaultDuration,
+            allowsIndefiniteDuration: settings.sleepGuardAllowsIndefinite,
             keepsDisplayAwake: settings.sleepGuardKeepsDisplayAwake,
-            showsPower: settings.showPowerFooter,
+            showsPower: true,
             powerStatus: statusStore.power,
-            showsCountBadge: settings.showCountBadge,
-            itemCount: displayItems.count,
-            quitAction: quitAction
+            showsCountBadge: true,
+            itemCount: displayItems.count
         )
     }
 
@@ -684,13 +687,11 @@ private struct MetricSparklineView: View {
                 }
             }
 
-            context.stroke(path, with: .color(tint.opacity(0.9)), lineWidth: 1.8)
+            var shadowContext = context
+            shadowContext.addFilter(.shadow(color: tint.opacity(0.3), radius: 1, x: 0, y: 1))
+            shadowContext.stroke(path, with: .color(tint.opacity(0.9)), lineWidth: 1.8)
         }
-        .background(tint.opacity(0.08), in: RoundedRectangle(cornerRadius: 4, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 4, style: .continuous)
-                .stroke(tint.opacity(0.14), lineWidth: 0.7)
-        }
+        .padding(.vertical, 2)
     }
 
     private func drawFlatLine(in context: inout GraphicsContext, size: CGSize) {

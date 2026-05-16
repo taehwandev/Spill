@@ -15,12 +15,30 @@ final class SpillSettingsTests: XCTestCase {
         XCTAssertEqual(settings.menuBarStatusPrecision, .tenths)
         XCTAssertEqual(settings.menuBarStatusHighlightThreshold, .seventy)
         XCTAssertEqual(settings.sleepGuardDefaultDuration, .fifteenMinutes)
+        XCTAssertFalse(settings.sleepGuardAllowsIndefinite)
+        XCTAssertFalse(settings.sleepGuardShowsRemainingInMenuBar)
+        XCTAssertFalse(settings.availableSleepGuardDurations.contains(.indefinitely))
         XCTAssertEqual(settings.shortcutKey(for: .leftHalf), .leftArrow)
         XCTAssertEqual(settings.shortcutKey(for: .rightHalf), .rightArrow)
+        XCTAssertEqual(settings.shortcutKey(for: .topHalf), .upArrow)
+        XCTAssertEqual(settings.shortcutKey(for: .bottomHalf), .downArrow)
         XCTAssertEqual(settings.shortcutKey(for: .center), .c)
         XCTAssertEqual(settings.shortcutKey(for: .maximize), .returnKey)
-        XCTAssertEqual(settings.shortcutKey(for: .nextDisplay), .d)
-        XCTAssertEqual(settings.shortcutKey(for: .restore), .r)
+        XCTAssertEqual(settings.shortcutKey(for: .topLeft), .off)
+        XCTAssertEqual(settings.shortcutKey(for: .topRight), .off)
+        XCTAssertEqual(settings.shortcutKey(for: .bottomLeft), .off)
+        XCTAssertEqual(settings.shortcutKey(for: .bottomRight), .off)
+        XCTAssertEqual(settings.shortcutKey(for: .previousDisplay), .leftArrow)
+        XCTAssertEqual(settings.shortcutKey(for: .nextDisplay), .rightArrow)
+        XCTAssertEqual(settings.shortcutKey(for: .restore), .deleteKey)
+        XCTAssertEqual(settings.shortcutKey(for: .topHalf).shortcutLabel, "⌃⌥↑")
+        XCTAssertEqual(settings.shortcutKey(for: .bottomHalf).shortcutLabel, "⌃⌥↓")
+        XCTAssertEqual(settings.shortcutKey(for: .restore).shortcutLabel, "⌃⌥⌫")
+        XCTAssertEqual(
+            settings.shortcutKey(for: .previousDisplay).shortcutLabel(with: .display),
+            "⌃⌥⌘←"
+        )
+        XCTAssertEqual(settings.shortcutKey(for: .bottomLeft).pickerTitle, "Off")
     }
 
     func testPowerFooterDefaultsToVisibleAndSleepGuardDisplayAwakeDefaultsOff() {
@@ -29,7 +47,9 @@ final class SpillSettingsTests: XCTestCase {
 
         XCTAssertTrue(settings.showPowerFooter)
         XCTAssertFalse(settings.sleepGuardKeepsDisplayAwake)
+        XCTAssertFalse(settings.sleepGuardShowsRemainingInMenuBar)
         XCTAssertEqual(settings.sleepGuardDefaultDuration, .fifteenMinutes)
+        XCTAssertFalse(settings.sleepGuardAllowsIndefinite)
     }
 
     func testPowerAndSleepGuardSettingsPersist() {
@@ -38,14 +58,20 @@ final class SpillSettingsTests: XCTestCase {
 
         settings.showPowerFooter = false
         settings.sleepGuardKeepsDisplayAwake = true
-        settings.sleepGuardDefaultDuration = .oneHour
+        settings.sleepGuardShowsRemainingInMenuBar = true
+        settings.sleepGuardAllowsIndefinite = true
+        settings.sleepGuardDefaultDuration = .indefinitely
 
         XCTAssertFalse(defaults.bool(forKey: "showPowerFooter"))
         XCTAssertTrue(defaults.bool(forKey: "sleepGuardKeepsDisplayAwake"))
-        XCTAssertEqual(defaults.integer(forKey: "sleepGuardDefaultDuration"), SleepGuardDuration.oneHour.rawValue)
+        XCTAssertTrue(defaults.bool(forKey: "sleepGuardShowsRemainingInMenuBar"))
+        XCTAssertTrue(defaults.bool(forKey: "sleepGuardAllowsIndefinite"))
+        XCTAssertEqual(defaults.integer(forKey: "sleepGuardDefaultDuration"), SleepGuardDuration.indefinitely.rawValue)
 
         let reloadedSettings = SpillSettings(defaults: defaults)
-        XCTAssertEqual(reloadedSettings.sleepGuardDefaultDuration, .oneHour)
+        XCTAssertEqual(reloadedSettings.sleepGuardDefaultDuration, .indefinitely)
+        XCTAssertTrue(reloadedSettings.sleepGuardShowsRemainingInMenuBar)
+        XCTAssertTrue(reloadedSettings.sleepGuardAllowsIndefinite)
     }
 
     func testSleepGuardDefaultDurationNormalizesUnknownValue() {
@@ -55,6 +81,30 @@ final class SpillSettingsTests: XCTestCase {
         let settings = SpillSettings(defaults: defaults)
 
         XCTAssertEqual(settings.sleepGuardDefaultDuration, .fifteenMinutes)
+    }
+
+    func testIndefiniteSleepGuardDurationRequiresWarningFlag() {
+        let defaults = makeDefaults()
+        defaults.set(SleepGuardDuration.indefinitely.rawValue, forKey: "sleepGuardDefaultDuration")
+
+        let settings = SpillSettings(defaults: defaults)
+
+        XCTAssertEqual(settings.sleepGuardDefaultDuration, .fifteenMinutes)
+        XCTAssertFalse(settings.availableSleepGuardDurations.contains(.indefinitely))
+
+        let allowedDefaults = makeDefaults()
+        allowedDefaults.set(true, forKey: "sleepGuardAllowsIndefinite")
+        allowedDefaults.set(SleepGuardDuration.indefinitely.rawValue, forKey: "sleepGuardDefaultDuration")
+
+        let allowedSettings = SpillSettings(defaults: allowedDefaults)
+
+        XCTAssertEqual(allowedSettings.sleepGuardDefaultDuration, .indefinitely)
+        XCTAssertTrue(allowedSettings.availableSleepGuardDurations.contains(.indefinitely))
+
+        allowedSettings.sleepGuardAllowsIndefinite = false
+
+        XCTAssertEqual(allowedSettings.sleepGuardDefaultDuration, .fifteenMinutes)
+        XCTAssertFalse(allowedSettings.availableSleepGuardDurations.contains(.indefinitely))
     }
 
     func testStatusModuleOrderNormalizesUnknownDuplicateAndMissingValues() {
@@ -87,14 +137,16 @@ final class SpillSettingsTests: XCTestCase {
 
         settings.setStatusModule(.network, enabled: false)
         settings.setMenuBarStatusItem(.memory, enabled: false)
+        settings.setMenuBarStatusItem(.caffeine, enabled: true)
         settings.setMenuBarStatusItem(.network, enabled: true)
 
         XCTAssertTrue(settings.isMenuBarStatusItemEnabled(.cpu))
         XCTAssertFalse(settings.isMenuBarStatusItemEnabled(.memory))
+        XCTAssertTrue(settings.isMenuBarStatusItemEnabled(.caffeine))
         XCTAssertFalse(settings.isMenuBarStatusItemEnabled(.gpu))
         XCTAssertFalse(settings.isMenuBarStatusItemEnabled(.network))
         XCTAssertFalse(settings.isMenuBarStatusItemEnabled(.ai))
-        XCTAssertEqual(defaults.stringArray(forKey: "enabledMenuBarStatusItems"), ["cpu"])
+        XCTAssertEqual(defaults.stringArray(forKey: "enabledMenuBarStatusItems"), ["cpu", "caffeine"])
         XCTAssertEqual(settings.statusModulesRequiredForRefresh, [.cpu, .memory, .storage])
     }
 
@@ -134,11 +186,11 @@ final class SpillSettingsTests: XCTestCase {
 
     func testMenuBarStatusItemsNormalizeUnknownValues() {
         let defaults = makeDefaults()
-        defaults.set(["ai", "unknown", "cpu"], forKey: "enabledMenuBarStatusItems")
+        defaults.set(["caffeine", "ai", "unknown", "cpu"], forKey: "enabledMenuBarStatusItems")
 
         let settings = SpillSettings(defaults: defaults)
 
-        XCTAssertEqual(settings.enabledMenuBarStatusItems, [.cpu])
+        XCTAssertEqual(settings.enabledMenuBarStatusItems, [.cpu, .caffeine])
     }
 
     func testMenuBarStatusDisplayOptionsPersist() {
@@ -188,9 +240,16 @@ final class SpillSettingsTests: XCTestCase {
             [
                 "leftHalf=off",
                 "rightHalf=one",
+                "topHalf=upArrow",
+                "bottomHalf=downArrow",
                 "center=c",
                 "maximize=returnKey",
-                "nextDisplay=d",
+                "topLeft=off",
+                "topRight=off",
+                "bottomLeft=off",
+                "bottomRight=off",
+                "previousDisplay=leftArrow",
+                "nextDisplay=rightArrow",
                 "restore=off"
             ]
         )
@@ -217,8 +276,97 @@ final class SpillSettingsTests: XCTestCase {
 
         XCTAssertEqual(settings.shortcutKey(for: .leftHalf), .two)
         XCTAssertEqual(settings.shortcutKey(for: .rightHalf), .off)
+        XCTAssertEqual(settings.shortcutKey(for: .topHalf), .upArrow)
+        XCTAssertEqual(settings.shortcutKey(for: .bottomHalf), .downArrow)
         XCTAssertEqual(settings.shortcutKey(for: .center), .c)
         XCTAssertEqual(settings.shortcutKey(for: .maximize), .returnKey)
+        XCTAssertEqual(settings.shortcutKey(for: .topLeft), .off)
+        XCTAssertEqual(settings.shortcutKey(for: .topRight), .off)
+        XCTAssertEqual(settings.shortcutKey(for: .bottomLeft), .off)
+        XCTAssertEqual(settings.shortcutKey(for: .bottomRight), .off)
+        XCTAssertEqual(settings.shortcutKey(for: .previousDisplay), .leftArrow)
+        XCTAssertEqual(settings.shortcutKey(for: .nextDisplay), .rightArrow)
+    }
+
+    func testLegacyWindowActionDefaultsMigrateToCommonShortcuts() {
+        let defaults = makeDefaults()
+        defaults.set(
+            [
+                "leftHalf=leftArrow",
+                "rightHalf=rightArrow",
+                "center=c",
+                "maximize=returnKey",
+                "topLeft=one",
+                "topRight=two",
+                "bottomLeft=three",
+                "bottomRight=four",
+                "nextDisplay=d",
+                "restore=r"
+            ],
+            forKey: "windowActionShortcutKeys"
+        )
+
+        let settings = SpillSettings(defaults: defaults)
+
+        XCTAssertEqual(settings.shortcutKey(for: .topHalf), .upArrow)
+        XCTAssertEqual(settings.shortcutKey(for: .bottomHalf), .downArrow)
+        XCTAssertEqual(settings.shortcutKey(for: .topLeft), .off)
+        XCTAssertEqual(settings.shortcutKey(for: .topRight), .off)
+        XCTAssertEqual(settings.shortcutKey(for: .bottomLeft), .off)
+        XCTAssertEqual(settings.shortcutKey(for: .bottomRight), .off)
+        XCTAssertEqual(settings.shortcutKey(for: .previousDisplay), .leftArrow)
+        XCTAssertEqual(settings.shortcutKey(for: .nextDisplay), .rightArrow)
+        XCTAssertEqual(settings.shortcutKey(for: .restore), .deleteKey)
+    }
+
+    func testPreviousWindowActionDefaultsMigrateToArrowOnlyMovementShortcuts() {
+        let defaults = makeDefaults()
+        defaults.set(
+            [
+                "leftHalf=leftArrow",
+                "rightHalf=rightArrow",
+                "center=c",
+                "maximize=returnKey",
+                "topLeft=u",
+                "topRight=i",
+                "bottomLeft=j",
+                "bottomRight=k",
+                "previousDisplay=leftArrow",
+                "nextDisplay=rightArrow",
+                "restore=deleteKey"
+            ],
+            forKey: "windowActionShortcutKeys"
+        )
+
+        let settings = SpillSettings(defaults: defaults)
+
+        XCTAssertEqual(settings.shortcutKey(for: .leftHalf), .leftArrow)
+        XCTAssertEqual(settings.shortcutKey(for: .rightHalf), .rightArrow)
+        XCTAssertEqual(settings.shortcutKey(for: .topHalf), .upArrow)
+        XCTAssertEqual(settings.shortcutKey(for: .bottomHalf), .downArrow)
+        XCTAssertEqual(settings.shortcutKey(for: .topLeft), .off)
+        XCTAssertEqual(settings.shortcutKey(for: .topRight), .off)
+        XCTAssertEqual(settings.shortcutKey(for: .bottomLeft), .off)
+        XCTAssertEqual(settings.shortcutKey(for: .bottomRight), .off)
+        XCTAssertEqual(settings.shortcutKey(for: .previousDisplay), .leftArrow)
+        XCTAssertEqual(settings.shortcutKey(for: .nextDisplay), .rightArrow)
+        XCTAssertEqual(settings.shortcutKey(for: .restore), .deleteKey)
+    }
+
+    func testWindowActionShortcutConflictsAreScopedToModifierGroup() {
+        let defaults = makeDefaults()
+        let settings = SpillSettings(defaults: defaults)
+
+        settings.setWindowActionShortcut(.leftArrow, for: .previousDisplay)
+
+        XCTAssertEqual(settings.shortcutKey(for: .leftHalf), .leftArrow)
+        XCTAssertEqual(settings.shortcutKey(for: .previousDisplay), .leftArrow)
+
+        settings.setWindowActionShortcut(.leftArrow, for: .rightHalf)
+
+        XCTAssertEqual(settings.shortcutKey(for: .leftHalf), .off)
+        XCTAssertEqual(settings.shortcutKey(for: .rightHalf), .leftArrow)
+        XCTAssertEqual(settings.shortcutKey(for: .previousDisplay), .leftArrow)
     }
 
     func testStatusModuleOrderPersistsAfterMove() {

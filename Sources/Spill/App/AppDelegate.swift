@@ -29,9 +29,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         },
         settingsAction: { [weak self] in
             self?.showPreferences()
-        },
-        quitAction: {
-            NSApp.terminate(nil)
         }
     )
     private lazy var preferencesWindowController = PreferencesWindowController(
@@ -55,7 +52,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             sleepGuard: sleepGuard,
             hiddenItemCountProvider: { [weak scanner] in
                 guard let scanner else { return 0 }
-                return SpillSettings.shared.displayMode.items(from: scanner, settings: SpillSettings.shared).count
+                return SpillDisplayMode.notchCandidateItems(from: scanner, settings: SpillSettings.shared).count
             },
             toggleAction: { [weak self] in
                 self?.toggleSpillBar()
@@ -313,13 +310,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             .store(in: &cancellables)
 
-        settings.$showCountBadge
-            .dropFirst()
-            .sink { [weak self] _ in
-                self?.statusItemController?.refresh()
-            }
-            .store(in: &cancellables)
-
         settings.$displayMode
             .dropFirst()
             .sink { [weak self] _ in
@@ -346,6 +336,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .sink { [weak self] _ in
                 self?.statusItemController?.refresh()
                 self?.configureStatusRefreshLoop()
+            }
+            .store(in: &cancellables)
+
+        settings.$sleepGuardShowsRemainingInMenuBar
+            .dropFirst()
+            .sink { [weak self] _ in
+                self?.statusItemController?.refresh()
             }
             .store(in: &cancellables)
 
@@ -404,7 +401,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let enabledModules = isSpillPanelVisible
             ? settings.statusModulesRequiredForRefresh
             : menuBarStatusModules
-        let readsPower = isSpillPanelVisible && settings.showPowerFooter
+        let readsPower = isSpillPanelVisible
 
         await statusStore.refresh(
             enabledModules: enabledModules,
@@ -420,7 +417,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         await statusStore.refresh(
             enabledModules: isSpillPanelVisible ? settings.statusModulesRequiredForRefresh : menuBarStatusModules,
-            readsPower: isSpillPanelVisible && settings.showPowerFooter
+            readsPower: isSpillPanelVisible
         )
         statusItemController?.refresh()
     }

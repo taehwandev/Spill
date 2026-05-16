@@ -31,6 +31,10 @@ enum WindowFramePlanner {
 
         switch kind {
         case .leftHalf:
+            if let verticalPlacement = verticalPlacement(of: snapshot.windowFrame, in: visibleFrame) {
+                return quarterFrame(in: visibleFrame, horizontal: .leading, vertical: verticalPlacement)
+            }
+
             return CGRect(
                 x: visibleFrame.minX,
                 y: visibleFrame.minY,
@@ -38,11 +42,37 @@ enum WindowFramePlanner {
                 height: visibleFrame.height
             ).integral
         case .rightHalf:
+            if let verticalPlacement = verticalPlacement(of: snapshot.windowFrame, in: visibleFrame) {
+                return quarterFrame(in: visibleFrame, horizontal: .trailing, vertical: verticalPlacement)
+            }
+
             return CGRect(
                 x: visibleFrame.midX,
                 y: visibleFrame.minY,
                 width: visibleFrame.width / 2,
                 height: visibleFrame.height
+            ).integral
+        case .topHalf:
+            if let horizontalPlacement = horizontalPlacement(of: snapshot.windowFrame, in: visibleFrame) {
+                return quarterFrame(in: visibleFrame, horizontal: horizontalPlacement, vertical: .top)
+            }
+
+            return CGRect(
+                x: visibleFrame.minX,
+                y: visibleFrame.minY,
+                width: visibleFrame.width,
+                height: visibleFrame.height / 2
+            ).integral
+        case .bottomHalf:
+            if let horizontalPlacement = horizontalPlacement(of: snapshot.windowFrame, in: visibleFrame) {
+                return quarterFrame(in: visibleFrame, horizontal: horizontalPlacement, vertical: .bottom)
+            }
+
+            return CGRect(
+                x: visibleFrame.minX,
+                y: visibleFrame.midY,
+                width: visibleFrame.width,
+                height: visibleFrame.height / 2
             ).integral
         case .center:
             let size = CGSize(
@@ -57,35 +87,172 @@ enum WindowFramePlanner {
             ).integral
         case .maximize:
             return visibleFrame.integral
+        case .topLeft:
+            return quarterFrame(in: visibleFrame, horizontal: .leading, vertical: .top)
+        case .topRight:
+            return quarterFrame(in: visibleFrame, horizontal: .trailing, vertical: .top)
+        case .bottomLeft:
+            return quarterFrame(in: visibleFrame, horizontal: .leading, vertical: .bottom)
+        case .bottomRight:
+            return quarterFrame(in: visibleFrame, horizontal: .trailing, vertical: .bottom)
+        case .previousDisplay:
+            guard let targetVisibleFrame = previousVisibleFrame(before: visibleFrame, in: snapshot.visibleFrames) else {
+                return nil
+            }
+
+            return movedFrame(from: snapshot.windowFrame, to: targetVisibleFrame)
         case .nextDisplay:
             guard let targetVisibleFrame = nextVisibleFrame(after: visibleFrame, in: snapshot.visibleFrames) else {
                 return nil
             }
 
-            let size = CGSize(
-                width: min(snapshot.windowFrame.width, targetVisibleFrame.width),
-                height: min(snapshot.windowFrame.height, targetVisibleFrame.height)
-            )
-            return CGRect(
-                x: targetVisibleFrame.midX - size.width / 2,
-                y: targetVisibleFrame.midY - size.height / 2,
-                width: size.width,
-                height: size.height
-            ).integral
+            return movedFrame(from: snapshot.windowFrame, to: targetVisibleFrame)
         case .restore:
             return restoreFrame?.integral
         }
     }
 
     private static func nextVisibleFrame(after current: CGRect, in frames: [CGRect]) -> CGRect? {
+        adjacentVisibleFrame(from: current, in: frames, offset: 1)
+    }
+
+    private static func previousVisibleFrame(before current: CGRect, in frames: [CGRect]) -> CGRect? {
+        adjacentVisibleFrame(from: current, in: frames, offset: -1)
+    }
+
+    private static func adjacentVisibleFrame(from current: CGRect, in frames: [CGRect], offset: Int) -> CGRect? {
         guard frames.count > 1,
-              let index = frames.firstIndex(of: current)
+              offset != 0
         else {
             return nil
         }
 
-        let targetIndex = frames.index(after: index) == frames.endIndex ? frames.startIndex : frames.index(after: index)
-        return frames[targetIndex]
+        let orderedFrames = frames.sorted { lhs, rhs in
+            if lhs.midX == rhs.midX {
+                return lhs.midY < rhs.midY
+            }
+
+            return lhs.midX < rhs.midX
+        }
+
+        guard let index = orderedFrames.firstIndex(of: current) else {
+            return nil
+        }
+
+        let targetIndex = (index + offset + orderedFrames.count) % orderedFrames.count
+        return orderedFrames[targetIndex]
+    }
+
+    private static func movedFrame(from windowFrame: CGRect, to visibleFrame: CGRect) -> CGRect {
+        let size = CGSize(
+            width: min(windowFrame.width, visibleFrame.width),
+            height: min(windowFrame.height, visibleFrame.height)
+        )
+        return CGRect(
+            x: visibleFrame.midX - size.width / 2,
+            y: visibleFrame.midY - size.height / 2,
+            width: size.width,
+            height: size.height
+        ).integral
+    }
+
+    private static func quarterFrame(
+        in visibleFrame: CGRect,
+        horizontal: HorizontalPlacement,
+        vertical: VerticalPlacement
+    ) -> CGRect {
+        let width = visibleFrame.width / 2
+        let height = visibleFrame.height / 2
+        let x = horizontal == .leading ? visibleFrame.minX : visibleFrame.midX
+        let y = vertical == .top ? visibleFrame.minY : visibleFrame.midY
+
+        return CGRect(x: x, y: y, width: width, height: height).integral
+    }
+
+    private static func horizontalPlacement(
+        of windowFrame: CGRect,
+        in visibleFrame: CGRect,
+        tolerance: CGFloat = 2
+    ) -> HorizontalPlacement? {
+        guard isApproximately(windowFrame.width, visibleFrame.width / 2, tolerance: tolerance) else {
+            return nil
+        }
+
+        if isApproximately(windowFrame.minX, visibleFrame.minX, tolerance: tolerance) {
+            return .leading
+        }
+
+        if isApproximately(windowFrame.minX, visibleFrame.midX, tolerance: tolerance) {
+            return .trailing
+        }
+
+        return nil
+    }
+
+    private static func verticalPlacement(
+        of windowFrame: CGRect,
+        in visibleFrame: CGRect,
+        tolerance: CGFloat = 2
+    ) -> VerticalPlacement? {
+        guard isApproximately(windowFrame.height, visibleFrame.height / 2, tolerance: tolerance) else {
+            return nil
+        }
+
+        if isApproximately(windowFrame.minY, visibleFrame.minY, tolerance: tolerance) {
+            return .top
+        }
+
+        if isApproximately(windowFrame.minY, visibleFrame.midY, tolerance: tolerance) {
+            return .bottom
+        }
+
+        return nil
+    }
+
+    private static func isApproximately(_ lhs: CGFloat, _ rhs: CGFloat, tolerance: CGFloat) -> Bool {
+        abs(lhs - rhs) <= tolerance
+    }
+}
+
+private enum HorizontalPlacement {
+    case leading
+    case trailing
+}
+
+private enum VerticalPlacement {
+    case top
+    case bottom
+}
+
+struct WindowFrameRestoreHistory: Equatable, Sendable {
+    private(set) var frames: [CGRect] = []
+    private let maxDepth: Int
+
+    init(maxDepth: Int = 20) {
+        self.maxDepth = max(1, maxDepth)
+    }
+
+    var canRestore: Bool {
+        frames.isEmpty == false
+    }
+
+    var nextRestoreFrame: CGRect? {
+        frames.last
+    }
+
+    mutating func record(_ frame: CGRect) {
+        frames.append(frame)
+        if frames.count > maxDepth {
+            frames.removeFirst(frames.count - maxDepth)
+        }
+    }
+
+    mutating func confirmRestore() {
+        _ = frames.popLast()
+    }
+
+    mutating func rollbackLatestRecord() {
+        _ = frames.popLast()
     }
 }
 
@@ -94,7 +261,7 @@ final class WindowActionStore: ObservableObject {
     @Published private(set) var actions: [SpillAction]
 
     private let controller: FocusedWindowController
-    private var restoreFrame: CGRect?
+    private var restoreHistory = WindowFrameRestoreHistory()
 
     init(controller: FocusedWindowController = FocusedWindowController()) {
         self.controller = controller
@@ -102,7 +269,7 @@ final class WindowActionStore: ObservableObject {
             isTrusted: AccessibilityPermission.isTrusted,
             hasFocusedWindow: false,
             canRestore: false,
-            canMoveToNextDisplay: NSScreen.screens.count > 1
+            canMoveBetweenDisplays: NSScreen.screens.count > 1
         )
         refresh()
     }
@@ -111,8 +278,8 @@ final class WindowActionStore: ObservableObject {
         actions = Self.makeActions(
             isTrusted: AccessibilityPermission.isTrusted,
             hasFocusedWindow: controller.focusedWindowFrame() != nil,
-            canRestore: restoreFrame != nil,
-            canMoveToNextDisplay: NSScreen.screens.count > 1
+            canRestore: restoreHistory.canRestore,
+            canMoveBetweenDisplays: NSScreen.screens.count > 1
         )
     }
 
@@ -121,7 +288,7 @@ final class WindowActionStore: ObservableObject {
             return .unsupported
         }
 
-        let result = controller.perform(kind, restoreFrame: &restoreFrame)
+        let result = controller.perform(kind, restoreHistory: &restoreHistory)
         refresh()
         return result
     }
@@ -144,7 +311,7 @@ final class WindowActionStore: ObservableObject {
         isTrusted: Bool,
         hasFocusedWindow: Bool,
         canRestore: Bool,
-        canMoveToNextDisplay: Bool
+        canMoveBetweenDisplays: Bool
     ) -> [SpillAction] {
         WindowActionKind.panelOrder.map { kind in
             SpillAction(
@@ -159,7 +326,7 @@ final class WindowActionStore: ObservableObject {
                     isTrusted: isTrusted,
                     hasFocusedWindow: hasFocusedWindow,
                     canRestore: canRestore,
-                    canMoveToNextDisplay: canMoveToNextDisplay
+                    canMoveBetweenDisplays: canMoveBetweenDisplays
                 )
             )
         }
@@ -170,7 +337,7 @@ final class WindowActionStore: ObservableObject {
         isTrusted: Bool,
         hasFocusedWindow: Bool,
         canRestore: Bool,
-        canMoveToNextDisplay: Bool
+        canMoveBetweenDisplays: Bool
     ) -> SpillActionState {
         guard isTrusted else {
             return .permissionRequired("Accessibility")
@@ -184,7 +351,7 @@ final class WindowActionStore: ObservableObject {
             return .disabled(reason: "No saved frame")
         }
 
-        if kind == .nextDisplay, !canMoveToNextDisplay {
+        if kind.isDisplayMove, !canMoveBetweenDisplays {
             return .disabled(reason: "One display")
         }
 
@@ -205,7 +372,7 @@ final class FocusedWindowController {
         return frame.isUsableWindowFrame ? frame : nil
     }
 
-    func perform(_ kind: WindowActionKind, restoreFrame: inout CGRect?) -> SpillActionResult {
+    func perform(_ kind: WindowActionKind, restoreHistory: inout WindowFrameRestoreHistory) -> SpillActionResult {
         guard AccessibilityPermission.isTrusted else {
             return .permissionRequired("Accessibility")
         }
@@ -223,6 +390,7 @@ final class FocusedWindowController {
             windowFrame: currentFrame,
             visibleFrames: NSScreen.screens.map(\.visibleFrame)
         )
+        let restoreFrame = kind == .restore ? restoreHistory.nextRestoreFrame : nil
         guard let targetFrame = WindowFramePlanner.targetFrame(
             for: kind,
             snapshot: snapshot,
@@ -232,15 +400,18 @@ final class FocusedWindowController {
         }
 
         if kind != .restore {
-            restoreFrame = currentFrame
+            restoreHistory.record(currentFrame)
         }
 
         guard reader.setFrame(targetFrame, of: window) else {
+            if kind != .restore {
+                restoreHistory.rollbackLatestRecord()
+            }
             return .failed(message: "Could not move window")
         }
 
         if kind == .restore {
-            restoreFrame = nil
+            restoreHistory.confirmRestore()
         }
 
         return .success
@@ -252,7 +423,26 @@ final class FocusedWindowController {
         }
 
         let appElement = AXUIElementCreateApplication(application.processIdentifier)
-        return reader.elementAttribute(appElement, AXAttributeName.focusedWindow)
+        if let focusedWindow = usableWindowElement(from: appElement, attribute: AXAttributeName.focusedWindow) {
+            return focusedWindow
+        }
+
+        if let mainWindow = usableWindowElement(from: appElement, attribute: AXAttributeName.mainWindow) {
+            return mainWindow
+        }
+
+        return reader.elementArrayAttribute(appElement, AXAttributeName.windows)
+            .first { reader.frame(of: $0).isUsableWindowFrame }
+    }
+
+    private func usableWindowElement(from appElement: AXUIElement, attribute: String) -> AXUIElement? {
+        guard let window = reader.elementAttribute(appElement, attribute),
+              reader.frame(of: window).isUsableWindowFrame
+        else {
+            return nil
+        }
+
+        return window
     }
 }
 
@@ -260,8 +450,15 @@ extension WindowActionKind {
     static let panelOrder: [WindowActionKind] = [
         .leftHalf,
         .rightHalf,
+        .topHalf,
+        .bottomHalf,
         .center,
         .maximize,
+        .topLeft,
+        .topRight,
+        .bottomLeft,
+        .bottomRight,
+        .previousDisplay,
         .nextDisplay,
         .restore
     ]
@@ -272,12 +469,26 @@ extension WindowActionKind {
             return "Left"
         case .rightHalf:
             return "Right"
+        case .topHalf:
+            return "Top"
+        case .bottomHalf:
+            return "Bottom"
         case .center:
             return "Center"
         case .maximize:
             return "Max"
+        case .topLeft:
+            return "Top Left"
+        case .topRight:
+            return "Top Right"
+        case .bottomLeft:
+            return "Bottom Left"
+        case .bottomRight:
+            return "Bottom Right"
+        case .previousDisplay:
+            return "Display Left"
         case .nextDisplay:
-            return "Next Display"
+            return "Display Right"
         case .restore:
             return "Restore"
         }
@@ -289,12 +500,26 @@ extension WindowActionKind {
             return "Left half"
         case .rightHalf:
             return "Right half"
+        case .topHalf:
+            return "Top half"
+        case .bottomHalf:
+            return "Bottom half"
         case .center:
             return "Center current size"
         case .maximize:
             return "Fill visible screen"
+        case .topLeft:
+            return "Top-left quarter"
+        case .topRight:
+            return "Top-right quarter"
+        case .bottomLeft:
+            return "Bottom-left quarter"
+        case .bottomRight:
+            return "Bottom-right quarter"
+        case .previousDisplay:
+            return "Move to left display"
         case .nextDisplay:
-            return "Move to next display"
+            return "Move to right display"
         case .restore:
             return "Restore previous frame"
         }
@@ -306,14 +531,47 @@ extension WindowActionKind {
             return "arrow.left.to.line"
         case .rightHalf:
             return "arrow.right.to.line"
+        case .topHalf:
+            return "arrow.up.to.line"
+        case .bottomHalf:
+            return "arrow.down.to.line"
         case .center:
             return "dot.scope"
         case .maximize:
             return "arrow.up.left.and.arrow.down.right"
+        case .topLeft:
+            return "arrow.up.left"
+        case .topRight:
+            return "arrow.up.right"
+        case .bottomLeft:
+            return "arrow.down.left"
+        case .bottomRight:
+            return "arrow.down.right"
+        case .previousDisplay:
+            return "rectangle.on.rectangle"
         case .nextDisplay:
             return "rectangle.on.rectangle"
         case .restore:
             return "arrow.uturn.backward"
+        }
+    }
+
+    var isDisplayMove: Bool {
+        switch self {
+        case .previousDisplay, .nextDisplay:
+            return true
+        case .leftHalf,
+             .rightHalf,
+             .topHalf,
+             .bottomHalf,
+             .center,
+             .maximize,
+             .topLeft,
+             .topRight,
+             .bottomLeft,
+             .bottomRight,
+             .restore:
+            return false
         }
     }
 }

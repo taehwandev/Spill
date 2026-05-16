@@ -68,8 +68,15 @@ enum SpillActionRole: Hashable, Sendable {
 enum WindowActionKind: String, Hashable, Sendable {
     case leftHalf
     case rightHalf
+    case topHalf
+    case bottomHalf
     case center
     case maximize
+    case topLeft
+    case topRight
+    case bottomLeft
+    case bottomRight
+    case previousDisplay
     case nextDisplay
     case restore
 }

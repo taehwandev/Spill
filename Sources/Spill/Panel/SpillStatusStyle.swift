@@ -4,15 +4,15 @@ extension SpillStatusState {
     var panelTint: Color {
         switch self {
         case .normal:
-            return .green
+            return .mint
         case .active:
-            return .accentColor
+            return .blue
         case .warning:
             return .orange
         case .unavailable:
             return .secondary
         case .refreshing:
-            return .accentColor
+            return .blue
         }
     }
 }

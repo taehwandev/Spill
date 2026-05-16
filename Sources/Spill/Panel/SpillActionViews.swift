@@ -26,23 +26,20 @@ struct WindowActionButton: View {
                     .frame(width: 20, height: 16)
 
                 Text(labelText)
-                    .font(.system(size: 8.6, weight: .semibold, design: .rounded))
+                    .font(.system(size: 10.5, weight: .medium, design: .rounded))
                     .lineLimit(1)
                     .minimumScaleFactor(0.65)
 
                 Text(shortcutText)
-                    .font(.system(size: 7.4, weight: .semibold, design: .rounded))
+                    .font(.system(size: 9, weight: .medium, design: .rounded))
                     .lineLimit(1)
                     .foregroundStyle(.secondary)
             }
             .foregroundStyle(foregroundColor)
             .frame(width: 76, height: 50)
-            .background(backgroundColor, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(borderColor, lineWidth: 0.8)
-            }
-            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .background(backgroundColor, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .shadow(color: .black.opacity(0.03), radius: 1, y: 0.5)
+            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
         .buttonStyle(.plain)
         .disabled(!action.state.isEnabled)
@@ -56,12 +53,26 @@ struct WindowActionButton: View {
             return "Left"
         case .window(.rightHalf):
             return "Right"
+        case .window(.topHalf):
+            return "Top"
+        case .window(.bottomHalf):
+            return "Bottom"
         case .window(.center):
             return "Center"
         case .window(.maximize):
             return "Max"
+        case .window(.topLeft):
+            return "Top L"
+        case .window(.topRight):
+            return "Top R"
+        case .window(.bottomLeft):
+            return "Bot L"
+        case .window(.bottomRight):
+            return "Bot R"
+        case .window(.previousDisplay):
+            return "Disp L"
         case .window(.nextDisplay):
-            return "Display"
+            return "Disp R"
         case .window(.restore):
             return "Restore"
         case .menuBarItem, .app, .command:
@@ -70,11 +81,11 @@ struct WindowActionButton: View {
     }
 
     private var shortcutText: String {
-        guard case .window = action.kind else {
+        guard case let .window(kind) = action.kind else {
             return ""
         }
 
-        return shortcutKey.shortcutLabel
+        return kind.shortcutLabel(for: shortcutKey)
     }
 
     private var foregroundColor: Color {
@@ -82,12 +93,9 @@ struct WindowActionButton: View {
     }
 
     private var backgroundColor: Color {
-        isHovered ? .primary.opacity(0.13) : .primary.opacity(0.065)
+        isHovered ? .primary.opacity(0.1) : .primary.opacity(0.04)
     }
 
-    private var borderColor: Color {
-        isHovered ? .primary.opacity(0.18) : .primary.opacity(0.08)
-    }
 }
 
 struct SpillActionButton: View {
@@ -101,25 +109,23 @@ struct SpillActionButton: View {
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
             Button(action: perform) {
-                ZStack(alignment: .topTrailing) {
-                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .fill(backgroundColor)
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 11, style: .continuous)
-                                .stroke(borderColor, lineWidth: action.role == .primary ? 1.2 : 0.8)
-                        }
+                        .shadow(color: .black.opacity(0.02), radius: 1, y: 0.5)
 
                     icon
-
+                }
+                .frame(width: 44, height: 44)
+                .overlay(alignment: .topTrailing) {
                     if action.role == .primary {
                         Circle()
-                            .fill(Color.accentColor)
+                            .fill(Color.blue)
                             .frame(width: 5, height: 5)
                             .padding(5)
                     }
                 }
-                .frame(width: 44, height: 44)
-                .contentShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
             .buttonStyle(.plain)
             .disabled(!canPerform)
@@ -129,7 +135,7 @@ struct SpillActionButton: View {
             Button(action: togglePinned) {
                 Image(systemName: isPinned ? "pin.fill" : "pin")
                     .font(.system(size: 8, weight: .bold))
-                    .foregroundStyle(isPinned ? Color.accentColor : Color.secondary)
+                    .foregroundStyle(isPinned ? .blue : .secondary)
                     .frame(width: 15, height: 15)
                     .background(.regularMaterial, in: Circle())
                     .overlay {
@@ -149,8 +155,8 @@ struct SpillActionButton: View {
                 Image(nsImage: image)
                     .resizable()
                     .scaledToFit()
-                    .frame(width: 27, height: 27)
-                    .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+                    .frame(width: 26, height: 26)
+                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
             } else if let symbolName = action.symbolName {
                 Image(systemName: symbolName)
                     .font(.system(size: 19, weight: .semibold))
@@ -162,6 +168,7 @@ struct SpillActionButton: View {
                     .foregroundStyle(canPerform ? .primary : .secondary)
             }
         }
+        .frame(width: 30, height: 30, alignment: .center)
     }
 
     private var canPerform: Bool {
@@ -178,19 +185,12 @@ struct SpillActionButton: View {
 
     private var backgroundColor: Color {
         if isHovered {
-            return .primary.opacity(0.13)
+            return .primary.opacity(0.1)
         }
 
-        return .primary.opacity(0.065)
+        return .primary.opacity(0.04)
     }
 
-    private var borderColor: Color {
-        if action.role == .primary {
-            return Color.accentColor.opacity(isHovered ? 0.95 : 0.7)
-        }
-
-        return .primary.opacity(isHovered ? 0.16 : 0.08)
-    }
 }
 
 struct SpillActionFeedback: Equatable {
@@ -226,7 +226,7 @@ struct SpillActionFeedback: Equatable {
     var tint: Color {
         switch result {
         case .success:
-            return .green
+            return .mint
         case .unavailable, .unsupported:
             return .secondary
         case .permissionRequired, .failed:

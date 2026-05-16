@@ -8,7 +8,7 @@ struct SpillPanelAccessibilityReport: Equatable {
         "AI",
         "WINDOWS",
         "MENU BAR",
-        "Sleep Guard Off"
+        "Caffeine Off"
     ]
 
     let requiredLabels: [String]

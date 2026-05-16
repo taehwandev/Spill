@@ -3,6 +3,7 @@ import Foundation
 enum SpillMenuBarStatusItem: String, CaseIterable, Identifiable, Sendable {
     case cpu
     case memory
+    case caffeine
     case gpu
     case network
     case ai
@@ -17,6 +18,8 @@ enum SpillMenuBarStatusItem: String, CaseIterable, Identifiable, Sendable {
             return "CPU"
         case .memory:
             return "Memory"
+        case .caffeine:
+            return "Caffeine"
         case .gpu:
             return "GPU"
         case .network:
@@ -32,6 +35,8 @@ enum SpillMenuBarStatusItem: String, CaseIterable, Identifiable, Sendable {
             return "CPU"
         case .memory:
             return "MEM"
+        case .caffeine:
+            return "CAF"
         case .gpu:
             return "GPU"
         case .network:
@@ -47,6 +52,8 @@ enum SpillMenuBarStatusItem: String, CaseIterable, Identifiable, Sendable {
             return "cpu"
         case .memory:
             return "memorychip"
+        case .caffeine:
+            return "cup.and.saucer.fill"
         case .gpu:
             return "display"
         case .network:
@@ -62,6 +69,8 @@ enum SpillMenuBarStatusItem: String, CaseIterable, Identifiable, Sendable {
             return .cpu
         case .memory:
             return .memory
+        case .caffeine:
+            return nil
         case .gpu:
             return .gpu
         case .network:
@@ -71,9 +80,9 @@ enum SpillMenuBarStatusItem: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
-    static let defaultOrder: [SpillMenuBarStatusItem] = [.cpu, .memory, .gpu, .network, .ai]
+    static let defaultOrder: [SpillMenuBarStatusItem] = [.cpu, .memory, .caffeine, .gpu, .network, .ai]
     static let defaultEnabled: Set<SpillMenuBarStatusItem> = [.cpu, .memory]
-    static let glanceSupported: Set<SpillMenuBarStatusItem> = [.cpu, .memory]
+    static let glanceSupported: Set<SpillMenuBarStatusItem> = [.cpu, .memory, .caffeine]
 
     static func normalizedEnabled(from rawValues: [String]?) -> Set<SpillMenuBarStatusItem> {
         guard let rawValues else {

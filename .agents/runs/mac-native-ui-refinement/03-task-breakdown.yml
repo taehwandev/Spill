@@ -1,0 +1,46 @@
+feature_id: mac-native-ui-refinement
+status: completed
+
+necessity:
+  decision: build
+  reason: The maintainer explicitly requested Mac-native visual refinement to improve readability and product fit.
+  ambiguity:
+    clarity: clear
+    blockers_resolved: true
+    resolution_sources:
+      - maintainer
+      - repo-research
+      - assumption
+  clarification_required: false
+  questions: []
+
+tasks:
+  - id: color-refactor
+    title: Refactor SpillStatusStyle to use native colors
+    files:
+      - Sources/Spill/Panel/SpillStatusStyle.swift
+    acceptance:
+      - Normal maps to Mint/Teal.
+      - Active maps to Indigo/Blue.
+      - Warning maps to Orange.
+      - Unavailable maps to Secondary.
+
+  - id: view-polish
+    title: Polish color application in Panel views
+    files:
+      - Sources/Spill/Panel/SpillBarView.swift
+      - Sources/Spill/Panel/SpillFooterView.swift
+      - Sources/Spill/Panel/SpillActionViews.swift
+    acceptance:
+      - Colors are highly visible.
+      - No generic neon/AI styling remains.
+      - Font weights are appropriate for readability.
+
+  - id: verification
+    title: Run verification and closeout
+    files:
+      - .agents/runs/mac-native-ui-refinement/06-closeout.md
+    acceptance:
+      - swift build passes.
+      - Smoke tests pass.
+      - App looks native in manual check.

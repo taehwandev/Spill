@@ -21,8 +21,23 @@ final class SpillSettings: ObservableObject {
         didSet { defaults.set(sleepGuardKeepsDisplayAwake, forKey: Keys.sleepGuardKeepsDisplayAwake) }
     }
 
+    @Published var sleepGuardShowsRemainingInMenuBar: Bool {
+        didSet {
+            defaults.set(sleepGuardShowsRemainingInMenuBar, forKey: Keys.sleepGuardShowsRemainingInMenuBar)
+        }
+    }
+
     @Published var sleepGuardDefaultDuration: SleepGuardDuration {
         didSet { defaults.set(sleepGuardDefaultDuration.rawValue, forKey: Keys.sleepGuardDefaultDuration) }
+    }
+
+    @Published var sleepGuardAllowsIndefinite: Bool {
+        didSet {
+            defaults.set(sleepGuardAllowsIndefinite, forKey: Keys.sleepGuardAllowsIndefinite)
+            if !sleepGuardAllowsIndefinite, sleepGuardDefaultDuration.isIndefinite {
+                sleepGuardDefaultDuration = .fifteenMinutes
+            }
+        }
     }
 
     @Published var useSpillAnimation: Bool {
@@ -110,9 +125,16 @@ final class SpillSettings: ObservableObject {
         showCountBadge = defaults.object(forKey: Keys.showCountBadge) as? Bool ?? true
         showPowerFooter = defaults.object(forKey: Keys.showPowerFooter) as? Bool ?? true
         sleepGuardKeepsDisplayAwake = defaults.object(forKey: Keys.sleepGuardKeepsDisplayAwake) as? Bool ?? false
+        sleepGuardShowsRemainingInMenuBar = defaults.object(forKey: Keys.sleepGuardShowsRemainingInMenuBar) as? Bool
+            ?? false
+        let persistedAllowsIndefinite = defaults.object(forKey: Keys.sleepGuardAllowsIndefinite) as? Bool ?? false
         let sleepGuardDurationRawValue = defaults.object(forKey: Keys.sleepGuardDefaultDuration) as? Int
             ?? SleepGuardDuration.fifteenMinutes.rawValue
-        sleepGuardDefaultDuration = SleepGuardDuration(rawValue: sleepGuardDurationRawValue) ?? .fifteenMinutes
+        let persistedSleepGuardDuration = SleepGuardDuration(rawValue: sleepGuardDurationRawValue) ?? .fifteenMinutes
+        sleepGuardDefaultDuration = persistedSleepGuardDuration.isIndefinite && !persistedAllowsIndefinite
+            ? .fifteenMinutes
+            : persistedSleepGuardDuration
+        sleepGuardAllowsIndefinite = persistedAllowsIndefinite
         useSpillAnimation = defaults.object(forKey: Keys.useSpillAnimation) as? Bool ?? true
         autoRefreshEnabled = defaults.object(forKey: Keys.autoRefreshEnabled) as? Bool ?? true
         refreshInterval = max(defaults.object(forKey: Keys.refreshInterval) as? Double ?? 15, 5)
@@ -209,7 +231,11 @@ final class SpillSettings: ObservableObject {
 
     var statusModulesRequiredForRefresh: Set<SpillStatusModule> {
         let menuBarModules = enabledMenuBarStatusItems.compactMap(\.systemModule)
-        return enabledStatusModules.union(menuBarModules)
+        return Set(SpillStatusModule.primaryPanelModules).union(menuBarModules)
+    }
+
+    var availableSleepGuardDurations: [SleepGuardDuration] {
+        SleepGuardDuration.availableDurations(allowsIndefinite: sleepGuardAllowsIndefinite)
     }
 
     func setStatusModuleOrder(_ modules: [SpillStatusModule]) {
@@ -239,7 +265,11 @@ final class SpillSettings: ObservableObject {
         var updated = windowActionShortcutKeys
 
         if key != .off {
-            for otherKind in WindowActionKind.panelOrder where otherKind != kind && updated[otherKind] == key {
+            for otherKind in WindowActionKind.panelOrder
+                where otherKind != kind
+                && otherKind.shortcutModifier == kind.shortcutModifier
+                && updated[otherKind] == key
+            {
                 updated[otherKind] = .off
             }
         }
@@ -253,6 +283,10 @@ final class SpillSettings: ObservableObject {
     private static func normalizedWindowActionShortcutKeys(
         from rawValues: [String]?
     ) -> [WindowActionKind: WindowActionShortcutKey] {
+        if shouldMigrateLegacyWindowActionDefaults(rawValues) {
+            return WindowActionKind.defaultShortcutKeys
+        }
+
         var parsed: [WindowActionKind: WindowActionShortcutKey] = [:]
 
         rawValues?.forEach { rawValue in
@@ -268,7 +302,7 @@ final class SpillSettings: ObservableObject {
         }
 
         var normalized: [WindowActionKind: WindowActionShortcutKey] = [:]
-        var usedKeys = Set<WindowActionShortcutKey>()
+        var usedShortcuts = Set<WindowActionShortcutRegistrationKey>()
 
         for kind in WindowActionKind.panelOrder {
             let key = parsed[kind] ?? kind.defaultShortcutKey
@@ -277,7 +311,11 @@ final class SpillSettings: ObservableObject {
                 continue
             }
 
-            if usedKeys.insert(key).inserted {
+            let registrationKey = WindowActionShortcutRegistrationKey(
+                modifier: kind.shortcutModifier,
+                key: key
+            )
+            if usedShortcuts.insert(registrationKey).inserted {
                 normalized[kind] = key
             } else {
                 normalized[kind] = .off
@@ -285,6 +323,40 @@ final class SpillSettings: ObservableObject {
         }
 
         return normalized
+    }
+
+    private static func shouldMigrateLegacyWindowActionDefaults(_ rawValues: [String]?) -> Bool {
+        guard let rawValues else {
+            return false
+        }
+
+        let originalCommonDefaults = [
+            "leftHalf=leftArrow",
+            "rightHalf=rightArrow",
+            "center=c",
+            "maximize=returnKey",
+            "topLeft=one",
+            "topRight=two",
+            "bottomLeft=three",
+            "bottomRight=four",
+            "nextDisplay=d",
+            "restore=r"
+        ]
+        let previousCommonDefaults = [
+            "leftHalf=leftArrow",
+            "rightHalf=rightArrow",
+            "center=c",
+            "maximize=returnKey",
+            "topLeft=u",
+            "topRight=i",
+            "bottomLeft=j",
+            "bottomRight=k",
+            "previousDisplay=leftArrow",
+            "nextDisplay=rightArrow",
+            "restore=deleteKey"
+        ]
+
+        return rawValues == originalCommonDefaults || rawValues == previousCommonDefaults
     }
 
     private static func persistedWindowActionShortcutKeys(
@@ -296,11 +368,18 @@ final class SpillSettings: ObservableObject {
     }
 }
 
+private struct WindowActionShortcutRegistrationKey: Hashable {
+    let modifier: WindowActionShortcutModifier
+    let key: WindowActionShortcutKey
+}
+
 private enum Keys {
     static let iconSpacing = "iconSpacing"
     static let showCountBadge = "showCountBadge"
     static let showPowerFooter = "showPowerFooter"
     static let sleepGuardKeepsDisplayAwake = "sleepGuardKeepsDisplayAwake"
+    static let sleepGuardShowsRemainingInMenuBar = "sleepGuardShowsRemainingInMenuBar"
+    static let sleepGuardAllowsIndefinite = "sleepGuardAllowsIndefinite"
     static let sleepGuardDefaultDuration = "sleepGuardDefaultDuration"
     static let useSpillAnimation = "useSpillAnimation"
     static let autoRefreshEnabled = "autoRefreshEnabled"

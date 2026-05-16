@@ -19,6 +19,19 @@ struct AXElementReader: Sendable {
         return (value as! AXUIElement)
     }
 
+    func elementArrayAttribute(_ element: AXUIElement, _ attribute: String) -> [AXUIElement] {
+        prepare(element)
+
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success,
+              let value
+        else {
+            return []
+        }
+
+        return value as? [AXUIElement] ?? []
+    }
+
     func children(of element: AXUIElement) -> [AXUIElement] {
         prepare(element)
 
@@ -54,8 +67,10 @@ struct AXElementReader: Sendable {
     }
 
     func setFrame(_ frame: CGRect, of element: AXUIElement) -> Bool {
-        setSize(frame.size, for: element, attribute: AXAttributeName.size)
-            && setPosition(frame.origin, for: element, attribute: AXAttributeName.position)
+        let didSetPosition = setPosition(frame.origin, for: element, attribute: AXAttributeName.position)
+        let didSetSize = setSize(frame.size, for: element, attribute: AXAttributeName.size)
+
+        return didSetPosition && didSetSize
     }
 
     func actionNames(for element: AXUIElement) -> [String] {

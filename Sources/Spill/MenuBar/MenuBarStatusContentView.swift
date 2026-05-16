@@ -44,7 +44,27 @@ final class MenuBarStatusContentView: NSView {
         return sidePadding + chipTotal + gapTotal + sidePadding
     }
 
+    static func segmentKind(at point: NSPoint, in segments: [MenuBarStatusSegment]) -> MenuBarStatusSegment.Kind? {
+        var currentX = sidePadding
+
+        for segment in segments {
+            let width = chipWidth(for: segment)
+            let frame = NSRect(x: currentX, y: 0, width: width, height: height)
+            if frame.contains(point) {
+                return segment.kind
+            }
+
+            currentX += width + gap
+        }
+
+        return nil
+    }
+
     private static func chipWidth(for segment: MenuBarStatusSegment) -> CGFloat {
+        guard !segment.value.isEmpty else {
+            return 22
+        }
+
         let textWidth = (segment.value as NSString).size(withAttributes: [.font: textFont]).width
         return ceil(textWidth) + 29
     }
@@ -90,14 +110,14 @@ private final class MenuBarMetricChipView: NSView {
 
         translatesAutoresizingMaskIntoConstraints = false
         wantsLayer = true
-        layer?.cornerRadius = 4
+        layer?.cornerRadius = 6
 
         configureIcon()
         configureValue()
         installSubviews()
         refreshColors()
 
-        setAccessibilityLabel("\(segment.title) \(segment.value)")
+        setAccessibilityLabel(accessibilityText)
     }
 
     @available(*, unavailable)
@@ -113,7 +133,7 @@ private final class MenuBarMetricChipView: NSView {
     private func configureIcon() {
         iconView.translatesAutoresizingMaskIntoConstraints = false
         iconView.imageScaling = .scaleProportionallyDown
-        let config = NSImage.SymbolConfiguration(pointSize: 10, weight: .semibold)
+        let config = NSImage.SymbolConfiguration(pointSize: 10.5, weight: .semibold)
         iconView.image = NSImage(
             systemSymbolName: resolvedSymbolName,
             accessibilityDescription: segment.title
@@ -124,7 +144,7 @@ private final class MenuBarMetricChipView: NSView {
     private func configureValue() {
         valueLabel.translatesAutoresizingMaskIntoConstraints = false
         valueLabel.stringValue = segment.value
-        valueLabel.font = .monospacedDigitSystemFont(ofSize: 10.5, weight: .semibold)
+        valueLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
         valueLabel.alignment = .right
         valueLabel.lineBreakMode = .byClipping
         valueLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
@@ -133,16 +153,27 @@ private final class MenuBarMetricChipView: NSView {
 
     private func installSubviews() {
         addSubview(iconView)
+
+        if segment.value.isEmpty {
+            NSLayoutConstraint.activate([
+                iconView.centerXAnchor.constraint(equalTo: centerXAnchor),
+                iconView.centerYAnchor.constraint(equalTo: centerYAnchor),
+                iconView.widthAnchor.constraint(equalToConstant: 13),
+                iconView.heightAnchor.constraint(equalToConstant: 13)
+            ])
+            return
+        }
+
         addSubview(valueLabel)
 
         NSLayoutConstraint.activate([
-            iconView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 5),
+            iconView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 5.5),
             iconView.centerYAnchor.constraint(equalTo: centerYAnchor),
-            iconView.widthAnchor.constraint(equalToConstant: 12),
-            iconView.heightAnchor.constraint(equalToConstant: 12),
+            iconView.widthAnchor.constraint(equalToConstant: 13),
+            iconView.heightAnchor.constraint(equalToConstant: 13),
 
-            valueLabel.leadingAnchor.constraint(equalTo: iconView.trailingAnchor, constant: 4),
-            valueLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -5),
+            valueLabel.leadingAnchor.constraint(equalTo: iconView.trailingAnchor, constant: 3.5),
+            valueLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -5.5),
             valueLabel.centerYAnchor.constraint(equalTo: centerYAnchor)
         ])
     }
@@ -150,16 +181,16 @@ private final class MenuBarMetricChipView: NSView {
     private func refreshColors() {
         let color = statusColor
         valueLabel.textColor = segment.state == .unavailable ? .secondaryLabelColor : .labelColor
-        iconView.contentTintColor = color.withAlphaComponent(segment.state == .unavailable ? 0.55 : 0.95)
+        iconView.contentTintColor = color.withAlphaComponent(segment.state == .unavailable ? 0.5 : 1.0)
         layer?.backgroundColor = color.withAlphaComponent(backgroundAlpha).cgColor
     }
 
     private var statusColor: NSColor {
         switch segment.state {
         case .normal:
-            return .systemGreen
+            return .systemMint
         case .active, .refreshing:
-            return .controlAccentColor
+            return .systemBlue
         case .warning:
             return .systemOrange
         case .unavailable:
@@ -168,18 +199,19 @@ private final class MenuBarMetricChipView: NSView {
     }
 
     private var backgroundAlpha: CGFloat {
-        segment.state == .unavailable ? 0.04 : 0.08
+        segment.state == .unavailable ? 0.04 : 0.1
     }
 
     private var resolvedSymbolName: String {
-        switch segment.kind {
-        case .cpu:
-            return "cpu"
-        case .memory:
-            return "memorychip"
-        case .sleepGuard:
-            return "moon.fill"
+        segment.symbolName
+    }
+
+    private var accessibilityText: String {
+        guard !segment.value.isEmpty else {
+            return segment.title
         }
+
+        return "\(segment.title) \(segment.value)"
     }
 
 }

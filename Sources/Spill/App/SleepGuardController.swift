@@ -5,30 +5,60 @@ import SwiftUI
 typealias SleepAssertionID = UInt32
 
 enum SleepGuardDuration: Int, CaseIterable, Identifiable, Sendable {
+    case fiveMinutes = 300
+    case tenMinutes = 600
     case fifteenMinutes = 900
     case thirtyMinutes = 1_800
+    case fortyFiveMinutes = 2_700
     case oneHour = 3_600
     case twoHours = 7_200
+    case fourHours = 14_400
+    case eightHours = 28_800
+    case indefinitely = -1
 
     var id: Int {
         rawValue
     }
 
-    var seconds: TimeInterval {
-        TimeInterval(rawValue)
+    var seconds: TimeInterval? {
+        guard rawValue > 0 else {
+            return nil
+        }
+
+        return TimeInterval(rawValue)
+    }
+
+    var isIndefinite: Bool {
+        self == .indefinitely
     }
 
     var menuTitle: String {
         switch self {
+        case .fiveMinutes:
+            return "5 Minutes"
+        case .tenMinutes:
+            return "10 Minutes"
         case .fifteenMinutes:
             return "15 Minutes"
         case .thirtyMinutes:
             return "30 Minutes"
+        case .fortyFiveMinutes:
+            return "45 Minutes"
         case .oneHour:
             return "1 Hour"
         case .twoHours:
             return "2 Hours"
+        case .fourHours:
+            return "4 Hours"
+        case .eightHours:
+            return "8 Hours"
+        case .indefinitely:
+            return "Never"
         }
+    }
+
+    static func availableDurations(allowsIndefinite: Bool) -> [SleepGuardDuration] {
+        allCases.filter { allowsIndefinite || !$0.isIndefinite }
     }
 }
 
@@ -99,6 +129,10 @@ final class SleepGuardController: ObservableObject {
             return ""
         }
 
+        guard activeDuration?.isIndefinite != true else {
+            return "∞"
+        }
+
         let minutes = max(1, Int(ceil(Double(remainingSeconds) / 60.0)))
         if minutes >= 60 {
             let hours = minutes / 60
@@ -113,9 +147,9 @@ final class SleepGuardController: ObservableObject {
     func start(duration: SleepGuardDuration, keepDisplayAwake: Bool) -> Bool {
         stop(clearError: true)
 
-        let reason = "Spill Sleep Guard"
+        let reason = "Spill Caffeine"
         guard let systemID = assertionManager.createSystemAssertion(reason: reason) else {
-            errorMessage = "Could not start Sleep Guard."
+            errorMessage = "Could not start Caffeine."
             return false
         }
 
@@ -134,8 +168,8 @@ final class SleepGuardController: ObservableObject {
         displayAssertionID = displayID
         activeDuration = duration
         keepsDisplayAwake = keepDisplayAwake
-        expirationDate = now().addingTimeInterval(duration.seconds)
-        remainingSeconds = Int(duration.seconds)
+        expirationDate = duration.seconds.map { now().addingTimeInterval($0) }
+        remainingSeconds = duration.seconds.map(Int.init) ?? 0
         isActive = true
         errorMessage = nil
         startTimerIfNeeded()
@@ -148,7 +182,11 @@ final class SleepGuardController: ObservableObject {
     }
 
     func refreshRemaining() {
-        guard isActive, let expirationDate else {
+        guard isActive else {
+            return
+        }
+
+        guard let expirationDate else {
             return
         }
 

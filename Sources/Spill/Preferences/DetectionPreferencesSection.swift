@@ -42,12 +42,6 @@ struct DetectionPreferencesSection: View {
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .lineLimit(3)
-
-            if settings.displayMode == .selectedItems, settings.selectedItemKeys.isEmpty {
-                Text("Select items below to show them in Spill Bar.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
         }
     }
 }

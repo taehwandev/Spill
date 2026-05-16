@@ -153,7 +153,7 @@ extension HotKeyRegistration {
             HotKeyRegistration(
                 id: 1,
                 keyCode: UInt32(kVK_Space),
-                modifiers: UInt32(controlKey | optionKey),
+                modifiers: WindowActionShortcutModifier.standard.carbonFlags,
                 action: toggleAction
             )
         ]
@@ -166,7 +166,7 @@ extension HotKeyRegistration {
             return HotKeyRegistration(
                 id: kind.hotKeyID,
                 keyCode: keyCode,
-                modifiers: UInt32(controlKey | optionKey),
+                modifiers: kind.shortcutModifier.carbonFlags,
                 action: { windowAction(kind) }
             )
         }

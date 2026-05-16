@@ -80,6 +80,34 @@ final class SleepGuardControllerTests: XCTestCase {
         XCTAssertEqual(fakeManager.releasedAssertions, [100, 101])
     }
 
+    func testIndefiniteDurationStaysActiveUntilStopped() {
+        var now = Date(timeIntervalSince1970: 100)
+        let fakeManager = FakeSleepAssertionManager()
+        let controller = SleepGuardController(
+            assertionManager: fakeManager,
+            now: { now },
+            automaticallySchedulesTimer: false
+        )
+
+        XCTAssertTrue(controller.start(duration: .indefinitely, keepDisplayAwake: false))
+
+        XCTAssertTrue(controller.isActive)
+        XCTAssertEqual(controller.activeDuration, .indefinitely)
+        XCTAssertEqual(controller.remainingSeconds, 0)
+        XCTAssertEqual(controller.remainingLabel, "∞")
+
+        now.addTimeInterval(86_400)
+        controller.refreshRemaining()
+
+        XCTAssertTrue(controller.isActive)
+        XCTAssertEqual(fakeManager.releasedAssertions, [])
+
+        controller.stop()
+
+        XCTAssertFalse(controller.isActive)
+        XCTAssertEqual(fakeManager.releasedAssertions, [100])
+    }
+
     func testDisplayAssertionFailureRollsBackSystemAssertion() {
         let fakeManager = FakeSleepAssertionManager()
         fakeManager.shouldCreateDisplayAssertion = false
@@ -104,7 +132,7 @@ final class SleepGuardControllerTests: XCTestCase {
         XCTAssertFalse(controller.isActive)
         XCTAssertEqual(fakeManager.createdSystemAssertions, [])
         XCTAssertEqual(fakeManager.releasedAssertions, [])
-        XCTAssertEqual(controller.errorMessage, "Could not start Sleep Guard.")
+        XCTAssertEqual(controller.errorMessage, "Could not start Caffeine.")
     }
 }
 

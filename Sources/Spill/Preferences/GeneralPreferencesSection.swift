@@ -6,24 +6,23 @@ struct GeneralPreferencesSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Toggle("Show count badge", isOn: $settings.showCountBadge)
-
             Toggle("Use spill animation", isOn: $settings.useSpillAnimation)
 
             Toggle("Keyboard shortcut", isOn: $settings.hotKeyEnabled)
 
-            Text("Control + Option + Space")
+            Text("\(WindowActionShortcutModifier.standard.title) + Space")
                 .font(.footnote.monospaced())
                 .foregroundStyle(.secondary)
 
             windowShortcutsSection
 
-            Picker("Spill Bar Items", selection: $settings.displayMode) {
-                ForEach(SpillDisplayMode.allCases) { mode in
-                    Text(mode.title).tag(mode)
-                }
+            HStack {
+                Label("Menu bar actions", systemImage: "camera.viewfinder")
+                Spacer()
+                Text("Notch candidates")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
             }
-            .pickerStyle(.segmented)
 
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
@@ -59,7 +58,7 @@ struct GeneralPreferencesSection: View {
             HStack {
                 Label("Window shortcuts", systemImage: "macwindow")
                 Spacer()
-                Text("Control + Option")
+                Text("Grouped modifiers")
                     .font(.footnote.monospaced())
                     .foregroundStyle(.secondary)
             }
@@ -71,13 +70,17 @@ struct GeneralPreferencesSection: View {
 
                     Spacer()
 
+                    Text(kind.shortcutModifier.glyph)
+                        .font(.callout.monospaced())
+                        .foregroundStyle(.secondary)
+
                     Picker("", selection: shortcutBinding(for: kind)) {
                         ForEach(WindowActionShortcutKey.allCases) { key in
                             Text(key.pickerTitle).tag(key)
                         }
                     }
                     .labelsHidden()
-                    .frame(width: 112)
+                    .frame(width: 74)
                 }
             }
         }

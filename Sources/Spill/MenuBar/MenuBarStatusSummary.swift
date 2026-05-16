@@ -4,6 +4,7 @@ struct MenuBarStatusSegment: Equatable {
     enum Kind: Equatable {
         case cpu
         case memory
+        case caffeine
         case sleepGuard
     }
 
@@ -111,7 +112,7 @@ struct MenuBarStatusSummary: Equatable {
                 tooltip: details(title: item.title, value: memory.value, subtitle: memory.subtitle),
                 segment: segment
             )
-        case .gpu, .network, .ai:
+        case .caffeine, .gpu, .network, .ai:
             return nil
         }
     }

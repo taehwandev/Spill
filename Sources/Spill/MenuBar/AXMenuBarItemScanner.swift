@@ -19,11 +19,7 @@ final class AXMenuBarItemScanner: ObservableObject {
     private var refreshTask: Task<Void, Never>?
 
     var visibleItems: [MenuBarItemSnapshot] {
-        if notchCandidates.isEmpty {
-            return items
-        }
-
-        return notchCandidates
+        notchCandidates
     }
 
     var notchCandidates: [MenuBarItemSnapshot] {
@@ -92,7 +88,11 @@ final class AXMenuBarItemScanner: ObservableObject {
         }
 
         let enrichedItems = result.items.map { snapshot in
-            snapshot.withImageData(cachedImageData(for: snapshot))
+            guard snapshot.isNotchCandidate else {
+                return snapshot
+            }
+
+            return snapshot.withImageData(cachedImageData(for: snapshot))
         }
         items = enrichedItems
         elementsByID = result.elementsByID

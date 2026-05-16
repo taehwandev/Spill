@@ -14,6 +14,7 @@ final class StatusItemController: NSObject {
     private let triggerItem: NSStatusItem
     private var isSpillBarVisible = false
     private var statusContentView: MenuBarStatusContentView?
+    private var currentSegments: [MenuBarStatusSegment] = []
 
     init(
         settings: SpillSettings,
@@ -64,6 +65,7 @@ final class StatusItemController: NSObject {
         )
         let sleepGuardSegment = sleepGuardMenuBarSegment
         let segments = [sleepGuardSegment].compactMap { $0 } + summary.segments
+        currentSegments = segments
         let statusTooltip = statusTooltip(summary: summary, sleepGuardSegment: sleepGuardSegment)
         triggerItem.isVisible = true
         triggerItem.length = segments.isEmpty ? defaultLength : MenuBarStatusContentView.preferredWidth(for: segments)
@@ -204,19 +206,11 @@ final class StatusItemController: NSObject {
     }
 
     private var sleepGuardMenuBarSegment: MenuBarStatusSegment? {
-        guard sleepGuard.isActive else {
-            return nil
-        }
-
-        return MenuBarStatusSegment(
-            kind: .sleepGuard,
-            title: "Sleep Guard",
-            shortTitle: "Sleep",
-            value: sleepGuard.remainingLabel,
-            displayText: sleepGuard.remainingLabel,
-            usageRatio: 0,
-            state: .active,
-            symbolName: "moon.fill"
+        return SleepGuardMenuBarSegmentFactory.make(
+            isEnabled: settings.isMenuBarStatusItemEnabled(.caffeine),
+            isActive: sleepGuard.isActive,
+            remainingLabel: sleepGuard.remainingLabel,
+            showsRemainingInMenuBar: settings.sleepGuardShowsRemainingInMenuBar
         )
     }
 
@@ -226,8 +220,14 @@ final class StatusItemController: NSObject {
     ) -> String {
         var parts: [String] = []
 
-        if let sleepGuardSegment {
-            parts.append("Sleep Guard \(sleepGuardSegment.value) remaining")
+        if sleepGuardSegment != nil {
+            if !sleepGuard.isActive {
+                parts.append("Click to start Caffeine for \(settings.sleepGuardDefaultDuration.menuTitle)")
+            } else if sleepGuard.activeDuration?.isIndefinite == true {
+                parts.append("Caffeine on until stopped - click to stop")
+            } else {
+                parts.append("Caffeine \(sleepGuard.remainingLabel) remaining - click to stop")
+            }
         }
 
         if !summary.title.isEmpty {
@@ -243,9 +243,33 @@ final class StatusItemController: NSObject {
 
         if shouldShowMenu {
             showMenu()
+        } else if isCaffeineSegmentClick(sender: sender, event: event) {
+            toggleCaffeineFromStatusItem()
         } else {
             toggleAction()
         }
+    }
+
+    private func isCaffeineSegmentClick(sender: NSStatusBarButton, event: NSEvent?) -> Bool {
+        guard let event else {
+            return false
+        }
+
+        let point = sender.convert(event.locationInWindow, from: nil)
+        return MenuBarStatusContentView.segmentKind(at: point, in: currentSegments) == .caffeine
+    }
+
+    private func toggleCaffeineFromStatusItem() {
+        if sleepGuard.isActive {
+            sleepGuard.stop()
+        } else {
+            sleepGuard.start(
+                duration: settings.sleepGuardDefaultDuration,
+                keepDisplayAwake: settings.sleepGuardKeepsDisplayAwake
+            )
+        }
+
+        refresh()
     }
 
     @objc private func toggleFromMenu() {
@@ -269,7 +293,7 @@ final class StatusItemController: NSObject {
         let toggleTitle = isSpillBarVisible ? "Hide Spill Bar" : "Show Spill Bar"
 
         menu.addItem(menuItem(title: toggleTitle, action: #selector(toggleFromMenu), keyEquivalent: ""))
-        menu.addItem(disabledMenuItem(title: "Shortcut: Control + Option + Space"))
+        menu.addItem(disabledMenuItem(title: "Shortcut: \(WindowActionShortcutModifier.standard.title) + Space"))
         menu.addItem(menuItem(title: "Refresh Menu Bar Items", action: #selector(refreshFromMenu), keyEquivalent: "r"))
         menu.addItem(menuItem(title: "Preferences...", action: #selector(showPreferencesFromMenu), keyEquivalent: ","))
         menu.addItem(.separator())
@@ -290,5 +314,31 @@ final class StatusItemController: NSObject {
         let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
         item.isEnabled = false
         return item
+    }
+}
+
+enum SleepGuardMenuBarSegmentFactory {
+    static func make(
+        isEnabled: Bool,
+        isActive: Bool,
+        remainingLabel: String,
+        showsRemainingInMenuBar: Bool
+    ) -> MenuBarStatusSegment? {
+        guard isEnabled else {
+            return nil
+        }
+
+        let displayText = isActive && showsRemainingInMenuBar ? remainingLabel : ""
+
+        return MenuBarStatusSegment(
+            kind: .caffeine,
+            title: "Caffeine",
+            shortTitle: "CAF",
+            value: displayText,
+            displayText: displayText,
+            usageRatio: 0,
+            state: isActive ? .active : .unavailable,
+            symbolName: isActive ? "cup.and.saucer.fill" : "cup.and.saucer"
+        )
     }
 }

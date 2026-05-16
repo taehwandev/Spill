@@ -39,4 +39,49 @@ final class SpillPanelLayoutTests: XCTestCase {
         XCTAssertEqual(frame.width, fallbackFrame.width, accuracy: 0.001)
         XCTAssertEqual(frame.height, fallbackFrame.height, accuracy: 0.001)
     }
+
+    func testDefaultFrameClampsHeightToVisibleFrame() {
+        let layout = SpillPanelLayout()
+        let visibleFrame = NSRect(x: 0, y: 0, width: 900, height: 560)
+
+        let frame = layout.defaultFrame(in: visibleFrame, screen: nil)
+
+        XCTAssertEqual(frame.height, visibleFrame.height - SpillPanelMetrics.edgeInset * 2, accuracy: 0.001)
+        XCTAssertGreaterThanOrEqual(frame.minY, visibleFrame.minY + SpillPanelMetrics.edgeInset - 0.001)
+        XCTAssertLessThanOrEqual(frame.maxY, visibleFrame.maxY - SpillPanelMetrics.edgeInset + 0.001)
+    }
+
+    func testDefaultFrameUsesPreferredContentSize() {
+        let layout = SpillPanelLayout()
+        let visibleFrame = NSRect(x: 0, y: 0, width: 1_440, height: 900)
+        let preferredSize = NSSize(width: 560, height: 480)
+
+        let frame = layout.defaultFrame(in: visibleFrame, screen: nil, preferredSize: preferredSize)
+
+        XCTAssertEqual(frame.width, preferredSize.width, accuracy: 0.001)
+        XCTAssertEqual(frame.height, preferredSize.height, accuracy: 0.001)
+    }
+
+    func testContentSizerExpandsForAdditionalRows() {
+        let visibleFrame = NSRect(x: 0, y: 0, width: 1_440, height: 900)
+        let compactSize = SpillPanelContentSizer.preferredSize(
+            statusModuleCount: 0,
+            aiStatusCount: 3,
+            windowActionCount: 6,
+            menuBarActionCount: 0,
+            iconSpacing: 8,
+            visibleFrame: visibleFrame
+        )
+        let expandedSize = SpillPanelContentSizer.preferredSize(
+            statusModuleCount: 3,
+            aiStatusCount: 3,
+            windowActionCount: 10,
+            menuBarActionCount: 18,
+            iconSpacing: 8,
+            visibleFrame: visibleFrame
+        )
+
+        XCTAssertGreaterThan(expandedSize.height, compactSize.height)
+        XCTAssertLessThanOrEqual(expandedSize.height, visibleFrame.height - SpillPanelMetrics.edgeInset * 2)
+    }
 }

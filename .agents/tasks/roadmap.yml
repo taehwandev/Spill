@@ -45,7 +45,7 @@ milestones:
           - Panel can render status strip, AI strip, actions, and window actions.
       - id: M1-T2
         title: Clean panel visuals
-        state: partial
+        state: done
         acceptance:
           - No nested cards.
           - Compact height target is preserved.

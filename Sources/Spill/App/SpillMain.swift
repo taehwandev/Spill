@@ -11,7 +11,7 @@ enum SpillMain {
 
         appDelegate = delegate
         application.delegate = delegate
-        application.setActivationPolicy(.regular)
+        application.setActivationPolicy(.accessory)
         application.run()
     }
 }

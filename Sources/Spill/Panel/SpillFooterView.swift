@@ -5,12 +5,12 @@ struct SpillFooterView: View {
     let isScanning: Bool
     @ObservedObject var sleepGuard: SleepGuardController
     let sleepGuardDefaultDuration: SleepGuardDuration
+    let allowsIndefiniteDuration: Bool
     let keepsDisplayAwake: Bool
     let showsPower: Bool
     let powerStatus: SystemPowerStatus
     let showsCountBadge: Bool
     let itemCount: Int
-    let quitAction: () -> Void
 
     var body: some View {
         HStack(spacing: 8) {
@@ -18,14 +18,14 @@ struct SpillFooterView: View {
                 symbolName: isAccessibilityTrusted ? "checkmark.shield.fill" : "exclamationmark.shield.fill",
                 title: "AX",
                 value: isAccessibilityTrusted ? "OK" : "Need",
-                tint: isAccessibilityTrusted ? .green : .orange
+                tint: isAccessibilityTrusted ? .mint : .orange
             )
 
             footerBadge(
                 symbolName: isScanning ? "arrow.triangle.2.circlepath" : "bolt.horizontal.fill",
                 title: "Scan",
                 value: isScanning ? "On" : "Idle",
-                tint: isScanning ? Color.accentColor : Color.secondary
+                tint: isScanning ? .blue : .secondary
             )
 
             sleepGuardFooter
@@ -51,16 +51,11 @@ struct SpillFooterView: View {
                 value: shortTime,
                 tint: .secondary
             )
-
-            quitButton
         }
         .padding(.horizontal, 9)
         .frame(height: 32)
         .background(.primary.opacity(0.06), in: Capsule())
-        .overlay {
-            Capsule()
-                .stroke(.primary.opacity(0.08), lineWidth: 0.8)
-        }
+        .shadow(color: .black.opacity(0.02), radius: 1, y: 0.5)
     }
 
     private func footerBadge(
@@ -71,15 +66,15 @@ struct SpillFooterView: View {
     ) -> some View {
         HStack(spacing: 4) {
             Image(systemName: symbolName)
-                .font(.system(size: 10, weight: .semibold))
-                .frame(width: 13, height: 13)
+                .font(.system(size: 11, weight: .semibold))
+                .frame(width: 14, height: 14)
 
             Text(title)
-                .font(.system(size: 8, weight: .semibold, design: .rounded))
+                .font(.system(size: 10, weight: .medium, design: .rounded))
                 .foregroundStyle(.secondary)
 
             Text(value)
-                .font(.system(size: 10, weight: .semibold, design: .rounded))
+                .font(.system(size: 11, weight: .semibold, design: .rounded))
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.78)
@@ -93,7 +88,7 @@ struct SpillFooterView: View {
                 Button(role: .destructive) {
                     sleepGuard.stop()
                 } label: {
-                    Text("Stop Sleep Guard")
+                    Text("Stop Caffeine")
                 }
 
                 Divider()
@@ -108,7 +103,7 @@ struct SpillFooterView: View {
                 Divider()
             }
 
-            ForEach(SleepGuardDuration.allCases) { duration in
+            ForEach(SleepGuardDuration.availableDurations(allowsIndefinite: allowsIndefiniteDuration)) { duration in
                 Button(duration.menuTitle) {
                     sleepGuard.start(
                         duration: duration,
@@ -118,16 +113,16 @@ struct SpillFooterView: View {
             }
         } label: {
             HStack(spacing: 4) {
-                Image(systemName: sleepGuard.isActive ? "moon.fill" : "moon")
-                    .font(.system(size: 10, weight: .semibold))
-                    .frame(width: 13, height: 13)
+                Image(systemName: sleepGuard.isActive ? "cup.and.saucer.fill" : "cup.and.saucer")
+                    .font(.system(size: 11, weight: .semibold))
+                    .frame(width: 14, height: 14)
 
-                Text("Sleep")
-                    .font(.system(size: 8, weight: .semibold, design: .rounded))
+                Text("Caf")
+                    .font(.system(size: 10, weight: .medium, design: .rounded))
                     .foregroundStyle(.secondary)
 
                 Text(sleepGuard.isActive ? sleepGuard.remainingLabel : "Off")
-                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
                     .monospacedDigit()
                     .lineLimit(1)
                     .minimumScaleFactor(0.78)
@@ -137,32 +132,14 @@ struct SpillFooterView: View {
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
-        .help(sleepGuardHelpText)
-        .accessibilityLabel(sleepGuardHelpText)
-        .accessibilityIdentifier("Sleep Guard")
-    }
-
-    private var quitButton: some View {
-        Button(role: .destructive, action: quitAction) {
-            HStack(spacing: 4) {
-                Image(systemName: "power")
-                    .font(.system(size: 10, weight: .semibold))
-                    .frame(width: 13, height: 13)
-
-                Text("Quit")
-                    .font(.system(size: 10, weight: .semibold, design: .rounded))
-            }
-            .foregroundStyle(.secondary)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help("Quit Spill")
-        .accessibilityLabel("Quit Spill")
+        .help(caffeineHelpText)
+        .accessibilityLabel(caffeineHelpText)
+        .accessibilityIdentifier("Caffeine")
     }
 
     private var sleepGuardTint: Color {
         if sleepGuard.isActive {
-            return .accentColor
+            return .blue
         }
 
         if sleepGuard.errorMessage != nil {
@@ -187,16 +164,20 @@ struct SpillFooterView: View {
         Self.timeFormatter.string(from: Date())
     }
 
-    private var sleepGuardHelpText: String {
+    private var caffeineHelpText: String {
         if let errorMessage = sleepGuard.errorMessage {
-            return "Sleep Guard - \(errorMessage)"
+            return "Caffeine - \(errorMessage)"
         }
 
         guard sleepGuard.isActive else {
-            return "Sleep Guard Off"
+            return "Caffeine Off"
         }
 
-        return "Sleep Guard - \(sleepGuard.remainingLabel) remaining"
+        if sleepGuard.activeDuration?.isIndefinite == true {
+            return "Caffeine - on until stopped"
+        }
+
+        return "Caffeine - \(sleepGuard.remainingLabel) remaining"
     }
 
     private func powerHelpText(for status: SystemPowerStatus) -> String {

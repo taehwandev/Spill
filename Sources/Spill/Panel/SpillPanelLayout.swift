@@ -14,26 +14,31 @@ struct SpillPanelLayout {
     func defaultFrame(
         in visibleFrame: NSRect,
         screen: NSScreen?,
-        anchorFrame: NSRect? = nil
+        anchorFrame: NSRect? = nil,
+        preferredSize: NSSize? = nil
     ) -> NSRect {
-        let maximumWidth = min(
-            SpillPanelMetrics.maximumWidth,
-            visibleFrame.width - SpillPanelMetrics.edgeInset * 2
+        let preferredSize = preferredSize ?? NSSize(
+            width: SpillPanelMetrics.defaultWidth,
+            height: SpillPanelMetrics.defaultHeight
         )
-        let width = min(SpillPanelMetrics.defaultWidth, maximumWidth)
+        let width = min(
+            max(preferredSize.width, SpillPanelMetrics.minimumSize.width),
+            SpillPanelContentSizer.preferredWidth(visibleFrame: visibleFrame)
+        )
+        let height = SpillPanelContentSizer.boundedHeight(preferredSize.height, visibleFrame: visibleFrame)
         let geometry = MenuBarNotchGeometry(screen: screen)
         let validAnchorFrame = validMenuBarAnchor(anchorFrame, visibleFrame: visibleFrame)
         let anchorX = validAnchorFrame?.midX ?? (geometry.hasHardwareNotch ? geometry.notchFrame.midX : visibleFrame.midX)
         let minX = visibleFrame.minX + SpillPanelMetrics.edgeInset
         let maxX = visibleFrame.maxX - SpillPanelMetrics.edgeInset - width
         let x = (anchorX - width / 2).clamped(to: minX...max(minX, maxX))
-        let fallbackY = visibleFrame.maxY - SpillPanelMetrics.defaultHeight - 10
-        let anchoredY = validAnchorFrame.map { min($0.minY - 8, visibleFrame.maxY - 8) - SpillPanelMetrics.defaultHeight }
+        let fallbackY = visibleFrame.maxY - height - 10
+        let anchoredY = validAnchorFrame.map { min($0.minY - 8, visibleFrame.maxY - 8) - height }
         let minY = visibleFrame.minY + SpillPanelMetrics.edgeInset
-        let maxY = visibleFrame.maxY - SpillPanelMetrics.edgeInset - SpillPanelMetrics.defaultHeight
+        let maxY = visibleFrame.maxY - SpillPanelMetrics.edgeInset - height
         let y = (anchoredY ?? fallbackY).clamped(to: minY...max(minY, maxY))
 
-        return NSRect(x: x, y: y, width: width, height: SpillPanelMetrics.defaultHeight)
+        return NSRect(x: x, y: y, width: width, height: height)
     }
 
     private func validMenuBarAnchor(_ anchorFrame: NSRect?, visibleFrame: NSRect) -> NSRect? {

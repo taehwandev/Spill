@@ -15,7 +15,6 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
     private let windowActionStore: WindowActionStore
     private let visibilityChanged: (Bool) -> Void
     private let settingsAction: () -> Void
-    private let quitAction: () -> Void
     private var panel: NSPanel?
     private var anchorFrame: NSRect?
     private var isPresented = false
@@ -34,8 +33,7 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
         windowActionStore: WindowActionStore = WindowActionStore(),
         sleepGuard: SleepGuardController,
         visibilityChanged: @escaping (Bool) -> Void = { _ in },
-        settingsAction: @escaping () -> Void = {},
-        quitAction: @escaping () -> Void = {}
+        settingsAction: @escaping () -> Void = {}
     ) {
         self.settings = settings
         self.scanner = scanner
@@ -45,7 +43,6 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
         self.sleepGuard = sleepGuard
         self.visibilityChanged = visibilityChanged
         self.settingsAction = settingsAction
-        self.quitAction = quitAction
         super.init()
         observeLayoutChanges()
     }
@@ -79,17 +76,15 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
     }
 
     var contentReport: SpillPanelContentReport {
-        let displayItems = settings.displayMode.items(from: scanner, settings: settings)
-        let statusModules = SpillStatusModule.primaryPanelModules.filter { settings.isStatusModuleEnabled($0) }
+        let displayItems = SpillDisplayMode.notchCandidateItems(from: scanner, settings: settings)
+        let statusModules = SpillStatusModule.primaryPanelModules
         let statusDetailRowCount = statusModules.reduce(0) { count, module in
             count + statusStore.detailRows(for: module).count
         }
         let aiDetailRowCount = aiStatusStore.statuses.reduce(0) { count, status in
             count + SpillStatusDetailRows.rows(for: status).count
         }
-        let footerItemCount = 3
-            + (settings.showPowerFooter ? 1 : 0)
-            + (settings.showCountBadge ? 1 : 0)
+        let footerItemCount = 5
 
         return SpillPanelContentReport(
             isVisible: isPresented && panel?.isVisible == true,
@@ -105,8 +100,8 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
             windowActionCount: windowActionStore.actions.count,
             menuBarActionCount: displayItems.count,
             footerItemCount: footerItemCount,
-            showsPowerFooter: settings.showPowerFooter,
-            showsCountBadge: settings.showCountBadge
+            showsPowerFooter: true,
+            showsCountBadge: true
         )
     }
 
@@ -225,8 +220,6 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
                 self?.hide(animated: true)
             } settingsAction: { [weak self] in
                 self?.settingsAction()
-            } quitAction: { [weak self] in
-                self?.quitAction()
             }
         )
         hostingView.translatesAutoresizingMaskIntoConstraints = false
@@ -248,9 +241,33 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
     private func panelFrame() -> NSRect {
         let screen = screenForAnchor() ?? panel?.screen ?? NSScreen.main ?? NSScreen.screens.first
         let visibleFrame = layout.visibleFrame(forScreen: screen)
-        let fallback = layout.defaultFrame(in: visibleFrame, screen: screen, anchorFrame: anchorFrame)
+        let fallback = layout.defaultFrame(
+            in: visibleFrame,
+            screen: screen,
+            anchorFrame: anchorFrame,
+            preferredSize: preferredPanelSize(in: visibleFrame)
+        )
 
         return fallback
+    }
+
+    private func preferredPanelSize(in visibleFrame: NSRect) -> NSSize {
+        let displayItems = SpillDisplayMode.notchCandidateItems(from: scanner, settings: settings)
+        let pinnedItems = scanner.notchCandidates.filter {
+            settings.selectedItemKeys.contains($0.stableKey)
+                && !settings.isItemHidden($0)
+        }
+        let menuBarActionCount = pinnedItems.count
+            + displayItems.filter { !settings.selectedItemKeys.contains($0.stableKey) }.count
+
+        return SpillPanelContentSizer.preferredSize(
+            statusModuleCount: SpillStatusModule.primaryPanelModules.count,
+            aiStatusCount: aiStatusStore.statuses.count,
+            windowActionCount: windowActionStore.actions.count,
+            menuBarActionCount: menuBarActionCount,
+            iconSpacing: CGFloat(settings.iconSpacing),
+            visibleFrame: visibleFrame
+        )
     }
 
     private func screenForAnchor() -> NSScreen? {
@@ -292,29 +309,6 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
             }
             .store(in: &cancellables)
 
-        settings.$statusModuleOrder
-            .dropFirst()
-            .sink { [weak self] _ in
-                self?.resizePanelIfVisible()
-            }
-            .store(in: &cancellables)
-
-        settings.$enabledStatusModules
-            .dropFirst()
-            .sink { [weak self] _ in
-                self?.refreshStatusStore()
-                self?.resizePanelIfVisible()
-            }
-            .store(in: &cancellables)
-
-        settings.$showPowerFooter
-            .dropFirst()
-            .sink { [weak self] _ in
-                self?.refreshStatusStore()
-                self?.resizePanelIfVisible()
-            }
-            .store(in: &cancellables)
-
         settings.$selectedItemKeys
             .dropFirst()
             .sink { [weak self] _ in
@@ -328,11 +322,27 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
                 self?.resizePanelIfVisible()
             }
             .store(in: &cancellables)
+
+        aiStatusStore.objectWillChange
+            .sink { [weak self] _ in
+                DispatchQueue.main.async {
+                    self?.resizePanelIfVisible()
+                }
+            }
+            .store(in: &cancellables)
+
+        windowActionStore.objectWillChange
+            .sink { [weak self] _ in
+                DispatchQueue.main.async {
+                    self?.resizePanelIfVisible()
+                }
+            }
+            .store(in: &cancellables)
     }
 
     private func refreshStatusStore() {
         let enabledModules = settings.statusModulesRequiredForRefresh
-        let readsPower = settings.showPowerFooter
+        let readsPower = true
         aiStatusStore.refreshInBackground()
         windowActionStore.refresh()
         Task { @MainActor [statusStore] in
@@ -412,10 +422,15 @@ struct SpillPanelLayoutReport {
 
     private var hasCompactSize: Bool {
         let tolerance: CGFloat = 1
+        let maximumHeight = max(
+            SpillPanelMetrics.minimumSize.height,
+            visibleFrame.height - SpillPanelMetrics.edgeInset * 2
+        )
+
         return frame.width >= SpillPanelMetrics.minimumSize.width - tolerance
             && frame.width <= SpillPanelMetrics.maximumWidth + tolerance
             && frame.height >= SpillPanelMetrics.minimumSize.height - tolerance
-            && frame.height <= SpillPanelMetrics.maximumVerifiedHeight + tolerance
+            && frame.height <= maximumHeight + tolerance
     }
 
     private var contentMatchesFrame: Bool {

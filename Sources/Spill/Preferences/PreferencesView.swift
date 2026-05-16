@@ -7,6 +7,7 @@ struct PreferencesView: View {
     let showPanelAction: () -> Void
     @State private var accessibilityTrusted = AccessibilityPermission.isTrusted
     @State private var loginItemError: String?
+    @State private var showsAdvancedDetection = false
 
     var body: some View {
         ScrollView(.vertical) {
@@ -47,19 +48,11 @@ struct PreferencesView: View {
 
                 Divider()
 
-                DetectionPreferencesSection(
-                    settings: settings,
-                    scanner: scanner,
-                    accessibilityTrusted: $accessibilityTrusted
-                )
-
-                Divider()
-
-                DetectedItemsListView(items: scanner.items, settings: settings)
-
-                Divider()
-
                 AccessibilityPreferencesSection(scanner: scanner, accessibilityTrusted: $accessibilityTrusted)
+
+                Divider()
+
+                advancedDetectionSection
             }
             .padding(22)
             .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -75,8 +68,27 @@ struct PreferencesView: View {
 
     private func refreshPermissionState() {
         accessibilityTrusted = AccessibilityPermission.isTrusted
-        if accessibilityTrusted {
-            scanner.refresh()
+    }
+
+    private var advancedDetectionSection: some View {
+        DisclosureGroup(isExpanded: $showsAdvancedDetection) {
+            VStack(alignment: .leading, spacing: 14) {
+                Text("Best-effort menu bar scanning is an advanced pinning and diagnostics tool. It is not required for normal panel use.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+
+                DetectionPreferencesSection(
+                    settings: settings,
+                    scanner: scanner,
+                    accessibilityTrusted: $accessibilityTrusted
+                )
+
+                DetectedItemsListView(items: scanner.items, settings: settings)
+            }
+            .padding(.top, 8)
+        } label: {
+            Label("Advanced Detection", systemImage: "menubar.rectangle")
+                .font(.headline)
         }
     }
 }
