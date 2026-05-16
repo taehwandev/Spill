@@ -53,7 +53,7 @@ struct SystemCPUProvider: SpillStatusProvider {
         [(await Self.status()).statusItem]
     }
 
-    static func status(sampleIntervalNanoseconds: UInt64 = 120_000_000) async -> SystemCPUStatus {
+    static func status(sampleIntervalNanoseconds: UInt64 = 500_000_000) async -> SystemCPUStatus {
         let previous = SystemCPUReader.current()
         try? await Task.sleep(nanoseconds: sampleIntervalNanoseconds)
         let current = SystemCPUReader.current()
@@ -62,7 +62,11 @@ struct SystemCPUProvider: SpillStatusProvider {
     }
 
     static func status(previous: SystemCPUReading?, current: SystemCPUReading?) -> SystemCPUStatus {
-        guard let previous, let current else {
+        guard let previous else {
+            return samplingStatus()
+        }
+
+        guard let current else {
             return unavailableStatus()
         }
 
@@ -81,15 +85,15 @@ struct SystemCPUProvider: SpillStatusProvider {
         let totalDelta = current.totalTicks - previous.totalTicks
 
         guard totalDelta > 0 else {
-            return unavailableStatus()
+            return zeroStatus()
         }
 
         let ratio = (Double(activeDelta) / Double(totalDelta)).clamped(to: 0...1)
         let idleRatio = (Double(idleDelta) / Double(totalDelta)).clamped(to: 0...1)
 
         return SystemCPUStatus(
-            value: "\(Int((ratio * 100).rounded()))%",
-            subtitle: "\(Int((idleRatio * 100).rounded()))% available",
+            value: percentText(ratio),
+            subtitle: "\(percentText(idleRatio)) available",
             usageRatio: ratio,
             availableRatio: idleRatio,
             userRatio: (Double(userDelta) / Double(totalDelta)).clamped(to: 0...1),
@@ -100,6 +104,10 @@ struct SystemCPUProvider: SpillStatusProvider {
             totalTicks: totalDelta,
             state: state(for: ratio)
         )
+    }
+
+    static func percentText(_ ratio: Double) -> String {
+        String(format: "%.1f%%", ratio.clamped(to: 0...1) * 100)
     }
 
     private static func state(for usageRatio: Double) -> SpillStatusState {
@@ -114,7 +122,7 @@ struct SystemCPUProvider: SpillStatusProvider {
         return .normal
     }
 
-    private static func unavailableStatus() -> SystemCPUStatus {
+    static func unavailableStatus() -> SystemCPUStatus {
         SystemCPUStatus(
             value: "N/A",
             subtitle: nil,
@@ -127,6 +135,38 @@ struct SystemCPUProvider: SpillStatusProvider {
             activeTicks: 0,
             totalTicks: 0,
             state: .unavailable
+        )
+    }
+
+    private static func samplingStatus() -> SystemCPUStatus {
+        SystemCPUStatus(
+            value: "0.0%",
+            subtitle: "Sampling",
+            usageRatio: 0,
+            availableRatio: 1,
+            userRatio: 0,
+            systemRatio: 0,
+            idleRatio: 1,
+            niceRatio: 0,
+            activeTicks: 0,
+            totalTicks: 0,
+            state: .refreshing
+        )
+    }
+
+    private static func zeroStatus() -> SystemCPUStatus {
+        SystemCPUStatus(
+            value: "0.0%",
+            subtitle: "100.0% available",
+            usageRatio: 0,
+            availableRatio: 1,
+            userRatio: 0,
+            systemRatio: 0,
+            idleRatio: 1,
+            niceRatio: 0,
+            activeTicks: 0,
+            totalTicks: 0,
+            state: .normal
         )
     }
 }

@@ -3,6 +3,7 @@ import Foundation
 enum SpillStatusModule: String, CaseIterable, Identifiable, Sendable {
     case cpu
     case memory
+    case storage
     case gpu
     case network
 
@@ -16,6 +17,8 @@ enum SpillStatusModule: String, CaseIterable, Identifiable, Sendable {
             return "CPU"
         case .memory:
             return "Memory"
+        case .storage:
+            return "Storage"
         case .gpu:
             return "GPU"
         case .network:
@@ -25,6 +28,8 @@ enum SpillStatusModule: String, CaseIterable, Identifiable, Sendable {
 
     var meterTitle: String {
         switch self {
+        case .storage:
+            return "STORAGE"
         case .gpu:
             return "GPU"
         case .network:
@@ -40,6 +45,8 @@ enum SpillStatusModule: String, CaseIterable, Identifiable, Sendable {
             return "cpu"
         case .memory:
             return "memorychip"
+        case .storage:
+            return "internaldrive"
         case .gpu:
             return "display"
         case .network:
@@ -53,6 +60,8 @@ enum SpillStatusModule: String, CaseIterable, Identifiable, Sendable {
             return "Processor activity"
         case .memory:
             return "Used and available physical memory"
+        case .storage:
+            return "Used and available primary storage"
         case .gpu:
             return "Metal device availability"
         case .network:
@@ -60,8 +69,9 @@ enum SpillStatusModule: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
-    static let defaultOrder: [SpillStatusModule] = [.cpu, .memory, .gpu, .network]
-    static let defaultEnabled: Set<SpillStatusModule> = Set(defaultOrder)
+    static let defaultOrder: [SpillStatusModule] = [.cpu, .memory, .storage]
+    static let primaryPanelModules: [SpillStatusModule] = [.cpu, .memory, .storage]
+    static let defaultEnabled: Set<SpillStatusModule> = Set(primaryPanelModules)
 
     static func normalizedOrder(from rawValues: [String]?) -> [SpillStatusModule] {
         guard let rawValues else {
@@ -75,7 +85,7 @@ enum SpillStatusModule: String, CaseIterable, Identifiable, Sendable {
         var seen = Set<SpillStatusModule>()
         var result: [SpillStatusModule] = []
 
-        for module in modules where !seen.contains(module) {
+        for module in modules where defaultOrder.contains(module) && !seen.contains(module) {
             seen.insert(module)
             result.append(module)
         }
@@ -92,6 +102,14 @@ enum SpillStatusModule: String, CaseIterable, Identifiable, Sendable {
             return defaultEnabled
         }
 
-        return Set(rawValues.compactMap(SpillStatusModule.init(rawValue:)))
+        var result = Set(
+            rawValues
+                .compactMap(SpillStatusModule.init(rawValue:))
+                .filter { defaultOrder.contains($0) }
+        )
+        if rawValues.contains("gpu") {
+            result.insert(.storage)
+        }
+        return result
     }
 }

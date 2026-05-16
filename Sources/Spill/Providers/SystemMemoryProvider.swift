@@ -66,7 +66,7 @@ struct SystemMemoryProvider: SpillStatusProvider {
         }
 
         let ratio = (Double(reading.usedBytes) / Double(reading.totalBytes)).clamped(to: 0...1)
-        let value = "\(Int((ratio * 100).rounded()))%"
+        let value = SystemCPUProvider.percentText(ratio)
         let subtitle = "\(formatBytes(reading.availableBytes)) available of \(formatBytes(reading.totalBytes))"
 
         return SystemMemoryStatus(

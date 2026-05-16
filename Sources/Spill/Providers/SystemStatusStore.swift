@@ -4,41 +4,55 @@ import SwiftUI
 final class SystemStatusStore: ObservableObject {
     typealias CPUReader = () async -> SystemCPUStatus
     typealias MemoryReader = () -> SystemMemoryStatus
+    typealias StorageReader = () -> SystemStorageStatus
     typealias GPUReader = () -> SystemGPUStatus
     typealias NetworkReader = () -> SystemNetworkStatus
     typealias PowerReader = () -> SystemPowerStatus
 
     @Published private(set) var cpu: SystemCPUStatus
     @Published private(set) var memory: SystemMemoryStatus
+    @Published private(set) var storage: SystemStorageStatus
     @Published private(set) var gpu: SystemGPUStatus
     @Published private(set) var network: SystemNetworkStatus
     @Published private(set) var power: SystemPowerStatus
+    @Published private(set) var metricHistory: [SpillStatusModule: [Double]]
 
     private let cpuReader: CPUReader
     private let memoryReader: MemoryReader
+    private let storageReader: StorageReader
     private let gpuReader: GPUReader
     private let networkReader: NetworkReader
     private let powerReader: PowerReader
+    private let maximumHistoryCount = 24
 
     init(
         cpu: SystemCPUStatus = SystemCPUProvider.status(previous: nil, current: nil),
         memory: SystemMemoryStatus = SystemMemoryProvider.status(from: nil),
+        storage: SystemStorageStatus = SystemStorageProvider.status(from: nil),
         gpu: SystemGPUStatus = SystemGPUProvider.status(from: nil),
         network: SystemNetworkStatus = SystemNetworkProvider.status(from: nil),
         power: SystemPowerStatus = SystemPowerProvider.status(from: nil),
         cpuReader: @escaping CPUReader = { await SystemCPUProvider.status() },
         memoryReader: @escaping MemoryReader = { SystemMemoryProvider.status() },
+        storageReader: @escaping StorageReader = { SystemStorageProvider.status() },
         gpuReader: @escaping GPUReader = { SystemGPUProvider.status() },
         networkReader: @escaping NetworkReader = { SystemNetworkProvider.status() },
         powerReader: @escaping PowerReader = { SystemPowerProvider.status() }
     ) {
         self.cpu = cpu
         self.memory = memory
+        self.storage = storage
         self.gpu = gpu
         self.network = network
         self.power = power
+        metricHistory = [
+            .cpu: Self.initialHistory(for: cpu.usageRatio, state: cpu.state),
+            .memory: Self.initialHistory(for: memory.usageRatio, state: memory.state),
+            .storage: Self.initialHistory(for: storage.usageRatio, state: storage.state)
+        ]
         self.cpuReader = cpuReader
         self.memoryReader = memoryReader
+        self.storageReader = storageReader
         self.gpuReader = gpuReader
         self.networkReader = networkReader
         self.powerReader = powerReader
@@ -50,8 +64,16 @@ final class SystemStatusStore: ObservableObject {
     ) async {
         if enabledModules.contains(.memory) {
             memory = memoryReader()
+            appendHistory(memory.usageRatio, for: .memory, state: memory.state)
         } else {
             memory = SystemMemoryProvider.status(from: nil)
+        }
+
+        if enabledModules.contains(.storage) {
+            storage = storageReader()
+            appendHistory(storage.usageRatio, for: .storage, state: storage.state)
+        } else {
+            storage = SystemStorageProvider.status(from: nil)
         }
 
         if enabledModules.contains(.network) {
@@ -74,8 +96,34 @@ final class SystemStatusStore: ObservableObject {
 
         if enabledModules.contains(.cpu) {
             cpu = await cpuReader()
+            appendHistory(cpu.usageRatio, for: .cpu, state: cpu.state)
         } else {
-            cpu = SystemCPUProvider.status(previous: nil, current: nil)
+            cpu = SystemCPUProvider.unavailableStatus()
         }
+    }
+
+    func history(for module: SpillStatusModule) -> [Double] {
+        metricHistory[module] ?? []
+    }
+
+    private func appendHistory(_ value: Double, for module: SpillStatusModule, state: SpillStatusState) {
+        guard state != .unavailable, value.isFinite else {
+            return
+        }
+
+        var values = metricHistory[module] ?? []
+        values.append(value.clamped(to: 0...1))
+        if values.count > maximumHistoryCount {
+            values.removeFirst(values.count - maximumHistoryCount)
+        }
+        metricHistory[module] = values
+    }
+
+    private static func initialHistory(for value: Double, state: SpillStatusState) -> [Double] {
+        guard state != .unavailable, value.isFinite else {
+            return []
+        }
+
+        return [value.clamped(to: 0...1)]
     }
 }
