@@ -7,18 +7,24 @@ Spill is an open-source compact control tray for macOS. It keeps one visible men
 This repository currently contains an MVP shell:
 
 - menu bar status item
-- click-to-toggle floating Spill Bar
+- click-to-toggle floating Spill Bar anchored to the status item
+- optional CPU and memory menu bar glance chips
 - right-click menu with preferences and quit actions
 - SwiftUI preferences window
 - Accessibility permission status and diagnostics
 - Launch at Login wiring for packaged `.app` builds
 - Accessibility-based menu bar extra scanner using `AXExtrasMenuBar`
 - best-effort `AXPress` action for detected items
+- focused-window quick actions for left/right/center/maximize/next display/restore
 - automatic rescanning when apps, Spaces, or displays change
 - optional `Control + Option + Space` global shortcut
 - display mode for notch candidates or all detected items
 - selectable detected items with persisted Spill Bar inclusion
 - app-icon based labels for detected menu bar items
+- configurable CPU, memory, GPU, and network status modules
+- click-to-open status detail popovers with CPU and memory menu bar visibility toggles
+- local AI status strip for Codex, Ollama, and OpenAI configuration
+- pinned menu bar actions with pin/unpin controls, execution feedback, and app activation fallback
 
 The current Spill Bar can detect some visible menu bar extras when Accessibility permission is granted. This is best-effort behavior. Spill does not promise to recover every item hidden behind the notch or forcibly rearrange other apps' menu bar items.
 

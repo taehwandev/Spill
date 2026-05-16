@@ -122,9 +122,22 @@ milestones:
           - Hidden power footer state does not run the power reader.
       - id: M3-T4
         title: Network status
-        state: pending
+        state: done
         acceptance:
           - Network availability displays when available.
+      - id: M3-T6
+        title: Status detail and menu bar values
+        state: done
+        acceptance:
+          - Status pills expose detailed readings on click.
+          - CPU and memory values can be shown or hidden in the menu bar from the panel.
+          - CPU and memory use compact percentage values in the menu bar and richer detail in the panel.
+      - id: M3-T7
+        title: GPU availability
+        state: done
+        acceptance:
+          - Metal GPU devices are detected with availability and memory budget details where available.
+          - GPU details stay in the panel and are not part of the default menu bar glance.
 
   - id: M4
     name: AI strip
@@ -132,19 +145,25 @@ milestones:
     tasks:
       - id: M4-T1
         title: Codex state
-        state: pending
+        state: done
         acceptance:
           - Detects obvious local Codex process/session state when available.
       - id: M4-T2
         title: Ollama state
-        state: pending
+        state: done
         acceptance:
           - Detects Ollama running/not running without network dependency.
       - id: M4-T3
         title: OpenAI config state
-        state: pending
+        state: done
         acceptance:
           - Shows configured/missing without exposing secrets.
+      - id: M4-T4
+        title: AI menu bar summary
+        state: pending
+        acceptance:
+          - Reliable AI active usage detection is defined before adding a menu bar summary.
+          - AI summary does not expose secret values if this later ships.
 
   - id: M5
     name: Actions
@@ -152,18 +171,18 @@ milestones:
     tasks:
       - id: M5-T1
         title: Pinned actions UI
-        state: pending
+        state: done
         acceptance:
           - Pin/unpin works.
           - Pinned actions render prominently.
       - id: M5-T2
         title: Action execution result
-        state: pending
+        state: done
         acceptance:
           - Success/failure/permission states are visible.
       - id: M5-T3
         title: App activation fallback
-        state: pending
+        state: done
         acceptance:
           - Stale AX item can fallback to opening/activating app.
       - id: M5-T4
@@ -180,17 +199,17 @@ milestones:
     tasks:
       - id: M6-T1
         title: Focused window frame operations
-        state: pending
+        state: done
         acceptance:
           - Left/right/center/maximize work on normal windows.
       - id: M6-T2
         title: Next display
-        state: pending
+        state: done
         acceptance:
           - Active window can move to next display when multiple displays exist.
       - id: M6-T3
         title: Restore frame
-        state: pending
+        state: done
         acceptance:
           - Previous frame restores best-effort.
 
