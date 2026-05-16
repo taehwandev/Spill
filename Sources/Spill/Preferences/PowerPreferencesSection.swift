@@ -12,6 +12,14 @@ struct PowerPreferencesSection: View {
 
             Toggle("Show power footer", isOn: $settings.showPowerFooter)
 
+            Picker("Sleep Guard default", selection: $settings.sleepGuardDefaultDuration) {
+                ForEach(SleepGuardDuration.allCases) { duration in
+                    Text(duration.menuTitle)
+                        .tag(duration)
+                }
+            }
+            .pickerStyle(.menu)
+
             Toggle("Keep display awake during Sleep Guard", isOn: $settings.sleepGuardKeepsDisplayAwake)
         }
     }

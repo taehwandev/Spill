@@ -3,6 +3,8 @@ import Combine
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    private static let statusRefreshDelayNanoseconds: UInt64 = 1_000_000_000
+
     private let settings = SpillSettings.shared
     private let scanner = AXMenuBarItemScanner()
     private let sleepGuard = SleepGuardController()
@@ -23,6 +25,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         visibilityChanged: { [weak self] isVisible in
             self?.isSpillPanelVisible = isVisible
             self?.statusItemController?.refresh(isSpillBarVisible: isVisible)
+            self?.configureStatusRefreshLoop()
+        },
+        settingsAction: { [weak self] in
+            self?.showPreferences()
+        },
+        quitAction: {
+            NSApp.terminate(nil)
         }
     )
     private lazy var preferencesWindowController = PreferencesWindowController(
@@ -43,6 +52,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItemController = StatusItemController(
             settings: settings,
             statusStore: statusStore,
+            sleepGuard: sleepGuard,
             hiddenItemCountProvider: { [weak scanner] in
                 guard let scanner else { return 0 }
                 return SpillSettings.shared.displayMode.items(from: scanner, settings: SpillSettings.shared).count
@@ -69,6 +79,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             scanCoordinator.start()
             configureHotKey()
+            prewarmPanel()
         }
     }
 
@@ -102,7 +113,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func openPanelForSmokeTest() {
-        spillPanelController.show(anchorFrame: statusItemController?.buttonScreenFrame)
+        NSApp.activate(ignoringOtherApps: true)
+        spillPanelController.show(
+            anchorFrame: statusItemController?.buttonScreenFrame,
+            dismissOnOutsideInteraction: false
+        )
         statusItemController?.refresh(isSpillBarVisible: spillPanelController.isVisible)
 
         if spillPanelController.isVisible {
@@ -137,6 +152,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             } else {
                 print("SPILL_PANEL_CONTENT_FAIL")
             }
+
+            let accessibilityReport = spillPanelController.accessibilityReport
+            print("SPILL_PANEL_ACCESSIBILITY \(accessibilityReport.logLine)")
+
+            if accessibilityReport.isValid {
+                print("SPILL_PANEL_ACCESSIBILITY_OK")
+            } else {
+                print("SPILL_PANEL_ACCESSIBILITY_FAIL")
+            }
         }
     }
 
@@ -167,17 +191,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func showSpillBar() {
-        if !AccessibilityPermission.isTrusted {
-            _ = AccessibilityPermission.request()
-        }
-
         spillPanelController.show(anchorFrame: statusItemController?.buttonScreenFrame)
+        statusItemController?.refresh(isSpillBarVisible: spillPanelController.isVisible)
 
-        if AccessibilityPermission.isTrusted && scanner.items.isEmpty {
-            scanner.refresh()
+        if !AccessibilityPermission.isTrusted {
+            DispatchQueue.main.async {
+                _ = AccessibilityPermission.request()
+            }
+            return
         }
 
-        statusItemController?.refresh(isSpillBarVisible: spillPanelController.isVisible)
+        scheduleDeferredScanIfNeeded()
     }
 
     private func refreshMenuBarItems() {
@@ -190,6 +214,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func showPreferences() {
         preferencesWindowController.show()
+    }
+
+    private func prewarmPanel() {
+        DispatchQueue.main.async { [weak self] in
+            self?.spillPanelController.prepare()
+        }
+    }
+
+    private func scheduleDeferredScanIfNeeded() {
+        guard scanner.items.isEmpty, !scanner.isScanning else {
+            return
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+            guard let self,
+                  isSpillPanelVisible,
+                  AccessibilityPermission.isTrusted,
+                  scanner.items.isEmpty,
+                  !scanner.isScanning
+            else {
+                return
+            }
+
+            scanner.refresh()
+        }
     }
 
     private func performWindowAction(_ kind: WindowActionKind) {
@@ -242,6 +291,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             .store(in: &cancellables)
 
+        sleepGuard.objectWillChange
+            .sink { [weak self] _ in
+                Task { @MainActor in
+                    self?.statusItemController?.refresh()
+                }
+            }
+            .store(in: &cancellables)
+
         settings.$hotKeyEnabled
             .dropFirst()
             .sink { [weak self] _ in
@@ -271,6 +328,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .store(in: &cancellables)
 
         settings.$selectedItemKeys
+            .dropFirst()
+            .sink { [weak self] _ in
+                self?.statusItemController?.refresh()
+            }
+            .store(in: &cancellables)
+
+        settings.$hiddenItemKeys
             .dropFirst()
             .sink { [weak self] _ in
                 self?.statusItemController?.refresh()
@@ -317,7 +381,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func configureStatusRefreshLoop() {
         statusRefreshTask?.cancel()
 
-        guard !settings.enabledMenuBarStatusItems.isEmpty else {
+        guard isSpillPanelVisible || !settings.enabledMenuBarStatusItems.isEmpty else {
             statusItemController?.refresh()
             return
         }
@@ -327,9 +391,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 guard let self else { return }
                 await refreshMenuBarStatusData()
 
-                let delay = UInt64(max(settings.refreshInterval, 5) * 1_000_000_000)
                 do {
-                    try await Task.sleep(nanoseconds: delay)
+                    try await Task.sleep(nanoseconds: Self.statusRefreshDelayNanoseconds)
                 } catch {
                     return
                 }
@@ -352,7 +415,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func refreshStatusData() async {
         if isSpillPanelVisible {
-            aiStatusStore.refresh()
+            aiStatusStore.refreshInBackground()
         }
 
         await statusStore.refresh(

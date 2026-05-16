@@ -20,13 +20,16 @@ enum SpillDisplayMode: String, CaseIterable, Identifiable {
 
     @MainActor
     func items(from scanner: AXMenuBarItemScanner, settings: SpillSettings = .shared) -> [MenuBarItemSnapshot] {
+        let visibleItems = scanner.items.filter { !settings.isItemHidden($0) }
+        let visibleNotchCandidates = scanner.notchCandidates.filter { !settings.isItemHidden($0) }
+
         switch self {
         case .notchCandidates:
-            return scanner.notchCandidates.isEmpty ? scanner.items : scanner.notchCandidates
+            return visibleNotchCandidates.isEmpty ? visibleItems : visibleNotchCandidates
         case .selectedItems:
-            return scanner.items.filter { settings.selectedItemKeys.contains($0.stableKey) }
+            return visibleItems.filter { settings.selectedItemKeys.contains($0.stableKey) }
         case .allDetected:
-            return scanner.items
+            return visibleItems
         }
     }
 }

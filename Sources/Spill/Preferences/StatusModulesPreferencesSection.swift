@@ -18,7 +18,7 @@ struct StatusModulesPreferencesSection: View {
             sectionHeader(
                 title: "Panel Status",
                 symbolName: "gauge",
-                trailing: "\(settings.enabledStatusModules.count)/\(SpillStatusModule.allCases.count)"
+                trailing: "\(settings.enabledStatusModules.count)/\(SpillStatusModule.defaultOrder.count)"
             )
 
             VStack(spacing: 8) {

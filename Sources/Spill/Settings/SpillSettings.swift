@@ -21,6 +21,10 @@ final class SpillSettings: ObservableObject {
         didSet { defaults.set(sleepGuardKeepsDisplayAwake, forKey: Keys.sleepGuardKeepsDisplayAwake) }
     }
 
+    @Published var sleepGuardDefaultDuration: SleepGuardDuration {
+        didSet { defaults.set(sleepGuardDefaultDuration.rawValue, forKey: Keys.sleepGuardDefaultDuration) }
+    }
+
     @Published var useSpillAnimation: Bool {
         didSet { defaults.set(useSpillAnimation, forKey: Keys.useSpillAnimation) }
     }
@@ -77,6 +81,10 @@ final class SpillSettings: ObservableObject {
         didSet { defaults.set(Array(selectedItemKeys).sorted(), forKey: Keys.selectedItemKeys) }
     }
 
+    @Published private(set) var hiddenItemKeys: Set<String> {
+        didSet { defaults.set(Array(hiddenItemKeys).sorted(), forKey: Keys.hiddenItemKeys) }
+    }
+
     @Published var hotKeyEnabled: Bool {
         didSet { defaults.set(hotKeyEnabled, forKey: Keys.hotKeyEnabled) }
     }
@@ -102,6 +110,9 @@ final class SpillSettings: ObservableObject {
         showCountBadge = defaults.object(forKey: Keys.showCountBadge) as? Bool ?? true
         showPowerFooter = defaults.object(forKey: Keys.showPowerFooter) as? Bool ?? true
         sleepGuardKeepsDisplayAwake = defaults.object(forKey: Keys.sleepGuardKeepsDisplayAwake) as? Bool ?? false
+        let sleepGuardDurationRawValue = defaults.object(forKey: Keys.sleepGuardDefaultDuration) as? Int
+            ?? SleepGuardDuration.fifteenMinutes.rawValue
+        sleepGuardDefaultDuration = SleepGuardDuration(rawValue: sleepGuardDurationRawValue) ?? .fifteenMinutes
         useSpillAnimation = defaults.object(forKey: Keys.useSpillAnimation) as? Bool ?? true
         autoRefreshEnabled = defaults.object(forKey: Keys.autoRefreshEnabled) as? Bool ?? true
         refreshInterval = max(defaults.object(forKey: Keys.refreshInterval) as? Double ?? 15, 5)
@@ -120,12 +131,13 @@ final class SpillSettings: ObservableObject {
             ?? MenuBarStatusDisplayStyle.labelAndPercent.rawValue
         menuBarStatusDisplayStyle = MenuBarStatusDisplayStyle(rawValue: styleRawValue) ?? .labelAndPercent
         let precisionRawValue = defaults.object(forKey: Keys.menuBarStatusPrecision) as? Int
-            ?? MenuBarStatusPrecision.whole.rawValue
-        menuBarStatusPrecision = MenuBarStatusPrecision(rawValue: precisionRawValue) ?? .whole
+            ?? MenuBarStatusPrecision.tenths.rawValue
+        menuBarStatusPrecision = MenuBarStatusPrecision(rawValue: precisionRawValue) ?? .tenths
         let thresholdRawValue = defaults.object(forKey: Keys.menuBarStatusHighlightThreshold) as? Int
             ?? MenuBarStatusHighlightThreshold.seventy.rawValue
         menuBarStatusHighlightThreshold = MenuBarStatusHighlightThreshold(rawValue: thresholdRawValue) ?? .seventy
         selectedItemKeys = Set(defaults.stringArray(forKey: Keys.selectedItemKeys) ?? [])
+        hiddenItemKeys = Set(defaults.stringArray(forKey: Keys.hiddenItemKeys) ?? [])
         hotKeyEnabled = defaults.object(forKey: Keys.hotKeyEnabled) as? Bool ?? true
         windowActionShortcutKeys = Self.normalizedWindowActionShortcutKeys(
             from: defaults.stringArray(forKey: Keys.windowActionShortcutKeys)
@@ -137,12 +149,26 @@ final class SpillSettings: ObservableObject {
         selectedItemKeys.contains(item.stableKey) ? .selected : .unselected
     }
 
+    func isItemHidden(_ item: MenuBarItemSnapshot) -> Bool {
+        hiddenItemKeys.contains(item.stableKey)
+    }
+
     func setItem(_ item: MenuBarItemSnapshot, selected: Bool) {
         if selected {
+            hiddenItemKeys.remove(item.stableKey)
             selectedItemKeys.insert(item.stableKey)
         } else {
             selectedItemKeys.remove(item.stableKey)
         }
+    }
+
+    func hideItem(_ item: MenuBarItemSnapshot) {
+        selectedItemKeys.remove(item.stableKey)
+        hiddenItemKeys.insert(item.stableKey)
+    }
+
+    func showItem(_ item: MenuBarItemSnapshot) {
+        hiddenItemKeys.remove(item.stableKey)
     }
 
     func clearSelectedItems() {
@@ -154,6 +180,10 @@ final class SpillSettings: ObservableObject {
     }
 
     func setStatusModule(_ module: SpillStatusModule, enabled: Bool) {
+        guard SpillStatusModule.defaultOrder.contains(module) else {
+            return
+        }
+
         if enabled {
             enabledStatusModules.insert(module)
         } else {
@@ -271,6 +301,7 @@ private enum Keys {
     static let showCountBadge = "showCountBadge"
     static let showPowerFooter = "showPowerFooter"
     static let sleepGuardKeepsDisplayAwake = "sleepGuardKeepsDisplayAwake"
+    static let sleepGuardDefaultDuration = "sleepGuardDefaultDuration"
     static let useSpillAnimation = "useSpillAnimation"
     static let autoRefreshEnabled = "autoRefreshEnabled"
     static let refreshInterval = "refreshInterval"
@@ -282,6 +313,7 @@ private enum Keys {
     static let menuBarStatusPrecision = "menuBarStatusPrecision"
     static let menuBarStatusHighlightThreshold = "menuBarStatusHighlightThreshold"
     static let selectedItemKeys = "selectedItemKeys"
+    static let hiddenItemKeys = "hiddenItemKeys"
     static let hotKeyEnabled = "hotKeyEnabled"
     static let windowActionShortcutKeys = "windowActionShortcutKeys"
     static let launchAtLogin = "launchAtLogin"
