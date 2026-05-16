@@ -1,0 +1,119 @@
+feature_id: window-quick-actions
+status: ready
+
+necessity:
+  decision: build
+  reason: Window quick actions are the next roadmap milestone and complete the compact control tray action surface.
+  clarification_required: false
+  questions: []
+
+tasks:
+  - id: window-quick-actions-T1
+    title: Add window frame planner
+    owner_role: builder
+    state: done
+    depends_on: []
+    write_scope:
+      - Sources/Spill/Providers/WindowActionProvider.swift
+      - Tests/SpillTests/WindowFramePlannerTests.swift
+    read_scope:
+      - Sources/Spill/Providers/SpillActionModels.swift
+    forbidden_scope:
+      - Sources/Spill/MenuBar/StatusItemController.swift
+    acceptance:
+      - Left, right, center, maximize, next display, and restore target frames are deterministic.
+      - Unit tests cover the frame planner.
+    verification:
+      commands:
+        - swift test
+      manual: []
+
+  - id: window-quick-actions-T2
+    title: Add Accessibility execution path
+    owner_role: builder
+    state: done
+    depends_on:
+      - window-quick-actions-T1
+    write_scope:
+      - Sources/Spill/Accessibility/AXConstants.swift
+      - Sources/Spill/Accessibility/AXElementReader.swift
+      - Sources/Spill/Providers/WindowActionProvider.swift
+    read_scope:
+      - Sources/Spill/Accessibility/
+    forbidden_scope:
+      - Sources/Spill/MenuBar/StatusItemController.swift
+    acceptance:
+      - Focused window frame can be read.
+      - Target frame can be written through AX position and size.
+      - Permission and unavailable states are represented.
+    verification:
+      commands:
+        - swift test
+      manual:
+        - With Accessibility enabled, click window actions on a normal app window.
+
+  - id: window-quick-actions-T3
+    title: Render compact window actions
+    owner_role: builder
+    state: done
+    depends_on:
+      - window-quick-actions-T2
+    write_scope:
+      - Sources/Spill/Panel/SpillBarView.swift
+      - Sources/Spill/Panel/SpillPanelController.swift
+      - Sources/Spill/App/AppDelegate.swift
+    read_scope:
+      - Sources/Spill/Providers/WindowActionProvider.swift
+    forbidden_scope:
+      - Sources/Spill/MenuBar/StatusItemController.swift
+    acceptance:
+      - Window actions render in the existing action row.
+      - Panel height remains within layout smoke constraints.
+      - Action feedback is shown after execution.
+    verification:
+      commands:
+        - swift test
+        - python3 .agents/scripts/workflow.py panel-layout-smoke
+      manual: []
+
+  - id: window-quick-actions-T4
+    title: Verify and document
+    owner_role: verifier
+    state: done
+    depends_on:
+      - window-quick-actions-T1
+      - window-quick-actions-T2
+      - window-quick-actions-T3
+    write_scope:
+      - README.md
+      - .agents/tasks/roadmap.yml
+      - .agents/runs/window-quick-actions/05-verification.md
+      - .agents/runs/window-quick-actions/06-closeout.md
+    read_scope:
+      - Sources/Spill/
+      - Tests/SpillTests/
+    forbidden_scope: []
+    acceptance:
+      - M6 roadmap tasks are marked done.
+      - Verification commands pass.
+      - Manual AX-window limitations are documented.
+    verification:
+      commands:
+        - swift test
+        - python3 .agents/scripts/workflow.py panel-layout-smoke
+        - python3 .agents/scripts/workflow.py runtime-smoke
+        - python3 .agents/scripts/workflow.py verify
+        - git diff --check
+      manual: []
+
+parallel_groups:
+  - id: planner-and-execution
+    tasks:
+      - window-quick-actions-T1
+      - window-quick-actions-T2
+    rule: Planner tests can be written independently from the live AX execution path.
+  - id: ui-and-verification
+    tasks:
+      - window-quick-actions-T3
+      - window-quick-actions-T4
+    rule: UI and closeout depend on the action store API.

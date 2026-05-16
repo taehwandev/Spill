@@ -1,0 +1,146 @@
+feature_id: pinned-actions-ui
+status: ready
+
+necessity:
+  decision: build
+  reason: Pinned actions are a roadmap item and make persisted menu bar selections understandable in the main panel.
+  clarification_required: false
+  questions: []
+
+tasks:
+  - id: pinned-actions-ui-T1
+    title: Preserve pin metadata in actions
+    owner_role: builder
+    state: done
+    depends_on: []
+    write_scope:
+      - Sources/Spill/Providers/SpillActionModels.swift
+      - Sources/Spill/Providers/MenuBarActionAdapter.swift
+      - Tests/SpillTests/MenuBarActionAdapterTests.swift
+    read_scope:
+      - Sources/Spill/MenuBar/MenuBarItemSnapshot.swift
+      - Sources/Spill/Settings/SpillSettings.swift
+    forbidden_scope:
+      - Sources/Spill/MenuBar/StatusItemController.swift
+    acceptance:
+      - Menu bar actions carry source bundle identifiers.
+      - Tests can recover source bundle identifiers from mapped actions.
+    verification:
+      commands:
+        - swift test
+      manual: []
+
+  - id: pinned-actions-ui-T2
+    title: Add compact pin controls
+    owner_role: builder
+    state: done
+    depends_on:
+      - pinned-actions-ui-T1
+    write_scope:
+      - Sources/Spill/Panel/SpillBarView.swift
+    read_scope:
+      - Sources/Spill/Settings/SpillSettings.swift
+      - Sources/Spill/MenuBar/AXMenuBarItemScanner.swift
+    forbidden_scope:
+      - Sources/Spill/MenuBar/StatusItemController.swift
+    acceptance:
+      - Pinned actions render before unpinned actions.
+      - Pin and unpin controls update persisted selected item keys.
+      - Disabled actions can still be pinned or unpinned.
+    verification:
+      commands:
+        - swift test
+        - python3 .agents/scripts/workflow.py panel-layout-smoke
+      manual:
+        - Open the panel and confirm pin controls are visually clear.
+
+  - id: pinned-actions-ui-T3
+    title: Show execution feedback
+    owner_role: builder
+    state: done
+    depends_on:
+      - pinned-actions-ui-T2
+    write_scope:
+      - Sources/Spill/Panel/SpillBarView.swift
+    read_scope:
+      - Sources/Spill/Providers/SpillActionModels.swift
+    forbidden_scope:
+      - Sources/Spill/Preferences/
+    acceptance:
+      - Success and failure results update the panel header subtitle.
+      - Successful actions dismiss the panel after a short delay.
+      - Disabled actions return a visible failure when execution is requested programmatically.
+    verification:
+      commands:
+        - swift test
+      manual:
+        - Click a visible action and confirm feedback is shown before dismissal.
+
+  - id: pinned-actions-ui-T4
+    title: Add app activation fallback
+    owner_role: builder
+    state: done
+    depends_on:
+      - pinned-actions-ui-T1
+      - pinned-actions-ui-T3
+    write_scope:
+      - Sources/Spill/Panel/SpillBarView.swift
+      - Sources/Spill/Providers/MenuBarActionAdapter.swift
+    read_scope:
+      - Sources/Spill/MenuBar/MenuBarItemSnapshot.swift
+    forbidden_scope:
+      - Sources/Spill/Accessibility/
+    acceptance:
+      - AXPress remains the first execution path.
+      - Stale actions can activate or open the source app when the bundle identifier is available.
+      - Failure is visible when neither path succeeds.
+    verification:
+      commands:
+        - swift test
+        - python3 .agents/scripts/workflow.py runtime-smoke
+      manual: []
+
+  - id: pinned-actions-ui-T5
+    title: Verify and close out
+    owner_role: verifier
+    state: done
+    depends_on:
+      - pinned-actions-ui-T2
+      - pinned-actions-ui-T3
+      - pinned-actions-ui-T4
+    write_scope:
+      - .agents/runs/pinned-actions-ui/05-verification.md
+      - .agents/runs/pinned-actions-ui/06-closeout.md
+      - .agents/tasks/roadmap.yml
+      - README.md
+    read_scope:
+      - Sources/Spill/
+      - Tests/SpillTests/
+    forbidden_scope:
+      - Sources/Spill/Accessibility/
+    acceptance:
+      - Roadmap M5-T1 through M5-T3 are done.
+      - Verification commands pass.
+      - Residual visual manual check is documented.
+    verification:
+      commands:
+        - swift test
+        - python3 .agents/scripts/workflow.py panel-layout-smoke
+        - python3 .agents/scripts/workflow.py runtime-smoke
+        - python3 .agents/scripts/workflow.py verify
+        - git diff --check
+      manual:
+        - Open the panel interactively and confirm real pinned actions match expectations.
+
+parallel_groups:
+  - id: mapping-and-ui
+    tasks:
+      - pinned-actions-ui-T1
+      - pinned-actions-ui-T2
+    rule: Action metadata and compact UI can be implemented together because they touch separate responsibilities.
+  - id: behavior-and-verification
+    tasks:
+      - pinned-actions-ui-T3
+      - pinned-actions-ui-T4
+      - pinned-actions-ui-T5
+    rule: Feedback, fallback, and verification depend on the mapped action metadata.
