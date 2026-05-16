@@ -45,8 +45,8 @@ final class MenuBarStatusContentView: NSView {
     }
 
     private static func chipWidth(for segment: MenuBarStatusSegment) -> CGFloat {
-        let textWidth = (segment.displayText as NSString).size(withAttributes: [.font: textFont]).width
-        return ceil(textWidth) + 17
+        let textWidth = (segment.value as NSString).size(withAttributes: [.font: textFont]).width
+        return ceil(textWidth) + 29
     }
 
     private func installChips() {
@@ -81,7 +81,7 @@ final class MenuBarStatusContentView: NSView {
 @MainActor
 private final class MenuBarMetricChipView: NSView {
     private let segment: MenuBarStatusSegment
-    private let stateDot = NSView()
+    private let iconView = NSImageView()
     private let valueLabel = NSTextField(labelWithString: "")
 
     init(segment: MenuBarStatusSegment) {
@@ -92,7 +92,7 @@ private final class MenuBarMetricChipView: NSView {
         wantsLayer = true
         layer?.cornerRadius = 4
 
-        configureStateDot()
+        configureIcon()
         configureValue()
         installSubviews()
         refreshColors()
@@ -110,15 +110,20 @@ private final class MenuBarMetricChipView: NSView {
         refreshColors()
     }
 
-    private func configureStateDot() {
-        stateDot.translatesAutoresizingMaskIntoConstraints = false
-        stateDot.wantsLayer = true
-        stateDot.layer?.cornerRadius = 2
+    private func configureIcon() {
+        iconView.translatesAutoresizingMaskIntoConstraints = false
+        iconView.imageScaling = .scaleProportionallyDown
+        let config = NSImage.SymbolConfiguration(pointSize: 10, weight: .semibold)
+        iconView.image = NSImage(
+            systemSymbolName: resolvedSymbolName,
+            accessibilityDescription: segment.title
+        )?.withSymbolConfiguration(config)
+        iconView.symbolConfiguration = config
     }
 
     private func configureValue() {
         valueLabel.translatesAutoresizingMaskIntoConstraints = false
-        valueLabel.stringValue = segment.displayText
+        valueLabel.stringValue = segment.value
         valueLabel.font = .monospacedDigitSystemFont(ofSize: 10.5, weight: .semibold)
         valueLabel.alignment = .right
         valueLabel.lineBreakMode = .byClipping
@@ -127,16 +132,16 @@ private final class MenuBarMetricChipView: NSView {
     }
 
     private func installSubviews() {
-        addSubview(stateDot)
+        addSubview(iconView)
         addSubview(valueLabel)
 
         NSLayoutConstraint.activate([
-            stateDot.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 5),
-            stateDot.centerYAnchor.constraint(equalTo: centerYAnchor),
-            stateDot.widthAnchor.constraint(equalToConstant: 4),
-            stateDot.heightAnchor.constraint(equalToConstant: 4),
+            iconView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 5),
+            iconView.centerYAnchor.constraint(equalTo: centerYAnchor),
+            iconView.widthAnchor.constraint(equalToConstant: 12),
+            iconView.heightAnchor.constraint(equalToConstant: 12),
 
-            valueLabel.leadingAnchor.constraint(equalTo: stateDot.trailingAnchor, constant: 4),
+            valueLabel.leadingAnchor.constraint(equalTo: iconView.trailingAnchor, constant: 4),
             valueLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -5),
             valueLabel.centerYAnchor.constraint(equalTo: centerYAnchor)
         ])
@@ -145,8 +150,8 @@ private final class MenuBarMetricChipView: NSView {
     private func refreshColors() {
         let color = statusColor
         valueLabel.textColor = segment.state == .unavailable ? .secondaryLabelColor : .labelColor
+        iconView.contentTintColor = color.withAlphaComponent(segment.state == .unavailable ? 0.55 : 0.95)
         layer?.backgroundColor = color.withAlphaComponent(backgroundAlpha).cgColor
-        stateDot.layer?.backgroundColor = color.withAlphaComponent(dotAlpha).cgColor
     }
 
     private var statusColor: NSColor {
@@ -166,7 +171,15 @@ private final class MenuBarMetricChipView: NSView {
         segment.state == .unavailable ? 0.04 : 0.08
     }
 
-    private var dotAlpha: CGFloat {
-        segment.state == .unavailable ? 0.35 : 0.95
+    private var resolvedSymbolName: String {
+        switch segment.kind {
+        case .cpu:
+            return "cpu"
+        case .memory:
+            return "memorychip"
+        case .sleepGuard:
+            return "moon.fill"
+        }
     }
+
 }

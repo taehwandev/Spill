@@ -5,6 +5,7 @@ final class StatusItemController: NSObject {
     private let defaultLength: CGFloat = 26
     private let settings: SpillSettings
     private let statusStore: SystemStatusStore
+    private let sleepGuard: SleepGuardController
     private let hiddenItemCountProvider: () -> Int
     private let toggleAction: () -> Void
     private let refreshAction: () -> Void
@@ -17,6 +18,7 @@ final class StatusItemController: NSObject {
     init(
         settings: SpillSettings,
         statusStore: SystemStatusStore,
+        sleepGuard: SleepGuardController,
         hiddenItemCountProvider: @escaping () -> Int,
         toggleAction: @escaping () -> Void,
         refreshAction: @escaping () -> Void,
@@ -25,6 +27,7 @@ final class StatusItemController: NSObject {
     ) {
         self.settings = settings
         self.statusStore = statusStore
+        self.sleepGuard = sleepGuard
         self.hiddenItemCountProvider = hiddenItemCountProvider
         self.toggleAction = toggleAction
         self.refreshAction = refreshAction
@@ -59,12 +62,15 @@ final class StatusItemController: NSObject {
             precision: settings.menuBarStatusPrecision,
             highlightThreshold: settings.menuBarStatusHighlightThreshold
         )
+        let sleepGuardSegment = sleepGuardMenuBarSegment
+        let segments = [sleepGuardSegment].compactMap { $0 } + summary.segments
+        let statusTooltip = statusTooltip(summary: summary, sleepGuardSegment: sleepGuardSegment)
         triggerItem.isVisible = true
-        triggerItem.length = summary.segments.isEmpty ? defaultLength : MenuBarStatusContentView.preferredWidth(for: summary.segments)
-        configureAppearance(for: button, summary: summary)
+        triggerItem.length = segments.isEmpty ? defaultLength : MenuBarStatusContentView.preferredWidth(for: segments)
+        configureAppearance(for: button, segments: segments, statusTooltip: statusTooltip)
         button.state = self.isSpillBarVisible ? .on : .off
         button.toolTip = tooltip(
-            summary: summary,
+            statusTooltip: statusTooltip,
             hiddenCount: hiddenCount,
             isSpillBarVisible: self.isSpillBarVisible
         )
@@ -103,16 +109,20 @@ final class StatusItemController: NSObject {
         button.sendAction(on: [.leftMouseUp, .rightMouseUp])
     }
 
-    private func configureAppearance(for button: NSStatusBarButton, summary: MenuBarStatusSummary) {
+    private func configureAppearance(
+        for button: NSStatusBarButton,
+        segments: [MenuBarStatusSegment],
+        statusTooltip: String
+    ) {
         button.image = nil
         button.imagePosition = .noImage
         button.title = ""
         button.attributedTitle = NSAttributedString(string: "")
         button.isBordered = false
 
-        if !summary.segments.isEmpty {
-            installStatusContentView(on: button, segments: summary.segments)
-            button.setAccessibilityLabel(summary.tooltip)
+        if !segments.isEmpty {
+            installStatusContentView(on: button, segments: segments)
+            button.setAccessibilityLabel(statusTooltip)
             return
         }
 
@@ -174,14 +184,14 @@ final class StatusItemController: NSObject {
     }
 
     private func tooltip(
-        summary: MenuBarStatusSummary,
+        statusTooltip: String,
         hiddenCount: Int,
         isSpillBarVisible: Bool
     ) -> String {
         var parts: [String] = []
 
-        if !summary.title.isEmpty {
-            parts.append(summary.tooltip)
+        if !statusTooltip.isEmpty {
+            parts.append(statusTooltip)
         }
 
         parts.append(isSpillBarVisible ? "Hide Spill Bar" : "Show Spill Bar")
@@ -191,6 +201,40 @@ final class StatusItemController: NSObject {
         }
 
         return parts.joined(separator: "\n")
+    }
+
+    private var sleepGuardMenuBarSegment: MenuBarStatusSegment? {
+        guard sleepGuard.isActive else {
+            return nil
+        }
+
+        return MenuBarStatusSegment(
+            kind: .sleepGuard,
+            title: "Sleep Guard",
+            shortTitle: "Sleep",
+            value: sleepGuard.remainingLabel,
+            displayText: sleepGuard.remainingLabel,
+            usageRatio: 0,
+            state: .active,
+            symbolName: "moon.fill"
+        )
+    }
+
+    private func statusTooltip(
+        summary: MenuBarStatusSummary,
+        sleepGuardSegment: MenuBarStatusSegment?
+    ) -> String {
+        var parts: [String] = []
+
+        if let sleepGuardSegment {
+            parts.append("Sleep Guard \(sleepGuardSegment.value) remaining")
+        }
+
+        if !summary.title.isEmpty {
+            parts.append(summary.tooltip)
+        }
+
+        return parts.joined(separator: " | ")
     }
 
     @objc private func statusButtonClicked(_ sender: NSStatusBarButton) {

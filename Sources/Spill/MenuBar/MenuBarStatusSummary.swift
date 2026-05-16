@@ -4,6 +4,7 @@ struct MenuBarStatusSegment: Equatable {
     enum Kind: Equatable {
         case cpu
         case memory
+        case sleepGuard
     }
 
     let kind: Kind
@@ -32,7 +33,7 @@ struct MenuBarStatusSummary: Equatable {
         cpu: SystemCPUStatus,
         memory: SystemMemoryStatus,
         displayStyle: MenuBarStatusDisplayStyle = .labelAndPercent,
-        precision: MenuBarStatusPrecision = .whole,
+        precision: MenuBarStatusPrecision = .tenths,
         highlightThreshold: MenuBarStatusHighlightThreshold = .seventy
     ) -> MenuBarStatusSummary {
         let orderedItems = SpillMenuBarStatusItem.defaultOrder.filter {
