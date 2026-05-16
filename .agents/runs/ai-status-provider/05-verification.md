@@ -1,33 +1,13 @@
-# Verification: <Feature Name>
+# Verification: AI Status Provider
 
-## Build Checks
+## Automated
 
-- [ ] `swift build`
-- [ ] `./scripts/build-app.sh`
+- Passed: `swift test`
+- Passed: `python3 .agents/scripts/workflow.py panel-layout-smoke`
+- Passed: `python3 .agents/scripts/workflow.py runtime-smoke`
+- Passed: `python3 .agents/scripts/workflow.py verify`
+- Passed: `git diff --check`
 
-## Manual Checks
+## Manual
 
-- [ ] App launches.
-- [ ] Menu bar trigger is visible.
-- [ ] Panel opens.
-- [ ] Panel closes.
-- [ ] Permission-required states are clear.
-- [ ] Failure states are visible.
-
-## Feature Checks
-
-- [ ] 
-
-## Regression Checks
-
-- [ ] No giant status item spacer.
-- [ ] Panel remains compact.
-- [ ] No unrelated preferences regressions.
-
-## Notes
-
-## Result
-
-Status: `pass | fail | partial`
-
-Reason:
+- Pending: open the panel interactively and confirm the AI strip is visually balanced with real local tool state.

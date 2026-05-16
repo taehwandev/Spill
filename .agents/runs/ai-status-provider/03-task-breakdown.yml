@@ -1,29 +1,73 @@
 feature_id: ai-status-provider
-status: draft
+status: ready
+
+necessity:
+  decision: build
+  reason: "AI status is the next planned roadmap milestone and can be implemented with local, non-secret detection."
+  clarification_required: false
+  questions: []
 
 tasks:
   - id: ai-status-provider-T1
-    title: <task title>
+    title: Add local AI provider and compact panel strip
     owner_role: builder
-    state: todo
+    state: done
     depends_on: []
     write_scope:
-      - Sources/Spill/<File.swift>
+      - Sources/Spill/Providers/LocalAIStatusProvider.swift
+      - Sources/Spill/Providers/AIStatusStore.swift
+      - Sources/Spill/Panel/SpillBarView.swift
+      - Sources/Spill/Panel/SpillPanelController.swift
+      - Tests/SpillTests/LocalAIStatusProviderTests.swift
+      - Tests/SpillTests/AIStatusStoreTests.swift
     read_scope:
-      - .agents/specs/prd.md
-      - .agents/specs/ard.md
+      - Sources/Spill/Providers/SpillStatusModels.swift
+      - Sources/Spill/Panel/SpillPanelMetrics.swift
     forbidden_scope:
-      - Sources/Spill/<UnrelatedFile.swift>
+      - Sources/Spill/MenuBar
+      - Sources/Spill/Accessibility
     acceptance:
-      - swift build passes.
+      - Codex, Ollama, and OpenAI statuses render in the AI strip.
+      - Missing tools render as quiet unavailable states.
+      - OpenAI secret values are not exposed.
+      - swift test passes.
     verification:
       commands:
-        - swift build
+        - swift test
       manual:
-        - Launch app and verify behavior.
+        - Open the panel and confirm the AI strip fits without overlap.
+
+  - id: ai-status-provider-T2
+    title: Verify and close out AI status provider
+    owner_role: verifier
+    state: done
+    depends_on:
+      - ai-status-provider-T1
+    write_scope:
+      - .agents/runs/ai-status-provider
+      - .agents/tasks/roadmap.yml
+      - README.md
+    read_scope:
+      - .agents/scripts/workflow.py
+      - scripts/verify-panel-layout-smoke.sh
+      - scripts/verify-runtime-smoke.sh
+    forbidden_scope:
+      - Sources/Spill/MenuBar
+    acceptance:
+      - Roadmap marks AI strip states done.
+      - Verification results are documented.
+      - README current status mentions local AI status.
+    verification:
+      commands:
+        - python3 .agents/scripts/workflow.py verify
+        - python3 .agents/scripts/workflow.py panel-layout-smoke
+        - python3 .agents/scripts/workflow.py runtime-smoke
+      manual:
+        - Confirm no network calls or secret display were added.
 
 parallel_groups:
   - id: group-1
     tasks:
       - ai-status-provider-T1
-    rule: Tasks in a group must have disjoint write_scope entries.
+      - ai-status-provider-T2
+    rule: Tasks are serialized because closeout depends on verification.

@@ -1,80 +1,38 @@
-# Agent Briefs: <Feature Name>
+# Agent Briefs: AI Status Provider
 
-## Coordinator Notes
+## Builder Brief
 
-- You are not alone in the codebase.
-- Do not revert changes outside your assigned scope.
-- Keep the app buildable.
-- Report changed files.
+Goal: Add a compact local AI status strip for Codex, Ollama, and OpenAI configuration.
 
-## Agent A: Product
+Files:
 
-Goal:
-
-Inputs:
-
-- `.agents/specs/prd.md`
-- `.agents/runs/<feature>/00-intake.md`
-
-Output:
-
-- `.agents/runs/<feature>/01-prd.md`
-
-## Agent B: Architecture
-
-Goal:
-
-Inputs:
-
-- `.agents/runs/<feature>/01-prd.md`
-- `.agents/specs/ard.md`
-
-Output:
-
-- `.agents/runs/<feature>/02-ard.md`
-- `.agents/runs/<feature>/03-task-breakdown.yml`
-
-## Agent C1: Builder
-
-Goal:
-
-Write scope:
-
-- 
-
-Do not edit:
-
-- 
+- `Sources/Spill/Providers/LocalAIStatusProvider.swift`
+- `Sources/Spill/Providers/AIStatusStore.swift`
+- `Sources/Spill/Panel/SpillBarView.swift`
+- `Sources/Spill/Panel/SpillPanelController.swift`
+- `Tests/SpillTests/LocalAIStatusProviderTests.swift`
+- `Tests/SpillTests/AIStatusStoreTests.swift`
 
 Acceptance:
 
-- 
+- AI statuses are local-only and deterministic in tests.
+- Missing tools are quiet grey states.
+- OpenAI config status does not expose secret values.
+- Panel remains compact.
 
-Final report:
+## Verifier Brief
 
-- changed files
-- behavior implemented
-- commands run
-- blockers
+Goal: Run gates, update roadmap, and document residual risks.
 
-## Agent C2: Verifier
+Files:
 
-Goal:
+- `.agents/runs/ai-status-provider/05-verification.md`
+- `.agents/runs/ai-status-provider/06-closeout.md`
+- `.agents/tasks/roadmap.yml`
+- `README.md`
 
-Review scope:
+Acceptance:
 
-- 
-
-Checks:
-
-- PRD alignment
-- ARD alignment
-- build
-- manual behavior
-- permission states
-
-Final report:
-
-- findings first
-- verification result
-- residual risks
+- `swift test` passes.
+- Workflow gates pass.
+- Panel layout smoke passes.
