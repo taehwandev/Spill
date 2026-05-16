@@ -6,6 +6,7 @@
 - Download site install command and manual quarantine reset guidance.
 - README install guidance for the macOS Trash prompt case.
 - Future GitHub Release notes include the installer command.
+- Current `v2026.20.1` release notes were updated with the same command.
 
 ## Changed Files
 
@@ -24,7 +25,11 @@
 - Workflow YAML parse for release and Pages workflows.
 - `git diff --check`
 - `python3 .agents/scripts/workflow.py verify`
-- Deployment checks pending until push.
+- Pages deploy succeeded for `2524099`.
+- Site redesign deploy succeeded for `8e3d426`.
+- `curl -I https://thdev.app/Spill/`
+- `curl -I https://thdev.app/Spill/install.sh`
+- Deployed HTML contains the new hero copy and hosted installer command.
 
 ## Residual Risks
 
