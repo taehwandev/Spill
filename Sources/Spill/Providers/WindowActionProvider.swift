@@ -1,6 +1,5 @@
 import AppKit
 import ApplicationServices
-import Carbon.HIToolbox
 import CoreGraphics
 import Foundation
 
@@ -298,57 +297,6 @@ extension WindowActionKind {
             return "Move to next display"
         case .restore:
             return "Restore previous frame"
-        }
-    }
-
-    var shortcutLabel: String {
-        switch self {
-        case .leftHalf:
-            return "⌃⌥←"
-        case .rightHalf:
-            return "⌃⌥→"
-        case .center:
-            return "⌃⌥C"
-        case .maximize:
-            return "⌃⌥↩"
-        case .nextDisplay:
-            return "⌃⌥D"
-        case .restore:
-            return "⌃⌥R"
-        }
-    }
-
-    var hotKeyID: UInt32 {
-        switch self {
-        case .leftHalf:
-            return 10
-        case .rightHalf:
-            return 11
-        case .center:
-            return 12
-        case .maximize:
-            return 13
-        case .nextDisplay:
-            return 14
-        case .restore:
-            return 15
-        }
-    }
-
-    var hotKeyCode: UInt32 {
-        switch self {
-        case .leftHalf:
-            return UInt32(kVK_LeftArrow)
-        case .rightHalf:
-            return UInt32(kVK_RightArrow)
-        case .center:
-            return UInt32(kVK_ANSI_C)
-        case .maximize:
-            return UInt32(kVK_Return)
-        case .nextDisplay:
-            return UInt32(kVK_ANSI_D)
-        case .restore:
-            return UInt32(kVK_ANSI_R)
         }
     }
 

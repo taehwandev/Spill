@@ -16,9 +16,7 @@ struct GeneralPreferencesSection: View {
                 .font(.footnote.monospaced())
                 .foregroundStyle(.secondary)
 
-            Text("Window shortcuts: Control + Option + Left/Right/C/Return/D/R")
-                .font(.footnote.monospaced())
-                .foregroundStyle(.secondary)
+            windowShortcutsSection
 
             Picker("Spill Bar Items", selection: $settings.displayMode) {
                 ForEach(SpillDisplayMode.allCases) { mode in
@@ -53,6 +51,43 @@ struct GeneralPreferencesSection: View {
                     .font(.footnote)
                     .foregroundStyle(.red)
             }
+        }
+    }
+
+    private var windowShortcutsSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Label("Window shortcuts", systemImage: "macwindow")
+                Spacer()
+                Text("Control + Option")
+                    .font(.footnote.monospaced())
+                    .foregroundStyle(.secondary)
+            }
+
+            ForEach(WindowActionKind.panelOrder, id: \.self) { kind in
+                HStack(spacing: 10) {
+                    Label(kind.title, systemImage: kind.symbolName)
+                        .font(.callout)
+
+                    Spacer()
+
+                    Picker("", selection: shortcutBinding(for: kind)) {
+                        ForEach(WindowActionShortcutKey.allCases) { key in
+                            Text(key.pickerTitle).tag(key)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 112)
+                }
+            }
+        }
+    }
+
+    private func shortcutBinding(for kind: WindowActionKind) -> Binding<WindowActionShortcutKey> {
+        Binding {
+            settings.shortcutKey(for: kind)
+        } set: { key in
+            settings.setWindowActionShortcut(key, for: kind)
         }
     }
 

@@ -81,6 +81,15 @@ final class SpillSettings: ObservableObject {
         didSet { defaults.set(hotKeyEnabled, forKey: Keys.hotKeyEnabled) }
     }
 
+    @Published private(set) var windowActionShortcutKeys: [WindowActionKind: WindowActionShortcutKey] {
+        didSet {
+            defaults.set(
+                Self.persistedWindowActionShortcutKeys(windowActionShortcutKeys),
+                forKey: Keys.windowActionShortcutKeys
+            )
+        }
+    }
+
     @Published var launchAtLogin: Bool {
         didSet { defaults.set(launchAtLogin, forKey: Keys.launchAtLogin) }
     }
@@ -118,6 +127,9 @@ final class SpillSettings: ObservableObject {
         menuBarStatusHighlightThreshold = MenuBarStatusHighlightThreshold(rawValue: thresholdRawValue) ?? .seventy
         selectedItemKeys = Set(defaults.stringArray(forKey: Keys.selectedItemKeys) ?? [])
         hotKeyEnabled = defaults.object(forKey: Keys.hotKeyEnabled) as? Bool ?? true
+        windowActionShortcutKeys = Self.normalizedWindowActionShortcutKeys(
+            from: defaults.stringArray(forKey: Keys.windowActionShortcutKeys)
+        )
         launchAtLogin = LoginItemController.isEnabled
     }
 
@@ -188,6 +200,70 @@ final class SpillSettings: ObservableObject {
 
         statusModuleOrder.swapAt(index, targetIndex)
     }
+
+    func shortcutKey(for kind: WindowActionKind) -> WindowActionShortcutKey {
+        windowActionShortcutKeys[kind] ?? kind.defaultShortcutKey
+    }
+
+    func setWindowActionShortcut(_ key: WindowActionShortcutKey, for kind: WindowActionKind) {
+        var updated = windowActionShortcutKeys
+
+        if key != .off {
+            for otherKind in WindowActionKind.panelOrder where otherKind != kind && updated[otherKind] == key {
+                updated[otherKind] = .off
+            }
+        }
+
+        updated[kind] = key
+        windowActionShortcutKeys = Self.normalizedWindowActionShortcutKeys(
+            from: Self.persistedWindowActionShortcutKeys(updated)
+        )
+    }
+
+    private static func normalizedWindowActionShortcutKeys(
+        from rawValues: [String]?
+    ) -> [WindowActionKind: WindowActionShortcutKey] {
+        var parsed: [WindowActionKind: WindowActionShortcutKey] = [:]
+
+        rawValues?.forEach { rawValue in
+            let parts = rawValue.split(separator: "=", maxSplits: 1).map(String.init)
+            guard parts.count == 2,
+                  let kind = WindowActionKind(rawValue: parts[0]),
+                  let key = WindowActionShortcutKey(rawValue: parts[1])
+            else {
+                return
+            }
+
+            parsed[kind] = key
+        }
+
+        var normalized: [WindowActionKind: WindowActionShortcutKey] = [:]
+        var usedKeys = Set<WindowActionShortcutKey>()
+
+        for kind in WindowActionKind.panelOrder {
+            let key = parsed[kind] ?? kind.defaultShortcutKey
+            guard key != .off else {
+                normalized[kind] = .off
+                continue
+            }
+
+            if usedKeys.insert(key).inserted {
+                normalized[kind] = key
+            } else {
+                normalized[kind] = .off
+            }
+        }
+
+        return normalized
+    }
+
+    private static func persistedWindowActionShortcutKeys(
+        _ shortcutKeys: [WindowActionKind: WindowActionShortcutKey]
+    ) -> [String] {
+        WindowActionKind.panelOrder.map { kind in
+            "\(kind.rawValue)=\((shortcutKeys[kind] ?? kind.defaultShortcutKey).rawValue)"
+        }
+    }
 }
 
 private enum Keys {
@@ -207,5 +283,6 @@ private enum Keys {
     static let menuBarStatusHighlightThreshold = "menuBarStatusHighlightThreshold"
     static let selectedItemKeys = "selectedItemKeys"
     static let hotKeyEnabled = "hotKeyEnabled"
+    static let windowActionShortcutKeys = "windowActionShortcutKeys"
     static let launchAtLogin = "launchAtLogin"
 }

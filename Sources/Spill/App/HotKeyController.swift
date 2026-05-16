@@ -12,7 +12,7 @@ struct HotKeyRegistration {
 
 @MainActor
 final class HotKeyController {
-    private let registrations: [HotKeyRegistration]
+    private var registrations: [HotKeyRegistration]
     private var hotKeyRefs: [UInt32: EventHotKeyRef] = [:]
     private var eventHandlerRef: EventHandlerRef?
 
@@ -33,6 +33,16 @@ final class HotKeyController {
 
     var isRegistered: Bool {
         !hotKeyRefs.isEmpty
+    }
+
+    func updateRegistrations(_ registrations: [HotKeyRegistration]) {
+        let shouldRegister = isRegistered
+        unregister()
+        self.registrations = registrations
+
+        if shouldRegister {
+            register()
+        }
     }
 
     func register() {
@@ -135,23 +145,32 @@ private let hotKeyEventHandler: EventHandlerUPP = { _, event, userData in
 
 extension HotKeyRegistration {
     static func spillDefaults(
-        toggleAction: @escaping @MainActor () -> Void,
-        windowAction: @escaping @MainActor (WindowActionKind) -> Void
+        windowActionShortcutKeys: [WindowActionKind: WindowActionShortcutKey],
+        toggleAction: @escaping @MainActor @Sendable () -> Void,
+        windowAction: @escaping @MainActor @Sendable (WindowActionKind) -> Void
     ) -> [HotKeyRegistration] {
-        [
+        let panelRegistration = [
             HotKeyRegistration(
                 id: 1,
                 keyCode: UInt32(kVK_Space),
                 modifiers: UInt32(controlKey | optionKey),
                 action: toggleAction
             )
-        ] + WindowActionKind.panelOrder.map { kind in
-            HotKeyRegistration(
+        ]
+        let windowRegistrations = WindowActionKind.panelOrder.compactMap { kind -> HotKeyRegistration? in
+            let shortcutKey = windowActionShortcutKeys[kind] ?? kind.defaultShortcutKey
+            guard let keyCode = shortcutKey.keyCode else {
+                return nil
+            }
+
+            return HotKeyRegistration(
                 id: kind.hotKeyID,
-                keyCode: kind.hotKeyCode,
+                keyCode: keyCode,
                 modifiers: UInt32(controlKey | optionKey),
                 action: { windowAction(kind) }
             )
         }
+
+        return panelRegistration + windowRegistrations
     }
 }

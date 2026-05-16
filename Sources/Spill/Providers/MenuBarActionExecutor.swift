@@ -9,17 +9,18 @@ struct MenuBarActionExecutor {
             return .failed(message: action.state.disabledReason ?? "Action disabled")
         }
 
-        if let snapshotID = MenuBarActionAdapter.sourceSnapshotID(for: action),
-           scanner.pressItem(withID: snapshotID)
-        {
-            return .success
-        }
+        switch action.kind {
+        case .menuBarItem:
+            guard let snapshotID = MenuBarActionAdapter.sourceSnapshotID(for: action) else {
+                return .failed(message: "Menu unavailable")
+            }
 
-        if activateApp(bundleIdentifier: MenuBarActionAdapter.sourceBundleIdentifier(for: action)) {
-            return .success
+            return scanner.pressItem(withID: snapshotID) ? .success : .failed(message: "Menu unavailable")
+        case let .app(bundleIdentifier):
+            return activateApp(bundleIdentifier: bundleIdentifier) ? .success : .failed(message: "Action unavailable")
+        case .window, .command:
+            return .unsupported
         }
-
-        return .failed(message: "Action unavailable")
     }
 
     private func activateApp(bundleIdentifier: String?) -> Bool {

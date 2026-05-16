@@ -13,6 +13,12 @@ final class SpillSettingsTests: XCTestCase {
         XCTAssertEqual(settings.menuBarStatusDisplayStyle, .labelAndPercent)
         XCTAssertEqual(settings.menuBarStatusPrecision, .whole)
         XCTAssertEqual(settings.menuBarStatusHighlightThreshold, .seventy)
+        XCTAssertEqual(settings.shortcutKey(for: .leftHalf), .leftArrow)
+        XCTAssertEqual(settings.shortcutKey(for: .rightHalf), .rightArrow)
+        XCTAssertEqual(settings.shortcutKey(for: .center), .c)
+        XCTAssertEqual(settings.shortcutKey(for: .maximize), .returnKey)
+        XCTAssertEqual(settings.shortcutKey(for: .nextDisplay), .d)
+        XCTAssertEqual(settings.shortcutKey(for: .restore), .r)
     }
 
     func testPowerFooterDefaultsToVisibleAndSleepGuardDisplayAwakeDefaultsOff() {
@@ -111,6 +117,55 @@ final class SpillSettingsTests: XCTestCase {
         XCTAssertEqual(settings.menuBarStatusDisplayStyle, .labelAndPercent)
         XCTAssertEqual(settings.menuBarStatusPrecision, .whole)
         XCTAssertEqual(settings.menuBarStatusHighlightThreshold, .seventy)
+    }
+
+    func testWindowActionShortcutsPersistAndResolveConflicts() {
+        let defaults = makeDefaults()
+        let settings = SpillSettings(defaults: defaults)
+
+        settings.setWindowActionShortcut(.one, for: .leftHalf)
+        settings.setWindowActionShortcut(.one, for: .rightHalf)
+        settings.setWindowActionShortcut(.off, for: .restore)
+
+        XCTAssertEqual(settings.shortcutKey(for: .leftHalf), .off)
+        XCTAssertEqual(settings.shortcutKey(for: .rightHalf), .one)
+        XCTAssertEqual(settings.shortcutKey(for: .restore), .off)
+        XCTAssertEqual(
+            defaults.stringArray(forKey: "windowActionShortcutKeys"),
+            [
+                "leftHalf=off",
+                "rightHalf=one",
+                "center=c",
+                "maximize=returnKey",
+                "nextDisplay=d",
+                "restore=off"
+            ]
+        )
+
+        let reloadedSettings = SpillSettings(defaults: defaults)
+        XCTAssertEqual(reloadedSettings.shortcutKey(for: .leftHalf), .off)
+        XCTAssertEqual(reloadedSettings.shortcutKey(for: .rightHalf), .one)
+        XCTAssertEqual(reloadedSettings.shortcutKey(for: .restore), .off)
+    }
+
+    func testWindowActionShortcutsNormalizeUnknownAndDuplicateValues() {
+        let defaults = makeDefaults()
+        defaults.set(
+            [
+                "leftHalf=two",
+                "rightHalf=two",
+                "center=bad",
+                "unknown=three"
+            ],
+            forKey: "windowActionShortcutKeys"
+        )
+
+        let settings = SpillSettings(defaults: defaults)
+
+        XCTAssertEqual(settings.shortcutKey(for: .leftHalf), .two)
+        XCTAssertEqual(settings.shortcutKey(for: .rightHalf), .off)
+        XCTAssertEqual(settings.shortcutKey(for: .center), .c)
+        XCTAssertEqual(settings.shortcutKey(for: .maximize), .returnKey)
     }
 
     func testStatusModuleOrderPersistsAfterMove() {

@@ -11,14 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let windowActionStore = WindowActionStore()
     private lazy var scanCoordinator = MenuBarScanCoordinator(scanner: scanner, settings: settings)
     private lazy var hotKeyController = HotKeyController(
-        registrations: HotKeyRegistration.spillDefaults(
-            toggleAction: { [weak self] in
-                self?.toggleSpillBar()
-            },
-            windowAction: { [weak self] kind in
-                self?.performWindowAction(kind)
-            }
-        )
+        registrations: makeHotKeyRegistrations()
     )
     private lazy var spillPanelController = SpillPanelController(
         settings: settings,
@@ -212,11 +205,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func configureHotKey() {
+        hotKeyController.updateRegistrations(makeHotKeyRegistrations())
+
         if settings.hotKeyEnabled {
             hotKeyController.register()
         } else {
             hotKeyController.unregister()
         }
+    }
+
+    private func makeHotKeyRegistrations() -> [HotKeyRegistration] {
+        HotKeyRegistration.spillDefaults(
+            windowActionShortcutKeys: settings.windowActionShortcutKeys,
+            toggleAction: { [weak self] in
+                self?.toggleSpillBar()
+            },
+            windowAction: { [weak self] kind in
+                self?.performWindowAction(kind)
+            }
+        )
     }
 
     private func observeStateChanges() {
@@ -236,6 +243,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .store(in: &cancellables)
 
         settings.$hotKeyEnabled
+            .dropFirst()
+            .sink { [weak self] _ in
+                self?.configureHotKey()
+            }
+            .store(in: &cancellables)
+
+        settings.$windowActionShortcutKeys
             .dropFirst()
             .sink { [weak self] _ in
                 self?.configureHotKey()

@@ -13,6 +13,7 @@ struct SpillDisplayedActionItem: Identifiable {
 
 struct WindowActionButton: View {
     let action: SpillAction
+    let shortcutKey: WindowActionShortcutKey
     let perform: () -> Void
 
     @State private var isHovered = false
@@ -71,11 +72,11 @@ struct WindowActionButton: View {
     }
 
     private var shortcutText: String {
-        guard case let .window(kind) = action.kind else {
+        guard case .window = action.kind else {
             return ""
         }
 
-        return kind.shortcutLabel
+        return shortcutKey.shortcutLabel
     }
 
     private var foregroundColor: Color {

@@ -397,7 +397,7 @@ struct SpillBarView: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 6) {
                 ForEach(windowActionStore.actions) { action in
-                    WindowActionButton(action: action) {
+                    WindowActionButton(action: action, shortcutKey: shortcutKey(for: action)) {
                         performWindowAction(action)
                     }
                     .help(windowHelpText(for: action))
@@ -433,6 +433,14 @@ struct SpillBarView: View {
             action: MenuBarActionAdapter.action(from: item),
             isPinned: settings.selectedItemKeys.contains(item.stableKey)
         )
+    }
+
+    private func shortcutKey(for action: SpillAction) -> WindowActionShortcutKey {
+        guard case let .window(kind) = action.kind else {
+            return .off
+        }
+
+        return settings.shortcutKey(for: kind)
     }
 
     private func togglePinned(_ item: MenuBarItemSnapshot) {
