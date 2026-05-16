@@ -1,4 +1,3 @@
-import AppKit
 import SwiftUI
 
 struct AccessibilityPreferencesSection: View {
@@ -67,12 +66,6 @@ struct AccessibilityPreferencesSection: View {
                 Label("Permission Diagnostics", systemImage: "stethoscope")
                     .foregroundStyle(.secondary)
             }
-        }
-        .onAppear {
-            refreshPermissionState()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-            refreshPermissionState()
         }
     }
 

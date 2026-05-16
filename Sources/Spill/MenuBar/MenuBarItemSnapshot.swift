@@ -28,12 +28,7 @@ struct MenuBarItemSnapshot: Identifiable, Hashable, Sendable {
     }
 
     var shortLabel: String {
-        let source = displayTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let first = source.first else {
-            return "?"
-        }
-
-        return String(first).uppercased()
+        displayTitle.trimmingCharacters(in: .whitespacesAndNewlines).first.map { String($0).uppercased() } ?? "?"
     }
 
     func withImageData(_ imageData: Data?) -> MenuBarItemSnapshot {
