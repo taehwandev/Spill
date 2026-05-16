@@ -57,7 +57,15 @@ struct DetectedItemsListView: View {
         max(0, settings.selectedItemKeys.count - activeSelectedCount)
     }
 
+    private var activeHiddenCount: Int {
+        items.filter { settings.hiddenItemKeys.contains($0.stableKey) }.count
+    }
+
     private var selectionSummary: String {
+        if activeHiddenCount > 0 {
+            return "\(activeSelectedCount) selected, \(activeHiddenCount) hidden"
+        }
+
         if staleSelectedCount > 0 {
             return "\(activeSelectedCount) active, \(staleSelectedCount) saved"
         }
@@ -88,8 +96,11 @@ private struct DetectedItemRow: View {
             Spacer()
 
             Button {
-                let selected = settings.selectionState(for: item) == .selected
-                settings.setItem(item, selected: !selected)
+                if isSelected {
+                    settings.hideItem(item)
+                } else {
+                    settings.setItem(item, selected: true)
+                }
             } label: {
                 Image(systemName: selectionIconName)
                     .font(.system(size: 14, weight: .semibold))
@@ -133,15 +144,19 @@ private struct DetectedItemRow: View {
         settings.selectionState(for: item) == .selected
     }
 
+    private var isHidden: Bool {
+        settings.isItemHidden(item)
+    }
+
     private var selectionIconName: String {
-        isSelected ? "checkmark.circle.fill" : "plus.circle"
+        isSelected ? "minus.circle.fill" : "plus.circle"
     }
 
     private var selectionColor: Color {
-        isSelected ? .accentColor : .secondary
+        isSelected ? .secondary : (isHidden ? .accentColor : .secondary)
     }
 
     private var selectionHelpText: String {
-        isSelected ? "Remove from Spill Bar" : "Add to Spill Bar"
+        isSelected ? "Hide from Spill Bar" : "Add to Spill Bar"
     }
 }

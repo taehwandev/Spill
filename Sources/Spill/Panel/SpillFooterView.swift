@@ -4,19 +4,29 @@ struct SpillFooterView: View {
     let isAccessibilityTrusted: Bool
     let isScanning: Bool
     @ObservedObject var sleepGuard: SleepGuardController
+    let sleepGuardDefaultDuration: SleepGuardDuration
     let keepsDisplayAwake: Bool
     let showsPower: Bool
     let powerStatus: SystemPowerStatus
     let showsCountBadge: Bool
     let itemCount: Int
+    let quitAction: () -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
-            footerItem(symbolName: isAccessibilityTrusted ? "checkmark.shield.fill" : "exclamationmark.shield.fill")
-                .foregroundStyle(isAccessibilityTrusted ? .green : .orange)
+        HStack(spacing: 8) {
+            footerBadge(
+                symbolName: isAccessibilityTrusted ? "checkmark.shield.fill" : "exclamationmark.shield.fill",
+                title: "AX",
+                value: isAccessibilityTrusted ? "OK" : "Need",
+                tint: isAccessibilityTrusted ? .green : .orange
+            )
 
-            footerItem(symbolName: isScanning ? "arrow.triangle.2.circlepath" : "bolt.horizontal.fill")
-                .foregroundStyle(isScanning ? Color.accentColor : Color.secondary)
+            footerBadge(
+                symbolName: isScanning ? "arrow.triangle.2.circlepath" : "bolt.horizontal.fill",
+                title: "Scan",
+                value: isScanning ? "On" : "Idle",
+                tint: isScanning ? Color.accentColor : Color.secondary
+            )
 
             sleepGuardFooter
 
@@ -25,24 +35,27 @@ struct SpillFooterView: View {
             }
 
             if showsCountBadge {
-                HStack(spacing: 4) {
-                    Image(systemName: "square.grid.2x2.fill")
-                    Text("\(itemCount)")
-                        .monospacedDigit()
-                }
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(.secondary)
+                footerBadge(
+                    symbolName: "square.grid.2x2.fill",
+                    title: "Items",
+                    value: "\(itemCount)",
+                    tint: .secondary
+                )
             }
 
             Spacer()
 
-            Text(shortTime)
-                .font(.system(size: 10, weight: .semibold, design: .rounded))
-                .foregroundStyle(.secondary)
-                .monospacedDigit()
+            footerBadge(
+                symbolName: "clock.fill",
+                title: "Time",
+                value: shortTime,
+                tint: .secondary
+            )
+
+            quitButton
         }
-        .padding(.horizontal, 11)
-        .frame(height: 28)
+        .padding(.horizontal, 9)
+        .frame(height: 32)
         .background(.primary.opacity(0.06), in: Capsule())
         .overlay {
             Capsule()
@@ -50,10 +63,28 @@ struct SpillFooterView: View {
         }
     }
 
-    private func footerItem(symbolName: String) -> some View {
-        Image(systemName: symbolName)
-            .font(.system(size: 11, weight: .semibold))
-            .frame(width: 13, height: 13)
+    private func footerBadge(
+        symbolName: String,
+        title: String,
+        value: String,
+        tint: Color
+    ) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: symbolName)
+                .font(.system(size: 10, weight: .semibold))
+                .frame(width: 13, height: 13)
+
+            Text(title)
+                .font(.system(size: 8, weight: .semibold, design: .rounded))
+                .foregroundStyle(.secondary)
+
+            Text(value)
+                .font(.system(size: 10, weight: .semibold, design: .rounded))
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
+        }
+        .foregroundStyle(tint)
     }
 
     private var sleepGuardFooter: some View {
@@ -63,6 +94,15 @@ struct SpillFooterView: View {
                     sleepGuard.stop()
                 } label: {
                     Text("Stop Sleep Guard")
+                }
+
+                Divider()
+            } else {
+                Button("Start \(sleepGuardDefaultDuration.menuTitle)") {
+                    sleepGuard.start(
+                        duration: sleepGuardDefaultDuration,
+                        keepDisplayAwake: keepsDisplayAwake
+                    )
                 }
 
                 Divider()
@@ -82,12 +122,15 @@ struct SpillFooterView: View {
                     .font(.system(size: 10, weight: .semibold))
                     .frame(width: 13, height: 13)
 
-                if sleepGuard.isActive {
-                    Text(sleepGuard.remainingLabel)
-                        .font(.system(size: 10, weight: .semibold, design: .rounded))
-                        .monospacedDigit()
-                        .lineLimit(1)
-                }
+                Text("Sleep")
+                    .font(.system(size: 8, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.secondary)
+
+                Text(sleepGuard.isActive ? sleepGuard.remainingLabel : "Off")
+                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
             }
             .foregroundStyle(sleepGuardTint)
             .contentShape(Rectangle())
@@ -96,6 +139,25 @@ struct SpillFooterView: View {
         .fixedSize()
         .help(sleepGuardHelpText)
         .accessibilityLabel(sleepGuardHelpText)
+        .accessibilityIdentifier("Sleep Guard")
+    }
+
+    private var quitButton: some View {
+        Button(role: .destructive, action: quitAction) {
+            HStack(spacing: 4) {
+                Image(systemName: "power")
+                    .font(.system(size: 10, weight: .semibold))
+                    .frame(width: 13, height: 13)
+
+                Text("Quit")
+                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+            }
+            .foregroundStyle(.secondary)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("Quit Spill")
+        .accessibilityLabel("Quit Spill")
     }
 
     private var sleepGuardTint: Color {
@@ -111,18 +173,12 @@ struct SpillFooterView: View {
     }
 
     private func powerFooter(status: SystemPowerStatus) -> some View {
-        HStack(spacing: 4) {
-            Image(systemName: status.symbolName)
-                .font(.system(size: 10, weight: .semibold))
-                .frame(width: 13, height: 13)
-
-            Text(status.value)
-                .font(.system(size: 10, weight: .semibold, design: .rounded))
-                .monospacedDigit()
-                .lineLimit(1)
-                .minimumScaleFactor(0.82)
-        }
-        .foregroundStyle(status.state.panelTint)
+        footerBadge(
+            symbolName: status.symbolName,
+            title: "Power",
+            value: status.value,
+            tint: status.state.panelTint
+        )
         .help(powerHelpText(for: status))
         .accessibilityLabel(powerHelpText(for: status))
     }

@@ -42,6 +42,16 @@ enum SpillStatusDetailRows {
         ]
     }
 
+    static func rows(for status: SystemStorageStatus) -> [SpillStatusDetailRow] {
+        [
+            SpillStatusDetailRow(label: "Usage", value: status.value),
+            SpillStatusDetailRow(label: "Used", value: SystemMemoryProvider.formatBytes(status.usedBytes)),
+            SpillStatusDetailRow(label: "Available", value: SystemMemoryProvider.formatBytes(status.availableBytes)),
+            SpillStatusDetailRow(label: "Total", value: SystemMemoryProvider.formatBytes(status.totalBytes)),
+            SpillStatusDetailRow(label: "State", value: status.state.detailTitle)
+        ]
+    }
+
     static func rows(for status: SystemGPUStatus) -> [SpillStatusDetailRow] {
         let unifiedCount = status.devices.filter(\.hasUnifiedMemory).count
         let lowPowerCount = status.devices.filter(\.isLowPower).count
@@ -93,7 +103,7 @@ enum SpillStatusDetailRows {
     }
 
     private static func percentText(_ ratio: Double) -> String {
-        "\(Int((ratio * 100).rounded()))%"
+        SystemCPUProvider.percentText(ratio)
     }
 }
 

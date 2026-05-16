@@ -14,9 +14,12 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
     private let aiStatusStore: AIStatusStore
     private let windowActionStore: WindowActionStore
     private let visibilityChanged: (Bool) -> Void
+    private let settingsAction: () -> Void
+    private let quitAction: () -> Void
     private var panel: NSPanel?
     private var anchorFrame: NSRect?
     private var isPresented = false
+    private var panelRefreshTask: Task<Void, Never>?
     private var cancellables = Set<AnyCancellable>()
 
     override init() {
@@ -30,7 +33,9 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
         aiStatusStore: AIStatusStore = AIStatusStore(),
         windowActionStore: WindowActionStore = WindowActionStore(),
         sleepGuard: SleepGuardController,
-        visibilityChanged: @escaping (Bool) -> Void = { _ in }
+        visibilityChanged: @escaping (Bool) -> Void = { _ in },
+        settingsAction: @escaping () -> Void = {},
+        quitAction: @escaping () -> Void = {}
     ) {
         self.settings = settings
         self.scanner = scanner
@@ -39,12 +44,18 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
         self.windowActionStore = windowActionStore
         self.sleepGuard = sleepGuard
         self.visibilityChanged = visibilityChanged
+        self.settingsAction = settingsAction
+        self.quitAction = quitAction
         super.init()
         observeLayoutChanges()
     }
 
     var isVisible: Bool {
         isPresented
+    }
+
+    func prepare() {
+        _ = ensurePanel()
     }
 
     var layoutReport: SpillPanelLayoutReport {
@@ -69,7 +80,7 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
 
     var contentReport: SpillPanelContentReport {
         let displayItems = settings.displayMode.items(from: scanner, settings: settings)
-        let statusModules = settings.statusModuleOrder.filter { settings.isStatusModuleEnabled($0) }
+        let statusModules = SpillStatusModule.primaryPanelModules.filter { settings.isStatusModuleEnabled($0) }
         let statusDetailRowCount = statusModules.reduce(0) { count, module in
             count + statusStore.detailRows(for: module).count
         }
@@ -99,6 +110,12 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
         )
     }
 
+    var accessibilityReport: SpillPanelAccessibilityReport {
+        panel?.contentView?.layoutSubtreeIfNeeded()
+
+        return SpillPanelAccessibilityReport(rootElement: panel?.contentView)
+    }
+
     func toggle() {
         if isVisible {
             hide(animated: true)
@@ -107,7 +124,7 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
         }
     }
 
-    func show(anchorFrame: NSRect? = nil) {
+    func show(anchorFrame: NSRect? = nil, dismissOnOutsideInteraction: Bool = true) {
         if let anchorFrame {
             self.anchorFrame = anchorFrame
         }
@@ -116,14 +133,18 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
         let finalFrame = panelFrame()
         let startFrame = finalFrame.offsetBy(dx: 0, dy: 8)
 
-        refreshStatusStore()
         isPresented = true
         visibilityChanged(true)
         panel.setFrame(settings.useSpillAnimation ? startFrame : finalFrame, display: false)
         panel.alphaValue = settings.useSpillAnimation ? 0 : 1
         panel.orderFrontRegardless()
-        dismissController.start(panel: panel) { [weak self] in
-            self?.hide(animated: true)
+        schedulePanelDataRefresh()
+        if dismissOnOutsideInteraction {
+            dismissController.start(panel: panel) { [weak self] in
+                self?.hide(animated: true)
+            }
+        } else {
+            dismissController.stop()
         }
 
         animate(duration: settings.useSpillAnimation ? 0.18 : 0) {
@@ -141,6 +162,7 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
 
         isPresented = false
         visibilityChanged(false)
+        panelRefreshTask?.cancel()
         dismissController.stop()
 
         let finalFrame = panel.frame.offsetBy(dx: 0, dy: 8)
@@ -201,6 +223,10 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
                 sleepGuard: sleepGuard
             ) { [weak self] in
                 self?.hide(animated: true)
+            } settingsAction: { [weak self] in
+                self?.settingsAction()
+            } quitAction: { [weak self] in
+                self?.quitAction()
             }
         )
         hostingView.translatesAutoresizingMaskIntoConstraints = false
@@ -295,15 +321,34 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
                 self?.resizePanelIfVisible()
             }
             .store(in: &cancellables)
+
+        settings.$hiddenItemKeys
+            .dropFirst()
+            .sink { [weak self] _ in
+                self?.resizePanelIfVisible()
+            }
+            .store(in: &cancellables)
     }
 
     private func refreshStatusStore() {
         let enabledModules = settings.statusModulesRequiredForRefresh
         let readsPower = settings.showPowerFooter
-        aiStatusStore.refresh()
+        aiStatusStore.refreshInBackground()
         windowActionStore.refresh()
         Task { @MainActor [statusStore] in
             await statusStore.refresh(enabledModules: enabledModules, readsPower: readsPower)
+        }
+    }
+
+    private func schedulePanelDataRefresh() {
+        panelRefreshTask?.cancel()
+        panelRefreshTask = Task { @MainActor [weak self] in
+            await Task.yield()
+            guard let self, isPresented else {
+                return
+            }
+
+            refreshStatusStore()
         }
     }
 

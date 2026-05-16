@@ -1,0 +1,99 @@
+feature_id: panel-content-ui-polish
+status: implemented
+
+necessity:
+  decision: build
+  reason: The maintainer requested a content-based UI polish pass for the panel, and it directly improves the compact tray surface.
+  ambiguity:
+    clarity: clear
+    blockers_resolved: true
+    resolution_sources:
+      - maintainer
+      - repo-research
+      - assumption
+  clarification_required: false
+  questions: []
+
+tasks:
+  - id: panel-content-ui-polish-T1
+    title: Document content-based Stitch mapping
+    owner_role: builder
+    state: done
+    depends_on: []
+    write_scope:
+      - .agents/runs/panel-content-ui-polish/00-intake.md
+      - .agents/runs/panel-content-ui-polish/01-prd.md
+      - .agents/runs/panel-content-ui-polish/02-ard.md
+      - .agents/runs/panel-content-ui-polish/03-task-breakdown.yml
+      - .agents/runs/panel-content-ui-polish/04-agent-briefs.md
+    read_scope:
+      - .agents/design/stitch.md
+    forbidden_scope:
+      - repository secrets
+    acceptance:
+      - The run records that the left Stitch UI is out of scope.
+      - The run records the content sections used for implementation.
+    verification:
+      commands:
+        - python3 .agents/scripts/workflow.py run-gates
+      manual: []
+
+  - id: panel-content-ui-polish-T2
+    title: Polish compact panel content hierarchy
+    owner_role: builder
+    state: done
+    depends_on:
+      - panel-content-ui-polish-T1
+    write_scope:
+      - Sources/Spill/App/AppDelegate.swift
+      - Sources/Spill/Panel/SpillBarView.swift
+      - Sources/Spill/Panel/SpillActionViews.swift
+      - Sources/Spill/Panel/SpillFooterView.swift
+      - Sources/Spill/Panel/SpillPanelMetrics.swift
+      - Sources/Spill/Panel/SpillPanelController.swift
+    read_scope:
+      - Sources/Spill/Providers
+      - Sources/Spill/Settings
+    forbidden_scope:
+      - private API usage
+      - provider refresh cadence changes
+    acceptance:
+      - Panel header, status rows, AI, action rows, and footer have clearer hierarchy.
+      - Settings and Quit remain visible.
+      - Panel remains compact.
+    verification:
+      commands:
+        - swift test
+        - python3 .agents/scripts/workflow.py panel-layout-smoke
+      manual:
+        - Open the panel and confirm content does not overlap.
+
+  - id: panel-content-ui-polish-T3
+    title: Verify and close out UI polish
+    owner_role: builder
+    state: done
+    depends_on:
+      - panel-content-ui-polish-T2
+    write_scope:
+      - .agents/runs/panel-content-ui-polish/05-verification.md
+      - .agents/runs/panel-content-ui-polish/06-closeout.md
+    read_scope:
+      - .agents/workflows/implementation.md
+    forbidden_scope:
+      - unrelated run folders
+    acceptance:
+      - Verification results are recorded.
+      - Residual visual risks are documented.
+    verification:
+      commands:
+        - python3 .agents/scripts/workflow.py verify
+        - git diff --check
+      manual: []
+
+parallel_groups:
+  - id: implementation
+    tasks:
+      - panel-content-ui-polish-T1
+      - panel-content-ui-polish-T2
+      - panel-content-ui-polish-T3
+    rule: Tasks are serialized because the panel files overlap.

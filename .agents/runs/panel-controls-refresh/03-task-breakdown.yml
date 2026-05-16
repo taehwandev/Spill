@@ -1,0 +1,182 @@
+feature_id: panel-controls-refresh
+status: implemented
+
+necessity:
+  decision: build
+  reason: The maintainer identified stale menu bar metrics, unclear controls, low-value GPU status, missing storage visibility, missing graphs, and a Settings removal bug.
+  ambiguity:
+    clarity: clear
+    blockers_resolved: true
+    resolution_sources:
+      - maintainer
+      - repo-research
+      - assumption
+  clarification_required: false
+  questions: []
+
+tasks:
+  - id: panel-controls-refresh-T1
+    title: Split live status refresh from menu bar scanning
+    owner_role: builder
+    state: done
+    depends_on: []
+    write_scope:
+      - Sources/Spill/App/AppDelegate.swift
+      - Tests/SpillTests
+    read_scope:
+      - .agents/specs/prd.md
+      - .agents/specs/ard.md
+    forbidden_scope:
+      - private API usage
+    acceptance:
+      - CPU and memory menu bar chips continue refreshing after panel detail closes.
+      - AX menu bar scan cadence does not increase.
+    verification:
+      commands:
+        - swift test
+        - python3 .agents/scripts/workflow.py verify
+      manual:
+        - Observe menu bar CPU and memory changing with the panel closed.
+
+  - id: panel-controls-refresh-T2
+    title: Replace GPU status with storage and three-row panel metrics
+    owner_role: builder
+    state: done
+    depends_on:
+      - panel-controls-refresh-T1
+    write_scope:
+      - Sources/Spill/Providers/SystemStorageProvider.swift
+      - Sources/Spill/Providers/SystemStatusStore.swift
+      - Sources/Spill/Providers/SpillStatusModule.swift
+      - Sources/Spill/Panel/SpillBarView.swift
+      - Sources/Spill/Panel/SpillStatusDetailModels.swift
+      - Tests/SpillTests
+    read_scope:
+      - Sources/Spill/Providers/SystemCPUProvider.swift
+      - Sources/Spill/Providers/SystemMemoryProvider.swift
+      - Sources/Spill/Providers/SystemGPUProvider.swift
+    forbidden_scope:
+      - private API usage
+    acceptance:
+      - GPU is not shown as a primary panel status row.
+      - Storage is shown as a primary panel status row.
+      - The status section reads as CPU, Memory, and Storage rows.
+    verification:
+      commands:
+        - swift test
+        - python3 .agents/scripts/workflow.py panel-layout-smoke
+      manual:
+        - Open panel and confirm storage replaces GPU.
+
+  - id: panel-controls-refresh-T3
+    title: Add compact panel sparklines
+    owner_role: builder
+    state: done
+    depends_on:
+      - panel-controls-refresh-T2
+    write_scope:
+      - Sources/Spill/Panel/SpillBarView.swift
+      - Sources/Spill/Panel/SpillPanelMetrics.swift
+      - Sources/Spill/Providers/SystemStatusStore.swift
+      - Tests/SpillTests
+    read_scope:
+      - .agents/design/stitch.md
+    forbidden_scope:
+      - large dashboard layout
+    acceptance:
+      - CPU, Memory, and Storage rows have bounded compact sparklines.
+      - Graph rendering does not change panel compactness beyond verified bounds.
+    verification:
+      commands:
+        - swift test
+        - python3 .agents/scripts/workflow.py panel-layout-smoke
+      manual:
+        - Confirm graph lines render and do not overlap text.
+
+  - id: panel-controls-refresh-T4
+    title: Add Sleep Guard duration setting and panel Quit control
+    owner_role: builder
+    state: done
+    depends_on: []
+    write_scope:
+      - Sources/Spill/Settings/SpillSettings.swift
+      - Sources/Spill/Preferences/PowerPreferencesSection.swift
+      - Sources/Spill/Panel/SpillFooterView.swift
+      - Sources/Spill/Panel/SpillBarView.swift
+      - Tests/SpillTests/SpillSettingsTests.swift
+    read_scope:
+      - Sources/Spill/App/SleepGuardController.swift
+    forbidden_scope:
+      - new permissions
+    acceptance:
+      - Preferences can configure the default Sleep Guard duration.
+      - Panel footer can quit Spill.
+      - Duration persists through settings reload.
+    verification:
+      commands:
+        - swift test
+        - python3 .agents/scripts/workflow.py panel-layout-smoke
+      manual:
+        - Start Sleep Guard from footer and quit from panel.
+
+  - id: panel-controls-refresh-T5
+    title: Fix Settings icon removal
+    owner_role: builder
+    state: done
+    depends_on: []
+    write_scope:
+      - Sources/Spill/Panel/DetectedItemsListView.swift
+      - Sources/Spill/Settings/SpillSettings.swift
+      - Sources/Spill/Settings/SpillDisplayMode.swift
+      - Sources/Spill/Panel/SpillBarView.swift
+      - Tests/SpillTests
+    read_scope:
+      - Sources/Spill/MenuBar/MenuBarItemSnapshot.swift
+      - Sources/Spill/MenuBar/MenuBarItemSelectionState.swift
+    forbidden_scope:
+      - unrelated preferences refactors
+    acceptance:
+      - Removing an icon in Settings updates panel action lists immediately.
+      - Removed icons remain removed after preferences reload.
+    verification:
+      commands:
+        - swift test
+      manual:
+        - Remove an icon from Settings and confirm it disappears from the panel.
+
+  - id: panel-controls-refresh-T6
+    title: Complete docs and verification closeout
+    owner_role: builder
+    state: done
+    depends_on:
+      - panel-controls-refresh-T1
+      - panel-controls-refresh-T2
+      - panel-controls-refresh-T3
+      - panel-controls-refresh-T4
+      - panel-controls-refresh-T5
+    write_scope:
+      - .agents/runs/panel-controls-refresh/04-agent-briefs.md
+      - .agents/runs/panel-controls-refresh/05-verification.md
+      - .agents/runs/panel-controls-refresh/06-closeout.md
+    read_scope:
+      - .agents/workflows/implementation.md
+    forbidden_scope:
+      - unrelated run folders
+    acceptance:
+      - Run docs have no placeholders.
+      - Verification commands and residual risks are recorded.
+    verification:
+      commands:
+        - python3 .agents/scripts/workflow.py verify
+      manual: []
+
+parallel_groups:
+  - id: implementation
+    tasks:
+      - panel-controls-refresh-T1
+      - panel-controls-refresh-T2
+      - panel-controls-refresh-T3
+      - panel-controls-refresh-T4
+      - panel-controls-refresh-T5
+      - panel-controls-refresh-T6
+    rule: Tasks are intentionally serialized because panel layout, provider models, and settings state overlap.

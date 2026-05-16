@@ -13,6 +13,8 @@ extension SystemStatusStore {
             return SpillStatusMeterSnapshot(value: cpu.value, subtitle: cpu.subtitle, state: cpu.state)
         case .memory:
             return SpillStatusMeterSnapshot(value: memory.value, subtitle: memory.subtitle, state: memory.state)
+        case .storage:
+            return SpillStatusMeterSnapshot(value: storage.value, subtitle: storage.subtitle, state: storage.state)
         case .gpu:
             return SpillStatusMeterSnapshot(value: gpu.value, subtitle: gpu.subtitle, state: gpu.state)
         case .network:
@@ -30,6 +32,8 @@ extension SystemStatusStore {
             return SpillStatusDetailRows.rows(for: cpu)
         case .memory:
             return SpillStatusDetailRows.rows(for: memory)
+        case .storage:
+            return SpillStatusDetailRows.rows(for: storage)
         case .gpu:
             return SpillStatusDetailRows.rows(for: gpu)
         case .network:

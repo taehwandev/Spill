@@ -8,6 +8,8 @@ struct SpillBarView: View {
     @ObservedObject var windowActionStore: WindowActionStore
     @ObservedObject var sleepGuard: SleepGuardController
     let dismissAction: () -> Void
+    let settingsAction: () -> Void
+    let quitAction: () -> Void
     @State private var actionFeedback: SpillActionFeedback?
     @State private var statusDetailTarget: SpillStatusDetailTarget?
 
@@ -16,7 +18,10 @@ struct SpillBarView: View {
     }
 
     private var pinnedItems: [MenuBarItemSnapshot] {
-        scanner.items.filter { settings.selectedItemKeys.contains($0.stableKey) }
+        scanner.items.filter {
+            settings.selectedItemKeys.contains($0.stableKey)
+                && !settings.isItemHidden($0)
+        }
     }
 
     private var displayActionItems: [MenuBarItemSnapshot] {
@@ -36,7 +41,7 @@ struct SpillBarView: View {
     }
 
     private var visibleStatusModules: [SpillStatusModule] {
-        settings.statusModuleOrder.filter { settings.isStatusModuleEnabled($0) }
+        SpillStatusModule.primaryPanelModules.filter { settings.isStatusModuleEnabled($0) }
     }
 
     private var panelState: SpillPanelState {
@@ -48,7 +53,7 @@ struct SpillBarView: View {
     }
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 10) {
             header
             if !visibleStatusModules.isEmpty {
                 statusSection
@@ -63,7 +68,7 @@ struct SpillBarView: View {
     }
 
     private var header: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 12) {
             ZStack {
                 RoundedRectangle(cornerRadius: 11, style: .continuous)
                     .fill(Color.accentColor.opacity(0.18))
@@ -88,7 +93,28 @@ struct SpillBarView: View {
             Spacer(minLength: 8)
 
             statusDot
+            headerCommand(symbolName: "gearshape.fill", title: "Settings", action: settingsAction)
+            headerCommand(symbolName: "power", title: "Quit", action: quitAction)
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Spill Flow")
+    }
+
+    private func headerCommand(symbolName: String, title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: symbolName)
+                .font(.system(size: 10.5, weight: .semibold))
+                .lineLimit(1)
+                .padding(.horizontal, 8)
+                .frame(height: 28)
+                .background(.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(.primary.opacity(0.1), lineWidth: 0.8)
+                }
+        }
+        .buttonStyle(.plain)
+        .help(title)
     }
 
     private var statusDot: some View {
@@ -111,35 +137,67 @@ struct SpillBarView: View {
     }
 
     private var statusSection: some View {
-        VStack(spacing: 5) {
+        VStack(spacing: 6) {
             sectionHeader("STATUS", symbolName: "waveform.path.ecg")
 
-            LazyVGrid(
-                columns: [
-                    GridItem(.flexible(), spacing: 6),
-                    GridItem(.flexible(), spacing: 6)
-                ],
-                spacing: 6
-            ) {
+            VStack(spacing: 7) {
                 ForEach(visibleStatusModules) { module in
-                    statusMeter(for: module)
+                    statusMetricRow(for: module)
                 }
             }
         }
     }
 
-    private func statusMeter(for module: SpillStatusModule) -> some View {
+    private func statusMetricRow(for module: SpillStatusModule) -> some View {
         let status = statusStore.meterSnapshot(for: module)
         let helpText = statusHelpText(title: module.title, value: status.value, subtitle: status.subtitle)
 
-        return detailButton(
-            target: .system(module),
-            title: module.meterTitle,
-            value: status.value,
-            subtitle: status.subtitle,
-            symbolName: module.symbolName,
-            tint: status.state.panelTint
-        )
+        return Button {
+            statusDetailTarget = .system(module)
+        } label: {
+            HStack(spacing: 10) {
+                statusIconBadge(symbolName: module.symbolName, tint: status.state.panelTint)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 6) {
+                        Text(module.title)
+                            .font(.system(size: 10.5, weight: .semibold))
+                            .foregroundStyle(status.state.panelTint)
+
+                        Text(status.value)
+                            .font(.system(size: 15, weight: .bold, design: .rounded))
+                            .monospacedDigit()
+                            .foregroundStyle(status.state.panelTint)
+                    }
+
+                    Text(subtitleText(status.subtitle))
+                        .font(.system(size: 9.5, weight: .medium, design: .rounded))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.72)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer(minLength: 8)
+
+                MetricSparklineView(
+                    values: statusStore.history(for: module),
+                    tint: status.state.panelTint
+                )
+                .frame(width: 96, height: 28)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .frame(minHeight: 54)
+            .background(status.state.panelTint.opacity(0.1), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(status.state.panelTint.opacity(0.2), lineWidth: 0.8)
+            }
+        }
+        .buttonStyle(.plain)
+        .popover(isPresented: detailBinding(for: .system(module)), arrowEdge: .top) {
+            statusDetailPopover(for: .system(module))
+        }
         .help(helpText)
         .accessibilityLabel(helpText)
     }
@@ -156,6 +214,8 @@ struct SpillBarView: View {
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(.secondary)
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(title)
     }
 
     private var aiSection: some View {
@@ -185,7 +245,8 @@ struct SpillBarView: View {
         value: String,
         subtitle: String?,
         symbolName: String,
-        tint: Color
+        tint: Color,
+        detailRows: [SpillStatusDetailRow] = []
     ) -> some View {
         Button {
             statusDetailTarget = target
@@ -195,7 +256,8 @@ struct SpillBarView: View {
                 value: value,
                 subtitle: subtitle,
                 symbolName: symbolName,
-                tint: tint
+                tint: tint,
+                detailRows: detailRows
             )
         }
         .buttonStyle(.plain)
@@ -209,43 +271,95 @@ struct SpillBarView: View {
         value: String,
         subtitle: String?,
         symbolName: String,
-        tint: Color
+        tint: Color,
+        detailRows: [SpillStatusDetailRow]
     ) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 4) {
-                Image(systemName: symbolName)
-                    .font(.system(size: 9, weight: .semibold))
-                    .frame(width: 11, height: 11)
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(alignment: .top, spacing: 8) {
+                statusIconBadge(symbolName: symbolName, tint: tint)
 
-                Text(title)
-                    .font(.system(size: 8.5, weight: .semibold))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.72)
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 4) {
+                        Text(title)
+                            .font(.system(size: 10, weight: .semibold))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.72)
 
-                Spacer(minLength: 2)
+                        Spacer(minLength: 2)
 
-                Text(value)
-                    .font(.system(size: 11, weight: .bold, design: .rounded))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.68)
-                    .monospacedDigit()
+                        Text(value)
+                            .font(.system(size: 15, weight: .bold, design: .rounded))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.68)
+                            .monospacedDigit()
+                    }
+
+                    Text(subtitleText(subtitle))
+                        .font(.system(size: 9.5, weight: .medium, design: .rounded))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.68)
+                        .monospacedDigit()
+                        .foregroundStyle(tint.opacity(0.72))
+                }
             }
 
-            Text(subtitleText(subtitle))
-                .font(.system(size: 8.2, weight: .medium, design: .rounded))
-                .lineLimit(1)
-                .minimumScaleFactor(0.68)
-                .monospacedDigit()
-                .foregroundStyle(tint.opacity(0.72))
+            if !detailRows.isEmpty {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(detailRows.prefix(3)) { row in
+                        HStack(spacing: 4) {
+                            Text(row.label)
+                                .foregroundStyle(.secondary)
+                            Spacer(minLength: 4)
+                            Text(row.value)
+                                .monospacedDigit()
+                        }
+                        .font(.system(size: 9, weight: .semibold, design: .rounded))
+                    }
+                }
+            }
         }
         .foregroundStyle(tint)
-        .padding(.horizontal, 7)
-        .frame(height: 42)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(minHeight: detailRows.isEmpty ? 60 : 92)
         .frame(maxWidth: .infinity)
-        .background(tint.opacity(0.1), in: Capsule())
+        .background(tint.opacity(0.1), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay {
-            Capsule()
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(tint.opacity(0.2), lineWidth: 0.8)
+        }
+    }
+
+    private func statusIconBadge(symbolName: String, tint: Color) -> some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .fill(tint.opacity(0.14))
+
+            Image(systemName: symbolName)
+                .font(.system(size: 17, weight: .bold))
+                .symbolRenderingMode(.hierarchical)
+        }
+        .frame(width: 30, height: 30)
+        .overlay {
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .stroke(tint.opacity(0.18), lineWidth: 0.8)
+        }
+    }
+
+    private func inlineRows(for module: SpillStatusModule) -> [SpillStatusDetailRow] {
+        let rows = statusStore.detailRows(for: module)
+
+        switch module {
+        case .cpu:
+            return rows.filter { ["User", "System", "Idle"].contains($0.label) }
+        case .memory:
+            return rows.filter { ["Used", "Wired", "Compressed"].contains($0.label) }
+        case .storage:
+            return rows.filter { ["Used", "Available", "Total"].contains($0.label) }
+        case .gpu:
+            return rows.filter { ["Available", "Budget"].contains($0.label) }
+        case .network:
+            return rows.filter { ["Route", "Reachable"].contains($0.label) }
         }
     }
 
@@ -302,6 +416,8 @@ struct SpillBarView: View {
             return .cpu
         case .memory:
             return .memory
+        case .storage:
+            return nil
         case .gpu:
             return nil
         case .network:
@@ -367,7 +483,7 @@ struct SpillBarView: View {
 
             if windowActionStore.actions.isEmpty {
                 inlineState(symbolName: "macwindow", title: "No Focused Window")
-                    .frame(height: 38)
+                    .frame(height: 50)
             } else {
                 windowActionScroller
             }
@@ -389,7 +505,7 @@ struct SpillBarView: View {
                     menuBarActionScroller
                 }
             }
-            .frame(height: 38)
+            .frame(height: 48)
         }
     }
 
@@ -406,7 +522,7 @@ struct SpillBarView: View {
             }
             .padding(.horizontal, 1)
         }
-        .frame(height: 38)
+        .frame(height: 50)
     }
 
     private var menuBarActionScroller: some View {
@@ -497,11 +613,13 @@ struct SpillBarView: View {
             isAccessibilityTrusted: AccessibilityPermission.isTrusted,
             isScanning: scanner.isScanning,
             sleepGuard: sleepGuard,
+            sleepGuardDefaultDuration: settings.sleepGuardDefaultDuration,
             keepsDisplayAwake: settings.sleepGuardKeepsDisplayAwake,
             showsPower: settings.showPowerFooter,
             powerStatus: statusStore.power,
             showsCountBadge: settings.showCountBadge,
-            itemCount: displayItems.count
+            itemCount: displayItems.count,
+            quitAction: quitAction
         )
     }
 
@@ -533,4 +651,53 @@ struct SpillBarView: View {
         return parts.joined(separator: " - ")
     }
 
+}
+
+private struct MetricSparklineView: View {
+    let values: [Double]
+    let tint: Color
+
+    var body: some View {
+        Canvas { context, size in
+            let normalizedValues = values
+                .suffix(24)
+                .map { min(max($0, 0), 1) }
+
+            guard normalizedValues.count >= 2 else {
+                drawFlatLine(in: &context, size: size)
+                return
+            }
+
+            var path = Path()
+            let xStep = size.width / CGFloat(normalizedValues.count - 1)
+
+            for (index, value) in normalizedValues.enumerated() {
+                let point = CGPoint(
+                    x: CGFloat(index) * xStep,
+                    y: size.height - CGFloat(value) * size.height
+                )
+
+                if index == 0 {
+                    path.move(to: point)
+                } else {
+                    path.addLine(to: point)
+                }
+            }
+
+            context.stroke(path, with: .color(tint.opacity(0.9)), lineWidth: 1.8)
+        }
+        .background(tint.opacity(0.08), in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                .stroke(tint.opacity(0.14), lineWidth: 0.7)
+        }
+    }
+
+    private func drawFlatLine(in context: inout GraphicsContext, size: CGSize) {
+        var path = Path()
+        let y = size.height * 0.5
+        path.move(to: CGPoint(x: 0, y: y))
+        path.addLine(to: CGPoint(x: size.width, y: y))
+        context.stroke(path, with: .color(tint.opacity(0.42)), lineWidth: 1.3)
+    }
 }

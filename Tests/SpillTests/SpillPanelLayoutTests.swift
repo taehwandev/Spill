@@ -7,7 +7,7 @@ final class SpillPanelLayoutTests: XCTestCase {
     func testDefaultFrameUsesAnchorXWhenAvailable() {
         let layout = SpillPanelLayout()
         let visibleFrame = NSRect(x: 0, y: 0, width: 1_440, height: 900)
-        let anchorFrame = NSRect(x: 1_180, y: 875, width: 26, height: 22)
+        let anchorFrame = NSRect(x: 720, y: 875, width: 26, height: 22)
 
         let frame = layout.defaultFrame(in: visibleFrame, screen: nil, anchorFrame: anchorFrame)
 

@@ -91,6 +91,24 @@ if ! grep -q "SPILL_PANEL_CONTENT_OK" "$LOG_FILE"; then
     exit 1
 fi
 
+if ! grep -q "SPILL_PANEL_ACCESSIBILITY " "$LOG_FILE"; then
+    echo "FAIL: Spill did not report panel accessibility diagnostics."
+    cat "$LOG_FILE"
+    exit 1
+fi
+
+if grep -q "SPILL_PANEL_ACCESSIBILITY_FAIL" "$LOG_FILE"; then
+    echo "FAIL: Spill panel accessibility validation failed."
+    cat "$LOG_FILE"
+    exit 1
+fi
+
+if ! grep -q "SPILL_PANEL_ACCESSIBILITY_OK" "$LOG_FILE"; then
+    echo "FAIL: Spill did not report panel accessibility success."
+    cat "$LOG_FILE"
+    exit 1
+fi
+
 if ! grep -q "SPILL_SMOKE_EXIT" "$LOG_FILE"; then
     echo "FAIL: Spill did not report smoke shutdown."
     cat "$LOG_FILE"

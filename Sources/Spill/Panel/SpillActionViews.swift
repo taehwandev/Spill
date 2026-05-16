@@ -20,17 +20,15 @@ struct WindowActionButton: View {
 
     var body: some View {
         Button(action: perform) {
-            VStack(spacing: 3) {
-                HStack(spacing: 3) {
-                    Image(systemName: action.symbolName ?? "macwindow")
-                        .font(.system(size: 11, weight: .semibold))
-                        .frame(width: 14, height: 12)
+            VStack(spacing: 4) {
+                Image(systemName: action.symbolName ?? "macwindow")
+                    .font(.system(size: 16, weight: .semibold))
+                    .frame(width: 20, height: 16)
 
-                    Text(labelText)
-                        .font(.system(size: 8.3, weight: .semibold, design: .rounded))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.65)
-                }
+                Text(labelText)
+                    .font(.system(size: 8.6, weight: .semibold, design: .rounded))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.65)
 
                 Text(shortcutText)
                     .font(.system(size: 7.4, weight: .semibold, design: .rounded))
@@ -38,7 +36,7 @@ struct WindowActionButton: View {
                     .foregroundStyle(.secondary)
             }
             .foregroundStyle(foregroundColor)
-            .frame(width: 61, height: 38)
+            .frame(width: 76, height: 50)
             .background(backgroundColor, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
@@ -48,7 +46,7 @@ struct WindowActionButton: View {
         }
         .buttonStyle(.plain)
         .disabled(!action.state.isEnabled)
-        .opacity(action.state.isEnabled ? 1 : 0.42)
+        .opacity(action.state.isEnabled ? 1 : 0.7)
         .onHover { isHovered = $0 }
     }
 
@@ -120,7 +118,7 @@ struct SpillActionButton: View {
                             .padding(5)
                     }
                 }
-                .frame(width: 36, height: 36)
+                .frame(width: 44, height: 44)
                 .contentShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
             }
             .buttonStyle(.plain)
@@ -142,7 +140,7 @@ struct SpillActionButton: View {
             .buttonStyle(.plain)
             .help(isPinned ? "Unpin" : "Pin")
         }
-        .frame(width: 39, height: 38)
+        .frame(width: 48, height: 48)
     }
 
     private var icon: some View {
@@ -151,8 +149,13 @@ struct SpillActionButton: View {
                 Image(nsImage: image)
                     .resizable()
                     .scaledToFit()
-                    .frame(width: 22, height: 22)
+                    .frame(width: 27, height: 27)
                     .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+            } else if let symbolName = action.symbolName {
+                Image(systemName: symbolName)
+                    .font(.system(size: 19, weight: .semibold))
+                    .foregroundStyle(canPerform ? Color.primary : Color.secondary)
+                    .frame(width: 27, height: 27)
             } else {
                 Text(action.shortLabel)
                     .font(.system(size: 12, weight: .semibold, design: .rounded))

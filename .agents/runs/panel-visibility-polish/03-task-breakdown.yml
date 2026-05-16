@@ -1,0 +1,64 @@
+feature_id: panel-visibility-polish
+status: ready
+
+necessity:
+  decision: build
+  reason: The maintainer identified visible trust and usability issues in existing panel and menu bar surfaces.
+  ambiguity:
+    clarity: clear
+    blockers_resolved: true
+    resolution_sources:
+      - maintainer
+      - repo-research
+      - assumption
+  clarification_required: false
+  questions: []
+
+tasks:
+  - id: panel-visibility-polish-T1
+    title: Improve menu bar and panel status visibility
+    owner_role: builder
+    state: done
+    depends_on: []
+    write_scope:
+      - Sources/Spill/MenuBar/MenuBarStatusContentView.swift
+      - Sources/Spill/MenuBar/MenuBarStatusSummary.swift
+      - Sources/Spill/Panel/SpillActionViews.swift
+      - Sources/Spill/Panel/SpillBarView.swift
+      - Sources/Spill/Panel/SpillPanelMetrics.swift
+      - Sources/Spill/Panel/SpillPanelController.swift
+      - Sources/Spill/Panel/SpillStatusDetailModels.swift
+      - Sources/Spill/Providers/SystemCPUProvider.swift
+      - Sources/Spill/Providers/SystemMemoryProvider.swift
+      - Sources/Spill/Settings/SpillSettings.swift
+      - Tests/SpillTests/MenuBarStatusSummaryTests.swift
+      - Tests/SpillTests/SpillSettingsTests.swift
+      - Tests/SpillTests/SystemCPUProviderTests.swift
+      - Tests/SpillTests/SystemMemoryProviderTests.swift
+      - Tests/SpillTests/SpillPanelLayoutTests.swift
+    read_scope:
+      - .agents/specs/prd.md
+      - .agents/specs/ard.md
+      - .agents/design/stitch.md
+    forbidden_scope:
+      - Sources/Spill/Accessibility/
+      - private API usage
+    acceptance:
+      - Menu bar chips show SF Symbol icons and one-decimal values.
+      - CPU initial sampling does not render a gray `--`.
+      - Panel header shows Settings and Quit controls.
+      - Panel status cards expose useful inline details.
+      - Panel smoke remains valid.
+    verification:
+      commands:
+        - swift test
+        - python3 .agents/scripts/workflow.py panel-layout-smoke
+        - python3 .agents/scripts/workflow.py verify
+      manual:
+        - Confirm menu bar and panel visual polish live.
+
+parallel_groups:
+  - id: implementation
+    tasks:
+      - panel-visibility-polish-T1
+    rule: Single coupled UI polish task.

@@ -1,0 +1,56 @@
+feature_id: panel-accessibility-smoke
+status: ready
+
+necessity:
+  decision: build
+  reason: M1-T4 is the earliest pending roadmap task and can be completed with a smoke-only accessibility label check.
+  ambiguity:
+    clarity: clear
+    blockers_resolved: true
+    resolution_sources:
+      - repo-research
+      - assumption
+  clarification_required: false
+  questions: []
+
+tasks:
+  - id: panel-accessibility-smoke-T1
+    title: Add panel accessibility smoke diagnostics
+    owner_role: builder
+    state: todo
+    depends_on: []
+    write_scope:
+      - Sources/Spill/App/AppDelegate.swift
+      - Sources/Spill/Panel/SpillBarView.swift
+      - Sources/Spill/Panel/SpillFooterView.swift
+      - Sources/Spill/Panel/SpillPanelAccessibilityReport.swift
+      - Sources/Spill/Panel/SpillPanelController.swift
+      - scripts/verify-panel-layout-smoke.sh
+      - Tests/SpillTests/SpillPanelAccessibilityReportTests.swift
+    read_scope:
+      - .agents/specs/prd.md
+      - .agents/specs/ard.md
+      - Sources/Spill/Panel/SpillPanelContentReport.swift
+      - Sources/Spill/Panel/SpillPanelLayout.swift
+    forbidden_scope:
+      - Sources/Spill/Accessibility/
+      - Sources/Spill/MenuBar/
+    acceptance:
+      - Panel layout smoke logs accessibility diagnostics.
+      - Smoke verification fails when required panel labels are missing.
+      - The check does not require Accessibility permission.
+      - swift test passes.
+      - panel-layout-smoke passes.
+    verification:
+      commands:
+        - swift test
+        - python3 .agents/scripts/workflow.py panel-layout-smoke
+        - python3 .agents/scripts/workflow.py verify
+      manual:
+        - Manual visual inspection remains optional for true pixel overlap.
+
+parallel_groups:
+  - id: implementation
+    tasks:
+      - panel-accessibility-smoke-T1
+    rule: Single narrow implementation task.
