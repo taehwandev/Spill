@@ -4,112 +4,165 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="Spill is a compact macOS control tray for crowded menu bars.">
-    <title>Spill for macOS</title>
+    <title>Spill - Your Menu Bar, Unleashed.</title>
     <link rel="icon" href="assets/spill-icon.png">
     <link rel="apple-touch-icon" href="assets/spill-icon.png">
     <link rel="stylesheet" href="styles.css">
   </head>
   <body>
     <header class="site-header" aria-label="Primary">
-      <a class="brand" href="#top" aria-label="Spill home">
-        <img src="assets/spill-icon.png" alt="" width="32" height="32">
-        <span>Spill</span>
-      </a>
-      <nav>
-        <a href="#download">Download</a>
-        <a href="#install">Install</a>
-        <a href="https://github.com/taehwandev/Spill">GitHub</a>
-      </nav>
+      <div class="header-inner">
+        <a class="brand" href="#top" aria-label="Spill home">
+          <img src="assets/spill-icon.png" alt="" width="34" height="34">
+          <span>Spill</span>
+        </a>
+        <nav aria-label="Site">
+          <a href="#features">Features</a>
+          <a href="#install">Install</a>
+          <a href="#security">Security</a>
+          <a href="https://github.com/taehwandev/Spill">GitHub</a>
+        </nav>
+        <a class="nav-button" href="https://github.com/taehwandev/Spill/releases/latest/download/Spill-macos.dmg">Download</a>
+      </div>
     </header>
 
     <main id="top">
       <section class="hero" aria-labelledby="hero-title">
-        <div class="hero-backdrop" aria-hidden="true"></div>
-        <div class="hero-content">
-          <p class="eyebrow">macOS menu bar utility</p>
-          <h1 id="hero-title">Spill</h1>
-          <p class="hero-copy">
-            A compact control tray for crowded Mac menu bars, system status,
-            pinned actions, AI tooling state, and fast window moves.
+        <div class="hero-copy">
+          <a class="badge" href="https://github.com/taehwandev/Spill/releases/latest">
+            <span aria-hidden="true">⌘</span>
+            Open source on GitHub
+          </a>
+          <h1 id="hero-title">Your Menu Bar, Unleashed.</h1>
+          <p>
+            A compact control tray for crowded Mac menu bars. System status,
+            pinned actions, AI tooling, Caffeine, and fast window moves live
+            behind one focused trigger.
           </p>
           <div class="hero-actions" id="download">
-            <a class="button primary" href="https://github.com/taehwandev/Spill/releases/latest/download/Spill-macos.dmg">Download DMG</a>
-            <a class="button secondary" href="https://github.com/taehwandev/Spill/releases/latest/download/Spill-macos.zip">Download ZIP</a>
+            <a class="button primary" href="https://github.com/taehwandev/Spill/releases/latest/download/Spill-macos.dmg">Download for macOS</a>
+            <a class="button secondary" href="https://github.com/taehwandev/Spill">Star on GitHub</a>
           </div>
-          <p class="release-note">
-            Requires macOS 14 or later. Current public builds are ad-hoc signed.
+          <p class="release-note">Requires macOS 14 or later. Current public builds are ad-hoc signed.</p>
+        </div>
+
+        <div class="product-shot" aria-label="Spill panel preview">
+          <div class="screen">
+            <div class="menu-bar">
+              <span></span>
+              <span></span>
+              <span></span>
+              <strong>Spill</strong>
+            </div>
+            <div class="spill-panel">
+              <div class="panel-notch"></div>
+              <div class="panel-header">
+                <div>
+                  <span class="panel-kicker">Now</span>
+                  <h2>Control tray</h2>
+                </div>
+                <img src="assets/spill-icon.png" alt="" width="44" height="44">
+              </div>
+              <div class="status-grid" aria-hidden="true">
+                <span>CPU 18%</span>
+                <span>RAM 62%</span>
+                <span>Caffeine on</span>
+              </div>
+              <div class="action-row" aria-hidden="true">
+                <span>Left half</span>
+                <span>Center</span>
+                <span>Maximize</span>
+              </div>
+              <div class="ai-strip" aria-hidden="true">
+                <span>Codex active</span>
+                <span>Ollama ready</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="features" aria-labelledby="features-title">
+        <div class="section-heading">
+          <p class="eyebrow">Features</p>
+          <h2 id="features-title">One small trigger, one focused tray.</h2>
+        </div>
+        <div class="feature-grid">
+          <article>
+            <div class="feature-icon" aria-hidden="true">⌁</div>
+            <h3>Intelligent monitoring</h3>
+            <p>CPU, memory, power, network, and Caffeine state stay compact and scannable.</p>
+          </article>
+          <article>
+            <div class="feature-icon" aria-hidden="true">□</div>
+            <h3>Window moves</h3>
+            <p>Snap windows into halves, corners, displays, and restore history from the tray or shortcuts.</p>
+          </article>
+          <article>
+            <div class="feature-icon" aria-hidden="true">✦</div>
+            <h3>AI at hand</h3>
+            <p>Keep local AI tooling state visible without opening a dashboard or making network calls by default.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section install-section" id="install" aria-labelledby="install-title">
+        <div class="install-copy">
+          <p class="eyebrow">Install</p>
+          <h2 id="install-title">Get the current release.</h2>
+          <p>
+            Download the DMG, drag Spill into Applications, then launch it from
+            Applications. If macOS says the app is damaged or should be moved to
+            Trash, use the terminal install command to remove the quarantine flag.
+          </p>
+          <div class="command-block" aria-label="Terminal install command">
+            <code>/bin/bash -c "$(curl -fsSL https://thdev.app/Spill/install.sh)"</code>
+          </div>
+          <p class="small-note">
+            Already copied it to Applications?
+            <code>sudo xattr -dr com.apple.quarantine /Applications/Spill.app</code>
+            then open Spill again.
           </p>
         </div>
+        <ol class="steps">
+          <li>
+            <strong>Install</strong>
+            <span>Run the terminal installer or download the latest DMG.</span>
+          </li>
+          <li>
+            <strong>Keep it in Applications</strong>
+            <span>The installer copies Spill there automatically.</span>
+          </li>
+          <li>
+            <strong>Open from the menu bar</strong>
+            <span>Use the single Spill trigger to open and close the tray.</span>
+          </li>
+        </ol>
       </section>
 
-      <section class="section band" aria-labelledby="overview-title">
-        <div class="section-inner">
-          <div class="section-heading">
-            <p class="eyebrow">What it does</p>
-            <h2 id="overview-title">One small trigger, one focused tray.</h2>
-          </div>
-          <div class="feature-grid">
-            <article>
-              <h3>Status at a glance</h3>
-              <p>CPU, memory, power, network, and Caffeine state stay compact and scannable.</p>
-            </article>
-            <article>
-              <h3>Pinned actions</h3>
-              <p>Keep useful menu bar actions close without depending on fragile spacer tricks.</p>
-            </article>
-            <article>
-              <h3>Window moves</h3>
-              <p>Move focused windows with quick actions and familiar keyboard shortcuts.</p>
-            </article>
-          </div>
+      <section class="section security-section" id="security" aria-labelledby="security-title">
+        <div>
+          <p class="eyebrow">Security</p>
+          <h2 id="security-title">Unsigned today, notarized path ready.</h2>
+          <p>
+            Public builds are currently ad-hoc signed. The release workflow is
+            already wired for Developer ID signing and notarization once Apple
+            credentials are configured.
+          </p>
         </div>
-      </section>
-
-      <section class="section" id="install" aria-labelledby="install-title">
-        <div class="section-inner install-layout">
-          <div>
-            <p class="eyebrow">Install</p>
-            <h2 id="install-title">Get the current release.</h2>
-            <p>
-              Download the DMG, drag Spill into Applications, then launch it from
-              Applications. If macOS says the app is damaged or should be moved to
-              Trash, use the terminal install command to remove the download
-              quarantine flag.
-            </p>
-            <div class="command-block" aria-label="Terminal install command">
-              <code>/bin/bash -c "$(curl -fsSL https://thdev.app/Spill/install.sh)"</code>
-            </div>
-            <p class="small-note">
-              Already copied it to Applications? Run
-              <code>sudo xattr -dr com.apple.quarantine /Applications/Spill.app</code>
-              and open Spill again.
-            </p>
-          </div>
-          <ol class="steps">
-            <li>Run the terminal install command or download the latest DMG.</li>
-            <li>Keep Spill in Applications.</li>
-            <li>Open Spill and use the menu bar trigger.</li>
-          </ol>
-        </div>
-      </section>
-
-      <section class="section band" aria-labelledby="release-title">
-        <div class="section-inner release-layout">
-          <div>
-            <p class="eyebrow">Release assets</p>
-            <h2 id="release-title">Artifacts and source are on GitHub.</h2>
-          </div>
-          <div class="link-list" aria-label="Release links">
-            <a href="https://github.com/taehwandev/Spill/releases/latest">Latest release</a>
-            <a href="https://github.com/taehwandev/Spill/releases/latest/download/checksums.txt">Checksums</a>
-            <a href="https://github.com/taehwandev/Spill">Source code</a>
-          </div>
+        <div class="release-links" aria-label="Release links">
+          <a href="https://github.com/taehwandev/Spill/releases/latest">Latest release</a>
+          <a href="https://github.com/taehwandev/Spill/releases/latest/download/checksums.txt">Checksums</a>
+          <a href="https://github.com/taehwandev/Spill/releases/latest/download/Spill-macos.zip">Download ZIP</a>
         </div>
       </section>
     </main>
 
     <footer>
-      <span>Spill for macOS</span>
+      <div class="footer-brand">
+        <img src="assets/spill-icon.png" alt="" width="26" height="26">
+        <span>Spill for macOS</span>
+      </div>
       <span>Direct distribution outside the Mac App Store.</span>
     </footer>
   </body>
