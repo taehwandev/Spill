@@ -1,0 +1,76 @@
+feature_id: system-network-provider
+status: ready
+
+necessity:
+  decision: build
+  reason: "Network availability is the remaining planned System strip signal and can be implemented with public local reachability APIs."
+  clarification_required: false
+  questions: []
+
+tasks:
+  - id: system-network-provider-T1
+    title: Add network provider and status module
+    owner_role: builder
+    state: done
+    depends_on: []
+    write_scope:
+      - Sources/Spill/Providers/SystemNetworkProvider.swift
+      - Sources/Spill/Providers/SpillStatusModule.swift
+      - Sources/Spill/Providers/SystemStatusStore.swift
+      - Sources/Spill/Panel/SpillBarView.swift
+      - Tests/SpillTests/SystemNetworkProviderTests.swift
+      - Tests/SpillTests/SystemStatusStoreTests.swift
+      - Tests/SpillTests/SpillSettingsTests.swift
+    read_scope:
+      - Sources/Spill/Providers/SystemCPUProvider.swift
+      - Sources/Spill/Providers/SystemMemoryProvider.swift
+      - Sources/Spill/Providers/SystemPowerProvider.swift
+      - Sources/Spill/Providers/SpillStatusModels.swift
+    forbidden_scope:
+      - Sources/Spill/MenuBar
+      - Sources/Spill/Accessibility
+    acceptance:
+      - Network provider maps online, standby, offline, and unavailable states.
+      - Network appears in configurable status module defaults.
+      - Disabled Network does not run its reader.
+      - swift test passes.
+    verification:
+      commands:
+        - swift test
+      manual:
+        - Open the panel and confirm Network fits in the compact status section.
+
+  - id: system-network-provider-T2
+    title: Update docs and verify network provider
+    owner_role: verifier
+    state: done
+    depends_on:
+      - system-network-provider-T1
+    write_scope:
+      - .agents/runs/system-network-provider
+      - .agents/tasks/roadmap.yml
+      - README.md
+    read_scope:
+      - .agents/scripts/workflow.py
+      - scripts/verify-panel-layout-smoke.sh
+      - scripts/verify-runtime-smoke.sh
+    forbidden_scope:
+      - Sources/Spill/MenuBar
+    acceptance:
+      - Roadmap marks Network status done.
+      - Verification results are documented.
+      - README current status mentions configurable system status modules.
+    verification:
+      commands:
+        - python3 .agents/scripts/workflow.py verify
+        - python3 .agents/scripts/workflow.py panel-layout-smoke
+        - python3 .agents/scripts/workflow.py runtime-smoke
+      manual:
+        - Confirm no private APIs or network calls were added.
+
+parallel_groups:
+  - id: group-1
+    tasks:
+      - system-network-provider-T1
+      - system-network-provider-T2
+    rule: Tasks are serialized because docs closeout depends on implementation verification.
