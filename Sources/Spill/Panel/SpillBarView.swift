@@ -40,19 +40,11 @@ struct SpillBarView: View {
     }
 
     private var panelState: SpillPanelState {
-        if !AccessibilityPermission.isTrusted {
-            return .permissionRequired
-        }
-
-        if scanner.isScanning {
-            return .scanning
-        }
-
-        if displayItems.isEmpty {
-            return .empty
-        }
-
-        return .ready
+        SpillPanelState.current(
+            isAccessibilityTrusted: AccessibilityPermission.isTrusted,
+            isScanning: scanner.isScanning,
+            isEmpty: displayItems.isEmpty
+        )
     }
 
     var body: some View {

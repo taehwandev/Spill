@@ -138,6 +138,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             } else {
                 print("SPILL_PANEL_LAYOUT_FAIL")
             }
+
+            let contentReport = spillPanelController.contentReport
+            print("SPILL_PANEL_CONTENT \(contentReport.logLine)")
+
+            if contentReport.isValid {
+                print("SPILL_PANEL_CONTENT_OK")
+            } else {
+                print("SPILL_PANEL_CONTENT_FAIL")
+            }
         }
     }
 

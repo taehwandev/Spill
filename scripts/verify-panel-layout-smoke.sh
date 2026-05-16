@@ -73,6 +73,24 @@ if ! grep -q "SPILL_PANEL_LAYOUT_OK" "$LOG_FILE"; then
     exit 1
 fi
 
+if ! grep -q "SPILL_PANEL_CONTENT " "$LOG_FILE"; then
+    echo "FAIL: Spill did not report panel content diagnostics."
+    cat "$LOG_FILE"
+    exit 1
+fi
+
+if grep -q "SPILL_PANEL_CONTENT_FAIL" "$LOG_FILE"; then
+    echo "FAIL: Spill panel content validation failed."
+    cat "$LOG_FILE"
+    exit 1
+fi
+
+if ! grep -q "SPILL_PANEL_CONTENT_OK" "$LOG_FILE"; then
+    echo "FAIL: Spill did not report panel content success."
+    cat "$LOG_FILE"
+    exit 1
+fi
+
 if ! grep -q "SPILL_SMOKE_EXIT" "$LOG_FILE"; then
     echo "FAIL: Spill did not report smoke shutdown."
     cat "$LOG_FILE"

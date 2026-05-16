@@ -67,6 +67,38 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
         )
     }
 
+    var contentReport: SpillPanelContentReport {
+        let displayItems = settings.displayMode.items(from: scanner, settings: settings)
+        let statusModules = settings.statusModuleOrder.filter { settings.isStatusModuleEnabled($0) }
+        let statusDetailRowCount = statusModules.reduce(0) { count, module in
+            count + statusStore.detailRows(for: module).count
+        }
+        let aiDetailRowCount = aiStatusStore.statuses.reduce(0) { count, status in
+            count + SpillStatusDetailRows.rows(for: status).count
+        }
+        let footerItemCount = 3
+            + (settings.showPowerFooter ? 1 : 0)
+            + (settings.showCountBadge ? 1 : 0)
+
+        return SpillPanelContentReport(
+            isVisible: isPresented && panel?.isVisible == true,
+            panelState: SpillPanelState.current(
+                isAccessibilityTrusted: AccessibilityPermission.isTrusted,
+                isScanning: scanner.isScanning,
+                isEmpty: displayItems.isEmpty
+            ),
+            statusModuleIDs: statusModules.map(\.rawValue),
+            statusDetailRowCount: statusDetailRowCount,
+            aiStatusCount: aiStatusStore.statuses.count,
+            aiDetailRowCount: aiDetailRowCount,
+            windowActionCount: windowActionStore.actions.count,
+            menuBarActionCount: displayItems.count,
+            footerItemCount: footerItemCount,
+            showsPowerFooter: settings.showPowerFooter,
+            showsCountBadge: settings.showCountBadge
+        )
+    }
+
     func toggle() {
         if isVisible {
             hide(animated: true)

@@ -1,10 +1,43 @@
 import SwiftUI
 
-enum SpillPanelState {
+enum SpillPanelState: Equatable {
     case permissionRequired
     case scanning
     case empty
     case ready
+
+    static func current(
+        isAccessibilityTrusted: Bool,
+        isScanning: Bool,
+        isEmpty: Bool
+    ) -> SpillPanelState {
+        if !isAccessibilityTrusted {
+            return .permissionRequired
+        }
+
+        if isScanning {
+            return .scanning
+        }
+
+        if isEmpty {
+            return .empty
+        }
+
+        return .ready
+    }
+
+    var logName: String {
+        switch self {
+        case .permissionRequired:
+            return "permissionRequired"
+        case .scanning:
+            return "scanning"
+        case .empty:
+            return "empty"
+        case .ready:
+            return "ready"
+        }
+    }
 
     var symbolName: String {
         switch self {
