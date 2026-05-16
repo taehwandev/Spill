@@ -1,0 +1,72 @@
+feature_id: menu-bar-glance-summary
+status: ready
+
+necessity:
+  decision: build
+  reason: The menu bar glance should be limited to CPU and memory for this slice, with AI/GPU/network left out of the default clock-area summary.
+  clarification_required: false
+  questions: []
+
+tasks:
+  - id: menu-bar-glance-summary-T1
+    title: Limit menu bar glance defaults to CPU and memory
+    owner_role: builder
+    state: done
+    depends_on: []
+    write_scope:
+      - Sources/Spill/MenuBar/SpillMenuBarStatusItem.swift
+      - Sources/Spill/MenuBar/MenuBarStatusSummary.swift
+      - Sources/Spill/Settings/SpillSettings.swift
+      - Tests/SpillTests/SpillSettingsTests.swift
+      - Tests/SpillTests/MenuBarStatusSummaryTests.swift
+    read_scope:
+      - .agents/workflows/implementation.md
+      - Sources/Spill/MenuBar/StatusItemController.swift
+      - Sources/Spill/Panel/SpillBarView.swift
+    forbidden_scope:
+      - Sources/Spill/Accessibility/
+      - Sources/Spill/Providers/SystemGPUProvider.swift
+    acceptance:
+      - Default menu bar status items include CPU and memory only.
+      - Menu bar summary does not include AI, GPU, or network by default.
+      - Panel can still show CPU, memory, GPU, network, and AI details.
+    verification:
+      commands:
+        - swift test
+        - python3 .agents/scripts/workflow.py verify
+      manual:
+        - Confirm the macOS menu bar summary is short enough near the clock area.
+  - id: menu-bar-glance-summary-T2
+    title: Render menu bar values as visual chips
+    owner_role: builder
+    state: done
+    depends_on:
+      - menu-bar-glance-summary-T1
+    write_scope:
+      - Sources/Spill/MenuBar/MenuBarStatusSummary.swift
+      - Sources/Spill/MenuBar/MenuBarStatusContentView.swift
+      - Sources/Spill/MenuBar/StatusItemController.swift
+      - Tests/SpillTests/MenuBarStatusSummaryTests.swift
+    read_scope:
+      - .agents/workflows/implementation.md
+      - Sources/Spill/MenuBar/SpillMenuBarStatusItem.swift
+    forbidden_scope:
+      - Sources/Spill/Accessibility/
+      - Sources/Spill/Providers/SystemGPUProvider.swift
+    acceptance:
+      - CPU and memory status values render as chip views with symbols, percent values, and usage bars.
+      - The implementation still uses one `NSStatusItem`.
+      - Clicks continue to target the status button.
+    verification:
+      commands:
+        - swift test
+        - python3 .agents/scripts/workflow.py verify
+      manual:
+        - Confirm the macOS menu bar renders CPU and memory as compact visual chips.
+
+parallel_groups:
+  - id: implementation
+    tasks:
+      - menu-bar-glance-summary-T1
+      - menu-bar-glance-summary-T2
+    rule: Single narrow implementation task.

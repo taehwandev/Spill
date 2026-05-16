@@ -1,0 +1,151 @@
+feature_id: status-detail-menu-bar
+status: ready
+
+necessity:
+  decision: build
+  reason: Existing status providers need detail and configurable glanceable menu bar output to be useful.
+  clarification_required: false
+  questions: []
+
+tasks:
+  - id: status-detail-menu-bar-T1
+    title: Add menu bar status settings
+    owner_role: builder
+    state: done
+    depends_on: []
+    write_scope:
+      - Sources/Spill/Settings/SpillSettings.swift
+      - Sources/Spill/MenuBar/SpillMenuBarStatusItem.swift
+      - Tests/SpillTests/SpillSettingsTests.swift
+    read_scope:
+      - Sources/Spill/Providers/SpillStatusModule.swift
+    forbidden_scope:
+      - Sources/Spill/Accessibility/
+    acceptance:
+      - CPU and memory menu bar visibility can be persisted.
+      - Default menu bar status values include CPU and memory.
+    verification:
+      commands:
+        - swift test
+      manual: []
+
+  - id: status-detail-menu-bar-T2
+    title: Add menu bar summary rendering
+    owner_role: builder
+    state: done
+    depends_on:
+      - status-detail-menu-bar-T1
+    write_scope:
+      - Sources/Spill/MenuBar/MenuBarStatusSummary.swift
+      - Sources/Spill/MenuBar/StatusItemController.swift
+      - Tests/SpillTests/MenuBarStatusSummaryTests.swift
+    read_scope:
+      - Sources/Spill/Providers/
+    forbidden_scope:
+      - Sources/Spill/Accessibility/
+    acceptance:
+      - Status item shows selected values in readable text.
+      - Status item returns to icon-only mode when no values are enabled.
+      - AI summary does not expose secrets.
+    verification:
+      commands:
+        - swift test
+      manual:
+        - Confirm menu bar text is readable with CPU and memory enabled.
+
+  - id: status-detail-menu-bar-T3
+    title: Share status stores and refresh loop
+    owner_role: builder
+    state: done
+    depends_on:
+      - status-detail-menu-bar-T2
+    write_scope:
+      - Sources/Spill/App/AppDelegate.swift
+      - Sources/Spill/Panel/SpillPanelController.swift
+    read_scope:
+      - Sources/Spill/Providers/SystemStatusStore.swift
+      - Sources/Spill/Providers/AIStatusStore.swift
+    forbidden_scope:
+      - Sources/Spill/Accessibility/
+    acceptance:
+      - Panel and menu bar use the same stores.
+      - Menu bar values refresh without opening the panel.
+      - Refresh loop stops when all menu bar status values are disabled.
+    verification:
+      commands:
+        - swift test
+        - python3 .agents/scripts/workflow.py runtime-smoke
+      manual: []
+
+  - id: status-detail-menu-bar-T4
+    title: Add click details in the panel
+    owner_role: builder
+    state: done
+    depends_on:
+      - status-detail-menu-bar-T1
+    write_scope:
+      - Sources/Spill/Panel/SpillBarView.swift
+      - Sources/Spill/Providers/SystemMemoryProvider.swift
+      - Sources/Spill/Providers/SystemGPUProvider.swift
+      - Sources/Spill/Providers/SystemNetworkProvider.swift
+      - Tests/SpillTests/SystemMemoryProviderTests.swift
+      - Tests/SpillTests/SystemGPUProviderTests.swift
+      - Tests/SpillTests/SystemNetworkProviderTests.swift
+    read_scope:
+      - Sources/Spill/Providers/
+    forbidden_scope:
+      - Sources/Spill/MenuBar/StatusItemController.swift
+    acceptance:
+      - Clicking a system status pill shows detailed readings.
+      - Clicking an AI status pill shows details and a menu bar toggle.
+      - GPU details show Metal device availability and memory budget when available.
+      - Disabled or unavailable states still show clear detail values.
+    verification:
+      commands:
+        - swift test
+        - python3 .agents/scripts/workflow.py panel-layout-smoke
+      manual:
+        - Open each detail popover and confirm it anchors to the clicked status pill.
+
+  - id: status-detail-menu-bar-T5
+    title: Verify and document
+    owner_role: verifier
+    state: done
+    depends_on:
+      - status-detail-menu-bar-T2
+      - status-detail-menu-bar-T3
+      - status-detail-menu-bar-T4
+    write_scope:
+      - README.md
+      - .agents/tasks/roadmap.yml
+      - .agents/runs/status-detail-menu-bar/05-verification.md
+      - .agents/runs/status-detail-menu-bar/06-closeout.md
+    read_scope:
+      - Sources/Spill/
+      - Tests/SpillTests/
+    forbidden_scope: []
+    acceptance:
+      - README mentions menu bar status text and detail popovers.
+      - Roadmap status detail tasks are done.
+      - Verification commands pass.
+    verification:
+      commands:
+        - swift test
+        - python3 .agents/scripts/workflow.py panel-layout-smoke
+        - python3 .agents/scripts/workflow.py runtime-smoke
+        - python3 .agents/scripts/workflow.py verify
+        - git diff --check
+      manual: []
+
+parallel_groups:
+  - id: settings-and-summary
+    tasks:
+      - status-detail-menu-bar-T1
+      - status-detail-menu-bar-T2
+    rule: Settings and pure summary formatting can be implemented independently.
+  - id: integration-and-details
+    tasks:
+      - status-detail-menu-bar-T3
+      - status-detail-menu-bar-T4
+      - status-detail-menu-bar-T5
+    rule: Store integration and detail UI depend on the persisted status settings.
