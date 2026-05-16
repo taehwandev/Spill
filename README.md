@@ -153,8 +153,10 @@ workflow to GitHub Pages. It links to the latest stable release assets:
 - `https://github.com/taehwandev/Spill/releases/latest/download/Spill-macos.dmg`
 - `https://github.com/taehwandev/Spill/releases/latest/download/Spill-macos.zip`
 
-Enable GitHub Pages for the repository using the GitHub Actions source. A custom
-domain can be added later without changing the release workflow.
+The deploy workflow attempts to enable GitHub Pages with the GitHub Actions
+source. If repository policy blocks automatic enablement, enable GitHub Pages
+manually with the GitHub Actions source. A custom domain can be added later
+without changing the release workflow.
 
 ## Verify
 

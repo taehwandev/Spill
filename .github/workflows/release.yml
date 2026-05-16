@@ -232,15 +232,18 @@ jobs:
             gh release edit "$tag" --title "Spill $version" --notes-file "$notes_file"
             gh release upload "$tag" "${assets[@]}" --clobber
           else
-            draft_args=()
             if [[ "$draft" == "true" ]]; then
-              draft_args=(--draft)
+              gh release create "$tag" \
+                --target "$GITHUB_SHA" \
+                --title "Spill $version" \
+                --notes-file "$notes_file" \
+                --draft \
+                "${assets[@]}"
+            else
+              gh release create "$tag" \
+                --target "$GITHUB_SHA" \
+                --title "Spill $version" \
+                --notes-file "$notes_file" \
+                "${assets[@]}"
             fi
-
-            gh release create "$tag" \
-              --target "$GITHUB_SHA" \
-              --title "Spill $version" \
-              --notes-file "$notes_file" \
-              "${draft_args[@]}" \
-              "${assets[@]}"
           fi
