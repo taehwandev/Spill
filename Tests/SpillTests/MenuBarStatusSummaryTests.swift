@@ -18,25 +18,7 @@ final class MenuBarStatusSummaryTests: XCTestCase {
                     wiredBytes: gib(2),
                     compressedBytes: gib(1)
                 )
-            ),
-            gpu: SystemGPUProvider.status(
-                from: [
-                    SystemGPUDeviceStatus(
-                        name: "Apple GPU",
-                        isLowPower: true,
-                        isHeadless: false,
-                        isRemovable: false,
-                        hasUnifiedMemory: true,
-                        recommendedMaxWorkingSetBytes: gib(8)
-                    )
-                ]
-            ),
-            network: SystemNetworkProvider.status(from: nil),
-            aiStatuses: [
-                LocalAIToolStatus(kind: .codex, value: "Live", subtitle: "Process Found", state: .active),
-                LocalAIToolStatus(kind: .ollama, value: "Off", subtitle: "No Process", state: .unavailable),
-                LocalAIToolStatus(kind: .openAI, value: "Set", subtitle: "Configured", state: .normal)
-            ]
+            )
         )
 
         XCTAssertEqual(summary.title, "CPU 20%  MEM 56%")
@@ -57,10 +39,7 @@ final class MenuBarStatusSummaryTests: XCTestCase {
         let summary = MenuBarStatusSummary.make(
             enabledItems: [],
             cpu: SystemCPUProvider.status(previous: nil, current: nil),
-            memory: SystemMemoryProvider.status(from: nil),
-            gpu: SystemGPUProvider.status(from: nil),
-            network: SystemNetworkProvider.status(from: nil),
-            aiStatuses: []
+            memory: SystemMemoryProvider.status(from: nil)
         )
 
         XCTAssertEqual(summary.title, "")

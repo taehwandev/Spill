@@ -5,7 +5,6 @@ final class StatusItemController: NSObject {
     private let defaultLength: CGFloat = 26
     private let settings: SpillSettings
     private let statusStore: SystemStatusStore
-    private let aiStatusStore: AIStatusStore
     private let hiddenItemCountProvider: () -> Int
     private let toggleAction: () -> Void
     private let refreshAction: () -> Void
@@ -18,7 +17,6 @@ final class StatusItemController: NSObject {
     init(
         settings: SpillSettings,
         statusStore: SystemStatusStore,
-        aiStatusStore: AIStatusStore,
         hiddenItemCountProvider: @escaping () -> Int,
         toggleAction: @escaping () -> Void,
         refreshAction: @escaping () -> Void,
@@ -27,7 +25,6 @@ final class StatusItemController: NSObject {
     ) {
         self.settings = settings
         self.statusStore = statusStore
-        self.aiStatusStore = aiStatusStore
         self.hiddenItemCountProvider = hiddenItemCountProvider
         self.toggleAction = toggleAction
         self.refreshAction = refreshAction
@@ -57,10 +54,7 @@ final class StatusItemController: NSObject {
         let summary = MenuBarStatusSummary.make(
             enabledItems: settings.enabledMenuBarStatusItems,
             cpu: statusStore.cpu,
-            memory: statusStore.memory,
-            gpu: statusStore.gpu,
-            network: statusStore.network,
-            aiStatuses: aiStatusStore.statuses
+            memory: statusStore.memory
         )
         triggerItem.isVisible = true
         triggerItem.length = summary.segments.isEmpty ? defaultLength : MenuBarStatusContentView.preferredWidth(for: summary.segments)

@@ -41,7 +41,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItemController = StatusItemController(
             settings: settings,
             statusStore: statusStore,
-            aiStatusStore: aiStatusStore,
             hiddenItemCountProvider: { [weak scanner] in
                 guard let scanner else { return 0 }
                 return SpillSettings.shared.displayMode.items(from: scanner, settings: SpillSettings.shared).count
@@ -212,14 +211,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .store(in: &cancellables)
 
         statusStore.objectWillChange
-            .sink { [weak self] _ in
-                DispatchQueue.main.async {
-                    self?.statusItemController?.refresh()
-                }
-            }
-            .store(in: &cancellables)
-
-        aiStatusStore.objectWillChange
             .sink { [weak self] _ in
                 DispatchQueue.main.async {
                     self?.statusItemController?.refresh()
