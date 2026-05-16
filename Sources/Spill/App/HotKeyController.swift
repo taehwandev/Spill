@@ -2,49 +2,66 @@ import Carbon.HIToolbox
 import Foundation
 
 private let spillHotKeySignature: OSType = 0x5350_494C
-private let spillHotKeyIDValue: UInt32 = 1
+
+struct HotKeyRegistration {
+    let id: UInt32
+    let keyCode: UInt32
+    let modifiers: UInt32
+    let action: @MainActor @Sendable () -> Void
+}
 
 @MainActor
 final class HotKeyController {
-    private let action: () -> Void
-    private var hotKeyRef: EventHotKeyRef?
+    private let registrations: [HotKeyRegistration]
+    private var hotKeyRefs: [UInt32: EventHotKeyRef] = [:]
     private var eventHandlerRef: EventHandlerRef?
 
-    init(action: @escaping () -> Void) {
-        self.action = action
+    init(action: @escaping @MainActor @Sendable () -> Void) {
+        self.registrations = [
+            HotKeyRegistration(
+                id: 1,
+                keyCode: UInt32(kVK_Space),
+                modifiers: UInt32(controlKey | optionKey),
+                action: action
+            )
+        ]
+    }
+
+    init(registrations: [HotKeyRegistration]) {
+        self.registrations = registrations
     }
 
     var isRegistered: Bool {
-        hotKeyRef != nil
+        !hotKeyRefs.isEmpty
     }
 
     func register() {
-        guard hotKeyRef == nil else {
-            return
-        }
-
         installEventHandlerIfNeeded()
 
-        let hotKeyID = EventHotKeyID(signature: spillHotKeySignature, id: spillHotKeyIDValue)
-        let status = RegisterEventHotKey(
-            UInt32(kVK_Space),
-            UInt32(controlKey | optionKey),
-            hotKeyID,
-            GetApplicationEventTarget(),
-            0,
-            &hotKeyRef
-        )
+        for registration in registrations where hotKeyRefs[registration.id] == nil {
+            var hotKeyRef: EventHotKeyRef?
+            let hotKeyID = EventHotKeyID(signature: spillHotKeySignature, id: registration.id)
+            let status = RegisterEventHotKey(
+                registration.keyCode,
+                registration.modifiers,
+                hotKeyID,
+                GetApplicationEventTarget(),
+                0,
+                &hotKeyRef
+            )
 
-        if status != noErr {
-            hotKeyRef = nil
+            if status == noErr, let hotKeyRef {
+                hotKeyRefs[registration.id] = hotKeyRef
+            }
         }
     }
 
     func unregister() {
-        if let hotKeyRef {
+        for hotKeyRef in hotKeyRefs.values {
             UnregisterEventHotKey(hotKeyRef)
-            self.hotKeyRef = nil
         }
+
+        hotKeyRefs.removeAll()
     }
 
     func stop() {
@@ -56,8 +73,12 @@ final class HotKeyController {
         }
     }
 
-    fileprivate func handlePressedHotKey() {
-        action()
+    fileprivate func handlePressedHotKey(id: UInt32) {
+        guard let registration = registrations.first(where: { $0.id == id }) else {
+            return
+        }
+
+        registration.action()
     }
 
     private func installEventHandlerIfNeeded() {
@@ -99,16 +120,38 @@ private let hotKeyEventHandler: EventHandlerUPP = { _, event, userData in
     )
 
     guard status == noErr,
-          hotKeyID.signature == spillHotKeySignature,
-          hotKeyID.id == spillHotKeyIDValue
+          hotKeyID.signature == spillHotKeySignature
     else {
         return noErr
     }
 
     let controller = Unmanaged<HotKeyController>.fromOpaque(userData).takeUnretainedValue()
     Task { @MainActor in
-        controller.handlePressedHotKey()
+        controller.handlePressedHotKey(id: hotKeyID.id)
     }
 
     return noErr
+}
+
+extension HotKeyRegistration {
+    static func spillDefaults(
+        toggleAction: @escaping @MainActor () -> Void,
+        windowAction: @escaping @MainActor (WindowActionKind) -> Void
+    ) -> [HotKeyRegistration] {
+        [
+            HotKeyRegistration(
+                id: 1,
+                keyCode: UInt32(kVK_Space),
+                modifiers: UInt32(controlKey | optionKey),
+                action: toggleAction
+            )
+        ] + WindowActionKind.panelOrder.map { kind in
+            HotKeyRegistration(
+                id: kind.hotKeyID,
+                keyCode: kind.hotKeyCode,
+                modifiers: UInt32(controlKey | optionKey),
+                action: { windowAction(kind) }
+            )
+        }
+    }
 }

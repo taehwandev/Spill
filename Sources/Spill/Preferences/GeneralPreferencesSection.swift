@@ -16,6 +16,10 @@ struct GeneralPreferencesSection: View {
                 .font(.footnote.monospaced())
                 .foregroundStyle(.secondary)
 
+            Text("Window shortcuts: Control + Option + Left/Right/C/Return/D/R")
+                .font(.footnote.monospaced())
+                .foregroundStyle(.secondary)
+
             Picker("Spill Bar Items", selection: $settings.displayMode) {
                 ForEach(SpillDisplayMode.allCases) { mode in
                     Text(mode.title).tag(mode)

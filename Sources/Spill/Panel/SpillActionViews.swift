@@ -19,21 +19,63 @@ struct WindowActionButton: View {
 
     var body: some View {
         Button(action: perform) {
-            Image(systemName: action.symbolName ?? "macwindow")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(foregroundColor)
-                .frame(width: 30, height: 28)
-                .background(backgroundColor, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .stroke(borderColor, lineWidth: 0.8)
+            VStack(spacing: 3) {
+                HStack(spacing: 3) {
+                    Image(systemName: action.symbolName ?? "macwindow")
+                        .font(.system(size: 11, weight: .semibold))
+                        .frame(width: 14, height: 12)
+
+                    Text(labelText)
+                        .font(.system(size: 8.3, weight: .semibold, design: .rounded))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.65)
                 }
-                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                Text(shortcutText)
+                    .font(.system(size: 7.4, weight: .semibold, design: .rounded))
+                    .lineLimit(1)
+                    .foregroundStyle(.secondary)
+            }
+            .foregroundStyle(foregroundColor)
+            .frame(width: 61, height: 38)
+            .background(backgroundColor, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(borderColor, lineWidth: 0.8)
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(.plain)
         .disabled(!action.state.isEnabled)
         .opacity(action.state.isEnabled ? 1 : 0.42)
         .onHover { isHovered = $0 }
+    }
+
+    private var labelText: String {
+        switch action.kind {
+        case .window(.leftHalf):
+            return "Left"
+        case .window(.rightHalf):
+            return "Right"
+        case .window(.center):
+            return "Center"
+        case .window(.maximize):
+            return "Max"
+        case .window(.nextDisplay):
+            return "Display"
+        case .window(.restore):
+            return "Restore"
+        case .menuBarItem, .app, .command:
+            return action.title
+        }
+    }
+
+    private var shortcutText: String {
+        guard case let .window(kind) = action.kind else {
+            return ""
+        }
+
+        return kind.shortcutLabel
     }
 
     private var foregroundColor: Color {

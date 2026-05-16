@@ -10,9 +10,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let aiStatusStore = AIStatusStore()
     private let windowActionStore = WindowActionStore()
     private lazy var scanCoordinator = MenuBarScanCoordinator(scanner: scanner, settings: settings)
-    private lazy var hotKeyController = HotKeyController(action: { [weak self] in
-        self?.toggleSpillBar()
-    })
+    private lazy var hotKeyController = HotKeyController(
+        registrations: HotKeyRegistration.spillDefaults(
+            toggleAction: { [weak self] in
+                self?.toggleSpillBar()
+            },
+            windowAction: { [weak self] kind in
+                self?.performWindowAction(kind)
+            }
+        )
+    )
     private lazy var spillPanelController = SpillPanelController(
         settings: settings,
         scanner: scanner,
@@ -190,6 +197,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func showPreferences() {
         preferencesWindowController.show()
+    }
+
+    private func performWindowAction(_ kind: WindowActionKind) {
+        if !AccessibilityPermission.isTrusted {
+            _ = AccessibilityPermission.request()
+            return
+        }
+
+        let result = windowActionStore.perform(kind)
+        if case .permissionRequired = result {
+            _ = AccessibilityPermission.request()
+        }
     }
 
     private func configureHotKey() {

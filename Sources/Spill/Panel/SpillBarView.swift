@@ -54,7 +54,7 @@ struct SpillBarView: View {
                 statusSection
             }
             aiSection
-            actionsSection
+            actionSections
             footer
         }
         .padding(.horizontal, 14)
@@ -345,25 +345,6 @@ struct SpillBarView: View {
         return parts.joined(separator: " - ")
     }
 
-    private var actionsSection: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            sectionHeader("ACTIONS", symbolName: "square.grid.2x2")
-
-            Group {
-                if !AccessibilityPermission.isTrusted {
-                    inlineState(symbolName: "lock.fill", title: "Accessibility Required")
-                } else if scanner.isScanning && displayItems.isEmpty {
-                    scanningState
-                } else if actionItems.isEmpty && windowActionStore.actions.isEmpty {
-                    inlineState(symbolName: "magnifyingglass", title: emptyStateTitle)
-                } else {
-                    actionScroller
-                }
-            }
-            .frame(height: 38)
-        }
-    }
-
     private var emptyStateTitle: String {
         switch settings.displayMode {
         case .selectedItems:
@@ -373,9 +354,48 @@ struct SpillBarView: View {
         }
     }
 
-    private var actionScroller: some View {
+    private var actionSections: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            windowActionsSection
+            menuBarActionsSection
+        }
+    }
+
+    private var windowActionsSection: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            sectionHeader("WINDOWS", symbolName: "macwindow")
+
+            if windowActionStore.actions.isEmpty {
+                inlineState(symbolName: "macwindow", title: "No Focused Window")
+                    .frame(height: 38)
+            } else {
+                windowActionScroller
+            }
+        }
+    }
+
+    private var menuBarActionsSection: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            sectionHeader("MENU BAR", symbolName: "menubar.rectangle")
+
+            Group {
+                if !AccessibilityPermission.isTrusted {
+                    inlineState(symbolName: "lock.fill", title: "Accessibility Required")
+                } else if scanner.isScanning && displayItems.isEmpty {
+                    scanningState
+                } else if actionItems.isEmpty {
+                    inlineState(symbolName: "magnifyingglass", title: emptyStateTitle)
+                } else {
+                    menuBarActionScroller
+                }
+            }
+            .frame(height: 38)
+        }
+    }
+
+    private var windowActionScroller: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: max(CGFloat(settings.iconSpacing), 7)) {
+            HStack(spacing: 6) {
                 ForEach(windowActionStore.actions) { action in
                     WindowActionButton(action: action) {
                         performWindowAction(action)
@@ -383,7 +403,15 @@ struct SpillBarView: View {
                     .help(windowHelpText(for: action))
                     .accessibilityLabel(action.title)
                 }
+            }
+            .padding(.horizontal, 1)
+        }
+        .frame(height: 38)
+    }
 
+    private var menuBarActionScroller: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: max(CGFloat(settings.iconSpacing), 7)) {
                 ForEach(actionItems) { item in
                     SpillActionButton(
                         action: item.action,
