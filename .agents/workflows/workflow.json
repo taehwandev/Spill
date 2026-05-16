@@ -10,7 +10,7 @@
     },
     {
       "id": "A0.5",
-      "name": "Necessity and Clarification",
+      "name": "Necessity, Ambiguity, and Clarification",
       "owner": "Product Agent",
       "requiredArtifact": "00-intake.md"
     },
@@ -58,10 +58,14 @@
     }
   ],
   "requiredDocs": [
+    "AGENTS.md",
+    "CLAUDE.md",
+    "GEMINI.md",
     ".agents/README.md",
     ".agents/specs/prd.md",
     ".agents/specs/ard.md",
     ".agents/design/stitch.md",
+    ".agents/workflows/ambiguity-gate.md",
     ".agents/workflows/implementation.md",
     ".agents/workflows/multi-agent.md",
     ".agents/tasks/roadmap.yml",
@@ -80,7 +84,8 @@
     "No private APIs in MVP",
     "One visible menu bar trigger",
     "Every feature unit must pass a necessity check before implementation",
-    "Agents must ask the maintainer when intent, scope, value, or feasibility is unclear",
+    "Agents must classify unknowns through the shared ambiguity gate before PRD authoring",
+    "Agents must ask the maintainer when blocker unknowns remain unresolved",
     "Every non-trivial feature must pass PRD and ARD gates before implementation",
     "App startup, lifecycle, packaging, and status item changes must run runtime smoke verification",
     "Parallel code-edit tasks must have disjoint write scopes",

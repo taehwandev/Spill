@@ -8,6 +8,12 @@ Do not author this PRD until `00-intake.md` has `Decision: build` and all clarif
 
 One paragraph describing the feature.
 
+## Resolved Inputs
+
+- maintainer decisions:
+- repo-researched facts:
+- assumptions:
+
 ## Goals
 
 - 
@@ -42,6 +48,20 @@ What appears in the compact panel?
 ## Functional Requirements
 
 1. 
+
+## Behavior Scenarios
+
+### Main Path
+
+Given <starting state>
+When <user action or system event>
+Then <observable result>
+
+### Relevant Edge States
+
+Given <empty, unavailable, permission-required, success, or failure state>
+When <user action or system event>
+Then <observable result>
 
 ## Acceptance Criteria
 

@@ -68,6 +68,10 @@ def read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def has_markdown_status(text: str, label: str, status: str) -> bool:
+    return re.search(rf"(?m)^{re.escape(label)}:\s*`?{re.escape(status)}`?\s*$", text) is not None
+
+
 def repository_text_files() -> list[Path]:
     files: list[Path] = []
     for path in ROOT.rglob("*"):
@@ -147,6 +151,9 @@ def run_gates() -> None:
         r"What happens if we do not build it\?",
         r"Decision:\s*`build \| defer \| reject \| needs-clarification`",
         r"decision:\s*build \| defer \| reject \| needs-clarification",
+        r"Clarity:\s*`clear \| needs-clarification`",
+        r"clarity:\s*clear \| needs-clarification",
+        r"maintainer \| repo-research \| assumption",
         r"clarification_required:\s*true",
         r"What should the user see or do",
         r"One paragraph describing",
@@ -176,6 +183,14 @@ def run_gates() -> None:
                 else:
                     result.fail(f"run {run_dir.name} does not have a `build` necessity decision")
 
+                if "## Ambiguity Gate" in text:
+                    if has_markdown_status(text, "Clarity", "clear"):
+                        result.ok(f"run {run_dir.name} has a resolved ambiguity gate")
+                    elif has_markdown_status(text, "Clarity", "needs-clarification"):
+                        result.fail(f"run {run_dir.name} still has unresolved ambiguity blockers")
+                    else:
+                        result.fail(f"run {run_dir.name} does not have a resolved ambiguity clarity status")
+
             if name == "03-task-breakdown.yml":
                 if not re.search(r"(?m)^necessity:\s*$", text):
                     result.fail(f"run {run_dir.name} missing task breakdown necessity block")
@@ -183,6 +198,10 @@ def run_gates() -> None:
                     result.fail(f"run {run_dir.name} task breakdown is not approved for build")
                 elif re.search(r"(?m)^\s+clarification_required:\s*true\s*$", text):
                     result.fail(f"run {run_dir.name} still requires clarification")
+                elif re.search(r"(?m)^\s+clarity:\s*needs-clarification\s*$", text):
+                    result.fail(f"run {run_dir.name} task breakdown still has ambiguity blockers")
+                elif re.search(r"(?m)^\s+blockers_resolved:\s*false\s*$", text):
+                    result.fail(f"run {run_dir.name} task breakdown ambiguity blockers are not resolved")
                 else:
                     result.ok(f"run {run_dir.name} task breakdown has resolved necessity gate")
 

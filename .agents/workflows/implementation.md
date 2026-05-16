@@ -6,9 +6,11 @@ This workflow is for Codex/agents and human contributors.
 
 Work in small vertical slices. Each slice should leave the app buildable and usable.
 
-Before writing a feature PRD, complete the intake necessity and clarification gate. If intent, scope, product value, UI behavior, permission impact, distribution impact, or feasibility is unclear, ask the maintainer one to three concise questions and wait for answers before authoring the PRD, ARD, task breakdown, or implementation.
+Before writing a feature PRD, complete the intake necessity check and the shared ambiguity gate in `.agents/workflows/ambiguity-gate.md`. If intent, scope, product value, UI behavior, permission impact, distribution impact, or feasibility is unclear, classify the unknowns, ask the maintainer one to three concise blocking questions, and wait for answers before authoring the PRD, ARD, task breakdown, or implementation.
 
 Do not treat a draft PRD as a place to resolve unknown intent. Unknown intent belongs in `00-intake.md` with `Decision: needs-clarification`.
+
+When the request is clear enough to proceed, record assumptions explicitly in `00-intake.md` and convert user-facing behavior into `Given / When / Then` scenarios in `01-prd.md`.
 
 Default command checks:
 

@@ -7,6 +7,7 @@ This folder is the working source of truth for agent-driven implementation.
 - `specs/prd.md`: Product requirements and scope.
 - `specs/ard.md`: Architecture requirements, decisions, constraints, and module boundaries.
 - `workflows/implementation.md`: How agents should plan, implement, verify, and ship work.
+- `workflows/ambiguity-gate.md`: Shared ambiguity, clarification, and assumption rules for all agents.
 - `tasks/roadmap.yml`: Structured implementation milestones and acceptance checks.
 - `design/stitch.md`: Stitch project and screen references for UI-scoped work.
 
@@ -36,8 +37,8 @@ The app should not:
 3. Keep changes small and milestone-oriented.
 4. Prefer public macOS APIs. Accessibility is allowed when explicitly scoped.
 5. When a behavior is best-effort, show that clearly in UI and docs.
-6. Before writing a feature PRD, complete the intake necessity and clarification gate.
-7. If intent, scope, value, UI behavior, feasibility, permissions, or distribution impact is unclear, ask the maintainer concise clarifying questions and wait for answers before authoring the PRD.
+6. Before writing a feature PRD, complete the intake necessity check and the shared ambiguity gate.
+7. Follow `workflows/ambiguity-gate.md`: classify unknowns, research repo-answerable details, ask only blocking questions, and stop before PRD authoring while clarity is `needs-clarification`.
 8. Write repository docs, task artifacts, comments, and scripts in English.
 9. For UI-scoped work, inspect the Stitch source in `design/stitch.md` before implementing SwiftUI changes.
 

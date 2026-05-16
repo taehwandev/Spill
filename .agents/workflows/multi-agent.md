@@ -119,6 +119,7 @@ Input:
 - current product direction
 - known macOS constraints
 - maintainer intent from the conversation
+- `.agents/workflows/ambiguity-gate.md`
 
 Required checks:
 
@@ -127,6 +128,8 @@ Required checks:
 - Can the feature stay compact enough for the tray?
 - Does the feature require private APIs, fragile behavior, or permissions that make distribution worse?
 - What is the product cost of not building it?
+- Which unknowns are blockers, researchable, assumable, or out of scope?
+- Are all blocker unknowns resolved before PRD authoring?
 
 Allowed outcomes:
 
@@ -144,6 +147,7 @@ Exit criteria:
 Hard stop:
 
 - If the decision is `needs-clarification`, do not author the detailed PRD.
+- If ambiguity clarity is `needs-clarification`, do not author the detailed PRD.
 - Leave `01-prd.md`, `02-ard.md`, and `03-task-breakdown.yml` as drafts until the maintainer answers.
 - After the maintainer answers, update `00-intake.md` first, then proceed to the PRD.
 
@@ -164,6 +168,7 @@ Exit criteria:
 
 - user stories are concrete
 - UI behavior is described
+- behavior scenarios use `Given / When / Then` for the main path and relevant edge states
 - acceptance criteria are testable
 - non-goals are explicit
 - success metrics exist

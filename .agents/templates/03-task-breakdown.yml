@@ -4,6 +4,11 @@ status: draft
 necessity:
   decision: build | defer | reject | needs-clarification
   reason: 
+  ambiguity:
+    clarity: clear | needs-clarification
+    blockers_resolved: false
+    resolution_sources:
+      - maintainer | repo-research | assumption
   clarification_required: true
   questions:
     - 

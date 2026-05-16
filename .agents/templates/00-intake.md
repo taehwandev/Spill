@@ -26,6 +26,27 @@ Decision: `build | defer | reject | needs-clarification`
 
 Reason:
 
+## Ambiguity Gate
+
+Use `.agents/workflows/ambiguity-gate.md` before PRD authoring.
+
+Clarity: `clear | needs-clarification`
+
+Unknown classification:
+
+- blocker:
+- researchable:
+- assumable:
+- out-of-scope:
+
+Resolved inputs:
+
+- maintainer:
+- repo-research:
+- assumption:
+
+If clarity is `needs-clarification`, ask only the blocking questions below and stop before writing `01-prd.md`.
+
 ## PRD Authoring Gate
 
 If any of the following are unclear, set the decision to `needs-clarification`, ask the maintainer, and stop before writing `01-prd.md`:
