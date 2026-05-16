@@ -62,20 +62,7 @@ struct SystemMemoryProvider: SpillStatusProvider {
 
     static func status(from reading: SystemMemoryReading?) -> SystemMemoryStatus {
         guard let reading, reading.totalBytes > 0 else {
-            return SystemMemoryStatus(
-                value: "N/A",
-                subtitle: nil,
-                usageRatio: 0,
-                usedBytes: 0,
-                availableBytes: 0,
-                freeBytes: 0,
-                activeBytes: 0,
-                inactiveBytes: 0,
-                wiredBytes: 0,
-                compressedBytes: 0,
-                totalBytes: 0,
-                state: .unavailable
-            )
+            return unavailableStatus()
         }
 
         let ratio = (Double(reading.usedBytes) / Double(reading.totalBytes)).clamped(to: 0...1)
@@ -119,6 +106,23 @@ struct SystemMemoryProvider: SpillStatusProvider {
 
         return String(format: "%.1f GB", gibibytes)
     }
+
+    private static func unavailableStatus() -> SystemMemoryStatus {
+        SystemMemoryStatus(
+            value: "N/A",
+            subtitle: nil,
+            usageRatio: 0,
+            usedBytes: 0,
+            availableBytes: 0,
+            freeBytes: 0,
+            activeBytes: 0,
+            inactiveBytes: 0,
+            wiredBytes: 0,
+            compressedBytes: 0,
+            totalBytes: 0,
+            state: .unavailable
+        )
+    }
 }
 
 private enum SystemMemoryReader {
@@ -155,18 +159,5 @@ private enum SystemMemoryReader {
             wiredBytes: UInt64(stats.wire_count) * pageBytes,
             compressedBytes: UInt64(stats.compressor_page_count) * pageBytes
         )
-    }
-}
-
-private extension UInt64 {
-    func saturatingAdd(_ value: UInt64) -> UInt64 {
-        let (result, overflow) = addingReportingOverflow(value)
-        return overflow ? UInt64.max : result
-    }
-}
-
-private extension Comparable {
-    func clamped(to limits: ClosedRange<Self>) -> Self {
-        min(max(self, limits.lowerBound), limits.upperBound)
     }
 }

@@ -55,62 +55,109 @@ struct SystemNetworkProvider: SpillStatusProvider {
 
     static func status(from reading: SystemNetworkReading?) -> SystemNetworkStatus {
         guard let reading else {
-            return SystemNetworkStatus(
-                value: "N/A",
-                subtitle: nil,
-                availabilityRatio: 0,
-                state: .unavailable,
-                symbolName: "network",
-                isAvailable: false,
-                isReachable: false,
-                connectionRequired: false,
-                canConnectAutomatically: false,
-                interventionRequired: false
-            )
+            return unavailableStatus()
         }
 
-        if reading.hasUsableRoute {
-            return SystemNetworkStatus(
-                value: "Online",
-                subtitle: "Default Route",
-                availabilityRatio: 1,
-                state: .normal,
-                symbolName: "network",
-                isAvailable: true,
-                isReachable: reading.isReachable,
-                connectionRequired: reading.connectionRequired,
-                canConnectAutomatically: reading.canConnectAutomatically,
-                interventionRequired: reading.interventionRequired
-            )
-        }
+        return status(from: reading, routeState: routeState(for: reading))
+    }
 
-        if reading.isReachable && reading.connectionRequired {
-            return SystemNetworkStatus(
-                value: "Standby",
-                subtitle: "Connection Required",
-                availabilityRatio: 0.5,
-                state: .active,
-                symbolName: "network",
-                isAvailable: false,
-                isReachable: reading.isReachable,
-                connectionRequired: reading.connectionRequired,
-                canConnectAutomatically: reading.canConnectAutomatically,
-                interventionRequired: reading.interventionRequired
-            )
-        }
-
-        return SystemNetworkStatus(
-            value: "Offline",
-            subtitle: "No Route",
-            availabilityRatio: 0,
-            state: .warning,
+    private static func status(
+        from reading: SystemNetworkReading,
+        routeState: SystemNetworkRouteState
+    ) -> SystemNetworkStatus {
+        SystemNetworkStatus(
+            value: routeState.value,
+            subtitle: routeState.subtitle,
+            availabilityRatio: routeState.availabilityRatio,
+            state: routeState.state,
             symbolName: "network",
-            isAvailable: false,
+            isAvailable: routeState.isAvailable,
             isReachable: reading.isReachable,
             connectionRequired: reading.connectionRequired,
             canConnectAutomatically: reading.canConnectAutomatically,
             interventionRequired: reading.interventionRequired
         )
+    }
+
+    private static func routeState(for reading: SystemNetworkReading) -> SystemNetworkRouteState {
+        if reading.hasUsableRoute {
+            return .online
+        }
+
+        if reading.isReachable && reading.connectionRequired {
+            return .standby
+        }
+
+        return .offline
+    }
+
+    private static func unavailableStatus() -> SystemNetworkStatus {
+        SystemNetworkStatus(
+            value: "N/A",
+            subtitle: nil,
+            availabilityRatio: 0,
+            state: .unavailable,
+            symbolName: "network",
+            isAvailable: false,
+            isReachable: false,
+            connectionRequired: false,
+            canConnectAutomatically: false,
+            interventionRequired: false
+        )
+    }
+}
+
+private enum SystemNetworkRouteState {
+    case online
+    case standby
+    case offline
+
+    var value: String {
+        switch self {
+        case .online:
+            return "Online"
+        case .standby:
+            return "Standby"
+        case .offline:
+            return "Offline"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .online:
+            return "Default Route"
+        case .standby:
+            return "Connection Required"
+        case .offline:
+            return "No Route"
+        }
+    }
+
+    var availabilityRatio: Double {
+        switch self {
+        case .online:
+            return 1
+        case .standby:
+            return 0.5
+        case .offline:
+            return 0
+        }
+    }
+
+    var state: SpillStatusState {
+        switch self {
+        case .online:
+            return .normal
+        case .standby:
+            return .active
+        case .offline:
+            return .warning
+        }
+    }
+
+    var isAvailable: Bool {
+        self == .online
     }
 }
 

@@ -212,9 +212,3 @@ private enum SystemPowerReader {
         return typeSource.takeUnretainedValue() as String
     }
 }
-
-private extension Comparable {
-    func clamped(to limits: ClosedRange<Self>) -> Self {
-        min(max(self, limits.lowerBound), limits.upperBound)
-    }
-}

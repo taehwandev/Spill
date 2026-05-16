@@ -57,15 +57,7 @@ struct SystemGPUProvider: SpillStatusProvider {
 
     static func status(from devices: [SystemGPUDeviceStatus]?) -> SystemGPUStatus {
         guard let devices, !devices.isEmpty else {
-            return SystemGPUStatus(
-                value: "N/A",
-                subtitle: nil,
-                devices: [],
-                availableDeviceCount: 0,
-                totalDeviceCount: 0,
-                totalRecommendedMaxWorkingSetBytes: 0,
-                state: .unavailable
-            )
+            return unavailableStatus()
         }
 
         let usableDevices = devices.filter { !$0.isHeadless }
@@ -83,7 +75,23 @@ struct SystemGPUProvider: SpillStatusProvider {
             availableDeviceCount: usableDevices.count,
             totalDeviceCount: devices.count,
             totalRecommendedMaxWorkingSetBytes: workingSetBytes,
-            state: usableDevices.isEmpty ? .warning : .normal
+            state: state(for: usableDevices)
+        )
+    }
+
+    private static func state(for usableDevices: [SystemGPUDeviceStatus]) -> SpillStatusState {
+        usableDevices.isEmpty ? .warning : .normal
+    }
+
+    private static func unavailableStatus() -> SystemGPUStatus {
+        SystemGPUStatus(
+            value: "N/A",
+            subtitle: nil,
+            devices: [],
+            availableDeviceCount: 0,
+            totalDeviceCount: 0,
+            totalRecommendedMaxWorkingSetBytes: 0,
+            state: .unavailable
         )
     }
 
@@ -96,12 +104,5 @@ struct SystemGPUProvider: SpillStatusProvider {
             hasUnifiedMemory: device.hasUnifiedMemory,
             recommendedMaxWorkingSetBytes: UInt64(device.recommendedMaxWorkingSetSize)
         )
-    }
-}
-
-private extension UInt64 {
-    func saturatingAdd(_ value: UInt64) -> UInt64 {
-        let (result, overflow) = addingReportingOverflow(value)
-        return overflow ? UInt64.max : result
     }
 }
