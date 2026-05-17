@@ -188,6 +188,9 @@ private final class MenuBarMetricChipView: NSView {
     private var statusColor: NSColor {
         switch segment.state {
         case .normal:
+            if segment.kind == .trigger {
+                return .systemTeal
+            }
             return .systemMint
         case .active, .refreshing:
             return .systemBlue

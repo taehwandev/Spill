@@ -1,0 +1,71 @@
+feature_id: status-trigger-hit-target
+status: implemented
+
+necessity:
+  decision: build
+  reason: The menu bar panel trigger must remain available when status chips are enabled.
+  ambiguity:
+    clarity: clear
+    blockers_resolved: true
+    resolution_sources:
+      - maintainer
+      - repo-research
+      - assumption
+  clarification_required: false
+  questions: []
+
+tasks:
+  - id: status-trigger-hit-target-T1
+    title: Add dedicated trigger segment to menu bar status content
+    owner_role: builder
+    state: done
+    depends_on: []
+    write_scope:
+      - Sources/Spill/MenuBar/MenuBarStatusSummary.swift
+      - Sources/Spill/MenuBar/MenuBarStatusContentView.swift
+      - Sources/Spill/MenuBar/StatusItemController.swift
+    read_scope:
+      - .agents/specs/prd.md
+      - .agents/specs/ard.md
+      - Sources/Spill/App/AppDelegate.swift
+    forbidden_scope:
+      - Sources/Spill/Panel
+      - Sources/Spill/Preferences
+    acceptance:
+      - Status chips are preceded by a Spill trigger chip.
+      - Caffeine chip still toggles Caffeine.
+      - Non-Caffeine status chip clicks still open the panel.
+    verification:
+      commands:
+        - swift test --filter MenuBarStatusContentViewTests
+        - swift build
+      manual:
+        - Restart the app and click the trigger chip.
+
+  - id: status-trigger-hit-target-T2
+    title: Cover segment hit-test order
+    owner_role: builder
+    state: done
+    depends_on:
+      - status-trigger-hit-target-T1
+    write_scope:
+      - Tests/SpillTests/MenuBarStatusContentViewTests.swift
+    read_scope:
+      - Sources/Spill/MenuBar/MenuBarStatusContentView.swift
+      - Sources/Spill/MenuBar/MenuBarStatusSummary.swift
+    forbidden_scope:
+      - Sources/Spill/Panel
+      - Sources/Spill/Preferences
+    acceptance:
+      - Tests distinguish trigger, Caffeine, and CPU regions.
+    verification:
+      commands:
+        - swift test --filter MenuBarStatusContentViewTests
+      manual: []
+
+parallel_groups:
+  - id: group-1
+    tasks:
+      - status-trigger-hit-target-T1
+      - status-trigger-hit-target-T2
+    rule: Same model and tests; keep sequential to avoid conflicting assumptions.

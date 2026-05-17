@@ -2,6 +2,7 @@ import Foundation
 
 struct MenuBarStatusSegment: Equatable {
     enum Kind: Equatable {
+        case trigger
         case cpu
         case memory
         case caffeine

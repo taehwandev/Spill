@@ -64,11 +64,12 @@ final class StatusItemController: NSObject {
             highlightThreshold: settings.menuBarStatusHighlightThreshold
         )
         let sleepGuardSegment = sleepGuardMenuBarSegment
-        let segments = [sleepGuardSegment].compactMap { $0 } + summary.segments
+        let statusSegments = [sleepGuardSegment].compactMap { $0 } + summary.segments
+        let segments = [triggerSegment] + statusSegments
         currentSegments = segments
         let statusTooltip = statusTooltip(summary: summary, sleepGuardSegment: sleepGuardSegment)
         triggerItem.isVisible = true
-        triggerItem.length = segments.isEmpty ? defaultLength : MenuBarStatusContentView.preferredWidth(for: segments)
+        triggerItem.length = MenuBarStatusContentView.preferredWidth(for: segments)
         configureAppearance(for: button, segments: segments, statusTooltip: statusTooltip)
         button.state = self.isSpillBarVisible ? .on : .off
         button.toolTip = tooltip(
@@ -98,6 +99,10 @@ final class StatusItemController: NSObject {
         return windowFrame
     }
 
+    func performPrimaryClickForSmokeTest() {
+        triggerItem.button?.performClick(nil)
+    }
+
     private func configureTriggerButton() {
         guard let button = triggerItem.button else {
             return
@@ -124,7 +129,7 @@ final class StatusItemController: NSObject {
 
         if !segments.isEmpty {
             installStatusContentView(on: button, segments: segments)
-            button.setAccessibilityLabel(statusTooltip)
+            button.setAccessibilityLabel(statusTooltip.isEmpty ? "Spill" : statusTooltip)
             return
         }
 
@@ -214,6 +219,19 @@ final class StatusItemController: NSObject {
         )
     }
 
+    private var triggerSegment: MenuBarStatusSegment {
+        MenuBarStatusSegment(
+            kind: .trigger,
+            title: "Spill",
+            shortTitle: "Spill",
+            value: "",
+            displayText: "",
+            usageRatio: 0,
+            state: isSpillBarVisible ? .active : .normal,
+            symbolName: isSpillBarVisible ? "drop.circle.fill" : "drop.fill"
+        )
+    }
+
     private func statusTooltip(
         summary: MenuBarStatusSummary,
         sleepGuardSegment: MenuBarStatusSegment?
@@ -222,11 +240,11 @@ final class StatusItemController: NSObject {
 
         if sleepGuardSegment != nil {
             if !sleepGuard.isActive {
-                parts.append("Click to start Caffeine for \(settings.sleepGuardDefaultDuration.menuTitle)")
+                parts.append("Caffeine chip: click to start for \(settings.sleepGuardDefaultDuration.menuTitle)")
             } else if sleepGuard.activeDuration?.isIndefinite == true {
-                parts.append("Caffeine on until stopped - click to stop")
+                parts.append("Caffeine chip: on until stopped - click to stop")
             } else {
-                parts.append("Caffeine \(sleepGuard.remainingLabel) remaining - click to stop")
+                parts.append("Caffeine chip: \(sleepGuard.remainingLabel) remaining - click to stop")
             }
         }
 
@@ -242,7 +260,7 @@ final class StatusItemController: NSObject {
         let shouldShowMenu = event?.type == .rightMouseUp || event?.modifierFlags.contains(.control) == true
 
         if shouldShowMenu {
-            showMenu()
+            showMenu(for: sender, event: event)
         } else if isCaffeineSegmentClick(sender: sender, event: event) {
             toggleCaffeineFromStatusItem()
         } else {
@@ -288,7 +306,7 @@ final class StatusItemController: NSObject {
         quitAction()
     }
 
-    private func showMenu() {
+    private func showMenu(for button: NSStatusBarButton, event: NSEvent?) {
         let menu = NSMenu()
         let toggleTitle = isSpillBarVisible ? "Hide Spill Bar" : "Show Spill Bar"
 
@@ -299,9 +317,9 @@ final class StatusItemController: NSObject {
         menu.addItem(.separator())
         menu.addItem(menuItem(title: "Quit Spill", action: #selector(quitFromMenu), keyEquivalent: "q"))
 
-        triggerItem.menu = menu
-        triggerItem.button?.performClick(nil)
-        triggerItem.menu = nil
+        if let event {
+            NSMenu.popUpContextMenu(menu, with: event, for: button)
+        }
     }
 
     private func menuItem(title: String, action: Selector, keyEquivalent: String) -> NSMenuItem {
