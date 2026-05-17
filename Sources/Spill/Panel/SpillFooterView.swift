@@ -86,6 +86,7 @@ struct SpillFooterView: View {
         Menu {
             if sleepGuard.isActive {
                 Button(role: .destructive) {
+                    SpillTelemetry.shared.track("sleep_guard_stopped", props: ["source": "panel_footer"])
                     sleepGuard.stop()
                 } label: {
                     Text("Stop Caffeine")
@@ -94,10 +95,7 @@ struct SpillFooterView: View {
                 Divider()
             } else {
                 Button("Start \(sleepGuardDefaultDuration.menuTitle)") {
-                    sleepGuard.start(
-                        duration: sleepGuardDefaultDuration,
-                        keepDisplayAwake: keepsDisplayAwake
-                    )
+                    startSleepGuard(duration: sleepGuardDefaultDuration)
                 }
 
                 Divider()
@@ -105,10 +103,7 @@ struct SpillFooterView: View {
 
             ForEach(SleepGuardDuration.availableDurations(allowsIndefinite: allowsIndefiniteDuration)) { duration in
                 Button(duration.menuTitle) {
-                    sleepGuard.start(
-                        duration: duration,
-                        keepDisplayAwake: keepsDisplayAwake
-                    )
+                    startSleepGuard(duration: duration)
                 }
             }
         } label: {
@@ -158,6 +153,20 @@ struct SpillFooterView: View {
         )
         .help(powerHelpText(for: status))
         .accessibilityLabel(powerHelpText(for: status))
+    }
+
+    private func startSleepGuard(duration: SleepGuardDuration) {
+        let didStart = sleepGuard.start(
+            duration: duration,
+            keepDisplayAwake: keepsDisplayAwake
+        )
+        SpillTelemetry.shared.track(
+            "sleep_guard_started",
+            props: [
+                "source": "panel_footer",
+                "result": didStart ? "success" : "failed"
+            ]
+        )
     }
 
     private var shortTime: String {

@@ -1,0 +1,84 @@
+feature_id: landing-page-showcase
+status: ready
+
+necessity:
+  decision: build
+  reason: Upgrading the landing page is key to the 2.0 release, presenting Spill as a highly polished, premium desktop utility app with a live interactive simulator.
+  clarification_required: false
+  questions: []
+
+tasks:
+  - id: landing-page-showcase-T1
+    title: Build interactive hero simulator
+    owner_role: builder
+    state: done
+    depends_on: []
+    write_scope:
+      - docs/index.html
+    read_scope:
+      - .agents/runs/landing-page-showcase/
+    forbidden_scope:
+      - Sources/Spill/
+    acceptance:
+      - Spill menu bar dropdown toggles simulated panel smoothly.
+      - Snapping layout buttons snap mock window correctly in the simulator.
+    verification:
+      commands:
+        - python3 .agents/scripts/workflow.py verify
+      manual:
+        - Hover or tap the Spill trigger next to the notch in the simulator and confirm the panel opens.
+
+  - id: landing-page-showcase-T2
+    title: Implement live performance and Agent Cat telemetry animations
+    owner_role: builder
+    state: done
+    depends_on:
+      - landing-page-showcase-T1
+    write_scope:
+      - docs/index.html
+    read_scope:
+      - .agents/runs/landing-page-showcase/01-prd.md
+    forbidden_scope:
+      - Sources/Spill/
+    acceptance:
+      - CPU SVG wave fluctuations are smooth and organic.
+      - Agent Cat terminal streams simulated model telemetry logs in real-time.
+    verification:
+      commands:
+        - python3 .agents/scripts/workflow.py verify
+      manual:
+        - Confirm that scrolling down starts the telemetry text stream and increments the tickers.
+
+  - id: landing-page-showcase-T3
+    title: Conduct visual responsive and scroll-snap check
+    owner_role: verifier
+    state: done
+    depends_on:
+      - landing-page-showcase-T1
+      - landing-page-showcase-T2
+    write_scope:
+      - .agents/runs/landing-page-showcase/05-verification.md
+      - .agents/runs/landing-page-showcase/06-closeout.md
+    read_scope:
+      - docs/index.html
+    forbidden_scope:
+      - Sources/Spill/
+    acceptance:
+      - Fully responsive layouts across all breakpoint bounds.
+      - Scroll-snap snaps perfectly to each fullscreen card on desktop.
+    verification:
+      commands:
+        - python3 .agents/scripts/workflow.py verify
+      manual:
+        - Inspect the landing page in browser inspect tool and resize the screen from 320px to 2560px.
+
+parallel_groups:
+  - id: design-and-implementation
+    tasks:
+      - landing-page-showcase-T1
+      - landing-page-showcase-T2
+    rule: Hero and showcase widgets may be coded in parallel.
+  - id: verification
+    tasks:
+      - landing-page-showcase-T3
+    rule: Verification runs after the landing page is fully coded.

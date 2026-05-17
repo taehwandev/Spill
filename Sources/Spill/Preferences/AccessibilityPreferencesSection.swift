@@ -38,7 +38,7 @@ struct AccessibilityPreferencesSection: View {
                     .buttonStyle(.borderedProminent)
 
                     Button {
-                        scanner.refresh()
+                        refreshScanner()
                     } label: {
                         Label(scanner.isScanning ? "Scanning" : "Refresh Scanner", systemImage: "arrow.clockwise")
                     }
@@ -64,6 +64,10 @@ struct AccessibilityPreferencesSection: View {
                     .buttonStyle(.borderedProminent)
 
                     Button {
+                        SpillTelemetry.shared.track(
+                            "accessibility_system_settings_opened",
+                            props: ["source": "preferences"]
+                        )
                         AccessibilityPermission.openSystemSettings()
                     } label: {
                         Label("System Settings", systemImage: "gearshape.fill")
@@ -76,6 +80,10 @@ struct AccessibilityPreferencesSection: View {
                     }
 
                     Button {
+                        SpillTelemetry.shared.track(
+                            "app_relaunch_requested",
+                            props: ["source": "accessibility_preferences"]
+                        )
                         AppRelauncher.relaunch()
                     } label: {
                         Label("Relaunch", systemImage: "arrow.triangle.2.circlepath")
@@ -106,18 +114,48 @@ struct AccessibilityPreferencesSection: View {
 
     private func refreshPermissionState() {
         accessibilityTrusted = AccessibilityPermission.isTrusted
+        SpillTelemetry.shared.track(
+            "accessibility_rechecked",
+            props: [
+                "source": "preferences",
+                "result": accessibilityTrusted ? "trusted" : "not_trusted"
+            ]
+        )
         if accessibilityTrusted {
             scanner.refresh()
         }
     }
 
     private func requestPermission() {
+        SpillTelemetry.shared.track(
+            "accessibility_permission_requested",
+            props: ["source": "preferences"]
+        )
         accessibilityTrusted = AccessibilityPermission.request()
+        SpillTelemetry.shared.track(
+            "accessibility_permission_result",
+            props: [
+                "source": "preferences",
+                "result": accessibilityTrusted ? "trusted" : "not_trusted"
+            ]
+        )
         if accessibilityTrusted {
             scanner.refresh()
         } else {
+            SpillTelemetry.shared.track(
+                "accessibility_system_settings_opened",
+                props: ["source": "request_access"]
+            )
             AccessibilityPermission.openSystemSettings()
         }
+    }
+
+    private func refreshScanner() {
+        SpillTelemetry.shared.track(
+            "menu_bar_scan_requested",
+            props: ["source": "accessibility_preferences"]
+        )
+        scanner.refresh()
     }
 
     private func statePill(title: String, tint: Color) -> some View {

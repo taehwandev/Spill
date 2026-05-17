@@ -182,6 +182,9 @@ final class PanelStore: ObservableObject {
         case .refreshDerivedState:
             refreshDerivedState()
         case let .setStatusDetailTarget(target):
+            if let target {
+                SpillTelemetry.shared.track("status_detail_opened", props: telemetryProps(for: target))
+            }
             updateTransientState(statusDetailTarget: .replace(target), pendingDismiss: .replace(false))
         case .dismissRequestHandled:
             updateTransientState(pendingDismiss: .replace(false))
@@ -254,6 +257,10 @@ final class PanelStore: ObservableObject {
     private func togglePinned(_ item: MenuBarItemSnapshot) {
         let isPinned = settings.selectedItemKeys.contains(item.stableKey)
         settings.setItem(item, selected: !isPinned)
+        SpillTelemetry.shared.track(
+            "pinned_item_toggled",
+            props: ["state": isPinned ? "unpinned" : "pinned"]
+        )
         refreshDerivedState()
         updateTransientState(
             actionFeedback: .replace(SpillActionFeedback(
@@ -267,6 +274,13 @@ final class PanelStore: ObservableObject {
 
     private func perform(_ item: SpillDisplayedActionItem) {
         let result = menuBarActionPerformer(item.action)
+        SpillTelemetry.shared.track(
+            "menu_bar_action_performed",
+            props: [
+                "source": "panel",
+                "result": telemetryResult(result)
+            ]
+        )
         updateTransientState(
             actionFeedback: .replace(SpillActionFeedback(result: result, title: item.action.title)),
             pendingDismiss: .replace(result == .success)
@@ -275,9 +289,43 @@ final class PanelStore: ObservableObject {
 
     private func performWindowAction(_ action: SpillAction) {
         let result = windowActionPerformer(action)
+        if case let .window(kind) = action.kind {
+            SpillTelemetry.shared.track(
+                "window_action_performed",
+                props: [
+                    "source": "panel",
+                    "kind": kind.rawValue,
+                    "result": telemetryResult(result)
+                ]
+            )
+        }
         updateTransientState(
             actionFeedback: .replace(SpillActionFeedback(result: result, title: action.title)),
             pendingDismiss: .replace(false)
         )
+    }
+
+    private func telemetryProps(for target: SpillStatusDetailTarget) -> [String: String] {
+        switch target {
+        case let .system(module):
+            return ["target": "system", "module": module.rawValue]
+        case .ai:
+            return ["target": "ai"]
+        }
+    }
+
+    private func telemetryResult(_ result: SpillActionResult) -> String {
+        switch result {
+        case .success:
+            return "success"
+        case .unavailable:
+            return "unavailable"
+        case .permissionRequired:
+            return "permission_required"
+        case .unsupported:
+            return "unsupported"
+        case .failed:
+            return "failed"
+        }
     }
 }

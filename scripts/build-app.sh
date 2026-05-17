@@ -11,6 +11,18 @@ DEFAULT_VERSION="$(date -u +%G.%V.1)"
 VERSION="${SPILL_VERSION:-$DEFAULT_VERSION}"
 BUILD_NUMBER="${SPILL_BUILD:-1}"
 SIGN_IDENTITY="${SPILL_SIGN_IDENTITY:--}"
+APTABASE_APP_KEY="${SPILL_APTABASE_APP_KEY:-}"
+APTABASE_INFO_PLIST_ENTRY=""
+
+if [[ -n "$APTABASE_APP_KEY" ]]; then
+    if [[ ! "$APTABASE_APP_KEY" =~ ^A-[A-Z]{2}-[0-9]+$ ]]; then
+        echo "SPILL_APTABASE_APP_KEY must look like A-US-1234567890 or A-EU-1234567890." >&2
+        exit 2
+    fi
+
+    APTABASE_INFO_PLIST_ENTRY="    <key>SPILLAptabaseAppKey</key>
+    <string>$APTABASE_APP_KEY</string>"
+fi
 
 swift build -c release --package-path "$ROOT_DIR"
 
@@ -56,6 +68,7 @@ cat > "$CONTENTS_DIR/Info.plist" <<PLIST
     <true/>
     <key>NSHumanReadableCopyright</key>
     <string>Copyright 2026 Spill contributors</string>
+$APTABASE_INFO_PLIST_ENTRY
 </dict>
 </plist>
 PLIST

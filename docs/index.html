@@ -1,201 +1,973 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="Spill is a compact macOS control tray for crowded menu bars.">
-    <title>Spill - Your Menu Bar, Unleashed.</title>
-    <link rel="icon" href="assets/spill-icon.png">
-    <link rel="apple-touch-icon" href="assets/spill-icon.png">
-    <link rel="stylesheet" href="styles.css">
-  </head>
-  <body>
-    <header class="site-header" aria-label="Primary">
-      <div class="header-inner">
-        <a class="brand" href="#top" aria-label="Spill home">
-          <img src="assets/spill-icon.png" alt="" width="34" height="34">
-          <span>Spill</span>
+<!DOCTYPE html>
+<html class="scroll-smooth" lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <meta name="description" content="Spill is a compact macOS control tray for crowded menu bars, system status, window actions, pinned shortcuts, and local AI state."/>
+    <title>Spill - Compact macOS control tray</title>
+    <link rel="icon" href="assets/spill-icon.png"/>
+    <link rel="apple-touch-icon" href="assets/spill-icon.png"/>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&amp;display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+    <script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "on-primary": "#ffffff",
+                        "background": "#ffffff",
+                        "primary-fixed": "#d8e2ff",
+                        "surface-variant": "#e2e2e2",
+                        "surface-container-high": "#e8e8e8",
+                        "primary-fixed-dim": "#adc6ff",
+                        "on-error": "#ffffff",
+                        "on-secondary-fixed-variant": "#3631b4",
+                        "on-secondary-fixed": "#0c006a",
+                        "tertiary": "#5a5c60",
+                        "primary-container": "#0070eb",
+                        "on-surface": "#1a1c1c",
+                        "on-tertiary": "#ffffff",
+                        "surface": "#ffffff",
+                        "secondary-container": "#6664e4",
+                        "tertiary-fixed": "#e2e2e7",
+                        "on-secondary": "#ffffff",
+                        "error-container": "#ffdad6",
+                        "surface-container-low": "#f3f3f4",
+                        "surface-container-highest": "#e2e2e2",
+                        "secondary": "#4c4aca",
+                        "on-tertiary-fixed": "#1a1c1f",
+                        "surface-dim": "#dadada",
+                        "inverse-on-surface": "#f0f1f1",
+                        "on-tertiary-container": "#fdfcff",
+                        "primary": "#0058bc",
+                        "on-secondary-container": "#fffbff",
+                        "on-surface-variant": "#414755",
+                        "inverse-surface": "#2f3131",
+                        "on-tertiary-fixed-variant": "#45474b",
+                        "on-primary-fixed": "#001a41",
+                        "inverse-primary": "#adc6ff",
+                        "secondary-fixed-dim": "#c2c1ff",
+                        "surface-container": "#eeeeee",
+                        "on-primary-container": "#fefcff",
+                        "tertiary-container": "#737479",
+                        "outline": "#717786",
+                        "tertiary-fixed-dim": "#c6c6cb",
+                        "surface-bright": "#f9f9f9",
+                        "error": "#ba1a1a",
+                        "surface-tint": "#005bc1",
+                        "secondary-fixed": "#e2dfff",
+                        "on-primary-fixed-variant": "#004493",
+                        "surface-container-lowest": "#ffffff",
+                        "on-error-container": "#93000a",
+                        "on-background": "#1a1c1c",
+                        "outline-variant": "#c1c6d7"
+                    },
+                    borderRadius: {
+                        DEFAULT: "1rem",
+                        lg: "2rem",
+                        xl: "3rem",
+                        full: "9999px"
+                    },
+                    spacing: {
+                        gutter: "24px",
+                        "container-padding-desktop": "80px",
+                        unit: "8px",
+                        "container-padding-mobile": "24px",
+                        "stack-gap-md": "32px",
+                        "stack-gap-lg": "120px"
+                    },
+                    fontFamily: {
+                        "display-lg": ["Inter"],
+                        "display-lg-mobile": ["Inter"],
+                        "label-caps": ["Inter"],
+                        "body-lg": ["Inter"],
+                        "body-md": ["Inter"],
+                        "headline-md": ["Inter"]
+                    },
+                    fontSize: {
+                        "display-lg": ["64px", {"lineHeight": "1.1", "letterSpacing": "0", "fontWeight": "800"}],
+                        "display-lg-mobile": ["42px", {"lineHeight": "1.2", "letterSpacing": "0", "fontWeight": "800"}],
+                        "label-caps": ["13px", {"lineHeight": "1.0", "letterSpacing": "0.15em", "fontWeight": "700"}],
+                        "body-lg": ["20px", {"lineHeight": "1.7", "letterSpacing": "0", "fontWeight": "400"}],
+                        "body-md": ["16px", {"lineHeight": "1.6", "letterSpacing": "0", "fontWeight": "400"}],
+                        "headline-md": ["32px", {"lineHeight": "1.3", "letterSpacing": "0", "fontWeight": "700"}]
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @media (min-width: 1024px) {
+            html {
+                scroll-snap-type: y mandatory;
+                scroll-behavior: smooth;
+            }
+            .snap-shell {
+                overflow: visible;
+            }
+            .snap-page {
+                min-height: 100vh;
+                min-height: 100svh;
+                scroll-snap-align: start;
+                scroll-snap-stop: always;
+            }
+            .snap-page:not(#hero) {
+                box-sizing: border-box;
+                padding-top: clamp(88px, 10vh, 112px) !important;
+                padding-bottom: clamp(48px, 6vh, 80px) !important;
+            }
+        }
+
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            box-shadow: 0 8px 32px 0 rgba(0, 88, 188, 0.05);
+        }
+        .glass-panel-deep {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(40px);
+            -webkit-backdrop-filter: blur(40px);
+            border: 1px solid rgba(255, 255, 255, 0.6);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.03);
+        }
+        .terminal-shadow {
+            box-shadow: 0 30px 60px -12px rgba(0, 0, 0, 0.25);
+        }
+        .text-gradient {
+            background: linear-gradient(135deg, #0058bc 0%, #4c4aca 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .bg-soft-gradient {
+            background: radial-gradient(circle at 50% 50%, rgba(216, 226, 255, 0.3) 0%, rgba(255, 255, 255, 0) 70%);
+        }
+        .product-screen {
+            background:
+                radial-gradient(circle at 50% 12%, rgba(0, 88, 188, 0.12), transparent 32%),
+                linear-gradient(180deg, #f8fafc 0%, #e7ecf4 100%);
+        }
+        .app-icon {
+            display: block;
+            object-fit: cover;
+            border-radius: 22%;
+            background: #071015;
+            box-shadow: 0 10px 22px rgba(0, 24, 50, 0.14);
+        }
+        .app-icon-sm {
+            width: 32px;
+            height: 32px;
+        }
+        .app-icon-md {
+            width: 40px;
+            height: 40px;
+        }
+        .app-icon-lg {
+            width: 72px;
+            height: 72px;
+        }
+        .agentcat-icon {
+            box-sizing: border-box;
+            background: #fff7ed;
+            object-fit: contain;
+            padding: 4px;
+        }
+        .agentcat-icon-sm {
+            width: 20px;
+            height: 20px;
+            padding: 2px;
+        }
+        .mock-window {
+            transition: transform 700ms cubic-bezier(.2,.9,.2,1), width 700ms cubic-bezier(.2,.9,.2,1);
+        }
+        @keyframes trace-line {
+            0% {
+                stroke-dashoffset: var(--dash, 180);
+            }
+            55%,
+            100% {
+                stroke-dashoffset: 0;
+            }
+        }
+        @keyframes drift-line {
+            0%,
+            100% {
+                transform: translateX(0);
+            }
+            50% {
+                transform: translateX(-12px);
+            }
+        }
+        @keyframes core-breathe {
+            0%,
+            100% {
+                transform: scaleY(0.35);
+                opacity: 0.55;
+            }
+            50% {
+                transform: scaleY(var(--level, 0.85));
+                opacity: 1;
+            }
+        }
+        @keyframes meter-sweep {
+            0%,
+            100% {
+                width: var(--from, 24%);
+            }
+            50% {
+                width: var(--to, 72%);
+            }
+        }
+        .live-line {
+            stroke-dasharray: var(--dash, 180);
+            animation: trace-line var(--speed, 3.4s) ease-in-out infinite alternate;
+        }
+        .drift-line {
+            animation: drift-line var(--speed, 5s) ease-in-out infinite;
+            transform-origin: center;
+        }
+        .core-bar {
+            transform-box: fill-box;
+            transform-origin: center bottom;
+            animation: core-breathe var(--speed, 1.8s) ease-in-out infinite;
+            animation-delay: var(--delay, 0s);
+        }
+        .meter-fill {
+            animation: meter-sweep var(--speed, 3.8s) ease-in-out infinite;
+        }
+        .metric-row {
+            transition: transform 180ms ease, background 180ms ease, border-color 180ms ease;
+        }
+        .metric-row:hover {
+            transform: translateY(-1px);
+            border-color: rgba(0, 88, 188, 0.14);
+        }
+        .action-tile {
+            transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease;
+        }
+        .action-tile:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 10px 24px rgba(0, 88, 188, 0.08);
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .live-line,
+            .drift-line,
+            .core-bar,
+            .meter-fill {
+                animation: none;
+            }
+        }
+    </style>
+</head>
+<body class="bg-background text-on-surface font-body-md selection:bg-primary-fixed selection:text-on-primary-fixed overflow-x-hidden">
+    <nav class="fixed top-6 left-1/2 -translate-x-1/2 z-50 w-[95%] max-w-5xl glass-panel-deep rounded-full px-6 md:px-8 py-3 flex items-center justify-between">
+        <div class="flex items-center gap-8 md:gap-12">
+            <a class="flex items-center gap-2.5 text-2xl font-black text-primary tracking-tight" href="#hero">
+                <img src="assets/spill-icon.png" alt="" class="app-icon app-icon-sm"/>
+                <span>Spill</span>
+            </a>
+            <div class="hidden md:flex items-center gap-8">
+                <a class="text-sm font-semibold text-on-surface-variant hover:text-primary transition-colors" href="#status">Status</a>
+                <a class="text-sm font-semibold text-on-surface-variant hover:text-primary transition-colors" href="#windows">Windows</a>
+                <a class="text-sm font-semibold text-on-surface-variant hover:text-primary transition-colors" href="#actions">Actions</a>
+                <a class="text-sm font-semibold text-on-surface-variant hover:text-primary transition-colors" href="#download" data-analytics-event="download_intent" data-analytics-location="nav_install">Install</a>
+            </div>
+        </div>
+        <a class="bg-primary text-on-primary px-5 md:px-6 py-2 rounded-full text-sm font-bold hover:shadow-lg hover:shadow-primary/20 transition-all active:scale-95" href="#download" data-analytics-event="download_intent" data-analytics-location="nav">
+            Download
         </a>
-        <nav aria-label="Site">
-          <a href="#features">Features</a>
-          <a href="#install">Install</a>
-          <a href="#security">Security</a>
-          <a href="https://github.com/taehwandev/Spill">GitHub</a>
-        </nav>
-        <a class="nav-button" href="#install-command">Install command</a>
-      </div>
-    </header>
+    </nav>
 
-    <main id="top">
-      <section class="hero" aria-labelledby="hero-title">
-        <div class="hero-copy">
-          <a class="badge" href="https://github.com/taehwandev/Spill/releases/latest">
-            <span aria-hidden="true">⌘</span>
-            Open source on GitHub
-          </a>
-          <h1 id="hero-title">Your Menu Bar, Unleashed.</h1>
-          <p>
-            A compact control tray for crowded Mac menu bars. System status,
-            pinned actions, AI tooling, Caffeine, and fast window moves live
-            behind one focused trigger.
-          </p>
-          <div class="install-card" id="download">
-            <div class="install-card-label">
-              <span aria-hidden="true">$</span>
-              <strong>Recommended install command</strong>
-            </div>
-            <div class="command-line" id="install-command" aria-label="Recommended terminal install command">
-              <code>/bin/bash -c "$(curl -fsSL https://thdev.app/Spill/install.sh)"</code>
-              <button class="copy-button" type="button" data-copy='/bin/bash -c "$(curl -fsSL https://thdev.app/Spill/install.sh)"'>Copy</button>
-            </div>
-            <p class="install-card-note">
-              Installs the latest release to Applications, removes the macOS quarantine flag,
-              and opens Spill.
-            </p>
-          </div>
-          <div class="hero-actions secondary-downloads" aria-label="Alternative download links">
-            <a class="button secondary" href="https://github.com/taehwandev/Spill/releases/latest/download/Spill-macos.dmg">Download DMG</a>
-            <a class="button secondary" href="https://github.com/taehwandev/Spill/releases/latest/download/Spill-macos.zip">Download ZIP</a>
-            <a class="button secondary" href="https://github.com/taehwandev/Spill">GitHub</a>
-          </div>
-          <p class="release-note">Requires macOS 14 or later. Current public builds are ad-hoc signed.</p>
-        </div>
-
-        <div class="product-shot" aria-label="Spill panel preview">
-          <div class="screen">
-            <div class="menu-bar">
-              <span></span>
-              <span></span>
-              <span></span>
-              <strong>Spill</strong>
-            </div>
-            <div class="spill-panel">
-              <div class="panel-notch"></div>
-              <div class="panel-header">
-                <div>
-                  <span class="panel-kicker">Now</span>
-                  <h2>Control tray</h2>
+    <main class="snap-shell">
+        <section class="snap-page relative pt-48 pb-32 lg:py-0 px-container-padding-mobile md:px-container-padding-desktop flex items-center" id="hero">
+            <div class="absolute top-0 left-1/2 -translate-x-1/2 w-full h-[800px] bg-soft-gradient pointer-events-none -z-10"></div>
+            <div class="max-w-6xl w-full mx-auto grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+                <div class="space-y-8 text-center lg:text-left">
+                    <div class="inline-flex items-center gap-2 px-4 py-2 bg-primary/5 rounded-full border border-primary/10">
+                        <span class="flex h-2 w-2 rounded-full bg-primary animate-pulse"></span>
+                        <span class="text-label-caps text-primary">Spill 2.0 for macOS</span>
+                    </div>
+                    <h1 class="text-display-lg-mobile md:text-display-lg font-display-lg">
+                        Don't hold it back,<br/>
+                        <span class="text-gradient">Just Spill it.</span>
+                    </h1>
+                    <p class="text-body-lg text-on-surface-variant max-w-xl mx-auto lg:mx-0">
+                        A compact control tray for crowded Mac menu bars. Open one small trigger for system status,
+                        window actions, pinned shortcuts, sleep guard, and local AI tool state.
+                    </p>
+                    <div class="flex flex-wrap items-center justify-center lg:justify-start gap-3">
+                        <a class="inline-flex items-center gap-2 rounded-full bg-on-surface text-white px-4 py-2 text-sm font-black hover:bg-inverse-surface transition-colors" href="https://github.com/taehwandev/Spill" target="_blank" rel="noopener" data-analytics-event="open_source_link_clicked" data-analytics-location="hero">
+                            <span class="material-symbols-outlined text-[17px]">code</span>
+                            Open source
+                        </a>
+                        <span class="text-sm font-semibold text-on-surface-variant">Built in public and distributed directly from GitHub.</span>
+                    </div>
                 </div>
-                <img src="assets/spill-icon.png" alt="" width="44" height="44">
-              </div>
-              <div class="status-grid" aria-hidden="true">
-                <span>CPU 18%</span>
-                <span>RAM 62%</span>
-                <span>Caffeine on</span>
-              </div>
-              <div class="action-row" aria-hidden="true">
-                <span>Left half</span>
-                <span>Center</span>
-                <span>Maximize</span>
-              </div>
-              <div class="ai-strip" aria-hidden="true">
-                <span>Codex active</span>
-                <span>Ollama ready</span>
-              </div>
+
+                <div class="relative group">
+                    <div class="absolute -inset-4 bg-primary/20 blur-3xl rounded-full opacity-50 group-hover:opacity-70 transition-opacity"></div>
+                    <div class="relative glass-panel rounded-3xl p-3 overflow-hidden">
+                        <div class="product-screen rounded-2xl shadow-2xl overflow-hidden border border-white/70">
+                            <div class="h-8 bg-white/80 backdrop-blur flex items-center justify-between px-4 text-[10px] font-bold text-on-surface-variant">
+                                <div class="flex items-center gap-3">
+                                    <span>Finder</span>
+                                    <span>File</span>
+                                    <span>Edit</span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <span>CPU 18%</span>
+                                    <span class="px-2 py-0.5 rounded-full bg-primary text-white">Spill</span>
+                                </div>
+                            </div>
+                            <div class="relative min-h-[600px] p-5 sm:p-7">
+                                <div class="mock-window absolute top-20 left-7 w-[50%] h-[245px] rounded-2xl bg-[#14171f] shadow-2xl border border-black/10 overflow-hidden">
+                                    <div class="h-8 bg-[#1d212b] flex items-center gap-1.5 px-3">
+                                        <span class="w-2.5 h-2.5 rounded-full bg-red-400"></span>
+                                        <span class="w-2.5 h-2.5 rounded-full bg-yellow-400"></span>
+                                        <span class="w-2.5 h-2.5 rounded-full bg-green-400"></span>
+                                    </div>
+                                    <div class="p-4 space-y-2">
+                                        <div class="h-2 rounded bg-blue-300/50 w-2/3"></div>
+                                        <div class="h-2 rounded bg-blue-300/30 w-5/6"></div>
+                                        <div class="h-2 rounded bg-blue-300/20 w-1/2"></div>
+                                    </div>
+                                </div>
+                                <div class="absolute bottom-9 left-12 hidden sm:block w-[38%] rounded-2xl bg-white/70 border border-white/70 shadow-xl p-3">
+                                    <div class="flex items-center gap-2 text-[10px] font-black text-on-surface-variant">
+                                        <span class="material-symbols-outlined text-primary text-sm">keep</span>
+                                        <span>Pinned shortcuts</span>
+                                    </div>
+                                    <div class="grid grid-cols-4 gap-2 mt-3">
+                                        <span class="aspect-square rounded-xl bg-primary/10"></span>
+                                        <span class="aspect-square rounded-xl bg-secondary/10"></span>
+                                        <span class="aspect-square rounded-xl bg-tertiary/10"></span>
+                                        <span class="aspect-square rounded-xl bg-surface-container"></span>
+                                    </div>
+                                </div>
+                                <div class="absolute top-6 right-5 w-[344px] max-w-[80%] glass-panel-deep rounded-[28px] p-[14px] shadow-2xl">
+                                    <div class="flex items-center gap-3">
+                                        <img src="assets/spill-icon.png" alt="" class="app-icon app-icon-md"/>
+                                        <div class="min-w-0">
+                                            <div class="font-black text-sm leading-tight">Spill</div>
+                                            <div class="text-[11px] text-on-surface-variant font-semibold truncate">12 items, 4 pinned</div>
+                                        </div>
+                                        <div class="ml-auto flex items-center gap-2">
+                                            <span class="h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-[0_0_0_5px_rgba(16,185,129,0.14)]"></span>
+                                            <span class="h-7 w-7 rounded-xl bg-on-surface/5 flex items-center justify-center">
+                                                <span class="material-symbols-outlined text-[15px] text-on-surface-variant">settings</span>
+                                            </span>
+                                            <span class="h-7 w-7 rounded-xl bg-on-surface/5 flex items-center justify-center">
+                                                <span class="material-symbols-outlined text-[15px] text-on-surface-variant">close</span>
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <div class="mt-3 pt-2 border-t border-on-surface/5">
+                                        <div class="flex items-center justify-between text-[9px] font-black uppercase tracking-[0.18em] text-on-surface/45">
+                                            <span>Status</span>
+                                            <span class="material-symbols-outlined text-[13px]">show_chart</span>
+                                        </div>
+                                        <div class="mt-2 space-y-1.5">
+                                            <div class="metric-row rounded-2xl bg-white/75 border border-white/70 px-2.5 py-2 flex items-center gap-2">
+                                                <div class="h-7 w-7 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+                                                    <span class="material-symbols-outlined text-[17px]">developer_board</span>
+                                                </div>
+                                                <div class="min-w-0 flex-1">
+                                                    <div class="flex items-baseline gap-1.5">
+                                                        <span class="text-[11px] font-black">CPU</span>
+                                                        <span class="text-[15px] font-black text-primary">18%</span>
+                                                    </div>
+                                                    <div class="text-[10px] font-semibold text-on-surface-variant truncate">8-core balanced</div>
+                                                </div>
+                                                <div class="h-7 w-20 flex items-end gap-1">
+                                                    <span class="core-bar w-2 rounded-full bg-primary/30 h-full" style="--level: .42; --delay: 0s;"></span>
+                                                    <span class="core-bar w-2 rounded-full bg-primary/45 h-full" style="--level: .74; --delay: -.32s;"></span>
+                                                    <span class="core-bar w-2 rounded-full bg-primary/25 h-full" style="--level: .38; --delay: -.16s;"></span>
+                                                    <span class="core-bar w-2 rounded-full bg-primary/60 h-full" style="--level: .92; --delay: -.5s;"></span>
+                                                    <span class="core-bar w-2 rounded-full bg-primary/35 h-full" style="--level: .58; --delay: -.24s;"></span>
+                                                    <span class="core-bar w-2 rounded-full bg-primary/20 h-full" style="--level: .46; --delay: -.42s;"></span>
+                                                    <span class="core-bar w-2 rounded-full bg-primary/50 h-full" style="--level: .8; --delay: -.08s;"></span>
+                                                    <span class="core-bar w-2 rounded-full bg-primary/30 h-full" style="--level: .52; --delay: -.6s;"></span>
+                                                </div>
+                                            </div>
+
+                                            <div class="metric-row rounded-2xl bg-white/75 border border-white/70 px-2.5 py-2 flex items-center gap-2">
+                                                <div class="h-7 w-7 rounded-xl bg-secondary/10 text-secondary flex items-center justify-center">
+                                                    <span class="material-symbols-outlined text-[17px]">memory</span>
+                                                </div>
+                                                <div class="min-w-0 flex-1">
+                                                    <div class="flex items-baseline gap-1.5">
+                                                        <span class="text-[11px] font-black">Memory</span>
+                                                        <span class="text-[15px] font-black text-secondary">62%</span>
+                                                    </div>
+                                                    <div class="text-[10px] font-semibold text-on-surface-variant truncate">5.8 GB available</div>
+                                                </div>
+                                                <svg class="w-20 h-7" viewBox="0 0 96 32" aria-hidden="true">
+                                                    <path d="M2 24 C12 10 20 19 30 13 S48 12 58 19 S78 26 94 8" fill="none" stroke="#4c4aca" stroke-width="3" stroke-linecap="round" class="live-line" style="--dash: 145; --speed: 3.2s;"></path>
+                                                    <path d="M2 28 C18 18 26 25 38 19 S58 15 70 22 S84 22 94 14" fill="none" stroke="#4c4aca" stroke-width="2" stroke-linecap="round" opacity="0.18" class="drift-line"></path>
+                                                </svg>
+                                            </div>
+
+                                            <div class="metric-row rounded-2xl bg-white/75 border border-white/70 px-2.5 py-2 flex items-center gap-2">
+                                                <div class="h-7 w-7 rounded-xl bg-blue-500/10 text-blue-600 flex items-center justify-center">
+                                                    <span class="material-symbols-outlined text-[17px]">network_check</span>
+                                                </div>
+                                                <div class="min-w-0 flex-1">
+                                                    <div class="flex items-baseline gap-1.5">
+                                                        <span class="text-[11px] font-black">Network</span>
+                                                        <span class="text-[15px] font-black text-blue-600">1.4</span>
+                                                    </div>
+                                                    <div class="text-[10px] font-semibold text-orange-500 truncate">0.3 MB/s upload</div>
+                                                </div>
+                                                <svg class="w-20 h-7" viewBox="0 0 96 32" aria-hidden="true">
+                                                    <path d="M2 22 C10 12 18 20 26 15 S42 6 50 16 S66 27 76 18 S88 12 94 16" fill="none" stroke="#0070eb" stroke-width="2.6" stroke-linecap="round" class="live-line" style="--dash: 150; --speed: 2.8s;"></path>
+                                                    <path d="M2 25 C14 23 20 15 30 24 S48 30 58 21 S78 12 94 24" fill="none" stroke="#f97316" stroke-width="2.2" stroke-linecap="round" class="live-line" style="--dash: 145; --speed: 3.5s;"></path>
+                                                </svg>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="mt-3 pt-2 border-t border-on-surface/5">
+                                        <div class="flex items-center justify-between text-[9px] font-black uppercase tracking-[0.18em] text-on-surface/45">
+                                            <span>Windows</span>
+                                            <span class="material-symbols-outlined text-[13px]">desktop_windows</span>
+                                        </div>
+                                        <div class="mt-2 grid grid-cols-[1.35fr_.95fr] gap-2">
+                                            <div>
+                                                <div class="text-[9px] font-black text-on-surface/40 text-center mb-1">POSITIONS</div>
+                                                <div class="grid grid-cols-3 gap-1.5">
+                                                    <span class="action-tile h-9 rounded-xl bg-on-surface/5 border border-white/60 flex items-center justify-center"><span class="material-symbols-outlined text-[15px] text-on-surface/50">north_west</span></span>
+                                                    <span class="action-tile h-9 rounded-xl bg-on-surface/5 border border-white/60 flex items-center justify-center"><span class="material-symbols-outlined text-[15px] text-on-surface/50">north</span></span>
+                                                    <span class="action-tile h-9 rounded-xl bg-on-surface/5 border border-white/60 flex items-center justify-center"><span class="material-symbols-outlined text-[15px] text-on-surface/50">north_east</span></span>
+                                                    <span class="action-tile h-9 rounded-xl bg-on-surface/5 border border-white/60 flex items-center justify-center"><span class="material-symbols-outlined text-[15px] text-on-surface/50">west</span></span>
+                                                    <span class="action-tile h-9 rounded-xl bg-primary text-white shadow-lg shadow-primary/20 flex items-center justify-center"><span class="material-symbols-outlined text-[16px]">center_focus_strong</span></span>
+                                                    <span class="action-tile h-9 rounded-xl bg-on-surface/5 border border-white/60 flex items-center justify-center"><span class="material-symbols-outlined text-[15px] text-on-surface/50">east</span></span>
+                                                    <span class="action-tile h-9 rounded-xl bg-on-surface/5 border border-white/60 flex items-center justify-center"><span class="material-symbols-outlined text-[15px] text-on-surface/50">south_west</span></span>
+                                                    <span class="action-tile h-9 rounded-xl bg-on-surface/5 border border-white/60 flex items-center justify-center"><span class="material-symbols-outlined text-[15px] text-on-surface/50">south</span></span>
+                                                    <span class="action-tile h-9 rounded-xl bg-on-surface/5 border border-white/60 flex items-center justify-center"><span class="material-symbols-outlined text-[15px] text-on-surface/50">south_east</span></span>
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <div class="text-[9px] font-black text-on-surface/40 text-center mb-1">UTILITIES</div>
+                                                <div class="grid grid-cols-2 gap-1.5">
+                                                    <span class="action-tile h-9 rounded-xl bg-on-surface/5 border border-white/60 flex items-center justify-center"><span class="material-symbols-outlined text-[15px] text-on-surface/50">fullscreen</span></span>
+                                                    <span class="action-tile h-9 rounded-xl bg-on-surface/5 border border-white/60 flex items-center justify-center"><span class="material-symbols-outlined text-[15px] text-on-surface/50">restore</span></span>
+                                                    <span class="action-tile h-9 rounded-xl bg-on-surface/5 border border-white/60 flex items-center justify-center"><span class="material-symbols-outlined text-[15px] text-on-surface/50">arrow_back</span></span>
+                                                    <span class="action-tile h-9 rounded-xl bg-on-surface/5 border border-white/60 flex items-center justify-center"><span class="material-symbols-outlined text-[15px] text-on-surface/50">arrow_forward</span></span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="mt-2 pt-2 border-t border-on-surface/5 flex items-center justify-between text-[9px] font-black text-on-surface-variant">
+                                        <span>Caffeine Off</span>
+                                        <span>Battery 80%</span>
+                                        <span>Local AI Ready</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
-          </div>
-        </div>
-      </section>
+        </section>
 
-      <section class="section" id="features" aria-labelledby="features-title">
-        <div class="section-heading">
-          <p class="eyebrow">Features</p>
-          <h2 id="features-title">One small trigger, one focused tray.</h2>
-        </div>
-        <div class="feature-grid">
-          <article>
-            <div class="feature-icon" aria-hidden="true">⌁</div>
-            <h3>Intelligent monitoring</h3>
-            <p>CPU, memory, power, network, and Caffeine state stay compact and scannable.</p>
-          </article>
-          <article>
-            <div class="feature-icon" aria-hidden="true">□</div>
-            <h3>Window moves</h3>
-            <p>Snap windows into halves, corners, displays, and restore history from the tray or shortcuts.</p>
-          </article>
-          <article>
-            <div class="feature-icon" aria-hidden="true">✦</div>
-            <h3>AI at hand</h3>
-            <p>Keep local AI tooling state visible without opening a dashboard or making network calls by default.</p>
-          </article>
-        </div>
-      </section>
+        <section class="snap-page py-stack-gap-lg px-container-padding-mobile md:px-container-padding-desktop flex items-center" id="status">
+            <div class="max-w-7xl mx-auto w-full">
+                <div class="text-center mb-20 space-y-4">
+                    <span class="text-label-caps text-secondary font-black">Performance Hub</span>
+                    <h2 class="text-headline-md md:text-5xl font-extrabold tracking-tight">Know what your Mac is doing.</h2>
+                    <p class="text-body-lg text-on-surface-variant max-w-2xl mx-auto">
+                        Spill shows CPU, memory, storage, network, and power state as compact modules built for quick reads.
+                    </p>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                    <article class="glass-panel p-8 rounded-3xl space-y-6 hover:-translate-y-2 transition-transform duration-500">
+                        <div class="w-14 h-14 bg-primary/10 rounded-2xl flex items-center justify-center">
+                            <span class="material-symbols-outlined text-primary text-3xl">developer_board</span>
+                        </div>
+                        <div>
+                            <h3 class="text-2xl font-bold mb-2">CPU Monitoring</h3>
+                            <p class="text-on-surface-variant">Track total usage or switch to per-core bars when you need a denser read.</p>
+                        </div>
+                        <div class="rounded-2xl bg-white/65 border border-white/70 p-4">
+                            <div class="h-24 flex items-end gap-2">
+                                <span class="core-bar flex-1 rounded-t-xl bg-primary/25 h-full" style="--level: .38; --delay: 0s;"></span>
+                                <span class="core-bar flex-1 rounded-t-xl bg-primary/55 h-full" style="--level: .82; --delay: -.28s;"></span>
+                                <span class="core-bar flex-1 rounded-t-xl bg-primary/35 h-full" style="--level: .52; --delay: -.1s;"></span>
+                                <span class="core-bar flex-1 rounded-t-xl bg-primary/70 h-full" style="--level: .94; --delay: -.46s;"></span>
+                                <span class="core-bar flex-1 rounded-t-xl bg-primary/30 h-full" style="--level: .44; --delay: -.2s;"></span>
+                                <span class="core-bar flex-1 rounded-t-xl bg-primary/50 h-full" style="--level: .68; --delay: -.6s;"></span>
+                                <span class="core-bar flex-1 rounded-t-xl bg-primary/40 h-full" style="--level: .56; --delay: -.34s;"></span>
+                                <span class="core-bar flex-1 rounded-t-xl bg-primary/60 h-full" style="--level: .78; --delay: -.72s;"></span>
+                            </div>
+                            <div class="mt-3 flex justify-between text-[11px] font-bold text-on-surface/40 uppercase">
+                                <span>Per-core view</span>
+                                <span>Live</span>
+                            </div>
+                        </div>
+                        <div class="pt-4 border-t border-surface-variant/50">
+                            <div class="flex justify-between items-end">
+                                <span class="text-xs font-bold text-on-surface/40 uppercase">Real-time usage</span>
+                                <span class="text-2xl font-black text-primary">18.4%</span>
+                            </div>
+                            <div class="h-1.5 bg-surface-container mt-2 rounded-full overflow-hidden">
+                                <div class="h-full bg-primary rounded-full meter-fill" style="--from: 18%; --to: 34%; width: 18%;"></div>
+                            </div>
+                        </div>
+                    </article>
+                    <article class="glass-panel p-8 rounded-3xl space-y-6 hover:-translate-y-2 transition-transform duration-500">
+                        <div class="w-14 h-14 bg-secondary/10 rounded-2xl flex items-center justify-center">
+                            <span class="material-symbols-outlined text-secondary text-3xl">memory</span>
+                        </div>
+                        <div>
+                            <h3 class="text-2xl font-bold mb-2">Memory Insight</h3>
+                            <p class="text-on-surface-variant">Keep memory pressure visible without opening Activity Monitor.</p>
+                        </div>
+                        <div class="rounded-2xl bg-white/65 border border-white/70 p-4">
+                            <svg class="w-full h-24" viewBox="0 0 280 96" aria-hidden="true">
+                                <path d="M4 70 C28 34 42 64 64 45 S104 30 124 52 S168 84 196 44 S238 22 276 36" fill="none" stroke="#4c4aca" stroke-width="5" stroke-linecap="round" class="live-line" style="--dash: 330; --speed: 3.5s;"></path>
+                                <path d="M4 78 C36 58 52 72 78 56 S124 42 150 62 S194 78 220 54 S252 44 276 58" fill="none" stroke="#4c4aca" stroke-width="4" stroke-linecap="round" opacity="0.16" class="drift-line" style="--speed: 5.4s;"></path>
+                                <path d="M4 92 H276" fill="none" stroke="#c1c6d7" stroke-width="1.5" stroke-linecap="round" opacity="0.75"></path>
+                            </svg>
+                            <div class="mt-3 grid grid-cols-3 gap-2 text-[11px] font-bold">
+                                <span class="rounded-full bg-secondary/10 text-secondary px-3 py-1 text-center">Used</span>
+                                <span class="rounded-full bg-secondary/10 text-secondary px-3 py-1 text-center">Wired</span>
+                                <span class="rounded-full bg-secondary/10 text-secondary px-3 py-1 text-center">Compressed</span>
+                            </div>
+                        </div>
+                        <div class="pt-4 border-t border-surface-variant/50">
+                            <div class="flex justify-between items-end">
+                                <span class="text-xs font-bold text-on-surface/40 uppercase">Memory load</span>
+                                <span class="text-2xl font-black text-secondary">62%</span>
+                            </div>
+                            <div class="h-1.5 bg-surface-container mt-2 rounded-full overflow-hidden">
+                                <div class="h-full bg-secondary rounded-full meter-fill" style="--from: 54%; --to: 68%; width: 62%; --speed: 4.2s;"></div>
+                            </div>
+                        </div>
+                    </article>
+                    <article class="glass-panel p-8 rounded-3xl space-y-6 hover:-translate-y-2 transition-transform duration-500">
+                        <div class="w-14 h-14 bg-tertiary/10 rounded-2xl flex items-center justify-center">
+                            <span class="material-symbols-outlined text-tertiary text-3xl">network_check</span>
+                        </div>
+                        <div>
+                            <h3 class="text-2xl font-bold mb-2">Network Activity</h3>
+                            <p class="text-on-surface-variant">See receive and upload throughput as lightweight status signals.</p>
+                        </div>
+                        <div class="rounded-2xl bg-white/65 border border-white/70 p-4">
+                            <svg class="w-full h-24" viewBox="0 0 280 96" aria-hidden="true">
+                                <path d="M4 64 C24 30 40 54 58 40 S92 12 116 42 S154 88 184 48 S232 18 276 34" fill="none" stroke="#0070eb" stroke-width="5" stroke-linecap="round" class="live-line" style="--dash: 345; --speed: 2.9s;"></path>
+                                <path d="M4 76 C34 74 48 42 78 68 S126 92 154 62 S204 32 232 58 S260 78 276 64" fill="none" stroke="#f97316" stroke-width="4" stroke-linecap="round" class="live-line" style="--dash: 330; --speed: 3.6s;"></path>
+                                <path d="M4 92 H276" fill="none" stroke="#c1c6d7" stroke-width="1.5" stroke-linecap="round" opacity="0.75"></path>
+                            </svg>
+                            <div class="mt-3 flex items-center justify-between text-[11px] font-black">
+                                <span class="inline-flex items-center gap-2 text-blue-600"><span class="h-2 w-2 rounded-full bg-blue-600"></span>Receive</span>
+                                <span class="inline-flex items-center gap-2 text-orange-500"><span class="h-2 w-2 rounded-full bg-orange-500"></span>Upload</span>
+                            </div>
+                        </div>
+                        <div class="pt-4 border-t border-surface-variant/50">
+                            <div class="flex justify-between items-end">
+                                <span class="text-xs font-bold text-on-surface/40 uppercase">Receive</span>
+                                <span class="text-2xl font-black text-tertiary">1.4 MB/s</span>
+                            </div>
+                            <div class="h-1.5 bg-surface-container mt-2 rounded-full overflow-hidden">
+                                <div class="h-full bg-tertiary rounded-full meter-fill" style="--from: 28%; --to: 62%; width: 54%; --speed: 3.2s;"></div>
+                            </div>
+                        </div>
+                    </article>
+                </div>
+            </div>
+        </section>
 
-      <section class="section install-section" id="install" aria-labelledby="install-title">
-        <div class="install-copy">
-          <p class="eyebrow">Install</p>
-          <h2 id="install-title">Get the current release.</h2>
-          <p>
-            Download the DMG, drag Spill into Applications, then launch it from
-            Applications. If macOS says the app is damaged or should be moved to
-            Trash, use the terminal install command to remove the quarantine flag.
-          </p>
-          <div class="command-block" aria-label="Terminal install command">
-            <code>/bin/bash -c "$(curl -fsSL https://thdev.app/Spill/install.sh)"</code>
-          </div>
-          <p class="small-note">
-            Already copied it to Applications?
-            <code>sudo xattr -dr com.apple.quarantine /Applications/Spill.app</code>
-            then open Spill again.
-          </p>
-        </div>
-        <ol class="steps">
-          <li>
-            <strong>Install</strong>
-            <span>Run the terminal installer or download the latest DMG.</span>
-          </li>
-          <li>
-            <strong>Keep it in Applications</strong>
-            <span>The installer copies Spill there automatically.</span>
-          </li>
-          <li>
-            <strong>Open from the menu bar</strong>
-            <span>Use the single Spill trigger to open and close the tray.</span>
-          </li>
-        </ol>
-      </section>
+        <section class="snap-page py-stack-gap-lg px-container-padding-mobile md:px-container-padding-desktop bg-surface-container-lowest flex items-center" id="windows">
+            <div class="max-w-7xl mx-auto flex flex-col lg:flex-row items-center gap-20">
+                <div class="lg:w-1/2 space-y-8">
+                    <span class="text-label-caps text-primary">Productivity Engine</span>
+                    <h2 class="text-display-lg-mobile md:text-5xl font-extrabold leading-[1.1]">Organize desktop chaos with one action.</h2>
+                    <p class="text-body-lg text-on-surface-variant">
+                        Move the focused window left, right, center, maximize, send it to the next display, or restore its previous frame.
+                    </p>
+                    <div class="grid grid-cols-2 gap-6">
+                        <div class="p-6 rounded-2xl border border-outline-variant/30 bg-white shadow-sm">
+                            <span class="material-symbols-outlined text-primary mb-3">grid_view</span>
+                            <h4 class="font-bold mb-1">Panel Actions</h4>
+                            <p class="text-sm opacity-70">Click the compact window row when the panel is open.</p>
+                        </div>
+                        <div class="p-6 rounded-2xl border border-outline-variant/30 bg-white shadow-sm">
+                            <span class="material-symbols-outlined text-primary mb-3">display_settings</span>
+                            <h4 class="font-bold mb-1">Display Moves</h4>
+                            <p class="text-sm opacity-70">Move a window between displays or restore its previous frame.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="lg:w-1/2 w-full">
+                    <div class="glass-panel p-8 md:p-10 rounded-3xl relative overflow-hidden group">
+                        <div class="absolute inset-0 bg-primary/5 group-hover:bg-primary/10 transition-colors"></div>
+                        <div class="relative z-10 max-w-md mx-auto glass-panel-deep rounded-[28px] p-5">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-3">
+                                    <div class="h-10 w-10 rounded-2xl bg-primary/10 text-primary flex items-center justify-center">
+                                        <span class="material-symbols-outlined text-[22px]">desktop_windows</span>
+                                    </div>
+                                    <div>
+                                        <div class="font-black">WINDOWS</div>
+                                        <div class="text-xs font-semibold text-on-surface-variant">Focused app ready</div>
+                                    </div>
+                                </div>
+                                <span class="rounded-full bg-emerald-500/10 text-emerald-600 px-3 py-1 text-xs font-black">Active</span>
+                            </div>
+                            <div class="mt-5 grid grid-cols-[1.35fr_.95fr] gap-4">
+                                <div>
+                                    <div class="text-[10px] font-black text-on-surface/40 text-center mb-2 tracking-[0.16em]">POSITIONS</div>
+                                    <div class="grid grid-cols-3 gap-2">
+                                        <button class="action-tile aspect-square rounded-2xl bg-white/80 border border-outline-variant/30 flex items-center justify-center">
+                                            <span class="material-symbols-outlined text-xl text-on-surface/50">north_west</span>
+                                        </button>
+                                        <button class="action-tile aspect-square rounded-2xl bg-white/80 border border-outline-variant/30 flex items-center justify-center">
+                                            <span class="material-symbols-outlined text-xl text-on-surface/50">north</span>
+                                        </button>
+                                        <button class="action-tile aspect-square rounded-2xl bg-white/80 border border-outline-variant/30 flex items-center justify-center">
+                                            <span class="material-symbols-outlined text-xl text-on-surface/50">north_east</span>
+                                        </button>
+                                        <button class="action-tile aspect-square rounded-2xl bg-white/80 border border-outline-variant/30 flex items-center justify-center">
+                                            <span class="material-symbols-outlined text-xl text-on-surface/50">west</span>
+                                        </button>
+                                        <button class="action-tile aspect-square rounded-2xl bg-primary text-white shadow-xl shadow-primary/20 flex items-center justify-center">
+                                            <span class="material-symbols-outlined text-xl">center_focus_strong</span>
+                                        </button>
+                                        <button class="action-tile aspect-square rounded-2xl bg-white/80 border border-outline-variant/30 flex items-center justify-center">
+                                            <span class="material-symbols-outlined text-xl text-on-surface/50">east</span>
+                                        </button>
+                                        <button class="action-tile aspect-square rounded-2xl bg-white/80 border border-outline-variant/30 flex items-center justify-center">
+                                            <span class="material-symbols-outlined text-xl text-on-surface/50">south_west</span>
+                                        </button>
+                                        <button class="action-tile aspect-square rounded-2xl bg-white/80 border border-outline-variant/30 flex items-center justify-center">
+                                            <span class="material-symbols-outlined text-xl text-on-surface/50">south</span>
+                                        </button>
+                                        <button class="action-tile aspect-square rounded-2xl bg-white/80 border border-outline-variant/30 flex items-center justify-center">
+                                            <span class="material-symbols-outlined text-xl text-on-surface/50">south_east</span>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div>
+                                    <div class="text-[10px] font-black text-on-surface/40 text-center mb-2 tracking-[0.16em]">UTILITIES</div>
+                                    <div class="grid grid-cols-2 gap-2">
+                                        <button class="action-tile aspect-square rounded-2xl bg-white/80 border border-outline-variant/30 flex items-center justify-center">
+                                            <span class="material-symbols-outlined text-xl text-on-surface/50">fullscreen</span>
+                                        </button>
+                                        <button class="action-tile aspect-square rounded-2xl bg-white/80 border border-outline-variant/30 flex items-center justify-center">
+                                            <span class="material-symbols-outlined text-xl text-on-surface/50">restore</span>
+                                        </button>
+                                        <button class="action-tile aspect-square rounded-2xl bg-white/80 border border-outline-variant/30 flex items-center justify-center">
+                                            <span class="material-symbols-outlined text-xl text-on-surface/50">arrow_back</span>
+                                        </button>
+                                        <button class="action-tile aspect-square rounded-2xl bg-white/80 border border-outline-variant/30 flex items-center justify-center">
+                                            <span class="material-symbols-outlined text-xl text-on-surface/50">arrow_forward</span>
+                                        </button>
+                                    </div>
+                                    <div class="mt-3 rounded-2xl bg-primary/10 text-primary px-3 py-2 text-center text-[11px] font-black">
+                                        Restore ready
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
 
-      <section class="section security-section" id="security" aria-labelledby="security-title">
-        <div>
-          <p class="eyebrow">Security</p>
-          <h2 id="security-title">Unsigned today, notarized path ready.</h2>
-          <p>
-            Public builds are currently ad-hoc signed. The release workflow is
-            already wired for Developer ID signing and notarization once Apple
-            credentials are configured.
-          </p>
-        </div>
-        <div class="release-links" aria-label="Release links">
-          <a href="https://github.com/taehwandev/Spill/releases/latest">Latest release</a>
-          <a href="https://github.com/taehwandev/Spill/releases/latest/download/checksums.txt">Checksums</a>
-          <a href="https://github.com/taehwandev/Spill/releases/latest/download/Spill-macos.zip">Download ZIP</a>
-        </div>
-      </section>
+        <section class="snap-page py-stack-gap-lg px-container-padding-mobile md:px-container-padding-desktop flex items-center" id="actions">
+            <div class="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+                <div class="space-y-8">
+                    <span class="text-label-caps text-secondary font-black">Action Shelf</span>
+                    <h2 class="text-display-lg-mobile md:text-5xl font-extrabold leading-tight">Small controls, always close.</h2>
+                    <p class="text-body-lg text-on-surface-variant">
+                        Pin detected menu bar candidates, launch app actions, toggle Caffeine, and keep local AI tool state visible without turning Spill into a dashboard.
+                    </p>
+                </div>
+                <div class="grid grid-cols-2 gap-5">
+                    <div class="glass-panel-deep rounded-3xl p-7 min-h-[170px] flex flex-col justify-between">
+                        <span class="material-symbols-outlined text-primary text-3xl">push_pin</span>
+                        <div>
+                            <h3 class="font-black text-xl">Pinned Actions</h3>
+                            <p class="text-sm text-on-surface-variant mt-2">Keep repeated actions in the tray.</p>
+                        </div>
+                    </div>
+                    <div class="glass-panel-deep rounded-3xl p-7 min-h-[170px] flex flex-col justify-between">
+                        <span class="material-symbols-outlined text-secondary text-3xl">coffee</span>
+                        <div>
+                            <h3 class="font-black text-xl">Caffeine</h3>
+                            <p class="text-sm text-on-surface-variant mt-2">Prevent sleep for focused sessions.</p>
+                        </div>
+                    </div>
+                    <div class="glass-panel-deep rounded-3xl p-7 min-h-[170px] flex flex-col justify-between">
+                        <span class="material-symbols-outlined text-tertiary text-3xl">hub</span>
+                        <div>
+                            <h3 class="font-black text-xl">Local AI</h3>
+                            <p class="text-sm text-on-surface-variant mt-2">Show Codex, Ollama, and OpenAI config state.</p>
+                        </div>
+                    </div>
+                    <div class="glass-panel-deep rounded-3xl p-7 min-h-[170px] flex flex-col justify-between">
+                        <span class="material-symbols-outlined text-primary text-3xl">lock</span>
+                        <div>
+                            <h3 class="font-black text-xl">Best Effort</h3>
+                            <p class="text-sm text-on-surface-variant mt-2">Public APIs first, clear fallback states.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="snap-page py-stack-gap-lg px-container-padding-mobile md:px-container-padding-desktop bg-surface-container-lowest flex items-center" id="download">
+            <div class="max-w-7xl mx-auto w-full grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+                <div class="space-y-8">
+                    <span class="text-label-caps text-primary font-black">Download</span>
+                    <h2 class="text-display-lg-mobile md:text-5xl font-extrabold leading-tight">Install Spill from Terminal.</h2>
+                    <p class="text-body-lg text-on-surface-variant max-w-xl">
+                        The public install path is command-based for now. Paste the command below, follow the prompts, and Spill is ready from your Mac menu bar.
+                    </p>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-xl">
+                        <div class="rounded-2xl bg-white/80 border border-outline-variant/30 p-4">
+                            <div class="text-[10px] font-black text-primary uppercase">Step 1</div>
+                            <div class="mt-1 text-sm font-black">Open Terminal</div>
+                        </div>
+                        <div class="rounded-2xl bg-white/80 border border-outline-variant/30 p-4">
+                            <div class="text-[10px] font-black text-primary uppercase">Step 2</div>
+                            <div class="mt-1 text-sm font-black">Paste command</div>
+                        </div>
+                        <div class="rounded-2xl bg-white/80 border border-outline-variant/30 p-4">
+                            <div class="text-[10px] font-black text-primary uppercase">Step 3</div>
+                            <div class="mt-1 text-sm font-black">Launch Spill</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="relative">
+                    <div class="absolute -inset-5 bg-primary/15 blur-3xl rounded-full"></div>
+                    <div class="relative bg-inverse-surface text-inverse-on-surface rounded-[2rem] p-6 md:p-7 terminal-shadow overflow-hidden">
+                        <div class="flex items-center justify-between">
+                            <div class="flex gap-2">
+                                <span class="w-3 h-3 rounded-full bg-[#FF5F56]"></span>
+                                <span class="w-3 h-3 rounded-full bg-[#FFBD2E]"></span>
+                                <span class="w-3 h-3 rounded-full bg-[#27C93F]"></span>
+                            </div>
+                            <span class="text-xs font-black text-inverse-on-surface/45">spill-install</span>
+                        </div>
+                        <div class="mt-7 rounded-2xl bg-white/5 border border-white/10 p-4">
+                            <div class="text-[11px] font-black uppercase tracking-[0.16em] text-inverse-on-surface/45">Install command</div>
+                            <div class="mt-4 flex items-start gap-4">
+                                <code id="install-command" class="font-mono text-sm md:text-base leading-relaxed break-all text-inverse-on-surface">/bin/bash -c "$(curl -fsSL https://thdev.app/Spill/install.sh)"</code>
+                                <button class="shrink-0 rounded-xl bg-white/10 px-3 py-2 text-xs font-black text-inverse-on-surface hover:bg-white/15 transition-colors" type="button" data-copy='/bin/bash -c "$(curl -fsSL https://thdev.app/Spill/install.sh)"'>
+                                    Copy
+                                </button>
+                            </div>
+                        </div>
+                        <div class="mt-6 space-y-3 text-sm font-semibold text-inverse-on-surface/70">
+                            <div class="flex items-center gap-3">
+                                <span class="h-2 w-2 rounded-full bg-emerald-400"></span>
+                                <span>Fetch latest installer script</span>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <span class="h-2 w-2 rounded-full bg-primary-fixed-dim"></span>
+                                <span>Install Spill for macOS</span>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <span class="h-2 w-2 rounded-full bg-secondary-fixed-dim"></span>
+                                <span>Open the menu bar control tray</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="snap-page py-stack-gap-lg px-container-padding-mobile md:px-container-padding-desktop flex items-center" id="agentcat">
+            <div class="max-w-7xl mx-auto w-full grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+                <div class="space-y-8">
+                    <div class="inline-flex items-center gap-3 rounded-full bg-secondary/10 border border-secondary/10 px-4 py-2">
+                        <img src="https://agentcat.app/assets/app-icon.png?v=20260514" alt="" class="app-icon agentcat-icon agentcat-icon-sm"/>
+                        <span class="text-label-caps text-secondary font-black">Also from the team</span>
+                    </div>
+                    <h2 class="text-display-lg-mobile md:text-5xl font-extrabold leading-tight">AgentCat keeps AI agent work visible.</h2>
+                    <p class="text-body-lg text-on-surface-variant max-w-xl">
+                        When Spill handles the Mac control tray, AgentCat gives your AI coding sessions a focused usage view for Codex, Claude, Gemini, and local tools.
+                    </p>
+                    <a class="inline-flex items-center gap-3 bg-secondary text-on-secondary px-7 py-3 rounded-full text-sm font-black shadow-xl shadow-secondary/20 hover:shadow-2xl hover:scale-[1.02] transition-all" href="https://agentcat.app/en" target="_blank" rel="noopener" data-analytics-event="agentcat_link_clicked" data-analytics-location="agentcat_section">
+                        <img src="https://agentcat.app/assets/app-icon.png?v=20260514" alt="" class="app-icon agentcat-icon agentcat-icon-sm"/>
+                        Visit AgentCat
+                        <span class="material-symbols-outlined text-[18px]">open_in_new</span>
+                    </a>
+                </div>
+                <div class="relative">
+                    <div class="absolute -inset-6 bg-secondary/10 blur-3xl rounded-full"></div>
+                    <div class="relative glass-panel-deep rounded-[2rem] p-6 md:p-8 shadow-2xl">
+                        <div class="flex items-center justify-between border-b border-on-surface/5 pb-5">
+                            <div class="flex items-center gap-3">
+                                <img src="https://agentcat.app/assets/app-icon.png?v=20260514" alt="" class="app-icon agentcat-icon app-icon-lg"/>
+                                <div>
+                                    <div class="text-xl font-black">AgentCat</div>
+                                    <div class="text-sm font-semibold text-on-surface-variant">AI agent activity</div>
+                                </div>
+                            </div>
+                            <span class="rounded-full bg-emerald-500/10 text-emerald-600 px-3 py-1 text-xs font-black">Live</span>
+                        </div>
+
+                        <div class="mt-6 grid grid-cols-3 gap-3">
+                            <div class="rounded-2xl bg-secondary/10 p-4">
+                                <div class="text-[10px] font-black uppercase text-secondary/70">Codex</div>
+                                <div class="mt-2 text-2xl font-black text-secondary">42k</div>
+                            </div>
+                            <div class="rounded-2xl bg-primary/10 p-4">
+                                <div class="text-[10px] font-black uppercase text-primary/70">Claude</div>
+                                <div class="mt-2 text-2xl font-black text-primary">18k</div>
+                            </div>
+                            <div class="rounded-2xl bg-tertiary/10 p-4">
+                                <div class="text-[10px] font-black uppercase text-tertiary/70">Gemini</div>
+                                <div class="mt-2 text-2xl font-black text-tertiary">9k</div>
+                            </div>
+                        </div>
+
+                        <div class="mt-6 rounded-2xl bg-white/70 border border-white/70 p-4">
+                            <svg class="w-full h-28" viewBox="0 0 320 112" aria-hidden="true">
+                                <path d="M4 82 C34 46 54 78 78 54 S126 24 154 58 S204 104 238 54 S286 26 316 42" fill="none" stroke="#4c4aca" stroke-width="5" stroke-linecap="round" class="live-line" style="--dash: 390; --speed: 3.1s;"></path>
+                                <path d="M4 92 C42 88 56 56 92 82 S154 108 184 74 S244 36 278 66 S304 88 316 76" fill="none" stroke="#0070eb" stroke-width="4" stroke-linecap="round" opacity="0.55" class="live-line" style="--dash: 360; --speed: 3.8s;"></path>
+                                <path d="M4 108 H316" fill="none" stroke="#c1c6d7" stroke-width="1.5" stroke-linecap="round" opacity="0.75"></path>
+                            </svg>
+                            <div class="mt-3 flex items-center justify-between text-[11px] font-black text-on-surface/45 uppercase">
+                                <span>Usage timeline</span>
+                                <span>Local snapshot</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
     </main>
 
-    <footer>
-      <div class="footer-brand">
-        <img src="assets/spill-icon.png" alt="" width="26" height="26">
-        <span>Spill for macOS</span>
-      </div>
-      <span>Direct distribution outside the Mac App Store.</span>
+    <footer class="border-t border-outline-variant/20 bg-white py-16 px-container-padding-mobile md:px-container-padding-desktop">
+        <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-start md:items-center gap-10">
+            <div class="space-y-3">
+                <div class="flex items-center gap-3">
+                    <img src="assets/spill-icon.png" alt="" class="app-icon app-icon-md"/>
+                    <div class="text-2xl font-black text-primary tracking-tight">Spill</div>
+                </div>
+                <p class="text-on-surface-variant max-w-sm">Open-source compact control tray for macOS. Direct distribution outside the Mac App Store.</p>
+            </div>
+            <div class="flex flex-wrap gap-5 md:gap-7 font-semibold text-on-surface-variant">
+                <a class="hover:text-primary transition-colors" href="https://github.com/taehwandev/Spill" data-analytics-event="open_source_link_clicked" data-analytics-location="footer">GitHub</a>
+                <a class="hover:text-primary transition-colors" href="https://github.com/taehwandev/Spill/releases" data-analytics-event="external_link_clicked" data-analytics-location="footer" data-analytics-destination="releases">Releases</a>
+                <a class="hover:text-primary transition-colors" href="https://www.keyflow.me/" target="_blank" rel="noopener" data-analytics-event="external_link_clicked" data-analytics-location="footer" data-analytics-destination="keyflow">KeyFlow</a>
+                <a class="inline-flex items-center gap-2 hover:text-primary transition-colors" href="https://agentcat.app/en" target="_blank" rel="noopener" data-analytics-event="agentcat_link_clicked" data-analytics-location="footer">
+                    <img src="https://agentcat.app/assets/app-icon.png?v=20260514" alt="" class="app-icon agentcat-icon agentcat-icon-sm"/>
+                    <span>AgentCat</span>
+                </a>
+            </div>
+        </div>
     </footer>
     <script>
-      document.querySelectorAll("[data-copy]").forEach((button) => {
-        button.addEventListener("click", async () => {
-          const text = button.getAttribute("data-copy") || "";
-          try {
-            await navigator.clipboard.writeText(text);
-            const original = button.textContent;
-            button.textContent = "Copied";
-            window.setTimeout(() => {
-              button.textContent = original;
-            }, 1600);
-          } catch {
-            button.textContent = "Copy failed";
-          }
+        const APTABASE_APP_KEY = "__SPILL_WEB_APTABASE_APP_KEY__";
+        const APTABASE_HOST = APTABASE_APP_KEY.includes("-EU-") ? "https://eu.aptabase.com" : "https://us.aptabase.com";
+        const aptabaseSessionId = (() => {
+            const key = "spill_aptabase_session_id";
+
+            try {
+                const existing = sessionStorage.getItem(key);
+                if (existing) {
+                    return existing;
+                }
+
+                const next = `${Math.floor(Date.now() / 1000)}${Math.floor(Math.random() * 100000000).toString().padStart(8, "0")}`;
+                sessionStorage.setItem(key, next);
+                return next;
+            } catch {
+                return `${Math.floor(Date.now() / 1000)}${Math.floor(Math.random() * 100000000).toString().padStart(8, "0")}`;
+            }
+        })();
+
+        function hasAptabaseAppKey() {
+            return APTABASE_APP_KEY.startsWith("A-US-") || APTABASE_APP_KEY.startsWith("A-EU-");
+        }
+
+        function trackAptabaseEvent(eventName, props = {}) {
+            if (!hasAptabaseAppKey()) {
+                return;
+            }
+
+            const payload = [
+                {
+                    timestamp: new Date().toISOString(),
+                    sessionId: aptabaseSessionId,
+                    eventName,
+                    systemProps: {
+                        locale: "unknown",
+                        osName: "Web",
+                        osVersion: "unknown",
+                        deviceModel: "browser",
+                        isDebug: ["localhost", "127.0.0.1", ""].includes(location.hostname),
+                        appVersion: "landing",
+                        sdkVersion: "spill-web@1.0.0"
+                    },
+                    props
+                }
+            ];
+
+            fetch(`${APTABASE_HOST}/api/v0/events`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "App-Key": APTABASE_APP_KEY
+                },
+                credentials: "omit",
+                keepalive: true,
+                body: JSON.stringify(payload)
+            }).catch(() => {});
+        }
+
+        document.querySelectorAll("[data-analytics-event]").forEach((element) => {
+            element.addEventListener("click", () => {
+                const props = {
+                    location: element.dataset.analyticsLocation || "unknown",
+                    source: "landing"
+                };
+
+                if (element.dataset.analyticsDestination) {
+                    props.destination = element.dataset.analyticsDestination;
+                }
+
+                trackAptabaseEvent(element.dataset.analyticsEvent, props);
+            });
         });
-      });
+
+        trackAptabaseEvent("landing_page_viewed", {
+            source: "landing"
+        });
+
+        const copyButton = document.querySelector("[data-copy]");
+
+        if (copyButton) {
+            copyButton.addEventListener("click", async () => {
+                const value = copyButton.getAttribute("data-copy") || "";
+                const originalText = copyButton.textContent.trim() || "Copy";
+
+                try {
+                    await navigator.clipboard.writeText(value);
+                    copyButton.textContent = "Copied";
+                } catch {
+                    copyButton.textContent = "Select";
+                }
+
+                trackAptabaseEvent("install_command_copy", {
+                    source: "landing",
+                    status: copyButton.textContent === "Copied" ? "copied" : "select"
+                });
+
+                window.setTimeout(() => {
+                    copyButton.textContent = originalText;
+                }, 1400);
+            });
+        }
     </script>
-  </body>
+</body>
 </html>

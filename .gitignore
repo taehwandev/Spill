@@ -6,6 +6,11 @@ DerivedData/
 *.xcodeproj/project.xcworkspace/xcuserdata/
 *.xcodeproj/xcuserdata/
 
+# Local environment overrides
+.env
+.env.*
+!.env.example
+
 # Local experiments and probes
 test*.swift
 test*.tiff

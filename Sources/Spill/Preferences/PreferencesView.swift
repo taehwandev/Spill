@@ -115,7 +115,6 @@ struct PreferencesView: View {
     @State private var accessibilityTrusted = AccessibilityPermission.isTrusted
     @State private var loginItemError: String?
     @State private var showsAdvancedDetection = false
-    @State private var isAgentCatInstalled = false
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
@@ -181,8 +180,8 @@ struct PreferencesView: View {
                 Divider()
                     .background(Color.primary.opacity(0.04))
 
-                // Section 5: Agent Cat Connection Card
-                AgentCatCard(isInstalled: isAgentCatInstalled)
+                // Section 5: Agent Cat Promo Card
+                AgentCatCard()
 
                 Divider()
                     .background(Color.primary.opacity(0.04))
@@ -211,11 +210,10 @@ struct PreferencesView: View {
 
     private func refreshPermissionState() {
         accessibilityTrusted = AccessibilityPermission.isTrusted
-        isAgentCatInstalled = AgentCatDetector.isInstalled
     }
 
     private var advancedDetectionSection: some View {
-        DisclosureGroup(isExpanded: $showsAdvancedDetection) {
+        DisclosureGroup(isExpanded: advancedDetectionBinding) {
             VStack(alignment: .leading, spacing: 14) {
                 Text("Best-effort menu bar scanning is an advanced pinning and diagnostics tool. It is not required for normal panel use.")
                     .font(.footnote)
@@ -242,9 +240,7 @@ struct PreferencesView: View {
         VStack(spacing: 6) {
             HStack(spacing: 12) {
                 Button {
-                    if let url = URL(string: "https://github.com/taehwankwon/Spill") {
-                        NSWorkspace.shared.open(url)
-                    }
+                    openSourceLink(source: "feedback")
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "hand.thumbsup.fill")
@@ -261,9 +257,7 @@ struct PreferencesView: View {
                     .foregroundStyle(.secondary.opacity(0.5))
 
                 Button {
-                    if let url = URL(string: "https://github.com/taehwankwon/Spill") {
-                        NSWorkspace.shared.open(url)
-                    }
+                    openSourceLink(source: "github")
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "arrow.up.forward.app.fill")
@@ -283,51 +277,39 @@ struct PreferencesView: View {
         .frame(maxWidth: .infinity, alignment: .center)
         .padding(.top, 8)
     }
-}// Dynamic Agent Cat Installation Detector
-struct AgentCatDetector {
-    static var isInstalled: Bool {
-        // 1. Check standard bundle IDs (com.trappist.agentcat is the official Agent Cat ID)
-        if NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.trappist.agentcat") != nil {
-            return true
-        }
-        if NSWorkspace.shared.urlForApplication(withBundleIdentifier: "app.agentcat") != nil {
-            return true
-        }
-        if NSWorkspace.shared.urlForApplication(withBundleIdentifier: "app.agentcat.AgentCat") != nil {
-            return true
-        }
 
-        // 2. Check standard paths (supporting space in 'Agent Cat.app')
-        let fileManager = FileManager.default
-        let paths = [
-            "/Applications/Agent Cat.app",
-            "/Applications/AgentCat.app",
-            "\(NSHomeDirectory())/Applications/Agent Cat.app",
-            "\(NSHomeDirectory())/Applications/AgentCat.app"
-        ]
-        for path in paths {
-            if fileManager.fileExists(atPath: path) {
-                return true
+    private var advancedDetectionBinding: Binding<Bool> {
+        Binding {
+            showsAdvancedDetection
+        } set: { isExpanded in
+            guard showsAdvancedDetection != isExpanded else {
+                return
             }
+
+            showsAdvancedDetection = isExpanded
+            SpillTelemetry.shared.track(
+                "settings_section_toggled",
+                props: [
+                    "section": "advanced_menu_scan",
+                    "state": isExpanded ? "open" : "closed"
+                ]
+            )
         }
-        return false
+    }
+
+    private func openSourceLink(source: String) {
+        SpillTelemetry.shared.track(
+            "open_source_link_clicked",
+            props: ["source": "preferences_\(source)"]
+        )
+        if let url = URL(string: "https://github.com/taehwandev/Spill") {
+            NSWorkspace.shared.open(url)
+        }
     }
 }
 
-// Gorgeous Responsive Connection Card for Agent Cat
 struct AgentCatCard: View {
-    let isInstalled: Bool
-
     var body: some View {
-        if isInstalled {
-            connectedCard
-        } else {
-            promoCard
-        }
-    }
-
-    // Sleek and modern promo card for installing Agent Cat
-    private var promoCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 12) {
                 AsyncImage(url: URL(string: "https://agentcat.app/assets/app-icon.png")) { phase in
@@ -351,7 +333,7 @@ struct AgentCatCard: View {
                 .frame(width: 32, height: 32)
 
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("Connect Local AI with Agent Cat")
+                    Text("Agent Cat for Local AI Work")
                         .font(.system(size: 13, weight: .bold))
                         .foregroundStyle(.primary)
 
@@ -361,19 +343,23 @@ struct AgentCatCard: View {
                 }
             }
 
-            Text("A powerful local connector that brings real-time telemetry, advanced monitoring, and visual dashboards to local AI agents like Codex, Claude Code, and Gemini CLI. Install Agent Cat to unlock a rich visual analytics workspace.")
+            Text("A companion app for visualizing local AI agent activity across Codex, Claude Code, Gemini CLI, and other development tools.")
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .lineSpacing(3)
                 .fixedSize(horizontal: false, vertical: true)
 
             Button {
+                SpillTelemetry.shared.track(
+                    "agentcat_link_clicked",
+                    props: ["source": "preferences"]
+                )
                 if let url = URL(string: "https://agentcat.app/") {
                     NSWorkspace.shared.open(url)
                 }
             } label: {
                 HStack(spacing: 6) {
-                    Text("Get Free AgentCat")
+                    Text("Visit AgentCat")
                     Image(systemName: "arrow.up.right")
                         .font(.system(size: 10, weight: .bold))
                 }
@@ -417,138 +403,6 @@ struct AgentCatCard: View {
                     ),
                     lineWidth: 1
                 )
-        }
-    }
-
-    // Sleek and modern card when Agent Cat is successfully connected
-    private var connectedCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 12) {
-                ZStack(alignment: .bottomTrailing) {
-                    AsyncImage(url: URL(string: "https://agentcat.app/assets/app-icon.png")) { phase in
-                        switch phase {
-                        case .success(let image):
-                            image
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                                .shadow(color: Color.black.opacity(0.15), radius: 2, x: 0, y: 1)
-                        default:
-                            ZStack {
-                                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .fill(Color(red: 29/255, green: 26/255, blue: 22/255))
-                                Image(systemName: "cat.fill")
-                                    .font(.system(size: 14))
-                                    .foregroundStyle(.white)
-                            }
-                        }
-                    }
-                    .frame(width: 32, height: 32)
-
-                    // Connected green badge dot
-                    Circle()
-                        .fill(Color.green)
-                        .frame(width: 8, height: 8)
-                        .overlay(
-                            Circle()
-                                .stroke(Color.white, lineWidth: 1.5)
-                        )
-                        .offset(x: 2, y: 2)
-                }
-
-                VStack(alignment: .leading, spacing: 1) {
-                    HStack(spacing: 6) {
-                        Text("Agent Cat Connected")
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundStyle(.primary)
-
-                        Text("● Active")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundStyle(.green)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Color.green.opacity(0.12), in: Capsule())
-                    }
-
-                    Text("https://agentcat.app")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            Text("Your local AI workflows (Codex, Claude Code, Gemini CLI) are currently being tracked and visualized inside Agent Cat's rich visual telemetry workspace.")
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
-                .lineSpacing(3)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Button {
-                launchAgentCat()
-            } label: {
-                HStack(spacing: 6) {
-                    Text("Launch Agent Cat Dashboard")
-                    Image(systemName: "arrow.right.circle.fill")
-                        .font(.system(size: 10, weight: .bold))
-                }
-                .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .background(
-                    LinearGradient(
-                        colors: [Color.green, Color.green.opacity(0.85)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    in: RoundedRectangle(cornerRadius: 8, style: .continuous)
-                )
-                .shadow(color: Color.green.opacity(0.2), radius: 2, x: 0, y: 1)
-            }
-            .buttonStyle(.plain)
-            .padding(.top, 4)
-        }
-        .padding(16)
-        .background(
-            ZStack {
-                VisualEffectView(material: .hudWindow, blendingMode: .withinWindow)
-
-                LinearGradient(
-                    colors: [Color.green.opacity(0.04), Color.teal.opacity(0.03)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            }
-        )
-        .cornerRadius(14)
-        .overlay {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(
-                    LinearGradient(
-                        colors: [Color.green.opacity(0.25), Color.teal.opacity(0.1)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    lineWidth: 1
-                )
-        }
-    }
-
-    private func launchAgentCat() {
-        if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.trappist.agentcat") ?? NSWorkspace.shared.urlForApplication(withBundleIdentifier: "app.agentcat.AgentCat") ?? NSWorkspace.shared.urlForApplication(withBundleIdentifier: "app.agentcat") {
-            NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
-        } else {
-            let paths = [
-                "/Applications/Agent Cat.app",
-                "/Applications/AgentCat.app",
-                "\(NSHomeDirectory())/Applications/Agent Cat.app",
-                "\(NSHomeDirectory())/Applications/AgentCat.app"
-            ]
-            for path in paths {
-                if FileManager.default.fileExists(atPath: path) {
-                    NSWorkspace.shared.open(URL(fileURLWithPath: path))
-                    return
-                }
-            }
         }
     }
 }
