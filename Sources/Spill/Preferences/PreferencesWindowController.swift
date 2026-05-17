@@ -49,6 +49,7 @@ final class PreferencesWindowController {
         )
 
         window.title = "Spill Preferences"
+        window.titlebarAppearsTransparent = true
         window.isReleasedWhenClosed = false
         window.minSize = minimumSize
         window.collectionBehavior = [.moveToActiveSpace]

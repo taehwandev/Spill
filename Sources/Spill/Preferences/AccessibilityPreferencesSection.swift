@@ -3,35 +3,76 @@ import SwiftUI
 struct AccessibilityPreferencesSection: View {
     @ObservedObject var scanner: AXMenuBarItemScanner
     @Binding var accessibilityTrusted: Bool
+    let showPanelAction: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
                 Label(
-                    accessibilityTrusted ? "Accessibility Enabled" : "Accessibility Needed",
-                    systemImage: accessibilityTrusted ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
+                    accessibilityTrusted ? "Accessibility Active" : "Accessibility Needed",
+                    systemImage: accessibilityTrusted ? "checkmark.shield.fill" : "exclamationmark.shield.fill"
                 )
+                .font(.body.weight(.medium))
                 .foregroundStyle(accessibilityTrusted ? .green : .orange)
 
                 Spacer()
 
-                Button {
-                    refreshPermissionState()
-                } label: {
-                    Label("Recheck", systemImage: "arrow.clockwise")
-                }
+                statePill(
+                    title: accessibilityTrusted ? "ON" : "OFF",
+                    tint: accessibilityTrusted ? .green : .orange
+                )
 
-                if !accessibilityTrusted {
+                statePill(
+                    title: "\(scanner.items.count) items",
+                    tint: .secondary
+                )
+            }
+
+            if accessibilityTrusted {
+                HStack(spacing: 8) {
+                    Button {
+                        showPanelAction()
+                    } label: {
+                        Label("Open Panel", systemImage: "rectangle.on.rectangle")
+                    }
+                    .buttonStyle(.borderedProminent)
+
+                    Button {
+                        scanner.refresh()
+                    } label: {
+                        Label(scanner.isScanning ? "Scanning" : "Refresh Scanner", systemImage: "arrow.clockwise")
+                    }
+                    .disabled(scanner.isScanning)
+                }
+            } else {
+                Text("Spill needs Accessibility permission to discover and activate menu bar items owned by other apps.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text("After granting permission in System Settings, relaunch Spill if it still shows as inactive.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack(spacing: 8) {
                     Button {
                         requestPermission()
                     } label: {
-                        Label("Request", systemImage: "hand.raised.fill")
+                        Label("Request Access", systemImage: "hand.raised.fill")
                     }
+                    .buttonStyle(.borderedProminent)
 
                     Button {
                         AccessibilityPermission.openSystemSettings()
                     } label: {
-                        Label("Settings", systemImage: "gearshape.fill")
+                        Label("System Settings", systemImage: "gearshape.fill")
+                    }
+
+                    Button {
+                        refreshPermissionState()
+                    } label: {
+                        Label("Recheck", systemImage: "arrow.clockwise")
                     }
 
                     Button {
@@ -42,15 +83,8 @@ struct AccessibilityPreferencesSection: View {
                 }
             }
 
-            if !accessibilityTrusted {
-                Text("Spill needs Accessibility to discover and activate menu bar items owned by other apps.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-
-                Text("After granting Accessibility, relaunch Spill if this still stays off. macOS can keep the current process untrusted until restart.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
+            Divider()
+                .background(Color.primary.opacity(0.04))
 
             DisclosureGroup {
                 VStack(alignment: .leading, spacing: 5) {
@@ -64,6 +98,7 @@ struct AccessibilityPreferencesSection: View {
                 .padding(.top, 4)
             } label: {
                 Label("Permission Diagnostics", systemImage: "stethoscope")
+                    .font(.footnote)
                     .foregroundStyle(.secondary)
             }
         }
@@ -71,7 +106,6 @@ struct AccessibilityPreferencesSection: View {
 
     private func refreshPermissionState() {
         accessibilityTrusted = AccessibilityPermission.isTrusted
-
         if accessibilityTrusted {
             scanner.refresh()
         }
@@ -79,7 +113,6 @@ struct AccessibilityPreferencesSection: View {
 
     private func requestPermission() {
         accessibilityTrusted = AccessibilityPermission.request()
-
         if accessibilityTrusted {
             scanner.refresh()
         } else {
@@ -87,13 +120,27 @@ struct AccessibilityPreferencesSection: View {
         }
     }
 
+    private func statePill(title: String, tint: Color) -> some View {
+        Text(title)
+            .font(.caption2.weight(.bold))
+            .monospacedDigit()
+            .foregroundStyle(tint)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(tint.opacity(0.12), in: Capsule())
+            .overlay {
+                Capsule()
+                    .stroke(tint.opacity(0.2), lineWidth: 0.8)
+            }
+    }
+
     private func diagnosticRow(_ label: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(label)
-                .font(.caption)
+                .font(.caption2)
                 .foregroundStyle(.secondary)
             Text(value)
-                .font(.caption.monospaced())
+                .font(.caption2.monospaced())
                 .textSelection(.enabled)
         }
     }

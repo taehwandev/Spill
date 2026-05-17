@@ -3,30 +3,54 @@ import SwiftUI
 struct GeneralPreferencesSection: View {
     @ObservedObject var settings: SpillSettings
     @Binding var loginItemError: String?
+    @State private var showsWindowShortcuts = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Toggle("Use spill animation", isOn: $settings.useSpillAnimation)
+            // Launch at Login - at the absolute top!
+            VStack(alignment: .leading, spacing: 4) {
+                Toggle("Launch at Login", isOn: launchAtLoginBinding)
+                    .disabled(!LoginItemController.isAvailable)
+                    .font(.body.weight(.medium))
 
-            Toggle("Keyboard shortcut", isOn: $settings.hotKeyEnabled)
+                if !LoginItemController.isAvailable {
+                    Text("Launch at Login is available after packaging Spill as a .app bundle.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
 
-            Text("\(WindowActionShortcutModifier.standard.title) + Space")
-                .font(.footnote.monospaced())
-                .foregroundStyle(.secondary)
-
-            windowShortcutsSection
-
-            HStack {
-                Label("Menu bar actions", systemImage: "camera.viewfinder")
-                Spacer()
-                Text("Notch candidates")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+                if let loginItemError {
+                    Text(loginItemError)
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                }
             }
 
+            Divider()
+                .background(Color.primary.opacity(0.04))
+
+            // Main Animation & Global Shortcut Toggles
+            Toggle("Use spill animation", isOn: $settings.useSpillAnimation)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Toggle("Keyboard shortcut", isOn: $settings.hotKeyEnabled)
+
+                if settings.hotKeyEnabled {
+                    Text("\(WindowActionShortcutModifier.standard.title) + Space")
+                        .font(.footnote.monospaced())
+                        .foregroundStyle(.secondary)
+                        .padding(.leading, 20)
+                }
+            }
+
+            Divider()
+                .background(Color.primary.opacity(0.04))
+
+            // Menu Bar Layout Customization
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
-                    Text("Icon spacing")
+                    Label("Menu bar icon spacing", systemImage: "camera.viewfinder")
+                        .font(.body.weight(.medium))
                     Spacer()
                     Text("\(Int(settings.iconSpacing)) px")
                         .font(.callout.monospacedDigit())
@@ -36,52 +60,22 @@ struct GeneralPreferencesSection: View {
                 Slider(value: $settings.iconSpacing, in: 2...16, step: 1)
             }
 
-            Toggle("Launch at Login", isOn: launchAtLoginBinding)
-                .disabled(!LoginItemController.isAvailable)
-
-            if !LoginItemController.isAvailable {
-                Text("Launch at Login is available after packaging Spill as a .app bundle.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
-            if let loginItemError {
-                Text(loginItemError)
-                    .font(.footnote)
-                    .foregroundStyle(.red)
-            }
-
             Divider()
+                .background(Color.primary.opacity(0.04))
 
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Label("Screen Time", systemImage: "hourglass")
-                    Spacer()
-                    Button {
-                        ScreenTimeSettings.open()
-                    } label: {
-                        Label("Open Screen Time", systemImage: "gearshape.fill")
-                    }
-                }
-
-                Text("If App Limits or Downtime block Spill, macOS can prevent launch or place a Time Limit shield above the app. Add Spill to Always Allowed or disable the relevant limit. Launch Spill from Applications/Finder instead of a blocked launcher app.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+            // Window Snap Shortcuts under an elegant DisclosureGroup
+            DisclosureGroup(isExpanded: $showsWindowShortcuts) {
+                windowShortcutsSection
+                    .padding(.top, 8)
+            } label: {
+                Label("Window Snap Shortcuts", systemImage: "macwindow")
+                    .font(.body.weight(.medium))
             }
         }
     }
 
     private var windowShortcutsSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Label("Window shortcuts", systemImage: "macwindow")
-                Spacer()
-                Text("Grouped modifiers")
-                    .font(.footnote.monospaced())
-                    .foregroundStyle(.secondary)
-            }
-
             ForEach(WindowActionKind.panelOrder, id: \.self) { kind in
                 HStack(spacing: 10) {
                     Label(kind.title, systemImage: kind.symbolName)
