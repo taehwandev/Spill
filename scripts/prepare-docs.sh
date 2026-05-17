@@ -41,7 +41,7 @@ validate_app_key "SPILL_INSTALLER_APTABASE_APP_KEY" "$INSTALLER_APTABASE_APP_KEY
 
 rm -rf "$OUTPUT_DIR"
 mkdir -p "$OUTPUT_DIR"
-ditto "$SOURCE_DIR" "$OUTPUT_DIR"
+cp -R "$SOURCE_DIR"/. "$OUTPUT_DIR"/
 
 replace_placeholder "$OUTPUT_DIR/index.html" "__SPILL_WEB_APTABASE_APP_KEY__" "$WEB_APTABASE_APP_KEY"
 
