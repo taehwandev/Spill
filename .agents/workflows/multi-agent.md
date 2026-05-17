@@ -273,6 +273,11 @@ C2 Verifier reviews:
 - tests/manual checks
 - adherence to PRD/ARD
 
+For non-trivial changes, use `.agents/workflows/persona-review.md` to structure
+the review across product, native UX, power-user workflow, architecture,
+reliability, permission/distribution, and QA perspectives. If the persona review
+is skipped, state why in verification or closeout notes.
+
 Review output must lead with findings.
 
 ## Gate 7: Verification

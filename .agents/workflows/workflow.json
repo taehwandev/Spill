@@ -68,6 +68,7 @@
     ".agents/workflows/ambiguity-gate.md",
     ".agents/workflows/implementation.md",
     ".agents/workflows/multi-agent.md",
+    ".agents/workflows/persona-review.md",
     ".agents/tasks/roadmap.yml",
     ".agents/templates/00-intake.md",
     ".agents/templates/01-prd.md",

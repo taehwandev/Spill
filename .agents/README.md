@@ -8,6 +8,7 @@ This folder is the working source of truth for agent-driven implementation.
 - `specs/ard.md`: Architecture requirements, decisions, constraints, and module boundaries.
 - `workflows/implementation.md`: How agents should plan, implement, verify, and ship work.
 - `workflows/ambiguity-gate.md`: Shared ambiguity, clarification, and assumption rules for all agents.
+- `workflows/persona-review.md`: Reusable multi-perspective review method for code, product, UX, architecture, reliability, permission, and QA reviews.
 - `tasks/roadmap.yml`: Structured implementation milestones and acceptance checks.
 - `design/stitch.md`: Stitch project and screen references for UI-scoped work.
 
@@ -84,4 +85,10 @@ Run compact panel layout smoke verification:
 
 ```bash
 python3 .agents/scripts/workflow.py panel-layout-smoke
+```
+
+Run menu bar status item click smoke verification:
+
+```bash
+python3 .agents/scripts/workflow.py status-click-smoke
 ```
