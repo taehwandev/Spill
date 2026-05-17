@@ -9,6 +9,8 @@ This folder is the working source of truth for agent-driven implementation.
 - `workflows/implementation.md`: How agents should plan, implement, verify, and ship work.
 - `workflows/ambiguity-gate.md`: Shared ambiguity, clarification, and assumption rules for all agents.
 - `workflows/persona-review.md`: Reusable multi-perspective review method for code, product, UX, architecture, reliability, permission, and QA reviews.
+- `workflows/release.md`: Release request contract, versioning, tagging, packaging, publication, and closeout steps.
+- `checklists/release.md`: Quick release gate that points back to the full release workflow.
 - `tasks/roadmap.yml`: Structured implementation milestones and acceptance checks.
 - `design/stitch.md`: Stitch project and screen references for UI-scoped work.
 
@@ -91,4 +93,10 @@ Run menu bar status item click smoke verification:
 
 ```bash
 python3 .agents/scripts/workflow.py status-click-smoke
+```
+
+Release from the current repository state:
+
+```bash
+sed -n '1,260p' .agents/workflows/release.md
 ```

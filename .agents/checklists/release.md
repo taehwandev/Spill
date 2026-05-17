@@ -1,35 +1,88 @@
 # Release Checklist
 
-## Build
+Use `.agents/workflows/release.md` as the full release procedure. This checklist
+is the quick gate before closeout.
 
-- [ ] Clean build.
-- [ ] App bundle generated.
-- [ ] Runtime smoke test passes.
-- [ ] App launches from Finder.
+## Scope
 
-## Signing
+- [ ] The release request, target version, and publication scope are clear.
+- [ ] The working tree is clean or all intended changes are committed.
+- [ ] Unrelated dirty files are excluded or escalated to the maintainer.
+- [ ] The target commit is the commit that will be tagged and packaged.
 
-- [ ] Developer ID Application certificate available.
-- [ ] Hardened runtime enabled.
-- [ ] Entitlements reviewed.
-- [ ] No debug-only entitlements.
+## Version And Tag
 
-## Notarization
+- [ ] Version uses `ISO-year.ISO-week.release-count`, for example `2026.20.2`.
+- [ ] Build number is set intentionally.
+- [ ] Existing local and remote tags were checked.
+- [ ] Annotated tag `v<version>` points at the release commit.
+- [ ] No existing published tag or release is being overwritten without approval.
 
-- [ ] Submit with `notarytool`.
-- [ ] Notarization accepted.
-- [ ] Staple ticket.
-- [ ] Verify Gatekeeper launch on a quarantined copy.
+## Source Verification
+
+- [ ] `swift test`
+- [ ] `python3 .agents/scripts/workflow.py verify`
+- [ ] `python3 .agents/scripts/workflow.py runtime-smoke` when app startup,
+      packaging, permissions, or lifecycle changed.
+- [ ] `python3 .agents/scripts/workflow.py panel-layout-smoke` when panel UI or
+      sizing changed.
+- [ ] `python3 .agents/scripts/workflow.py status-click-smoke` when menu bar
+      trigger behavior changed.
 
 ## Packaging
 
-- [ ] DMG or zip created.
-- [ ] Version metadata correct.
-- [ ] Changelog included.
-- [ ] GitHub Release draft created.
+- [ ] `SPILL_VERSION=<version> SPILL_BUILD=<build> ./scripts/package-release.sh`
+- [ ] Versioned DMG exists.
+- [ ] Versioned ZIP exists.
+- [ ] Stable `Spill-macos.dmg` exists.
+- [ ] Stable `Spill-macos.zip` exists.
+- [ ] `update.json` exists.
+- [ ] `checksums.txt` exists.
 
-## Docs
+## Artifact Verification
 
-- [ ] README updated.
-- [ ] Permission instructions updated.
-- [ ] Known limitations updated.
+- [ ] `hdiutil verify .build/release-artifacts/Spill-<version>-macos.dmg`
+- [ ] `unzip -t .build/release-artifacts/Spill-<version>-macos.zip`
+- [ ] `codesign --verify --deep --strict --verbose=2 .build/Spill.app`
+- [ ] `CFBundleShortVersionString` equals `<version>`.
+- [ ] `CFBundleVersion` equals `<build>`.
+- [ ] `update.json.latestVersion` equals `<version>`.
+- [ ] `update.json.downloadURL` points at the stable latest DMG URL.
+
+## Signing And Notarization
+
+- [ ] Signing mode is explicit: ad-hoc, Developer ID signed, or notarized.
+- [ ] Developer ID certificate is available when required.
+- [ ] Hardened runtime is enabled.
+- [ ] Notarization profile is available when required.
+- [ ] Notarization accepted and stapled when required.
+- [ ] Gatekeeper behavior is documented if the release is ad-hoc signed.
+
+## Publication
+
+- [ ] `git push origin main`
+- [ ] `git push origin v<version>`
+- [ ] GitHub `Release` workflow completed successfully.
+- [ ] GitHub Release for `v<version>` exists.
+- [ ] Stable and versioned assets are attached.
+- [ ] `update.json` is attached.
+- [ ] `checksums.txt` is attached.
+
+## Public URL Checks
+
+- [ ] Latest stable DMG URL resolves.
+- [ ] Latest stable ZIP URL resolves.
+- [ ] Latest `update.json` URL resolves.
+- [ ] `https://thdev.app/Spill/` resolves.
+- [ ] Manual Check for Updates can discover the new release from an older build.
+
+## Closeout
+
+- [ ] Report version and build.
+- [ ] Report release commit hash.
+- [ ] Report tag name.
+- [ ] Report whether the tag was pushed.
+- [ ] Report GitHub Release status.
+- [ ] Report local artifact paths or public URLs.
+- [ ] Report verification commands.
+- [ ] Report signing or notarization limitations.

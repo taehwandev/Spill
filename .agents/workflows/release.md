@@ -1,0 +1,263 @@
+# Spill Release Workflow
+
+This workflow defines what repo agents should do when the maintainer asks for a
+release, deploy, or distribution build.
+
+## Trigger Contract
+
+Treat these requests as release requests:
+
+- `release`
+- `release it`
+- `make a release`
+- `deploy`
+- `ship it`
+- Korean-language equivalents of release or deploy requests
+
+Default behavior for an unqualified release request:
+
+1. Release from the current repository state.
+2. Commit all intended source, script, and documentation changes first, separated
+   by logical purpose.
+3. Use the next `ISO-year.ISO-week.release-count` version unless the maintainer
+   provided a specific version.
+4. Build and verify local release artifacts from the exact commit being tagged.
+5. Create an annotated release tag.
+6. Publish through the GitHub `Release` workflow when remote access is available.
+7. Verify the GitHub Release, stable download assets, and update manifest.
+
+Ask the maintainer only when a blocker remains after repo research, such as an
+unclear version target, unrelated dirty files, an existing tag that points to a
+different commit, missing signing credentials for a notarized release, or a
+request that would overwrite an existing public release.
+
+## Version Policy
+
+Spill release versions use:
+
+```text
+ISO-year.ISO-week.release-count
+```
+
+Example:
+
+```text
+2026.20.2
+```
+
+Tags must use the same version with a leading `v`:
+
+```text
+v2026.20.2
+```
+
+If the maintainer does not provide a version:
+
+1. Compute the current UTC ISO year and week.
+2. Inspect local and remote tags for the same `year.week`.
+3. Use the next release count after the highest existing tag for that week.
+4. Use the release count as `SPILL_BUILD` unless the maintainer provided another
+   build number.
+
+Never reuse a tag for a different commit. If the tag already exists and points to
+the intended release commit, continue with packaging or publishing. If it points
+elsewhere, stop and ask.
+
+## Preflight
+
+Read the standard agent entry points first:
+
+```bash
+sed -n '1,220p' .agents/README.md
+sed -n '1,240p' .agents/workflows/implementation.md
+sed -n '1,220p' .agents/workflows/ambiguity-gate.md
+```
+
+Inspect repository state:
+
+```bash
+git status --short
+git log --oneline -5
+git tag --list 'v*' --sort=-v:refname
+```
+
+When network access is available, refresh tags before deciding the next version:
+
+```bash
+git fetch --tags origin
+```
+
+Dirty tree handling:
+
+- If files are clearly part of the current release work, commit them before
+  tagging.
+- Split commits by logical purpose, not by file extension.
+- Do not include `.build/` artifacts in git.
+- Do not revert unrelated user changes.
+- Ask only if dirty changes are unrelated, risky, or impossible to classify.
+
+## Verification Before Packaging
+
+Run the minimum source checks:
+
+```bash
+swift test
+python3 .agents/scripts/workflow.py verify
+```
+
+Run additional smoke checks when the release includes related changes:
+
+```bash
+python3 .agents/scripts/workflow.py runtime-smoke
+python3 .agents/scripts/workflow.py panel-layout-smoke
+python3 .agents/scripts/workflow.py status-click-smoke
+```
+
+Use judgment for scope. A pure documentation release does not need UI smoke
+checks, but an app release should pass the checks relevant to changed behavior.
+
+## Package From The Release Commit
+
+Make sure the commit to be tagged is the one being packaged:
+
+```bash
+git status --short
+git rev-parse --short HEAD
+```
+
+Build local artifacts:
+
+```bash
+SPILL_VERSION=<version> SPILL_BUILD=<build> ./scripts/package-release.sh
+```
+
+For Developer ID signed and notarized releases, include the signing identity and
+notary profile:
+
+```bash
+SPILL_VERSION=<version> \
+SPILL_BUILD=<build> \
+SPILL_SIGN_IDENTITY="Developer ID Application: Example Name (TEAMID)" \
+SPILL_NOTARY_KEYCHAIN_PROFILE="spill-notary" \
+./scripts/package-release.sh
+```
+
+The package script must produce:
+
+- `.build/release-artifacts/Spill-<version>-macos.dmg`
+- `.build/release-artifacts/Spill-<version>-macos.zip`
+- `.build/release-artifacts/Spill-macos.dmg`
+- `.build/release-artifacts/Spill-macos.zip`
+- `.build/release-artifacts/update.json`
+- `.build/release-artifacts/checksums.txt`
+
+## Verify Artifacts
+
+Run:
+
+```bash
+hdiutil verify .build/release-artifacts/Spill-<version>-macos.dmg
+unzip -t .build/release-artifacts/Spill-<version>-macos.zip
+codesign --verify --deep --strict --verbose=2 .build/Spill.app
+/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" .build/Spill.app/Contents/Info.plist
+/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" .build/Spill.app/Contents/Info.plist
+sed -n '1,120p' .build/release-artifacts/update.json
+```
+
+Confirm:
+
+- `CFBundleShortVersionString` equals `<version>`.
+- `CFBundleVersion` equals `<build>`.
+- `update.json.latestVersion` equals `<version>`.
+- `update.json.downloadURL` points to
+  `https://github.com/taehwandev/Spill/releases/latest/download/Spill-macos.dmg`.
+- Stable and versioned DMG/ZIP assets exist.
+
+## Tag
+
+Create an annotated tag after successful local verification:
+
+```bash
+git tag -a v<version> -m "Release <version>"
+git tag --points-at HEAD
+```
+
+If a matching tag already exists at `HEAD`, keep it. Do not recreate it unless
+the maintainer explicitly asks for a retag.
+
+## Publish
+
+Canonical publication path:
+
+```bash
+git push origin main
+git push origin v<version>
+```
+
+The tag push starts `.github/workflows/release.yml`. Monitor it:
+
+```bash
+gh run list --workflow Release --limit 3
+gh run watch <run-id>
+gh release view v<version>
+```
+
+The workflow should create or update the GitHub Release and upload:
+
+- `Spill-<version>-macos.dmg`
+- `Spill-<version>-macos.zip`
+- `Spill-macos.dmg`
+- `Spill-macos.zip`
+- `update.json`
+- `checksums.txt`
+
+Manual asset upload is a fallback only when GitHub Actions is unavailable. Prefer
+the workflow so the public release is reproducible from the tag.
+
+## Post-Release Checks
+
+After GitHub publication, verify stable public URLs:
+
+```bash
+curl -I -L https://github.com/taehwandev/Spill/releases/latest/download/Spill-macos.dmg
+curl -I -L https://github.com/taehwandev/Spill/releases/latest/download/Spill-macos.zip
+curl -fsSL https://github.com/taehwandev/Spill/releases/latest/download/update.json
+curl -I -L https://thdev.app/Spill/
+```
+
+Open the release page and confirm:
+
+- the latest release tag is correct;
+- stable assets resolve;
+- `update.json` is attached;
+- the download site still points at stable assets;
+- the app's manual Check for Updates action can discover the release from an
+  older build.
+
+## Do Not
+
+- Do not tag before committing intended release changes.
+- Do not package a dirty working tree unless the dirt is generated output under
+  ignored paths.
+- Do not publish a release with an ad-hoc signature if the maintainer requested a
+  notarized public release.
+- Do not overwrite an existing public release without explicit maintainer
+  approval.
+- Do not move a release tag after publication without explicit maintainer
+  approval.
+- Do not claim automatic in-app installation exists. The current app supports a
+  manual update check and download/install guidance. Sparkle-style automatic
+  updates are a separate future slice.
+
+## Closeout
+
+Report:
+
+- release version and build number;
+- release commit hash;
+- tag name;
+- whether the tag was pushed;
+- whether GitHub Release publication passed;
+- artifact paths or GitHub URLs;
+- verification commands run;
+- any signing/notarization limitations.
