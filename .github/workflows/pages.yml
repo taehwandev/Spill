@@ -35,10 +35,17 @@ jobs:
         with:
           enablement: true
 
+      - name: Prepare site
+        env:
+          SPILL_APTABASE_APP_KEY: ${{ secrets.SPILL_APTABASE_APP_KEY }}
+          SPILL_WEB_APTABASE_APP_KEY: ${{ secrets.SPILL_WEB_APTABASE_APP_KEY }}
+          SPILL_INSTALLER_APTABASE_APP_KEY: ${{ secrets.SPILL_INSTALLER_APTABASE_APP_KEY }}
+        run: ./scripts/prepare-docs.sh
+
       - name: Upload site artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: docs
+          path: .build/docs
 
       - name: Deploy Pages
         id: deployment

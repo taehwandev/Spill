@@ -156,6 +156,7 @@ jobs:
           SPILL_BUNDLE_ID: ${{ env.SPILL_BUNDLE_ID }}
           SPILL_SIGN_IDENTITY: ${{ steps.signing.outputs.sign_identity }}
           SPILL_NOTARY_KEYCHAIN_PROFILE: ${{ steps.signing.outputs.notary_profile }}
+          SPILL_APTABASE_APP_KEY: ${{ secrets.SPILL_APTABASE_APP_KEY }}
         run: ./scripts/package-release.sh
 
       - name: Add stable website asset names

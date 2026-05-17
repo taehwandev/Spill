@@ -2,10 +2,18 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+if [[ -f "$ROOT_DIR/.env.local" ]]; then
+    set -a
+    # shellcheck source=/dev/null
+    source "$ROOT_DIR/.env.local"
+    set +a
+fi
+
 SOURCE_DIR="$ROOT_DIR/docs"
 OUTPUT_DIR="${SPILL_DOCS_OUTPUT_DIR:-$ROOT_DIR/.build/docs}"
-WEB_APTABASE_APP_KEY="${SPILL_WEB_APTABASE_APP_KEY:-}"
-INSTALLER_APTABASE_APP_KEY="${SPILL_INSTALLER_APTABASE_APP_KEY:-}"
+WEB_APTABASE_APP_KEY="${SPILL_WEB_APTABASE_APP_KEY:-${SPILL_APTABASE_APP_KEY:-}}"
+INSTALLER_APTABASE_APP_KEY="${SPILL_INSTALLER_APTABASE_APP_KEY:-${SPILL_APTABASE_APP_KEY:-}}"
 
 validate_app_key() {
     local name="$1"

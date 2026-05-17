@@ -131,6 +131,18 @@ Build local artifacts:
 SPILL_VERSION=<version> SPILL_BUILD=<build> ./scripts/package-release.sh
 ```
 
+Local builds read `.env.local` automatically when present. For telemetry-enabled
+artifacts, `.env.local` or the shell environment should provide:
+
+- `SPILL_APTABASE_APP_KEY` for the macOS app bundle.
+- `SPILL_WEB_APTABASE_APP_KEY` for the landing page when it should use a
+  separate key.
+- `SPILL_INSTALLER_APTABASE_APP_KEY` for `install.sh` when it should use a
+  separate key.
+
+The landing page and installer fall back to `SPILL_APTABASE_APP_KEY` when their
+specific keys are absent.
+
 For Developer ID signed and notarized releases, include the signing identity and
 notary profile:
 
@@ -213,6 +225,17 @@ The workflow should create or update the GitHub Release and upload:
 
 Manual asset upload is a fallback only when GitHub Actions is unavailable. Prefer
 the workflow so the public release is reproducible from the tag.
+
+For telemetry-enabled public releases, GitHub Secrets should include:
+
+- `SPILL_APTABASE_APP_KEY`
+- `SPILL_WEB_APTABASE_APP_KEY` when the landing page should use a separate key
+- `SPILL_INSTALLER_APTABASE_APP_KEY` when the installer should use a separate key
+
+The release workflow embeds the app key in the macOS app bundle. The Pages
+workflow runs `scripts/prepare-docs.sh` and deploys `.build/docs` so the landing
+page and installer script receive telemetry keys. The Pages workflow falls back
+to `SPILL_APTABASE_APP_KEY` when page-specific keys are absent.
 
 ## Post-Release Checks
 

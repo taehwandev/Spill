@@ -32,6 +32,8 @@ is the quick gate before closeout.
 ## Packaging
 
 - [ ] `SPILL_VERSION=<version> SPILL_BUILD=<build> ./scripts/package-release.sh`
+- [ ] Telemetry key source is explicit: shell environment, `.env.local`, GitHub
+      Secrets, or intentionally disabled.
 - [ ] Versioned DMG exists.
 - [ ] Versioned ZIP exists.
 - [ ] Stable `Spill-macos.dmg` exists.
@@ -62,6 +64,9 @@ is the quick gate before closeout.
 
 - [ ] `git push origin main`
 - [ ] `git push origin v<version>`
+- [ ] GitHub Secrets include `SPILL_APTABASE_APP_KEY` when public metrics are
+      expected. `SPILL_WEB_APTABASE_APP_KEY` and
+      `SPILL_INSTALLER_APTABASE_APP_KEY` are optional separate-key overrides.
 - [ ] GitHub `Release` workflow completed successfully.
 - [ ] GitHub Release for `v<version>` exists.
 - [ ] Stable and versioned assets are attached.

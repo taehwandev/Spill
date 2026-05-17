@@ -2,6 +2,14 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+if [[ -f "$ROOT_DIR/.env.local" ]]; then
+    set -a
+    # shellcheck source=/dev/null
+    source "$ROOT_DIR/.env.local"
+    set +a
+fi
+
 APP_DIR="$ROOT_DIR/.build/Spill.app"
 CONTENTS_DIR="$APP_DIR/Contents"
 MACOS_DIR="$CONTENTS_DIR/MacOS"

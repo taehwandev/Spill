@@ -104,6 +104,10 @@ Create local release artifacts:
 ./scripts/package-release.sh
 ```
 
+Local builds automatically read `.env.local` when present. Copy `.env.example`
+to `.env.local` and fill telemetry keys before building if analytics should be
+enabled in local app, landing page, or installer artifacts.
+
 This writes:
 
 - `.build/release-artifacts/Spill-2026.20.1-macos.zip`
@@ -188,10 +192,22 @@ If the Developer ID certificate secrets are present, the workflow signs with tha
 identity. If the Apple notarization secrets are also present, the workflow stores a
 temporary `notarytool` profile and notarizes the app and DMG before publishing.
 
+Optional telemetry secrets:
+
+- `SPILL_APTABASE_APP_KEY`: shared analytics key. It is embedded in release app
+  bundles and is also used by the landing page and installer when more specific
+  keys are absent.
+- `SPILL_WEB_APTABASE_APP_KEY`: optional landing page analytics key injected
+  during Pages deployment.
+- `SPILL_INSTALLER_APTABASE_APP_KEY`: optional installer script analytics key
+  injected during Pages deployment.
+
 ### Download Site
 
-The static distribution site lives in `docs/` and is deployed by the `Deploy Site`
-workflow to GitHub Pages. It links to the latest stable release assets:
+The static distribution site source lives in `docs/`. The `Deploy Site` workflow
+runs `scripts/prepare-docs.sh`, injects optional telemetry keys from GitHub
+Secrets, and deploys `.build/docs` to GitHub Pages. The site links to the latest
+stable release assets:
 
 - `https://github.com/taehwandev/Spill/releases/latest/download/Spill-macos.dmg`
 - `https://github.com/taehwandev/Spill/releases/latest/download/Spill-macos.zip`
