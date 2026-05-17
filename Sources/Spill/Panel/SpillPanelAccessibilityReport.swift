@@ -4,7 +4,7 @@ import Foundation
 
 struct SpillPanelAccessibilityReport: Equatable {
     static let defaultRequiredLabels = [
-        "Spill Flow",
+        "Spill",
         "AI",
         "WINDOWS",
         "MENU BAR",

@@ -75,7 +75,7 @@ struct SpillBarView: View {
             .frame(width: 34, height: 34)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text("Spill Flow")
+                Text("Spill")
                     .font(.system(size: 13, weight: .semibold))
                     .lineLimit(1)
 
@@ -92,7 +92,7 @@ struct SpillBarView: View {
             headerCommand(symbolName: "xmark", title: "Close", action: dismissAction)
         }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Spill Flow")
+        .accessibilityLabel("Spill")
     }
 
     private func headerCommand(symbolName: String, title: String, action: @escaping () -> Void) -> some View {

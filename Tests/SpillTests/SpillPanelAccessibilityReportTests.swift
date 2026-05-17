@@ -4,9 +4,9 @@ import XCTest
 final class SpillPanelAccessibilityReportTests: XCTestCase {
     func testValidReportAcceptsRequiredLabels() {
         let report = SpillPanelAccessibilityReport(
-            requiredLabels: ["Spill Flow", "AI", "Caffeine Off"],
+            requiredLabels: ["Spill", "AI", "Caffeine Off"],
             discoveredLabels: [
-                "Spill Flow",
+                "Spill",
                 "AI",
                 "Caffeine Off",
                 "Codex Missing"
@@ -16,13 +16,13 @@ final class SpillPanelAccessibilityReportTests: XCTestCase {
         XCTAssertTrue(report.isValid)
         XCTAssertEqual(report.missingLabels, [])
         XCTAssertTrue(report.logLine.contains("valid=true"))
-        XCTAssertTrue(report.logLine.contains("required=Spill_Flow,AI,Caffeine_Off"))
+        XCTAssertTrue(report.logLine.contains("required=Spill,AI,Caffeine_Off"))
     }
 
     func testReportFailsWhenRequiredLabelIsMissing() {
         let report = SpillPanelAccessibilityReport(
-            requiredLabels: ["Spill Flow", "AI", "WINDOWS"],
-            discoveredLabels: ["Spill Flow", "OpenAI Missing"]
+            requiredLabels: ["Spill", "AI", "WINDOWS"],
+            discoveredLabels: ["Spill", "OpenAI Missing"]
         )
 
         XCTAssertFalse(report.isValid)

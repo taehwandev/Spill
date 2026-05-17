@@ -46,7 +46,7 @@ and `scripts/verify-panel-layout-smoke.sh`.
 
 ### Layout
 
-No layout changes. Existing panel labels such as Spill Flow, STATUS, AI, and
+No layout changes. Existing panel labels such as Spill, STATUS, AI, and
 Sleep Guard must remain discoverable when the panel is opened by smoke mode.
 
 ### States

@@ -61,7 +61,7 @@ Resolved inputs:
   verification.
 - repo-research: `SpillBarView` currently derives display items, pinned items,
   action items, visible status modules, and panel state directly from stores.
-- assumption: this slice should not rename the user-facing "Spill Flow" header
+- assumption: this slice should not rename the user-facing "Spill" header
   or change any panel layout.
 
 ## PRD Authoring Gate
