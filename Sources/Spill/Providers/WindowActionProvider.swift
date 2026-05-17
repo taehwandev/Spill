@@ -257,27 +257,40 @@ struct WindowFrameRestoreHistory: Equatable, Sendable {
 }
 
 @MainActor
+protocol FocusedWindowControlling: AnyObject {
+    func focusedWindowFrame() -> CGRect?
+    func perform(_ kind: WindowActionKind, restoreHistory: inout WindowFrameRestoreHistory) -> SpillActionResult
+}
+
+@MainActor
 final class WindowActionStore: ObservableObject {
+    typealias AccessibilityTrustReader = () -> Bool
+
     @Published private(set) var actions: [SpillAction]
 
-    private let controller: FocusedWindowController
+    private let controller: FocusedWindowControlling
+    private let isAccessibilityTrusted: AccessibilityTrustReader
     private var restoreHistory = WindowFrameRestoreHistory()
 
-    init(controller: FocusedWindowController = FocusedWindowController()) {
+    init(
+        controller: FocusedWindowControlling = FocusedWindowController(),
+        isAccessibilityTrusted: @escaping AccessibilityTrustReader = { AccessibilityPermission.isTrusted }
+    ) {
         self.controller = controller
+        self.isAccessibilityTrusted = isAccessibilityTrusted
         actions = Self.makeActions(
-            isTrusted: AccessibilityPermission.isTrusted,
+            isTrusted: isAccessibilityTrusted(),
             hasFocusedWindow: false,
             canRestore: false,
             canMoveBetweenDisplays: NSScreen.screens.count > 1
         )
-        refresh()
     }
 
     func refresh() {
+        let isTrusted = isAccessibilityTrusted()
         actions = Self.makeActions(
-            isTrusted: AccessibilityPermission.isTrusted,
-            hasFocusedWindow: controller.focusedWindowFrame() != nil,
+            isTrusted: isTrusted,
+            hasFocusedWindow: isTrusted ? controller.focusedWindowFrame() != nil : false,
             canRestore: restoreHistory.canRestore,
             canMoveBetweenDisplays: NSScreen.screens.count > 1
         )
@@ -286,6 +299,11 @@ final class WindowActionStore: ObservableObject {
     func perform(_ action: SpillAction) -> SpillActionResult {
         guard case let .window(kind) = action.kind else {
             return .unsupported
+        }
+
+        guard isAccessibilityTrusted() else {
+            refresh()
+            return .permissionRequired("Accessibility")
         }
 
         let result = controller.perform(kind, restoreHistory: &restoreHistory)
@@ -360,7 +378,7 @@ final class WindowActionStore: ObservableObject {
 }
 
 @MainActor
-final class FocusedWindowController {
+final class FocusedWindowController: FocusedWindowControlling {
     private let reader = AXElementReader()
 
     func focusedWindowFrame() -> CGRect? {
