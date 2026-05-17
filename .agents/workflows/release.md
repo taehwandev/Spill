@@ -25,6 +25,8 @@ Default behavior for an unqualified release request:
 5. Create an annotated release tag.
 6. Publish through the GitHub `Release` workflow when remote access is available.
 7. Verify the GitHub Release, stable download assets, and update manifest.
+8. Leave the release tag on the packaged commit even if documentation or
+   workflow follow-up commits are added afterward.
 
 Ask the maintainer only when a blocker remains after repo research, such as an
 unclear version target, unrelated dirty files, an existing tag that points to a
@@ -62,6 +64,43 @@ If the maintainer does not provide a version:
 Never reuse a tag for a different commit. If the tag already exists and points to
 the intended release commit, continue with packaging or publishing. If it points
 elsewhere, stop and ask.
+
+## Release Tag Ownership
+
+A release tag is owned by the exact commit used to build and publish release
+artifacts. It is not a marker for the latest `main` commit.
+
+Rules:
+
+- Create the tag only after the release commit has passed local artifact
+  verification.
+- Keep the tag on the packaged commit after publication.
+- Do not move the tag to later documentation, workflow, or telemetry-fix commits.
+- If a post-release fix changes app behavior or release artifacts, publish a new
+  version with a new tag.
+- If a post-release fix changes only repository process, documentation, or Pages
+  deployment behavior, commit it after the release tag and do not retag the
+  previous release.
+- Do not force-push a release tag unless the maintainer explicitly approves a
+  public release correction.
+
+Annotated tags have two identities:
+
+- the tag object SHA;
+- the peeled commit SHA, shown with `^{}`.
+
+Use the peeled commit SHA when confirming which commit a release tag actually
+points to:
+
+```bash
+git show-ref --tags -d v<version>
+git tag --points-at <release-commit>
+git tag --points-at HEAD
+```
+
+`git tag --points-at HEAD` returns the release tag only when `HEAD` is still the
+release commit. If later commits were added after the release, this command can
+return nothing even though the release tag is correct.
 
 ## Preflight
 
@@ -197,6 +236,10 @@ git tag --points-at HEAD
 If a matching tag already exists at `HEAD`, keep it. Do not recreate it unless
 the maintainer explicitly asks for a retag.
 
+If a matching tag already exists on the intended release commit but `HEAD` has
+advanced, keep the tag where it is. Report both the release commit and current
+`HEAD` in the closeout.
+
 ## Publish
 
 Canonical publication path:
@@ -205,6 +248,15 @@ Canonical publication path:
 git push origin main
 git push origin v<version>
 ```
+
+Verify the remote tag target after pushing:
+
+```bash
+git ls-remote --tags origin "v<version>*"
+```
+
+For annotated tags, confirm the `refs/tags/v<version>^{}` line matches the
+release commit SHA.
 
 The tag push starts `.github/workflows/release.yml`. Monitor it:
 

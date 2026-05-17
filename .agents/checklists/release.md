@@ -16,6 +16,10 @@ is the quick gate before closeout.
 - [ ] Build number is set intentionally.
 - [ ] Existing local and remote tags were checked.
 - [ ] Annotated tag `v<version>` points at the release commit.
+- [ ] The release tag is treated as the packaged commit, not as the latest
+      `main` commit.
+- [ ] If `HEAD` advanced after release tagging, the tag was not moved.
+- [ ] For annotated tags, the remote peeled `v<version>^{}` target was verified.
 - [ ] No existing published tag or release is being overwritten without approval.
 
 ## Source Verification
@@ -85,6 +89,7 @@ is the quick gate before closeout.
 
 - [ ] Report version and build.
 - [ ] Report release commit hash.
+- [ ] Report current `HEAD` if it differs from the release commit.
 - [ ] Report tag name.
 - [ ] Report whether the tag was pushed.
 - [ ] Report GitHub Release status.
