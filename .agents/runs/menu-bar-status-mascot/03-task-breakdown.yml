@@ -1,0 +1,26 @@
+version: 1
+feature_id: menu-bar-status-mascot
+status: draft
+necessity:
+  decision: defer
+  clarity: needs-clarification
+  clarification_required: true
+  blockers_resolved: false
+tasks:
+  - id: MBM-T1
+    title: Resolve compact mascot visual language
+    state: deferred
+    acceptance:
+      - Maintainer chooses a compact trigger direction.
+      - The design preserves minimal menu bar width.
+  - id: MBM-T2
+    title: Resolve Caffeine click model
+    state: deferred
+    acceptance:
+      - The implementation path defines whether Caffeine remains a direct click
+        target or moves behind another interaction.
+  - id: MBM-T3
+    title: Resolve animation cadence
+    state: deferred
+    acceptance:
+      - Animation is short, event-driven, and not constantly running.
