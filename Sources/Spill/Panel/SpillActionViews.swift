@@ -186,7 +186,7 @@ struct SpillActionButton: View {
             return nil
         }
 
-        return NSImage(data: iconData)
+        return MenuBarIconImageCache.shared.image(for: iconData)
     }
 
     private var backgroundColor: Color {

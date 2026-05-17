@@ -94,6 +94,10 @@ struct SystemCPUProvider: SpillStatusProvider {
         return status(previous: previous, current: current)
     }
 
+    static func currentReading() -> SystemCPUReading? {
+        SystemCPUReader.current()
+    }
+
     static func status(previous: SystemCPUReading?, current: SystemCPUReading?) -> SystemCPUStatus {
         guard let previous else {
             return samplingStatus()

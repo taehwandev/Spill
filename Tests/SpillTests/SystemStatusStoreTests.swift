@@ -5,7 +5,7 @@ import XCTest
 final class SystemStatusStoreTests: XCTestCase {
     func testDefaultStoreStartsWithUnavailableStatuses() {
         let store = SystemStatusStore(
-            cpuReader: { XCTFail("CPU reader should not run during initialization"); return .unavailableTestValue },
+            cpuReader: { XCTFail("CPU reader should not run during initialization"); return nil },
             memoryReader: { XCTFail("Memory reader should not run during initialization"); return .unavailableTestValue },
             storageReader: { XCTFail("Storage reader should not run during initialization"); return .unavailableTestValue },
             gpuReader: { XCTFail("GPU reader should not run during initialization"); return .unavailableTestValue },
@@ -30,10 +30,8 @@ final class SystemStatusStoreTests: XCTestCase {
     }
 
     func testRefreshUsesInjectedReaders() async {
-        let cpu = SystemCPUProvider.status(
-            previous: SystemCPUReading(userTicks: 10, systemTicks: 10, idleTicks: 80, niceTicks: 0),
-            current: SystemCPUReading(userTicks: 20, systemTicks: 20, idleTicks: 160, niceTicks: 0)
-        )
+        let previousCPUReading = SystemCPUReading(userTicks: 10, systemTicks: 10, idleTicks: 80, niceTicks: 0)
+        let currentCPUReading = SystemCPUReading(userTicks: 20, systemTicks: 20, idleTicks: 160, niceTicks: 0)
         let memory = SystemMemoryProvider.status(
             from: SystemMemoryReading(
                 totalBytes: gib(16),
@@ -78,7 +76,8 @@ final class SystemStatusStoreTests: XCTestCase {
             ]
         )
         let store = SystemStatusStore(
-            cpuReader: { cpu },
+            previousCPUReading: previousCPUReading,
+            cpuReader: { currentCPUReading },
             memoryReader: { memory },
             storageReader: { storage },
             gpuReader: { gpu },
@@ -103,6 +102,32 @@ final class SystemStatusStoreTests: XCTestCase {
         XCTAssertEqual(store.power.subtitle, "On Battery")
     }
 
+    func testCPURefreshUsesFirstReadingAsBaseline() async {
+        var readings = [
+            SystemCPUReading(userTicks: 10, systemTicks: 10, idleTicks: 80, niceTicks: 0),
+            SystemCPUReading(userTicks: 20, systemTicks: 20, idleTicks: 160, niceTicks: 0)
+        ]
+        let store = SystemStatusStore(
+            cpuReader: {
+                readings.removeFirst()
+            },
+            memoryReader: { .unavailableTestValue },
+            storageReader: { .unavailableTestValue },
+            gpuReader: { .unavailableTestValue },
+            networkReader: { nil },
+            powerReader: { .unavailableTestValue },
+            networkInitialSampleIntervalNanoseconds: 0
+        )
+
+        await store.refresh(enabledModules: [.cpu])
+        XCTAssertEqual(store.cpu.value, "Sampling")
+        XCTAssertEqual(store.cpu.state, .refreshing)
+
+        await store.refresh(enabledModules: [.cpu])
+        XCTAssertEqual(store.cpu.value, "20.0%")
+        XCTAssertEqual(store.cpu.state, .normal)
+    }
+
     func testRepeatedRefreshUpdatesCachedValues() async {
         var cpuReadCount = 0
         var memoryReadCount = 0
@@ -111,39 +136,37 @@ final class SystemStatusStoreTests: XCTestCase {
         var networkReadCount = 0
         var powerReadCount = 0
         let store = SystemStatusStore(
+            previousCPUReading: SystemCPUReading(
+                userTicks: 0,
+                systemTicks: 0,
+                idleTicks: 0,
+                niceTicks: 0,
+                coreReadings: [
+                    SystemCPUCoreReading(userTicks: 0, systemTicks: 0, idleTicks: 0, niceTicks: 0),
+                    SystemCPUCoreReading(userTicks: 0, systemTicks: 0, idleTicks: 0, niceTicks: 0)
+                ]
+            ),
             cpuReader: {
                 cpuReadCount += 1
-                return SystemCPUProvider.status(
-                    previous: SystemCPUReading(
-                        userTicks: 0,
-                        systemTicks: 0,
-                        idleTicks: 0,
-                        niceTicks: 0,
-                        coreReadings: [
-                            SystemCPUCoreReading(userTicks: 0, systemTicks: 0, idleTicks: 0, niceTicks: 0),
-                            SystemCPUCoreReading(userTicks: 0, systemTicks: 0, idleTicks: 0, niceTicks: 0)
-                        ]
-                    ),
-                    current: SystemCPUReading(
-                        userTicks: UInt64(cpuReadCount),
-                        systemTicks: UInt64(cpuReadCount),
-                        idleTicks: UInt64(8 * cpuReadCount),
-                        niceTicks: 0,
-                        coreReadings: [
-                            SystemCPUCoreReading(
-                                userTicks: UInt64(cpuReadCount),
-                                systemTicks: 0,
-                                idleTicks: UInt64(9 * cpuReadCount),
-                                niceTicks: 0
-                            ),
-                            SystemCPUCoreReading(
-                                userTicks: UInt64(3 * cpuReadCount),
-                                systemTicks: 0,
-                                idleTicks: UInt64(7 * cpuReadCount),
-                                niceTicks: 0
-                            )
-                        ]
-                    )
+                return SystemCPUReading(
+                    userTicks: UInt64(cpuReadCount),
+                    systemTicks: UInt64(cpuReadCount),
+                    idleTicks: UInt64(8 * cpuReadCount),
+                    niceTicks: 0,
+                    coreReadings: [
+                        SystemCPUCoreReading(
+                            userTicks: UInt64(cpuReadCount),
+                            systemTicks: 0,
+                            idleTicks: UInt64(9 * cpuReadCount),
+                            niceTicks: 0
+                        ),
+                        SystemCPUCoreReading(
+                            userTicks: UInt64(3 * cpuReadCount),
+                            systemTicks: 0,
+                            idleTicks: UInt64(7 * cpuReadCount),
+                            niceTicks: 0
+                        )
+                    ]
                 )
             },
             memoryReader: {
@@ -247,35 +270,30 @@ final class SystemStatusStoreTests: XCTestCase {
     func testCPUCoreHistoryClearsWhenCoreSamplesDisappear() async {
         var cpuReadCount = 0
         let store = SystemStatusStore(
+            previousCPUReading: SystemCPUReading(
+                userTicks: 0,
+                systemTicks: 0,
+                idleTicks: 0,
+                niceTicks: 0,
+                coreReadings: [
+                    SystemCPUCoreReading(userTicks: 0, systemTicks: 0, idleTicks: 0, niceTicks: 0)
+                ]
+            ),
             cpuReader: {
                 cpuReadCount += 1
                 if cpuReadCount == 1 {
-                    return SystemCPUProvider.status(
-                        previous: SystemCPUReading(
-                            userTicks: 0,
-                            systemTicks: 0,
-                            idleTicks: 0,
-                            niceTicks: 0,
-                            coreReadings: [
-                                SystemCPUCoreReading(userTicks: 0, systemTicks: 0, idleTicks: 0, niceTicks: 0)
-                            ]
-                        ),
-                        current: SystemCPUReading(
-                            userTicks: 2,
-                            systemTicks: 0,
-                            idleTicks: 8,
-                            niceTicks: 0,
-                            coreReadings: [
-                                SystemCPUCoreReading(userTicks: 2, systemTicks: 0, idleTicks: 8, niceTicks: 0)
-                            ]
-                        )
+                    return SystemCPUReading(
+                        userTicks: 2,
+                        systemTicks: 0,
+                        idleTicks: 8,
+                        niceTicks: 0,
+                        coreReadings: [
+                            SystemCPUCoreReading(userTicks: 2, systemTicks: 0, idleTicks: 8, niceTicks: 0)
+                        ]
                     )
                 }
 
-                return SystemCPUProvider.status(
-                    previous: SystemCPUReading(userTicks: 0, systemTicks: 0, idleTicks: 0, niceTicks: 0),
-                    current: SystemCPUReading(userTicks: 2, systemTicks: 0, idleTicks: 8, niceTicks: 0)
-                )
+                return SystemCPUReading(userTicks: 4, systemTicks: 0, idleTicks: 16, niceTicks: 0)
             },
             memoryReader: { .unavailableTestValue },
             storageReader: { .unavailableTestValue },
@@ -305,7 +323,7 @@ final class SystemStatusStoreTests: XCTestCase {
         let store = SystemStatusStore(
             cpuReader: {
                 cpuReadCount += 1
-                return .unavailableTestValue
+                return nil
             },
             memoryReader: {
                 memoryReadCount += 1
@@ -348,7 +366,7 @@ final class SystemStatusStoreTests: XCTestCase {
     func testHiddenPowerFooterDoesNotRunPowerReader() async {
         var powerReadCount = 0
         let store = SystemStatusStore(
-            cpuReader: { .unavailableTestValue },
+            cpuReader: { nil },
             memoryReader: { .unavailableTestValue },
             storageReader: { .unavailableTestValue },
             gpuReader: { .unavailableTestValue },
@@ -389,8 +407,4 @@ private extension SystemNetworkStatus {
 
 private extension SystemGPUStatus {
     static let unavailableTestValue = SystemGPUProvider.status(from: nil)
-}
-
-private extension SystemCPUStatus {
-    static let unavailableTestValue = SystemCPUProvider.status(previous: nil, current: nil)
 }

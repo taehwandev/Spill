@@ -28,7 +28,7 @@ final class MenuBarScanCoordinator {
     }
 
     func refreshNow() {
-        refreshIfAllowed()
+        refreshIfAllowed(force: true, reason: .manual)
     }
 
     private func observeSettings() {
@@ -50,7 +50,7 @@ final class MenuBarScanCoordinator {
     private func observeApplicationActivation() {
         NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
             .sink { [weak self] _ in
-                self?.refreshIfAllowed()
+                self?.refreshIfAllowed(force: false, reason: .applicationActivation)
             }
             .store(in: &cancellables)
     }
@@ -66,7 +66,7 @@ final class MenuBarScanCoordinator {
         for name in workspaceNotifications {
             workspaceCenter.publisher(for: name)
                 .sink { [weak self] _ in
-                    self?.refreshIfAllowed()
+                    self?.refreshIfAllowed(force: true, reason: .workspaceChange)
                 }
                 .store(in: &cancellables)
         }
@@ -75,7 +75,7 @@ final class MenuBarScanCoordinator {
     private func observeScreenChanges() {
         NotificationCenter.default.publisher(for: NSApplication.didChangeScreenParametersNotification)
             .sink { [weak self] _ in
-                self?.refreshIfAllowed()
+                self?.refreshIfAllowed(force: true, reason: .screenChange)
             }
             .store(in: &cancellables)
     }
@@ -90,17 +90,24 @@ final class MenuBarScanCoordinator {
 
         timer = Timer.scheduledTimer(withTimeInterval: max(settings.refreshInterval, 5), repeats: true) { [weak self] _ in
             Task { @MainActor in
-                self?.refreshIfAllowed()
+                self?.refreshIfAllowed(force: false, reason: .timer)
             }
         }
     }
 
-    private func refreshIfAllowed() {
+    private func refreshIfAllowed(force: Bool, reason: MenuBarScanRefreshReason) {
         guard AccessibilityPermission.isTrusted else {
             scanner.clearForMissingPermission()
             return
         }
 
-        scanner.refresh()
+        if force {
+            scanner.refresh(force: true, reason: reason)
+        } else {
+            scanner.refreshIfStale(
+                reason: reason,
+                minimumRefreshInterval: max(settings.refreshInterval, 5)
+            )
+        }
     }
 }

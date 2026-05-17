@@ -2,7 +2,7 @@ import SwiftUI
 
 @MainActor
 final class SystemStatusStore: ObservableObject {
-    typealias CPUReader = () async -> SystemCPUStatus
+    typealias CPUReader = () -> SystemCPUReading?
     typealias MemoryReader = () -> SystemMemoryStatus
     typealias StorageReader = () -> SystemStorageStatus
     typealias GPUReader = () -> SystemGPUStatus
@@ -27,6 +27,7 @@ final class SystemStatusStore: ObservableObject {
     private let powerReader: PowerReader
     private let maximumHistoryCount = 24
     private let networkInitialSampleIntervalNanoseconds: UInt64
+    private var previousCPUReading: SystemCPUReading?
     private var previousNetworkReading: SystemNetworkReading?
 
     init(
@@ -36,7 +37,8 @@ final class SystemStatusStore: ObservableObject {
         gpu: SystemGPUStatus = SystemGPUProvider.status(from: nil),
         network: SystemNetworkStatus = SystemNetworkProvider.status(previous: nil, current: nil),
         power: SystemPowerStatus = SystemPowerProvider.status(from: nil),
-        cpuReader: @escaping CPUReader = { await SystemCPUProvider.status() },
+        previousCPUReading: SystemCPUReading? = nil,
+        cpuReader: @escaping CPUReader = { SystemCPUProvider.currentReading() },
         memoryReader: @escaping MemoryReader = { SystemMemoryProvider.status() },
         storageReader: @escaping StorageReader = { SystemStorageProvider.status() },
         gpuReader: @escaping GPUReader = { SystemGPUProvider.status() },
@@ -50,6 +52,7 @@ final class SystemStatusStore: ObservableObject {
         self.gpu = gpu
         self.network = network
         self.power = power
+        self.previousCPUReading = previousCPUReading
         metricHistory = [
             .cpu: Self.initialHistory(for: cpu.usageRatio, state: cpu.state),
             .memory: Self.initialHistory(for: memory.usageRatio, state: memory.state),
@@ -115,11 +118,16 @@ final class SystemStatusStore: ObservableObject {
         }
 
         if enabledModules.contains(.cpu) {
-            cpu = await cpuReader()
+            let currentCPUReading = cpuReader()
+            cpu = SystemCPUProvider.status(previous: previousCPUReading, current: currentCPUReading)
+            if let currentCPUReading {
+                previousCPUReading = currentCPUReading
+            }
             appendHistory(cpu.usageRatio, for: .cpu, state: cpu.state)
             appendCPUCoreHistory(cpu)
         } else {
             cpu = SystemCPUProvider.unavailableStatus()
+            previousCPUReading = nil
             cpuCoreHistory = []
         }
     }

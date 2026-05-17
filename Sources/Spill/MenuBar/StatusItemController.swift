@@ -66,11 +66,17 @@ final class StatusItemController: NSObject {
         let sleepGuardSegment = sleepGuardMenuBarSegment
         let statusSegments = [sleepGuardSegment].compactMap { $0 } + summary.segments
         let segments = [triggerSegment] + statusSegments
+        let segmentsChanged = segments != currentSegments
         currentSegments = segments
         let statusTooltip = statusTooltip(summary: summary, sleepGuardSegment: sleepGuardSegment)
         triggerItem.isVisible = true
         triggerItem.length = MenuBarStatusContentView.preferredWidth(for: segments)
-        configureAppearance(for: button, segments: segments, statusTooltip: statusTooltip)
+        configureAppearance(
+            for: button,
+            segments: segments,
+            statusTooltip: statusTooltip,
+            rebuildsContentView: segmentsChanged
+        )
         button.state = self.isSpillBarVisible ? .on : .off
         button.toolTip = tooltip(
             statusTooltip: statusTooltip,
@@ -119,7 +125,8 @@ final class StatusItemController: NSObject {
     private func configureAppearance(
         for button: NSStatusBarButton,
         segments: [MenuBarStatusSegment],
-        statusTooltip: String
+        statusTooltip: String,
+        rebuildsContentView: Bool
     ) {
         button.image = nil
         button.imagePosition = .noImage
@@ -128,7 +135,7 @@ final class StatusItemController: NSObject {
         button.isBordered = false
 
         if !segments.isEmpty {
-            installStatusContentView(on: button, segments: segments)
+            installStatusContentView(on: button, segments: segments, rebuildsContentView: rebuildsContentView)
             button.setAccessibilityLabel(statusTooltip.isEmpty ? "Spill" : statusTooltip)
             return
         }
@@ -161,7 +168,15 @@ final class StatusItemController: NSObject {
         button.setAccessibilityLabel("Spill")
     }
 
-    private func installStatusContentView(on button: NSStatusBarButton, segments: [MenuBarStatusSegment]) {
+    private func installStatusContentView(
+        on button: NSStatusBarButton,
+        segments: [MenuBarStatusSegment],
+        rebuildsContentView: Bool
+    ) {
+        guard rebuildsContentView || statusContentView == nil else {
+            return
+        }
+
         removeStatusContentView()
 
         let contentView = MenuBarStatusContentView(segments: segments)

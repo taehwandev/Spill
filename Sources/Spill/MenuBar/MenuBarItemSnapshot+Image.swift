@@ -6,6 +6,6 @@ extension MenuBarItemSnapshot {
             return nil
         }
 
-        return NSImage(data: imageData)
+        return MenuBarIconImageCache.shared.image(for: imageData)
     }
 }

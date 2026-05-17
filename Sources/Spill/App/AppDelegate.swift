@@ -265,7 +265,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func scheduleDeferredScanIfNeeded() {
-        guard scanner.items.isEmpty, !scanner.isScanning else {
+        guard !scanner.isScanning else {
             return
         }
 
@@ -273,13 +273,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self,
                   isSpillPanelVisible,
                   AccessibilityPermission.isTrusted,
-                  scanner.items.isEmpty,
                   !scanner.isScanning
             else {
                 return
             }
 
-            scanner.refresh()
+            scanner.refreshIfStale(reason: .panelOpen)
         }
     }
 

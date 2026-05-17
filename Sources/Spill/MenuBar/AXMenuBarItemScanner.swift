@@ -2,6 +2,41 @@ import AppKit
 import ApplicationServices
 import Foundation
 
+enum MenuBarScanRefreshReason: Sendable {
+    case applicationActivation
+    case manual
+    case panelOpen
+    case screenChange
+    case staleReference
+    case timer
+    case workspaceChange
+}
+
+struct MenuBarScanRefreshPolicy: Sendable {
+    let minimumRefreshInterval: TimeInterval
+
+    init(minimumRefreshInterval: TimeInterval = 15) {
+        self.minimumRefreshInterval = minimumRefreshInterval
+    }
+
+    func shouldRefresh(
+        lastScannedAt: Date?,
+        now: Date,
+        force: Bool,
+        minimumRefreshInterval override: TimeInterval? = nil
+    ) -> Bool {
+        if force {
+            return true
+        }
+
+        guard let lastScannedAt else {
+            return true
+        }
+
+        return now.timeIntervalSince(lastScannedAt) >= (override ?? minimumRefreshInterval)
+    }
+}
+
 @MainActor
 final class AXMenuBarItemScanner: ObservableObject {
     @Published private(set) var items: [MenuBarItemSnapshot] = []
@@ -16,7 +51,18 @@ final class AXMenuBarItemScanner: ObservableObject {
     private var imageDataCache: [String: Data] = [:]
     private var missingImageKeys = Set<String>()
     private var pendingRefresh = false
+    private var pendingRefreshReason = MenuBarScanRefreshReason.manual
     private var refreshTask: Task<Void, Never>?
+    private let refreshPolicy: MenuBarScanRefreshPolicy
+    private let dateProvider: () -> Date
+
+    init(
+        refreshPolicy: MenuBarScanRefreshPolicy = MenuBarScanRefreshPolicy(),
+        dateProvider: @escaping () -> Date = { Date() }
+    ) {
+        self.refreshPolicy = refreshPolicy
+        self.dateProvider = dateProvider
+    }
 
     var visibleItems: [MenuBarItemSnapshot] {
         notchCandidates
@@ -31,26 +77,45 @@ final class AXMenuBarItemScanner: ObservableObject {
         refreshTask = nil
         isScanning = false
         pendingRefresh = false
+        pendingRefreshReason = .manual
         items = []
         elementsByID = [:]
         lastScannedAt = nil
         scanMessage = "Accessibility is not trusted for this Spill build. Recheck after granting it, or remove and re-add this app in Privacy settings."
     }
 
-    func refresh() {
+    @discardableResult
+    func refresh(
+        force: Bool = true,
+        reason: MenuBarScanRefreshReason = .manual,
+        minimumRefreshInterval: TimeInterval? = nil
+    ) -> Bool {
         guard AccessibilityPermission.isTrusted else {
             clearForMissingPermission()
-            return
+            return false
+        }
+
+        let now = dateProvider()
+        guard refreshPolicy.shouldRefresh(
+            lastScannedAt: lastScannedAt,
+            now: now,
+            force: force,
+            minimumRefreshInterval: minimumRefreshInterval
+        ) else {
+            return false
+        }
+
+        guard !isScanning else {
+            if force {
+                pendingRefresh = true
+                pendingRefreshReason = reason
+                scanMessage = "Refresh queued while the current scan finishes."
+            }
+            return false
         }
 
         let applications = applicationProvider.candidates()
         let notchGeometry = MenuBarNotchGeometry(screen: NSScreen.main)
-
-        guard !isScanning else {
-            pendingRefresh = true
-            scanMessage = "Refresh queued while the current scan finishes."
-            return
-        }
 
         isScanning = true
         scanMessage = lastScannedAt == nil ? "Scanning menu bar items..." : "Refreshing menu bar items..."
@@ -63,12 +128,22 @@ final class AXMenuBarItemScanner: ObservableObject {
             let result = await workerTask.value
             self?.completeRefresh(result)
         }
+        return true
+    }
+
+    @discardableResult
+    func refreshIfStale(
+        reason: MenuBarScanRefreshReason,
+        minimumRefreshInterval: TimeInterval? = nil
+    ) -> Bool {
+        refresh(force: false, reason: reason, minimumRefreshInterval: minimumRefreshInterval)
     }
 
     @discardableResult
     func pressItem(withID id: MenuBarItemSnapshot.ID) -> Bool {
         guard let reference = elementsByID[id] else {
             scanMessage = "The selected menu bar item is no longer available."
+            requestRefreshAfterFailedPress()
             return false
         }
 
@@ -79,6 +154,7 @@ final class AXMenuBarItemScanner: ObservableObject {
         }
 
         scanMessage = "Could not press the selected menu bar item. AX returned \(result.rawValue)."
+        requestRefreshAfterFailedPress()
         return false
     }
 
@@ -94,28 +170,55 @@ final class AXMenuBarItemScanner: ObservableObject {
 
             return snapshot.withImageData(cachedImageData(for: snapshot))
         }
-        items = enrichedItems
+        let hadPreviousScan = lastScannedAt != nil
+        let didChangeItems = enrichedItems != items
+        if didChangeItems {
+            items = enrichedItems
+        }
         elementsByID = result.elementsByID
-        lastScannedAt = Date()
+        lastScannedAt = dateProvider()
         isScanning = false
-        scanMessage = message(for: result.stats, items: enrichedItems)
+        scanMessage = message(
+            for: result.stats,
+            items: enrichedItems,
+            hadPreviousScan: hadPreviousScan,
+            didChangeItems: didChangeItems
+        )
         refreshTask = nil
 
         if pendingRefresh {
+            let queuedReason = pendingRefreshReason
             pendingRefresh = false
-            refresh()
+            pendingRefreshReason = .manual
+            refresh(force: true, reason: queuedReason)
         }
     }
 
-    private func message(for stats: MenuBarScanStats, items: [MenuBarItemSnapshot]) -> String {
+    private func message(
+        for stats: MenuBarScanStats,
+        items: [MenuBarItemSnapshot],
+        hadPreviousScan: Bool,
+        didChangeItems: Bool
+    ) -> String {
         let notchCount = items.filter(\.isNotchCandidate).count
+        let suffix = hadPreviousScan && !didChangeItems ? " Cached result unchanged." : ""
 
         if items.isEmpty {
-            return "No menu bar items found. Scanned \(stats.candidateCount) apps, \(stats.menuBarRootCount) menu bar roots (\(stats.extrasRootCount) extras, \(stats.fallbackRootCount) fallback), \(stats.representableElementCount) candidate elements."
+            return "No menu bar items found. Scanned \(stats.candidateCount) apps, \(stats.menuBarRootCount) menu bar roots (\(stats.extrasRootCount) extras, \(stats.fallbackRootCount) fallback), \(stats.representableElementCount) candidate elements.\(suffix)"
         } else if notchCount == 0 {
-            return "Detected \(items.count) menu bar item(s). Scanned \(stats.menuBarRootCount) menu bar roots; no notch overlap candidate found."
+            return "Detected \(items.count) menu bar item(s). Scanned \(stats.menuBarRootCount) menu bar roots; no notch overlap candidate found.\(suffix)"
         } else {
-            return "Detected \(items.count) menu bar item(s), \(notchCount) near the notch estimate."
+            return "Detected \(items.count) menu bar item(s), \(notchCount) near the notch estimate.\(suffix)"
+        }
+    }
+
+    private func requestRefreshAfterFailedPress() {
+        guard AccessibilityPermission.isTrusted else {
+            return
+        }
+
+        Task { @MainActor [weak self] in
+            self?.refresh(force: true, reason: .staleReference)
         }
     }
 

@@ -1,0 +1,159 @@
+feature_id: status-performance-optimization
+status: done
+
+necessity:
+  decision: build
+  reason: Responsiveness and low overhead are existing compact tray requirements.
+  ambiguity:
+    clarity: clear
+    blockers_resolved: true
+    resolution_sources:
+      - maintainer
+      - repo-research
+      - assumption
+  clarification_required: false
+  questions: []
+
+tasks:
+  - id: status-performance-optimization-T1
+    title: Cache and downsample menu bar action icons
+    owner_role: builder
+    state: done
+    depends_on: []
+    write_scope:
+      - Sources/Spill/MenuBar/MenuBarItemImageProvider.swift
+      - Sources/Spill/MenuBar/MenuBarItemSnapshot+Image.swift
+      - Sources/Spill/Panel/SpillActionViews.swift
+    read_scope:
+      - .agents/runs/status-performance-optimization/01-prd.md
+      - .agents/runs/status-performance-optimization/02-ard.md
+    forbidden_scope:
+      - Sources/Spill/Preferences/AccessibilityPreferencesSection.swift
+      - Sources/Spill/Preferences/GeneralPreferencesSection.swift
+      - Sources/Spill/Preferences/PanelFallbackPreferencesSection.swift
+      - Sources/Spill/Preferences/PreferencesView.swift
+    acceptance:
+      - Icon data is small enough for panel rendering.
+      - Repeated icon rendering reuses decoded images.
+      - Existing symbol fallback remains.
+    verification:
+      commands:
+        - swift test
+      manual: []
+
+  - id: status-performance-optimization-T2
+    title: Remove recurring CPU refresh sleep
+    owner_role: builder
+    state: done
+    depends_on: []
+    write_scope:
+      - Sources/Spill/Providers/SystemCPUProvider.swift
+      - Sources/Spill/Providers/SystemStatusStore.swift
+      - Tests/SpillTests/SystemStatusStoreTests.swift
+    read_scope:
+      - Tests/SpillTests/SystemCPUProviderTests.swift
+    forbidden_scope:
+      - Sources/Spill/Preferences/AccessibilityPreferencesSection.swift
+      - Sources/Spill/Preferences/GeneralPreferencesSection.swift
+      - Sources/Spill/Preferences/PanelFallbackPreferencesSection.swift
+      - Sources/Spill/Preferences/PreferencesView.swift
+    acceptance:
+      - Default status refresh reads one CPU sample per refresh.
+      - First CPU refresh can show sampling.
+      - Subsequent CPU refreshes compute deltas from the prior sample.
+    verification:
+      commands:
+        - swift test --filter SystemStatusStoreTests
+      manual: []
+
+  - id: status-performance-optimization-T3
+    title: Skip unchanged menu bar status view rebuilds
+    owner_role: builder
+    state: done
+    depends_on: []
+    write_scope:
+      - Sources/Spill/MenuBar/StatusItemController.swift
+    read_scope:
+      - Sources/Spill/MenuBar/MenuBarStatusContentView.swift
+      - Sources/Spill/MenuBar/MenuBarStatusSummary.swift
+    forbidden_scope:
+      - Sources/Spill/Preferences/AccessibilityPreferencesSection.swift
+      - Sources/Spill/Preferences/GeneralPreferencesSection.swift
+      - Sources/Spill/Preferences/PanelFallbackPreferencesSection.swift
+      - Sources/Spill/Preferences/PreferencesView.swift
+    acceptance:
+      - Refresh avoids reinstalling chip views when segments are unchanged.
+      - Refresh still updates length, tooltip, and selected state.
+    verification:
+      commands:
+        - swift test
+      manual: []
+
+  - id: status-performance-optimization-T4
+    title: Avoid full AX rescans on ordinary panel open
+    owner_role: builder
+    state: done
+    depends_on: []
+    write_scope:
+      - Sources/Spill/MenuBar/AXMenuBarItemScanner.swift
+      - Sources/Spill/MenuBar/MenuBarScanCoordinator.swift
+      - Sources/Spill/App/AppDelegate.swift
+      - Tests/SpillTests/MenuBarScanRefreshPolicyTests.swift
+    read_scope:
+      - Sources/Spill/Panel/PanelStore.swift
+      - Sources/Spill/Providers/MenuBarActionExecutor.swift
+      - .agents/runs/status-performance-optimization/01-prd.md
+      - .agents/runs/status-performance-optimization/02-ard.md
+    forbidden_scope:
+      - Sources/Spill/Preferences/AccessibilityPreferencesSection.swift
+      - Sources/Spill/Preferences/GeneralPreferencesSection.swift
+      - Sources/Spill/Preferences/PanelFallbackPreferencesSection.swift
+      - Sources/Spill/Preferences/PreferencesView.swift
+    acceptance:
+      - Panel open and app activation use stale-aware scanner refresh.
+      - Manual refresh, workspace changes, screen changes, and stale AX references still force scan.
+      - Unchanged scan results do not republish the same `items` array.
+      - Scanner refresh policy has focused tests.
+    verification:
+      commands:
+        - swift test --filter MenuBarScanRefreshPolicyTests
+        - swift test
+      manual:
+        - Repeated trigger clicks should show cached panel without forcing a full AX scan inside the freshness interval.
+
+  - id: status-performance-optimization-T5
+    title: Verify performance optimization slice
+    owner_role: verifier
+    state: done
+    depends_on:
+      - status-performance-optimization-T1
+      - status-performance-optimization-T2
+      - status-performance-optimization-T3
+      - status-performance-optimization-T4
+    write_scope:
+      - .agents/runs/status-performance-optimization/05-verification.md
+      - .agents/runs/status-performance-optimization/06-closeout.md
+    read_scope:
+      - .agents/runs/status-performance-optimization/03-task-breakdown.yml
+    forbidden_scope: []
+    acceptance:
+      - Focused and full automated verification pass.
+      - App builds and launches.
+    verification:
+      commands:
+        - swift test
+        - ./scripts/build-app.sh
+        - ./scripts/verify-panel-layout-smoke.sh
+        - python3 .agents/scripts/workflow.py verify
+        - git diff --check
+      manual:
+        - Relaunch app.
+
+parallel_groups:
+  - id: implementation
+    tasks:
+      - status-performance-optimization-T1
+      - status-performance-optimization-T2
+      - status-performance-optimization-T3
+      - status-performance-optimization-T4
+    rule: Tasks have disjoint implementation files except shared tests; coordinate final verification after all changes.
