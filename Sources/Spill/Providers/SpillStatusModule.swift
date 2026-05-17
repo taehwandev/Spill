@@ -65,12 +65,12 @@ enum SpillStatusModule: String, CaseIterable, Identifiable, Sendable {
         case .gpu:
             return "Metal device availability"
         case .network:
-            return "Default route availability"
+            return "Receive and upload activity"
         }
     }
 
-    static let defaultOrder: [SpillStatusModule] = [.cpu, .memory, .storage]
-    static let primaryPanelModules: [SpillStatusModule] = [.cpu, .memory, .storage]
+    static let defaultOrder: [SpillStatusModule] = [.cpu, .memory, .storage, .network]
+    static let primaryPanelModules: [SpillStatusModule] = defaultOrder
     static let defaultEnabled: Set<SpillStatusModule> = Set(primaryPanelModules)
 
     static func normalizedOrder(from rawValues: [String]?) -> [SpillStatusModule] {

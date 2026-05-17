@@ -9,8 +9,9 @@ final class SystemStatusStoreTests: XCTestCase {
             memoryReader: { XCTFail("Memory reader should not run during initialization"); return .unavailableTestValue },
             storageReader: { XCTFail("Storage reader should not run during initialization"); return .unavailableTestValue },
             gpuReader: { XCTFail("GPU reader should not run during initialization"); return .unavailableTestValue },
-            networkReader: { XCTFail("Network reader should not run during initialization"); return .unavailableTestValue },
-            powerReader: { XCTFail("Power reader should not run during initialization"); return .unavailableTestValue }
+            networkReader: { XCTFail("Network reader should not run during initialization"); return nil },
+            powerReader: { XCTFail("Power reader should not run during initialization"); return .unavailableTestValue },
+            networkInitialSampleIntervalNanoseconds: 0
         )
 
         XCTAssertEqual(store.cpu.state, .refreshing)
@@ -52,13 +53,11 @@ final class SystemStatusStoreTests: XCTestCase {
                 hasBattery: true
             )
         )
-        let network = SystemNetworkProvider.status(
-            from: SystemNetworkReading(
-                isReachable: true,
-                connectionRequired: false,
-                canConnectAutomatically: false,
-                interventionRequired: false
-            )
+        let network = SystemNetworkReading(
+            receivedBytes: 1_000,
+            sentBytes: 500,
+            timestamp: 1,
+            activeInterfaceCount: 1
         )
         let storage = SystemStorageProvider.status(
             from: SystemStorageReading(
@@ -84,7 +83,8 @@ final class SystemStatusStoreTests: XCTestCase {
             storageReader: { storage },
             gpuReader: { gpu },
             networkReader: { network },
-            powerReader: { power }
+            powerReader: { power },
+            networkInitialSampleIntervalNanoseconds: 0
         )
 
         await store.refresh(enabledModules: [.cpu, .memory, .storage, .gpu, .network])
@@ -97,8 +97,8 @@ final class SystemStatusStoreTests: XCTestCase {
         XCTAssertEqual(store.storage.state, .normal)
         XCTAssertEqual(store.gpu.value, "1/1")
         XCTAssertEqual(store.gpu.state, .normal)
-        XCTAssertEqual(store.network.value, "Online")
-        XCTAssertEqual(store.network.state, .normal)
+        XCTAssertEqual(store.network.value, "Sampling")
+        XCTAssertEqual(store.network.state, .refreshing)
         XCTAssertEqual(store.power.value, "80%")
         XCTAssertEqual(store.power.subtitle, "On Battery")
     }
@@ -162,13 +162,11 @@ final class SystemStatusStoreTests: XCTestCase {
             },
             networkReader: {
                 networkReadCount += 1
-                return SystemNetworkProvider.status(
-                    from: SystemNetworkReading(
-                        isReachable: networkReadCount.isMultiple(of: 2),
-                        connectionRequired: false,
-                        canConnectAutomatically: false,
-                        interventionRequired: false
-                    )
+                return SystemNetworkReading(
+                    receivedBytes: UInt64(networkReadCount * 1_000),
+                    sentBytes: UInt64(networkReadCount * 2_000),
+                    timestamp: Double(networkReadCount),
+                    activeInterfaceCount: 1
                 )
             },
             powerReader: {
@@ -182,7 +180,8 @@ final class SystemStatusStoreTests: XCTestCase {
                         hasBattery: true
                     )
                 )
-            }
+            },
+            networkInitialSampleIntervalNanoseconds: 0
         )
 
         await store.refresh(enabledModules: [.cpu, .memory, .storage, .gpu, .network])
@@ -190,7 +189,12 @@ final class SystemStatusStoreTests: XCTestCase {
         XCTAssertEqual(store.memory.value, "10.0%")
         XCTAssertEqual(store.storage.value, "10.0%")
         XCTAssertEqual(store.gpu.subtitle, "1.0 GB recommended budget")
-        XCTAssertEqual(store.network.value, "Offline")
+        XCTAssertEqual(store.network.value, "↓ 1.0 KB/s")
+        XCTAssertEqual(store.network.subtitle, "↑ 2.0 KB/s")
+        XCTAssertEqual(store.networkTrafficHistory.received.count, 1)
+        XCTAssertEqual(store.networkTrafficHistory.sent.count, 1)
+        XCTAssertEqual(store.networkTrafficHistory.received[0], 0.0001, accuracy: 0.000001)
+        XCTAssertEqual(store.networkTrafficHistory.sent[0], 0.0002, accuracy: 0.000001)
         XCTAssertEqual(store.power.value, "51%")
 
         await store.refresh(enabledModules: [.cpu, .memory, .storage, .gpu, .network])
@@ -198,7 +202,12 @@ final class SystemStatusStoreTests: XCTestCase {
         XCTAssertEqual(store.memory.value, "20.0%")
         XCTAssertEqual(store.storage.value, "20.0%")
         XCTAssertEqual(store.gpu.subtitle, "2.0 GB recommended budget")
-        XCTAssertEqual(store.network.value, "Online")
+        XCTAssertEqual(store.network.value, "↓ 1.0 KB/s")
+        XCTAssertEqual(store.network.subtitle, "↑ 2.0 KB/s")
+        XCTAssertEqual(store.networkTrafficHistory.received.count, 2)
+        XCTAssertEqual(store.networkTrafficHistory.sent.count, 2)
+        XCTAssertEqual(store.networkTrafficHistory.received[1], 0.0001, accuracy: 0.000001)
+        XCTAssertEqual(store.networkTrafficHistory.sent[1], 0.0002, accuracy: 0.000001)
         XCTAssertEqual(store.power.value, "52%")
     }
 
@@ -228,12 +237,13 @@ final class SystemStatusStoreTests: XCTestCase {
             },
             networkReader: {
                 networkReadCount += 1
-                return .unavailableTestValue
+                return nil
             },
             powerReader: {
                 powerReadCount += 1
                 return .unavailableTestValue
-            }
+            },
+            networkInitialSampleIntervalNanoseconds: 0
         )
 
         await store.refresh(enabledModules: [])
@@ -258,11 +268,12 @@ final class SystemStatusStoreTests: XCTestCase {
             memoryReader: { .unavailableTestValue },
             storageReader: { .unavailableTestValue },
             gpuReader: { .unavailableTestValue },
-            networkReader: { .unavailableTestValue },
+            networkReader: { nil },
             powerReader: {
                 powerReadCount += 1
                 return .unavailableTestValue
-            }
+            },
+            networkInitialSampleIntervalNanoseconds: 0
         )
 
         await store.refresh(readsPower: false)
@@ -289,7 +300,7 @@ private extension SystemPowerStatus {
 }
 
 private extension SystemNetworkStatus {
-    static let unavailableTestValue = SystemNetworkProvider.status(from: nil)
+    static let unavailableTestValue = SystemNetworkProvider.status(previous: nil, current: nil)
 }
 
 private extension SystemGPUStatus {

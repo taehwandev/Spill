@@ -1,0 +1,154 @@
+feature_id: panel-network-status
+status: ready
+
+necessity:
+  decision: build
+  reason: Network is already a documented initial panel status metric and the existing provider/presentation stack can support it.
+  ambiguity:
+    clarity: clear
+    blockers_resolved: true
+    resolution_sources:
+      - maintainer
+      - repo-research
+      - assumption
+  clarification_required: false
+  questions: []
+
+tasks:
+  - id: panel-network-status-T1
+    title: Add Network to default panel status modules
+    owner_role: builder
+    state: done
+    depends_on: []
+    write_scope:
+      - Sources/Spill/Providers/SpillStatusModule.swift
+      - Sources/Spill/Settings/SpillSettings.swift
+    read_scope:
+      - .agents/specs/prd.md
+      - .agents/specs/ard.md
+      - Sources/Spill/Settings/SpillSettings.swift
+      - Sources/Spill/Panel/SpillBarView.swift
+    forbidden_scope:
+      - Sources/Spill/MenuBar/SpillMenuBarStatusItem.swift
+    acceptance:
+      - Network is in default status module order.
+      - Network is enabled by default for panel status modules.
+      - Existing order normalization appends Network when older stored order omits it.
+      - Existing enabled-module settings migrate Network on once without overriding later user disablement.
+    verification:
+      commands:
+        - swift test --filter SpillSettingsTests
+      manual:
+        - Confirm panel status modules include Network by default.
+
+  - id: panel-network-status-T2
+    title: Update Network provider to report receive and upload throughput
+    owner_role: builder
+    state: done
+    depends_on:
+      - panel-network-status-T1
+    write_scope:
+      - Sources/Spill/Providers/SystemNetworkProvider.swift
+      - Sources/Spill/Providers/SystemStatusStore.swift
+      - Sources/Spill/Panel/SpillStatusDetailModels.swift
+      - Sources/Spill/Panel/SpillBarView.swift
+    read_scope:
+      - Sources/Spill/Providers/SpillStatusModule.swift
+      - Sources/Spill/Providers/SystemStatusStore.swift
+    forbidden_scope:
+      - Sources/Spill/MenuBar/SpillMenuBarStatusItem.swift
+    acceptance:
+      - Network uses local interface counters instead of route reachability.
+      - Network row value shows receive rate and subtitle shows upload rate.
+      - Network graph history keeps receive and upload as separate series.
+      - First enabled refresh takes a short second sample for immediate throughput.
+    verification:
+      commands:
+        - swift test --filter SystemNetworkProviderTests
+        - swift test --filter SystemStatusStoreTests
+      manual: []
+
+  - id: panel-network-status-T3
+    title: Update settings, panel store, and throughput regression tests
+    owner_role: builder
+    state: done
+    depends_on:
+      - panel-network-status-T1
+      - panel-network-status-T2
+    write_scope:
+      - Tests/SpillTests/SpillSettingsTests.swift
+      - Tests/SpillTests/PanelStoreTests.swift
+      - Tests/SpillTests/SystemNetworkProviderTests.swift
+      - Tests/SpillTests/SystemStatusStoreTests.swift
+    read_scope:
+      - Sources/Spill/Providers/SpillStatusModule.swift
+      - Sources/Spill/Settings/SpillSettings.swift
+      - Sources/Spill/Panel/PanelStore.swift
+      - Sources/Spill/Providers/SystemNetworkProvider.swift
+      - Sources/Spill/Providers/SystemStatusStore.swift
+    forbidden_scope:
+      - Sources/Spill/MenuBar/SpillMenuBarStatusItem.swift
+    acceptance:
+      - Tests assert Network default visibility and persistence.
+      - Tests assert refresh requirements include visible Network.
+      - Tests assert receive/upload throughput calculation.
+      - Tests assert separate receive/upload graph history values.
+    verification:
+      commands:
+        - swift test --filter SpillSettingsTests
+        - swift test --filter PanelStoreTests
+        - swift test --filter SystemNetworkProviderTests
+        - swift test --filter SystemStatusStoreTests
+      manual: []
+
+  - id: panel-network-status-T4
+    title: Verify build and workflow gates
+    owner_role: verifier
+    state: done
+    depends_on:
+      - panel-network-status-T1
+      - panel-network-status-T2
+      - panel-network-status-T3
+    write_scope:
+      - .agents/runs/panel-network-status/05-verification.md
+      - .agents/runs/panel-network-status/06-closeout.md
+    read_scope:
+      - .agents/runs/panel-network-status/00-intake.md
+      - .agents/runs/panel-network-status/01-prd.md
+      - .agents/runs/panel-network-status/02-ard.md
+      - .agents/runs/panel-network-status/03-task-breakdown.yml
+    forbidden_scope: []
+    acceptance:
+      - Focused tests pass.
+      - Full Swift test suite passes.
+      - App build script passes or any blocker is documented.
+      - Workflow verification passes.
+    verification:
+      commands:
+        - swift test --filter SpillSettingsTests
+        - swift test --filter PanelStoreTests
+        - swift test --filter SystemNetworkProviderTests
+        - swift test --filter SystemStatusStoreTests
+        - swift test
+        - ./scripts/build-app.sh
+        - python3 .agents/scripts/workflow.py verify
+      manual:
+        - Panel remains compact with Network row.
+
+parallel_groups:
+  - id: group-1
+    tasks:
+      - panel-network-status-T1
+    rule: Module defaults should land before test expectation updates.
+  - id: group-2
+    tasks:
+      - panel-network-status-T2
+    rule: Throughput provider updates depend on module defaults.
+  - id: group-3
+    tasks:
+      - panel-network-status-T3
+    rule: Test updates depend on module defaults and provider updates.
+  - id: group-4
+    tasks:
+      - panel-network-status-T4
+    rule: Verification depends on implementation and tests.

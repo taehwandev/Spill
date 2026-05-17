@@ -83,11 +83,13 @@ enum SpillStatusDetailRows {
 
     static func rows(for status: SystemNetworkStatus) -> [SpillStatusDetailRow] {
         [
-            SpillStatusDetailRow(label: "Route", value: status.value),
-            SpillStatusDetailRow(label: "Reachable", value: boolText(status.isReachable)),
-            SpillStatusDetailRow(label: "Connection Required", value: boolText(status.connectionRequired)),
-            SpillStatusDetailRow(label: "Auto Connect", value: boolText(status.canConnectAutomatically)),
-            SpillStatusDetailRow(label: "Intervention", value: boolText(status.interventionRequired))
+            SpillStatusDetailRow(label: "Receive", value: SystemNetworkProvider.formatRate(status.receivedBytesPerSecond)),
+            SpillStatusDetailRow(label: "Upload", value: SystemNetworkProvider.formatRate(status.sentBytesPerSecond)),
+            SpillStatusDetailRow(label: "Total", value: SystemNetworkProvider.formatRate(status.totalBytesPerSecond)),
+            SpillStatusDetailRow(label: "Interfaces", value: "\(status.activeInterfaceCount)"),
+            SpillStatusDetailRow(label: "Sample", value: status.sampleInterval > 0 ? String(format: "%.1fs", status.sampleInterval) : "Sampling"),
+            SpillStatusDetailRow(label: "Received Total", value: SystemNetworkProvider.formatBytes(status.totalReceivedBytes)),
+            SpillStatusDetailRow(label: "Uploaded Total", value: SystemNetworkProvider.formatBytes(status.totalSentBytes))
         ]
     }
 

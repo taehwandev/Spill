@@ -2,108 +2,138 @@ import XCTest
 @testable import Spill
 
 final class SystemNetworkProviderTests: XCTestCase {
-    func testOnlineStatusMapping() {
+    func testSamplingStatusWhenPreviousReadingIsMissing() {
         let status = SystemNetworkProvider.status(
-            from: SystemNetworkReading(
-                isReachable: true,
-                connectionRequired: false,
-                canConnectAutomatically: false,
-                interventionRequired: false
+            previous: nil,
+            current: SystemNetworkReading(
+                receivedBytes: 1_000,
+                sentBytes: 500,
+                timestamp: 10,
+                activeInterfaceCount: 1
             )
         )
 
-        XCTAssertEqual(status.value, "Online")
-        XCTAssertEqual(status.subtitle, "Default Route")
-        XCTAssertEqual(status.availabilityRatio, 1)
-        XCTAssertEqual(status.state, .normal)
-        XCTAssertTrue(status.isAvailable)
-        XCTAssertTrue(status.isReachable)
-        XCTAssertFalse(status.connectionRequired)
-        XCTAssertFalse(status.canConnectAutomatically)
-        XCTAssertFalse(status.interventionRequired)
+        XCTAssertEqual(status.value, "Sampling")
+        XCTAssertEqual(status.subtitle, "Waiting for second sample")
+        XCTAssertEqual(status.activityRatio, 0)
+        XCTAssertEqual(status.receivedBytesPerSecond, 0)
+        XCTAssertEqual(status.sentBytesPerSecond, 0)
+        XCTAssertEqual(status.totalBytesPerSecond, 0)
+        XCTAssertEqual(status.activeInterfaceCount, 1)
+        XCTAssertEqual(status.state, .refreshing)
     }
 
-    func testAutomaticConnectionStatusMapping() {
+    func testThroughputStatusMapping() {
         let status = SystemNetworkProvider.status(
-            from: SystemNetworkReading(
-                isReachable: true,
-                connectionRequired: true,
-                canConnectAutomatically: true,
-                interventionRequired: false
+            previous: SystemNetworkReading(
+                receivedBytes: 1_000_000,
+                sentBytes: 500_000,
+                timestamp: 10,
+                activeInterfaceCount: 1
+            ),
+            current: SystemNetworkReading(
+                receivedBytes: 2_500_000,
+                sentBytes: 1_100_000,
+                timestamp: 11.5,
+                activeInterfaceCount: 2
             )
         )
 
-        XCTAssertEqual(status.value, "Online")
-        XCTAssertEqual(status.state, .normal)
-        XCTAssertTrue(status.isAvailable)
-    }
-
-    func testConnectionRequiredStatusMapping() {
-        let status = SystemNetworkProvider.status(
-            from: SystemNetworkReading(
-                isReachable: true,
-                connectionRequired: true,
-                canConnectAutomatically: false,
-                interventionRequired: false
-            )
-        )
-
-        XCTAssertEqual(status.value, "Standby")
-        XCTAssertEqual(status.subtitle, "Connection Required")
-        XCTAssertEqual(status.availabilityRatio, 0.5)
+        XCTAssertEqual(status.value, "↓ 1.0 MB/s")
+        XCTAssertEqual(status.subtitle, "↑ 400 KB/s")
+        XCTAssertEqual(status.activityRatio, 0.14, accuracy: 0.001)
+        XCTAssertEqual(status.receivedBytesPerSecond, 1_000_000, accuracy: 0.001)
+        XCTAssertEqual(status.sentBytesPerSecond, 400_000, accuracy: 0.001)
+        XCTAssertEqual(status.totalBytesPerSecond, 1_400_000, accuracy: 0.001)
+        XCTAssertEqual(status.totalReceivedBytes, 2_500_000)
+        XCTAssertEqual(status.totalSentBytes, 1_100_000)
+        XCTAssertEqual(status.activeInterfaceCount, 2)
+        XCTAssertEqual(status.sampleInterval, 1.5)
         XCTAssertEqual(status.state, .active)
-        XCTAssertFalse(status.isAvailable)
-        XCTAssertTrue(status.isReachable)
-        XCTAssertTrue(status.connectionRequired)
-        XCTAssertFalse(status.canConnectAutomatically)
-        XCTAssertFalse(status.interventionRequired)
     }
 
-    func testOfflineStatusMapping() {
+    func testIdleStatusMapping() {
         let status = SystemNetworkProvider.status(
-            from: SystemNetworkReading(
-                isReachable: false,
-                connectionRequired: false,
-                canConnectAutomatically: false,
-                interventionRequired: false
+            previous: SystemNetworkReading(
+                receivedBytes: 1_000,
+                sentBytes: 500,
+                timestamp: 10,
+                activeInterfaceCount: 1
+            ),
+            current: SystemNetworkReading(
+                receivedBytes: 1_000,
+                sentBytes: 500,
+                timestamp: 11,
+                activeInterfaceCount: 1
             )
         )
 
-        XCTAssertEqual(status.value, "Offline")
-        XCTAssertEqual(status.subtitle, "No Route")
-        XCTAssertEqual(status.availabilityRatio, 0)
-        XCTAssertEqual(status.state, .warning)
-        XCTAssertFalse(status.isAvailable)
+        XCTAssertEqual(status.value, "↓ 0 B/s")
+        XCTAssertEqual(status.subtitle, "↑ 0 B/s")
+        XCTAssertEqual(status.activityRatio, 0)
+        XCTAssertEqual(status.state, .normal)
+    }
+
+    func testCounterResetUsesCurrentBytesAsDelta() {
+        let status = SystemNetworkProvider.status(
+            previous: SystemNetworkReading(
+                receivedBytes: 10_000,
+                sentBytes: 10_000,
+                timestamp: 10,
+                activeInterfaceCount: 1
+            ),
+            current: SystemNetworkReading(
+                receivedBytes: 1_500,
+                sentBytes: 500,
+                timestamp: 11,
+                activeInterfaceCount: 1
+            )
+        )
+
+        XCTAssertEqual(status.value, "↓ 1.5 KB/s")
+        XCTAssertEqual(status.subtitle, "↑ 500 B/s")
     }
 
     func testUnavailableNetworkStatusWhenReadingIsMissing() {
-        let status = SystemNetworkProvider.status(from: nil)
+        let status = SystemNetworkProvider.status(previous: nil, current: nil)
 
         XCTAssertEqual(status.value, "N/A")
         XCTAssertNil(status.subtitle)
-        XCTAssertEqual(status.availabilityRatio, 0)
+        XCTAssertEqual(status.activityRatio, 0)
         XCTAssertEqual(status.state, .unavailable)
-        XCTAssertFalse(status.isAvailable)
         XCTAssertEqual(status.statusItem.state, .unavailable)
     }
 
     func testStatusItemMapping() {
         let item = SystemNetworkProvider.status(
-            from: SystemNetworkReading(
-                isReachable: true,
-                connectionRequired: false,
-                canConnectAutomatically: false,
-                interventionRequired: false
+            previous: SystemNetworkReading(
+                receivedBytes: 0,
+                sentBytes: 0,
+                timestamp: 10,
+                activeInterfaceCount: 1
+            ),
+            current: SystemNetworkReading(
+                receivedBytes: 1_000,
+                sentBytes: 500,
+                timestamp: 11,
+                activeInterfaceCount: 1
             )
         ).statusItem
 
         XCTAssertEqual(item.id, "network")
         XCTAssertEqual(item.providerID.rawValue, "system")
         XCTAssertEqual(item.title, "Network")
-        XCTAssertEqual(item.value, "Online")
-        XCTAssertEqual(item.subtitle, "Default Route")
+        XCTAssertEqual(item.value, "↓ 1.0 KB/s")
+        XCTAssertEqual(item.subtitle, "↑ 500 B/s")
         XCTAssertEqual(item.symbolName, "network")
-        XCTAssertEqual(item.state, .normal)
+        XCTAssertEqual(item.state, .active)
         XCTAssertEqual(item.sortPriority, 15)
+    }
+
+    func testNetworkByteFormatting() {
+        XCTAssertEqual(SystemNetworkProvider.formatBytes(999), "999 B")
+        XCTAssertEqual(SystemNetworkProvider.formatBytes(1_500), "1.5 KB")
+        XCTAssertEqual(SystemNetworkProvider.formatBytes(10_000), "10 KB")
+        XCTAssertEqual(SystemNetworkProvider.formatBytes(1_500_000), "1.5 MB")
     }
 }

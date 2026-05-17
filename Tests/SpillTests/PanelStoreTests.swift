@@ -123,7 +123,7 @@ final class PanelStoreTests: XCTestCase {
             isAccessibilityTrusted: { true }
         )
 
-        XCTAssertEqual(store.state.visibleStatusModules, [.storage, .cpu])
+        XCTAssertEqual(store.state.visibleStatusModules, [.storage, .cpu, .network])
     }
 
     @MainActor

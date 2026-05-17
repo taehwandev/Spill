@@ -162,21 +162,21 @@ struct SpillBarView: View {
                         Text(status.value)
                             .font(.system(size: 16, weight: .bold, design: .rounded))
                             .monospacedDigit()
-                            .foregroundStyle(status.state.panelTint)
+                            .foregroundStyle(metricValueTint(for: module, state: status.state))
                     }
 
                     Text(subtitleText(status.subtitle))
                         .font(.system(size: 10, weight: .medium, design: .rounded))
                         .lineLimit(1)
                         .minimumScaleFactor(0.72)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(metricSubtitleTint(for: module))
                 }
 
                 Spacer(minLength: 8)
 
                 MetricSparklineView(
-                    values: statusStore.history(for: module),
-                    tint: status.state.panelTint
+                    series: sparklineSeries(for: module, tint: status.state.panelTint),
+                    normalizesToSeriesMaximum: module == .network
                 )
                 .frame(width: 96, height: 28)
             }
@@ -345,8 +345,27 @@ struct SpillBarView: View {
         case .gpu:
             return rows.filter { ["Available", "Budget"].contains($0.label) }
         case .network:
-            return rows.filter { ["Route", "Reachable"].contains($0.label) }
+            return rows.filter { ["Receive", "Upload"].contains($0.label) }
         }
+    }
+
+    private func sparklineSeries(for module: SpillStatusModule, tint: Color) -> [MetricSparklineSeries] {
+        guard module == .network else {
+            return [MetricSparklineSeries(values: statusStore.history(for: module), tint: tint)]
+        }
+
+        return [
+            MetricSparklineSeries(values: statusStore.networkTrafficHistory.received, tint: .blue),
+            MetricSparklineSeries(values: statusStore.networkTrafficHistory.sent, tint: .orange)
+        ]
+    }
+
+    private func metricValueTint(for module: SpillStatusModule, state: SpillStatusState) -> Color {
+        module == .network ? .blue : state.panelTint
+    }
+
+    private func metricSubtitleTint(for module: SpillStatusModule) -> Color {
+        module == .network ? .orange : .secondary
     }
 
     @ViewBuilder
@@ -627,40 +646,73 @@ struct SpillBarView: View {
 
 }
 
-private struct MetricSparklineView: View {
+private struct MetricSparklineSeries {
     let values: [Double]
     let tint: Color
+}
+
+private struct MetricSparklineView: View {
+    let series: [MetricSparklineSeries]
+    var normalizesToSeriesMaximum = false
 
     var body: some View {
         Canvas { context, size in
-            let normalizedValues = values
-                .suffix(24)
-                .map { min(max($0, 0), 1) }
+            let rawSeries = series.map { series in
+                MetricSparklineSeries(
+                    values: series.values.suffix(24).map { max($0, 0) },
+                    tint: series.tint
+                )
+            }
+            let scale = normalizesToSeriesMaximum
+                ? rawSeries.flatMap(\.values).max() ?? 0
+                : 1
+            let normalizedSeries = rawSeries.map { series in
+                MetricSparklineSeries(
+                    values: series.values.map { value in
+                        if normalizesToSeriesMaximum {
+                            guard scale > 0 else {
+                                return 0
+                            }
+                            return min(value / scale, 1)
+                        }
+                        return min(value, 1)
+                    },
+                    tint: series.tint
+                )
+            }
 
-            guard normalizedValues.count >= 2 else {
+            guard normalizedSeries.contains(where: { $0.values.count >= 2 }),
+                  (!normalizesToSeriesMaximum || scale > 0)
+            else {
                 drawFlatLine(in: &context, size: size)
                 return
             }
 
-            var path = Path()
-            let xStep = size.width / CGFloat(normalizedValues.count - 1)
+            for (seriesIndex, series) in normalizedSeries.enumerated() where series.values.count >= 2 {
+                var path = Path()
+                let xStep = size.width / CGFloat(series.values.count - 1)
 
-            for (index, value) in normalizedValues.enumerated() {
-                let point = CGPoint(
-                    x: CGFloat(index) * xStep,
-                    y: size.height - CGFloat(value) * size.height
-                )
+                for (index, value) in series.values.enumerated() {
+                    let point = CGPoint(
+                        x: CGFloat(index) * xStep,
+                        y: size.height - CGFloat(value) * size.height
+                    )
 
-                if index == 0 {
-                    path.move(to: point)
-                } else {
-                    path.addLine(to: point)
+                    if index == 0 {
+                        path.move(to: point)
+                    } else {
+                        path.addLine(to: point)
+                    }
                 }
-            }
 
-            var shadowContext = context
-            shadowContext.addFilter(.shadow(color: tint.opacity(0.3), radius: 1, x: 0, y: 1))
-            shadowContext.stroke(path, with: .color(tint.opacity(0.9)), lineWidth: 1.8)
+                var shadowContext = context
+                shadowContext.addFilter(.shadow(color: series.tint.opacity(0.26), radius: 1, x: 0, y: 1))
+                shadowContext.stroke(
+                    path,
+                    with: .color(series.tint.opacity(seriesIndex == 0 ? 0.92 : 0.78)),
+                    lineWidth: seriesIndex == 0 ? 1.8 : 1.55
+                )
+            }
         }
         .padding(.vertical, 2)
     }
@@ -670,6 +722,7 @@ private struct MetricSparklineView: View {
         let y = size.height * 0.5
         path.move(to: CGPoint(x: 0, y: y))
         path.addLine(to: CGPoint(x: size.width, y: y))
+        let tint = series.first?.tint ?? .secondary
         context.stroke(path, with: .color(tint.opacity(0.42)), lineWidth: 1.3)
     }
 }
