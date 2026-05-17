@@ -74,6 +74,26 @@ final class MenuBarStatusSummaryTests: XCTestCase {
         XCTAssertEqual(summary.segments.map(\.value), ["20.0%", "56.2%"])
     }
 
+    func testSummaryUsesPlaceholderWhileCPUIsSampling() {
+        let summary = MenuBarStatusSummary.make(
+            enabledItems: [.cpu],
+            cpu: SystemCPUProvider.status(previous: nil, current: nil),
+            memory: SystemMemoryProvider.status(from: nil)
+        )
+
+        XCTAssertEqual(summary.title, "CPU --")
+        XCTAssertEqual(summary.segments.map(\.value), ["--"])
+        XCTAssertEqual(summary.segments.map(\.state), [.refreshing])
+        XCTAssertTrue(summary.tooltip.contains("CPU Sampling"))
+    }
+
+    func testPercentPrecisionUsesLessThanForTinyNonZeroUsage() {
+        XCTAssertEqual(MenuBarStatusPrecision.whole.percentText(for: 0), "0%")
+        XCTAssertEqual(MenuBarStatusPrecision.whole.percentText(for: 0.0005), "<1%")
+        XCTAssertEqual(MenuBarStatusPrecision.tenths.percentText(for: 0.0005), "<0.1%")
+        XCTAssertEqual(MenuBarStatusPrecision.tenths.percentText(for: 0.001), "0.1%")
+    }
+
     func testSummaryUsesConfiguredHighlightThresholdForMenuBarState() {
         let summary = MenuBarStatusSummary.make(
             enabledItems: [.cpu],

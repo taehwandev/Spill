@@ -20,7 +20,9 @@ struct WindowActionButton: View {
 
     var body: some View {
         Button(action: perform) {
-            VStack(spacing: 4) {
+            VStack(spacing: 3) {
+                Spacer(minLength: 0)
+
                 Image(systemName: action.symbolName ?? "macwindow")
                     .font(.system(size: 16, weight: .semibold))
                     .frame(width: 20, height: 16)
@@ -30,13 +32,17 @@ struct WindowActionButton: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.65)
 
-                Text(shortcutText)
-                    .font(.system(size: 9, weight: .medium, design: .rounded))
-                    .lineLimit(1)
-                    .foregroundStyle(.secondary)
+                if shortcutKey != .off {
+                    Text(shortcutText)
+                        .font(.system(size: 9, weight: .medium, design: .rounded))
+                        .lineLimit(1)
+                        .foregroundStyle(Color.secondary)
+                }
+
+                Spacer(minLength: 0)
             }
             .foregroundStyle(foregroundColor)
-            .frame(width: 76, height: 50)
+            .frame(width: 76, height: 58)
             .background(backgroundColor, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .shadow(color: .black.opacity(0.03), radius: 1, y: 0.5)
             .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))

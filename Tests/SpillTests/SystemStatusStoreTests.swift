@@ -15,8 +15,8 @@ final class SystemStatusStoreTests: XCTestCase {
         )
 
         XCTAssertEqual(store.cpu.state, .refreshing)
-        XCTAssertEqual(store.cpu.value, "0.0%")
-        XCTAssertEqual(store.cpu.subtitle, "Sampling")
+        XCTAssertEqual(store.cpu.value, "Sampling")
+        XCTAssertEqual(store.cpu.subtitle, "Waiting for sample")
         XCTAssertEqual(store.memory.state, .unavailable)
         XCTAssertEqual(store.memory.value, "N/A")
         XCTAssertEqual(store.storage.state, .unavailable)
@@ -114,12 +114,35 @@ final class SystemStatusStoreTests: XCTestCase {
             cpuReader: {
                 cpuReadCount += 1
                 return SystemCPUProvider.status(
-                    previous: SystemCPUReading(userTicks: 0, systemTicks: 0, idleTicks: 0, niceTicks: 0),
+                    previous: SystemCPUReading(
+                        userTicks: 0,
+                        systemTicks: 0,
+                        idleTicks: 0,
+                        niceTicks: 0,
+                        coreReadings: [
+                            SystemCPUCoreReading(userTicks: 0, systemTicks: 0, idleTicks: 0, niceTicks: 0),
+                            SystemCPUCoreReading(userTicks: 0, systemTicks: 0, idleTicks: 0, niceTicks: 0)
+                        ]
+                    ),
                     current: SystemCPUReading(
                         userTicks: UInt64(cpuReadCount),
                         systemTicks: UInt64(cpuReadCount),
                         idleTicks: UInt64(8 * cpuReadCount),
-                        niceTicks: 0
+                        niceTicks: 0,
+                        coreReadings: [
+                            SystemCPUCoreReading(
+                                userTicks: UInt64(cpuReadCount),
+                                systemTicks: 0,
+                                idleTicks: UInt64(9 * cpuReadCount),
+                                niceTicks: 0
+                            ),
+                            SystemCPUCoreReading(
+                                userTicks: UInt64(3 * cpuReadCount),
+                                systemTicks: 0,
+                                idleTicks: UInt64(7 * cpuReadCount),
+                                niceTicks: 0
+                            )
+                        ]
                     )
                 )
             },
@@ -195,6 +218,11 @@ final class SystemStatusStoreTests: XCTestCase {
         XCTAssertEqual(store.networkTrafficHistory.sent.count, 1)
         XCTAssertEqual(store.networkTrafficHistory.received[0], 0.0001, accuracy: 0.000001)
         XCTAssertEqual(store.networkTrafficHistory.sent[0], 0.0002, accuracy: 0.000001)
+        XCTAssertEqual(store.cpuCoreHistory.count, 2)
+        XCTAssertEqual(store.cpuCoreHistory[0].count, 1)
+        XCTAssertEqual(store.cpuCoreHistory[1].count, 1)
+        XCTAssertEqual(store.cpuCoreHistory[0][0], 0.1, accuracy: 0.000001)
+        XCTAssertEqual(store.cpuCoreHistory[1][0], 0.3, accuracy: 0.000001)
         XCTAssertEqual(store.power.value, "51%")
 
         await store.refresh(enabledModules: [.cpu, .memory, .storage, .gpu, .network])
@@ -208,7 +236,63 @@ final class SystemStatusStoreTests: XCTestCase {
         XCTAssertEqual(store.networkTrafficHistory.sent.count, 2)
         XCTAssertEqual(store.networkTrafficHistory.received[1], 0.0001, accuracy: 0.000001)
         XCTAssertEqual(store.networkTrafficHistory.sent[1], 0.0002, accuracy: 0.000001)
+        XCTAssertEqual(store.cpuCoreHistory.count, 2)
+        XCTAssertEqual(store.cpuCoreHistory[0].count, 2)
+        XCTAssertEqual(store.cpuCoreHistory[1].count, 2)
+        XCTAssertEqual(store.cpuCoreHistory[0][1], 0.1, accuracy: 0.000001)
+        XCTAssertEqual(store.cpuCoreHistory[1][1], 0.3, accuracy: 0.000001)
         XCTAssertEqual(store.power.value, "52%")
+    }
+
+    func testCPUCoreHistoryClearsWhenCoreSamplesDisappear() async {
+        var cpuReadCount = 0
+        let store = SystemStatusStore(
+            cpuReader: {
+                cpuReadCount += 1
+                if cpuReadCount == 1 {
+                    return SystemCPUProvider.status(
+                        previous: SystemCPUReading(
+                            userTicks: 0,
+                            systemTicks: 0,
+                            idleTicks: 0,
+                            niceTicks: 0,
+                            coreReadings: [
+                                SystemCPUCoreReading(userTicks: 0, systemTicks: 0, idleTicks: 0, niceTicks: 0)
+                            ]
+                        ),
+                        current: SystemCPUReading(
+                            userTicks: 2,
+                            systemTicks: 0,
+                            idleTicks: 8,
+                            niceTicks: 0,
+                            coreReadings: [
+                                SystemCPUCoreReading(userTicks: 2, systemTicks: 0, idleTicks: 8, niceTicks: 0)
+                            ]
+                        )
+                    )
+                }
+
+                return SystemCPUProvider.status(
+                    previous: SystemCPUReading(userTicks: 0, systemTicks: 0, idleTicks: 0, niceTicks: 0),
+                    current: SystemCPUReading(userTicks: 2, systemTicks: 0, idleTicks: 8, niceTicks: 0)
+                )
+            },
+            memoryReader: { .unavailableTestValue },
+            storageReader: { .unavailableTestValue },
+            gpuReader: { .unavailableTestValue },
+            networkReader: { nil },
+            powerReader: { .unavailableTestValue },
+            networkInitialSampleIntervalNanoseconds: 0
+        )
+
+        await store.refresh(enabledModules: [.cpu])
+        XCTAssertEqual(store.cpuCoreHistory.count, 1)
+        XCTAssertEqual(store.cpuCoreHistory[0].count, 1)
+        XCTAssertEqual(store.cpuCoreHistory[0][0], 0.2, accuracy: 0.000001)
+
+        await store.refresh(enabledModules: [.cpu])
+        XCTAssertEqual(store.cpu.value, "20.0%")
+        XCTAssertEqual(store.cpuCoreHistory, [])
     }
 
     func testDisabledModulesDoNotRunReaders() async {

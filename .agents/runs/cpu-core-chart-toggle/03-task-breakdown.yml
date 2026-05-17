@@ -1,0 +1,166 @@
+feature_id: cpu-core-chart-toggle
+status: ready
+
+necessity:
+  decision: build
+  reason: CPU is an existing compact status metric, and the maintainer clarified the feature as a separate Preferences toggle for CPU core display.
+  ambiguity:
+    clarity: clear
+    blockers_resolved: true
+    resolution_sources:
+      - maintainer
+      - repo-research
+      - assumption
+  clarification_required: false
+  questions: []
+
+tasks:
+  - id: cpu-core-chart-toggle-T1
+    title: Extend CPU provider with logical-core usage and zero formatting
+    owner_role: builder
+    state: done
+    depends_on: []
+    write_scope:
+      - Sources/Spill/Providers/SystemCPUProvider.swift
+      - Tests/SpillTests/SystemCPUProviderTests.swift
+    read_scope:
+      - .agents/runs/cpu-core-chart-toggle/01-prd.md
+      - .agents/runs/cpu-core-chart-toggle/02-ard.md
+    forbidden_scope: []
+    acceptance:
+      - CPU aggregate status remains unchanged for normal samples.
+      - CPU status includes per-core usage ratios when matching core samples exist.
+      - Sampling CPU does not display measured zero.
+      - Tiny non-zero CPU usage formats as less-than text.
+    verification:
+      commands:
+        - swift test --filter SystemCPUProviderTests
+      manual: []
+
+  - id: cpu-core-chart-toggle-T2
+    title: Add persisted CPU core chart setting
+    owner_role: builder
+    state: done
+    depends_on:
+      - cpu-core-chart-toggle-T1
+    write_scope:
+      - Sources/Spill/Settings/SpillSettings.swift
+      - Sources/Spill/Preferences/StatusModulesPreferencesSection.swift
+      - Tests/SpillTests/SpillSettingsTests.swift
+    read_scope:
+      - Sources/Spill/Preferences/PreferencesView.swift
+      - Sources/Spill/Settings/SpillSettings.swift
+    forbidden_scope: []
+    acceptance:
+      - CPU core chart mode defaults off.
+      - CPU core chart mode persists through UserDefaults.
+      - Preferences exposes a toggle in the status settings area.
+    verification:
+      commands:
+        - swift test --filter SpillSettingsTests
+      manual:
+        - Confirm Preferences shows the CPU core chart toggle.
+
+  - id: cpu-core-chart-toggle-T3
+    title: Render CPU core bars in the compact panel
+    owner_role: builder
+    state: done
+    depends_on:
+      - cpu-core-chart-toggle-T1
+      - cpu-core-chart-toggle-T2
+    write_scope:
+      - Sources/Spill/Providers/SystemStatusStore.swift
+      - Sources/Spill/Panel/SpillBarView.swift
+      - Sources/Spill/Panel/SpillStatusDetailModels.swift
+      - Tests/SpillTests/SystemStatusStoreTests.swift
+    read_scope:
+      - Sources/Spill/Panel/SpillBarView.swift
+      - Sources/Spill/Panel/SpillStatusDetailPopover.swift
+    forbidden_scope: []
+    acceptance:
+      - System status store keeps bounded per-core history.
+      - CPU row uses core bars only when the setting is on and core history exists.
+      - CPU row falls back to aggregate sparkline when core history is unavailable.
+      - Detail rows summarize core count and peak core.
+    verification:
+      commands:
+        - swift test --filter SystemStatusStoreTests
+      manual:
+        - Confirm CPU row remains compact.
+
+  - id: cpu-core-chart-toggle-T4
+    title: Update menu bar CPU formatting for sampling and tiny usage
+    owner_role: builder
+    state: done
+    depends_on:
+      - cpu-core-chart-toggle-T1
+    write_scope:
+      - Sources/Spill/MenuBar/MenuBarStatusDisplayOptions.swift
+      - Sources/Spill/MenuBar/MenuBarStatusSummary.swift
+      - Tests/SpillTests/MenuBarStatusSummaryTests.swift
+    read_scope:
+      - Sources/Spill/MenuBar/MenuBarStatusContentView.swift
+    forbidden_scope: []
+    acceptance:
+      - CPU menu bar summary displays `--` while CPU is refreshing.
+      - Tiny non-zero percentage formatting avoids rounded zero.
+    verification:
+      commands:
+        - swift test --filter MenuBarStatusSummaryTests
+      manual: []
+
+  - id: cpu-core-chart-toggle-T5
+    title: Verify build, layout, and workflow gates
+    owner_role: verifier
+    state: done
+    depends_on:
+      - cpu-core-chart-toggle-T1
+      - cpu-core-chart-toggle-T2
+      - cpu-core-chart-toggle-T3
+      - cpu-core-chart-toggle-T4
+    write_scope:
+      - .agents/runs/cpu-core-chart-toggle/05-verification.md
+      - .agents/runs/cpu-core-chart-toggle/06-closeout.md
+    read_scope:
+      - .agents/runs/cpu-core-chart-toggle/00-intake.md
+      - .agents/runs/cpu-core-chart-toggle/01-prd.md
+      - .agents/runs/cpu-core-chart-toggle/02-ard.md
+      - .agents/runs/cpu-core-chart-toggle/03-task-breakdown.yml
+    forbidden_scope: []
+    acceptance:
+      - Focused tests pass.
+      - Full Swift test suite passes.
+      - App build script passes.
+      - Panel layout smoke passes.
+      - Workflow verification passes.
+    verification:
+      commands:
+        - swift test --filter SystemCPUProviderTests
+        - swift test --filter SpillSettingsTests
+        - swift test --filter SystemStatusStoreTests
+        - swift test --filter MenuBarStatusSummaryTests
+        - swift test
+        - ./scripts/build-app.sh
+        - ./scripts/verify-panel-layout-smoke.sh
+        - python3 .agents/scripts/workflow.py verify
+      manual:
+        - Launch app and confirm Preferences/CPU chart behavior.
+
+parallel_groups:
+  - id: group-1
+    tasks:
+      - cpu-core-chart-toggle-T1
+    rule: CPU model changes must land first.
+  - id: group-2
+    tasks:
+      - cpu-core-chart-toggle-T2
+      - cpu-core-chart-toggle-T4
+    rule: Settings and menu bar formatting can proceed after CPU model changes.
+  - id: group-3
+    tasks:
+      - cpu-core-chart-toggle-T3
+    rule: Panel chart depends on CPU model and setting.
+  - id: group-4
+    tasks:
+      - cpu-core-chart-toggle-T5
+    rule: Verification depends on implementation.

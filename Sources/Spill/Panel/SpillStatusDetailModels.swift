@@ -16,16 +16,26 @@ struct SpillStatusDetailRow: Identifiable, Equatable {
 
 enum SpillStatusDetailRows {
     static func rows(for status: SystemCPUStatus) -> [SpillStatusDetailRow] {
-        [
+        var rows = [
             SpillStatusDetailRow(label: "Usage", value: status.value),
             SpillStatusDetailRow(label: "Available", value: percentText(status.availableRatio)),
             SpillStatusDetailRow(label: "User", value: percentText(status.userRatio)),
             SpillStatusDetailRow(label: "System", value: percentText(status.systemRatio)),
             SpillStatusDetailRow(label: "Nice", value: percentText(status.niceRatio)),
-            SpillStatusDetailRow(label: "Idle", value: percentText(status.idleRatio)),
+            SpillStatusDetailRow(label: "Idle", value: percentText(status.idleRatio))
+        ]
+
+        if status.coreCount > 0 {
+            rows.append(SpillStatusDetailRow(label: "Cores", value: "\(status.coreCount)"))
+            rows.append(SpillStatusDetailRow(label: "Peak Core", value: percentText(status.peakCoreUsageRatio)))
+        }
+
+        rows.append(contentsOf: [
             SpillStatusDetailRow(label: "Sample", value: "\(status.activeTicks) / \(status.totalTicks) active ticks"),
             SpillStatusDetailRow(label: "State", value: status.state.detailTitle)
-        ]
+        ])
+
+        return rows
     }
 
     static func rows(for status: SystemMemoryStatus) -> [SpillStatusDetailRow] {

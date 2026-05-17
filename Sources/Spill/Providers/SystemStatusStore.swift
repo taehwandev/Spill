@@ -17,6 +17,7 @@ final class SystemStatusStore: ObservableObject {
     @Published private(set) var power: SystemPowerStatus
     @Published private(set) var metricHistory: [SpillStatusModule: [Double]]
     @Published private(set) var networkTrafficHistory: SystemNetworkTrafficHistory
+    @Published private(set) var cpuCoreHistory: [[Double]]
 
     private let cpuReader: CPUReader
     private let memoryReader: MemoryReader
@@ -59,6 +60,7 @@ final class SystemStatusStore: ObservableObject {
             received: Self.initialHistory(for: network.receivedActivityRatio, state: network.state),
             sent: Self.initialHistory(for: network.sentActivityRatio, state: network.state)
         )
+        cpuCoreHistory = Self.initialCoreHistory(for: cpu.coreUsageRatios, state: cpu.state)
         self.cpuReader = cpuReader
         self.memoryReader = memoryReader
         self.storageReader = storageReader
@@ -115,8 +117,10 @@ final class SystemStatusStore: ObservableObject {
         if enabledModules.contains(.cpu) {
             cpu = await cpuReader()
             appendHistory(cpu.usageRatio, for: .cpu, state: cpu.state)
+            appendCPUCoreHistory(cpu)
         } else {
             cpu = SystemCPUProvider.unavailableStatus()
+            cpuCoreHistory = []
         }
     }
 
@@ -148,6 +152,23 @@ final class SystemStatusStore: ObservableObject {
         )
     }
 
+    private func appendCPUCoreHistory(_ status: SystemCPUStatus) {
+        guard status.state != .unavailable,
+              !status.coreUsageRatios.isEmpty
+        else {
+            cpuCoreHistory = []
+            return
+        }
+
+        if cpuCoreHistory.count != status.coreUsageRatios.count {
+            cpuCoreHistory = Array(repeating: [], count: status.coreUsageRatios.count)
+        }
+
+        cpuCoreHistory = status.coreUsageRatios.enumerated().map { index, ratio in
+            appendedHistoryValue(ratio, to: cpuCoreHistory[index])
+        }
+    }
+
     private func appendedHistoryValue(_ value: Double, to history: [Double]) -> [Double] {
         guard value.isFinite else {
             return history
@@ -167,6 +188,16 @@ final class SystemStatusStore: ObservableObject {
         }
 
         return [value.clamped(to: 0...1)]
+    }
+
+    private static func initialCoreHistory(for values: [Double], state: SpillStatusState) -> [[Double]] {
+        guard state != .unavailable else {
+            return []
+        }
+
+        return values.map { value in
+            value.isFinite ? [value.clamped(to: 0...1)] : []
+        }
     }
 
     private func networkPreviousReadingForRefresh() async -> SystemNetworkReading? {

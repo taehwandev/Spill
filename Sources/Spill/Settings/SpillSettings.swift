@@ -75,6 +75,10 @@ final class SpillSettings: ObservableObject {
         }
     }
 
+    @Published var showsCPUCoreChart: Bool {
+        didSet { defaults.set(showsCPUCoreChart, forKey: Keys.showsCPUCoreChart) }
+    }
+
     @Published var menuBarStatusDisplayStyle: MenuBarStatusDisplayStyle {
         didSet { defaults.set(menuBarStatusDisplayStyle.rawValue, forKey: Keys.menuBarStatusDisplayStyle) }
     }
@@ -159,6 +163,7 @@ final class SpillSettings: ObservableObject {
         enabledMenuBarStatusItems = SpillMenuBarStatusItem.normalizedEnabled(
             from: defaults.stringArray(forKey: Keys.enabledMenuBarStatusItems)
         )
+        showsCPUCoreChart = defaults.object(forKey: Keys.showsCPUCoreChart) as? Bool ?? false
         let styleRawValue = defaults.string(forKey: Keys.menuBarStatusDisplayStyle)
             ?? MenuBarStatusDisplayStyle.labelAndPercent.rawValue
         menuBarStatusDisplayStyle = MenuBarStatusDisplayStyle(rawValue: styleRawValue) ?? .labelAndPercent
@@ -426,6 +431,7 @@ private enum Keys {
     static let enabledStatusModules = "enabledStatusModules"
     static let statusModuleNetworkDefaultEnabledMigrated = "statusModuleNetworkDefaultEnabledMigrated"
     static let enabledMenuBarStatusItems = "enabledMenuBarStatusItems"
+    static let showsCPUCoreChart = "showsCPUCoreChart"
     static let menuBarStatusDisplayStyle = "menuBarStatusDisplayStyle"
     static let menuBarStatusPrecision = "menuBarStatusPrecision"
     static let menuBarStatusHighlightThreshold = "menuBarStatusHighlightThreshold"

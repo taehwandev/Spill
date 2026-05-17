@@ -17,6 +17,8 @@ final class SystemCPUProviderTests: XCTestCase {
         XCTAssertEqual(status.idleRatio, 0.75, accuracy: 0.0001)
         XCTAssertEqual(status.activeTicks, 25)
         XCTAssertEqual(status.totalTicks, 100)
+        XCTAssertEqual(status.coreUsageRatios, [])
+        XCTAssertEqual(status.coreCount, 0)
         XCTAssertEqual(status.state, .normal)
     }
 
@@ -56,12 +58,76 @@ final class SystemCPUProviderTests: XCTestCase {
     func testSamplingCPUStatusWhenPreviousReadingIsMissing() {
         let status = SystemCPUProvider.status(previous: nil, current: makeReading(active: 1, idle: 1))
 
-        XCTAssertEqual(status.value, "0.0%")
-        XCTAssertEqual(status.subtitle, "Sampling")
+        XCTAssertEqual(status.value, "Sampling")
+        XCTAssertEqual(status.subtitle, "Waiting for sample")
         XCTAssertEqual(status.usageRatio, 0)
         XCTAssertEqual(status.availableRatio, 1)
         XCTAssertEqual(status.state, .refreshing)
         XCTAssertEqual(status.statusItem.state, .refreshing)
+    }
+
+    func testCPUStatusComputesPerCoreUsageRatios() {
+        let status = SystemCPUProvider.status(
+            previous: SystemCPUReading(
+                userTicks: 0,
+                systemTicks: 0,
+                idleTicks: 0,
+                niceTicks: 0,
+                coreReadings: [
+                    makeCoreReading(active: 10, idle: 90),
+                    makeCoreReading(active: 20, idle: 80)
+                ]
+            ),
+            current: SystemCPUReading(
+                userTicks: 30,
+                systemTicks: 0,
+                idleTicks: 70,
+                niceTicks: 0,
+                coreReadings: [
+                    makeCoreReading(active: 35, idle: 165),
+                    makeCoreReading(active: 95, idle: 105)
+                ]
+            )
+        )
+
+        XCTAssertEqual(status.usageRatio, 0.3, accuracy: 0.0001)
+        XCTAssertEqual(status.coreUsageRatios.count, 2)
+        XCTAssertEqual(status.coreUsageRatios[0], 0.25, accuracy: 0.0001)
+        XCTAssertEqual(status.coreUsageRatios[1], 0.75, accuracy: 0.0001)
+        XCTAssertEqual(status.peakCoreUsageRatio, 0.75, accuracy: 0.0001)
+        XCTAssertEqual(status.coreCount, 2)
+    }
+
+    func testCPUStatusDropsPerCoreRatiosWhenSamplesMismatch() {
+        let status = SystemCPUProvider.status(
+            previous: SystemCPUReading(
+                userTicks: 0,
+                systemTicks: 0,
+                idleTicks: 0,
+                niceTicks: 0,
+                coreReadings: [makeCoreReading(active: 10, idle: 90)]
+            ),
+            current: SystemCPUReading(
+                userTicks: 30,
+                systemTicks: 0,
+                idleTicks: 70,
+                niceTicks: 0,
+                coreReadings: [
+                    makeCoreReading(active: 35, idle: 165),
+                    makeCoreReading(active: 95, idle: 105)
+                ]
+            )
+        )
+
+        XCTAssertEqual(status.value, "30.0%")
+        XCTAssertEqual(status.coreUsageRatios, [])
+        XCTAssertEqual(status.coreCount, 2)
+    }
+
+    func testCPUPercentTextUsesLessThanForTinyNonZeroUsage() {
+        XCTAssertEqual(SystemCPUProvider.percentText(0), "0.0%")
+        XCTAssertEqual(SystemCPUProvider.percentText(0.0005), "<0.1%")
+        XCTAssertEqual(SystemCPUProvider.percentText(0.001), "0.1%")
     }
 
     func testUnavailableCPUStatusWhenCurrentReadingIsMissing() {
@@ -108,6 +174,15 @@ final class SystemCPUProviderTests: XCTestCase {
 
     private func makeReading(active: UInt64, idle: UInt64) -> SystemCPUReading {
         SystemCPUReading(
+            userTicks: active,
+            systemTicks: 0,
+            idleTicks: idle,
+            niceTicks: 0
+        )
+    }
+
+    private func makeCoreReading(active: UInt64, idle: UInt64) -> SystemCPUCoreReading {
+        SystemCPUCoreReading(
             userTicks: active,
             systemTicks: 0,
             idleTicks: idle,

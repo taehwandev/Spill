@@ -45,12 +45,28 @@ enum MenuBarStatusPrecision: Int, CaseIterable, Identifiable, Sendable {
     }
 
     func percentText(for ratio: Double) -> String {
-        let percent = ratio.clamped(to: 0...1) * 100
+        let clampedRatio = ratio.clamped(to: 0...1)
+        guard clampedRatio > 0 else {
+            switch self {
+            case .whole:
+                return "0%"
+            case .tenths:
+                return "0.0%"
+            }
+        }
+
+        let percent = clampedRatio * 100
 
         switch self {
         case .whole:
+            if percent < 1 {
+                return "<1%"
+            }
             return "\(Int(percent.rounded()))%"
         case .tenths:
+            if percent < 0.1 {
+                return "<0.1%"
+            }
             return String(format: "%.1f%%", percent)
         }
     }

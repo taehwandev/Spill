@@ -122,7 +122,7 @@ struct MenuBarStatusSummary: Equatable {
         _ status: SystemCPUStatus,
         precision: MenuBarStatusPrecision
     ) -> String {
-        guard status.state != .unavailable else {
+        guard status.state != .unavailable, status.state != .refreshing else {
             return "--"
         }
 
@@ -155,6 +155,10 @@ struct MenuBarStatusSummary: Equatable {
     ) -> SpillStatusState {
         guard baseState != .unavailable else {
             return .unavailable
+        }
+
+        guard baseState != .refreshing else {
+            return .refreshing
         }
 
         if ratio >= MenuBarStatusHighlightThreshold.ninety.ratio {

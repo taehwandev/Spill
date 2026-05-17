@@ -3,15 +3,15 @@ import AppKit
 enum SpillPanelContentSizer {
     private static let horizontalPadding: CGFloat = 28
     private static let verticalPadding: CGFloat = 20
-    private static let topLevelSpacing: CGFloat = 10
+    private static let topLevelSpacing: CGFloat = 14
+    private static let dividerHeight: CGFloat = 1
     private static let sectionHeaderHeight: CGFloat = 14
     private static let statusSectionSpacing: CGFloat = 6
     private static let sectionContentSpacing: CGFloat = 5
     private static let statusRowHeight: CGFloat = 56
     private static let statusRowSpacing: CGFloat = 7
     private static let aiPillHeight: CGFloat = 60
-    private static let windowActionWidth: CGFloat = 76
-    private static let windowActionHeight: CGFloat = 50
+    private static let windowActionHeight: CGFloat = 58
     private static let windowActionSpacing: CGFloat = 6
     private static let menuBarActionWidth: CGFloat = 48
     private static let menuBarActionHeight: CGFloat = 48
@@ -30,11 +30,14 @@ enum SpillPanelContentSizer {
     ) -> NSSize {
         let width = preferredWidth(visibleFrame: visibleFrame)
         let contentWidth = max(0, width - horizontalPadding)
-        let sectionCount = statusModuleCount > 0 ? 5 : 4
-        let topLevelGapHeight = CGFloat(max(0, sectionCount - 1)) * topLevelSpacing
+        let dividerCount = statusModuleCount > 0 ? 4 : 3
+        let topLevelChildCount = statusModuleCount > 0 ? 9 : 7
+        let topLevelGapHeight = CGFloat(max(0, topLevelChildCount - 1)) * topLevelSpacing
+        let dividerTotalHeight = CGFloat(dividerCount) * dividerHeight
         let desiredHeight = verticalPadding
             + 34
             + topLevelGapHeight
+            + dividerTotalHeight
             + statusSectionHeight(moduleCount: statusModuleCount)
             + aiSectionHeight(statusCount: aiStatusCount)
             + actionSectionsHeight(
@@ -101,18 +104,19 @@ enum SpillPanelContentSizer {
             )
     }
 
-    private static func windowActionsSectionHeight(actionCount: Int, contentWidth: CGFloat) -> CGFloat {
-        sectionHeaderHeight
+    private static func windowActionsSectionHeight(actionCount: Int, contentWidth _: CGFloat) -> CGFloat {
+        guard actionCount > 0 else {
+            return sectionHeaderHeight + sectionContentSpacing + windowActionHeight
+        }
+
+        // Side-by-side layout: 3 rows of buttons + header label space (15 pt)
+        let gridHeight = rowsHeight(count: 3, itemHeight: windowActionHeight, spacing: windowActionSpacing)
+        let customHeaderHeight: CGFloat = 15
+
+        return sectionHeaderHeight
             + sectionContentSpacing
-            + actionGridHeight(
-                actionCount: actionCount,
-                contentWidth: contentWidth,
-                itemWidth: windowActionWidth,
-                itemHeight: windowActionHeight,
-                columnSpacing: windowActionSpacing,
-                rowSpacing: windowActionSpacing,
-                emptyHeight: windowActionHeight
-            )
+            + gridHeight
+            + customHeaderHeight
     }
 
     private static func menuBarActionsSectionHeight(

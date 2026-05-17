@@ -11,6 +11,7 @@ final class SpillSettingsTests: XCTestCase {
         XCTAssertEqual(settings.statusModuleOrder, [.cpu, .memory, .storage, .network])
         XCTAssertEqual(settings.enabledStatusModules, [.cpu, .memory, .storage, .network])
         XCTAssertEqual(settings.enabledMenuBarStatusItems, [.cpu, .memory])
+        XCTAssertFalse(settings.showsCPUCoreChart)
         XCTAssertEqual(settings.menuBarStatusDisplayStyle, .labelAndPercent)
         XCTAssertEqual(settings.menuBarStatusPrecision, .tenths)
         XCTAssertEqual(settings.menuBarStatusHighlightThreshold, .seventy)
@@ -241,6 +242,18 @@ final class SpillSettingsTests: XCTestCase {
         XCTAssertEqual(reloadedSettings.menuBarStatusDisplayStyle, .percentOnly)
         XCTAssertEqual(reloadedSettings.menuBarStatusPrecision, .tenths)
         XCTAssertEqual(reloadedSettings.menuBarStatusHighlightThreshold, .eighty)
+    }
+
+    func testCPUCoreChartSettingPersists() {
+        let defaults = makeDefaults()
+        let settings = SpillSettings(defaults: defaults)
+
+        settings.showsCPUCoreChart = true
+
+        XCTAssertTrue(defaults.bool(forKey: "showsCPUCoreChart"))
+
+        let reloadedSettings = SpillSettings(defaults: defaults)
+        XCTAssertTrue(reloadedSettings.showsCPUCoreChart)
     }
 
     func testMenuBarStatusDisplayOptionsNormalizeUnknownValues() {

@@ -5,7 +5,28 @@ struct StatusModulesPreferencesSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
+            panelStatusSection
+            Divider()
             menuBarGlanceSection
+        }
+    }
+
+    private var panelStatusSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionHeader(
+                title: "Panel Status",
+                symbolName: "waveform.path.ecg",
+                trailing: settings.showsCPUCoreChart ? "Core Bars" : "Aggregate"
+            )
+
+            HStack {
+                Label("CPU Core Bars", systemImage: "cpu")
+                    .font(.callout)
+                Spacer()
+                Toggle("CPU Core Bars", isOn: $settings.showsCPUCoreChart)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+            }
         }
     }
 

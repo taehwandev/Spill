@@ -10,6 +10,7 @@ struct SpillBarView: View {
     let dismissAction: () -> Void
     let settingsAction: () -> Void
     @State private var pendingDismissWorkItem: DispatchWorkItem?
+    @State private var hoveredStatusModule: SpillStatusModule? = nil
 
     private var panelState: PanelState {
         panelStore.state
@@ -17,13 +18,25 @@ struct SpillBarView: View {
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
-            VStack(spacing: 10) {
+            VStack(spacing: 14) {
                 header
+
                 if !panelState.visibleStatusModules.isEmpty {
+                    Divider()
+                        .background(Color.primary.opacity(0.04))
                     statusSection
                 }
+
+                Divider()
+                    .background(Color.primary.opacity(0.04))
                 aiSection
+
+                Divider()
+                    .background(Color.primary.opacity(0.04))
                 actionSections
+
+                Divider()
+                    .background(Color.primary.opacity(0.04))
                 footer
             }
             .padding(.horizontal, 14)
@@ -65,8 +78,14 @@ struct SpillBarView: View {
         HStack(spacing: 12) {
             ZStack {
                 RoundedRectangle(cornerRadius: 11, style: .continuous)
-                    .fill(Color.blue)
-                    .shadow(color: Color.blue.opacity(0.3), radius: 3, y: 1)
+                    .fill(
+                        LinearGradient(
+                            colors: [.teal, .indigo],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .shadow(color: .indigo.opacity(0.25), radius: 3, y: 1)
 
                 Image(systemName: panelState.readiness.symbolName)
                     .font(.system(size: 15, weight: .semibold))
@@ -174,22 +193,26 @@ struct SpillBarView: View {
 
                 Spacer(minLength: 8)
 
-                MetricSparklineView(
-                    series: sparklineSeries(for: module, tint: status.state.panelTint),
-                    normalizesToSeriesMaximum: module == .network
-                )
-                .frame(width: 96, height: 28)
+                metricChart(for: module, status: status)
+                    .frame(width: 96, height: 28)
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 7)
             .frame(minHeight: 56)
-            .background(.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .background(
+                hoveredStatusModule == module ? Color.primary.opacity(0.07) : Color.primary.opacity(0.04),
+                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+            )
             .overlay {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(.primary.opacity(0.05), lineWidth: 0.5)
+                    .stroke(Color.primary.opacity(hoveredStatusModule == module ? 0.08 : 0.05), lineWidth: 0.5)
             }
+            .animation(.easeOut(duration: 0.12), value: hoveredStatusModule)
         }
         .buttonStyle(.plain)
+        .onHover { isHovered in
+            hoveredStatusModule = isHovered ? module : nil
+        }
         .popover(isPresented: detailBinding(for: .system(module)), arrowEdge: .top) {
             statusDetailPopover(for: .system(module))
         }
@@ -199,15 +222,16 @@ struct SpillBarView: View {
 
     private func sectionHeader(_ title: String, symbolName: String) -> some View {
         HStack {
-            Text(title)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.secondary)
+            Text(title.uppercased())
+                .font(.system(size: 9.5, weight: .bold))
+                .tracking(1.2)
+                .foregroundStyle(.secondary.opacity(0.7))
 
             Spacer()
 
             Image(systemName: symbolName)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.secondary)
+                .font(.system(size: 10.5, weight: .bold))
+                .foregroundStyle(.secondary.opacity(0.7))
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(title)
@@ -358,6 +382,23 @@ struct SpillBarView: View {
             MetricSparklineSeries(values: statusStore.networkTrafficHistory.received, tint: .blue),
             MetricSparklineSeries(values: statusStore.networkTrafficHistory.sent, tint: .orange)
         ]
+    }
+
+    @ViewBuilder
+    private func metricChart(for module: SpillStatusModule, status: SpillStatusMeterSnapshot) -> some View {
+        let currentCoreValues = statusStore.cpuCoreHistory.map { $0.last ?? 0 }
+
+        if module == .cpu,
+           settings.showsCPUCoreChart,
+           !currentCoreValues.isEmpty
+        {
+            CPUCoreBarChartView(coreValues: currentCoreValues, tint: status.state.panelTint)
+        } else {
+            MetricSparklineView(
+                series: sparklineSeries(for: module, tint: status.state.panelTint),
+                normalizesToSeriesMaximum: module == .network
+            )
+        }
     }
 
     private func metricValueTint(for module: SpillStatusModule, state: SpillStatusState) -> Color {
@@ -513,26 +554,77 @@ struct SpillBarView: View {
     }
 
     private var windowActionGrid: some View {
-        LazyVGrid(columns: windowActionGridColumns, alignment: .leading, spacing: 6) {
-            ForEach(windowActionStore.actions) { action in
-                WindowActionButton(action: action, shortcutKey: shortcutKey(for: action)) {
-                    performWindowAction(action)
+        HStack(alignment: .top, spacing: 20) {
+            // Left Column: Directional / Sizing Positions
+            VStack(alignment: .center, spacing: 6) {
+                Text("POSITIONS")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(.secondary.opacity(0.8))
+                    .padding(.leading, 1)
+
+                VStack(spacing: 6) {
+                    let positions: [[WindowActionKind]] = [
+                        [.topLeft, .topHalf, .topRight],
+                        [.leftHalf, .center, .rightHalf],
+                        [.bottomLeft, .bottomHalf, .bottomRight]
+                    ]
+
+                    ForEach(0..<positions.count, id: \.self) { rowIndex in
+                        HStack(spacing: 6) {
+                            ForEach(positions[rowIndex], id: \.self) { kind in
+                                if let action = action(for: kind) {
+                                    WindowActionButton(action: action, shortcutKey: shortcutKey(for: action)) {
+                                        performWindowAction(action)
+                                    }
+                                    .help(windowHelpText(for: action))
+                                    .accessibilityLabel(action.title)
+                                }
+                            }
+                        }
+                    }
                 }
-                .help(windowHelpText(for: action))
-                .accessibilityLabel(action.title)
+            }
+
+            // Right Column: State & Utilities
+            VStack(alignment: .center, spacing: 6) {
+                Text("UTILITIES")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(.secondary.opacity(0.8))
+                    .padding(.leading, 1)
+
+                VStack(spacing: 6) {
+                    let utilities: [[WindowActionKind]] = [
+                        [.maximize, .restore],
+                        [.previousDisplay, .nextDisplay]
+                    ]
+
+                    ForEach(0..<utilities.count, id: \.self) { rowIndex in
+                        HStack(spacing: 6) {
+                            ForEach(utilities[rowIndex], id: \.self) { kind in
+                                if let action = action(for: kind) {
+                                    WindowActionButton(action: action, shortcutKey: shortcutKey(for: action)) {
+                                        performWindowAction(action)
+                                    }
+                                    .help(windowHelpText(for: action))
+                                    .accessibilityLabel(action.title)
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
+        .frame(maxWidth: .infinity, alignment: .center)
         .padding(.horizontal, 1)
     }
 
-    private var windowActionGridColumns: [GridItem] {
-        [
-            GridItem(
-                .adaptive(minimum: 76, maximum: 76),
-                spacing: 6,
-                alignment: .center
-            )
-        ]
+    private func action(for kind: WindowActionKind) -> SpillAction? {
+        windowActionStore.actions.first { action in
+            if case let .window(actionKind) = action.kind {
+                return actionKind == kind
+            }
+            return false
+        }
     }
 
     private var menuBarActionGrid: some View {
@@ -651,6 +743,56 @@ private struct MetricSparklineSeries {
     let tint: Color
 }
 
+private struct CPUCoreBarChartView: View {
+    let coreValues: [Double]
+    let tint: Color
+
+    var body: some View {
+        Canvas { context, size in
+            let values = coreValues.map { $0.clamped(to: 0...1) }
+            let coreCount = values.count
+
+            guard coreCount > 0 else {
+                drawFlatLine(in: &context, size: size)
+                return
+            }
+
+            let topInset: CGFloat = 2
+            let bottomInset: CGFloat = 2
+            let availableHeight = max(size.height - topInset - bottomInset, 1)
+            let slotWidth = size.width / CGFloat(coreCount)
+            let gap = min(max(slotWidth * 0.24, 0.6), 1.8)
+            let barWidth = max(slotWidth - gap, 1)
+            let baselineY = size.height - bottomInset
+
+            for (index, value) in values.enumerated() {
+                let barHeight = max(availableHeight * CGFloat(value), value > 0 ? 1.2 : 0.8)
+                let x = CGFloat(index) * slotWidth + (slotWidth - barWidth) * 0.5
+                let rect = CGRect(
+                    x: x,
+                    y: baselineY - barHeight,
+                    width: barWidth,
+                    height: barHeight
+                )
+                let opacity = 0.28 + 0.68 * value
+                context.fill(
+                    Path(roundedRect: rect, cornerRadius: min(barWidth * 0.45, 1.8)),
+                    with: .color(tint.opacity(opacity))
+                )
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func drawFlatLine(in context: inout GraphicsContext, size: CGSize) {
+        var path = Path()
+        let y = size.height * 0.5
+        path.move(to: CGPoint(x: 0, y: y))
+        path.addLine(to: CGPoint(x: size.width, y: y))
+        context.stroke(path, with: .color(tint.opacity(0.42)), lineWidth: 1.3)
+    }
+}
+
 private struct MetricSparklineView: View {
     let series: [MetricSparklineSeries]
     var normalizesToSeriesMaximum = false
@@ -689,32 +831,71 @@ private struct MetricSparklineView: View {
             }
 
             for (seriesIndex, series) in normalizedSeries.enumerated() where series.values.count >= 2 {
-                var path = Path()
-                let xStep = size.width / CGFloat(series.values.count - 1)
+                let path = smoothedPath(for: series.values, size: size)
 
-                for (index, value) in series.values.enumerated() {
-                    let point = CGPoint(
-                        x: CGFloat(index) * xStep,
-                        y: size.height - CGFloat(value) * size.height
+                // 1. Draw elegant vertical linear gradient area fill under the curve
+                var fillPath = path
+                fillPath.addLine(to: CGPoint(x: size.width, y: size.height))
+                fillPath.addLine(to: CGPoint(x: 0, y: size.height))
+                fillPath.closeSubpath()
+
+                let fillOpacity: Double = normalizedSeries.count > 1 ? 0.12 : 0.22
+                let gradient = Gradient(colors: [series.tint.opacity(fillOpacity), series.tint.opacity(0.0)])
+                context.fill(
+                    fillPath,
+                    with: .linearGradient(
+                        gradient,
+                        startPoint: CGPoint(x: 0, y: 0),
+                        endPoint: CGPoint(x: 0, y: size.height)
                     )
+                )
 
-                    if index == 0 {
-                        path.move(to: point)
-                    } else {
-                        path.addLine(to: point)
-                    }
-                }
-
+                // 2. Draw high-end glowing stroked line
                 var shadowContext = context
-                shadowContext.addFilter(.shadow(color: series.tint.opacity(0.26), radius: 1, x: 0, y: 1))
+                shadowContext.addFilter(.shadow(color: series.tint.opacity(0.3), radius: 1.5, x: 0, y: 1))
                 shadowContext.stroke(
                     path,
-                    with: .color(series.tint.opacity(seriesIndex == 0 ? 0.92 : 0.78)),
-                    lineWidth: seriesIndex == 0 ? 1.8 : 1.55
+                    with: .color(series.tint.opacity(seriesIndex == 0 ? 0.95 : 0.8)),
+                    lineWidth: seriesIndex == 0 ? 2.0 : 1.6
                 )
             }
         }
         .padding(.vertical, 2)
+    }
+
+    private func smoothedPath(for values: [Double], size: CGSize) -> Path {
+        var path = Path()
+        guard values.count >= 2 else { return path }
+
+        let xStep = size.width / CGFloat(values.count - 1)
+        var points: [CGPoint] = []
+
+        for (index, value) in values.enumerated() {
+            points.append(CGPoint(
+                x: CGFloat(index) * xStep,
+                y: size.height - CGFloat(value) * size.height
+            ))
+        }
+
+        path.move(to: points[0])
+
+        for i in 0..<points.count - 1 {
+            let p0 = points[i]
+            let p1 = points[i+1]
+            let midPoint = CGPoint(x: (p0.x + p1.x) / 2, y: (p0.y + p1.y) / 2)
+
+            if i == 0 {
+                path.addLine(to: midPoint)
+            } else {
+                path.addQuadCurve(to: midPoint, control: p0)
+            }
+
+            if i == points.count - 2 {
+                path.addLine(to: p1)
+            }
+        }
+
+        return path
     }
 
     private func drawFlatLine(in context: inout GraphicsContext, size: CGSize) {
