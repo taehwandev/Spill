@@ -231,7 +231,11 @@ final class SpillSettings: ObservableObject {
 
     var statusModulesRequiredForRefresh: Set<SpillStatusModule> {
         let menuBarModules = enabledMenuBarStatusItems.compactMap(\.systemModule)
-        return Set(SpillStatusModule.primaryPanelModules).union(menuBarModules)
+        return Set(visiblePanelStatusModules).union(menuBarModules)
+    }
+
+    var visiblePanelStatusModules: [SpillStatusModule] {
+        statusModuleOrder.filter { enabledStatusModules.contains($0) }
     }
 
     var availableSleepGuardDurations: [SleepGuardDuration] {

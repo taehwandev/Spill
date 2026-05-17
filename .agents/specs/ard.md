@@ -161,6 +161,94 @@ Distribution requirements:
 - GitHub Releases.
 - Optional Homebrew Cask.
 
+### ARD-008: Lightweight Feature Store Architecture
+
+Decision:
+
+Use a lightweight unidirectional feature-store architecture for UI-facing app
+behavior. SwiftUI views render state and send actions. Feature stores own
+state transitions, presentation-ready derivation, and feature-level async
+effects. System-specific behavior remains behind adapters, clients, providers,
+or AppKit bridge controllers.
+
+The target shape is:
+
+```text
+SwiftUI View
+  -> FeatureStore.send(Action)
+  -> FeatureStore updates State
+  -> FeatureStore calls Provider / Service / Adapter
+  -> Adapter talks to public macOS APIs
+```
+
+Rationale:
+
+Spill has several external event sources: the menu bar trigger, global
+shortcuts, Accessibility permission state, AX scanning, status polling, window
+movement, power assertions, and app/window lifecycle notifications. Plain MVVM
+would likely push too much system coordination into view models. A full Redux,
+TCA, or global reducer architecture would add more ceremony than the app needs.
+
+This project should keep the React-style benefits that matter:
+
+- UI is a pure function of observable state where practical.
+- User and system events enter through explicit actions.
+- Async work is launched and cancelled by the owning feature store or
+  coordinator.
+- AppKit and Accessibility details do not leak into SwiftUI views.
+
+This project should avoid:
+
+- a single global `AppState`;
+- a single global `Action` enum;
+- reducer framework dependencies unless the app grows enough to justify them;
+- putting `NSPanel`, `NSStatusItem`, `AXUIElement`, `IOPMAssertionID`, or
+  `NSWorkspace` details directly in SwiftUI views.
+
+Naming rules:
+
+- `FeatureState`: plain value model for rendering and availability state.
+- `FeatureAction`: user or system event accepted by the feature.
+- `FeatureStore`: `@MainActor ObservableObject` that owns published state and
+  handles actions.
+- `Provider`: reads or transforms domain/system information into plain models.
+- `Adapter` or `Client`: wraps public macOS APIs and side effects.
+- `Controller`: reserved for AppKit object lifecycle, delegates, or system
+  APIs that require reference semantics.
+- `Coordinator`: reserved for wiring timers, notifications, shortcuts, or
+  cross-feature event streams.
+
+Implementation rules:
+
+- `AppDelegate` should become the composition root and lifecycle entry point,
+  not the owner of feature orchestration.
+- SwiftUI views should avoid deriving feature state directly from multiple
+  stores, scanners, settings, or providers. That derivation belongs in a
+  feature store or presentation model.
+- Stores may depend on providers and adapters, but providers must not depend on
+  SwiftUI or AppKit view types.
+- Providers and planners should return plain `Sendable` models where possible.
+- AppKit bridge controllers may keep owning `NSPanel`, `NSStatusItem`, and
+  window delegate behavior, but should receive feature stores, state, or
+  closures instead of embedding business rules.
+- Permission-required, unavailable, disabled, success, and failure states must
+  be represented explicitly in feature state or action results.
+
+Migration order:
+
+1. Introduce `PanelState`, `PanelAction`, and `PanelStore`. Move panel display
+   derivation out of `SpillBarView`.
+2. Slim `AppDelegate` into app startup, environment construction, and lifecycle
+   forwarding.
+3. Keep `SpillPanelController` and `StatusItemController` as AppKit bridge
+   controllers, but move feature policy out of them.
+4. Wrap Accessibility, focused-window movement, status item hosting, panel
+   hosting, workspace reads, and power assertions behind adapters or clients.
+5. Consolidate status and action provider registration so new providers can be
+   added without special-casing panel composition.
+6. Add focused store tests for state transitions and keep pure planner/provider
+   tests for system-independent logic.
+
 ## Module Boundaries
 
 ### Source Layout

@@ -11,6 +11,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let statusStore = SystemStatusStore()
     private let aiStatusStore = AIStatusStore()
     private let windowActionStore = WindowActionStore()
+    private lazy var panelStore = PanelStore(
+        settings: settings,
+        scanner: scanner,
+        windowActionPerformer: { [unowned self] action in
+            self.windowActionStore.perform(action)
+        }
+    )
     private lazy var scanCoordinator = MenuBarScanCoordinator(scanner: scanner, settings: settings)
     private lazy var hotKeyController = HotKeyController(
         registrations: makeHotKeyRegistrations()
@@ -18,6 +25,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var spillPanelController = SpillPanelController(
         settings: settings,
         scanner: scanner,
+        panelStore: panelStore,
         statusStore: statusStore,
         aiStatusStore: aiStatusStore,
         windowActionStore: windowActionStore,
@@ -88,6 +96,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ProcessInfo.processInfo.environment["SPILL_SMOKE_OPEN_PANEL"] == "1"
     }
 
+    private var shouldClickStatusItemInSmokeTest: Bool {
+        ProcessInfo.processInfo.environment["SPILL_SMOKE_CLICK_STATUS_ITEM"] == "1"
+    }
+
     private var shouldValidatePanelLayoutInSmokeTest: Bool {
         ProcessInfo.processInfo.environment["SPILL_SMOKE_VALIDATE_PANEL_LAYOUT"] == "1"
     }
@@ -97,6 +109,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         if shouldOpenPanelInSmokeTest {
             openPanelForSmokeTest()
+        }
+
+        if shouldClickStatusItemInSmokeTest {
+            clickStatusItemForSmokeTest()
         }
 
         let configuredDelay = ProcessInfo.processInfo.environment["SPILL_SMOKE_TEST_EXIT_AFTER"]
@@ -128,36 +144,65 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    private func clickStatusItemForSmokeTest() {
+        statusItemController?.performPrimaryClickForSmokeTest()
+
+        if spillPanelController.isVisible {
+            print("SPILL_STATUS_CLICK_SMOKE_VISIBLE")
+        } else {
+            print("SPILL_STATUS_CLICK_SMOKE_NOT_VISIBLE")
+        }
+    }
+
     private func reportPanelLayoutForSmokeTest() {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-            guard let self else { return }
+            self?.reportPanelLayoutForSmokeTest(attempt: 1)
+        }
+    }
 
-            let report = spillPanelController.layoutReport
-            print("SPILL_PANEL_LAYOUT \(report.logLine)")
+    private func reportPanelLayoutForSmokeTest(attempt: Int) {
+        guard attempt <= 5 else {
+            printPanelLayoutSmokeReport()
+            return
+        }
 
-            if report.isValid {
-                print("SPILL_PANEL_LAYOUT_OK")
-            } else {
-                print("SPILL_PANEL_LAYOUT_FAIL")
-            }
+        let accessibilityReport = spillPanelController.accessibilityReport
+        if accessibilityReport.isValid {
+            printPanelLayoutSmokeReport(accessibilityReport: accessibilityReport)
+            return
+        }
 
-            let contentReport = spillPanelController.contentReport
-            print("SPILL_PANEL_CONTENT \(contentReport.logLine)")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+            self?.reportPanelLayoutForSmokeTest(attempt: attempt + 1)
+        }
+    }
 
-            if contentReport.isValid {
-                print("SPILL_PANEL_CONTENT_OK")
-            } else {
-                print("SPILL_PANEL_CONTENT_FAIL")
-            }
+    private func printPanelLayoutSmokeReport(accessibilityReport: SpillPanelAccessibilityReport? = nil) {
+        let report = spillPanelController.layoutReport
+        print("SPILL_PANEL_LAYOUT \(report.logLine)")
 
-            let accessibilityReport = spillPanelController.accessibilityReport
-            print("SPILL_PANEL_ACCESSIBILITY \(accessibilityReport.logLine)")
+        if report.isValid {
+            print("SPILL_PANEL_LAYOUT_OK")
+        } else {
+            print("SPILL_PANEL_LAYOUT_FAIL")
+        }
 
-            if accessibilityReport.isValid {
-                print("SPILL_PANEL_ACCESSIBILITY_OK")
-            } else {
-                print("SPILL_PANEL_ACCESSIBILITY_FAIL")
-            }
+        let contentReport = spillPanelController.contentReport
+        print("SPILL_PANEL_CONTENT \(contentReport.logLine)")
+
+        if contentReport.isValid {
+            print("SPILL_PANEL_CONTENT_OK")
+        } else {
+            print("SPILL_PANEL_CONTENT_FAIL")
+        }
+
+        let resolvedReport = accessibilityReport ?? spillPanelController.accessibilityReport
+        print("SPILL_PANEL_ACCESSIBILITY \(resolvedReport.logLine)")
+
+        if resolvedReport.isValid {
+            print("SPILL_PANEL_ACCESSIBILITY_OK")
+        } else {
+            print("SPILL_PANEL_ACCESSIBILITY_FAIL")
         }
     }
 

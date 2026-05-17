@@ -1,0 +1,59 @@
+feature_id: panel-feature-store
+status: ready
+
+necessity:
+  decision: build
+  reason: Aligns implementation with ARD-008 while preserving current behavior.
+  ambiguity:
+    clarity: clear
+    blockers_resolved: true
+    resolution_sources:
+      - maintainer
+      - repo-research
+      - assumption
+  clarification_required: false
+  questions: []
+
+tasks:
+  - id: panel-feature-store-T1
+    title: Add panel feature store state derivation
+    owner_role: builder
+    state: todo
+    depends_on: []
+    write_scope:
+      - Sources/Spill/Panel/PanelStore.swift
+      - Sources/Spill/Panel/SpillBarView.swift
+      - Sources/Spill/Panel/SpillPanelController.swift
+      - Tests/SpillTests/PanelStoreTests.swift
+    read_scope:
+      - .agents/specs/prd.md
+      - .agents/specs/ard.md
+      - Sources/Spill/Panel/SpillPanelState.swift
+      - Sources/Spill/MenuBar/MenuBarItemSnapshot.swift
+      - Sources/Spill/Providers/MenuBarActionAdapter.swift
+    forbidden_scope:
+      - .github/workflows
+      - docs
+      - scripts/package-release.sh
+    acceptance:
+      - Panel rendering state is derived by PanelStore.
+      - SpillBarView no longer computes displayItems, pinnedItems, displayActionItems, actionItems, visibleStatusModules, or panelState directly.
+      - User-facing panel behavior is unchanged.
+      - Focused PanelStore tests cover state derivation.
+    verification:
+      commands:
+        - swift test
+        - swift build
+        - ./scripts/build-app.sh
+        - ./scripts/verify-runtime-smoke.sh
+        - ./scripts/verify-panel-open-smoke.sh
+        - ./scripts/verify-panel-layout-smoke.sh
+        - python3 .agents/scripts/workflow.py verify
+      manual:
+        - Confirm panel still opens, closes, and keeps compact layout.
+
+parallel_groups:
+  - id: group-1
+    tasks:
+      - panel-feature-store-T1
+    rule: Single implementation slice; do not split writes across agents.

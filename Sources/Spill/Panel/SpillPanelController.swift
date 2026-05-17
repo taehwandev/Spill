@@ -9,6 +9,7 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
     private let layout = SpillPanelLayout()
     private let settings: SpillSettings
     private let scanner: AXMenuBarItemScanner
+    private let panelStore: PanelStore
     private let sleepGuard: SleepGuardController
     private let statusStore: SystemStatusStore
     private let aiStatusStore: AIStatusStore
@@ -22,12 +23,13 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
     private var cancellables = Set<AnyCancellable>()
 
     override init() {
-        fatalError("Use init(settings:).")
+        fatalError("Use init(settings:scanner:panelStore:sleepGuard:).")
     }
 
     init(
         settings: SpillSettings,
         scanner: AXMenuBarItemScanner,
+        panelStore: PanelStore,
         statusStore: SystemStatusStore = SystemStatusStore(),
         aiStatusStore: AIStatusStore = AIStatusStore(),
         windowActionStore: WindowActionStore = WindowActionStore(),
@@ -37,6 +39,7 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
     ) {
         self.settings = settings
         self.scanner = scanner
+        self.panelStore = panelStore
         self.statusStore = statusStore
         self.aiStatusStore = aiStatusStore
         self.windowActionStore = windowActionStore
@@ -59,6 +62,7 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
         guard let panel else {
             return SpillPanelLayoutReport(
                 isVisible: false,
+                level: .popUpMenu,
                 frame: .zero,
                 contentBounds: .zero,
                 visibleFrame: layout.visibleFrame(for: nil)
@@ -69,6 +73,7 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
 
         return SpillPanelLayoutReport(
             isVisible: isPresented && panel.isVisible,
+            level: panel.level,
             frame: panel.frame,
             contentBounds: panel.contentView?.bounds ?? .zero,
             visibleFrame: layout.visibleFrame(for: panel)
@@ -76,8 +81,8 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
     }
 
     var contentReport: SpillPanelContentReport {
-        let displayItems = SpillDisplayMode.notchCandidateItems(from: scanner, settings: settings)
-        let statusModules = SpillStatusModule.primaryPanelModules
+        let state = currentPanelState()
+        let statusModules = state.visibleStatusModules
         let statusDetailRowCount = statusModules.reduce(0) { count, module in
             count + statusStore.detailRows(for: module).count
         }
@@ -88,17 +93,13 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
 
         return SpillPanelContentReport(
             isVisible: isPresented && panel?.isVisible == true,
-            panelState: SpillPanelState.current(
-                isAccessibilityTrusted: AccessibilityPermission.isTrusted,
-                isScanning: scanner.isScanning,
-                isEmpty: displayItems.isEmpty
-            ),
+            panelState: state.readiness,
             statusModuleIDs: statusModules.map(\.rawValue),
             statusDetailRowCount: statusDetailRowCount,
             aiStatusCount: aiStatusStore.statuses.count,
             aiDetailRowCount: aiDetailRowCount,
             windowActionCount: windowActionStore.actions.count,
-            menuBarActionCount: displayItems.count,
+            menuBarActionCount: state.displayItems.count,
             footerItemCount: footerItemCount,
             showsPowerFooter: true,
             showsCountBadge: true
@@ -124,6 +125,7 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
             self.anchorFrame = anchorFrame
         }
 
+        panelStore.send(.refreshDerivedState)
         let panel = ensurePanel()
         let finalFrame = panelFrame()
         let startFrame = finalFrame.offsetBy(dx: 0, dy: 8)
@@ -152,11 +154,13 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
 
     func hide(animated: Bool) {
         guard let panel else {
+            panelStore.send(.dismissRequestHandled)
             return
         }
 
         isPresented = false
         visibilityChanged(false)
+        panelStore.send(.dismissRequestHandled)
         panelRefreshTask?.cancel()
         dismissController.stop()
 
@@ -187,7 +191,8 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
 
         panel.delegate = self
         panel.isReleasedWhenClosed = false
-        panel.level = .statusBar
+        // Keep the tray above menu bar/status extras while it is open.
+        panel.level = .popUpMenu
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle, .stationary]
         panel.backgroundColor = .clear
         panel.isOpaque = false
@@ -210,8 +215,8 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
 
         let hostingView = NSHostingView(
             rootView: SpillBarView(
+                panelStore: panelStore,
                 settings: settings,
-                scanner: scanner,
                 statusStore: statusStore,
                 aiStatusStore: aiStatusStore,
                 windowActionStore: windowActionStore,
@@ -252,22 +257,21 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
     }
 
     private func preferredPanelSize(in visibleFrame: NSRect) -> NSSize {
-        let displayItems = SpillDisplayMode.notchCandidateItems(from: scanner, settings: settings)
-        let pinnedItems = scanner.notchCandidates.filter {
-            settings.selectedItemKeys.contains($0.stableKey)
-                && !settings.isItemHidden($0)
-        }
-        let menuBarActionCount = pinnedItems.count
-            + displayItems.filter { !settings.selectedItemKeys.contains($0.stableKey) }.count
+        let state = currentPanelState()
+        let menuBarActionCount = state.actionItems.count
 
         return SpillPanelContentSizer.preferredSize(
-            statusModuleCount: SpillStatusModule.primaryPanelModules.count,
+            statusModuleCount: state.visibleStatusModules.count,
             aiStatusCount: aiStatusStore.statuses.count,
             windowActionCount: windowActionStore.actions.count,
             menuBarActionCount: menuBarActionCount,
             iconSpacing: CGFloat(settings.iconSpacing),
             visibleFrame: visibleFrame
         )
+    }
+
+    private func currentPanelState() -> PanelState {
+        return panelStore.state
     }
 
     private func screenForAnchor() -> NSScreen? {
@@ -289,6 +293,13 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
 
     private func observeLayoutChanges() {
         scanner.$items
+            .dropFirst()
+            .sink { [weak self] _ in
+                self?.resizePanelIfVisible()
+            }
+            .store(in: &cancellables)
+
+        panelStore.$state
             .dropFirst()
             .sink { [weak self] _ in
                 self?.resizePanelIfVisible()
@@ -387,6 +398,7 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
 
 struct SpillPanelLayoutReport {
     let isVisible: Bool
+    let level: NSWindow.Level
     let frame: NSRect
     let contentBounds: NSRect
     let visibleFrame: NSRect
@@ -402,6 +414,7 @@ struct SpillPanelLayoutReport {
     var logLine: String {
         [
             "visible=\(isVisible)",
+            "level=\(level.rawValue)",
             "frame=\(format(rect: frame))",
             "content=\(format(rect: contentBounds))",
             "visibleFrame=\(format(rect: visibleFrame))",

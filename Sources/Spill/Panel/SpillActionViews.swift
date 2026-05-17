@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-struct SpillDisplayedActionItem: Identifiable {
+struct SpillDisplayedActionItem: Equatable, Identifiable {
     let sourceItem: MenuBarItemSnapshot
     let action: SpillAction
     let isPinned: Bool

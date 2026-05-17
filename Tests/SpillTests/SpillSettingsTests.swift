@@ -135,6 +135,7 @@ final class SpillSettingsTests: XCTestCase {
         let defaults = makeDefaults()
         let settings = SpillSettings(defaults: defaults)
 
+        settings.setStatusModule(.memory, enabled: false)
         settings.setStatusModule(.network, enabled: false)
         settings.setMenuBarStatusItem(.memory, enabled: false)
         settings.setMenuBarStatusItem(.caffeine, enabled: true)
@@ -147,6 +148,18 @@ final class SpillSettingsTests: XCTestCase {
         XCTAssertFalse(settings.isMenuBarStatusItemEnabled(.network))
         XCTAssertFalse(settings.isMenuBarStatusItemEnabled(.ai))
         XCTAssertEqual(defaults.stringArray(forKey: "enabledMenuBarStatusItems"), ["cpu", "caffeine"])
+        XCTAssertEqual(settings.visiblePanelStatusModules, [.cpu, .storage])
+        XCTAssertEqual(settings.statusModulesRequiredForRefresh, [.cpu, .storage])
+    }
+
+    func testMenuBarStatusKeepsDisabledPanelModuleRefreshingWhenShownInMenuBar() {
+        let defaults = makeDefaults()
+        let settings = SpillSettings(defaults: defaults)
+
+        settings.setStatusModule(.memory, enabled: false)
+
+        XCTAssertTrue(settings.isMenuBarStatusItemEnabled(.memory))
+        XCTAssertEqual(settings.visiblePanelStatusModules, [.cpu, .storage])
         XCTAssertEqual(settings.statusModulesRequiredForRefresh, [.cpu, .memory, .storage])
     }
 

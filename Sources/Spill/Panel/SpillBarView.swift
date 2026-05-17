@@ -1,61 +1,25 @@
 import SwiftUI
 
 struct SpillBarView: View {
+    @ObservedObject var panelStore: PanelStore
     @ObservedObject var settings: SpillSettings
-    @ObservedObject var scanner: AXMenuBarItemScanner
     @ObservedObject var statusStore: SystemStatusStore
     @ObservedObject var aiStatusStore: AIStatusStore
     @ObservedObject var windowActionStore: WindowActionStore
     @ObservedObject var sleepGuard: SleepGuardController
     let dismissAction: () -> Void
     let settingsAction: () -> Void
-    @State private var actionFeedback: SpillActionFeedback?
-    @State private var statusDetailTarget: SpillStatusDetailTarget?
+    @State private var pendingDismissWorkItem: DispatchWorkItem?
 
-    private var displayItems: [MenuBarItemSnapshot] {
-        SpillDisplayMode.notchCandidateItems(from: scanner, settings: settings)
-    }
-
-    private var pinnedItems: [MenuBarItemSnapshot] {
-        scanner.notchCandidates.filter {
-            settings.selectedItemKeys.contains($0.stableKey)
-                && !settings.isItemHidden($0)
-        }
-    }
-
-    private var displayActionItems: [MenuBarItemSnapshot] {
-        displayItems.filter { !settings.selectedItemKeys.contains($0.stableKey) }
-    }
-
-    private var pinnedActionItems: [SpillDisplayedActionItem] {
-        pinnedItems.map(displayedActionItem)
-    }
-
-    private var displayedActionItems: [SpillDisplayedActionItem] {
-        displayActionItems.map(displayedActionItem)
-    }
-
-    private var actionItems: [SpillDisplayedActionItem] {
-        pinnedActionItems + displayedActionItems
-    }
-
-    private var visibleStatusModules: [SpillStatusModule] {
-        SpillStatusModule.primaryPanelModules
-    }
-
-    private var panelState: SpillPanelState {
-        SpillPanelState.current(
-            isAccessibilityTrusted: AccessibilityPermission.isTrusted,
-            isScanning: scanner.isScanning,
-            isEmpty: displayItems.isEmpty
-        )
+    private var panelState: PanelState {
+        panelStore.state
     }
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
             VStack(spacing: 10) {
                 header
-                if !visibleStatusModules.isEmpty {
+                if !panelState.visibleStatusModules.isEmpty {
                     statusSection
                 }
                 aiSection
@@ -67,6 +31,34 @@ struct SpillBarView: View {
             .frame(maxWidth: .infinity, alignment: .top)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .onChange(of: panelState.pendingDismiss) { _, pendingDismiss in
+            updatePendingDismiss(pendingDismiss)
+        }
+        .onDisappear {
+            pendingDismissWorkItem?.cancel()
+            pendingDismissWorkItem = nil
+            panelStore.send(.dismissRequestHandled)
+        }
+    }
+
+    private func updatePendingDismiss(_ pendingDismiss: Bool) {
+        pendingDismissWorkItem?.cancel()
+        pendingDismissWorkItem = nil
+
+        guard pendingDismiss else {
+            return
+        }
+
+        let workItem = DispatchWorkItem {
+            guard panelStore.state.pendingDismiss else {
+                return
+            }
+
+            panelStore.send(.dismissRequestHandled)
+            dismissAction()
+        }
+        pendingDismissWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: workItem)
     }
 
     private var header: some View {
@@ -76,7 +68,7 @@ struct SpillBarView: View {
                     .fill(Color.blue)
                     .shadow(color: Color.blue.opacity(0.3), radius: 3, y: 1)
 
-                Image(systemName: panelState.symbolName)
+                Image(systemName: panelState.readiness.symbolName)
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(.white)
             }
@@ -89,7 +81,7 @@ struct SpillBarView: View {
 
                 Text(headerSubtitle)
                     .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(actionFeedback?.tint ?? .secondary)
+                    .foregroundStyle(panelState.actionFeedback?.tint ?? .secondary)
                     .lineLimit(1)
             }
 
@@ -119,22 +111,25 @@ struct SpillBarView: View {
 
     private var statusDot: some View {
         Circle()
-            .fill(panelState.tint)
+            .fill(panelState.readiness.tint)
             .frame(width: 8, height: 8)
-            .shadow(color: panelState.tint.opacity(0.4), radius: 2, y: 1)
+            .shadow(color: panelState.readiness.tint.opacity(0.4), radius: 2, y: 1)
             .overlay {
                 Circle()
-                    .stroke(panelState.tint.opacity(0.22), lineWidth: 5)
+                    .stroke(panelState.readiness.tint.opacity(0.22), lineWidth: 5)
             }
-            .accessibilityLabel(panelState.accessibilityLabel)
+            .accessibilityLabel(panelState.readiness.accessibilityLabel)
     }
 
     private var headerSubtitle: String {
-        if let actionFeedback {
+        if let actionFeedback = panelState.actionFeedback {
             return actionFeedback.message
         }
 
-        return panelState.subtitle(count: displayItems.count, pinnedCount: pinnedItems.count)
+        return panelState.readiness.subtitle(
+            count: panelState.itemCount,
+            pinnedCount: panelState.pinnedItemCount
+        )
     }
 
     private var statusSection: some View {
@@ -142,7 +137,7 @@ struct SpillBarView: View {
             sectionHeader("STATUS", symbolName: "waveform.path.ecg")
 
             VStack(spacing: 7) {
-                ForEach(visibleStatusModules) { module in
+                ForEach(panelState.visibleStatusModules) { module in
                     statusMetricRow(for: module)
                 }
             }
@@ -154,7 +149,7 @@ struct SpillBarView: View {
         let helpText = statusHelpText(title: module.title, value: status.value, subtitle: status.subtitle)
 
         return Button {
-            statusDetailTarget = .system(module)
+            panelStore.send(.setStatusDetailTarget(.system(module)))
         } label: {
             HStack(spacing: 10) {
                 statusIconBadge(symbolName: module.symbolName, tint: status.state.panelTint)
@@ -249,7 +244,7 @@ struct SpillBarView: View {
         detailRows: [SpillStatusDetailRow] = []
     ) -> some View {
         Button {
-            statusDetailTarget = target
+            panelStore.send(.setStatusDetailTarget(target))
         } label: {
             compactStatusPill(
                 title: title,
@@ -379,10 +374,12 @@ struct SpillBarView: View {
 
     private func detailBinding(for target: SpillStatusDetailTarget) -> Binding<Bool> {
         Binding {
-            statusDetailTarget == target
+            panelState.statusDetailTarget == target
         } set: { isPresented in
-            if !isPresented, statusDetailTarget == target {
-                statusDetailTarget = nil
+            if isPresented {
+                panelStore.send(.setStatusDetailTarget(target))
+            } else if panelState.statusDetailTarget == target {
+                panelStore.send(.setStatusDetailTarget(nil))
             }
         }
     }
@@ -434,8 +431,7 @@ struct SpillBarView: View {
     }
 
     private func performWindowAction(_ action: SpillAction) {
-        let result = windowActionStore.perform(action)
-        actionFeedback = SpillActionFeedback(result: result, title: action.title)
+        panelStore.send(.performWindowAction(action))
     }
 
     private func windowHelpText(for action: SpillAction) -> String {
@@ -481,13 +477,13 @@ struct SpillBarView: View {
             sectionHeader("MENU BAR", symbolName: "menubar.rectangle")
 
             Group {
-                if !AccessibilityPermission.isTrusted {
+                if panelState.readiness == .permissionRequired {
                     inlineState(symbolName: "lock.fill", title: "Accessibility Required")
                         .frame(height: 48)
-                } else if scanner.isScanning && displayItems.isEmpty {
+                } else if panelState.readiness == .scanning && panelState.displayItems.isEmpty {
                     scanningState
                         .frame(height: 48)
-                } else if actionItems.isEmpty {
+                } else if panelState.actionItems.isEmpty {
                     inlineState(symbolName: "magnifyingglass", title: emptyStateTitle)
                         .frame(height: 48)
                 } else {
@@ -522,11 +518,11 @@ struct SpillBarView: View {
 
     private var menuBarActionGrid: some View {
         LazyVGrid(columns: menuBarActionGridColumns, alignment: .leading, spacing: 6) {
-            ForEach(actionItems) { item in
+            ForEach(panelState.actionItems) { item in
                 SpillActionButton(
                     action: item.action,
                     isPinned: item.isPinned,
-                    togglePinned: { togglePinned(item.sourceItem) },
+                    togglePinned: { panelStore.send(.togglePinned(item.sourceItem)) },
                     perform: { perform(item) }
                 )
                 .help(helpText(for: item))
@@ -546,14 +542,6 @@ struct SpillBarView: View {
         ]
     }
 
-    private func displayedActionItem(from item: MenuBarItemSnapshot) -> SpillDisplayedActionItem {
-        SpillDisplayedActionItem(
-            sourceItem: item,
-            action: MenuBarActionAdapter.action(from: item),
-            isPinned: settings.selectedItemKeys.contains(item.stableKey)
-        )
-    }
-
     private func shortcutKey(for action: SpillAction) -> WindowActionShortcutKey {
         guard case let .window(kind) = action.kind else {
             return .off
@@ -562,25 +550,8 @@ struct SpillBarView: View {
         return settings.shortcutKey(for: kind)
     }
 
-    private func togglePinned(_ item: MenuBarItemSnapshot) {
-        let isPinned = settings.selectedItemKeys.contains(item.stableKey)
-        settings.setItem(item, selected: !isPinned)
-        actionFeedback = SpillActionFeedback(
-            result: .success,
-            title: item.displayTitle,
-            overrideMessage: isPinned ? "Unpinned \(item.displayTitle)" : "Pinned \(item.displayTitle)"
-        )
-    }
-
     private func perform(_ item: SpillDisplayedActionItem) {
-        let result = MenuBarActionExecutor(scanner: scanner).perform(item.action)
-        actionFeedback = SpillActionFeedback(result: result, title: item.action.title)
-
-        if result == .success {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                dismissAction()
-            }
-        }
+        panelStore.send(.performMenuBarAction(item))
     }
 
     private var scanningState: some View {
@@ -613,8 +584,8 @@ struct SpillBarView: View {
 
     private var footer: some View {
         SpillFooterView(
-            isAccessibilityTrusted: AccessibilityPermission.isTrusted,
-            isScanning: scanner.isScanning,
+            isAccessibilityTrusted: panelState.readiness != .permissionRequired,
+            isScanning: panelState.readiness == .scanning,
             sleepGuard: sleepGuard,
             sleepGuardDefaultDuration: settings.sleepGuardDefaultDuration,
             allowsIndefiniteDuration: settings.sleepGuardAllowsIndefinite,
@@ -622,7 +593,7 @@ struct SpillBarView: View {
             showsPower: true,
             powerStatus: statusStore.power,
             showsCountBadge: true,
-            itemCount: displayItems.count
+            itemCount: panelState.itemCount
         )
     }
 
