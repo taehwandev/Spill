@@ -47,29 +47,42 @@ enum UpdateCheckError: LocalizedError, Equatable, Sendable {
 
 struct UpdateChecker: Sendable {
     static let defaultManifestURL = URL(
-        string: "https://github.com/taehwankwon/Spill/releases/latest/download/update.json"
+        string: "https://github.com/taehwandev/Spill/releases/latest/download/update.json"
+    )!
+    static let defaultLatestReleaseURL = URL(
+        string: "https://api.github.com/repos/taehwandev/Spill/releases/latest"
     )!
 
     let manifestURL: URL
+    let latestReleaseURL: URL
     let currentVersion: String
     let currentMacOS: DottedVersion
     let dataLoader: @Sendable (URL) async throws -> Data
 
     init(
         manifestURL: URL = Self.defaultManifestURL,
+        latestReleaseURL: URL = Self.defaultLatestReleaseURL,
         currentVersion: String = Bundle.main.spillShortVersion,
         currentMacOS: DottedVersion = DottedVersion(ProcessInfo.processInfo.operatingSystemVersion),
         dataLoader: @escaping @Sendable (URL) async throws -> Data = Self.liveData(from:)
     ) {
         self.manifestURL = manifestURL
+        self.latestReleaseURL = latestReleaseURL
         self.currentVersion = currentVersion
         self.currentMacOS = currentMacOS
         self.dataLoader = dataLoader
     }
 
     func check() async throws -> UpdateCheckOutcome {
-        let data = try await dataLoader(manifestURL)
-        let manifest = try decodeManifest(from: data)
+        let manifest: UpdateManifest
+        do {
+            let data = try await dataLoader(manifestURL)
+            manifest = try decodeManifest(from: data)
+        } catch UpdateCheckError.invalidHTTPStatus(404) {
+            let data = try await dataLoader(latestReleaseURL)
+            manifest = try decodeLatestRelease(from: data)
+        }
+
         return try outcome(for: manifest)
     }
 
@@ -114,6 +127,40 @@ struct UpdateChecker: Sendable {
         }
     }
 
+    private func decodeLatestRelease(from data: Data) throws -> UpdateManifest {
+        do {
+            let release = try JSONDecoder().decode(GitHubLatestRelease.self, from: data)
+            let latestVersion = release.tagName.hasPrefix("v")
+                ? String(release.tagName.dropFirst())
+                : release.tagName
+            let preferredAssetNames = [
+                "Spill-macos.dmg",
+                "Spill-\(latestVersion)-macos.dmg",
+                "Spill-macos.zip",
+                "Spill-\(latestVersion)-macos.zip"
+            ]
+
+            guard let asset = preferredAssetNames.compactMap({ name in
+                release.assets.first { $0.name == name }
+            }).first else {
+                throw UpdateCheckError.decodingFailed("Latest GitHub release does not include a Spill macOS download asset.")
+            }
+
+            return UpdateManifest(
+                latestVersion: latestVersion,
+                build: nil,
+                minimumMacOS: "14.0",
+                downloadURL: asset.browserDownloadURL,
+                releaseNotesURL: release.htmlURL,
+                publishedAt: release.publishedAt
+            )
+        } catch let error as UpdateCheckError {
+            throw error
+        } catch {
+            throw UpdateCheckError.decodingFailed(error.localizedDescription)
+        }
+    }
+
     private static func liveData(from url: URL) async throws -> Data {
         let (data, response) = try await URLSession.shared.data(from: url)
 
@@ -123,6 +170,30 @@ struct UpdateChecker: Sendable {
         }
 
         return data
+    }
+}
+
+private struct GitHubLatestRelease: Decodable {
+    let tagName: String
+    let htmlURL: URL
+    let publishedAt: String?
+    let assets: [GitHubReleaseAsset]
+
+    private enum CodingKeys: String, CodingKey {
+        case tagName = "tag_name"
+        case htmlURL = "html_url"
+        case publishedAt = "published_at"
+        case assets
+    }
+}
+
+private struct GitHubReleaseAsset: Decodable {
+    let name: String
+    let browserDownloadURL: URL
+
+    private enum CodingKeys: String, CodingKey {
+        case name
+        case browserDownloadURL = "browser_download_url"
     }
 }
 

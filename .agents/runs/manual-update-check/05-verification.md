@@ -22,6 +22,10 @@
 - [x] Manifest version comparison detects available updates.
 - [x] Manifest version comparison detects up-to-date installs.
 - [x] Unsupported macOS update state disables the Update action.
+- [x] Missing `update.json` falls back to the latest GitHub release metadata.
+- [x] Update store starts idle instead of forcing a fake available update.
+- [x] Available updates expose a copied Terminal install command.
+- [x] Compact panel reserves height only when the update banner is visible.
 - [x] Release artifacts include `update.json`.
 
 ## Regression Checks

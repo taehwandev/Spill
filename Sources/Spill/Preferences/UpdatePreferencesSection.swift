@@ -2,6 +2,7 @@ import SwiftUI
 
 struct UpdatePreferencesSection: View {
     @ObservedObject var store: UpdateCheckStore
+    @State private var didCopyInstallCommand = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -18,9 +19,13 @@ struct UpdatePreferencesSection: View {
 
             updateStatus
 
+            if store.canOpenUpdate {
+                installCommandView
+            }
+
             HStack(spacing: 8) {
                 Button {
-                    store.checkForUpdates()
+                    store.checkForUpdates(source: "preferences")
                 } label: {
                     Label(checkButtonTitle, systemImage: "arrow.clockwise")
                 }
@@ -28,22 +33,53 @@ struct UpdatePreferencesSection: View {
 
                 if store.canOpenUpdate {
                     Button {
-                        store.openUpdate()
+                        copyInstallCommand()
                     } label: {
-                        Label("Update", systemImage: "arrow.down.circle.fill")
+                        Label(
+                            didCopyInstallCommand ? "Copied" : "Copy Install Command",
+                            systemImage: didCopyInstallCommand ? "checkmark.circle.fill" : "terminal.fill"
+                        )
                     }
                     .buttonStyle(.borderedProminent)
+
+                    Button {
+                        store.openUpdate(source: "preferences")
+                    } label: {
+                        Label("Download DMG", systemImage: "arrow.down.circle")
+                    }
                 }
 
                 if store.availableUpdate?.releaseNotesURL != nil {
                     Button {
-                        store.openReleaseNotes()
+                        store.openReleaseNotes(source: "preferences")
                     } label: {
                         Label("Notes", systemImage: "doc.text")
                     }
                 }
             }
             .controlSize(.small)
+        }
+    }
+
+    private var installCommandView: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: "terminal.fill")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.blue)
+
+                Text("Terminal install command")
+                    .font(.footnote.weight(.semibold))
+            }
+
+            Text(store.installCommand)
+                .font(.caption.monospaced())
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+                .lineLimit(2)
+                .padding(8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
     }
 
@@ -63,7 +99,7 @@ struct UpdatePreferencesSection: View {
                 .font(.footnote)
                 .foregroundStyle(.green)
         case .available(let update):
-            Label("Version \(update.latestVersion) is available.", systemImage: "arrow.down.circle.fill")
+            Label("Version \(update.latestVersion) is available. Copy the terminal command to install it.", systemImage: "arrow.down.circle.fill")
                 .font(.footnote)
                 .foregroundStyle(.blue)
         case .unsupported(let update, let currentMacOS):
@@ -79,5 +115,13 @@ struct UpdatePreferencesSection: View {
 
     private var checkButtonTitle: String {
         store.isChecking ? "Checking" : "Check for Updates"
+    }
+
+    private func copyInstallCommand() {
+        store.copyInstallCommand(source: "preferences")
+        didCopyInstallCommand = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
+            didCopyInstallCommand = false
+        }
     }
 }

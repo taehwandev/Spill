@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import UserNotifications
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -30,6 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusStore: statusStore,
         aiStatusStore: aiStatusStore,
         windowActionStore: windowActionStore,
+        updateStore: updateCheckStore,
         sleepGuard: sleepGuard,
         visibilityChanged: { [weak self] isVisible in
             self?.isSpillPanelVisible = isVisible
@@ -37,7 +39,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.configureStatusRefreshLoop()
         },
         settingsAction: { [weak self] in
-            self?.showPreferences()
+            self?.showPreferencesFromPanel()
         }
     )
     private lazy var preferencesWindowController = PreferencesWindowController(
@@ -45,7 +47,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         scanner: scanner,
         updateStore: updateCheckStore,
         showPanelAction: { [weak self] in
-            self?.showSpillBar()
+            self?.showSpillBar(source: "preferences")
         }
     )
     private var statusItemController: StatusItemController?
@@ -55,6 +57,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         configureMainMenu()
+        SpillTelemetry.shared.track("app_started", props: ["source": "mac_app"])
 
         statusItemController = StatusItemController(
             settings: settings,
@@ -68,13 +71,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.toggleSpillBar()
             },
             refreshAction: { [weak self] in
-                self?.refreshMenuBarItems()
+                self?.refreshMenuBarItems(source: "status_menu")
             },
             preferencesAction: { [weak self] in
-                self?.showPreferences()
+                self?.showPreferences(source: "status_menu")
             },
             updateAction: { [weak self] in
-                self?.checkForUpdates()
+                self?.checkForUpdates(source: "status_menu")
             },
             quitAction: {
                 NSApp.terminate(nil)
@@ -213,7 +216,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         if !flag {
-            showSpillBar()
+            showSpillBar(source: "app_reopen")
         }
 
         return true
@@ -230,18 +233,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func toggleSpillBar() {
         if spillPanelController.isVisible {
             spillPanelController.hide(animated: true)
+            SpillTelemetry.shared.track("panel_closed", props: ["source": "menu_bar_toggle"])
             statusItemController?.refresh(isSpillBarVisible: false)
             return
         }
 
-        showSpillBar()
+        showSpillBar(source: "menu_bar_toggle")
     }
 
-    private func showSpillBar() {
+    private func showSpillBar(source: String = "unknown") {
         spillPanelController.show(anchorFrame: statusItemController?.buttonScreenFrame)
         statusItemController?.refresh(isSpillBarVisible: spillPanelController.isVisible)
 
+        if spillPanelController.isVisible {
+            SpillTelemetry.shared.track("panel_opened", props: ["source": source])
+        }
+
         if !AccessibilityPermission.isTrusted {
+            SpillTelemetry.shared.track("accessibility_prompt_shown", props: ["source": "panel_open"])
             DispatchQueue.main.async {
                 _ = AccessibilityPermission.request()
             }
@@ -251,7 +260,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         scheduleDeferredScanIfNeeded()
     }
 
-    private func refreshMenuBarItems() {
+    private func refreshMenuBarItems(source: String = "status_menu") {
+        SpillTelemetry.shared.track("menu_bar_scan_requested", props: ["source": source])
         scanCoordinator.refreshNow()
         statusItemController?.refresh()
         Task { @MainActor [weak self] in
@@ -259,13 +269,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func showPreferences() {
+    private func showPreferences(source: String = "unknown") {
+        SpillTelemetry.shared.track("settings_opened", props: ["source": source])
         preferencesWindowController.show()
     }
 
-    private func checkForUpdates() {
-        showPreferences()
-        updateCheckStore.checkForUpdates()
+    private func showPreferencesFromPanel() {
+        if spillPanelController.isVisible {
+            spillPanelController.hide(animated: true)
+            SpillTelemetry.shared.track("panel_closed", props: ["source": "settings_from_panel"])
+        }
+
+        showPreferences(source: "panel")
+    }
+
+    private func checkForUpdates(source: String = "unknown") {
+        showPreferences(source: "update_check")
+        updateCheckStore.checkForUpdates(source: source)
     }
 
     private func prewarmPanel() {
@@ -294,12 +314,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func performWindowAction(_ kind: WindowActionKind) {
         if !AccessibilityPermission.isTrusted {
+            SpillTelemetry.shared.track("accessibility_prompt_shown", props: ["source": "window_action_hotkey"])
             _ = AccessibilityPermission.request()
             return
         }
 
         let result = windowActionStore.perform(kind)
+        SpillTelemetry.shared.track(
+            "window_action_performed",
+            props: [
+                "source": "hotkey",
+                "kind": kind.rawValue,
+                "result": telemetryResult(result)
+            ]
+        )
         if case .permissionRequired = result {
+            SpillTelemetry.shared.track("accessibility_prompt_shown", props: ["source": "window_action_hotkey_result"])
             _ = AccessibilityPermission.request()
         }
     }
@@ -353,6 +383,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settings.$hotKeyEnabled
             .dropFirst()
             .sink { [weak self] _ in
+                SpillTelemetry.shared.track("preference_changed", props: ["name": "hot_key_enabled"])
                 self?.configureHotKey()
             }
             .store(in: &cancellables)
@@ -360,6 +391,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settings.$windowActionShortcutKeys
             .dropFirst()
             .sink { [weak self] _ in
+                SpillTelemetry.shared.track("preference_changed", props: ["name": "window_action_shortcuts"])
                 self?.configureHotKey()
             }
             .store(in: &cancellables)
@@ -367,6 +399,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settings.$displayMode
             .dropFirst()
             .sink { [weak self] _ in
+                SpillTelemetry.shared.track("preference_changed", props: ["name": "display_mode"])
                 self?.statusItemController?.refresh()
             }
             .store(in: &cancellables)
@@ -374,6 +407,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settings.$selectedItemKeys
             .dropFirst()
             .sink { [weak self] _ in
+                SpillTelemetry.shared.track("preference_changed", props: ["name": "selected_items"])
                 self?.statusItemController?.refresh()
             }
             .store(in: &cancellables)
@@ -381,6 +415,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settings.$hiddenItemKeys
             .dropFirst()
             .sink { [weak self] _ in
+                SpillTelemetry.shared.track("preference_changed", props: ["name": "hidden_items"])
                 self?.statusItemController?.refresh()
             }
             .store(in: &cancellables)
@@ -388,6 +423,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settings.$enabledMenuBarStatusItems
             .dropFirst()
             .sink { [weak self] _ in
+                SpillTelemetry.shared.track("preference_changed", props: ["name": "menu_bar_status_items"])
                 self?.statusItemController?.refresh()
                 self?.configureStatusRefreshLoop()
             }
@@ -396,6 +432,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settings.$sleepGuardShowsRemainingInMenuBar
             .dropFirst()
             .sink { [weak self] _ in
+                SpillTelemetry.shared.track("preference_changed", props: ["name": "sleep_guard_menu_bar_remaining"])
                 self?.statusItemController?.refresh()
             }
             .store(in: &cancellables)
@@ -403,6 +440,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settings.$menuBarStatusDisplayStyle
             .dropFirst()
             .sink { [weak self] _ in
+                SpillTelemetry.shared.track("preference_changed", props: ["name": "menu_bar_status_display_style"])
                 self?.statusItemController?.refresh()
             }
             .store(in: &cancellables)
@@ -410,6 +448,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settings.$menuBarStatusPrecision
             .dropFirst()
             .sink { [weak self] _ in
+                SpillTelemetry.shared.track("preference_changed", props: ["name": "menu_bar_status_precision"])
                 self?.statusItemController?.refresh()
             }
             .store(in: &cancellables)
@@ -417,22 +456,65 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settings.$menuBarStatusHighlightThreshold
             .dropFirst()
             .sink { [weak self] _ in
+                SpillTelemetry.shared.track("preference_changed", props: ["name": "menu_bar_status_highlight_threshold"])
                 self?.statusItemController?.refresh()
+            }
+            .store(in: &cancellables)
+
+        settings.$menuBarTriggerIconStyle
+            .dropFirst()
+            .sink { [weak self] _ in
+                SpillTelemetry.shared.track("preference_changed", props: ["name": "menu_bar_trigger_icon_style"])
+                self?.statusItemController?.refresh()
+                self?.configureStatusRefreshLoop()
             }
             .store(in: &cancellables)
 
         settings.$refreshInterval
             .dropFirst()
             .sink { [weak self] _ in
+                SpillTelemetry.shared.track("preference_changed", props: ["name": "refresh_interval"])
                 self?.configureStatusRefreshLoop()
             }
             .store(in: &cancellables)
+
+        updateCheckStore.$state
+            .dropFirst()
+            .removeDuplicates()
+            .sink { [weak self] state in
+                if case .available(let update) = state {
+                    self?.notifyUpdateAvailable(update)
+                }
+            }
+            .store(in: &cancellables)
+    }
+
+    private func notifyUpdateAvailable(_ update: AvailableUpdate) {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, _ in
+            guard granted else { return }
+
+            let content = UNMutableNotificationContent()
+            content.title = "Spill Update Available"
+            content.body = "Version \(update.latestVersion) is ready to download."
+            content.sound = .default
+
+            let request = UNNotificationRequest(
+                identifier: "spill.update.\(update.latestVersion)",
+                content: content,
+                trigger: nil
+            )
+
+            UNUserNotificationCenter.current().add(request)
+        }
     }
 
     private func configureStatusRefreshLoop() {
         statusRefreshTask?.cancel()
 
-        guard isSpillPanelVisible || !settings.enabledMenuBarStatusItems.isEmpty else {
+        guard isSpillPanelVisible
+            || !settings.enabledMenuBarStatusItems.isEmpty
+            || settings.menuBarTriggerIconStyle.usesPerformanceEffect
+        else {
             statusItemController?.refresh()
             return
         }
@@ -478,6 +560,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var menuBarStatusModules: Set<SpillStatusModule> {
         Set(settings.enabledMenuBarStatusItems.compactMap(\.systemModule))
+            .union(settings.menuBarTriggerIconStyle.requiredStatusModules)
     }
 
     private func configureMainMenu() {
@@ -504,22 +587,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func showSpillPanelFromMainMenu() {
-        showSpillBar()
+        showSpillBar(source: "main_menu")
     }
 
     @objc private func refreshMenuBarItemsFromMainMenu() {
-        refreshMenuBarItems()
+        refreshMenuBarItems(source: "main_menu")
     }
 
     @objc private func showPreferencesFromMainMenu() {
-        showPreferences()
+        showPreferences(source: "main_menu")
     }
 
     @objc private func checkForUpdatesFromMainMenu() {
-        checkForUpdates()
+        checkForUpdates(source: "main_menu")
     }
 
     @objc private func quitFromMainMenu() {
         NSApp.terminate(nil)
+    }
+
+    private func telemetryResult(_ result: SpillActionResult) -> String {
+        switch result {
+        case .success:
+            return "success"
+        case .unavailable:
+            return "unavailable"
+        case .permissionRequired:
+            return "permission_required"
+        case .unsupported:
+            return "unsupported"
+        case .failed:
+            return "failed"
+        }
     }
 }

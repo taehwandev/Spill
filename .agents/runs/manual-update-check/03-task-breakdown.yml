@@ -89,6 +89,37 @@ tasks:
         - swift build
       manual:
         - Launch app and confirm Preferences update section renders.
+  - id: manual-update-check-T4
+    title: Refine update UI and Terminal install command
+    owner_role: builder
+    state: done
+    depends_on:
+      - manual-update-check-T2
+      - manual-update-check-T3
+    write_scope:
+      - Sources/Spill/App/UpdateCheckStore.swift
+      - Sources/Spill/Panel/SpillBarView.swift
+      - Sources/Spill/Panel/SpillPanelContentSizer.swift
+      - Sources/Spill/Panel/SpillPanelController.swift
+      - Sources/Spill/Preferences/UpdatePreferencesSection.swift
+      - Tests/SpillTests/UpdateCheckStoreTests.swift
+      - Tests/SpillTests/SpillPanelLayoutTests.swift
+    read_scope:
+      - .agents/design/stitch.md
+      - docs/install.sh
+    forbidden_scope:
+      - .agents/runs/landing-page-showcase
+    acceptance:
+      - Update store starts idle and does not force a fake available update.
+      - Available update UI prioritizes copying the Terminal install command.
+      - Compact panel update UI remains a narrow single-row affordance.
+      - App never executes the install command automatically.
+    verification:
+      commands:
+        - swift test
+        - python3 .agents/scripts/workflow.py panel-layout-smoke
+      manual:
+        - Launch app and confirm the compact panel still fits.
 
 parallel_groups:
   - id: group-1
@@ -100,3 +131,7 @@ parallel_groups:
     tasks:
       - manual-update-check-T3
     rule: UI wiring depends on the update checker store.
+  - id: group-3
+    tasks:
+      - manual-update-check-T4
+    rule: UI refinement depends on the update checker and store.

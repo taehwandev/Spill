@@ -7,10 +7,12 @@ struct SpillBarView: View {
     @ObservedObject var aiStatusStore: AIStatusStore
     @ObservedObject var windowActionStore: WindowActionStore
     @ObservedObject var sleepGuard: SleepGuardController
+    @ObservedObject var updateStore: UpdateCheckStore
     let dismissAction: () -> Void
     let settingsAction: () -> Void
     @State private var pendingDismissWorkItem: DispatchWorkItem?
     @State private var hoveredStatusModule: SpillStatusModule? = nil
+    @State private var didCopyUpdateInstallCommand = false
 
     private var panelState: PanelState {
         panelStore.state
@@ -20,6 +22,10 @@ struct SpillBarView: View {
         ScrollView(.vertical, showsIndicators: false) {
             VStack(spacing: 14) {
                 header
+
+                if updateStore.canOpenUpdate {
+                    updateBanner
+                }
 
                 if !panelState.visibleStatusModules.isEmpty {
                     Divider()
@@ -74,6 +80,82 @@ struct SpillBarView: View {
         }
         pendingDismissWorkItem = workItem
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: workItem)
+    }
+
+    private var updateBanner: some View {
+        HStack(spacing: 8) {
+            ZStack {
+                Circle()
+                    .fill(Color.blue.opacity(0.12))
+
+                Image(systemName: "terminal.fill")
+                    .foregroundStyle(.blue)
+                    .font(.system(size: 11, weight: .semibold))
+            }
+            .frame(width: 24, height: 24)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(updateBannerTitle)
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .lineLimit(1)
+
+                Text("Copy install command")
+                    .font(.system(size: 9.5, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 6)
+
+            updateBannerButton(
+                symbolName: didCopyUpdateInstallCommand ? "checkmark" : "doc.on.doc",
+                title: didCopyUpdateInstallCommand ? "Copied" : "Copy install command"
+            ) {
+                copyUpdateInstallCommand()
+            }
+
+            updateBannerButton(symbolName: "arrow.down.circle", title: "Download DMG") {
+                updateStore.openUpdate(source: "panel")
+            }
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 7)
+        .background(Color.blue.opacity(0.07), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(Color.blue.opacity(0.16), lineWidth: 0.8)
+        )
+    }
+
+    private var updateBannerTitle: String {
+        guard let version = updateStore.availableUpdate?.latestVersion else {
+            return "Update Ready"
+        }
+
+        return "Update \(version)"
+    }
+
+    private func updateBannerButton(
+        symbolName: String,
+        title: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: symbolName)
+                .font(.system(size: 11, weight: .semibold))
+                .frame(width: 24, height: 24)
+                .background(.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .help(title)
+    }
+
+    private func copyUpdateInstallCommand() {
+        updateStore.copyInstallCommand(source: "panel")
+        didCopyUpdateInstallCommand = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+            didCopyUpdateInstallCommand = false
+        }
     }
 
     private var header: some View {

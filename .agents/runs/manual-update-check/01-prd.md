@@ -10,7 +10,8 @@ questions.
 Add a manual update check that compares the bundled app version with a static
 release manifest. The app should show current update status in Preferences,
 surface Check for Updates from the app/status menus, and open the release
-download URL when a newer version exists.
+download URL or copy the public Terminal install command when a newer version
+exists.
 
 ## Resolved Inputs
 
@@ -26,12 +27,15 @@ download URL when a newer version exists.
 
 - Let users manually check whether Spill is current.
 - Show an Update button only when a newer release is available.
+- Let users copy a Terminal installer command for the safer direct-distribution
+  update path.
 - Generate release update metadata as part of the packaging/release path.
 - Keep the check lightweight and explicit.
 
 ## Non-goals
 
 - Automatic update installation.
+- Silent shell execution from inside the app.
 - Background update polling.
 - Sparkle appcast generation.
 - Homebrew Cask update policy.
@@ -40,6 +44,8 @@ download URL when a newer version exists.
 
 - As a user, I want to check for updates from the app without opening GitHub
   manually.
+- As a user, I want to copy an install command so the update runs visibly in
+  Terminal.
 - As a maintainer, I want update metadata to be produced by the existing release
   process.
 
@@ -48,12 +54,15 @@ download URL when a newer version exists.
 ### Entry Point
 
 Users find Check for Updates in Preferences, the app menu, and the status item
-context menu.
+context menu. After a newer version is found, Preferences and the compact panel
+can expose the Terminal command copy action.
 
 ### Layout
 
-No compact panel UI changes. Preferences contains a compact update section with
-current version, status, and action buttons.
+Preferences contains a compact update section with current version, status, a
+Terminal command block, and action buttons. The compact panel may show a narrow
+single-row update affordance when an update is available; it must not expand into
+a dashboard module.
 
 ### States
 
@@ -75,8 +84,9 @@ current version, status, and action buttons.
 4. Compare dotted numeric versions with zero padding.
 5. Show Update when manifest `latestVersion` is newer than the current bundle
    version.
-6. Open the manifest download URL when the user clicks Update.
-7. Treat unsupported macOS minimums as a non-installable available update state.
+6. Copy the public Terminal install command as the primary update action.
+7. Open the manifest download URL as a secondary direct-download action.
+8. Treat unsupported macOS minimums as a non-installable available update state.
 
 ## Behavior Scenarios
 
@@ -85,7 +95,21 @@ current version, status, and action buttons.
 Given the installed version is `2026.20.1` and the manifest latest version is
 `2026.20.2`
 When the user checks for updates
-Then Preferences shows that `2026.20.2` is available and enables Update.
+Then Preferences shows that `2026.20.2` is available and enables command copy
+and DMG download actions.
+
+### Terminal Install Command
+
+Given a newer version is available
+When the user chooses the Terminal install action
+Then Spill copies `/bin/bash -c "$(curl -fsSL https://thdev.app/Spill/install.sh)"`.
+
+### Compact Panel Update
+
+Given a newer version is available
+When the user opens the compact panel
+Then the panel shows a narrow update row with command copy and DMG download
+actions.
 
 ### Up To Date
 
@@ -103,6 +127,8 @@ Then Preferences shows a retryable failure message.
 ## Acceptance Criteria
 
 - Preferences shows current version and update state.
+- Panel update UI stays compact and appears only for available updates.
+- Terminal install command is copied but not executed by the app.
 - App menu and status item menu include Check for Updates.
 - Release artifacts include `update.json`.
 - Unit tests cover version comparison and manifest outcomes.

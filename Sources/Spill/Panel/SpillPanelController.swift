@@ -14,6 +14,7 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
     private let statusStore: SystemStatusStore
     private let aiStatusStore: AIStatusStore
     private let windowActionStore: WindowActionStore
+    private let updateStore: UpdateCheckStore
     private let visibilityChanged: (Bool) -> Void
     private let settingsAction: () -> Void
     private var panel: NSPanel?
@@ -33,6 +34,7 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
         statusStore: SystemStatusStore = SystemStatusStore(),
         aiStatusStore: AIStatusStore = AIStatusStore(),
         windowActionStore: WindowActionStore = WindowActionStore(),
+        updateStore: UpdateCheckStore = UpdateCheckStore(),
         sleepGuard: SleepGuardController,
         visibilityChanged: @escaping (Bool) -> Void = { _ in },
         settingsAction: @escaping () -> Void = {}
@@ -43,6 +45,7 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
         self.statusStore = statusStore
         self.aiStatusStore = aiStatusStore
         self.windowActionStore = windowActionStore
+        self.updateStore = updateStore
         self.sleepGuard = sleepGuard
         self.visibilityChanged = visibilityChanged
         self.settingsAction = settingsAction
@@ -220,7 +223,8 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
                 statusStore: statusStore,
                 aiStatusStore: aiStatusStore,
                 windowActionStore: windowActionStore,
-                sleepGuard: sleepGuard
+                sleepGuard: sleepGuard,
+                updateStore: updateStore
             ) { [weak self] in
                 self?.hide(animated: true)
             } settingsAction: { [weak self] in
@@ -266,7 +270,8 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
             windowActionCount: windowActionStore.actions.count,
             menuBarActionCount: menuBarActionCount,
             iconSpacing: CGFloat(settings.iconSpacing),
-            visibleFrame: visibleFrame
+            visibleFrame: visibleFrame,
+            showsUpdateBanner: updateStore.canOpenUpdate
         )
     }
 
@@ -343,6 +348,14 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
             .store(in: &cancellables)
 
         windowActionStore.objectWillChange
+            .sink { [weak self] _ in
+                DispatchQueue.main.async {
+                    self?.resizePanelIfVisible()
+                }
+            }
+            .store(in: &cancellables)
+
+        updateStore.objectWillChange
             .sink { [weak self] _ in
                 DispatchQueue.main.async {
                     self?.resizePanelIfVisible()

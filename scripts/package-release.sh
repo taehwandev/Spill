@@ -9,11 +9,14 @@ APP_DIR="$ROOT_DIR/.build/Spill.app"
 ARTIFACTS_DIR="$ROOT_DIR/.build/release-artifacts"
 ZIP_PATH="$ARTIFACTS_DIR/Spill-$VERSION-macos.zip"
 DMG_PATH="$ARTIFACTS_DIR/Spill-$VERSION-macos.dmg"
+STABLE_ZIP_PATH="$ARTIFACTS_DIR/Spill-macos.zip"
+STABLE_DMG_PATH="$ARTIFACTS_DIR/Spill-macos.dmg"
 UPDATE_MANIFEST_PATH="$ARTIFACTS_DIR/update.json"
+CHECKSUMS_PATH="$ARTIFACTS_DIR/checksums.txt"
 DMG_ROOT="$ARTIFACTS_DIR/dmg-root"
 NOTARY_PROFILE="${SPILL_NOTARY_KEYCHAIN_PROFILE:-}"
-DOWNLOAD_BASE_URL="${SPILL_DOWNLOAD_BASE_URL:-https://github.com/taehwankwon/Spill/releases/latest/download}"
-RELEASE_NOTES_URL="${SPILL_RELEASE_NOTES_URL:-https://github.com/taehwankwon/Spill/releases/latest}"
+DOWNLOAD_BASE_URL="${SPILL_DOWNLOAD_BASE_URL:-https://github.com/taehwandev/Spill/releases/latest/download}"
+RELEASE_NOTES_URL="${SPILL_RELEASE_NOTES_URL:-https://github.com/taehwandev/Spill/releases/latest}"
 PUBLISHED_AT="${SPILL_PUBLISHED_AT:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
 
 if [[ -n "$NOTARY_PROFILE" && "${SPILL_SIGN_IDENTITY:--}" == "-" ]]; then
@@ -25,7 +28,9 @@ fi
 
 mkdir -p "$ARTIFACTS_DIR"
 rm -rf "$DMG_ROOT"
-rm -f "$ZIP_PATH" "$DMG_PATH" "$UPDATE_MANIFEST_PATH"
+rm -f "$ARTIFACTS_DIR"/Spill-*-macos.zip
+rm -f "$ARTIFACTS_DIR"/Spill-*-macos.dmg
+rm -f "$STABLE_ZIP_PATH" "$STABLE_DMG_PATH" "$UPDATE_MANIFEST_PATH" "$CHECKSUMS_PATH"
 
 if [[ -n "$NOTARY_PROFILE" ]]; then
     NOTARY_ZIP="$ARTIFACTS_DIR/Spill-$VERSION-notary.zip"
@@ -60,7 +65,18 @@ cat > "$UPDATE_MANIFEST_PATH" <<JSON
 }
 JSON
 
+cp "$ZIP_PATH" "$STABLE_ZIP_PATH"
+cp "$DMG_PATH" "$STABLE_DMG_PATH"
+
+(
+    cd "$ARTIFACTS_DIR"
+    shasum -a 256 "Spill-$VERSION-macos.dmg" "Spill-$VERSION-macos.zip" "Spill-macos.dmg" "Spill-macos.zip" "update.json" > "$CHECKSUMS_PATH"
+)
+
 echo "Built release artifacts:"
 echo "$ZIP_PATH"
 echo "$DMG_PATH"
+echo "$STABLE_ZIP_PATH"
+echo "$STABLE_DMG_PATH"
 echo "$UPDATE_MANIFEST_PATH"
+echo "$CHECKSUMS_PATH"

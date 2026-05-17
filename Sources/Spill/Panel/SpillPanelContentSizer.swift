@@ -5,6 +5,7 @@ enum SpillPanelContentSizer {
     private static let verticalPadding: CGFloat = 20
     private static let topLevelSpacing: CGFloat = 14
     private static let dividerHeight: CGFloat = 1
+    private static let updateBannerHeight: CGFloat = 38
     private static let sectionHeaderHeight: CGFloat = 14
     private static let statusSectionSpacing: CGFloat = 6
     private static let sectionContentSpacing: CGFloat = 5
@@ -26,18 +27,23 @@ enum SpillPanelContentSizer {
         windowActionCount: Int,
         menuBarActionCount: Int,
         iconSpacing: CGFloat,
-        visibleFrame: NSRect
+        visibleFrame: NSRect,
+        showsUpdateBanner: Bool = false
     ) -> NSSize {
         let width = preferredWidth(visibleFrame: visibleFrame)
         let contentWidth = max(0, width - horizontalPadding)
         let showsStatusSection = statusModuleCount > 0
         let showsAISection = aiStatusCount > 0
         let dividerCount = 2 + (showsStatusSection ? 1 : 0) + (showsAISection ? 1 : 0)
-        let topLevelChildCount = 5 + (showsStatusSection ? 2 : 0) + (showsAISection ? 2 : 0)
+        let topLevelChildCount = 5
+            + (showsUpdateBanner ? 1 : 0)
+            + (showsStatusSection ? 2 : 0)
+            + (showsAISection ? 2 : 0)
         let topLevelGapHeight = CGFloat(max(0, topLevelChildCount - 1)) * topLevelSpacing
         let dividerTotalHeight = CGFloat(dividerCount) * dividerHeight
         let desiredHeight = verticalPadding
             + 34
+            + (showsUpdateBanner ? updateBannerHeight : 0)
             + topLevelGapHeight
             + dividerTotalHeight
             + statusSectionHeight(moduleCount: statusModuleCount)
