@@ -73,9 +73,28 @@ To create a local `.app` bundle:
 open .build/Spill.app
 ```
 
-The bundled app also runs without a Dock icon. If the app appears to do nothing after launch, check the menu bar for the Spill trigger.
+The bundled app declares `LSUIElement` and also runs without a Dock icon. If the app appears to do nothing after launch, check the menu bar for the Spill trigger.
 
 During development, avoid rebuilding the `.app` while testing Accessibility permission. macOS can treat a newly rebuilt local app as a new permission target.
+
+### Screen Time and App Limits
+
+macOS Screen Time can block any app with App Limits or Downtime. When a limit is
+active, macOS may show a `Time Limit` shield above the blocked app and intercept
+normal mouse or keyboard input. Spill cannot and should not bypass that system
+control.
+
+For reliable use:
+
+- Install and launch Spill as its own app from `/Applications` or Finder.
+- Do not use a blocked terminal, launcher, or browser as the manual test surface.
+- If Spill itself is limited, open System Settings > Screen Time and add Spill to
+  Always Allowed, or turn off the relevant App Limit.
+- If another app is showing the Time Limit shield, clear that shield before
+  judging Spill menu bar clicks.
+
+The repository includes `./scripts/verify-status-click-smoke.sh` to verify the
+Spill status item click route without relying on manual input from a limited app.
 
 ## Distribution
 
@@ -202,6 +221,15 @@ python3 .agents/scripts/workflow.py panel-layout-smoke
 The panel smoke test opens the bundled panel in smoke mode and verifies frame,
 content, and key accessibility labels without relying on manual Accessibility
 permission setup.
+
+Run the status item click smoke test:
+
+```bash
+python3 .agents/scripts/workflow.py status-click-smoke
+```
+
+This verifies the menu bar status item click route without relying on manual
+input from an app that may be blocked by Screen Time.
 
 ## Roadmap
 

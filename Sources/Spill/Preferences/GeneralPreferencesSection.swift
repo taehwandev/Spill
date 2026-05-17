@@ -50,6 +50,25 @@ struct GeneralPreferencesSection: View {
                     .font(.footnote)
                     .foregroundStyle(.red)
             }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Label("Screen Time", systemImage: "hourglass")
+                    Spacer()
+                    Button {
+                        ScreenTimeSettings.open()
+                    } label: {
+                        Label("Open Screen Time", systemImage: "gearshape.fill")
+                    }
+                }
+
+                Text("If App Limits or Downtime block Spill, macOS can prevent launch or place a Time Limit shield above the app. Add Spill to Always Allowed or disable the relevant limit. Launch Spill from Applications/Finder instead of a blocked launcher app.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 

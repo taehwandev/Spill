@@ -1,0 +1,79 @@
+feature_id: startup-permission-timeout
+status: implemented
+
+necessity:
+  decision: build
+  reason: Startup must not depend on optional Accessibility-focused window lookup.
+  ambiguity:
+    clarity: clear
+    blockers_resolved: true
+    resolution_sources:
+      - maintainer
+      - repo-research
+      - assumption
+  clarification_required: false
+  questions: []
+
+tasks:
+  - id: startup-permission-timeout-T1
+    title: Gate focused-window lookup out of startup
+    owner_role: builder
+    state: done
+    depends_on: []
+    write_scope:
+      - Sources/Spill/Providers/WindowActionProvider.swift
+      - Tests/SpillTests/WindowActionStoreTests.swift
+    read_scope:
+      - .agents/specs/prd.md
+      - .agents/specs/ard.md
+      - Sources/Spill/App/AppDelegate.swift
+    forbidden_scope:
+      - Sources/Spill/MenuBar
+      - Sources/Spill/Preferences
+    acceptance:
+      - WindowActionStore initialization does not read the focused window.
+      - Untrusted refresh and perform paths do not call the focused-window controller.
+      - Trusted refresh still reads focused-window state.
+    verification:
+      commands:
+        - swift test
+        - swift build
+      manual:
+        - Launch app without relying on Accessibility permission.
+
+  - id: startup-permission-timeout-T2
+    title: Stabilize panel smoke diagnostics after startup change
+    owner_role: builder
+    state: done
+    depends_on:
+      - startup-permission-timeout-T1
+    write_scope:
+      - Sources/Spill/App/AppDelegate.swift
+      - scripts/verify-panel-layout-smoke.sh
+    read_scope:
+      - Sources/Spill/Panel
+      - scripts/verify-runtime-smoke.sh
+    forbidden_scope:
+      - Sources/Spill/MenuBar
+      - Sources/Spill/Preferences
+    acceptance:
+      - Panel layout smoke waits briefly for accessibility labels before final diagnostics.
+      - Runtime and panel smoke scripts pass.
+    verification:
+      commands:
+        - ./scripts/build-app.sh
+        - ./scripts/verify-runtime-smoke.sh
+        - ./scripts/verify-panel-open-smoke.sh
+        - ./scripts/verify-panel-layout-smoke.sh
+      manual:
+        - Open panel and confirm it remains compact and visible.
+
+parallel_groups:
+  - id: group-1
+    tasks:
+      - startup-permission-timeout-T1
+    rule: Startup state must be implemented before smoke behavior is judged.
+  - id: group-2
+    tasks:
+      - startup-permission-timeout-T2
+    rule: Smoke stabilization depends on the startup behavior change.

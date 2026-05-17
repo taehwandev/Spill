@@ -51,7 +51,7 @@ cat > "$CONTENTS_DIR/Info.plist" <<PLIST
     <key>LSMinimumSystemVersion</key>
     <string>14.0</string>
     <key>LSUIElement</key>
-    <false/>
+    <true/>
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSHumanReadableCopyright</key>

@@ -1,0 +1,69 @@
+feature_id: screen-time-app-limits
+status: implemented
+
+necessity:
+  decision: build
+  reason: Screen Time shields can block interaction and need a documented mitigation path.
+  ambiguity:
+    clarity: clear
+    blockers_resolved: true
+    resolution_sources:
+      - maintainer
+      - repo-research
+      - Apple documentation
+      - assumption
+  clarification_required: false
+  questions: []
+
+tasks:
+  - id: screen-time-app-limits-T1
+    title: Add Screen Time settings entry point
+    owner_role: builder
+    state: done
+    depends_on: []
+    write_scope:
+      - Sources/Spill/App/ScreenTimeSettings.swift
+      - Sources/Spill/Preferences/GeneralPreferencesSection.swift
+    read_scope:
+      - Sources/Spill/Accessibility/AccessibilityPermission.swift
+      - Sources/Spill/Preferences/PreferencesView.swift
+    forbidden_scope:
+      - Sources/Spill/Panel
+    acceptance:
+      - Preferences can open Screen Time settings.
+      - Preferences explain App Limits and Always Allowed without claiming a bypass.
+    verification:
+      commands:
+        - swift build
+      manual:
+        - Press Open Screen Time from Preferences.
+
+  - id: screen-time-app-limits-T2
+    title: Document Screen Time recovery path
+    owner_role: builder
+    state: done
+    depends_on: []
+    write_scope:
+      - .agents/README.md
+      - .agents/scripts/workflow.py
+      - README.md
+    read_scope:
+      - .agents/specs/prd.md
+      - .agents/specs/ard.md
+    forbidden_scope:
+      - Sources/Spill
+    acceptance:
+      - README explains App Limits, Downtime, Always Allowed, and independent launch.
+      - Workflow exposes status-click smoke.
+    verification:
+      commands:
+        - git diff --check
+      manual:
+        - Read troubleshooting guidance.
+
+parallel_groups:
+  - id: group-1
+    tasks:
+      - screen-time-app-limits-T1
+      - screen-time-app-limits-T2
+    rule: Source and README writes are disjoint.
