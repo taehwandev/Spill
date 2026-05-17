@@ -67,9 +67,11 @@ jobs:
             exit 2
           fi
 
+          build="${version##*.}"
+
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
-          echo "build=$GITHUB_RUN_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "build=$build" >> "$GITHUB_OUTPUT"
 
       - name: Prepare optional Developer ID signing
         id: signing
