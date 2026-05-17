@@ -93,6 +93,10 @@ final class SpillSettings: ObservableObject {
         }
     }
 
+    @Published var menuBarTriggerIconStyle: MenuBarTriggerIconStyle {
+        didSet { defaults.set(menuBarTriggerIconStyle.rawValue, forKey: Keys.menuBarTriggerIconStyle) }
+    }
+
     @Published var selectedItemKeys: Set<String> {
         didSet { defaults.set(Array(selectedItemKeys).sorted(), forKey: Keys.selectedItemKeys) }
     }
@@ -173,6 +177,9 @@ final class SpillSettings: ObservableObject {
         let thresholdRawValue = defaults.object(forKey: Keys.menuBarStatusHighlightThreshold) as? Int
             ?? MenuBarStatusHighlightThreshold.seventy.rawValue
         menuBarStatusHighlightThreshold = MenuBarStatusHighlightThreshold(rawValue: thresholdRawValue) ?? .seventy
+        menuBarTriggerIconStyle = MenuBarTriggerIconStyle.normalized(
+            rawValue: defaults.string(forKey: Keys.menuBarTriggerIconStyle)
+        )
         selectedItemKeys = Set(defaults.stringArray(forKey: Keys.selectedItemKeys) ?? [])
         hiddenItemKeys = Set(defaults.stringArray(forKey: Keys.hiddenItemKeys) ?? [])
         hotKeyEnabled = defaults.object(forKey: Keys.hotKeyEnabled) as? Bool ?? true
@@ -246,7 +253,9 @@ final class SpillSettings: ObservableObject {
 
     var statusModulesRequiredForRefresh: Set<SpillStatusModule> {
         let menuBarModules = enabledMenuBarStatusItems.compactMap(\.systemModule)
-        return Set(visiblePanelStatusModules).union(menuBarModules)
+        return Set(visiblePanelStatusModules)
+            .union(menuBarModules)
+            .union(menuBarTriggerIconStyle.requiredStatusModules)
     }
 
     var visiblePanelStatusModules: [SpillStatusModule] {
@@ -435,6 +444,7 @@ private enum Keys {
     static let menuBarStatusDisplayStyle = "menuBarStatusDisplayStyle"
     static let menuBarStatusPrecision = "menuBarStatusPrecision"
     static let menuBarStatusHighlightThreshold = "menuBarStatusHighlightThreshold"
+    static let menuBarTriggerIconStyle = "menuBarTriggerIconStyle"
     static let selectedItemKeys = "selectedItemKeys"
     static let hiddenItemKeys = "hiddenItemKeys"
     static let hotKeyEnabled = "hotKeyEnabled"

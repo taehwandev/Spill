@@ -66,12 +66,20 @@ final class StatusItemController: NSObject {
             precision: settings.menuBarStatusPrecision,
             highlightThreshold: settings.menuBarStatusHighlightThreshold
         )
+        let performanceEffect = menuBarPerformanceEffect
         let sleepGuardSegment = sleepGuardMenuBarSegment
-        let statusSegments = [sleepGuardSegment].compactMap { $0 } + summary.segments
-        let segments = [triggerSegment] + statusSegments
+        let segments = Self.orderedSegments(
+            trigger: triggerSegment(performanceEffect: performanceEffect),
+            statusSegments: summary.segments,
+            caffeineSegment: sleepGuardSegment
+        )
         let segmentsChanged = segments != currentSegments
         currentSegments = segments
-        let statusTooltip = statusTooltip(summary: summary, sleepGuardSegment: sleepGuardSegment)
+        let statusTooltip = statusTooltip(
+            summary: summary,
+            sleepGuardSegment: sleepGuardSegment,
+            performanceEffect: performanceEffect
+        )
         triggerItem.isVisible = true
         triggerItem.length = MenuBarStatusContentView.preferredWidth(for: segments)
         configureAppearance(
@@ -110,6 +118,14 @@ final class StatusItemController: NSObject {
 
     func performPrimaryClickForSmokeTest() {
         triggerItem.button?.performClick(nil)
+    }
+
+    static func orderedSegments(
+        trigger: MenuBarStatusSegment,
+        statusSegments: [MenuBarStatusSegment],
+        caffeineSegment: MenuBarStatusSegment?
+    ) -> [MenuBarStatusSegment] {
+        [caffeineSegment].compactMap { $0 } + [trigger] + statusSegments
     }
 
     private func configureTriggerButton() {
@@ -237,24 +253,45 @@ final class StatusItemController: NSObject {
         )
     }
 
-    private var triggerSegment: MenuBarStatusSegment {
-        MenuBarStatusSegment(
+    private var menuBarPerformanceEffect: MenuBarPerformanceEffect {
+        MenuBarPerformanceEffect.make(
+            cpu: statusStore.cpu,
+            memory: statusStore.memory,
+            network: statusStore.network,
+            power: statusStore.power
+        )
+    }
+
+    private func triggerSegment(performanceEffect: MenuBarPerformanceEffect) -> MenuBarStatusSegment {
+        let triggerIconStyle = settings.menuBarTriggerIconStyle
+        let triggerState = isSpillBarVisible
+            ? SpillStatusState.active
+            : (triggerIconStyle.usesPerformanceEffect ? performanceEffect.state : .normal)
+
+        return MenuBarStatusSegment(
             kind: .trigger,
             title: "Spill",
             shortTitle: "Spill",
             value: "",
             displayText: "",
-            usageRatio: 0,
-            state: isSpillBarVisible ? .active : .normal,
-            symbolName: isSpillBarVisible ? "drop.circle.fill" : "drop.fill"
+            usageRatio: triggerIconStyle.usesPerformanceEffect ? performanceEffect.usageRatio : 0,
+            state: triggerState,
+            symbolName: triggerIconStyle.symbolName(isActive: isSpillBarVisible),
+            visualStyle: .trigger(triggerIconStyle),
+            animates: settings.useSpillAnimation && triggerIconStyle.animates
         )
     }
 
     private func statusTooltip(
         summary: MenuBarStatusSummary,
-        sleepGuardSegment: MenuBarStatusSegment?
+        sleepGuardSegment: MenuBarStatusSegment?,
+        performanceEffect: MenuBarPerformanceEffect
     ) -> String {
         var parts: [String] = []
+
+        if settings.menuBarTriggerIconStyle.usesPerformanceEffect {
+            parts.append("Trigger load: \(performanceEffect.tooltipText)")
+        }
 
         if sleepGuardSegment != nil {
             if !sleepGuard.isActive {

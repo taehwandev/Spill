@@ -5,6 +5,10 @@ final class MenuBarStatusContentView: NSView {
     private static let sidePadding: CGFloat = 2
     private static let gap: CGFloat = 4
     private static let height: CGFloat = 22
+    private static let metricChipHeight: CGFloat = 17
+    private static let triggerChipHeight: CGFloat = 20
+    private static let iconOnlyChipWidth: CGFloat = 22
+    private static let triggerChipWidth: CGFloat = 30
     private static let textFont = NSFont.monospacedDigitSystemFont(ofSize: 10.5, weight: .semibold)
 
     private let segments: [MenuBarStatusSegment]
@@ -61,12 +65,20 @@ final class MenuBarStatusContentView: NSView {
     }
 
     private static func chipWidth(for segment: MenuBarStatusSegment) -> CGFloat {
+        if segment.kind == .trigger {
+            return triggerChipWidth
+        }
+
         guard !segment.value.isEmpty else {
-            return 22
+            return iconOnlyChipWidth
         }
 
         let textWidth = (segment.value as NSString).size(withAttributes: [.font: textFont]).width
         return ceil(textWidth) + 29
+    }
+
+    private static func chipHeight(for segment: MenuBarStatusSegment) -> CGFloat {
+        segment.kind == .trigger ? triggerChipHeight : metricChipHeight
     }
 
     private func installChips() {
@@ -79,7 +91,7 @@ final class MenuBarStatusContentView: NSView {
             var constraints = [
                 chip.centerYAnchor.constraint(equalTo: centerYAnchor),
                 chip.widthAnchor.constraint(equalToConstant: Self.chipWidth(for: segment)),
-                chip.heightAnchor.constraint(equalToConstant: 17)
+                chip.heightAnchor.constraint(equalToConstant: Self.chipHeight(for: segment))
             ]
 
             if let previous {
@@ -103,6 +115,8 @@ private final class MenuBarMetricChipView: NSView {
     private let segment: MenuBarStatusSegment
     private let iconView = NSImageView()
     private let valueLabel = NSTextField(labelWithString: "")
+    private var animationTimer: Timer?
+    private var animationPhase: CGFloat = 0
 
     init(segment: MenuBarStatusSegment) {
         self.segment = segment
@@ -116,6 +130,7 @@ private final class MenuBarMetricChipView: NSView {
         configureValue()
         installSubviews()
         refreshColors()
+        startAnimationIfNeeded()
 
         setAccessibilityLabel(accessibilityText)
     }
@@ -125,20 +140,82 @@ private final class MenuBarMetricChipView: NSView {
         fatalError("init(coder:) has not been implemented")
     }
 
+    override func viewDidMoveToSuperview() {
+        super.viewDidMoveToSuperview()
+        if superview == nil {
+            animationTimer?.invalidate()
+            animationTimer = nil
+        }
+    }
+
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
+        configureIcon()
         refreshColors()
     }
 
     private func configureIcon() {
         iconView.translatesAutoresizingMaskIntoConstraints = false
         iconView.imageScaling = .scaleProportionallyDown
-        let config = NSImage.SymbolConfiguration(pointSize: 10.5, weight: .semibold)
-        iconView.image = NSImage(
-            systemSymbolName: resolvedSymbolName,
-            accessibilityDescription: segment.title
-        )?.withSymbolConfiguration(config)
+        if case let .trigger(style) = segment.visualStyle,
+           let image = MenuBarTriggerIconRenderer.image(
+               style: style,
+               tintColor: statusColor,
+               usageRatio: segment.usageRatio,
+               phase: animationPhase,
+               size: iconSize
+           )
+        {
+            iconView.image = image
+            iconView.symbolConfiguration = nil
+            return
+        }
+
+        let config = NSImage.SymbolConfiguration(pointSize: symbolPointSize, weight: .semibold)
+        iconView.image = NSImage(systemSymbolName: resolvedSymbolName, accessibilityDescription: segment.title)?
+            .withSymbolConfiguration(config)
         iconView.symbolConfiguration = config
+    }
+
+    private func startAnimationIfNeeded() {
+        guard shouldAnimateTrigger else {
+            return
+        }
+
+        let timer = Timer(timeInterval: 1.0 / 12.0, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.advanceAnimationFrame()
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        animationTimer = timer
+    }
+
+    private func advanceAnimationFrame() {
+        animationPhase += animationStep
+        if animationPhase >= 1 {
+            animationPhase.formTruncatingRemainder(dividingBy: 1)
+        }
+
+        configureIcon()
+    }
+
+    private var animationStep: CGFloat {
+        let loadBoost = CGFloat(segment.usageRatio.clamped(to: 0...1)) * 0.055
+        switch segment.state {
+        case .warning:
+            return 0.105 + loadBoost
+        case .active, .refreshing:
+            return 0.075 + loadBoost
+        case .normal:
+            return 0.045 + loadBoost
+        case .unavailable:
+            return 0.03
+        }
+    }
+
+    private var shouldAnimateTrigger: Bool {
+        segment.animates && hasCustomTriggerIcon
     }
 
     private func configureValue() {
@@ -158,8 +235,8 @@ private final class MenuBarMetricChipView: NSView {
             NSLayoutConstraint.activate([
                 iconView.centerXAnchor.constraint(equalTo: centerXAnchor),
                 iconView.centerYAnchor.constraint(equalTo: centerYAnchor),
-                iconView.widthAnchor.constraint(equalToConstant: 13),
-                iconView.heightAnchor.constraint(equalToConstant: 13)
+                iconView.widthAnchor.constraint(equalToConstant: iconSize),
+                iconView.heightAnchor.constraint(equalToConstant: iconSize)
             ])
             return
         }
@@ -169,8 +246,8 @@ private final class MenuBarMetricChipView: NSView {
         NSLayoutConstraint.activate([
             iconView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 5.5),
             iconView.centerYAnchor.constraint(equalTo: centerYAnchor),
-            iconView.widthAnchor.constraint(equalToConstant: 13),
-            iconView.heightAnchor.constraint(equalToConstant: 13),
+            iconView.widthAnchor.constraint(equalToConstant: iconSize),
+            iconView.heightAnchor.constraint(equalToConstant: iconSize),
 
             valueLabel.leadingAnchor.constraint(equalTo: iconView.trailingAnchor, constant: 3.5),
             valueLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -5.5),
@@ -181,7 +258,11 @@ private final class MenuBarMetricChipView: NSView {
     private func refreshColors() {
         let color = statusColor
         valueLabel.textColor = segment.state == .unavailable ? .secondaryLabelColor : .labelColor
-        iconView.contentTintColor = color.withAlphaComponent(segment.state == .unavailable ? 0.5 : 1.0)
+        if hasCustomTriggerIcon {
+            iconView.contentTintColor = nil
+        } else {
+            iconView.contentTintColor = color.withAlphaComponent(segment.state == .unavailable ? 0.5 : 1.0)
+        }
         layer?.backgroundColor = color.withAlphaComponent(backgroundAlpha).cgColor
     }
 
@@ -207,6 +288,25 @@ private final class MenuBarMetricChipView: NSView {
 
     private var resolvedSymbolName: String {
         segment.symbolName
+    }
+
+    private var iconSize: CGFloat {
+        segment.kind == .trigger ? 18 : 13
+    }
+
+    private var symbolPointSize: CGFloat {
+        segment.kind == .trigger ? 15.5 : 10.5
+    }
+
+    private var hasCustomTriggerIcon: Bool {
+        switch segment.visualStyle {
+        case .symbol:
+            return false
+        case .trigger(.spill):
+            return false
+        case .trigger(.cat), .trigger(.liquid):
+            return true
+        }
     }
 
     private var accessibilityText: String {

@@ -15,6 +15,7 @@ final class SpillSettingsTests: XCTestCase {
         XCTAssertEqual(settings.menuBarStatusDisplayStyle, .labelAndPercent)
         XCTAssertEqual(settings.menuBarStatusPrecision, .tenths)
         XCTAssertEqual(settings.menuBarStatusHighlightThreshold, .seventy)
+        XCTAssertEqual(settings.menuBarTriggerIconStyle, .spill)
         XCTAssertEqual(settings.sleepGuardDefaultDuration, .fifteenMinutes)
         XCTAssertFalse(settings.sleepGuardAllowsIndefinite)
         XCTAssertFalse(settings.sleepGuardShowsRemainingInMenuBar)
@@ -170,6 +171,10 @@ final class SpillSettingsTests: XCTestCase {
         XCTAssertEqual(defaults.stringArray(forKey: "enabledMenuBarStatusItems"), ["cpu", "caffeine"])
         XCTAssertEqual(settings.visiblePanelStatusModules, [.cpu, .storage])
         XCTAssertEqual(settings.statusModulesRequiredForRefresh, [.cpu, .storage])
+
+        settings.menuBarTriggerIconStyle = .liquid
+
+        XCTAssertEqual(settings.statusModulesRequiredForRefresh, [.cpu, .memory, .storage, .network])
     }
 
     func testMenuBarStatusKeepsDisabledPanelModuleRefreshingWhenShownInMenuBar() {
@@ -233,15 +238,18 @@ final class SpillSettingsTests: XCTestCase {
         settings.menuBarStatusDisplayStyle = .percentOnly
         settings.menuBarStatusPrecision = .tenths
         settings.menuBarStatusHighlightThreshold = .eighty
+        settings.menuBarTriggerIconStyle = .cat
 
         XCTAssertEqual(defaults.string(forKey: "menuBarStatusDisplayStyle"), "percentOnly")
         XCTAssertEqual(defaults.integer(forKey: "menuBarStatusPrecision"), 1)
         XCTAssertEqual(defaults.integer(forKey: "menuBarStatusHighlightThreshold"), 80)
+        XCTAssertEqual(defaults.string(forKey: "menuBarTriggerIconStyle"), "cat")
 
         let reloadedSettings = SpillSettings(defaults: defaults)
         XCTAssertEqual(reloadedSettings.menuBarStatusDisplayStyle, .percentOnly)
         XCTAssertEqual(reloadedSettings.menuBarStatusPrecision, .tenths)
         XCTAssertEqual(reloadedSettings.menuBarStatusHighlightThreshold, .eighty)
+        XCTAssertEqual(reloadedSettings.menuBarTriggerIconStyle, .cat)
     }
 
     func testCPUCoreChartSettingPersists() {
@@ -261,12 +269,27 @@ final class SpillSettingsTests: XCTestCase {
         defaults.set("bad-style", forKey: "menuBarStatusDisplayStyle")
         defaults.set(9, forKey: "menuBarStatusPrecision")
         defaults.set(12, forKey: "menuBarStatusHighlightThreshold")
+        defaults.set("bad-trigger", forKey: "menuBarTriggerIconStyle")
 
         let settings = SpillSettings(defaults: defaults)
 
         XCTAssertEqual(settings.menuBarStatusDisplayStyle, .labelAndPercent)
         XCTAssertEqual(settings.menuBarStatusPrecision, .tenths)
         XCTAssertEqual(settings.menuBarStatusHighlightThreshold, .seventy)
+        XCTAssertEqual(settings.menuBarTriggerIconStyle, .spill)
+    }
+
+    func testMenuBarTriggerIconStylesExposeDropSymbolOption() {
+        XCTAssertEqual(MenuBarTriggerIconStyle.selectableCases, [.spill, .cat, .liquid])
+        XCTAssertEqual(MenuBarTriggerIconStyle.spill.title, "Drop")
+        XCTAssertEqual(MenuBarTriggerIconStyle.normalized(rawValue: "spill"), .spill)
+
+        let defaults = makeDefaults()
+        defaults.set("spill", forKey: "menuBarTriggerIconStyle")
+
+        let settings = SpillSettings(defaults: defaults)
+
+        XCTAssertEqual(settings.menuBarTriggerIconStyle, .spill)
     }
 
     func testWindowActionShortcutsPersistAndResolveConflicts() {

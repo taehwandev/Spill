@@ -1,26 +1,54 @@
 version: 1
 feature_id: menu-bar-status-mascot
-status: draft
+status: implemented
 necessity:
-  decision: defer
-  clarity: needs-clarification
-  clarification_required: true
-  blockers_resolved: false
+  decision: build
+  clarity: clear
+  clarification_required: false
+  blockers_resolved: true
 tasks:
   - id: MBM-T1
-    title: Resolve compact mascot visual language
-    state: deferred
+    title: Resolve compact drop, cat, and liquid visual language
+    state: done
     acceptance:
-      - Maintainer chooses a compact trigger direction.
+      - Maintainer can choose the restored Drop symbol plus animated cat/liquid
+        trigger styles.
+      - The droplet or liquid treatment feels soft and malleable rather than
+        like a separate water feature.
       - The design preserves minimal menu bar width.
   - id: MBM-T2
-    title: Resolve Caffeine click model
-    state: deferred
+    title: Resolve direct Caffeine click model
+    state: done
     acceptance:
-      - The implementation path defines whether Caffeine remains a direct click
-        target or moves behind another interaction.
+      - Caffeine has a visually separated adjacent direct click affordance.
+      - The implementation path defines whether the hit target lives inside one
+        composite status item or requires an explicit ARD change.
   - id: MBM-T3
     title: Resolve animation cadence
-    state: deferred
+    state: done
     acceptance:
-      - Animation is short, event-driven, and not constantly running.
+      - Animation is lightweight, low-cadence, and bounded to the trigger chip.
+      - Performance-reactive liquid motion uses conservative thresholds.
+  - id: MBM-T4
+    title: Resolve state priority for the clock-adjacent icon
+    state: done
+    acceptance:
+      - Permission/error, panel-open, Caffeine, busy, and idle states have an
+        explicit precedence order.
+      - Overlapping states never make the primary panel trigger ambiguous.
+  - id: MBM-T5
+    title: Resolve compact width and asset format
+    state: done
+    acceptance:
+      - The selected mascot representation fits the menu bar without adding a
+        second status item.
+      - Animation frames do not cause status item width jitter.
+      - Preferences shows a live preview of the selected trigger style.
+  - id: MBM-T6
+    title: Resolve performance-reactive droplet mapping
+    state: done
+    acceptance:
+      - CPU, memory, battery, and network signals have a small aggregate mapping
+        into calm, active, and stressed visual states.
+      - The effect reuses existing provider snapshots and does not introduce
+        high-frequency sampling.

@@ -2,8 +2,30 @@
 
 ## Shipped
 
-- Documented a deferred direction for a compact mascot-style menu bar trigger
-  that can represent Caffeine and transient status states.
+- Implemented a Preferences-controlled menu bar trigger icon style.
+- Placed the trigger icon control in `General & Launch` for visibility.
+- Added `Drop`, `Cat`, and `Liquid` user-selectable trigger styles.
+- Restored the existing droplet symbol as the `Drop` trigger style.
+- Added a live trigger preview in Preferences.
+- Increased the actual menu bar trigger render size while keeping ordinary
+  metric and Caffeine icon chips unchanged.
+- Kept Caffeine as a visually separated clock area item with direct click
+  behavior when enabled.
+- Moved Caffeine to the far left of the composite menu bar status surface.
+- Preserved existing metric and Caffeine symbols; only ordering changed.
+- Added low-cadence trigger motion for Cat and Liquid styles.
+- Made Liquid trigger motion react to aggregate CPU, memory, and network load
+  using existing status samples.
+- Updated the panel Settings action to close the panel before opening
+  Preferences.
+- Clarified that the scope is the clock-adjacent Spill icon design, not update
+  behavior.
+- Captured candidate states: idle, panel open, Caffeine active, busy/scanning,
+  and warning/error.
+- Captured constraints for single status item ownership, compact width, and
+  lightweight trigger animation.
+- Captured the refined direction: tail-wagging cat-like panel trigger, direct
+  separated Caffeine action, and soft performance-reactive liquid treatment.
 
 ## Changed Files
 
@@ -17,15 +39,18 @@
 
 ## Verification
 
-- Documentation-only note. No build verification required for this deferred
-  idea.
+- `swift build`
+- `swift test`
 
 ## Residual Risks
 
-- Visual language and click behavior remain unresolved by design.
-- Implementation should not start until the feature-store refactor is complete.
+- Final brand-quality cat art remains unresolved.
+- Liquid and Cat movement use drawn frames, not brand-quality asset animation.
+- Caffeine remains opt-in through the existing clock area status item setting.
 
 ## Follow-up Tasks
 
-- Reopen this run or create an implementation run after the maintainer resolves
-  mascot visuals, Caffeine click behavior, and animation cadence.
+- Reopen this run or create a follow-up implementation run if the maintainer
+  wants asset-quality cat art or actual short animation frames.
+- Decide whether the mascot replaces all default status chips or only replaces
+  the leading trigger while optional status chips remain user-configurable.

@@ -9,6 +9,11 @@ struct MenuBarStatusSegment: Equatable {
         case sleepGuard
     }
 
+    enum VisualStyle: Equatable {
+        case symbol
+        case trigger(MenuBarTriggerIconStyle)
+    }
+
     let kind: Kind
     let title: String
     let shortTitle: String
@@ -17,6 +22,32 @@ struct MenuBarStatusSegment: Equatable {
     let usageRatio: Double
     let state: SpillStatusState
     let symbolName: String
+    let visualStyle: VisualStyle
+    let animates: Bool
+
+    init(
+        kind: Kind,
+        title: String,
+        shortTitle: String,
+        value: String,
+        displayText: String,
+        usageRatio: Double,
+        state: SpillStatusState,
+        symbolName: String,
+        visualStyle: VisualStyle = .symbol,
+        animates: Bool = false
+    ) {
+        self.kind = kind
+        self.title = title
+        self.shortTitle = shortTitle
+        self.value = value
+        self.displayText = displayText
+        self.usageRatio = usageRatio
+        self.state = state
+        self.symbolName = symbolName
+        self.visualStyle = visualStyle
+        self.animates = animates
+    }
 }
 
 private struct MenuBarStatusEntry {
