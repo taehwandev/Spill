@@ -1,0 +1,102 @@
+feature_id: manual-update-check
+status: completed
+
+necessity:
+  decision: build
+  reason: Manual update checks are needed for direct distribution and do not require a custom server.
+  ambiguity:
+    clarity: clear
+    blockers_resolved: true
+    resolution_sources:
+      - maintainer
+      - repo-research
+      - assumption
+  clarification_required: false
+  questions: []
+
+tasks:
+  - id: manual-update-check-T1
+    title: Generate release update manifest
+    owner_role: builder
+    state: done
+    depends_on: []
+    write_scope:
+      - scripts/package-release.sh
+      - .github/workflows/release.yml
+      - README.md
+    read_scope:
+      - .agents/specs/prd.md
+      - .agents/specs/ard.md
+      - .agents/runs/release-automation-site/01-prd.md
+    forbidden_scope:
+      - docs/index.html
+      - .agents/runs/landing-page-showcase
+    acceptance:
+      - Release artifacts include update.json.
+      - GitHub Release upload includes update.json.
+    verification:
+      commands:
+        - bash -n scripts/package-release.sh
+        - ruby -e 'require "yaml"; YAML.load_file(".github/workflows/release.yml")'
+      manual:
+        - Inspect generated manifest shape.
+  - id: manual-update-check-T2
+    title: Add manual update checker service and tests
+    owner_role: builder
+    state: done
+    depends_on: []
+    write_scope:
+      - Sources/Spill/App/UpdateChecker.swift
+      - Tests/SpillTests/UpdateCheckerTests.swift
+    read_scope:
+      - Sources/Spill/App
+      - Tests/SpillTests
+    forbidden_scope:
+      - docs/index.html
+      - .agents/runs/landing-page-showcase
+    acceptance:
+      - Version comparison and manifest outcomes are tested.
+    verification:
+      commands:
+        - swift test
+      manual: []
+  - id: manual-update-check-T3
+    title: Expose update check in Preferences and menus
+    owner_role: builder
+    state: done
+    depends_on:
+      - manual-update-check-T2
+    write_scope:
+      - Sources/Spill/App/AppDelegate.swift
+      - Sources/Spill/App/UpdateCheckStore.swift
+      - Sources/Spill/MenuBar/StatusItemController.swift
+      - Sources/Spill/Preferences/GeneralPreferencesSection.swift
+      - Sources/Spill/Preferences/PreferencesView.swift
+      - Sources/Spill/Preferences/PreferencesWindowController.swift
+      - Sources/Spill/Preferences/UpdatePreferencesSection.swift
+    read_scope:
+      - .agents/design/stitch.md
+      - Sources/Spill/Preferences
+      - Sources/Spill/MenuBar
+    forbidden_scope:
+      - docs/index.html
+      - .agents/runs/landing-page-showcase
+    acceptance:
+      - Preferences shows current version and update state.
+      - Menu actions open Preferences and start a manual check.
+    verification:
+      commands:
+        - swift build
+      manual:
+        - Launch app and confirm Preferences update section renders.
+
+parallel_groups:
+  - id: group-1
+    tasks:
+      - manual-update-check-T1
+      - manual-update-check-T2
+    rule: Tasks in this group have disjoint write scopes.
+  - id: group-2
+    tasks:
+      - manual-update-check-T3
+    rule: UI wiring depends on the update checker store.

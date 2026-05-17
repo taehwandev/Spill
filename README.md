@@ -167,6 +167,11 @@ bundle and archives, and uploads these assets:
 The stable `Spill-macos.*` asset names are used by the download site. The workflow
 can also be started manually from GitHub Actions with a per-week release count.
 Manual runs compute the version from the current UTC ISO year/week plus that count.
+The workflow also uploads `update.json`, a small static manifest used by the
+app's manual Check for Updates action. The app reads that manifest from the
+latest GitHub Release asset URL and opens the stable DMG download when a newer
+version is available. Spill does not run background update checks or install
+updates automatically in the MVP.
 
 Unsigned test releases work without secrets and are ad-hoc signed. For Developer
 ID signing and notarization, configure these repository secrets:

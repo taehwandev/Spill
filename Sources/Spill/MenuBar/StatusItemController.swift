@@ -10,6 +10,7 @@ final class StatusItemController: NSObject {
     private let toggleAction: () -> Void
     private let refreshAction: () -> Void
     private let preferencesAction: () -> Void
+    private let updateAction: () -> Void
     private let quitAction: () -> Void
     private let triggerItem: NSStatusItem
     private var isSpillBarVisible = false
@@ -24,6 +25,7 @@ final class StatusItemController: NSObject {
         toggleAction: @escaping () -> Void,
         refreshAction: @escaping () -> Void,
         preferencesAction: @escaping () -> Void,
+        updateAction: @escaping () -> Void,
         quitAction: @escaping () -> Void
     ) {
         self.settings = settings
@@ -33,6 +35,7 @@ final class StatusItemController: NSObject {
         self.toggleAction = toggleAction
         self.refreshAction = refreshAction
         self.preferencesAction = preferencesAction
+        self.updateAction = updateAction
         self.quitAction = quitAction
 
         triggerItem = NSStatusBar.system.statusItem(withLength: defaultLength)
@@ -317,6 +320,10 @@ final class StatusItemController: NSObject {
         refreshAction()
     }
 
+    @objc private func checkForUpdatesFromMenu() {
+        updateAction()
+    }
+
     @objc private func quitFromMenu() {
         quitAction()
     }
@@ -328,6 +335,7 @@ final class StatusItemController: NSObject {
         menu.addItem(menuItem(title: toggleTitle, action: #selector(toggleFromMenu), keyEquivalent: ""))
         menu.addItem(disabledMenuItem(title: "Shortcut: \(WindowActionShortcutModifier.standard.title) + Space"))
         menu.addItem(menuItem(title: "Refresh Menu Bar Items", action: #selector(refreshFromMenu), keyEquivalent: "r"))
+        menu.addItem(menuItem(title: "Check for Updates...", action: #selector(checkForUpdatesFromMenu), keyEquivalent: ""))
         menu.addItem(menuItem(title: "Preferences...", action: #selector(showPreferencesFromMenu), keyEquivalent: ","))
         menu.addItem(.separator())
         menu.addItem(menuItem(title: "Quit Spill", action: #selector(quitFromMenu), keyEquivalent: "q"))

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct GeneralPreferencesSection: View {
     @ObservedObject var settings: SpillSettings
+    @ObservedObject var updateStore: UpdateCheckStore
     @Binding var loginItemError: String?
     @State private var showsWindowShortcuts = false
 
@@ -25,6 +26,11 @@ struct GeneralPreferencesSection: View {
                         .foregroundStyle(.red)
                 }
             }
+
+            Divider()
+                .background(Color.primary.opacity(0.04))
+
+            UpdatePreferencesSection(store: updateStore)
 
             Divider()
                 .background(Color.primary.opacity(0.04))

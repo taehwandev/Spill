@@ -110,6 +110,7 @@ struct SpillLogoShape: Shape {
 struct PreferencesView: View {
     @ObservedObject var settings: SpillSettings
     @ObservedObject var scanner: AXMenuBarItemScanner
+    @ObservedObject var updateStore: UpdateCheckStore
     let showPanelAction: () -> Void
     @State private var accessibilityTrusted = AccessibilityPermission.isTrusted
     @State private var loginItemError: String?
@@ -151,7 +152,11 @@ struct PreferencesView: View {
 
                 // Section 1: General Settings (Launch at Login, Animations, Shortcuts)
                 PreferenceCard(title: "General & Launch", symbolName: "gearshape.fill", iconColor: .blue) {
-                    GeneralPreferencesSection(settings: settings, loginItemError: $loginItemError)
+                    GeneralPreferencesSection(
+                        settings: settings,
+                        updateStore: updateStore,
+                        loginItemError: $loginItemError
+                    )
                 }
 
                 // Section 2: Status Modules

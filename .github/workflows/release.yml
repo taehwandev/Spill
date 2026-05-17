@@ -170,7 +170,7 @@ jobs:
 
           (
             cd "$artifacts_dir"
-            shasum -a 256 Spill-*.dmg Spill-*.zip > checksums.txt
+            shasum -a 256 Spill-*.dmg Spill-*.zip update.json > checksums.txt
           )
 
       - name: Verify packaged artifacts
@@ -192,6 +192,7 @@ jobs:
             .build/release-artifacts/Spill-${{ steps.version.outputs.version }}-macos.zip
             .build/release-artifacts/Spill-macos.dmg
             .build/release-artifacts/Spill-macos.zip
+            .build/release-artifacts/update.json
             .build/release-artifacts/checksums.txt
 
       - name: Publish GitHub Release
@@ -214,6 +215,7 @@ jobs:
           - Spill-$version-macos.dmg
           - Spill-$version-macos.zip
           - Spill-macos.dmg and Spill-macos.zip for stable website download links
+          - update.json for manual in-app update checks
           - checksums.txt
 
           Signing:
@@ -236,6 +238,7 @@ jobs:
             "$artifacts_dir/Spill-$version-macos.zip"
             "$artifacts_dir/Spill-macos.dmg"
             "$artifacts_dir/Spill-macos.zip"
+            "$artifacts_dir/update.json"
             "$artifacts_dir/checksums.txt"
           )
 

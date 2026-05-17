@@ -11,6 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let statusStore = SystemStatusStore()
     private let aiStatusStore = AIStatusStore()
     private let windowActionStore = WindowActionStore()
+    private let updateCheckStore = UpdateCheckStore()
     private lazy var panelStore = PanelStore(
         settings: settings,
         scanner: scanner,
@@ -42,6 +43,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var preferencesWindowController = PreferencesWindowController(
         settings: settings,
         scanner: scanner,
+        updateStore: updateCheckStore,
         showPanelAction: { [weak self] in
             self?.showSpillBar()
         }
@@ -70,6 +72,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             },
             preferencesAction: { [weak self] in
                 self?.showPreferences()
+            },
+            updateAction: { [weak self] in
+                self?.checkForUpdates()
             },
             quitAction: {
                 NSApp.terminate(nil)
@@ -256,6 +261,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func showPreferences() {
         preferencesWindowController.show()
+    }
+
+    private func checkForUpdates() {
+        showPreferences()
+        updateCheckStore.checkForUpdates()
     }
 
     private func prewarmPanel() {
@@ -480,6 +490,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appMenu.addItem(mainMenuItem(title: "Show Spill Panel", action: #selector(showSpillPanelFromMainMenu), keyEquivalent: ""))
         appMenu.addItem(mainMenuItem(title: "Refresh Menu Bar Items", action: #selector(refreshMenuBarItemsFromMainMenu), keyEquivalent: "r"))
         appMenu.addItem(.separator())
+        appMenu.addItem(mainMenuItem(title: "Check for Updates...", action: #selector(checkForUpdatesFromMainMenu), keyEquivalent: ""))
         appMenu.addItem(mainMenuItem(title: "Preferences...", action: #selector(showPreferencesFromMainMenu), keyEquivalent: ","))
         appMenu.addItem(.separator())
         appMenu.addItem(mainMenuItem(title: "Quit Spill", action: #selector(quitFromMainMenu), keyEquivalent: "q"))
@@ -502,6 +513,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func showPreferencesFromMainMenu() {
         showPreferences()
+    }
+
+    @objc private func checkForUpdatesFromMainMenu() {
+        checkForUpdates()
     }
 
     @objc private func quitFromMainMenu() {
