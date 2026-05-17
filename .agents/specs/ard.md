@@ -394,12 +394,30 @@ MVP detection:
 - Codex:
   - process detection
   - optional local config/session files if stable
+- Claude:
+  - process detection
+  - version and model hints only when exposed by safe local command output or
+    process arguments
+- Gemini:
+  - process detection
+  - version and model hints only when exposed by safe local command output or
+    process arguments
 - Ollama:
   - process detection
-  - optional `ollama list` only when user enables command probing
+  - `ollama ps` for currently loaded model hints when local command probing is enabled
+  - optional `ollama list` only when user enables broader command probing
 - OpenAI:
   - environment/config presence only
+  - optional default model from explicit OpenAI model environment keys
   - never display secret values
+
+The panel should render only detected or configured AI tools. Missing local tools
+should be omitted from the compact strip, and the whole AI strip should be hidden
+when every local AI signal is absent.
+
+Model and version labels are best-effort metadata. Spill should not inspect chat
+transcripts, private session stores, or secret-bearing config files to infer an
+AI session's exact model.
 
 No external network calls by default.
 

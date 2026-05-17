@@ -2,6 +2,20 @@ import XCTest
 @testable import Spill
 
 final class SpillPanelAccessibilityReportTests: XCTestCase {
+    func testDefaultReportDoesNotRequireHiddenAISection() {
+        let report = SpillPanelAccessibilityReport(
+            discoveredLabels: [
+                "Spill",
+                "WINDOWS",
+                "MENU BAR",
+                "Caffeine Off"
+            ]
+        )
+
+        XCTAssertTrue(report.isValid)
+        XCTAssertEqual(report.missingLabels, [])
+    }
+
     func testValidReportAcceptsRequiredLabels() {
         let report = SpillPanelAccessibilityReport(
             requiredLabels: ["Spill", "AI", "Caffeine Off"],
@@ -22,7 +36,7 @@ final class SpillPanelAccessibilityReportTests: XCTestCase {
     func testReportFailsWhenRequiredLabelIsMissing() {
         let report = SpillPanelAccessibilityReport(
             requiredLabels: ["Spill", "AI", "WINDOWS"],
-            discoveredLabels: ["Spill", "OpenAI Missing"]
+            discoveredLabels: ["Spill", "OpenAI API Set"]
         )
 
         XCTAssertFalse(report.isValid)
@@ -33,7 +47,7 @@ final class SpillPanelAccessibilityReportTests: XCTestCase {
     func testRequiredLabelMatchesTokenBoundaryInsideCombinedLabel() {
         let report = SpillPanelAccessibilityReport(
             requiredLabels: ["AI"],
-            discoveredLabels: ["AI Codex Missing Ollama Missing OpenAI Configured"]
+            discoveredLabels: ["AI Codex Active Claude Active Gemini Idle Ollama Active OpenAI API Set"]
         )
 
         XCTAssertTrue(report.isValid)

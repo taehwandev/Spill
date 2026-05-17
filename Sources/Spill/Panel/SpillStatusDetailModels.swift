@@ -104,10 +104,24 @@ enum SpillStatusDetailRows {
     }
 
     static func rows(for status: LocalAIToolStatus) -> [SpillStatusDetailRow] {
-        [
+        var rows = [
             SpillStatusDetailRow(label: "Status", value: status.value),
             SpillStatusDetailRow(label: "Detail", value: status.subtitle ?? "N/A")
         ]
+
+        if let model = status.metadata.model, !model.isEmpty {
+            rows.append(SpillStatusDetailRow(label: "Model", value: model))
+        }
+
+        if let version = status.metadata.version, !version.isEmpty {
+            rows.append(SpillStatusDetailRow(label: "Version", value: version))
+        }
+
+        if let source = status.metadata.source, !source.isEmpty {
+            rows.append(SpillStatusDetailRow(label: "Source", value: source))
+        }
+
+        return rows
     }
 
     private static func boolText(_ value: Bool) -> String {

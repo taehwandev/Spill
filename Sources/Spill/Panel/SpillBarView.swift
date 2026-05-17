@@ -27,9 +27,11 @@ struct SpillBarView: View {
                     statusSection
                 }
 
-                Divider()
-                    .background(Color.primary.opacity(0.04))
-                aiSection
+                if !aiStatusStore.statuses.isEmpty {
+                    Divider()
+                        .background(Color.primary.opacity(0.04))
+                    aiSection
+                }
 
                 Divider()
                     .background(Color.primary.opacity(0.04))

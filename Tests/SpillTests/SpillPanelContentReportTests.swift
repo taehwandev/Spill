@@ -8,8 +8,8 @@ final class SpillPanelContentReportTests: XCTestCase {
             panelState: .permissionRequired,
             statusModuleIDs: ["cpu", "memory"],
             statusDetailRowCount: 10,
-            aiStatusCount: LocalAIToolKind.allCases.count,
-            aiDetailRowCount: 6,
+            aiStatusCount: 0,
+            aiDetailRowCount: 0,
             windowActionCount: 0,
             menuBarActionCount: 0,
             footerItemCount: 5,
@@ -28,8 +28,8 @@ final class SpillPanelContentReportTests: XCTestCase {
             panelState: .ready,
             statusModuleIDs: [],
             statusDetailRowCount: 0,
-            aiStatusCount: LocalAIToolKind.allCases.count,
-            aiDetailRowCount: 6,
+            aiStatusCount: 0,
+            aiDetailRowCount: 0,
             windowActionCount: 0,
             menuBarActionCount: 0,
             footerItemCount: 5,
@@ -41,13 +41,32 @@ final class SpillPanelContentReportTests: XCTestCase {
         XCTAssertTrue(report.logLine.contains("actionSurface=false"))
     }
 
-    func testContentReportRequiresAllAIStatuses() {
+    func testContentReportAllowsSubsetAIStatuses() {
         let report = SpillPanelContentReport(
             isVisible: true,
             panelState: .empty,
             statusModuleIDs: ["cpu"],
             statusDetailRowCount: 8,
-            aiStatusCount: LocalAIToolKind.allCases.count - 1,
+            aiStatusCount: 1,
+            aiDetailRowCount: 2,
+            windowActionCount: 0,
+            menuBarActionCount: 0,
+            footerItemCount: 5,
+            showsPowerFooter: true,
+            showsCountBadge: true
+        )
+
+        XCTAssertTrue(report.isValid)
+        XCTAssertTrue(report.logLine.contains("aiContent=true"))
+    }
+
+    func testContentReportRejectsImpossibleAIStatusCount() {
+        let report = SpillPanelContentReport(
+            isVisible: true,
+            panelState: .empty,
+            statusModuleIDs: ["cpu"],
+            statusDetailRowCount: 8,
+            aiStatusCount: LocalAIToolKind.allCases.count + 1,
             aiDetailRowCount: 4,
             windowActionCount: 0,
             menuBarActionCount: 0,

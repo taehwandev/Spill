@@ -1,0 +1,69 @@
+feature_id: ai-tool-metadata
+status: completed
+
+necessity:
+  decision: build
+  reason: "Best-effort model and version hints make the compact AI strip materially more useful without turning Spill into a telemetry dashboard."
+  ambiguity:
+    clarity: clear
+    blockers_resolved: true
+    resolution_sources:
+      - maintainer
+      - repo-research
+      - assumption
+  clarification_required: false
+  questions: []
+
+tasks:
+  - id: ai-tool-metadata-T1
+    title: Add Claude, Gemini, model, and version metadata to the local AI provider
+    owner_role: builder
+    state: done
+    depends_on: []
+    write_scope:
+      - Sources/Spill/Providers/LocalAIStatusProvider.swift
+      - Tests/SpillTests/LocalAIStatusProviderTests.swift
+    read_scope:
+      - .agents/specs/prd.md
+      - .agents/specs/ard.md
+    forbidden_scope:
+      - Sources/Spill/Preferences/PreferencesView.swift
+    acceptance:
+      - Claude and Gemini are detected when installed or running.
+      - Local CLI version hints are collected with short command timeouts.
+      - Process model arguments and Ollama runtime model are surfaced when available.
+      - OpenAI is labeled as API configuration.
+    verification:
+      commands:
+        - swift test --filter LocalAIStatusProviderTests
+
+  - id: ai-tool-metadata-T2
+    title: Show safe AI model and version metadata in detail rows
+    owner_role: builder
+    state: done
+    depends_on:
+      - ai-tool-metadata-T1
+    write_scope:
+      - Sources/Spill/Panel/SpillStatusDetailModels.swift
+      - Tests/SpillTests/SpillStatusDetailRowsTests.swift
+      - Tests/SpillTests/SpillPanelAccessibilityReportTests.swift
+    read_scope:
+      - Sources/Spill/Panel/SpillBarView.swift
+    forbidden_scope:
+      - Sources/Spill/Preferences/PreferencesView.swift
+    acceptance:
+      - AI detail popovers include model, version, and source rows when present.
+      - Existing AI rows without metadata remain compact.
+    verification:
+      commands:
+        - swift test --filter SpillStatusDetailRowsTests
+
+parallel_groups:
+  - id: group-1
+    tasks:
+      - ai-tool-metadata-T1
+    rule: Tasks in a group must have disjoint write_scope entries.
+  - id: group-2
+    tasks:
+      - ai-tool-metadata-T2
+    rule: Tasks in a group must have disjoint write_scope entries.

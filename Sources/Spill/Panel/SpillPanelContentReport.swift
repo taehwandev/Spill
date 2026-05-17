@@ -46,7 +46,7 @@ struct SpillPanelContentReport: Equatable {
     }
 
     private var hasConsistentAIContent: Bool {
-        aiStatusCount == LocalAIToolKind.allCases.count
+        (0 ... LocalAIToolKind.allCases.count).contains(aiStatusCount)
             && aiDetailRowCount >= aiStatusCount
     }
 

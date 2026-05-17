@@ -9,16 +9,16 @@ final class AIStatusStoreTests: XCTestCase {
             readCount += 1
             return LocalAIStatusProvider.statuses(
                 environment: readCount == 1 ? [:] : ["OPENAI_BASE_URL": "http://localhost"],
-                processNames: readCount == 1 ? [] : ["codex"]
+                processNames: readCount == 1 ? [] : ["codex"],
+                installedExecutableNames: readCount == 1 ? [] : ["codex"]
             )
         })
 
         store.refresh()
-        XCTAssertEqual(store.statuses.first { $0.kind == .codex }?.value, "Idle")
-        XCTAssertEqual(store.statuses.first { $0.kind == .openAI }?.value, "Missing")
+        XCTAssertEqual(store.statuses, [])
 
         store.refresh()
-        XCTAssertEqual(store.statuses.first { $0.kind == .codex }?.value, "Live")
+        XCTAssertEqual(store.statuses.first { $0.kind == .codex }?.value, "Active")
         XCTAssertEqual(store.statuses.first { $0.kind == .openAI }?.value, "Set")
     }
 }

@@ -1,0 +1,84 @@
+feature_id: detected-ai-strip
+status: completed
+
+necessity:
+  decision: build
+  reason: "The current fixed AI strip creates placeholder UI; detection-only rendering keeps the compact tray useful."
+  ambiguity:
+    clarity: clear
+    blockers_resolved: true
+    resolution_sources:
+      - maintainer
+      - repo-research
+      - assumption
+  clarification_required: false
+  questions: []
+
+tasks:
+  - id: detected-ai-strip-T1
+    title: Make local AI provider return only meaningful statuses
+    owner_role: builder
+    state: done
+    depends_on: []
+    write_scope:
+      - Sources/Spill/Providers/LocalAIStatusProvider.swift
+      - Sources/Spill/Providers/AIStatusStore.swift
+      - Tests/SpillTests/LocalAIStatusProviderTests.swift
+      - Tests/SpillTests/AIStatusStoreTests.swift
+    read_scope:
+      - .agents/specs/prd.md
+      - .agents/specs/ard.md
+    forbidden_scope:
+      - Sources/Spill/Preferences/PreferencesView.swift
+    acceptance:
+      - Missing Codex and Ollama tools are omitted.
+      - Installed Codex and Ollama tools render idle.
+      - Running Codex and Ollama tools render active.
+      - OpenAI renders only when configured.
+    verification:
+      commands:
+        - swift test --filter LocalAIStatusProviderTests
+        - swift test --filter AIStatusStoreTests
+      manual:
+        - Open the panel with no detected local AI tools and confirm the section is hidden.
+
+  - id: detected-ai-strip-T2
+    title: Make the panel treat AI as an optional compact section
+    owner_role: builder
+    state: done
+    depends_on:
+      - detected-ai-strip-T1
+    write_scope:
+      - Sources/Spill/Panel/SpillBarView.swift
+      - Sources/Spill/Panel/SpillPanelContentSizer.swift
+      - Sources/Spill/Panel/SpillPanelContentReport.swift
+      - Sources/Spill/Panel/SpillPanelAccessibilityReport.swift
+      - Tests/SpillTests/SpillPanelContentReportTests.swift
+      - Tests/SpillTests/SpillPanelLayoutTests.swift
+      - Tests/SpillTests/SpillPanelAccessibilityReportTests.swift
+    read_scope:
+      - Sources/Spill/Panel/SpillPanelController.swift
+      - Sources/Spill/Panel/SpillStatusDetailModels.swift
+    forbidden_scope:
+      - Sources/Spill/Preferences/PreferencesView.swift
+    acceptance:
+      - The AI section and divider are omitted when there are no visible AI statuses.
+      - Panel sizing does not reserve AI height for empty AI state.
+      - Content and accessibility reports accept the hidden AI section.
+    verification:
+      commands:
+        - swift test --filter SpillPanelContentReportTests
+        - swift test --filter SpillPanelLayoutTests
+        - swift test --filter SpillPanelAccessibilityReportTests
+      manual:
+        - Run panel layout smoke verification.
+
+parallel_groups:
+  - id: group-1
+    tasks:
+      - detected-ai-strip-T1
+    rule: Tasks in a group must have disjoint write_scope entries.
+  - id: group-2
+    tasks:
+      - detected-ai-strip-T2
+    rule: Tasks in a group must have disjoint write_scope entries.

@@ -136,20 +136,28 @@ Acceptance:
 Initial signals:
 
 - Codex process/session state where locally detectable.
+- Claude process/session state where locally detectable.
+- Gemini process/session state where locally detectable.
 - Ollama running/not running.
 - Ollama model hint if cheaply detectable.
-- OpenAI configuration present/missing, without revealing secrets.
+- OpenAI API configuration present/missing, without revealing secrets.
+- Best-effort tool version and model hints when exposed by local commands or
+  visible process arguments.
 
 Requirements:
 
 - No external API calls in MVP unless explicitly configured.
 - Never display API keys.
 - Treat AI providers as pluggable.
+- Show only locally detected or configured tools in the compact panel.
+- Hide the AI strip when no local AI tool or OpenAI configuration is detected.
+- Treat model and version labels as best-effort hints, not guaranteed session
+  truth.
 
 Acceptance:
 
 - AI strip shows useful local state.
-- Missing tools do not create errors or noise.
+- Missing tools do not create errors, noise, or placeholder panel rows.
 
 ### 5. Pinned Actions
 
