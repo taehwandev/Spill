@@ -267,7 +267,7 @@ private final class MenuBarMetricChipView: NSView {
         case .normal:
             return .labelColor
         case .active, .refreshing:
-            return .systemBlue
+            return .systemTeal
         case .warning:
             return .systemOrange
         case .unavailable:

@@ -126,7 +126,7 @@ struct SpillActionButton: View {
                 .overlay(alignment: .topTrailing) {
                     if action.role == .primary {
                         Circle()
-                            .fill(Color.blue)
+                            .fill(Color.teal)
                             .frame(width: 5, height: 5)
                             .padding(5)
                     }
@@ -141,7 +141,7 @@ struct SpillActionButton: View {
             Button(action: togglePinned) {
                 Image(systemName: isPinned ? "pin.fill" : "pin")
                     .font(.system(size: 8, weight: .bold))
-                    .foregroundStyle(isPinned ? .blue : .secondary)
+                    .foregroundStyle(isPinned ? .teal : .secondary)
                     .frame(width: 15, height: 15)
                     .background(.regularMaterial, in: Circle())
                     .overlay {

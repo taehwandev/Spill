@@ -57,7 +57,7 @@ enum SpillPanelState: Equatable {
         case .permissionRequired:
             return .orange
         case .scanning:
-            return .blue
+            return .teal
         case .empty:
             return .secondary
         case .ready:

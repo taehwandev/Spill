@@ -1,0 +1,58 @@
+feature_id: panel-glass-footer-contrast
+status: completed
+
+necessity:
+  decision: build
+  reason: Improve transparent dashboard footer readability without restoring heavy backgrounds.
+  ambiguity:
+    clarity: clear
+    blockers_resolved: true
+    resolution_sources:
+      - maintainer
+      - repo-research
+      - assumption
+  clarification_required: false
+  questions: []
+
+tasks:
+  - id: panel-glass-footer-contrast-T1
+    title: Add adaptive footer foreground roles
+    owner_role: builder
+    state: done
+    depends_on: []
+    write_scope:
+      - Sources/Spill/Panel/SpillFooterContrastStyle.swift
+      - Sources/Spill/Panel/SpillFooterView.swift
+      - Sources/Spill/Panel/SpillStatusStyle.swift
+      - Sources/Spill/Panel/SpillPanelState.swift
+      - Sources/Spill/Panel/SpillBarView.swift
+      - Sources/Spill/MenuBar/MenuBarStatusContentView.swift
+      - Tests/SpillTests/SpillFooterContrastStyleTests.swift
+    read_scope:
+      - .agents/specs/prd.md
+      - .agents/specs/ard.md
+      - .agents/design/stitch.md
+      - Sources/Spill/Panel/SpillBarView.swift
+      - Sources/Spill/Panel/SpillStatusStyle.swift
+    forbidden_scope:
+      - Sources/Spill/Providers
+      - Sources/Spill/Settings
+    acceptance:
+      - Footer values use a primary foreground role.
+      - Footer status color is concentrated on icons.
+      - Footer capsule background remains absent.
+      - Active/refreshing accents use teal instead of blue in affected glass and menu bar surfaces.
+      - Unit, build, and panel smoke checks pass.
+    verification:
+      commands:
+        - swift test
+        - swift build
+        - python3 .agents/scripts/workflow.py panel-layout-smoke
+      manual:
+        - Launch app and inspect footer over light and dark backgrounds.
+
+parallel_groups:
+  - id: group-1
+    tasks:
+      - panel-glass-footer-contrast-T1
+    rule: Single scoped footer contrast task.

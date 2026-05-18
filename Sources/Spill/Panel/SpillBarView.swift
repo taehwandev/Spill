@@ -86,10 +86,10 @@ struct SpillBarView: View {
         HStack(spacing: 8) {
             ZStack {
                 Circle()
-                    .fill(Color.blue.opacity(0.12))
+                    .fill(Color.teal.opacity(0.14))
 
                 Image(systemName: "terminal.fill")
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(.teal)
                     .font(.system(size: 11, weight: .semibold))
             }
             .frame(width: 24, height: 24)
@@ -120,10 +120,10 @@ struct SpillBarView: View {
         }
         .padding(.horizontal, 9)
         .padding(.vertical, 7)
-        .background(Color.blue.opacity(0.07), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .background(Color.teal.opacity(0.08), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(Color.blue.opacity(0.16), lineWidth: 0.8)
+                .stroke(Color.teal.opacity(0.18), lineWidth: 0.8)
         )
     }
 
@@ -463,7 +463,7 @@ struct SpillBarView: View {
         }
 
         return [
-            MetricSparklineSeries(values: statusStore.networkTrafficHistory.received, tint: .blue),
+            MetricSparklineSeries(values: statusStore.networkTrafficHistory.received, tint: .teal),
             MetricSparklineSeries(values: statusStore.networkTrafficHistory.sent, tint: .orange)
         ]
     }
@@ -486,7 +486,7 @@ struct SpillBarView: View {
     }
 
     private func metricValueTint(for module: SpillStatusModule, state: SpillStatusState) -> Color {
-        module == .network ? .blue : state.panelTint
+        module == .network ? .teal : state.panelTint
     }
 
     private func metricSubtitleTint(for module: SpillStatusModule) -> Color {

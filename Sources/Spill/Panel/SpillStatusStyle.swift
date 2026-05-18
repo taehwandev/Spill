@@ -6,13 +6,13 @@ extension SpillStatusState {
         case .normal:
             return .mint
         case .active:
-            return .blue
+            return .teal
         case .warning:
             return .orange
         case .unavailable:
             return .secondary
         case .refreshing:
-            return .blue
+            return .teal
         }
     }
 }
