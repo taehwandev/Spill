@@ -64,52 +64,61 @@ enum MenuBarTriggerIconRenderer {
     ) {
         let load = CGFloat(usageRatio.clamped(to: 0...1))
         let angle = phase * .pi * 2
-        let bob = sin(angle) * (0.25 + load * 0.5)
-        let tailWag = sin(angle * 1.8) * (0.7 + load * 0.8)
-        let bodyRect = rect.insetBy(dx: 2.2, dy: 3.3).offsetBy(dx: 0, dy: bob - load * 0.3)
-        let headRect = rect.insetBy(dx: 2.4, dy: 2.7).offsetBy(dx: 0, dy: bob)
-        let headPath = CGPath(
-            roundedRect: headRect,
-            cornerWidth: 3.2,
-            cornerHeight: 3.2,
-            transform: nil
-        )
-        let path = CGMutablePath()
-        path.addEllipse(in: bodyRect.insetBy(dx: 0.6, dy: 1.4))
-        path.move(to: CGPoint(x: rect.minX + 2.7, y: rect.minY + 8.2 + bob))
-        path.addLine(to: CGPoint(x: rect.minX + 3.8, y: rect.minY + 11.4 + bob))
-        path.addLine(to: CGPoint(x: rect.minX + 6.0, y: rect.minY + 8.8 + bob))
-        path.closeSubpath()
-        path.move(to: CGPoint(x: rect.maxX - 6.0, y: rect.minY + 8.8 + bob))
-        path.addLine(to: CGPoint(x: rect.maxX - 3.8, y: rect.minY + 11.4 + bob))
-        path.addLine(to: CGPoint(x: rect.maxX - 2.7, y: rect.minY + 8.2 + bob))
-        path.closeSubpath()
-        path.addPath(headPath)
+        let tailSpeed = 1.15 + load * 1.25
+        let tailWag = sin(angle * tailSpeed) * (1.3 + load * 1.15)
+        let tailCurl = cos(angle * tailSpeed) * (0.28 + load * 0.22)
+        let bodyRect = CGRect(x: rect.minX + 3.4, y: rect.minY + 3.1, width: 6.4, height: 4.2)
+        let headRect = CGRect(x: rect.minX + 1.7, y: rect.minY + 5.2, width: 4.4, height: 3.8)
+        let catPath = CGMutablePath()
+
+        catPath.addEllipse(in: bodyRect)
+        catPath.addRoundedRect(in: headRect, cornerWidth: 2.3, cornerHeight: 2.3)
+        catPath.move(to: CGPoint(x: headRect.minX + 0.45, y: headRect.maxY - 0.9))
+        catPath.addLine(to: CGPoint(x: headRect.minX + 1.15, y: rect.maxY - 1.0))
+        catPath.addLine(to: CGPoint(x: headRect.minX + 2.0, y: headRect.maxY - 0.35))
+        catPath.closeSubpath()
+        catPath.move(to: CGPoint(x: headRect.maxX - 2.0, y: headRect.maxY - 0.35))
+        catPath.addLine(to: CGPoint(x: headRect.maxX - 1.0, y: rect.maxY - 1.1))
+        catPath.addLine(to: CGPoint(x: headRect.maxX - 0.35, y: headRect.maxY - 1.0))
+        catPath.closeSubpath()
 
         context.saveGState()
-        context.setStrokeColor(tintColor.withAlphaComponent(0.92).cgColor)
-        context.setLineWidth(1.25)
+        context.setStrokeColor(tintColor.cgColor)
+        context.setLineWidth(1.55)
         context.setLineCap(.round)
-        context.move(to: CGPoint(x: bodyRect.maxX - 0.4, y: bodyRect.midY + 0.2))
-        context.addCurve(
-            to: CGPoint(x: rect.maxX - 1.1, y: rect.minY + 8.2 + tailWag),
-            control1: CGPoint(x: rect.maxX - 1.7, y: rect.minY + 4.6 + bob),
-            control2: CGPoint(x: rect.maxX - 1.1, y: rect.minY + 6.5 + tailWag)
+        context.setLineJoin(.round)
+        let tailPath = CGMutablePath()
+        let tailStartX = bodyRect.maxX - 0.4
+        let tailStartY = bodyRect.midY + 0.2
+        let tailEnd = CGPoint(
+            x: rect.maxX - 1.15 - abs(tailWag) * 0.10,
+            y: rect.minY + 8.0 + tailWag
         )
+        tailPath.move(to: CGPoint(x: tailStartX, y: tailStartY))
+        tailPath.addCurve(
+            to: tailEnd,
+            control1: CGPoint(x: rect.maxX - 2.4, y: rect.minY + 4.7),
+            control2: CGPoint(x: rect.maxX - 0.6 + tailCurl, y: rect.minY + 6.3 + tailWag * 0.55)
+        )
+        context.addPath(tailPath)
         context.strokePath()
         context.restoreGState()
 
         context.saveGState()
-        context.setShadow(offset: CGSize(width: 0, height: -0.6), blur: 1.0, color: tintColor.withAlphaComponent(0.32).cgColor)
+        context.setShadow(
+            offset: CGSize(width: 0, height: -0.45),
+            blur: 0.9,
+            color: tintColor.withAlphaComponent(0.26).cgColor
+        )
         context.setFillColor(tintColor.cgColor)
-        context.addPath(path)
+        context.addPath(catPath)
         context.fillPath()
         context.restoreGState()
 
-        let eyeColor = NSColor.controlBackgroundColor.withAlphaComponent(0.8).cgColor
-        context.setFillColor(eyeColor)
-        context.fillEllipse(in: CGRect(x: rect.minX + 4.7, y: rect.minY + 6.4 + bob, width: 1.0, height: 1.0))
-        context.fillEllipse(in: CGRect(x: rect.maxX - 5.7, y: rect.minY + 6.4 + bob, width: 1.0, height: 1.0))
+        context.saveGState()
+        context.setFillColor(NSColor.controlBackgroundColor.withAlphaComponent(0.82).cgColor)
+        context.fillEllipse(in: CGRect(x: headRect.minX + 1.15, y: headRect.minY + 1.9, width: 0.85, height: 0.85))
+        context.restoreGState()
     }
 
     private static func drawLiquid(
