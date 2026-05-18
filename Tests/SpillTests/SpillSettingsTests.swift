@@ -172,9 +172,9 @@ final class SpillSettingsTests: XCTestCase {
         XCTAssertEqual(settings.visiblePanelStatusModules, [.cpu, .storage])
         XCTAssertEqual(settings.statusModulesRequiredForRefresh, [.cpu, .storage])
 
-        settings.menuBarTriggerIconStyle = .liquid
+        settings.menuBarTriggerIconStyle = .spill
 
-        XCTAssertEqual(settings.statusModulesRequiredForRefresh, [.cpu, .memory, .storage, .network])
+        XCTAssertEqual(settings.statusModulesRequiredForRefresh, [.cpu, .storage])
     }
 
     func testMenuBarStatusKeepsDisabledPanelModuleRefreshingWhenShownInMenuBar() {
@@ -238,18 +238,18 @@ final class SpillSettingsTests: XCTestCase {
         settings.menuBarStatusDisplayStyle = .percentOnly
         settings.menuBarStatusPrecision = .tenths
         settings.menuBarStatusHighlightThreshold = .eighty
-        settings.menuBarTriggerIconStyle = .cat
+        settings.menuBarTriggerIconStyle = .spill
 
         XCTAssertEqual(defaults.string(forKey: "menuBarStatusDisplayStyle"), "percentOnly")
         XCTAssertEqual(defaults.integer(forKey: "menuBarStatusPrecision"), 1)
         XCTAssertEqual(defaults.integer(forKey: "menuBarStatusHighlightThreshold"), 80)
-        XCTAssertEqual(defaults.string(forKey: "menuBarTriggerIconStyle"), "cat")
+        XCTAssertEqual(defaults.string(forKey: "menuBarTriggerIconStyle"), "spill")
 
         let reloadedSettings = SpillSettings(defaults: defaults)
         XCTAssertEqual(reloadedSettings.menuBarStatusDisplayStyle, .percentOnly)
         XCTAssertEqual(reloadedSettings.menuBarStatusPrecision, .tenths)
         XCTAssertEqual(reloadedSettings.menuBarStatusHighlightThreshold, .eighty)
-        XCTAssertEqual(reloadedSettings.menuBarTriggerIconStyle, .cat)
+        XCTAssertEqual(reloadedSettings.menuBarTriggerIconStyle, .spill)
     }
 
     func testCPUCoreChartSettingPersists() {
@@ -280,9 +280,11 @@ final class SpillSettingsTests: XCTestCase {
     }
 
     func testMenuBarTriggerIconStylesExposeDropSymbolOption() {
-        XCTAssertEqual(MenuBarTriggerIconStyle.selectableCases, [.spill, .cat, .liquid])
+        XCTAssertEqual(MenuBarTriggerIconStyle.selectableCases, [.spill])
         XCTAssertEqual(MenuBarTriggerIconStyle.spill.title, "Drop")
         XCTAssertEqual(MenuBarTriggerIconStyle.normalized(rawValue: "spill"), .spill)
+        XCTAssertEqual(MenuBarTriggerIconStyle.normalized(rawValue: "cat"), .spill)
+        XCTAssertEqual(MenuBarTriggerIconStyle.normalized(rawValue: "liquid"), .spill)
 
         let defaults = makeDefaults()
         defaults.set("spill", forKey: "menuBarTriggerIconStyle")

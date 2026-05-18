@@ -119,13 +119,15 @@ struct GeneralPreferencesSection: View {
                     .foregroundStyle(.secondary)
             }
 
-            Picker("Menu bar trigger icon", selection: $settings.menuBarTriggerIconStyle) {
-                ForEach(MenuBarTriggerIconStyle.selectableCases) { style in
-                    Text(style.title).tag(style)
+            if MenuBarTriggerIconStyle.selectableCases.count > 1 {
+                Picker("Menu bar trigger icon", selection: $settings.menuBarTriggerIconStyle) {
+                    ForEach(MenuBarTriggerIconStyle.selectableCases) { style in
+                        Text(style.title).tag(style)
+                    }
                 }
+                .labelsHidden()
+                .pickerStyle(.segmented)
             }
-            .labelsHidden()
-            .pickerStyle(.segmented)
 
             MenuBarTriggerIconPreview(
                 style: settings.menuBarTriggerIconStyle,

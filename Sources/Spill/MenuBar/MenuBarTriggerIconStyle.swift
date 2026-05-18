@@ -2,11 +2,9 @@ import Foundation
 
 enum MenuBarTriggerIconStyle: String, CaseIterable, Identifiable, Sendable {
     case spill
-    case cat
-    case liquid
 
     static let defaultStyle: MenuBarTriggerIconStyle = .spill
-    static let selectableCases: [MenuBarTriggerIconStyle] = [.spill, .cat, .liquid]
+    static let selectableCases: [MenuBarTriggerIconStyle] = [.spill]
 
     static func normalized(rawValue: String?) -> MenuBarTriggerIconStyle {
         guard let rawValue,
@@ -27,10 +25,6 @@ enum MenuBarTriggerIconStyle: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .spill:
             return "Drop"
-        case .cat:
-            return "Cat"
-        case .liquid:
-            return "Liquid"
         }
     }
 
@@ -38,24 +32,15 @@ enum MenuBarTriggerIconStyle: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .spill:
             return "Uses the compact droplet symbol."
-        case .cat:
-            return "Uses a compact tail-wagging panel trigger."
-        case .liquid:
-            return "Uses a soft load-reactive trigger."
         }
     }
 
     var usesPerformanceEffect: Bool {
-        self == .liquid
+        false
     }
 
     var animates: Bool {
-        switch self {
-        case .spill:
-            return false
-        case .cat, .liquid:
-            return true
-        }
+        false
     }
 
     var requiredStatusModules: Set<SpillStatusModule> {
@@ -65,10 +50,6 @@ enum MenuBarTriggerIconStyle: String, CaseIterable, Identifiable, Sendable {
     func symbolName(isActive: Bool) -> String {
         switch self {
         case .spill:
-            return isActive ? "drop.circle.fill" : "drop.fill"
-        case .cat:
-            return isActive ? "pawprint.circle.fill" : "pawprint.fill"
-        case .liquid:
             return isActive ? "drop.circle.fill" : "drop.fill"
         }
     }

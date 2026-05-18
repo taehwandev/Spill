@@ -174,36 +174,14 @@ final class MenuBarStatusContentViewTests: XCTestCase {
         }
     }
 
-    func testTriggerRendererUsesRequestedMenuBarSize() {
+    func testDropTriggerUsesSystemSymbolFallback() {
         let image = MenuBarTriggerIconRenderer.image(
-            style: .cat,
+            style: .spill,
             tintColor: .systemTeal,
             usageRatio: 0.4,
             size: 18
         )
 
-        XCTAssertEqual(image?.size.width, 18)
-        XCTAssertEqual(image?.size.height, 18)
-    }
-
-    func testCatTriggerRendererAnimatesTailAcrossPhases() {
-        let first = MenuBarTriggerIconRenderer.image(
-            style: .cat,
-            tintColor: .systemTeal,
-            usageRatio: 1,
-            phase: 0,
-            size: 18
-        )?.tiffRepresentation
-        let second = MenuBarTriggerIconRenderer.image(
-            style: .cat,
-            tintColor: .systemTeal,
-            usageRatio: 1,
-            phase: 0.125,
-            size: 18
-        )?.tiffRepresentation
-
-        XCTAssertNotNil(first)
-        XCTAssertNotNil(second)
-        XCTAssertNotEqual(first, second)
+        XCTAssertNil(image)
     }
 }

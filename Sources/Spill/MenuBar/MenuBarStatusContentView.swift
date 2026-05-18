@@ -291,10 +291,8 @@ private final class MenuBarMetricChipView: NSView {
         switch segment.visualStyle {
         case .symbol:
             return false
-        case .trigger(.spill):
+        case .trigger:
             return false
-        case .trigger(.cat), .trigger(.liquid):
-            return true
         }
     }
 
