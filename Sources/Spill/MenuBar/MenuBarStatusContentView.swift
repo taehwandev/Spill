@@ -9,7 +9,7 @@ final class MenuBarStatusContentView: NSView {
     private static let triggerChipHeight: CGFloat = 20
     private static let iconOnlyChipWidth: CGFloat = 22
     private static let triggerChipWidth: CGFloat = 30
-    private static let textFont = NSFont.monospacedDigitSystemFont(ofSize: 10.5, weight: .semibold)
+    private static let textFont = NSFont.monospacedDigitSystemFont(ofSize: 13.5, weight: .light)
 
     private let segments: [MenuBarStatusSegment]
 
@@ -221,7 +221,7 @@ private final class MenuBarMetricChipView: NSView {
     private func configureValue() {
         valueLabel.translatesAutoresizingMaskIntoConstraints = false
         valueLabel.stringValue = segment.value
-        valueLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
+        valueLabel.font = .monospacedDigitSystemFont(ofSize: 13.5, weight: .light)
         valueLabel.alignment = .right
         valueLabel.lineBreakMode = .byClipping
         valueLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
