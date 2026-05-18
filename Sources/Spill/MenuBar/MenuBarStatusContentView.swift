@@ -123,9 +123,6 @@ private final class MenuBarMetricChipView: NSView {
         super.init(frame: .zero)
 
         translatesAutoresizingMaskIntoConstraints = false
-        wantsLayer = true
-        layer?.cornerRadius = 6
-
         configureIcon()
         configureValue()
         installSubviews()
@@ -263,16 +260,12 @@ private final class MenuBarMetricChipView: NSView {
         } else {
             iconView.contentTintColor = color.withAlphaComponent(segment.state == .unavailable ? 0.5 : 1.0)
         }
-        layer?.backgroundColor = color.withAlphaComponent(backgroundAlpha).cgColor
     }
 
     private var statusColor: NSColor {
         switch segment.state {
         case .normal:
-            if segment.kind == .trigger {
-                return .systemTeal
-            }
-            return .systemMint
+            return .labelColor
         case .active, .refreshing:
             return .systemBlue
         case .warning:
@@ -280,10 +273,6 @@ private final class MenuBarMetricChipView: NSView {
         case .unavailable:
             return .tertiaryLabelColor
         }
-    }
-
-    private var backgroundAlpha: CGFloat {
-        segment.state == .unavailable ? 0.04 : 0.1
     }
 
     private var resolvedSymbolName: String {

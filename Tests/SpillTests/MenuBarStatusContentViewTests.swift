@@ -143,6 +143,37 @@ final class MenuBarStatusContentViewTests: XCTestCase {
         )
     }
 
+    func testStatusChipsDoNotDrawRoundedBackgrounds() {
+        let trigger = MenuBarStatusSegment(
+            kind: .trigger,
+            title: "Spill",
+            shortTitle: "Spill",
+            value: "",
+            displayText: "",
+            usageRatio: 0,
+            state: .normal,
+            symbolName: "drop.fill"
+        )
+        let cpu = MenuBarStatusSegment(
+            kind: .cpu,
+            title: "CPU",
+            shortTitle: "CPU",
+            value: "20.0%",
+            displayText: "CPU 20.0%",
+            usageRatio: 0.2,
+            state: .normal,
+            symbolName: "cpu"
+        )
+
+        let view = MenuBarStatusContentView(segments: [trigger, cpu])
+
+        XCTAssertEqual(view.subviews.count, 2)
+        view.subviews.forEach { chip in
+            XCTAssertFalse(chip.wantsLayer)
+            XCTAssertNil(chip.layer?.backgroundColor)
+        }
+    }
+
     func testTriggerRendererUsesRequestedMenuBarSize() {
         let image = MenuBarTriggerIconRenderer.image(
             style: .cat,

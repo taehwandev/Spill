@@ -1,0 +1,52 @@
+feature_id: menu-bar-status-background-cleanup
+status: completed
+
+necessity:
+  decision: build
+  reason: Remove visual clutter from Spill's existing clock-area status UI while preserving compact menu bar behavior.
+  ambiguity:
+    clarity: clear
+    blockers_resolved: true
+    resolution_sources:
+      - maintainer
+      - repo-research
+      - assumption
+  clarification_required: false
+  questions: []
+
+tasks:
+  - id: menu-bar-status-background-cleanup-T1
+    title: Remove layer-backed menu bar status chip backgrounds
+    owner_role: builder
+    state: done
+    depends_on: []
+    write_scope:
+      - Sources/Spill/MenuBar/MenuBarStatusContentView.swift
+      - Tests/SpillTests/MenuBarStatusContentViewTests.swift
+    read_scope:
+      - .agents/specs/prd.md
+      - .agents/specs/ard.md
+      - .agents/design/stitch.md
+      - Sources/Spill/MenuBar/StatusItemController.swift
+      - Sources/Spill/MenuBar/MenuBarStatusSummary.swift
+    forbidden_scope:
+      - Sources/Spill/Panel
+      - Sources/Spill/Providers
+      - Sources/Spill/Settings
+    acceptance:
+      - Menu bar status segments render without layer-backed rounded backgrounds.
+      - Existing status item click and hit-test behavior remains unchanged.
+      - Focused unit coverage asserts no chip background layer is drawn.
+      - swift test and swift build pass.
+    verification:
+      commands:
+        - swift test
+        - swift build
+      manual:
+        - Launch app and verify the menu bar status item has no rounded colored chip backgrounds.
+
+parallel_groups:
+  - id: group-1
+    tasks:
+      - menu-bar-status-background-cleanup-T1
+    rule: Single scoped UI rendering task.
