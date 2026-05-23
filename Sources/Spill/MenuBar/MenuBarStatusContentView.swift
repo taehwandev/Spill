@@ -16,8 +16,8 @@ final class MenuBarStatusContentView: NSView {
     private static let verticalHorizontalPadding: CGFloat = 9
     private static let textFont = NSFont.monospacedDigitSystemFont(ofSize: 13.5, weight: .light)
     fileprivate static let compactStackTextFont = NSFont.monospacedDigitSystemFont(ofSize: 8.2, weight: .medium)
-    fileprivate static let verticalTitleFont = NSFont.systemFont(ofSize: 7.2, weight: .semibold)
-    fileprivate static let verticalValueFont = NSFont.monospacedDigitSystemFont(ofSize: 11.2, weight: .medium)
+    fileprivate static let verticalTitleFont = NSFont.systemFont(ofSize: 7.6, weight: .semibold)
+    fileprivate static let verticalValueFont = NSFont.monospacedDigitSystemFont(ofSize: 10.8, weight: .medium)
 
     private let segments: [MenuBarStatusSegment]
     private let layoutStyle: MenuBarStatusLayoutStyle
@@ -288,6 +288,7 @@ final class MenuBarStatusContentView: NSView {
 @MainActor
 private final class MenuBarCompactStackMetricChipView: NSView {
     private let segments: [MenuBarStatusSegment]
+    private var segmentLabels: [(segment: MenuBarStatusSegment, label: NSTextField)] = []
 
     init(segments: [MenuBarStatusSegment]) {
         self.segments = segments
@@ -303,8 +304,14 @@ private final class MenuBarCompactStackMetricChipView: NSView {
         fatalError("init(coder:) has not been implemented")
     }
 
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        refreshColors()
+    }
+
     private func installLabels() {
         let labels = segments.map(makeLabel(for:))
+        segmentLabels = zip(segments, labels).map { (segment: $0.0, label: $0.1) }
         labels.forEach(addSubview)
 
         guard labels.count == 2 else {
@@ -335,10 +342,16 @@ private final class MenuBarCompactStackMetricChipView: NSView {
         label.font = MenuBarStatusContentView.compactStackTextFont
         label.alignment = .center
         label.lineBreakMode = .byClipping
-        label.textColor = textColor(for: segment)
         label.setContentCompressionResistancePriority(.required, for: .horizontal)
         label.setContentHuggingPriority(.required, for: .horizontal)
+        label.textColor = textColor(for: segment)
         return label
+    }
+
+    private func refreshColors() {
+        segmentLabels.forEach { pair in
+            pair.label.textColor = textColor(for: pair.segment)
+        }
     }
 
     private func textColor(for segment: MenuBarStatusSegment) -> NSColor {
@@ -388,13 +401,17 @@ private final class MenuBarVerticalMetricChipView: NSView {
         fatalError("init(coder:) has not been implemented")
     }
 
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        refreshColors()
+    }
+
     private func configureLabels() {
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         titleLabel.stringValue = MenuBarStatusContentView.verticalTitle(for: segment)
         titleLabel.font = MenuBarStatusContentView.verticalTitleFont
         titleLabel.alignment = .center
         titleLabel.lineBreakMode = .byClipping
-        titleLabel.textColor = .secondaryLabelColor
         titleLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
         titleLabel.setContentHuggingPriority(.required, for: .horizontal)
 
@@ -403,9 +420,10 @@ private final class MenuBarVerticalMetricChipView: NSView {
         valueLabel.font = MenuBarStatusContentView.verticalValueFont
         valueLabel.alignment = .center
         valueLabel.lineBreakMode = .byClipping
-        valueLabel.textColor = valueColor
         valueLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
         valueLabel.setContentHuggingPriority(.required, for: .horizontal)
+
+        refreshColors()
     }
 
     private func installLabels() {
@@ -416,11 +434,18 @@ private final class MenuBarVerticalMetricChipView: NSView {
             titleLabel.topAnchor.constraint(equalTo: topAnchor, constant: 1),
             titleLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 3),
             titleLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -3),
+            titleLabel.heightAnchor.constraint(equalToConstant: 8),
 
+            valueLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: -1),
             valueLabel.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -1),
             valueLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 3),
             valueLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -3)
         ])
+    }
+
+    private func refreshColors() {
+        titleLabel.textColor = .labelColor
+        valueLabel.textColor = valueColor
     }
 
     private var valueColor: NSColor {

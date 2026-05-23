@@ -273,6 +273,18 @@ final class MenuBarStatusContentViewTests: XCTestCase {
         XCTAssertEqual(labels, ["CPU", "5%", "RAM", "20%"])
     }
 
+    func testStackedLayoutUsesThemeAdaptiveTitleColor() {
+        let cpu = makeStatusSegment(kind: .cpu, value: "5%")
+        let memory = makeStatusSegment(kind: .memory, value: "20%")
+        let view = MenuBarStatusContentView(segments: [cpu, memory], layoutStyle: .stacked)
+        let labels = view.subviews
+            .flatMap(\.subviews)
+            .compactMap { $0 as? NSTextField }
+
+        XCTAssertEqual(labels[0].textColor, .labelColor)
+        XCTAssertEqual(labels[2].textColor, .labelColor)
+    }
+
     func testStackedLayoutUsesSeparateMetricHitTargets() {
         let cpu = makeStatusSegment(kind: .cpu, value: "90.0%")
         let memory = makeStatusSegment(kind: .memory, value: "90.0%")
