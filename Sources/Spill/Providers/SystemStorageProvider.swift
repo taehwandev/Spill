@@ -51,13 +51,15 @@ struct SystemStorageProvider: SpillStatusProvider {
             return unavailableStatus()
         }
 
-        let ratio = (Double(reading.usedBytes) / Double(reading.totalBytes)).clamped(to: 0...1)
+        let availableBytes = min(reading.availableBytes, reading.totalBytes)
+        let usedBytes = reading.totalBytes - availableBytes
+        let ratio = (Double(usedBytes) / Double(reading.totalBytes)).clamped(to: 0...1)
         return SystemStorageStatus(
             value: SystemCPUProvider.percentText(ratio),
-            subtitle: "\(SystemMemoryProvider.formatBytes(reading.availableBytes)) available of \(SystemMemoryProvider.formatBytes(reading.totalBytes))",
+            subtitle: "\(SystemMemoryProvider.formatBytes(availableBytes)) available of \(SystemMemoryProvider.formatBytes(reading.totalBytes))",
             usageRatio: ratio,
-            usedBytes: reading.usedBytes,
-            availableBytes: reading.availableBytes,
+            usedBytes: usedBytes,
+            availableBytes: availableBytes,
             totalBytes: reading.totalBytes,
             state: state(for: ratio)
         )

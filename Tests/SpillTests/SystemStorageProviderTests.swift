@@ -42,7 +42,9 @@ final class SystemStorageProviderTests: XCTestCase {
         )
 
         XCTAssertEqual(status.value, "0.0%")
+        XCTAssertEqual(status.subtitle, "10 GB available of 10 GB")
         XCTAssertEqual(status.usedBytes, 0)
+        XCTAssertEqual(status.availableBytes, gib(10))
         XCTAssertEqual(status.usageRatio, 0)
         XCTAssertEqual(status.state, .normal)
     }

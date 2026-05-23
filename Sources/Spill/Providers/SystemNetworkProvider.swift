@@ -60,7 +60,16 @@ struct SystemNetworkProvider: SpillStatusProvider {
             return unavailableStatus()
         }
 
-        guard let previous, current.timestamp > previous.timestamp else {
+        guard current.activeInterfaceCount > 0,
+              current.timestamp.isFinite
+        else {
+            return unavailableStatus()
+        }
+
+        guard let previous,
+              previous.timestamp.isFinite,
+              current.timestamp > previous.timestamp
+        else {
             return samplingStatus(from: current)
         }
 
@@ -180,7 +189,15 @@ struct SystemNetworkProvider: SpillStatusProvider {
     }
 
     private static func compactRate(_ value: Double, unit: String) -> String {
+        guard value.isFinite, value >= 0 else {
+            return "N/A"
+        }
+
         if value >= 10 {
+            guard value <= Double(Int.max) else {
+                return String(format: "%.0f %@", value, unit)
+            }
+
             return "\(Int(value.rounded())) \(unit)"
         }
 

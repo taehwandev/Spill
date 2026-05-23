@@ -104,6 +104,41 @@ final class SystemNetworkProviderTests: XCTestCase {
         XCTAssertEqual(status.statusItem.state, .unavailable)
     }
 
+    func testUnavailableNetworkStatusWhenCurrentReadingHasNoActiveInterfaces() {
+        let status = SystemNetworkProvider.status(
+            previous: nil,
+            current: SystemNetworkReading(
+                receivedBytes: 1_000,
+                sentBytes: 500,
+                timestamp: 10,
+                activeInterfaceCount: 0
+            )
+        )
+
+        XCTAssertEqual(status.value, "N/A")
+        XCTAssertEqual(status.state, .unavailable)
+    }
+
+    func testUnavailableNetworkStatusWhenCurrentTimestampIsInvalid() {
+        let status = SystemNetworkProvider.status(
+            previous: SystemNetworkReading(
+                receivedBytes: 1_000,
+                sentBytes: 500,
+                timestamp: 10,
+                activeInterfaceCount: 1
+            ),
+            current: SystemNetworkReading(
+                receivedBytes: 2_000,
+                sentBytes: 900,
+                timestamp: .infinity,
+                activeInterfaceCount: 1
+            )
+        )
+
+        XCTAssertEqual(status.value, "N/A")
+        XCTAssertEqual(status.state, .unavailable)
+    }
+
     func testStatusItemMapping() {
         let item = SystemNetworkProvider.status(
             previous: SystemNetworkReading(
@@ -128,6 +163,27 @@ final class SystemNetworkProviderTests: XCTestCase {
         XCTAssertEqual(item.symbolName, "network")
         XCTAssertEqual(item.state, .active)
         XCTAssertEqual(item.sortPriority, 15)
+    }
+
+    func testNetworkFormatsHugeFiniteRatesWithoutOverflowingInt() {
+        let status = SystemNetworkProvider.status(
+            previous: SystemNetworkReading(
+                receivedBytes: 0,
+                sentBytes: 0,
+                timestamp: 1,
+                activeInterfaceCount: 1
+            ),
+            current: SystemNetworkReading(
+                receivedBytes: UInt64.max,
+                sentBytes: 0,
+                timestamp: 1.000_000_001,
+                activeInterfaceCount: 1
+            )
+        )
+
+        XCTAssertTrue(status.receivedBytesPerSecond.isFinite)
+        XCTAssertNotEqual(status.value, "↓ N/A")
+        XCTAssertEqual(status.state, .active)
     }
 
     func testNetworkByteFormatting() {

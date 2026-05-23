@@ -44,6 +44,17 @@ final class SystemCPUProviderTests: XCTestCase {
         XCTAssertEqual(status.state, .warning)
     }
 
+    func testCPUStatusWarnsAtExactNinetyPercentUsage() {
+        let status = SystemCPUProvider.status(
+            previous: makeReading(active: 100, idle: 300),
+            current: makeReading(active: 190, idle: 310)
+        )
+
+        XCTAssertEqual(status.value, "90.0%")
+        XCTAssertEqual(status.usageRatio, 0.9, accuracy: 0.0001)
+        XCTAssertEqual(status.state, .warning)
+    }
+
     func testCPUStatusClampsUsageRatio() {
         let status = SystemCPUProvider.status(
             previous: SystemCPUReading(userTicks: 100, systemTicks: 0, idleTicks: 100, niceTicks: 0),
@@ -124,6 +135,15 @@ final class SystemCPUProviderTests: XCTestCase {
         XCTAssertEqual(status.coreCount, 2)
     }
 
+    func testProcessorTickTreatsPerCoreCountersAsUnsignedValues() {
+        XCTAssertEqual(SystemCPUProvider.processorTick(0), 0)
+        XCTAssertEqual(SystemCPUProvider.processorTick(Int32.max), UInt64(Int32.max))
+        XCTAssertEqual(
+            SystemCPUProvider.processorTick(Int32(bitPattern: UInt32.max)),
+            UInt64(UInt32.max)
+        )
+    }
+
     func testCPUPercentTextUsesLessThanForTinyNonZeroUsage() {
         XCTAssertEqual(SystemCPUProvider.percentText(0), "0.0%")
         XCTAssertEqual(SystemCPUProvider.percentText(0.0005), "<0.1%")
@@ -150,6 +170,16 @@ final class SystemCPUProviderTests: XCTestCase {
         let status = SystemCPUProvider.status(
             previous: makeReading(active: 100, idle: 300),
             current: makeReading(active: 90, idle: 310)
+        )
+
+        XCTAssertEqual(status.value, "N/A")
+        XCTAssertEqual(status.state, .unavailable)
+    }
+
+    func testUnavailableCPUStatusWhenComponentCounterMovesBackward() {
+        let status = SystemCPUProvider.status(
+            previous: SystemCPUReading(userTicks: 100, systemTicks: 20, idleTicks: 300, niceTicks: 0),
+            current: SystemCPUReading(userTicks: 90, systemTicks: 50, idleTicks: 310, niceTicks: 0)
         )
 
         XCTAssertEqual(status.value, "N/A")

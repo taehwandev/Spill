@@ -89,6 +89,15 @@ final class SystemPowerProviderTests: XCTestCase {
         XCTAssertEqual(status.state, .unavailable)
     }
 
+    func testUnavailablePowerStatusWhenCurrentCapacityIsNegative() {
+        let status = SystemPowerProvider.status(
+            from: makeReading(currentCapacity: -1, maxCapacity: 100, isACPowered: false)
+        )
+
+        XCTAssertEqual(status.value, "N/A")
+        XCTAssertEqual(status.state, .unavailable)
+    }
+
     func testPowerStatusClampsChargeRatio() {
         let status = SystemPowerProvider.status(
             from: makeReading(currentCapacity: 130, maxCapacity: 100, isACPowered: true)

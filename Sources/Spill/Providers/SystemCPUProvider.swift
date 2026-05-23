@@ -98,6 +98,10 @@ struct SystemCPUProvider: SpillStatusProvider {
         SystemCPUReader.current()
     }
 
+    static func processorTick(_ value: integer_t) -> UInt64 {
+        UInt64(UInt32(bitPattern: value))
+    }
+
     static func status(previous: SystemCPUReading?, current: SystemCPUReading?) -> SystemCPUStatus {
         guard let previous else {
             return samplingStatus()
@@ -109,7 +113,10 @@ struct SystemCPUProvider: SpillStatusProvider {
 
         guard current.totalTicks >= previous.totalTicks,
               current.activeTicks >= previous.activeTicks,
-              current.idleTicks >= previous.idleTicks
+              current.idleTicks >= previous.idleTicks,
+              current.userTicks >= previous.userTicks,
+              current.systemTicks >= previous.systemTicks,
+              current.niceTicks >= previous.niceTicks
         else {
             return unavailableStatus()
         }
@@ -335,10 +342,10 @@ private enum SystemCPUReader {
             }
 
             return SystemCPUCoreReading(
-                userTicks: UInt64(processorInfo[base + Int(CPU_STATE_USER)]),
-                systemTicks: UInt64(processorInfo[base + Int(CPU_STATE_SYSTEM)]),
-                idleTicks: UInt64(processorInfo[base + Int(CPU_STATE_IDLE)]),
-                niceTicks: UInt64(processorInfo[base + Int(CPU_STATE_NICE)])
+                userTicks: SystemCPUProvider.processorTick(processorInfo[base + Int(CPU_STATE_USER)]),
+                systemTicks: SystemCPUProvider.processorTick(processorInfo[base + Int(CPU_STATE_SYSTEM)]),
+                idleTicks: SystemCPUProvider.processorTick(processorInfo[base + Int(CPU_STATE_IDLE)]),
+                niceTicks: SystemCPUProvider.processorTick(processorInfo[base + Int(CPU_STATE_NICE)])
             )
         }
     }

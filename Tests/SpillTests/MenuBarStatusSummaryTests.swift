@@ -108,6 +108,31 @@ final class MenuBarStatusSummaryTests: XCTestCase {
         XCTAssertEqual(summary.segments.map(\.state), [.active])
     }
 
+    func testSummaryUsesWarningAtExactNinetyPercentWithNinetyThreshold() {
+        let summary = MenuBarStatusSummary.make(
+            enabledItems: [.cpu, .memory],
+            cpu: SystemCPUProvider.status(
+                previous: SystemCPUReading(userTicks: 0, systemTicks: 0, idleTicks: 100, niceTicks: 0),
+                current: SystemCPUReading(userTicks: 90, systemTicks: 0, idleTicks: 110, niceTicks: 0)
+            ),
+            memory: SystemMemoryProvider.status(
+                from: SystemMemoryReading(
+                    totalBytes: gib(10),
+                    freeBytes: 0,
+                    activeBytes: gib(7),
+                    inactiveBytes: gib(1),
+                    wiredBytes: gib(1),
+                    compressedBytes: gib(1)
+                )
+            ),
+            highlightThreshold: .ninety
+        )
+
+        XCTAssertEqual(summary.title, "CPU 90.0%  MEM 90.0%")
+        XCTAssertEqual(summary.segments.map(\.state), [.warning, .warning])
+        XCTAssertEqual(summary.segments.map(\.usageRatio), [0.9, 0.9])
+    }
+
     private func gib(_ value: UInt64) -> UInt64 {
         value * 1_073_741_824
     }

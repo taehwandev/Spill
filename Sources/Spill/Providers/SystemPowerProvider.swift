@@ -71,6 +71,7 @@ struct SystemPowerProvider: SpillStatusProvider {
 
         guard let currentCapacity = reading.currentCapacity,
               let maxCapacity = reading.maxCapacity,
+              currentCapacity >= 0,
               maxCapacity > 0
         else {
             return unavailableStatus()

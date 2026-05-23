@@ -62,6 +62,45 @@ final class LocalAIStatusProviderTests: XCTestCase {
         XCTAssertEqual(statuses.first { $0.kind == .codex }?.state, .normal)
     }
 
+    func testCommandLineDetectionHandlesQuotedExecutablePaths() {
+        let statuses = LocalAIStatusProvider.statuses(
+            environment: [:],
+            processNames: [],
+            processCommands: ["\"/Applications/AI Tools/claude\" --model claude-opus-4-1"],
+            installedExecutableNames: []
+        )
+
+        XCTAssertEqual(statuses.map(\.kind), [.claude])
+        XCTAssertEqual(statuses.first?.value, "Active")
+        XCTAssertEqual(statuses.first?.subtitle, "claude-opus-4-1")
+    }
+
+    func testCommandLineDetectionHandlesEnvWrapper() {
+        let statuses = LocalAIStatusProvider.statuses(
+            environment: [:],
+            processNames: [],
+            processCommands: ["/usr/bin/env GEMINI_API_KEY=set /opt/homebrew/bin/gemini -m gemini-2.5-pro"],
+            installedExecutableNames: []
+        )
+
+        XCTAssertEqual(statuses.map(\.kind), [.gemini])
+        XCTAssertEqual(statuses.first?.value, "Active")
+        XCTAssertEqual(statuses.first?.subtitle, "gemini-2.5-pro")
+    }
+
+    func testCommandLineDetectionDoesNotMatchExecutableOnlyFromArguments() {
+        let statuses = LocalAIStatusProvider.statuses(
+            environment: [:],
+            processNames: [],
+            processCommands: ["/usr/bin/python3 /tmp/codex --model fake-model"],
+            installedExecutableNames: ["codex"]
+        )
+
+        XCTAssertEqual(statuses.map(\.kind), [.codex])
+        XCTAssertEqual(statuses.first?.value, "Idle")
+        XCTAssertEqual(statuses.first?.subtitle, "Installed")
+    }
+
     func testMissingToolsAreHidden() {
         let statuses = LocalAIStatusProvider.statuses(
             environment: [:],

@@ -56,6 +56,23 @@ final class SystemMemoryProviderTests: XCTestCase {
         XCTAssertEqual(status.usageRatio, 0.9375, accuracy: 0.0001)
     }
 
+    func testMemoryStatusWarnsAtExactNinetyPercentUsage() {
+        let reading = makeReading(
+            totalBytes: gib(10),
+            freeBytes: 0,
+            activeBytes: gib(7),
+            inactiveBytes: gib(1),
+            wiredBytes: gib(1),
+            compressedBytes: gib(1)
+        )
+
+        let status = SystemMemoryProvider.status(from: reading)
+
+        XCTAssertEqual(status.value, "90.0%")
+        XCTAssertEqual(status.state, .warning)
+        XCTAssertEqual(status.usageRatio, 0.9, accuracy: 0.0001)
+    }
+
     func testMemoryStatusClampsUsageRatio() {
         let reading = makeReading(
             totalBytes: gib(8),
@@ -67,6 +84,26 @@ final class SystemMemoryProviderTests: XCTestCase {
         let status = SystemMemoryProvider.status(from: reading)
 
         XCTAssertEqual(status.value, "100.0%")
+        XCTAssertEqual(status.usageRatio, 1)
+        XCTAssertEqual(status.state, .warning)
+    }
+
+    func testMemoryStatusClampsMalformedByteCounts() {
+        let reading = makeReading(
+            totalBytes: gib(8),
+            freeBytes: gib(10),
+            activeBytes: gib(9),
+            inactiveBytes: gib(4),
+            wiredBytes: gib(3),
+            compressedBytes: gib(2)
+        )
+
+        let status = SystemMemoryProvider.status(from: reading)
+
+        XCTAssertEqual(status.value, "100.0%")
+        XCTAssertEqual(status.subtitle, "8.0 GB available of 8.0 GB")
+        XCTAssertEqual(status.usedBytes, gib(8))
+        XCTAssertEqual(status.availableBytes, gib(8))
         XCTAssertEqual(status.usageRatio, 1)
         XCTAssertEqual(status.state, .warning)
     }
