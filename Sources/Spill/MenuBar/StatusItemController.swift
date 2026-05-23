@@ -333,15 +333,10 @@ final class StatusItemController: NSObject {
     }
 
     private func toggleCaffeineFromStatusItem() {
-        if sleepGuard.isActive {
-            sleepGuard.stop()
-        } else {
-            sleepGuard.start(
-                duration: settings.sleepGuardDefaultDuration,
-                keepDisplayAwake: settings.sleepGuardKeepsDisplayAwake
-            )
-        }
-
+        sleepGuard.toggle(
+            duration: settings.sleepGuardDefaultDuration,
+            keepDisplayAwake: settings.sleepGuardKeepsDisplayAwake
+        )
         refresh()
     }
 

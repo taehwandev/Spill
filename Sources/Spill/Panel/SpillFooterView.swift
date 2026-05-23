@@ -7,6 +7,7 @@ struct SpillFooterView: View {
     let sleepGuardDefaultDuration: SleepGuardDuration
     let allowsIndefiniteDuration: Bool
     let keepsDisplayAwake: Bool
+    let setSleepGuardDefaultDuration: (SleepGuardDuration) -> Void
     let showsPower: Bool
     let powerStatus: SystemPowerStatus
     let showsCountBadge: Bool
@@ -82,54 +83,86 @@ struct SpillFooterView: View {
     }
 
     private var sleepGuardFooter: some View {
-        Menu {
-            if sleepGuard.isActive {
-                Button(role: .destructive) {
-                    SpillTelemetry.shared.track("sleep_guard_stopped", props: ["source": "panel_footer"])
-                    sleepGuard.stop()
-                } label: {
-                    Text("Stop Caffeine")
-                }
-
-                Divider()
-            } else {
-                Button("Start \(sleepGuardDefaultDuration.menuTitle)") {
-                    startSleepGuard(duration: sleepGuardDefaultDuration)
-                }
-
-                Divider()
+        HStack(spacing: 2) {
+            Button {
+                toggleSleepGuardFromFooter()
+            } label: {
+                sleepGuardLabel
             }
+            .buttonStyle(.plain)
+            .accessibilityLabel(caffeineHelpText)
+            .accessibilityIdentifier("CaffeineToggle")
 
-            ForEach(SleepGuardDuration.availableDurations(allowsIndefinite: allowsIndefiniteDuration)) { duration in
-                Button(duration.menuTitle) {
-                    startSleepGuard(duration: duration)
-                }
-            }
-        } label: {
-            HStack(spacing: 4) {
-                Image(systemName: sleepGuard.isActive ? "cup.and.saucer.fill" : "cup.and.saucer")
-                    .font(.system(size: 11, weight: .semibold))
-                    .frame(width: 14, height: 14)
-                    .spillFooterForeground(sleepGuardStyle.symbolRole)
-
-                Text("Caf")
-                    .font(.system(size: 10, weight: .medium, design: .rounded))
+            Menu {
+                sleepGuardMenuItems
+            } label: {
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8, weight: .semibold))
+                    .frame(width: 10, height: 18)
                     .spillFooterForeground(sleepGuardStyle.titleRole)
-
-                Text(sleepGuard.isActive ? sleepGuard.remainingLabel : "Off")
-                    .font(.system(size: 11, weight: .semibold, design: .rounded))
-                    .monospacedDigit()
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.78)
-                    .spillFooterForeground(sleepGuardStyle.valueRole)
+                    .contentShape(Rectangle())
             }
-            .contentShape(Rectangle())
+            .menuStyle(.borderlessButton)
+            .frame(width: 14, height: 20)
+            .accessibilityLabel("Choose Caffeine Duration")
         }
-        .menuStyle(.borderlessButton)
         .fixedSize()
         .help(caffeineHelpText)
-        .accessibilityLabel(caffeineHelpText)
         .accessibilityIdentifier("Caffeine")
+    }
+
+    private var sleepGuardLabel: some View {
+        HStack(spacing: 4) {
+            Image(systemName: sleepGuard.isActive ? "cup.and.saucer.fill" : "cup.and.saucer")
+                .font(.system(size: 11, weight: .semibold))
+                .frame(width: 14, height: 14)
+                .spillFooterForeground(sleepGuardStyle.symbolRole)
+
+            Text("Caf")
+                .font(.system(size: 10, weight: .medium, design: .rounded))
+                .spillFooterForeground(sleepGuardStyle.titleRole)
+
+            Text(sleepGuard.isActive ? sleepGuard.remainingLabel : "Off")
+                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
+                .spillFooterForeground(sleepGuardStyle.valueRole)
+        }
+        .contentShape(Rectangle())
+    }
+
+    @ViewBuilder
+    private var sleepGuardMenuItems: some View {
+        if sleepGuard.isActive {
+            Button(role: .destructive) {
+                stopSleepGuard(source: "panel_footer_menu")
+            } label: {
+                Text("Stop Caffeine")
+            }
+
+            Divider()
+        } else {
+            Button("Start \(sleepGuardDefaultDuration.menuTitle)") {
+                startSleepGuard(
+                    duration: sleepGuardDefaultDuration,
+                    updatesDefaultDuration: false,
+                    source: "panel_footer_menu_default"
+                )
+            }
+
+            Divider()
+        }
+
+        ForEach(SleepGuardDuration.availableDurations(allowsIndefinite: allowsIndefiniteDuration)) { duration in
+            Button(duration.menuTitle) {
+                startSleepGuard(
+                    duration: duration,
+                    updatesDefaultDuration: true,
+                    source: "panel_footer_menu_duration"
+                )
+            }
+        }
     }
 
     private var sleepGuardStyle: SpillFooterBadgeStyle {
@@ -150,7 +183,28 @@ struct SpillFooterView: View {
         .accessibilityLabel(powerHelpText(for: status))
     }
 
-    private func startSleepGuard(duration: SleepGuardDuration) {
+    private func toggleSleepGuardFromFooter() {
+        if sleepGuard.isActive {
+            stopSleepGuard(source: "panel_footer")
+            return
+        }
+
+        startSleepGuard(
+            duration: sleepGuardDefaultDuration,
+            updatesDefaultDuration: false,
+            source: "panel_footer"
+        )
+    }
+
+    private func startSleepGuard(
+        duration: SleepGuardDuration,
+        updatesDefaultDuration: Bool,
+        source: String
+    ) {
+        if updatesDefaultDuration {
+            setSleepGuardDefaultDuration(duration)
+        }
+
         let didStart = sleepGuard.start(
             duration: duration,
             keepDisplayAwake: keepsDisplayAwake
@@ -158,10 +212,17 @@ struct SpillFooterView: View {
         SpillTelemetry.shared.track(
             "sleep_guard_started",
             props: [
-                "source": "panel_footer",
+                "source": source,
+                "duration": duration.menuTitle,
+                "keep_display_awake": keepsDisplayAwake ? "true" : "false",
                 "result": didStart ? "success" : "failed"
             ]
         )
+    }
+
+    private func stopSleepGuard(source: String) {
+        SpillTelemetry.shared.track("sleep_guard_stopped", props: ["source": source])
+        sleepGuard.stop()
     }
 
     private var shortTime: String {

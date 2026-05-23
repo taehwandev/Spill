@@ -785,6 +785,7 @@ struct SpillBarView: View {
             sleepGuardDefaultDuration: settings.sleepGuardDefaultDuration,
             allowsIndefiniteDuration: settings.sleepGuardAllowsIndefinite,
             keepsDisplayAwake: settings.sleepGuardKeepsDisplayAwake,
+            setSleepGuardDefaultDuration: { settings.sleepGuardDefaultDuration = $0 },
             showsPower: true,
             powerStatus: statusStore.power,
             showsCountBadge: true,

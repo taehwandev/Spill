@@ -6,7 +6,13 @@ final class SpillSettings: ObservableObject {
     static let shared = SpillSettings()
 
     @Published var iconSpacing: Double {
-        didSet { defaults.set(iconSpacing, forKey: Keys.iconSpacing) }
+        didSet {
+            let normalizedValue = Self.normalizedIconSpacing(iconSpacing)
+            if iconSpacing != normalizedValue {
+                iconSpacing = normalizedValue
+            }
+            defaults.set(normalizedValue, forKey: Keys.iconSpacing)
+        }
     }
 
     @Published var showCountBadge: Bool {
@@ -49,7 +55,13 @@ final class SpillSettings: ObservableObject {
     }
 
     @Published var refreshInterval: Double {
-        didSet { defaults.set(refreshInterval, forKey: Keys.refreshInterval) }
+        didSet {
+            let normalizedValue = Self.normalizedRefreshInterval(refreshInterval)
+            if refreshInterval != normalizedValue {
+                refreshInterval = normalizedValue
+            }
+            defaults.set(normalizedValue, forKey: Keys.refreshInterval)
+        }
     }
 
     @Published var displayMode: SpillDisplayMode {
@@ -126,10 +138,10 @@ final class SpillSettings: ObservableObject {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        iconSpacing = defaults.object(forKey: Keys.iconSpacing) as? Double ?? 8
+        iconSpacing = Self.normalizedIconSpacing(defaults.object(forKey: Keys.iconSpacing) as? Double)
         showCountBadge = defaults.object(forKey: Keys.showCountBadge) as? Bool ?? true
         showPowerFooter = defaults.object(forKey: Keys.showPowerFooter) as? Bool ?? true
-        sleepGuardKeepsDisplayAwake = defaults.object(forKey: Keys.sleepGuardKeepsDisplayAwake) as? Bool ?? false
+        sleepGuardKeepsDisplayAwake = defaults.object(forKey: Keys.sleepGuardKeepsDisplayAwake) as? Bool ?? true
         sleepGuardShowsRemainingInMenuBar = defaults.object(forKey: Keys.sleepGuardShowsRemainingInMenuBar) as? Bool
             ?? false
         let persistedAllowsIndefinite = defaults.object(forKey: Keys.sleepGuardAllowsIndefinite) as? Bool ?? false
@@ -142,7 +154,7 @@ final class SpillSettings: ObservableObject {
         sleepGuardAllowsIndefinite = persistedAllowsIndefinite
         useSpillAnimation = defaults.object(forKey: Keys.useSpillAnimation) as? Bool ?? true
         autoRefreshEnabled = defaults.object(forKey: Keys.autoRefreshEnabled) as? Bool ?? true
-        refreshInterval = max(defaults.object(forKey: Keys.refreshInterval) as? Double ?? 15, 5)
+        refreshInterval = Self.normalizedRefreshInterval(defaults.object(forKey: Keys.refreshInterval) as? Double)
         let modeRawValue = defaults.string(forKey: Keys.displayMode) ?? SpillDisplayMode.notchCandidates.rawValue
         displayMode = SpillDisplayMode(rawValue: modeRawValue) ?? .notchCandidates
         statusModuleOrder = SpillStatusModule.normalizedOrder(
@@ -416,6 +428,22 @@ final class SpillSettings: ObservableObject {
             .filter { modules.contains($0) }
             .map(\.rawValue)
         defaults.set(orderedEnabledModules, forKey: Keys.enabledStatusModules)
+    }
+
+    private static func normalizedIconSpacing(_ value: Double?) -> Double {
+        guard let value, value.isFinite else {
+            return 8
+        }
+
+        return value.clamped(to: 2...16)
+    }
+
+    private static func normalizedRefreshInterval(_ value: Double?) -> Double {
+        guard let value, value.isFinite else {
+            return 15
+        }
+
+        return max(value, 5)
     }
 }
 

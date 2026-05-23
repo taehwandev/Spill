@@ -177,6 +177,16 @@ final class SleepGuardController: ObservableObject {
         return true
     }
 
+    @discardableResult
+    func toggle(duration: SleepGuardDuration, keepDisplayAwake: Bool) -> Bool {
+        if isActive {
+            stop()
+            return true
+        }
+
+        return start(duration: duration, keepDisplayAwake: keepDisplayAwake)
+    }
+
     func stop() {
         stop(clearError: true)
     }

@@ -80,6 +80,24 @@ final class SleepGuardControllerTests: XCTestCase {
         XCTAssertEqual(fakeManager.releasedAssertions, [100, 101])
     }
 
+    func testToggleStartsAndStopsWithSelectedOptions() {
+        let fakeManager = FakeSleepAssertionManager()
+        let controller = SleepGuardController(assertionManager: fakeManager, automaticallySchedulesTimer: false)
+
+        XCTAssertTrue(controller.toggle(duration: .twoHours, keepDisplayAwake: true))
+
+        XCTAssertTrue(controller.isActive)
+        XCTAssertEqual(controller.activeDuration, .twoHours)
+        XCTAssertTrue(controller.keepsDisplayAwake)
+        XCTAssertEqual(fakeManager.createdSystemAssertions, [100])
+        XCTAssertEqual(fakeManager.createdDisplayAssertions, [101])
+
+        XCTAssertTrue(controller.toggle(duration: .fifteenMinutes, keepDisplayAwake: false))
+
+        XCTAssertFalse(controller.isActive)
+        XCTAssertEqual(fakeManager.releasedAssertions, [100, 101])
+    }
+
     func testIndefiniteDurationStaysActiveUntilStopped() {
         var now = Date(timeIntervalSince1970: 100)
         let fakeManager = FakeSleepAssertionManager()

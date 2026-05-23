@@ -19,6 +19,7 @@ final class SpillSettingsTests: XCTestCase {
         XCTAssertEqual(settings.sleepGuardDefaultDuration, .fifteenMinutes)
         XCTAssertFalse(settings.sleepGuardAllowsIndefinite)
         XCTAssertFalse(settings.sleepGuardShowsRemainingInMenuBar)
+        XCTAssertTrue(settings.sleepGuardKeepsDisplayAwake)
         XCTAssertFalse(settings.availableSleepGuardDurations.contains(.indefinitely))
         XCTAssertEqual(settings.shortcutKey(for: .leftHalf), .leftArrow)
         XCTAssertEqual(settings.shortcutKey(for: .rightHalf), .rightArrow)
@@ -43,15 +44,39 @@ final class SpillSettingsTests: XCTestCase {
         XCTAssertEqual(settings.shortcutKey(for: .bottomLeft).pickerTitle, "Off")
     }
 
-    func testPowerFooterDefaultsToVisibleAndSleepGuardDisplayAwakeDefaultsOff() {
+    func testPowerFooterDefaultsToVisibleAndSleepGuardDisplayAwakeDefaultsOn() {
         let defaults = makeDefaults()
         let settings = SpillSettings(defaults: defaults)
 
         XCTAssertTrue(settings.showPowerFooter)
-        XCTAssertFalse(settings.sleepGuardKeepsDisplayAwake)
+        XCTAssertTrue(settings.sleepGuardKeepsDisplayAwake)
         XCTAssertFalse(settings.sleepGuardShowsRemainingInMenuBar)
         XCTAssertEqual(settings.sleepGuardDefaultDuration, .fifteenMinutes)
         XCTAssertFalse(settings.sleepGuardAllowsIndefinite)
+    }
+
+    func testNumericLayoutSettingsNormalizeNonFiniteDefaults() {
+        let defaults = makeDefaults()
+        defaults.set(Double.nan, forKey: "iconSpacing")
+        defaults.set(Double.infinity, forKey: "refreshInterval")
+
+        let settings = SpillSettings(defaults: defaults)
+
+        XCTAssertEqual(settings.iconSpacing, 8)
+        XCTAssertEqual(settings.refreshInterval, 15)
+    }
+
+    func testNumericLayoutSettingsClampAssignedValues() {
+        let defaults = makeDefaults()
+        let settings = SpillSettings(defaults: defaults)
+
+        settings.iconSpacing = .nan
+        settings.refreshInterval = -1
+
+        XCTAssertEqual(settings.iconSpacing, 8)
+        XCTAssertEqual(settings.refreshInterval, 5)
+        XCTAssertEqual(defaults.double(forKey: "iconSpacing"), 8)
+        XCTAssertEqual(defaults.double(forKey: "refreshInterval"), 5)
     }
 
     func testPowerAndSleepGuardSettingsPersist() {
@@ -237,18 +262,18 @@ final class SpillSettingsTests: XCTestCase {
 
         settings.menuBarStatusDisplayStyle = .percentOnly
         settings.menuBarStatusPrecision = .tenths
-        settings.menuBarStatusHighlightThreshold = .eighty
+        settings.menuBarStatusHighlightThreshold = .ninety
         settings.menuBarTriggerIconStyle = .spill
 
         XCTAssertEqual(defaults.string(forKey: "menuBarStatusDisplayStyle"), "percentOnly")
         XCTAssertEqual(defaults.integer(forKey: "menuBarStatusPrecision"), 1)
-        XCTAssertEqual(defaults.integer(forKey: "menuBarStatusHighlightThreshold"), 80)
+        XCTAssertEqual(defaults.integer(forKey: "menuBarStatusHighlightThreshold"), 90)
         XCTAssertEqual(defaults.string(forKey: "menuBarTriggerIconStyle"), "spill")
 
         let reloadedSettings = SpillSettings(defaults: defaults)
         XCTAssertEqual(reloadedSettings.menuBarStatusDisplayStyle, .percentOnly)
         XCTAssertEqual(reloadedSettings.menuBarStatusPrecision, .tenths)
-        XCTAssertEqual(reloadedSettings.menuBarStatusHighlightThreshold, .eighty)
+        XCTAssertEqual(reloadedSettings.menuBarStatusHighlightThreshold, .ninety)
         XCTAssertEqual(reloadedSettings.menuBarTriggerIconStyle, .spill)
     }
 

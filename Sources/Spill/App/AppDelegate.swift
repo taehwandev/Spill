@@ -437,6 +437,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             .store(in: &cancellables)
 
+        settings.$sleepGuardDefaultDuration
+            .dropFirst()
+            .sink { [weak self] _ in
+                SpillTelemetry.shared.track("preference_changed", props: ["name": "sleep_guard_default_duration"])
+                self?.statusItemController?.refresh()
+            }
+            .store(in: &cancellables)
+
+        settings.$sleepGuardKeepsDisplayAwake
+            .dropFirst()
+            .sink { [weak self] _ in
+                SpillTelemetry.shared.track("preference_changed", props: ["name": "sleep_guard_keep_display_awake"])
+                self?.statusItemController?.refresh()
+            }
+            .store(in: &cancellables)
+
         settings.$menuBarStatusDisplayStyle
             .dropFirst()
             .sink { [weak self] _ in
