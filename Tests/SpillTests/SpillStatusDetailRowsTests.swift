@@ -20,7 +20,7 @@ final class SpillStatusDetailRowsTests: XCTestCase {
         let rows = SpillStatusDetailRows.rows(
             for: LocalAIToolStatus(
                 kind: .ollama,
-                value: "Active",
+                value: "Running",
                 subtitle: "llama3.2:latest",
                 state: .active,
                 metadata: LocalAIToolMetadata(
@@ -32,7 +32,7 @@ final class SpillStatusDetailRowsTests: XCTestCase {
         )
 
         XCTAssertEqual(rows.map(\.label), ["Status", "Detail", "Model", "Version", "Source"])
-        XCTAssertEqual(rows.map(\.value), ["Active", "llama3.2:latest", "llama3.2:latest", "0.12.0", "Ollama Runtime"])
+        XCTAssertEqual(rows.map(\.value), ["Running", "llama3.2:latest", "llama3.2:latest", "0.12.0", "Ollama Runtime"])
     }
 
 }

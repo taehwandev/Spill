@@ -10,11 +10,11 @@ final class LocalAIStatusProviderTests: XCTestCase {
         )
 
         XCTAssertEqual(statuses.map(\.kind), [.codex, .ollama, .openAI])
-        XCTAssertEqual(statuses.first { $0.kind == .codex }?.value, "Active")
+        XCTAssertEqual(statuses.first { $0.kind == .codex }?.value, "Running")
         XCTAssertEqual(statuses.first { $0.kind == .codex }?.state, .active)
-        XCTAssertEqual(statuses.first { $0.kind == .ollama }?.value, "Active")
+        XCTAssertEqual(statuses.first { $0.kind == .ollama }?.value, "Running")
         XCTAssertEqual(statuses.first { $0.kind == .ollama }?.state, .active)
-        XCTAssertEqual(statuses.first { $0.kind == .openAI }?.value, "Set")
+        XCTAssertEqual(statuses.first { $0.kind == .openAI }?.value, "Configured")
         XCTAssertEqual(statuses.first { $0.kind == .openAI }?.state, .normal)
     }
 
@@ -40,7 +40,7 @@ final class LocalAIStatusProviderTests: XCTestCase {
         )
 
         XCTAssertEqual(statuses.map(\.kind), [.claude, .antigravity, .ollama, .openAI])
-        XCTAssertEqual(statuses.first { $0.kind == .claude }?.value, "Active")
+        XCTAssertEqual(statuses.first { $0.kind == .claude }?.value, "Running")
         XCTAssertEqual(statuses.first { $0.kind == .claude }?.subtitle, "claude-sonnet-4-5")
         XCTAssertEqual(statuses.first { $0.kind == .claude }?.metadata.version, "2.1.0")
         XCTAssertEqual(statuses.first { $0.kind == .antigravity }?.subtitle, "ag-pro")
@@ -51,7 +51,7 @@ final class LocalAIStatusProviderTests: XCTestCase {
         XCTAssertEqual(statuses.first { $0.kind == .openAI }?.subtitle, "gpt-5.2")
     }
 
-    func testInstalledToolsAreIdleWhenNoProcessIsRunning() {
+    func testInstalledToolsShowInstalledWhenNoProcessIsRunning() {
         let statuses = LocalAIStatusProvider.statuses(
             environment: [:],
             processNames: [],
@@ -59,8 +59,8 @@ final class LocalAIStatusProviderTests: XCTestCase {
         )
 
         XCTAssertEqual(statuses.map(\.kind), [.codex])
-        XCTAssertEqual(statuses.first { $0.kind == .codex }?.value, "Idle")
-        XCTAssertEqual(statuses.first { $0.kind == .codex }?.subtitle, "Installed")
+        XCTAssertEqual(statuses.first { $0.kind == .codex }?.value, "Installed")
+        XCTAssertEqual(statuses.first { $0.kind == .codex }?.subtitle, "Installed locally")
         XCTAssertEqual(statuses.first { $0.kind == .codex }?.state, .normal)
     }
 
@@ -73,7 +73,7 @@ final class LocalAIStatusProviderTests: XCTestCase {
         )
 
         XCTAssertEqual(statuses.map(\.kind), [.claude])
-        XCTAssertEqual(statuses.first?.value, "Active")
+        XCTAssertEqual(statuses.first?.value, "Running")
         XCTAssertEqual(statuses.first?.subtitle, "claude-opus-4-1")
     }
 
@@ -89,7 +89,7 @@ final class LocalAIStatusProviderTests: XCTestCase {
         )
 
         XCTAssertEqual(statuses.map(\.kind), [.antigravity])
-        XCTAssertEqual(statuses.first?.value, "Active")
+        XCTAssertEqual(statuses.first?.value, "Running")
         XCTAssertEqual(statuses.first?.subtitle, "ag-pro")
         XCTAssertEqual(statuses.first?.metadata.model, "ag-pro")
     }
@@ -103,7 +103,7 @@ final class LocalAIStatusProviderTests: XCTestCase {
         )
 
         XCTAssertEqual(statuses.map(\.kind), [.antigravity])
-        XCTAssertEqual(statuses.first?.value, "Active")
+        XCTAssertEqual(statuses.first?.value, "Running")
         XCTAssertEqual(statuses.first?.state, .active)
         XCTAssertEqual(statuses.first?.subtitle, "ag-lite")
         XCTAssertEqual(statuses.first?.metadata.model, "ag-lite")
@@ -119,8 +119,8 @@ final class LocalAIStatusProviderTests: XCTestCase {
 
         XCTAssertEqual(statuses.map(\.kind), [.antigravity])
         XCTAssertEqual(statuses.first?.title, "Antigravity")
-        XCTAssertEqual(statuses.first?.value, "Active")
-        XCTAssertEqual(statuses.first?.subtitle, "Process Running")
+        XCTAssertEqual(statuses.first?.value, "Running")
+        XCTAssertEqual(statuses.first?.subtitle, "Local process")
     }
 
     func testAntigravityInstalledAppUsesLocalProcessStateOnly() {
@@ -136,8 +136,8 @@ final class LocalAIStatusProviderTests: XCTestCase {
         )
 
         XCTAssertEqual(statuses.map(\.kind), [.antigravity])
-        XCTAssertEqual(statuses.first?.value, "Active")
-        XCTAssertEqual(statuses.first?.subtitle, "Process Running")
+        XCTAssertEqual(statuses.first?.value, "Running")
+        XCTAssertEqual(statuses.first?.subtitle, "Local process")
     }
 
     func testAntigravityIDEInstalledAppUsesLocalProcessStateOnly() {
@@ -152,8 +152,8 @@ final class LocalAIStatusProviderTests: XCTestCase {
         )
 
         XCTAssertEqual(statuses.map(\.kind), [.antigravity])
-        XCTAssertEqual(statuses.first?.value, "Active")
-        XCTAssertEqual(statuses.first?.subtitle, "Process Running")
+        XCTAssertEqual(statuses.first?.value, "Running")
+        XCTAssertEqual(statuses.first?.subtitle, "Local process")
     }
 
     func testAntigravityMCPServerOnlyDoesNotMarkAppActive() {
@@ -168,8 +168,8 @@ final class LocalAIStatusProviderTests: XCTestCase {
         )
 
         XCTAssertEqual(statuses.map(\.kind), [.antigravity])
-        XCTAssertEqual(statuses.first?.value, "Idle")
-        XCTAssertEqual(statuses.first?.subtitle, "Installed")
+        XCTAssertEqual(statuses.first?.value, "Installed")
+        XCTAssertEqual(statuses.first?.subtitle, "Installed locally")
     }
 
     func testRunningCommandIsHiddenWhenToolIsNotInstalled() {
@@ -192,8 +192,8 @@ final class LocalAIStatusProviderTests: XCTestCase {
         )
 
         XCTAssertEqual(statuses.map(\.kind), [.codex])
-        XCTAssertEqual(statuses.first?.value, "Idle")
-        XCTAssertEqual(statuses.first?.subtitle, "Installed")
+        XCTAssertEqual(statuses.first?.value, "Installed")
+        XCTAssertEqual(statuses.first?.subtitle, "Installed locally")
     }
 
     func testMissingToolsAreHidden() {
@@ -218,8 +218,8 @@ final class LocalAIStatusProviderTests: XCTestCase {
         XCTAssertEqual(item.id, "openAI")
         XCTAssertEqual(item.providerID.rawValue, "ai")
         XCTAssertEqual(item.title, "OpenAI API")
-        XCTAssertEqual(item.value, "Set")
-        XCTAssertEqual(item.subtitle, "Configured")
+        XCTAssertEqual(item.value, "Configured")
+        XCTAssertEqual(item.subtitle, "API key/base URL")
         XCTAssertEqual(item.symbolName, "key.fill")
     }
 }

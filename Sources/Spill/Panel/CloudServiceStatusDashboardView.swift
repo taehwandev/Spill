@@ -34,9 +34,16 @@ struct CloudServiceStatusDashboardView: View {
     }
 
     private var header: some View {
-        HStack(spacing: 8) {
-            Label("Service Status", systemImage: "cloud.fill")
-                .font(.system(size: 13, weight: .semibold))
+        HStack(alignment: .top, spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                Label("Status Details", systemImage: "cloud.fill")
+                    .font(.system(size: 13, weight: .semibold))
+
+                Text(headerSubtitle)
+                    .font(.system(size: 9.5, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
 
             Spacer()
 
@@ -50,8 +57,20 @@ struct CloudServiceStatusDashboardView: View {
             }
             .buttonStyle(.plain)
             .disabled(store.isLoading)
-            .help("Refresh")
+            .help("Refresh. Option-click forces a new check.")
         }
+    }
+
+    private var headerSubtitle: String {
+        if store.isLoading {
+            return "Checking official sources"
+        }
+
+        guard let snapshot = store.snapshot else {
+            return "Fetched when this opens"
+        }
+
+        return "\(snapshot.items.count) services from official sources"
     }
 
     private var items: [CloudServiceStatusItem] {

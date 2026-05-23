@@ -331,12 +331,32 @@ struct SpillBarView: View {
         VStack(spacing: 7) {
             aiSectionHeader
 
-            VStack(spacing: 5) {
+            LazyVGrid(columns: aiToolColumns, alignment: .leading, spacing: 7) {
                 ForEach(aiStatusStore.statuses) { status in
-                    aiToolRow(status)
+                    let serviceIssue = serviceIssue(for: status.kind)
+                    let helpText = aiToolHelpText(status, serviceIssue: serviceIssue)
+
+                    Button {
+                        panelStore.send(.setStatusDetailTarget(.ai(status.kind)))
+                    } label: {
+                        compactAIToolPill(status, serviceIssue: serviceIssue)
+                    }
+                    .buttonStyle(.plain)
+                    .popover(isPresented: detailBinding(for: .ai(status.kind)), arrowEdge: .top) {
+                        statusDetailPopover(for: .ai(status.kind))
+                    }
+                    .help(helpText)
+                    .accessibilityLabel(helpText)
                 }
             }
         }
+    }
+
+    private var aiToolColumns: [GridItem] {
+        [
+            GridItem(.flexible(minimum: 0), spacing: 7),
+            GridItem(.flexible(minimum: 0), spacing: 7)
+        ]
     }
 
     private var aiSectionHeader: some View {
@@ -357,7 +377,7 @@ struct SpillBarView: View {
                         .fill(serviceStatusTint)
                         .frame(width: 5, height: 5)
 
-                    Image(systemName: "cloud.fill")
+                    Image(systemName: serviceStatusSymbolName)
 
                     Text(serviceStatusButtonTitle)
                         .lineLimit(1)
@@ -377,13 +397,12 @@ struct SpillBarView: View {
                 CloudServiceStatusDashboardView(store: cloudServiceStatusStore)
             }
             .help(serviceStatusHelpText)
+            .accessibilityLabel("Service status \(serviceStatusButtonTitle)")
 
             Image(systemName: "sparkles")
                 .font(.system(size: 10.5, weight: .bold))
                 .foregroundStyle(.secondary.opacity(0.7))
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("AI")
     }
 
     private var serviceStatusButtonTitle: String {
@@ -392,18 +411,50 @@ struct SpillBarView: View {
         }
 
         guard let snapshot = cloudServiceStatusStore.snapshot else {
-            return "Status"
+            return "Check"
         }
 
-        return "Status \(shortServiceCheckTime(snapshot.fetchedAt))"
+        let issueCount = serviceStatusIssueItems.count
+        if issueCount > 0 {
+            return issueCount == 1 ? "1 Issue" : "\(issueCount) Issues"
+        }
+
+        return "Services \(shortServiceCheckTime(snapshot.fetchedAt))"
     }
 
     private var serviceStatusHelpText: String {
         guard let snapshot = cloudServiceStatusStore.snapshot else {
-            return "Official service status"
+            return "Click to fetch official service status details."
         }
 
-        return "Official service status. Last checked \(fullServiceCheckTime(snapshot.fetchedAt))."
+        let statusText = serviceStatusIssueItems.isEmpty
+            ? "No server issues"
+            : "\(serviceStatusIssueItems.count) server issue\(serviceStatusIssueItems.count == 1 ? "" : "s")"
+        return "\(statusText). Last checked \(fullServiceCheckTime(snapshot.fetchedAt)). Click for per-service details."
+    }
+
+    private var serviceStatusSymbolName: String {
+        if cloudServiceStatusStore.isLoading {
+            return "arrow.triangle.2.circlepath"
+        }
+
+        let issueItems = serviceStatusIssueItems
+        guard !issueItems.isEmpty else {
+            return "cloud.fill"
+        }
+
+        switch aggregateServiceHealth(for: issueItems) {
+        case .operational:
+            return "checkmark.circle.fill"
+        case .degraded:
+            return "exclamationmark.circle.fill"
+        case .outage:
+            return "exclamationmark.triangle.fill"
+        case .maintenance:
+            return "wrench.and.screwdriver.fill"
+        case .unknown:
+            return "questionmark.circle.fill"
+        }
     }
 
     private var serviceStatusTint: Color {
@@ -411,27 +462,76 @@ struct SpillBarView: View {
             return .blue
         }
 
-        guard let items = cloudServiceStatusStore.snapshot?.items, !items.isEmpty else {
+        let issueItems = serviceStatusIssueItems
+        guard !issueItems.isEmpty else {
             return .secondary
         }
 
-        if items.contains(where: { $0.health == .outage }) {
+        switch aggregateServiceHealth(for: issueItems) {
+        case .outage:
             return .red
+        case .degraded:
+            return .orange
+        case .maintenance:
+            return .blue
+        case .operational:
+            return .green
+        case .unknown:
+            return .secondary
+        }
+    }
+
+    private var serviceStatusIssueItems: [CloudServiceStatusItem] {
+        cloudServiceStatusStore.snapshot?.items.filter { $0.health.isServerIssue } ?? []
+    }
+
+    private func aggregateServiceHealth(for items: [CloudServiceStatusItem]) -> CloudServiceHealth {
+        if items.contains(where: { $0.health == .outage }) {
+            return .outage
         }
 
         if items.contains(where: { $0.health == .degraded }) {
-            return .orange
+            return .degraded
         }
 
         if items.contains(where: { $0.health == .maintenance }) {
-            return .blue
+            return .maintenance
         }
 
-        if items.allSatisfy({ $0.health == .operational }) {
-            return .green
+        if items.contains(where: { $0.health == .operational }) {
+            return .operational
         }
 
-        return .secondary
+        return .unknown
+    }
+
+    private func serviceIssue(for kind: LocalAIToolKind) -> CloudServiceStatusItem? {
+        let serviceKinds = cloudServiceKinds(for: kind)
+        guard !serviceKinds.isEmpty else {
+            return nil
+        }
+
+        return cloudServiceStatusStore.snapshot?.items
+            .filter { serviceKinds.contains($0.kind) && $0.health.isServerIssue }
+            .sorted { lhs, rhs in
+                lhs.health.serverIssueRank > rhs.health.serverIssueRank
+            }
+            .first
+    }
+
+    private func cloudServiceKinds(for kind: LocalAIToolKind) -> [CloudServiceKind] {
+        switch kind {
+        case .codex:
+            return [.codex]
+        case .claude:
+            return [.claudeCode]
+        case .antigravity:
+            return [.antigravity]
+        case .ollama:
+            return []
+        case .openAI:
+            return [.openAI]
+        }
     }
 
     private func shortServiceCheckTime(_ date: Date) -> String {
@@ -542,66 +642,58 @@ struct SpillBarView: View {
         .background(.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
-    private func aiToolRow(_ status: LocalAIToolStatus) -> some View {
+    private func compactAIToolPill(
+        _ status: LocalAIToolStatus,
+        serviceIssue: CloudServiceStatusItem?
+    ) -> some View {
         let tint = status.state.panelTint
         let isActive = status.state == .active
         let isUnavailable = status.state == .unavailable
-        let helpText = statusHelpText(title: status.title, value: status.value, subtitle: status.subtitle)
 
-        return Button {
-            panelStore.send(.setStatusDetailTarget(.ai(status.kind)))
-        } label: {
-            HStack(spacing: 8) {
-                aiToolIconBadge(symbolName: status.symbolName, tint: tint)
+        return HStack(alignment: .top, spacing: 8) {
+            aiToolIconBadge(symbolName: status.symbolName, tint: tint)
 
-                VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
                     Text(status.title)
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.system(size: 10.5, weight: .bold))
                         .lineLimit(1)
-                        .minimumScaleFactor(0.72)
+                        .minimumScaleFactor(0.78)
                         .foregroundStyle(isUnavailable ? .secondary : .primary)
 
-                    Text(subtitleText(status.subtitle))
-                        .font(.system(size: 9.5, weight: .medium, design: .rounded))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.72)
-                        .monospacedDigit()
-                        .foregroundStyle(isActive ? tint.opacity(0.86) : .secondary)
+                    Spacer(minLength: 4)
+
+                    aiStatusBadge(value: status.value, tint: tint, isRunning: isActive)
                 }
 
-                Spacer(minLength: 6)
+                HStack(spacing: 5) {
+                    Text(subtitleText(status.subtitle))
+                        .font(.system(size: 10, weight: .semibold, design: .rounded))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.76)
+                        .monospacedDigit()
+                        .foregroundStyle(isActive ? tint.opacity(0.86) : .secondary)
 
-                aiStatusBadge(value: status.value, tint: tint, isRunning: isActive)
+                    Spacer(minLength: 4)
 
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 8.5, weight: .bold))
-                    .foregroundStyle(.secondary.opacity(0.45))
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 5)
-            .frame(height: 34)
-            .frame(maxWidth: .infinity)
-            .background(
-                isActive ? tint.opacity(0.07) : Color.primary.opacity(0.035),
-                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(isActive ? tint.opacity(0.13) : Color.primary.opacity(0.045), lineWidth: 0.5)
-            }
-            .overlay(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
-                    .fill(tint.opacity(isUnavailable ? 0.38 : 0.86))
-                    .frame(width: 3)
-                    .padding(.vertical, 7)
+                    if let serviceIssue {
+                        aiServerIssueBadge(serviceIssue)
+                    }
+                }
             }
         }
-        .buttonStyle(.plain)
-        .popover(isPresented: detailBinding(for: .ai(status.kind)), arrowEdge: .top) {
-            statusDetailPopover(for: .ai(status.kind))
+        .padding(.horizontal, 8)
+        .padding(.vertical, 7)
+        .frame(height: 54)
+        .frame(maxWidth: .infinity)
+        .background(
+            isActive ? tint.opacity(0.06) : Color.primary.opacity(0.03),
+            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(isActive ? tint.opacity(0.12) : Color.primary.opacity(0.04), lineWidth: 0.5)
         }
-        .help(helpText)
-        .accessibilityLabel(helpText)
     }
 
     private func aiToolIconBadge(symbolName: String, tint: Color) -> some View {
@@ -636,6 +728,22 @@ struct SpillBarView: View {
             tint.opacity(isRunning ? 0.13 : 0.07),
             in: Capsule()
         )
+    }
+
+    private func aiServerIssueBadge(_ item: CloudServiceStatusItem) -> some View {
+        HStack(spacing: 3) {
+            Image(systemName: item.health.serverIssueSymbolName)
+                .font(.system(size: 8, weight: .bold))
+
+            Text(item.health.serverIssueBadgeTitle)
+                .font(.system(size: 8.5, weight: .bold, design: .rounded))
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 5)
+        .frame(height: 16)
+        .foregroundStyle(item.health.serverIssueTint)
+        .background(item.health.serverIssueTint.opacity(0.13), in: Capsule())
+        .help("\(item.title) server \(item.health.title): \(item.detail)")
     }
 
     private func statusIconBadge(symbolName: String, tint: Color) -> some View {
@@ -1038,6 +1146,16 @@ struct SpillBarView: View {
         return parts.joined(separator: " - ")
     }
 
+    private func aiToolHelpText(_ status: LocalAIToolStatus, serviceIssue: CloudServiceStatusItem?) -> String {
+        var text = statusHelpText(title: status.title, value: status.value, subtitle: status.subtitle)
+
+        if let serviceIssue {
+            text += " - Server \(serviceIssue.health.title)"
+        }
+
+        return text
+    }
+
     private func helpText(for item: SpillDisplayedActionItem) -> String {
         var parts = [item.action.title]
 
@@ -1056,6 +1174,75 @@ struct SpillBarView: View {
         return parts.joined(separator: " - ")
     }
 
+}
+
+private extension CloudServiceHealth {
+    var isServerIssue: Bool {
+        switch self {
+        case .degraded, .outage, .maintenance:
+            return true
+        case .operational, .unknown:
+            return false
+        }
+    }
+
+    var serverIssueRank: Int {
+        switch self {
+        case .outage:
+            return 3
+        case .degraded:
+            return 2
+        case .maintenance:
+            return 1
+        case .operational, .unknown:
+            return 0
+        }
+    }
+
+    var serverIssueBadgeTitle: String {
+        switch self {
+        case .outage:
+            return "Outage"
+        case .degraded:
+            return "Degraded"
+        case .maintenance:
+            return "Maint"
+        case .operational:
+            return "OK"
+        case .unknown:
+            return "Unknown"
+        }
+    }
+
+    var serverIssueSymbolName: String {
+        switch self {
+        case .outage:
+            return "exclamationmark.triangle.fill"
+        case .degraded:
+            return "exclamationmark.circle.fill"
+        case .maintenance:
+            return "wrench.and.screwdriver.fill"
+        case .operational:
+            return "checkmark.circle.fill"
+        case .unknown:
+            return "questionmark.circle.fill"
+        }
+    }
+
+    var serverIssueTint: Color {
+        switch self {
+        case .outage:
+            return .red
+        case .degraded:
+            return .orange
+        case .maintenance:
+            return .blue
+        case .operational:
+            return .green
+        case .unknown:
+            return .secondary
+        }
+    }
 }
 
 private struct MetricSparklineSeries {

@@ -12,8 +12,9 @@ enum SpillPanelContentSizer {
     private static let aiSectionSpacing: CGFloat = 7
     private static let statusRowHeight: CGFloat = 64
     private static let statusRowSpacing: CGFloat = 7
-    private static let aiRowHeight: CGFloat = 34
-    private static let aiRowSpacing: CGFloat = 5
+    private static let aiCardHeight: CGFloat = 54
+    private static let aiCardRowSpacing: CGFloat = 7
+    private static let aiCardColumnCount = 2
     private static let windowActionHeight: CGFloat = 58
     private static let windowActionSpacing: CGFloat = 6
     private static let menuBarActionWidth: CGFloat = 48
@@ -96,9 +97,10 @@ enum SpillPanelContentSizer {
             return 0
         }
 
+        let rowCount = Int(ceil(Double(statusCount) / Double(aiCardColumnCount)))
         return sectionHeaderHeight
             + aiSectionSpacing
-            + rowsHeight(count: statusCount, itemHeight: aiRowHeight, spacing: aiRowSpacing)
+            + rowsHeight(count: rowCount, itemHeight: aiCardHeight, spacing: aiCardRowSpacing)
     }
 
     private static func actionSectionsHeight(

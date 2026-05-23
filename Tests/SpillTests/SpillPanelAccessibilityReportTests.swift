@@ -36,7 +36,7 @@ final class SpillPanelAccessibilityReportTests: XCTestCase {
     func testReportFailsWhenRequiredLabelIsMissing() {
         let report = SpillPanelAccessibilityReport(
             requiredLabels: ["Spill", "AI", "WINDOWS"],
-            discoveredLabels: ["Spill", "OpenAI API Set"]
+            discoveredLabels: ["Spill", "OpenAI API Configured"]
         )
 
         XCTAssertFalse(report.isValid)
@@ -47,7 +47,7 @@ final class SpillPanelAccessibilityReportTests: XCTestCase {
     func testRequiredLabelMatchesTokenBoundaryInsideCombinedLabel() {
         let report = SpillPanelAccessibilityReport(
             requiredLabels: ["AI"],
-            discoveredLabels: ["AI Codex Active Claude Active Antigravity Idle Ollama Active OpenAI API Set"]
+            discoveredLabels: ["AI Codex Running Claude Running Antigravity Installed Ollama Running OpenAI API Configured"]
         )
 
         XCTAssertTrue(report.isValid)

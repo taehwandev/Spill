@@ -18,7 +18,7 @@ final class AIStatusStoreTests: XCTestCase {
         XCTAssertEqual(store.statuses, [])
 
         store.refresh()
-        XCTAssertEqual(store.statuses.first { $0.kind == .codex }?.value, "Active")
-        XCTAssertEqual(store.statuses.first { $0.kind == .openAI }?.value, "Set")
+        XCTAssertEqual(store.statuses.first { $0.kind == .codex }?.value, "Running")
+        XCTAssertEqual(store.statuses.first { $0.kind == .openAI }?.value, "Configured")
     }
 }

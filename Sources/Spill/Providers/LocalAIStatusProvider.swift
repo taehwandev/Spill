@@ -320,7 +320,7 @@ struct LocalAIStatusProvider: SpillStatusProvider {
     }
 
     private static func commandValue(isRunning: Bool) -> String {
-        return isRunning ? "Active" : "Idle"
+        return isRunning ? "Running" : "Installed"
     }
 
     private static func commandSubtitle(
@@ -329,7 +329,7 @@ struct LocalAIStatusProvider: SpillStatusProvider {
     ) -> String {
         return compactSubtitle(
             metadata: metadata,
-            fallback: isRunning ? "Process Running" : "Installed"
+            fallback: isRunning ? "Local process" : "Installed locally"
         )
     }
 
@@ -357,8 +357,8 @@ struct LocalAIStatusProvider: SpillStatusProvider {
 
         return LocalAIToolStatus(
             kind: .openAI,
-            value: "Set",
-            subtitle: compactSubtitle(metadata: metadata, fallback: "Configured"),
+            value: "Configured",
+            subtitle: compactSubtitle(metadata: metadata, fallback: "API key/base URL"),
             state: .normal,
             metadata: metadata
         )
