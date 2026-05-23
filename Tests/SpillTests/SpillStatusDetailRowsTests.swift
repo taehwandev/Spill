@@ -46,22 +46,12 @@ final class SpillStatusDetailRowsTests: XCTestCase {
                     model: nil,
                     version: nil,
                     source: nil,
-                    serverStatus: LocalAIToolServerStatus(
-                        name: "Server",
-                        state: .running,
-                        detail: "Detected Antigravity MCP server process"
-                    )
+                    serverStatus: LocalAIToolServerStatus(name: "Server", state: .running)
                 )
             )
         )
 
-        XCTAssertEqual(rows.map(\.label), ["Status", "Detail", "Server", "Check", "Evidence"])
-        XCTAssertEqual(rows.map(\.value), [
-            "Active",
-            "Server Running",
-            "Running",
-            "Local process list",
-            "Detected Antigravity MCP server process"
-        ])
+        XCTAssertEqual(rows.map(\.label), ["Status", "Detail", "Server"])
+        XCTAssertEqual(rows.map(\.value), ["Active", "Server Running", "Running"])
     }
 }

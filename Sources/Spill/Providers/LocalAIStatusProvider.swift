@@ -90,23 +90,9 @@ enum LocalAIToolServerState: String, Hashable, Sendable {
 struct LocalAIToolServerStatus: Hashable, Sendable {
     let name: String
     let state: LocalAIToolServerState
-    let source: String
-    let detail: String
 
     var value: String {
         "\(name) \(state.title)"
-    }
-
-    init(
-        name: String,
-        state: LocalAIToolServerState,
-        source: String = "Local process list",
-        detail: String = ""
-    ) {
-        self.name = name
-        self.state = state
-        self.source = source
-        self.detail = detail
     }
 }
 
@@ -415,19 +401,12 @@ struct LocalAIStatusProvider: SpillStatusProvider {
         }
 
         if hasAntigravityServer(processCommands: processCommands) {
-            return LocalAIToolServerStatus(
-                name: "Server",
-                state: .running,
-                detail: "Detected Antigravity MCP server process"
-            )
+            return LocalAIToolServerStatus(name: "Server", state: .running)
         }
 
         return LocalAIToolServerStatus(
             name: "Server",
-            state: processCommands.isEmpty ? .unknown : .stopped,
-            detail: processCommands.isEmpty
-                ? "Process command scan unavailable"
-                : "Antigravity is running, but its MCP server process was not found"
+            state: processCommands.isEmpty ? .unknown : .stopped
         )
     }
 

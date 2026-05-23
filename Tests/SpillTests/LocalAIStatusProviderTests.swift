@@ -46,8 +46,6 @@ final class LocalAIStatusProviderTests: XCTestCase {
         XCTAssertEqual(statuses.first { $0.kind == .antigravity }?.subtitle, "Server Running")
         XCTAssertEqual(statuses.first { $0.kind == .antigravity }?.metadata.model, "ag-pro")
         XCTAssertEqual(statuses.first { $0.kind == .antigravity }?.metadata.serverStatus?.state, .running)
-        XCTAssertEqual(statuses.first { $0.kind == .antigravity }?.metadata.serverStatus?.source, "Local process list")
-        XCTAssertEqual(statuses.first { $0.kind == .antigravity }?.metadata.serverStatus?.detail, "Detected Antigravity MCP server process")
         XCTAssertEqual(statuses.first { $0.kind == .ollama }?.subtitle, "llama3.2:latest")
         XCTAssertEqual(statuses.first { $0.kind == .ollama }?.metadata.version, "0.12.0")
         XCTAssertEqual(statuses.first { $0.kind == .openAI }?.title, "OpenAI API")
@@ -109,7 +107,6 @@ final class LocalAIStatusProviderTests: XCTestCase {
         XCTAssertEqual(statuses.first?.value, "Server Down")
         XCTAssertEqual(statuses.first?.state, .warning)
         XCTAssertEqual(statuses.first?.subtitle, "Server Stopped")
-        XCTAssertEqual(statuses.first?.metadata.serverStatus?.detail, "Antigravity is running, but its MCP server process was not found")
         XCTAssertEqual(statuses.first?.metadata.model, "ag-lite")
     }
 
@@ -126,7 +123,6 @@ final class LocalAIStatusProviderTests: XCTestCase {
         XCTAssertEqual(statuses.first?.value, "Active")
         XCTAssertEqual(statuses.first?.subtitle, "Server Unknown")
         XCTAssertEqual(statuses.first?.metadata.serverStatus?.state, .unknown)
-        XCTAssertEqual(statuses.first?.metadata.serverStatus?.detail, "Process command scan unavailable")
     }
 
     func testAntigravityInstalledAppCanReportServerStatus() {

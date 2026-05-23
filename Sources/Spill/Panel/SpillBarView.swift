@@ -311,7 +311,7 @@ struct SpillBarView: View {
         VStack(spacing: 5) {
             sectionHeader("AI", symbolName: "sparkles")
 
-            LazyVGrid(columns: aiColumns, alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
                 ForEach(aiStatusStore.statuses) { status in
                     detailButton(
                         target: .ai(status.kind),
@@ -319,20 +319,13 @@ struct SpillBarView: View {
                         value: status.value,
                         subtitle: status.subtitle,
                         symbolName: status.symbolName,
-                        tint: status.state.panelTint,
-                        serverStatus: status.metadata.serverStatus
+                        tint: status.state.panelTint
                     )
-                    .help(aiHelpText(for: status))
-                    .accessibilityLabel(aiHelpText(for: status))
+                    .help(statusHelpText(title: status.title, value: status.value, subtitle: status.subtitle))
+                    .accessibilityLabel(statusHelpText(title: status.title, value: status.value, subtitle: status.subtitle))
                 }
             }
         }
-    }
-
-    private var aiColumns: [GridItem] {
-        [
-            GridItem(.adaptive(minimum: 128), spacing: 6, alignment: .top)
-        ]
     }
 
     private func detailButton(
@@ -342,7 +335,6 @@ struct SpillBarView: View {
         subtitle: String?,
         symbolName: String,
         tint: Color,
-        serverStatus: LocalAIToolServerStatus? = nil,
         detailRows: [SpillStatusDetailRow] = []
     ) -> some View {
         Button {
@@ -354,7 +346,6 @@ struct SpillBarView: View {
                 subtitle: subtitle,
                 symbolName: symbolName,
                 tint: tint,
-                serverStatus: serverStatus,
                 detailRows: detailRows
             )
         }
@@ -370,7 +361,6 @@ struct SpillBarView: View {
         subtitle: String?,
         symbolName: String,
         tint: Color,
-        serverStatus: LocalAIToolServerStatus?,
         detailRows: [SpillStatusDetailRow]
     ) -> some View {
         VStack(alignment: .leading, spacing: 5) {
@@ -402,10 +392,6 @@ struct SpillBarView: View {
                 }
             }
 
-            if let serverStatus {
-                serverStatusBadge(serverStatus)
-            }
-
             if !detailRows.isEmpty {
                 VStack(alignment: .leading, spacing: 2) {
                     ForEach(detailRows.prefix(3)) { row in
@@ -423,51 +409,9 @@ struct SpillBarView: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
-        .frame(minHeight: compactStatusPillMinHeight(hasServerStatus: serverStatus != nil, hasDetailRows: !detailRows.isEmpty))
+        .frame(minHeight: detailRows.isEmpty ? 60 : 92)
         .frame(maxWidth: .infinity)
         .background(.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-    }
-
-    private func compactStatusPillMinHeight(hasServerStatus: Bool, hasDetailRows: Bool) -> CGFloat {
-        if hasDetailRows {
-            return 92
-        }
-
-        return hasServerStatus ? 74 : 60
-    }
-
-    private func serverStatusBadge(_ status: LocalAIToolServerStatus) -> some View {
-        let tint = serverStatusTint(status.state)
-
-        return HStack(spacing: 5) {
-            Circle()
-                .fill(tint)
-                .frame(width: 6, height: 6)
-
-            Text(status.value)
-                .font(.system(size: 9.5, weight: .bold, design: .rounded))
-                .lineLimit(1)
-                .minimumScaleFactor(0.72)
-                .foregroundStyle(tint)
-        }
-        .padding(.horizontal, 7)
-        .padding(.vertical, 4)
-        .background(tint.opacity(0.12), in: Capsule())
-        .overlay {
-            Capsule()
-                .stroke(tint.opacity(0.18), lineWidth: 0.6)
-        }
-    }
-
-    private func serverStatusTint(_ state: LocalAIToolServerState) -> Color {
-        switch state {
-        case .running:
-            return .green
-        case .stopped:
-            return .orange
-        case .unknown:
-            return .secondary
-        }
     }
 
     private func statusIconBadge(symbolName: String, tint: Color) -> some View {
@@ -865,20 +809,6 @@ struct SpillBarView: View {
 
         if let subtitle, !subtitle.isEmpty {
             parts.append(subtitle)
-        }
-
-        return parts.joined(separator: " - ")
-    }
-
-    private func aiHelpText(for status: LocalAIToolStatus) -> String {
-        var parts = [statusHelpText(title: status.title, value: status.value, subtitle: status.subtitle)]
-
-        if let serverStatus = status.metadata.serverStatus {
-            parts.append(serverStatus.source)
-
-            if !serverStatus.detail.isEmpty {
-                parts.append(serverStatus.detail)
-            }
         }
 
         return parts.joined(separator: " - ")
