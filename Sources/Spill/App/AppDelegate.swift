@@ -15,11 +15,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let windowActionStore = WindowActionStore()
     private let sparkleUpdateController = SparkleUpdateController()
     private lazy var updateCheckStore = UpdateCheckStore(
-        isInAppUpdaterAvailable: { [weak self] in
-            self?.sparkleUpdateController.isAvailable == true
+        isInAppUpdaterAvailable: { [sparkleUpdateController] in
+            sparkleUpdateController.isAvailable
         },
-        runInAppUpdateCheck: { [weak self] _ in
-            self?.sparkleUpdateController.checkForUpdates() == true
+        runInAppUpdateCheck: { [sparkleUpdateController] _ in
+            sparkleUpdateController.checkForUpdates()
         }
     )
     private lazy var panelStore = PanelStore(
