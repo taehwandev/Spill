@@ -331,36 +331,12 @@ struct SpillBarView: View {
         VStack(spacing: 7) {
             aiSectionHeader
 
-            LazyVGrid(columns: aiToolColumns, alignment: .leading, spacing: 7) {
+            VStack(spacing: 5) {
                 ForEach(aiStatusStore.statuses) { status in
-                    Button {
-                        panelStore.send(.setStatusDetailTarget(.ai(status.kind)))
-                    } label: {
-                        compactAIToolPill(
-                            title: status.title,
-                            value: status.value,
-                            subtitle: status.subtitle,
-                            symbolName: status.symbolName,
-                            tint: status.state.panelTint,
-                            isRunning: status.value == "Active"
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .popover(isPresented: detailBinding(for: .ai(status.kind)), arrowEdge: .top) {
-                        statusDetailPopover(for: .ai(status.kind))
-                    }
-                    .help(statusHelpText(title: status.title, value: status.value, subtitle: status.subtitle))
-                    .accessibilityLabel(statusHelpText(title: status.title, value: status.value, subtitle: status.subtitle))
+                    aiToolRow(status)
                 }
             }
         }
-    }
-
-    private var aiToolColumns: [GridItem] {
-        [
-            GridItem(.flexible(minimum: 0), spacing: 7),
-            GridItem(.flexible(minimum: 0), spacing: 7)
-        ]
     }
 
     private var aiSectionHeader: some View {
@@ -566,59 +542,79 @@ struct SpillBarView: View {
         .background(.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
-    private func compactAIToolPill(
-        title: String,
-        value: String,
-        subtitle: String?,
-        symbolName: String,
-        tint: Color,
-        isRunning: Bool
-    ) -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(tint.opacity(0.14))
+    private func aiToolRow(_ status: LocalAIToolStatus) -> some View {
+        let tint = status.state.panelTint
+        let isActive = status.state == .active
+        let isUnavailable = status.state == .unavailable
+        let helpText = statusHelpText(title: status.title, value: status.value, subtitle: status.subtitle)
 
-                Image(systemName: symbolName)
-                    .font(.system(size: 12, weight: .bold))
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(tint)
-            }
-            .frame(width: 26, height: 26)
+        return Button {
+            panelStore.send(.setStatusDetailTarget(.ai(status.kind)))
+        } label: {
+            HStack(spacing: 8) {
+                aiToolIconBadge(symbolName: status.symbolName, tint: tint)
 
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 6) {
-                    Text(title)
-                        .font(.system(size: 10.5, weight: .bold))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(status.title)
+                        .font(.system(size: 11, weight: .semibold))
                         .lineLimit(1)
-                        .minimumScaleFactor(0.78)
-                        .foregroundStyle(isRunning ? .primary : .secondary)
+                        .minimumScaleFactor(0.72)
+                        .foregroundStyle(isUnavailable ? .secondary : .primary)
 
-                    Spacer(minLength: 4)
-
-                    aiStatusBadge(value: value, tint: tint, isRunning: isRunning)
+                    Text(subtitleText(status.subtitle))
+                        .font(.system(size: 9.5, weight: .medium, design: .rounded))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.72)
+                        .monospacedDigit()
+                        .foregroundStyle(isActive ? tint.opacity(0.86) : .secondary)
                 }
 
-                Text(subtitleText(subtitle))
-                    .font(.system(size: 10, weight: .semibold, design: .rounded))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.76)
-                    .monospacedDigit()
-                    .foregroundStyle(isRunning ? tint.opacity(0.84) : .secondary)
+                Spacer(minLength: 6)
+
+                aiStatusBadge(value: status.value, tint: tint, isRunning: isActive)
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 8.5, weight: .bold))
+                    .foregroundStyle(.secondary.opacity(0.45))
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .frame(height: 34)
+            .frame(maxWidth: .infinity)
+            .background(
+                isActive ? tint.opacity(0.07) : Color.primary.opacity(0.035),
+                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(isActive ? tint.opacity(0.13) : Color.primary.opacity(0.045), lineWidth: 0.5)
+            }
+            .overlay(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                    .fill(tint.opacity(isUnavailable ? 0.38 : 0.86))
+                    .frame(width: 3)
+                    .padding(.vertical, 7)
             }
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 7)
-        .frame(height: 50)
-        .frame(maxWidth: .infinity)
-        .background(
-            isRunning ? tint.opacity(0.06) : Color.primary.opacity(0.03),
-            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(isRunning ? tint.opacity(0.12) : Color.primary.opacity(0.04), lineWidth: 0.5)
+        .buttonStyle(.plain)
+        .popover(isPresented: detailBinding(for: .ai(status.kind)), arrowEdge: .top) {
+            statusDetailPopover(for: .ai(status.kind))
         }
+        .help(helpText)
+        .accessibilityLabel(helpText)
+    }
+
+    private func aiToolIconBadge(symbolName: String, tint: Color) -> some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(tint.opacity(0.14))
+
+            Image(systemName: symbolName)
+                .font(.system(size: 11, weight: .bold))
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(tint)
+        }
+        .frame(width: 24, height: 24)
     }
 
     private func aiStatusBadge(value: String, tint: Color, isRunning: Bool) -> some View {
