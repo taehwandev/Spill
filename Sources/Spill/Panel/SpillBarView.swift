@@ -328,24 +328,39 @@ struct SpillBarView: View {
     }
 
     private var aiSection: some View {
-        VStack(spacing: 5) {
+        VStack(spacing: 7) {
             aiSectionHeader
 
-            HStack(spacing: 6) {
+            LazyVGrid(columns: aiToolColumns, alignment: .leading, spacing: 7) {
                 ForEach(aiStatusStore.statuses) { status in
-                    detailButton(
-                        target: .ai(status.kind),
-                        title: status.title,
-                        value: status.value,
-                        subtitle: status.subtitle,
-                        symbolName: status.symbolName,
-                        tint: status.state.panelTint
-                    )
+                    Button {
+                        panelStore.send(.setStatusDetailTarget(.ai(status.kind)))
+                    } label: {
+                        compactAIToolPill(
+                            title: status.title,
+                            value: status.value,
+                            subtitle: status.subtitle,
+                            symbolName: status.symbolName,
+                            tint: status.state.panelTint,
+                            isRunning: status.value == "Active"
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .popover(isPresented: detailBinding(for: .ai(status.kind)), arrowEdge: .top) {
+                        statusDetailPopover(for: .ai(status.kind))
+                    }
                     .help(statusHelpText(title: status.title, value: status.value, subtitle: status.subtitle))
                     .accessibilityLabel(statusHelpText(title: status.title, value: status.value, subtitle: status.subtitle))
                 }
             }
         }
+    }
+
+    private var aiToolColumns: [GridItem] {
+        [
+            GridItem(.flexible(minimum: 0), spacing: 7),
+            GridItem(.flexible(minimum: 0), spacing: 7)
+        ]
     }
 
     private var aiSectionHeader: some View {
@@ -361,18 +376,31 @@ struct SpillBarView: View {
                 showsServiceStatusDashboard = true
                 cloudServiceStatusStore.refreshIfNeeded()
             } label: {
-                Label("Status", systemImage: "cloud.fill")
-                    .font(.system(size: 9.5, weight: .bold))
-                    .lineLimit(1)
-                    .padding(.horizontal, 7)
-                    .frame(height: 22)
-                    .background(.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                HStack(spacing: 5) {
+                    Circle()
+                        .fill(serviceStatusTint)
+                        .frame(width: 5, height: 5)
+
+                    Image(systemName: "cloud.fill")
+
+                    Text(serviceStatusButtonTitle)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.78)
+                }
+                .font(.system(size: 9.5, weight: .bold))
+                .padding(.horizontal, 7)
+                .frame(height: 22)
+                .background(serviceStatusTint.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(serviceStatusTint.opacity(0.12), lineWidth: 0.5)
+                }
             }
             .buttonStyle(.plain)
             .popover(isPresented: $showsServiceStatusDashboard, arrowEdge: .top) {
                 CloudServiceStatusDashboardView(store: cloudServiceStatusStore)
             }
-            .help("Official service status")
+            .help(serviceStatusHelpText)
 
             Image(systemName: "sparkles")
                 .font(.system(size: 10.5, weight: .bold))
@@ -380,6 +408,76 @@ struct SpillBarView: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("AI")
+    }
+
+    private var serviceStatusButtonTitle: String {
+        if cloudServiceStatusStore.isLoading {
+            return "Checking"
+        }
+
+        guard let snapshot = cloudServiceStatusStore.snapshot else {
+            return "Status"
+        }
+
+        return "Status \(shortServiceCheckTime(snapshot.fetchedAt))"
+    }
+
+    private var serviceStatusHelpText: String {
+        guard let snapshot = cloudServiceStatusStore.snapshot else {
+            return "Official service status"
+        }
+
+        return "Official service status. Last checked \(fullServiceCheckTime(snapshot.fetchedAt))."
+    }
+
+    private var serviceStatusTint: Color {
+        if cloudServiceStatusStore.isLoading {
+            return .blue
+        }
+
+        guard let items = cloudServiceStatusStore.snapshot?.items, !items.isEmpty else {
+            return .secondary
+        }
+
+        if items.contains(where: { $0.health == .outage }) {
+            return .red
+        }
+
+        if items.contains(where: { $0.health == .degraded }) {
+            return .orange
+        }
+
+        if items.contains(where: { $0.health == .maintenance }) {
+            return .blue
+        }
+
+        if items.allSatisfy({ $0.health == .operational }) {
+            return .green
+        }
+
+        return .secondary
+    }
+
+    private func shortServiceCheckTime(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = .current
+        formatter.timeZone = .current
+        formatter.setLocalizedDateFormatFromTemplate("jm")
+        return formatter.string(from: date)
+    }
+
+    private func fullServiceCheckTime(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = .current
+        formatter.timeZone = .current
+
+        if Calendar.current.isDateInToday(date) {
+            formatter.setLocalizedDateFormatFromTemplate("jm")
+        } else {
+            formatter.setLocalizedDateFormatFromTemplate("MMM d, jm")
+        }
+
+        return formatter.string(from: date)
     }
 
     private func detailButton(
@@ -466,6 +564,82 @@ struct SpillBarView: View {
         .frame(minHeight: detailRows.isEmpty ? 60 : 92)
         .frame(maxWidth: .infinity)
         .background(.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func compactAIToolPill(
+        title: String,
+        value: String,
+        subtitle: String?,
+        symbolName: String,
+        tint: Color,
+        isRunning: Bool
+    ) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(tint.opacity(0.14))
+
+                Image(systemName: symbolName)
+                    .font(.system(size: 12, weight: .bold))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(tint)
+            }
+            .frame(width: 26, height: 26)
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Text(title)
+                        .font(.system(size: 10.5, weight: .bold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.78)
+                        .foregroundStyle(isRunning ? .primary : .secondary)
+
+                    Spacer(minLength: 4)
+
+                    aiStatusBadge(value: value, tint: tint, isRunning: isRunning)
+                }
+
+                Text(subtitleText(subtitle))
+                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.76)
+                    .monospacedDigit()
+                    .foregroundStyle(isRunning ? tint.opacity(0.84) : .secondary)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 7)
+        .frame(height: 50)
+        .frame(maxWidth: .infinity)
+        .background(
+            isRunning ? tint.opacity(0.06) : Color.primary.opacity(0.03),
+            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(isRunning ? tint.opacity(0.12) : Color.primary.opacity(0.04), lineWidth: 0.5)
+        }
+    }
+
+    private func aiStatusBadge(value: String, tint: Color, isRunning: Bool) -> some View {
+        HStack(spacing: 4) {
+            Circle()
+                .fill(tint)
+                .frame(width: 5, height: 5)
+
+            Text(value)
+                .font(.system(size: 9.5, weight: .bold, design: .rounded))
+                .lineLimit(1)
+                .monospacedDigit()
+        }
+        .padding(.horizontal, 6)
+        .frame(height: 18)
+        .fixedSize(horizontal: true, vertical: false)
+        .foregroundStyle(isRunning ? tint : .secondary)
+        .background(
+            tint.opacity(isRunning ? 0.13 : 0.07),
+            in: Capsule()
+        )
     }
 
     private func statusIconBadge(symbolName: String, tint: Color) -> some View {

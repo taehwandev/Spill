@@ -108,7 +108,21 @@ struct CloudServiceStatusDashboardView: View {
             return "Official status is fetched only when this dashboard opens."
         }
 
-        return "Official status, updated \(relativeAge(from: snapshot.fetchedAt))."
+        return "Last checked \(formattedCheckTime(snapshot.fetchedAt)) (\(relativeAge(from: snapshot.fetchedAt)))."
+    }
+
+    private func formattedCheckTime(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = .current
+        formatter.timeZone = .current
+
+        if Calendar.current.isDateInToday(date) {
+            formatter.setLocalizedDateFormatFromTemplate("jm")
+        } else {
+            formatter.setLocalizedDateFormatFromTemplate("MMM d, jm")
+        }
+
+        return formatter.string(from: date)
     }
 
     private func relativeAge(from date: Date) -> String {

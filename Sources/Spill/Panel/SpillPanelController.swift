@@ -351,6 +351,14 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
             }
             .store(in: &cancellables)
 
+        cloudServiceStatusStore.objectWillChange
+            .sink { [weak self] _ in
+                DispatchQueue.main.async {
+                    self?.resizePanelIfVisible()
+                }
+            }
+            .store(in: &cancellables)
+
         windowActionStore.objectWillChange
             .sink { [weak self] _ in
                 DispatchQueue.main.async {
@@ -372,6 +380,7 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
         let enabledModules = settings.statusModulesRequiredForRefresh
         let readsPower = true
         aiStatusStore.refreshInBackground()
+        cloudServiceStatusStore.refreshIfNeeded()
         windowActionStore.refresh()
         Task { @MainActor [statusStore] in
             await statusStore.refresh(enabledModules: enabledModules, readsPower: readsPower)

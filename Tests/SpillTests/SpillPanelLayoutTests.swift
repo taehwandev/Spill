@@ -107,6 +107,29 @@ final class SpillPanelLayoutTests: XCTestCase {
         XCTAssertGreaterThan(sizeWithAI.height, sizeWithoutAI.height)
     }
 
+    func testContentSizerWrapsAIStatusesIntoReadableRows() {
+        let visibleFrame = NSRect(x: 0, y: 0, width: 1_440, height: 900)
+        let twoStatuses = SpillPanelContentSizer.preferredSize(
+            statusModuleCount: 0,
+            aiStatusCount: 2,
+            windowActionCount: 6,
+            menuBarActionCount: 0,
+            iconSpacing: 8,
+            visibleFrame: visibleFrame
+        )
+        let fiveStatuses = SpillPanelContentSizer.preferredSize(
+            statusModuleCount: 0,
+            aiStatusCount: 5,
+            windowActionCount: 6,
+            menuBarActionCount: 0,
+            iconSpacing: 8,
+            visibleFrame: visibleFrame
+        )
+
+        XCTAssertGreaterThan(fiveStatuses.height, twoStatuses.height)
+        XCTAssertLessThanOrEqual(fiveStatuses.height, visibleFrame.height - SpillPanelMetrics.edgeInset * 2)
+    }
+
     func testContentSizerExpandsForUpdateBannerOnlyWhenVisible() {
         let visibleFrame = NSRect(x: 0, y: 0, width: 1_440, height: 900)
         let sizeWithoutUpdate = SpillPanelContentSizer.preferredSize(
