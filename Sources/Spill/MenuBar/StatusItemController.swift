@@ -5,6 +5,8 @@ final class StatusItemController: NSObject {
     private let defaultLength: CGFloat = 26
     private static let inactiveMaximumStatusItemLength: CGFloat = 190
     private static let activeSleepGuardMaximumStatusItemLength: CGFloat = 176
+    private static let expandedStatusItemScreenRatio: CGFloat = 0.18
+    private static let expandedMaximumStatusItemLength: CGFloat = 320
     private let settings: SpillSettings
     private let statusStore: SystemStatusStore
     private let sleepGuard: SleepGuardController
@@ -199,10 +201,42 @@ final class StatusItemController: NSObject {
         return [trigger]
     }
 
+    static func maximumStatusItemLength(
+        screenWidth: CGFloat?,
+        isSleepGuardActive: Bool
+    ) -> CGFloat {
+        let minimumLength = isSleepGuardActive
+            ? activeSleepGuardMaximumStatusItemLength
+            : inactiveMaximumStatusItemLength
+
+        guard let screenWidth,
+              screenWidth.isFinite,
+              screenWidth > 0
+        else {
+            return minimumLength
+        }
+
+        let expandedLength = min(
+            expandedMaximumStatusItemLength,
+            floor(screenWidth * expandedStatusItemScreenRatio)
+        )
+        return max(minimumLength, expandedLength)
+    }
+
     private var maximumStatusItemLength: CGFloat {
-        sleepGuard.isActive
-            ? Self.activeSleepGuardMaximumStatusItemLength
-            : Self.inactiveMaximumStatusItemLength
+        Self.maximumStatusItemLength(
+            screenWidth: statusItemScreenWidth,
+            isSleepGuardActive: sleepGuard.isActive
+        )
+    }
+
+    private var statusItemScreenWidth: CGFloat? {
+        if let screenWidth = triggerItem.button?.window?.screen?.visibleFrame.width,
+           screenWidth > 0 {
+            return screenWidth
+        }
+
+        return NSScreen.main?.visibleFrame.width
     }
 
     private func configureTriggerButton() {

@@ -217,6 +217,54 @@ final class MenuBarStatusContentViewTests: XCTestCase {
         XCTAssertLessThanOrEqual(MenuBarStatusContentView.preferredWidth(for: segments), compactWidth)
     }
 
+    func testVisibleSegmentsKeepInlineMetricsOnWideScreens() {
+        let trigger = makeTriggerSegment()
+        let caffeine = makeCaffeineSegment()
+        let cpu = makeStatusSegment(kind: .cpu, value: "13.7%")
+        let memory = makeStatusSegment(kind: .memory, value: "72.9%")
+        let requestedSegments = StatusItemController.orderedSegments(
+            trigger: trigger,
+            statusSegments: [cpu, memory],
+            caffeineSegment: caffeine
+        )
+        let fixedLegacyMaximum: CGFloat = 190
+        let wideMaximum = StatusItemController.maximumStatusItemLength(
+            screenWidth: 1_512,
+            isSleepGuardActive: false
+        )
+
+        XCTAssertGreaterThan(MenuBarStatusContentView.preferredWidth(for: requestedSegments), fixedLegacyMaximum)
+
+        let segments = StatusItemController.visibleSegments(
+            trigger: trigger,
+            statusSegments: [cpu, memory],
+            caffeineSegment: caffeine,
+            maximumWidth: wideMaximum
+        )
+
+        XCTAssertEqual(segments.map(\.kind), [.caffeine, .trigger, .cpu, .memory])
+        XCTAssertEqual(segments.suffix(2).map(\.visualStyle), [.symbol, .symbol])
+    }
+
+    func testMaximumStatusItemLengthExpandsWithScreenWidth() {
+        XCTAssertEqual(
+            StatusItemController.maximumStatusItemLength(screenWidth: nil, isSleepGuardActive: false),
+            190
+        )
+        XCTAssertEqual(
+            StatusItemController.maximumStatusItemLength(screenWidth: 1_000, isSleepGuardActive: false),
+            190
+        )
+        XCTAssertGreaterThan(
+            StatusItemController.maximumStatusItemLength(screenWidth: 1_512, isSleepGuardActive: false),
+            190
+        )
+        XCTAssertLessThanOrEqual(
+            StatusItemController.maximumStatusItemLength(screenWidth: 3_456, isSleepGuardActive: false),
+            320
+        )
+    }
+
     func testVisibleSegmentsDropStatusOnlyAfterValueOnlySegmentsStillOverflow() {
         let trigger = makeTriggerSegment()
         let caffeine = makeCaffeineSegment(value: "1h 59m", active: true)
