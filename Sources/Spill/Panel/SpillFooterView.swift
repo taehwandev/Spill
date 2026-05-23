@@ -83,7 +83,7 @@ struct SpillFooterView: View {
     }
 
     private var sleepGuardFooter: some View {
-        HStack(spacing: 2) {
+        HStack(spacing: 4) {
             Button {
                 toggleSleepGuardFromFooter()
             } label: {
@@ -98,38 +98,42 @@ struct SpillFooterView: View {
             } label: {
                 Image(systemName: "chevron.down")
                     .font(.system(size: 8, weight: .semibold))
-                    .frame(width: 10, height: 18)
-                    .spillFooterForeground(sleepGuardStyle.titleRole)
+                    .frame(width: 12, height: 20)
+                    .spillFooterForeground(sleepGuardStyle.valueRole)
                     .contentShape(Rectangle())
             }
             .menuStyle(.borderlessButton)
-            .frame(width: 14, height: 20)
+            .frame(width: 14, height: 22)
             .accessibilityLabel("Choose Caffeine Duration")
         }
-        .fixedSize()
+        .frame(minWidth: 66, minHeight: 22, maxHeight: 22, alignment: .leading)
+        .fixedSize(horizontal: true, vertical: false)
+        .contentShape(Rectangle())
         .help(caffeineHelpText)
         .accessibilityIdentifier("Caffeine")
     }
 
     private var sleepGuardLabel: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 5) {
             Image(systemName: sleepGuard.isActive ? "cup.and.saucer.fill" : "cup.and.saucer")
                 .font(.system(size: 11, weight: .semibold))
                 .frame(width: 14, height: 14)
                 .spillFooterForeground(sleepGuardStyle.symbolRole)
 
-            Text("Caf")
-                .font(.system(size: 10, weight: .medium, design: .rounded))
-                .spillFooterForeground(sleepGuardStyle.titleRole)
-
-            Text(sleepGuard.isActive ? sleepGuard.remainingLabel : "Off")
+            Text(sleepGuardFooterValue)
                 .font(.system(size: 11, weight: .semibold, design: .rounded))
                 .monospacedDigit()
                 .lineLimit(1)
-                .minimumScaleFactor(0.78)
+                .minimumScaleFactor(0.72)
+                .frame(minWidth: 28, maxWidth: 48, alignment: .leading)
                 .spillFooterForeground(sleepGuardStyle.valueRole)
         }
+        .frame(height: 22)
         .contentShape(Rectangle())
+    }
+
+    private var sleepGuardFooterValue: String {
+        sleepGuard.isActive ? sleepGuard.remainingLabel : "Off"
     }
 
     @ViewBuilder
