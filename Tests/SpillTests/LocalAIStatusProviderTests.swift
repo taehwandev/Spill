@@ -101,6 +101,19 @@ final class LocalAIStatusProviderTests: XCTestCase {
         XCTAssertEqual(statuses.first?.subtitle, "ag-lite")
     }
 
+    func testAgyExecutableAliasIsDetected() {
+        let statuses = LocalAIStatusProvider.statuses(
+            environment: [:],
+            processNames: ["agy"],
+            processCommands: [],
+            installedExecutableNames: ["agy"]
+        )
+
+        XCTAssertEqual(statuses.map(\.kind), [.antigravity])
+        XCTAssertEqual(statuses.first?.title, "Antigravity")
+        XCTAssertEqual(statuses.first?.value, "Active")
+    }
+
     func testCommandLineDetectionDoesNotMatchExecutableOnlyFromArguments() {
         let statuses = LocalAIStatusProvider.statuses(
             environment: [:],

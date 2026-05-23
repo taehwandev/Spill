@@ -48,7 +48,7 @@ enum LocalAIToolKind: String, CaseIterable, Identifiable, Sendable {
         case .claude:
             return ["claude"]
         case .antigravity:
-            return ["antigravity", "antigravity-cli"]
+            return ["agy", "antigravity", "antigravity-cli"]
         case .ollama:
             return ["ollama"]
         case .openAI:
