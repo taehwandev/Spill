@@ -189,7 +189,10 @@ notary profile:
 SPILL_VERSION=<version> \
 SPILL_BUILD=<build> \
 SPILL_SIGN_IDENTITY="Developer ID Application: Example Name (TEAMID)" \
+SPILL_INSTALLER_SIGN_IDENTITY="Developer ID Installer: Example Name (TEAMID)" \
 SPILL_NOTARY_KEYCHAIN_PROFILE="spill-notary" \
+SPILL_SPARKLE_PUBLIC_ED_KEY="<public-ed-key>" \
+SPILL_SPARKLE_PRIVATE_KEY_FILE="/path/to/sparkle_ed_private_key" \
 ./scripts/package-release.sh
 ```
 
@@ -197,9 +200,12 @@ The package script must produce:
 
 - `.build/release-artifacts/Spill-<version>-macos.dmg`
 - `.build/release-artifacts/Spill-<version>-macos.zip`
+- `.build/release-artifacts/Spill-<version>-macos.pkg` when `SPILL_INSTALLER_SIGN_IDENTITY` is set
 - `.build/release-artifacts/Spill-macos.dmg`
 - `.build/release-artifacts/Spill-macos.zip`
+- `.build/release-artifacts/Spill-macos.pkg` when `SPILL_INSTALLER_SIGN_IDENTITY` is set
 - `.build/release-artifacts/update.json`
+- `.build/release-artifacts/appcast.xml` when `SPILL_SPARKLE_PRIVATE_KEY_FILE` is set
 - `.build/release-artifacts/checksums.txt`
 
 ## Verify Artifacts
@@ -209,10 +215,12 @@ Run:
 ```bash
 hdiutil verify .build/release-artifacts/Spill-<version>-macos.dmg
 unzip -t .build/release-artifacts/Spill-<version>-macos.zip
+pkgutil --check-signature .build/release-artifacts/Spill-<version>-macos.pkg # when present
 codesign --verify --deep --strict --verbose=2 .build/Spill.app
 /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" .build/Spill.app/Contents/Info.plist
 /usr/libexec/PlistBuddy -c "Print :CFBundleVersion" .build/Spill.app/Contents/Info.plist
 sed -n '1,120p' .build/release-artifacts/update.json
+test -s .build/release-artifacts/appcast.xml # when Sparkle signing is configured
 ```
 
 Confirm:
@@ -222,7 +230,14 @@ Confirm:
 - `update.json.latestVersion` equals `<version>`.
 - `update.json.downloadURL` points to
   `https://github.com/taehwandev/Spill/releases/latest/download/Spill-macos.dmg`.
+- `update.json.packageURL` points to
+  `https://github.com/taehwandev/Spill/releases/latest/download/Spill-macos.pkg`
+  when a signed package is produced.
 - Stable and versioned DMG/ZIP assets exist.
+- Stable and versioned PKG assets exist when `SPILL_INSTALLER_SIGN_IDENTITY` is
+  set.
+- `appcast.xml` exists when Sparkle signing is configured and points at the
+  versioned ZIP asset.
 
 ## Tag
 
@@ -270,9 +285,12 @@ The workflow should create or update the GitHub Release and upload:
 
 - `Spill-<version>-macos.dmg`
 - `Spill-<version>-macos.zip`
+- `Spill-<version>-macos.pkg` when Developer ID Installer signing is configured
 - `Spill-macos.dmg`
 - `Spill-macos.zip`
+- `Spill-macos.pkg` when Developer ID Installer signing is configured
 - `update.json`
+- `appcast.xml` when Sparkle signing is configured
 - `checksums.txt`
 
 Manual asset upload is a fallback only when GitHub Actions is unavailable. Prefer
@@ -283,6 +301,8 @@ For telemetry-enabled public releases, GitHub Secrets should include:
 - `SPILL_APTABASE_APP_KEY`
 - `SPILL_WEB_APTABASE_APP_KEY` when the landing page should use a separate key
 - `SPILL_INSTALLER_APTABASE_APP_KEY` when the installer should use a separate key
+- `SPARKLE_PUBLIC_ED_KEY` and `SPARKLE_PRIVATE_ED_KEY` when official in-app
+  Sparkle updates should be enabled
 
 The release workflow embeds the app key in the macOS app bundle. The Pages
 workflow runs `scripts/prepare-docs.sh` and deploys `.build/docs` so the landing
@@ -296,7 +316,9 @@ After GitHub publication, verify stable public URLs:
 ```bash
 curl -I -L https://github.com/taehwandev/Spill/releases/latest/download/Spill-macos.dmg
 curl -I -L https://github.com/taehwandev/Spill/releases/latest/download/Spill-macos.zip
+curl -I -L https://github.com/taehwandev/Spill/releases/latest/download/Spill-macos.pkg # when package signing is configured
 curl -fsSL https://github.com/taehwandev/Spill/releases/latest/download/update.json
+curl -fsSL https://github.com/taehwandev/Spill/releases/latest/download/appcast.xml # when Sparkle signing is configured
 curl -I -L https://spill.thdev.app/
 ```
 
@@ -305,9 +327,13 @@ Open the release page and confirm:
 - the latest release tag is correct;
 - stable assets resolve;
 - `update.json` is attached;
+- `update.json.packageURL` is present when the release includes a signed package;
+- `appcast.xml` is attached when Sparkle signing is configured;
 - the download site still points at stable assets;
-- the app's manual Check for Updates action can discover the release from an
-  older build.
+- a Sparkle-enabled older build can check, download, and replace the app from
+  inside Spill;
+- a non-Sparkle older build can still discover the release from `update.json`
+  and opens the signed package when `packageURL` is present.
 
 ## Do Not
 
@@ -320,9 +346,8 @@ Open the release page and confirm:
   approval.
 - Do not move a release tag after publication without explicit maintainer
   approval.
-- Do not claim automatic in-app installation exists. The current app supports a
-  manual update check and download/install guidance. Sparkle-style automatic
-  updates are a separate future slice.
+- Do not claim Sparkle is enabled unless the app bundle contains `SUFeedURL` and
+  `SUPublicEDKey` and the release has an attached `appcast.xml`.
 
 ## Closeout
 

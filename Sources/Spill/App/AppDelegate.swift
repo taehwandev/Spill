@@ -13,7 +13,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let aiStatusStore = AIStatusStore()
     private let cloudServiceStatusStore = CloudServiceStatusStore()
     private let windowActionStore = WindowActionStore()
-    private let updateCheckStore = UpdateCheckStore()
+    private let sparkleUpdateController = SparkleUpdateController()
+    private lazy var updateCheckStore = UpdateCheckStore(
+        isInAppUpdaterAvailable: { [weak self] in
+            self?.sparkleUpdateController.isAvailable == true
+        },
+        runInAppUpdateCheck: { [weak self] _ in
+            self?.sparkleUpdateController.checkForUpdates() == true
+        }
+    )
     private lazy var panelStore = PanelStore(
         settings: settings,
         scanner: scanner,
@@ -286,6 +294,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func checkForUpdates(source: String = "unknown") {
+        if updateCheckStore.usesInAppUpdater {
+            updateCheckStore.checkForUpdates(source: source)
+            return
+        }
+
         showPreferences(source: "update_check")
         updateCheckStore.checkForUpdates(source: source)
     }

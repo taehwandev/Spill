@@ -43,6 +43,7 @@ is the quick gate before closeout.
 - [ ] Stable `Spill-macos.dmg` exists.
 - [ ] Stable `Spill-macos.zip` exists.
 - [ ] `update.json` exists.
+- [ ] `appcast.xml` exists when Sparkle signing is configured.
 - [ ] `checksums.txt` exists.
 
 ## Artifact Verification
@@ -54,6 +55,8 @@ is the quick gate before closeout.
 - [ ] `CFBundleVersion` equals `<build>`.
 - [ ] `update.json.latestVersion` equals `<version>`.
 - [ ] `update.json.downloadURL` points at the stable latest DMG URL.
+- [ ] `appcast.xml` points at the versioned ZIP URL when Sparkle signing is
+      configured.
 
 ## Signing And Notarization
 
@@ -71,10 +74,13 @@ is the quick gate before closeout.
 - [ ] GitHub Secrets include `SPILL_APTABASE_APP_KEY` when public metrics are
       expected. `SPILL_WEB_APTABASE_APP_KEY` and
       `SPILL_INSTALLER_APTABASE_APP_KEY` are optional separate-key overrides.
+- [ ] GitHub Secrets include `SPARKLE_PUBLIC_ED_KEY` and
+      `SPARKLE_PRIVATE_ED_KEY` when official in-app updates are expected.
 - [ ] GitHub `Release` workflow completed successfully.
 - [ ] GitHub Release for `v<version>` exists.
 - [ ] Stable and versioned assets are attached.
 - [ ] `update.json` is attached.
+- [ ] `appcast.xml` is attached when Sparkle signing is configured.
 - [ ] `checksums.txt` is attached.
 
 ## Public URL Checks
@@ -82,8 +88,12 @@ is the quick gate before closeout.
 - [ ] Latest stable DMG URL resolves.
 - [ ] Latest stable ZIP URL resolves.
 - [ ] Latest `update.json` URL resolves.
+- [ ] Latest `appcast.xml` URL resolves when Sparkle signing is configured.
 - [ ] `https://spill.thdev.app/` resolves.
-- [ ] Manual Check for Updates can discover the new release from an older build.
+- [ ] Sparkle-enabled Check for Updates can download and replace the app from an
+      older build when Sparkle signing is configured.
+- [ ] Manual fallback Check for Updates can discover the new release from an
+      older non-Sparkle build.
 
 ## Closeout
 

@@ -10,16 +10,22 @@ final class UpdateCheckStore: ObservableObject {
     private let checker: UpdateChecker
     private let openURL: (URL) -> Void
     private let copyText: @MainActor (String) -> Void
+    private let isInAppUpdaterAvailable: @MainActor () -> Bool
+    private let runInAppUpdateCheck: @MainActor (String) -> Bool
     private var checkTask: Task<Void, Never>?
 
     init(
         checker: UpdateChecker = UpdateChecker(),
         openURL: @escaping (URL) -> Void = { NSWorkspace.shared.open($0) },
-        copyText: @escaping @MainActor (String) -> Void = UpdateCheckStore.copyToPasteboard(_:)
+        copyText: @escaping @MainActor (String) -> Void = UpdateCheckStore.copyToPasteboard(_:),
+        isInAppUpdaterAvailable: @escaping @MainActor () -> Bool = { false },
+        runInAppUpdateCheck: @escaping @MainActor (String) -> Bool = { _ in false }
     ) {
         self.checker = checker
         self.openURL = openURL
         self.copyText = copyText
+        self.isInAppUpdaterAvailable = isInAppUpdaterAvailable
+        self.runInAppUpdateCheck = runInAppUpdateCheck
         state = .idle(currentVersion: checker.currentVersion)
     }
 
@@ -58,12 +64,33 @@ final class UpdateCheckStore: ObservableObject {
         Self.defaultInstallCommand
     }
 
+    var usesInAppUpdater: Bool {
+        isInAppUpdaterAvailable()
+    }
+
     func checkForUpdates(source: String = "preferences") {
         guard !isChecking else {
             return
         }
 
-        SpillTelemetry.shared.track("update_check_started", props: ["source": source])
+        if runInAppUpdateCheck(source) {
+            SpillTelemetry.shared.track(
+                "update_check_started",
+                props: [
+                    "source": source,
+                    "engine": "sparkle"
+                ]
+            )
+            return
+        }
+
+        SpillTelemetry.shared.track(
+            "update_check_started",
+            props: [
+                "source": source,
+                "engine": "manifest"
+            ]
+        )
         checkTask?.cancel()
         state = .checking(currentVersion: checker.currentVersion)
         let checker = checker
@@ -106,8 +133,11 @@ final class UpdateCheckStore: ObservableObject {
             return
         }
 
-        SpillTelemetry.shared.track("update_download_opened", props: ["source": source])
-        openURL(update.downloadURL)
+        SpillTelemetry.shared.track("update_download_opened", props: [
+            "source": source,
+            "artifact": update.usesInstallerPackage ? "pkg" : "dmg"
+        ])
+        openURL(update.preferredDownloadURL)
     }
 
     func copyInstallCommand(source: String = "preferences") {

@@ -14,6 +14,7 @@ APP_DIR="$ROOT_DIR/.build/Spill.app"
 CONTENTS_DIR="$APP_DIR/Contents"
 MACOS_DIR="$CONTENTS_DIR/MacOS"
 RESOURCES_DIR="$CONTENTS_DIR/Resources"
+FRAMEWORKS_DIR="$CONTENTS_DIR/Frameworks"
 BUNDLE_ID="${SPILL_BUNDLE_ID:-dev.spill.Spill}"
 DEFAULT_VERSION="$(date -u +%G.%V.1)"
 VERSION="${SPILL_VERSION:-$DEFAULT_VERSION}"
@@ -21,6 +22,21 @@ BUILD_NUMBER="${SPILL_BUILD:-${VERSION##*.}}"
 SIGN_IDENTITY="${SPILL_SIGN_IDENTITY:--}"
 APTABASE_APP_KEY="${SPILL_APTABASE_APP_KEY:-}"
 APTABASE_INFO_PLIST_ENTRY=""
+SPARKLE_PUBLIC_ED_KEY="${SPILL_SPARKLE_PUBLIC_ED_KEY:-}"
+SPARKLE_FEED_URL="${SPILL_SPARKLE_FEED_URL:-https://github.com/taehwandev/Spill/releases/latest/download/appcast.xml}"
+SPARKLE_INFO_PLIST_ENTRY=""
+ENTITLEMENTS_PATH="$ROOT_DIR/.build/Spill.entitlements"
+CODESIGN_ENTITLEMENTS_ARGS=()
+
+sign_sparkle_framework() {
+    local sparkle_version_dir="$FRAMEWORKS_DIR/Sparkle.framework/Versions/B"
+
+    codesign --force --options runtime --sign "$SIGN_IDENTITY" "$sparkle_version_dir/Autoupdate"
+    codesign --force --deep --options runtime --sign "$SIGN_IDENTITY" "$sparkle_version_dir/Updater.app"
+    codesign --force --deep --options runtime --sign "$SIGN_IDENTITY" "$sparkle_version_dir/XPCServices/Downloader.xpc"
+    codesign --force --deep --options runtime --sign "$SIGN_IDENTITY" "$sparkle_version_dir/XPCServices/Installer.xpc"
+    codesign --force --options runtime --sign "$SIGN_IDENTITY" "$FRAMEWORKS_DIR/Sparkle.framework"
+}
 
 if [[ -n "$APTABASE_APP_KEY" ]]; then
     if [[ ! "$APTABASE_APP_KEY" =~ ^A-[A-Z]{2}-[0-9]+$ ]]; then
@@ -32,11 +48,49 @@ if [[ -n "$APTABASE_APP_KEY" ]]; then
     <string>$APTABASE_APP_KEY</string>"
 fi
 
+if [[ -n "$SPARKLE_PUBLIC_ED_KEY" ]]; then
+    SPARKLE_INFO_PLIST_ENTRY="    <key>SUFeedURL</key>
+    <string>$SPARKLE_FEED_URL</string>
+    <key>SUPublicEDKey</key>
+    <string>$SPARKLE_PUBLIC_ED_KEY</string>
+    <key>SUEnableAutomaticChecks</key>
+    <false/>
+    <key>SUAutomaticallyUpdate</key>
+    <false/>"
+fi
+
+if [[ "$SIGN_IDENTITY" == "-" ]]; then
+    cat > "$ENTITLEMENTS_PATH" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+</dict>
+</plist>
+PLIST
+    CODESIGN_ENTITLEMENTS_ARGS=(--entitlements "$ENTITLEMENTS_PATH")
+else
+    rm -f "$ENTITLEMENTS_PATH"
+fi
+
 swift build -c release --package-path "$ROOT_DIR"
 
 rm -rf "$APP_DIR"
-mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
+mkdir -p "$MACOS_DIR" "$RESOURCES_DIR" "$FRAMEWORKS_DIR"
 cp "$ROOT_DIR/.build/release/Spill" "$MACOS_DIR/Spill"
+
+SPARKLE_FRAMEWORK="$(find "$ROOT_DIR/.build/artifacts/sparkle" -path "*/Sparkle.framework" -type d -print -quit)"
+if [[ -z "$SPARKLE_FRAMEWORK" ]]; then
+    echo "Sparkle.framework was not found after swift build." >&2
+    exit 2
+fi
+
+ditto "$SPARKLE_FRAMEWORK" "$FRAMEWORKS_DIR/Sparkle.framework"
+if ! otool -l "$MACOS_DIR/Spill" | grep -q "@executable_path/../Frameworks"; then
+    install_name_tool -add_rpath "@executable_path/../Frameworks" "$MACOS_DIR/Spill"
+fi
 
 ICONSET_DIR="$CONTENTS_DIR/AppIcon.iconset"
 swift "$ROOT_DIR/scripts/generate-app-icon.swift" "$ICONSET_DIR"
@@ -77,15 +131,18 @@ cat > "$CONTENTS_DIR/Info.plist" <<PLIST
     <key>NSHumanReadableCopyright</key>
     <string>Copyright 2026 Spill contributors</string>
 $APTABASE_INFO_PLIST_ENTRY
+$SPARKLE_INFO_PLIST_ENTRY
 </dict>
 </plist>
 PLIST
 
+sign_sparkle_framework
+
 codesign \
     --force \
-    --deep \
     --options runtime \
     --sign "$SIGN_IDENTITY" \
+    "${CODESIGN_ENTITLEMENTS_ARGS[@]}" \
     --requirements "=designated => identifier \"$BUNDLE_ID\"" \
     "$APP_DIR"
 

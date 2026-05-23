@@ -80,6 +80,9 @@ jobs:
           CERTIFICATE_BASE64: ${{ secrets.MACOS_DEVELOPER_ID_CERTIFICATE_BASE64 }}
           CERTIFICATE_PASSWORD: ${{ secrets.MACOS_DEVELOPER_ID_CERTIFICATE_PASSWORD }}
           CODESIGN_IDENTITY: ${{ secrets.MACOS_CODESIGN_IDENTITY }}
+          INSTALLER_CERTIFICATE_BASE64: ${{ secrets.MACOS_DEVELOPER_ID_INSTALLER_CERTIFICATE_BASE64 }}
+          INSTALLER_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_DEVELOPER_ID_INSTALLER_CERTIFICATE_PASSWORD }}
+          INSTALLER_SIGN_IDENTITY: ${{ secrets.MACOS_INSTALLER_SIGN_IDENTITY }}
           KEYCHAIN_PASSWORD: ${{ secrets.MACOS_SIGNING_KEYCHAIN_PASSWORD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
@@ -92,8 +95,13 @@ jobs:
               echo "Notarization secrets require Developer ID signing secrets too." >&2
               exit 2
             fi
+            if [[ -n "$INSTALLER_CERTIFICATE_BASE64" || -n "$INSTALLER_CERTIFICATE_PASSWORD" || -n "$INSTALLER_SIGN_IDENTITY" ]]; then
+              echo "Installer package signing requires Developer ID app signing secrets too." >&2
+              exit 2
+            fi
 
             echo "sign_identity=-" >> "$GITHUB_OUTPUT"
+            echo "installer_sign_identity=" >> "$GITHUB_OUTPUT"
             echo "notary_profile=" >> "$GITHUB_OUTPUT"
             echo "signing_note=Ad-hoc signed. Gatekeeper warnings can appear." >> "$GITHUB_OUTPUT"
             exit 0
@@ -123,6 +131,27 @@ jobs:
             -f pkcs12 \
             -k "$keychain_path"
 
+          if [[ -n "$INSTALLER_CERTIFICATE_BASE64" || -n "$INSTALLER_CERTIFICATE_PASSWORD" || -n "$INSTALLER_SIGN_IDENTITY" ]]; then
+            if [[ -z "$INSTALLER_CERTIFICATE_BASE64" || -z "$INSTALLER_CERTIFICATE_PASSWORD" || -z "$INSTALLER_SIGN_IDENTITY" ]]; then
+              echo "Installer package signing requires MACOS_DEVELOPER_ID_INSTALLER_CERTIFICATE_BASE64, MACOS_DEVELOPER_ID_INSTALLER_CERTIFICATE_PASSWORD, and MACOS_INSTALLER_SIGN_IDENTITY." >&2
+              exit 2
+            fi
+
+            installer_certificate_path="$RUNNER_TEMP/developer-id-installer.p12"
+            printf "%s" "$INSTALLER_CERTIFICATE_BASE64" | base64 -D > "$installer_certificate_path"
+
+            security import "$installer_certificate_path" \
+              -P "$INSTALLER_CERTIFICATE_PASSWORD" \
+              -A \
+              -t cert \
+              -f pkcs12 \
+              -k "$keychain_path"
+
+            echo "installer_sign_identity=$INSTALLER_SIGN_IDENTITY" >> "$GITHUB_OUTPUT"
+          else
+            echo "installer_sign_identity=" >> "$GITHUB_OUTPUT"
+          fi
+
           security set-key-partition-list \
             -S apple-tool:,apple: \
             -s \
@@ -150,6 +179,33 @@ jobs:
             echo "signing_note=Developer ID signed without notarization. Gatekeeper warnings can still appear." >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Prepare optional Sparkle signing
+        id: sparkle
+        shell: bash
+        env:
+          SPARKLE_PUBLIC_ED_KEY: ${{ secrets.SPARKLE_PUBLIC_ED_KEY }}
+          SPARKLE_PRIVATE_ED_KEY: ${{ secrets.SPARKLE_PRIVATE_ED_KEY }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "$SPARKLE_PUBLIC_ED_KEY" && -z "$SPARKLE_PRIVATE_ED_KEY" ]]; then
+            echo "private_key_file=" >> "$GITHUB_OUTPUT"
+            echo "sparkle_note=Sparkle appcast disabled." >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ -z "$SPARKLE_PUBLIC_ED_KEY" || -z "$SPARKLE_PRIVATE_ED_KEY" ]]; then
+            echo "Sparkle updates require both SPARKLE_PUBLIC_ED_KEY and SPARKLE_PRIVATE_ED_KEY." >&2
+            exit 2
+          fi
+
+          private_key_file="$RUNNER_TEMP/sparkle_ed_private_key"
+          printf "%s" "$SPARKLE_PRIVATE_ED_KEY" > "$private_key_file"
+          chmod 600 "$private_key_file"
+
+          echo "private_key_file=$private_key_file" >> "$GITHUB_OUTPUT"
+          echo "sparkle_note=Sparkle in-app updates enabled." >> "$GITHUB_OUTPUT"
+
       - name: Package release
         shell: bash
         env:
@@ -157,8 +213,11 @@ jobs:
           SPILL_BUILD: ${{ steps.version.outputs.build }}
           SPILL_BUNDLE_ID: ${{ env.SPILL_BUNDLE_ID }}
           SPILL_SIGN_IDENTITY: ${{ steps.signing.outputs.sign_identity }}
+          SPILL_INSTALLER_SIGN_IDENTITY: ${{ steps.signing.outputs.installer_sign_identity }}
           SPILL_NOTARY_KEYCHAIN_PROFILE: ${{ steps.signing.outputs.notary_profile }}
           SPILL_APTABASE_APP_KEY: ${{ secrets.SPILL_APTABASE_APP_KEY }}
+          SPILL_SPARKLE_PUBLIC_ED_KEY: ${{ secrets.SPARKLE_PUBLIC_ED_KEY }}
+          SPILL_SPARKLE_PRIVATE_KEY_FILE: ${{ steps.sparkle.outputs.private_key_file }}
         run: ./scripts/package-release.sh
 
       - name: Add stable website asset names
@@ -170,10 +229,21 @@ jobs:
 
           cp "$artifacts_dir/Spill-$version-macos.dmg" "$artifacts_dir/Spill-macos.dmg"
           cp "$artifacts_dir/Spill-$version-macos.zip" "$artifacts_dir/Spill-macos.zip"
+          if [[ -f "$artifacts_dir/Spill-$version-macos.pkg" ]]; then
+            cp "$artifacts_dir/Spill-$version-macos.pkg" "$artifacts_dir/Spill-macos.pkg"
+          fi
 
           (
             cd "$artifacts_dir"
-            shasum -a 256 Spill-*.dmg Spill-*.zip update.json > checksums.txt
+            checksum_files=(Spill-*.dmg Spill-*.zip)
+            if compgen -G "Spill-*.pkg" > /dev/null; then
+              checksum_files+=(Spill-*.pkg)
+            fi
+            checksum_files+=(update.json)
+            if [[ -f appcast.xml ]]; then
+              checksum_files+=(appcast.xml)
+            fi
+            shasum -a 256 "${checksum_files[@]}" > checksums.txt
           )
 
       - name: Verify packaged artifacts
@@ -186,10 +256,20 @@ jobs:
           codesign --verify --deep --strict --verbose=2 .build/Spill.app
           hdiutil verify ".build/release-artifacts/Spill-$version-macos.dmg"
           unzip -t ".build/release-artifacts/Spill-$version-macos.zip"
+          if [[ -f ".build/release-artifacts/Spill-$version-macos.pkg" ]]; then
+            pkgutil --check-signature ".build/release-artifacts/Spill-$version-macos.pkg"
+          fi
+          if [[ -f ".build/release-artifacts/appcast.xml" ]]; then
+            test -s ".build/release-artifacts/appcast.xml"
+            grep -q "<rss" ".build/release-artifacts/appcast.xml"
+          fi
 
           if [[ -n "$notary_profile" ]]; then
             spctl --assess --type execute --verbose=4 .build/Spill.app
             spctl --assess --type open --verbose=4 ".build/release-artifacts/Spill-$version-macos.dmg"
+            if [[ -f ".build/release-artifacts/Spill-$version-macos.pkg" ]]; then
+              spctl --assess --type install --verbose=4 ".build/release-artifacts/Spill-$version-macos.pkg"
+            fi
           fi
 
       - name: Upload workflow artifacts
@@ -199,9 +279,12 @@ jobs:
           path: |
             .build/release-artifacts/Spill-${{ steps.version.outputs.version }}-macos.dmg
             .build/release-artifacts/Spill-${{ steps.version.outputs.version }}-macos.zip
+            .build/release-artifacts/Spill-${{ steps.version.outputs.version }}-macos.pkg
             .build/release-artifacts/Spill-macos.dmg
             .build/release-artifacts/Spill-macos.zip
+            .build/release-artifacts/Spill-macos.pkg
             .build/release-artifacts/update.json
+            .build/release-artifacts/appcast.xml
             .build/release-artifacts/checksums.txt
 
       - name: Publish GitHub Release
@@ -209,6 +292,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           SIGNING_NOTE: ${{ steps.signing.outputs.signing_note }}
+          SPARKLE_NOTE: ${{ steps.sparkle.outputs.sparkle_note }}
         run: |
           set -euo pipefail
 
@@ -239,12 +323,17 @@ jobs:
           Artifacts:
           - Spill-$version-macos.dmg
           - Spill-$version-macos.zip
+          - Spill-$version-macos.pkg when a Developer ID Installer identity is configured
           - Spill-macos.dmg and Spill-macos.zip for stable website download links
           - update.json for manual in-app update checks
+          - appcast.xml when Sparkle signing is configured
           - checksums.txt
 
           Signing:
           $SIGNING_NOTE
+
+          Updates:
+          $SPARKLE_NOTE
           $install_note
           NOTES
 
@@ -256,6 +345,15 @@ jobs:
             "$artifacts_dir/update.json"
             "$artifacts_dir/checksums.txt"
           )
+          if [[ -f "$artifacts_dir/Spill-$version-macos.pkg" ]]; then
+            assets+=(
+              "$artifacts_dir/Spill-$version-macos.pkg"
+              "$artifacts_dir/Spill-macos.pkg"
+            )
+          fi
+          if [[ -f "$artifacts_dir/appcast.xml" ]]; then
+            assets+=("$artifacts_dir/appcast.xml")
+          fi
 
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release edit "$tag" --title "Spill $version" --notes-file "$notes_file"

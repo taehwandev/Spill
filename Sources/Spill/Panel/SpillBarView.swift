@@ -90,7 +90,7 @@ struct SpillBarView: View {
                 Circle()
                     .fill(Color.teal.opacity(0.14))
 
-                Image(systemName: "terminal.fill")
+                Image(systemName: updateStore.availableUpdate?.usesInstallerPackage == true ? "shippingbox.fill" : "terminal.fill")
                     .foregroundStyle(.teal)
                     .font(.system(size: 11, weight: .semibold))
             }
@@ -101,7 +101,7 @@ struct SpillBarView: View {
                     .font(.system(size: 10.5, weight: .semibold))
                     .lineLimit(1)
 
-                Text("Copy install command")
+                Text(updateBannerSubtitle)
                     .font(.system(size: 9.5, weight: .medium))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -116,7 +116,7 @@ struct SpillBarView: View {
                 copyUpdateInstallCommand()
             }
 
-            updateBannerButton(symbolName: "arrow.down.circle", title: "Download DMG") {
+            updateBannerButton(symbolName: updateOpenButtonSymbolName, title: updateOpenButtonTitle) {
                 updateStore.openUpdate(source: "panel")
             }
         }
@@ -135,6 +135,24 @@ struct SpillBarView: View {
         }
 
         return "Update \(version)"
+    }
+
+    private var updateBannerSubtitle: String {
+        updateStore.availableUpdate?.usesInstallerPackage == true
+            ? "Signed installer package"
+            : "Copy install command"
+    }
+
+    private var updateOpenButtonTitle: String {
+        updateStore.availableUpdate?.usesInstallerPackage == true
+            ? "Open Installer"
+            : "Download DMG"
+    }
+
+    private var updateOpenButtonSymbolName: String {
+        updateStore.availableUpdate?.usesInstallerPackage == true
+            ? "shippingbox.fill"
+            : "arrow.down.circle"
     }
 
     private func updateBannerButton(

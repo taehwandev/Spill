@@ -28,6 +28,7 @@ final class UpdateCheckerTests: XCTestCase {
                     build: "42",
                     minimumMacOS: "14.0",
                     downloadURL: manifest.downloadURL,
+                    packageURL: manifest.packageURL,
                     releaseNotesURL: manifest.releaseNotesURL,
                     publishedAt: manifest.publishedAt
                 )
@@ -80,6 +81,7 @@ final class UpdateCheckerTests: XCTestCase {
                     build: "42",
                     minimumMacOS: "15.0",
                     downloadURL: manifest.downloadURL,
+                    packageURL: manifest.packageURL,
                     releaseNotesURL: manifest.releaseNotesURL,
                     publishedAt: manifest.publishedAt
                 ),
@@ -95,6 +97,7 @@ final class UpdateCheckerTests: XCTestCase {
           "build": "42",
           "minimumMacOS": "14.0",
           "downloadURL": "https://github.com/taehwandev/Spill/releases/latest/download/Spill-macos.dmg",
+          "packageURL": "https://github.com/taehwandev/Spill/releases/latest/download/Spill-macos.pkg",
           "releaseNotesURL": "https://github.com/taehwandev/Spill/releases/latest",
           "publishedAt": "2026-05-17T00:00:00Z"
         }
@@ -114,6 +117,9 @@ final class UpdateCheckerTests: XCTestCase {
 
         XCTAssertEqual(update.latestVersion, "2026.20.2")
         XCTAssertEqual(update.build, "42")
+        XCTAssertEqual(update.packageURL?.absoluteString, "https://github.com/taehwandev/Spill/releases/latest/download/Spill-macos.pkg")
+        XCTAssertEqual(update.preferredDownloadURL, update.packageURL)
+        XCTAssertTrue(update.usesInstallerPackage)
     }
 
     func testCheckFallsBackToLatestGitHubReleaseWhenManifestIsMissing() async throws {
@@ -125,6 +131,10 @@ final class UpdateCheckerTests: XCTestCase {
           "html_url": "https://github.com/taehwandev/Spill/releases/tag/v2026.20.2",
           "published_at": "2026-05-17T00:00:00Z",
           "assets": [
+            {
+              "name": "Spill-macos.pkg",
+              "browser_download_url": "https://github.com/taehwandev/Spill/releases/download/v2026.20.2/Spill-macos.pkg"
+            },
             {
               "name": "Spill-macos.dmg",
               "browser_download_url": "https://github.com/taehwandev/Spill/releases/download/v2026.20.2/Spill-macos.dmg"
@@ -161,7 +171,51 @@ final class UpdateCheckerTests: XCTestCase {
         XCTAssertNil(update.build)
         XCTAssertEqual(update.minimumMacOS, "14.0")
         XCTAssertEqual(update.downloadURL.absoluteString, "https://github.com/taehwandev/Spill/releases/download/v2026.20.2/Spill-macos.dmg")
+        XCTAssertEqual(update.packageURL?.absoluteString, "https://github.com/taehwandev/Spill/releases/download/v2026.20.2/Spill-macos.pkg")
+        XCTAssertEqual(update.preferredDownloadURL, update.packageURL)
         XCTAssertEqual(update.releaseNotesURL?.absoluteString, "https://github.com/taehwandev/Spill/releases/tag/v2026.20.2")
+    }
+
+    func testCheckCanFallBackToPackageOnlyLatestRelease() async throws {
+        let manifestURL = URL(string: "https://example.com/update.json")!
+        let latestReleaseURL = URL(string: "https://example.com/releases/latest")!
+        let releaseData = """
+        {
+          "tag_name": "v2026.20.2",
+          "html_url": "https://github.com/taehwandev/Spill/releases/tag/v2026.20.2",
+          "published_at": "2026-05-17T00:00:00Z",
+          "assets": [
+            {
+              "name": "Spill-macos.pkg",
+              "browser_download_url": "https://github.com/taehwandev/Spill/releases/download/v2026.20.2/Spill-macos.pkg"
+            }
+          ]
+        }
+        """.data(using: .utf8)!
+        let checker = UpdateChecker(
+            manifestURL: manifestURL,
+            latestReleaseURL: latestReleaseURL,
+            currentVersion: "2026.20.1",
+            currentMacOS: DottedVersion("14.5.0")!,
+            dataLoader: { url in
+                if url == manifestURL {
+                    throw UpdateCheckError.invalidHTTPStatus(404)
+                }
+
+                return releaseData
+            }
+        )
+
+        let outcome = try await checker.check()
+
+        guard case .available(let update) = outcome else {
+            XCTFail("Expected available update.")
+            return
+        }
+
+        XCTAssertEqual(update.downloadURL.absoluteString, "https://github.com/taehwandev/Spill/releases/download/v2026.20.2/Spill-macos.pkg")
+        XCTAssertEqual(update.packageURL?.absoluteString, "https://github.com/taehwandev/Spill/releases/download/v2026.20.2/Spill-macos.pkg")
+        XCTAssertTrue(update.usesInstallerPackage)
     }
 
     func testDefaultUpdateURLsPointAtPublicSpillRepo() {
@@ -184,6 +238,7 @@ final class UpdateCheckerTests: XCTestCase {
             build: "42",
             minimumMacOS: minimumMacOS,
             downloadURL: URL(string: "https://github.com/taehwandev/Spill/releases/latest/download/Spill-macos.dmg")!,
+            packageURL: nil,
             releaseNotesURL: URL(string: "https://github.com/taehwandev/Spill/releases/latest")!,
             publishedAt: "2026-05-17T00:00:00Z"
         )

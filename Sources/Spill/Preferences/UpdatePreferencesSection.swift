@@ -45,7 +45,7 @@ struct UpdatePreferencesSection: View {
                     Button {
                         store.openUpdate(source: "preferences")
                     } label: {
-                        Label("Download DMG", systemImage: "arrow.down.circle")
+                        Label(openUpdateTitle, systemImage: openUpdateSymbolName)
                     }
                 }
 
@@ -87,7 +87,9 @@ struct UpdatePreferencesSection: View {
     private var updateStatus: some View {
         switch store.state {
         case .idle:
-            Text("Manual checks use the latest GitHub release metadata.")
+            Text(store.usesInAppUpdater
+                ? "Updates can be downloaded and installed inside the app."
+                : "Manual checks use the latest GitHub release metadata.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         case .checking:
@@ -99,7 +101,7 @@ struct UpdatePreferencesSection: View {
                 .font(.footnote)
                 .foregroundStyle(.green)
         case .available(let update):
-            Label("Version \(update.latestVersion) is available. Copy the terminal command to install it.", systemImage: "arrow.down.circle.fill")
+            Label(availableUpdateMessage(for: update), systemImage: update.usesInstallerPackage ? "shippingbox.fill" : "arrow.down.circle.fill")
                 .font(.footnote)
                 .foregroundStyle(.blue)
         case .unsupported(let update, let currentMacOS):
@@ -115,6 +117,26 @@ struct UpdatePreferencesSection: View {
 
     private var checkButtonTitle: String {
         store.isChecking ? "Checking" : "Check for Updates"
+    }
+
+    private var openUpdateTitle: String {
+        store.availableUpdate?.usesInstallerPackage == true
+            ? "Open Installer"
+            : "Download DMG"
+    }
+
+    private var openUpdateSymbolName: String {
+        store.availableUpdate?.usesInstallerPackage == true
+            ? "shippingbox.fill"
+            : "arrow.down.circle"
+    }
+
+    private func availableUpdateMessage(for update: AvailableUpdate) -> String {
+        if update.usesInstallerPackage {
+            return "Version \(update.latestVersion) is available. Open the signed installer package to update."
+        }
+
+        return "Version \(update.latestVersion) is available. Copy the terminal command or download the DMG."
     }
 
     private func copyInstallCommand() {

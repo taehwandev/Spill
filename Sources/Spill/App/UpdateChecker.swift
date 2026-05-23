@@ -5,6 +5,7 @@ struct UpdateManifest: Decodable, Equatable, Sendable {
     let build: String?
     let minimumMacOS: String?
     let downloadURL: URL
+    let packageURL: URL?
     let releaseNotesURL: URL?
     let publishedAt: String?
 }
@@ -15,8 +16,17 @@ struct AvailableUpdate: Equatable, Sendable {
     let build: String?
     let minimumMacOS: String?
     let downloadURL: URL
+    let packageURL: URL?
     let releaseNotesURL: URL?
     let publishedAt: String?
+
+    var preferredDownloadURL: URL {
+        packageURL ?? downloadURL
+    }
+
+    var usesInstallerPackage: Bool {
+        packageURL != nil
+    }
 }
 
 enum UpdateCheckOutcome: Equatable, Sendable {
@@ -98,6 +108,7 @@ struct UpdateChecker: Sendable {
             build: manifest.build,
             minimumMacOS: manifest.minimumMacOS,
             downloadURL: manifest.downloadURL,
+            packageURL: manifest.packageURL,
             releaseNotesURL: manifest.releaseNotesURL,
             publishedAt: manifest.publishedAt
         )
@@ -133,14 +144,23 @@ struct UpdateChecker: Sendable {
             let latestVersion = release.tagName.hasPrefix("v")
                 ? String(release.tagName.dropFirst())
                 : release.tagName
-            let preferredAssetNames = [
+            let preferredPackageAssetNames = [
+                "Spill-macos.pkg",
+                "Spill-\(latestVersion)-macos.pkg"
+            ]
+            let preferredDownloadAssetNames = [
                 "Spill-macos.dmg",
                 "Spill-\(latestVersion)-macos.dmg",
                 "Spill-macos.zip",
-                "Spill-\(latestVersion)-macos.zip"
+                "Spill-\(latestVersion)-macos.zip",
+                "Spill-macos.pkg",
+                "Spill-\(latestVersion)-macos.pkg"
             ]
+            let packageAsset = preferredPackageAssetNames.compactMap { name in
+                release.assets.first { $0.name == name }
+            }.first
 
-            guard let asset = preferredAssetNames.compactMap({ name in
+            guard let asset = preferredDownloadAssetNames.compactMap({ name in
                 release.assets.first { $0.name == name }
             }).first else {
                 throw UpdateCheckError.decodingFailed("Latest GitHub release does not include a Spill macOS download asset.")
@@ -151,6 +171,7 @@ struct UpdateChecker: Sendable {
                 build: nil,
                 minimumMacOS: "14.0",
                 downloadURL: asset.browserDownloadURL,
+                packageURL: packageAsset?.browserDownloadURL,
                 releaseNotesURL: release.htmlURL,
                 publishedAt: release.publishedAt
             )

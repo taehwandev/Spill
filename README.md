@@ -141,6 +141,7 @@ Developer ID release example:
 ```bash
 SPILL_VERSION=2026.21.2 \
 SPILL_SIGN_IDENTITY="Developer ID Application: Example Name (TEAMID)" \
+SPILL_INSTALLER_SIGN_IDENTITY="Developer ID Installer: Example Name (TEAMID)" \
 SPILL_NOTARY_KEYCHAIN_PROFILE="spill-notary" \
 ./scripts/package-release.sh
 ```
@@ -167,18 +168,21 @@ bundle and archives, and uploads these assets:
 
 - `Spill-2026.20.1-macos.dmg`
 - `Spill-2026.20.1-macos.zip`
+- `Spill-2026.20.1-macos.pkg`, when Developer ID Installer signing is configured
 - `Spill-macos.dmg`
 - `Spill-macos.zip`
+- `Spill-macos.pkg`, when Developer ID Installer signing is configured
+- `appcast.xml`, when Sparkle signing secrets are configured
 - `checksums.txt`
 
 The stable `Spill-macos.*` asset names are used by the download site. The workflow
 can also be started manually from GitHub Actions with a per-week release count.
-Manual runs compute the version from the current UTC ISO year/week plus that count.
-The workflow also uploads `update.json`, a small static manifest used by the
-app's manual Check for Updates action. The app reads that manifest from the
-latest GitHub Release asset URL and opens the stable DMG download when a newer
-version is available. Spill does not run background update checks or install
-updates automatically in the MVP.
+Manual runs compute the version from the current UTC ISO year/week plus that
+count. Official signed releases can use Sparkle for in-app update checks,
+downloads, and app replacement. The workflow uploads `appcast.xml` when
+`SPARKLE_PUBLIC_ED_KEY` and `SPARKLE_PRIVATE_ED_KEY` are configured. The
+workflow also uploads `update.json`, a small static manifest used as the fallback
+manual Check for Updates path when Sparkle is not configured in the app bundle.
 
 Unsigned test releases work without secrets and are ad-hoc signed. For official
 Developer ID signing and notarization, configure these repository secrets:
@@ -186,14 +190,24 @@ Developer ID signing and notarization, configure these repository secrets:
 - `MACOS_DEVELOPER_ID_CERTIFICATE_BASE64`: base64-encoded `.p12` certificate.
 - `MACOS_DEVELOPER_ID_CERTIFICATE_PASSWORD`: `.p12` import password.
 - `MACOS_CODESIGN_IDENTITY`: full Developer ID identity, for example `Developer ID Application: Example Name (TEAMID)`.
+- `MACOS_DEVELOPER_ID_INSTALLER_CERTIFICATE_BASE64`: optional base64-encoded Developer ID Installer `.p12` certificate for signed `.pkg` updates.
+- `MACOS_DEVELOPER_ID_INSTALLER_CERTIFICATE_PASSWORD`: optional `.p12` import password for the installer certificate.
+- `MACOS_INSTALLER_SIGN_IDENTITY`: optional full Developer ID Installer identity, for example `Developer ID Installer: Example Name (TEAMID)`.
 - `MACOS_SIGNING_KEYCHAIN_PASSWORD`: optional temporary CI keychain password.
 - `APPLE_ID`: Apple ID used for notarization.
 - `APPLE_TEAM_ID`: Apple Developer Team ID.
 - `APPLE_APP_SPECIFIC_PASSWORD`: app-specific password for `notarytool`.
+- `SPARKLE_PUBLIC_ED_KEY`: optional Sparkle public EdDSA key embedded as `SUPublicEDKey`.
+- `SPARKLE_PRIVATE_ED_KEY`: optional Sparkle private EdDSA key used by `generate_appcast`.
 
 If the Developer ID certificate secrets are present, the workflow signs with that
 identity. If the Apple notarization secrets are also present, the workflow stores a
 temporary `notarytool` profile and notarizes the app and DMG before publishing.
+If the Developer ID Installer secrets are also present, the workflow additionally
+builds, signs, notarizes, and uploads stable `.pkg` installer assets. If both
+Sparkle secrets are present, the app's Check for Updates action uses Sparkle's
+in-app updater first; otherwise it falls back to the public `update.json`
+manifest and opens the installer package or DMG externally.
 
 Optional telemetry secrets:
 
@@ -214,6 +228,7 @@ stable release assets:
 
 - `https://github.com/taehwandev/Spill/releases/latest/download/Spill-macos.dmg`
 - `https://github.com/taehwandev/Spill/releases/latest/download/Spill-macos.zip`
+- `https://github.com/taehwandev/Spill/releases/latest/download/Spill-macos.pkg`, when Developer ID Installer signing is configured
 
 The deploy workflow attempts to enable GitHub Pages with the GitHub Actions
 source and publishes the site for `spill.thdev.app`. If repository policy blocks
