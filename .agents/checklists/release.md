@@ -51,6 +51,8 @@ is the quick gate before closeout.
 - [ ] `hdiutil verify .build/release-artifacts/Spill-<version>-macos.dmg`
 - [ ] `unzip -t .build/release-artifacts/Spill-<version>-macos.zip`
 - [ ] `codesign --verify --deep --strict --verbose=2 .build/Spill.app`
+- [ ] `xcrun stapler validate .build/release-artifacts/Spill-<version>-macos.dmg`
+      when notarized.
 - [ ] `CFBundleShortVersionString` equals `<version>`.
 - [ ] `CFBundleVersion` equals `<build>`.
 - [ ] `update.json.latestVersion` equals `<version>`.

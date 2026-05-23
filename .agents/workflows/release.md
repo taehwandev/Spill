@@ -221,6 +221,7 @@ codesign --verify --deep --strict --verbose=2 .build/Spill.app
 /usr/libexec/PlistBuddy -c "Print :CFBundleVersion" .build/Spill.app/Contents/Info.plist
 sed -n '1,120p' .build/release-artifacts/update.json
 test -s .build/release-artifacts/appcast.xml # when Sparkle signing is configured
+xcrun stapler validate .build/release-artifacts/Spill-<version>-macos.dmg # when notarized
 ```
 
 Confirm:
@@ -238,6 +239,7 @@ Confirm:
   set.
 - `appcast.xml` exists when Sparkle signing is configured and points at the
   versioned ZIP asset.
+- Notarized DMG stapler validation passes when notarization is configured.
 
 ## Tag
 

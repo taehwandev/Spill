@@ -266,8 +266,9 @@ jobs:
 
           if [[ -n "$notary_profile" ]]; then
             spctl --assess --type execute --verbose=4 .build/Spill.app
-            spctl --assess --type open --verbose=4 ".build/release-artifacts/Spill-$version-macos.dmg"
+            xcrun stapler validate ".build/release-artifacts/Spill-$version-macos.dmg"
             if [[ -f ".build/release-artifacts/Spill-$version-macos.pkg" ]]; then
+              xcrun stapler validate ".build/release-artifacts/Spill-$version-macos.pkg"
               spctl --assess --type install --verbose=4 ".build/release-artifacts/Spill-$version-macos.pkg"
             fi
           fi
