@@ -2,6 +2,11 @@
 
 This folder is the working source of truth for agent-driven implementation.
 
+Repo-local Spill docs define product direction, paths, commands, release policy,
+and macOS-specific constraints. For platform-neutral agent behavior, also consult
+the shared library at `/Users/taehwankwon/Documents/KeyFlowVault/agent/AGENTS.md`
+and use its `index.md` to load only relevant common cards.
+
 ## Documents
 
 - `specs/prd.md`: Product requirements and scope.

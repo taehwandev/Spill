@@ -2,6 +2,14 @@
 
 All repo agents must treat `.agents/README.md` as the working source of truth.
 
+Shared agent library:
+
+- `/Users/taehwankwon/Documents/KeyFlowVault/agent/AGENTS.md`
+- `/Users/taehwankwon/Documents/KeyFlowVault/agent/index.md`
+
+Use repo-local Spill instructions first. Use the shared library only to load the
+smallest relevant common, workflow, platform, or review cards for the task.
+
 Before PRD, ARD, task breakdown, or implementation work:
 
 1. Read `.agents/README.md`.
