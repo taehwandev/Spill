@@ -34,4 +34,24 @@ final class SpillStatusDetailRowsTests: XCTestCase {
         XCTAssertEqual(rows.map(\.label), ["Status", "Detail", "Model", "Version", "Source"])
         XCTAssertEqual(rows.map(\.value), ["Active", "llama3.2:latest", "llama3.2:latest", "0.12.0", "Ollama Runtime"])
     }
+
+    func testAIRowsIncludeServerMetadata() {
+        let rows = SpillStatusDetailRows.rows(
+            for: LocalAIToolStatus(
+                kind: .antigravity,
+                value: "Active",
+                subtitle: "Server Running",
+                state: .active,
+                metadata: LocalAIToolMetadata(
+                    model: nil,
+                    version: nil,
+                    source: nil,
+                    serverStatus: LocalAIToolServerStatus(name: "Server", state: .running)
+                )
+            )
+        )
+
+        XCTAssertEqual(rows.map(\.label), ["Status", "Detail", "Server"])
+        XCTAssertEqual(rows.map(\.value), ["Active", "Server Running", "Running"])
+    }
 }

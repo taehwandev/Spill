@@ -27,7 +27,8 @@ final class LocalAIStatusProviderTests: XCTestCase {
             processNames: [],
             processCommands: [
                 "/opt/homebrew/bin/claude --model claude-sonnet-4-5",
-                "/opt/homebrew/bin/antigravity -m ag-pro"
+                "/opt/homebrew/bin/antigravity -m ag-pro",
+                "/Users/me/.pencil/mcp/antigravity/out/mcp-server-darwin-arm64 --app antigravity"
             ],
             installedExecutableNames: ["claude", "antigravity", "ollama"],
             commandMetadata: [
@@ -42,7 +43,9 @@ final class LocalAIStatusProviderTests: XCTestCase {
         XCTAssertEqual(statuses.first { $0.kind == .claude }?.value, "Active")
         XCTAssertEqual(statuses.first { $0.kind == .claude }?.subtitle, "claude-sonnet-4-5")
         XCTAssertEqual(statuses.first { $0.kind == .claude }?.metadata.version, "2.1.0")
-        XCTAssertEqual(statuses.first { $0.kind == .antigravity }?.subtitle, "ag-pro")
+        XCTAssertEqual(statuses.first { $0.kind == .antigravity }?.subtitle, "Server Running")
+        XCTAssertEqual(statuses.first { $0.kind == .antigravity }?.metadata.model, "ag-pro")
+        XCTAssertEqual(statuses.first { $0.kind == .antigravity }?.metadata.serverStatus?.state, .running)
         XCTAssertEqual(statuses.first { $0.kind == .ollama }?.subtitle, "llama3.2:latest")
         XCTAssertEqual(statuses.first { $0.kind == .ollama }?.metadata.version, "0.12.0")
         XCTAssertEqual(statuses.first { $0.kind == .openAI }?.title, "OpenAI API")
@@ -67,7 +70,7 @@ final class LocalAIStatusProviderTests: XCTestCase {
             environment: [:],
             processNames: [],
             processCommands: ["\"/Applications/AI Tools/claude\" --model claude-opus-4-1"],
-            installedExecutableNames: []
+            installedExecutableNames: ["claude"]
         )
 
         XCTAssertEqual(statuses.map(\.kind), [.claude])
@@ -79,26 +82,32 @@ final class LocalAIStatusProviderTests: XCTestCase {
         let statuses = LocalAIStatusProvider.statuses(
             environment: [:],
             processNames: [],
-            processCommands: ["/usr/bin/env ANTIGRAVITY_HOME=/tmp /opt/homebrew/bin/antigravity -m ag-pro"],
-            installedExecutableNames: []
+            processCommands: [
+                "/usr/bin/env ANTIGRAVITY_HOME=/tmp /opt/homebrew/bin/antigravity -m ag-pro",
+                "/Users/me/.pencil/mcp/antigravity/out/mcp-server-darwin-arm64 --app antigravity"
+            ],
+            installedExecutableNames: ["antigravity"]
         )
 
         XCTAssertEqual(statuses.map(\.kind), [.antigravity])
         XCTAssertEqual(statuses.first?.value, "Active")
-        XCTAssertEqual(statuses.first?.subtitle, "ag-pro")
+        XCTAssertEqual(statuses.first?.subtitle, "Server Running")
+        XCTAssertEqual(statuses.first?.metadata.model, "ag-pro")
     }
 
-    func testAntigravityCliAliasIsDetected() {
+    func testAntigravityCliAliasWarnsWhenServerIsStopped() {
         let statuses = LocalAIStatusProvider.statuses(
             environment: [:],
             processNames: [],
             processCommands: ["/opt/homebrew/bin/antigravity-cli --model ag-lite"],
-            installedExecutableNames: []
+            installedExecutableNames: ["antigravity-cli"]
         )
 
         XCTAssertEqual(statuses.map(\.kind), [.antigravity])
-        XCTAssertEqual(statuses.first?.value, "Active")
-        XCTAssertEqual(statuses.first?.subtitle, "ag-lite")
+        XCTAssertEqual(statuses.first?.value, "Server Down")
+        XCTAssertEqual(statuses.first?.state, .warning)
+        XCTAssertEqual(statuses.first?.subtitle, "Server Stopped")
+        XCTAssertEqual(statuses.first?.metadata.model, "ag-lite")
     }
 
     func testAgyExecutableAliasIsDetected() {
@@ -112,6 +121,37 @@ final class LocalAIStatusProviderTests: XCTestCase {
         XCTAssertEqual(statuses.map(\.kind), [.antigravity])
         XCTAssertEqual(statuses.first?.title, "Antigravity")
         XCTAssertEqual(statuses.first?.value, "Active")
+        XCTAssertEqual(statuses.first?.subtitle, "Server Unknown")
+        XCTAssertEqual(statuses.first?.metadata.serverStatus?.state, .unknown)
+    }
+
+    func testAntigravityInstalledAppCanReportServerStatus() {
+        let statuses = LocalAIStatusProvider.statuses(
+            environment: [:],
+            processNames: ["Antigravity"],
+            processCommands: [
+                "/Applications/Antigravity.app/Contents/MacOS/Antigravity",
+                "/Users/me/.pencil/mcp/antigravity/out/mcp-server-darwin-arm64 --app antigravity"
+            ],
+            installedExecutableNames: [],
+            installedApplicationNames: ["Antigravity"]
+        )
+
+        XCTAssertEqual(statuses.map(\.kind), [.antigravity])
+        XCTAssertEqual(statuses.first?.value, "Active")
+        XCTAssertEqual(statuses.first?.subtitle, "Server Running")
+        XCTAssertEqual(statuses.first?.metadata.serverStatus?.state, .running)
+    }
+
+    func testRunningCommandIsHiddenWhenToolIsNotInstalled() {
+        let statuses = LocalAIStatusProvider.statuses(
+            environment: [:],
+            processNames: [],
+            processCommands: ["/opt/homebrew/bin/claude --model claude-opus-4-1"],
+            installedExecutableNames: []
+        )
+
+        XCTAssertEqual(statuses, [])
     }
 
     func testCommandLineDetectionDoesNotMatchExecutableOnlyFromArguments() {

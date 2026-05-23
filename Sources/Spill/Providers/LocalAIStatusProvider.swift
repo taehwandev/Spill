@@ -59,6 +59,41 @@ enum LocalAIToolKind: String, CaseIterable, Identifiable, Sendable {
     var executableName: String? {
         executableNames.first
     }
+
+    var applicationNames: [String] {
+        switch self {
+        case .antigravity:
+            return ["Antigravity"]
+        case .codex, .claude, .ollama, .openAI:
+            return []
+        }
+    }
+}
+
+enum LocalAIToolServerState: String, Hashable, Sendable {
+    case running
+    case stopped
+    case unknown
+
+    var title: String {
+        switch self {
+        case .running:
+            return "Running"
+        case .stopped:
+            return "Stopped"
+        case .unknown:
+            return "Unknown"
+        }
+    }
+}
+
+struct LocalAIToolServerStatus: Hashable, Sendable {
+    let name: String
+    let state: LocalAIToolServerState
+
+    var value: String {
+        "\(name) \(state.title)"
+    }
 }
 
 struct LocalAIToolMetadata: Hashable, Sendable {
@@ -67,6 +102,19 @@ struct LocalAIToolMetadata: Hashable, Sendable {
     let model: String?
     let version: String?
     let source: String?
+    let serverStatus: LocalAIToolServerStatus?
+
+    init(
+        model: String?,
+        version: String?,
+        source: String?,
+        serverStatus: LocalAIToolServerStatus? = nil
+    ) {
+        self.model = model
+        self.version = version
+        self.source = source
+        self.serverStatus = serverStatus
+    }
 }
 
 struct LocalAIToolStatus: Identifiable, Hashable, Sendable {
@@ -147,12 +195,16 @@ struct LocalAIStatusProvider: SpillStatusProvider {
             for: [.codex, .claude, .antigravity, .ollama],
             environment: environment
         )
+        let installedApplicationNames = LocalApplicationDetector.installedApplicationNames(
+            for: [.antigravity]
+        )
 
         return statuses(
             environment: environment,
             processNames: LocalProcessNameReader.currentNames(),
             processCommands: LocalProcessCommandReader.currentCommands(),
             installedExecutableNames: Set(executablePaths.keys),
+            installedApplicationNames: installedApplicationNames,
             commandMetadata: LocalAICommandMetadataReader.metadata(for: executablePaths),
             ollamaRuntime: LocalOllamaRuntimeReader.runtimeSummary(
                 executablePath: executablePaths[LocalAIToolKind.ollama.executableName ?? ""]
@@ -168,7 +220,8 @@ struct LocalAIStatusProvider: SpillStatusProvider {
             environment: environment,
             processNames: processNames,
             processCommands: [],
-            installedExecutableNames: []
+            installedExecutableNames: [],
+            installedApplicationNames: []
         )
     }
 
@@ -181,7 +234,8 @@ struct LocalAIStatusProvider: SpillStatusProvider {
             environment: environment,
             processNames: processNames,
             processCommands: [],
-            installedExecutableNames: installedExecutableNames
+            installedExecutableNames: installedExecutableNames,
+            installedApplicationNames: []
         )
     }
 
@@ -190,11 +244,13 @@ struct LocalAIStatusProvider: SpillStatusProvider {
         processNames: Set<String>,
         processCommands: [String],
         installedExecutableNames: Set<String>,
+        installedApplicationNames: Set<String> = [],
         commandMetadata: [LocalAIToolKind: LocalAIToolMetadata] = [:],
         ollamaRuntime: LocalOllamaRuntimeSummary? = nil
     ) -> [LocalAIToolStatus] {
         let normalizedProcessNames = Set(processNames.map { $0.lowercased() })
         let normalizedInstalledExecutableNames = Set(installedExecutableNames.map { $0.lowercased() })
+        let normalizedInstalledApplicationNames = Set(installedApplicationNames.map { $0.lowercased() })
 
         return [
             commandStatus(
@@ -202,6 +258,7 @@ struct LocalAIStatusProvider: SpillStatusProvider {
                 processNames: normalizedProcessNames,
                 processCommands: processCommands,
                 installedExecutableNames: normalizedInstalledExecutableNames,
+                installedApplicationNames: normalizedInstalledApplicationNames,
                 metadata: commandMetadata[.codex]
             ),
             commandStatus(
@@ -209,6 +266,7 @@ struct LocalAIStatusProvider: SpillStatusProvider {
                 processNames: normalizedProcessNames,
                 processCommands: processCommands,
                 installedExecutableNames: normalizedInstalledExecutableNames,
+                installedApplicationNames: normalizedInstalledApplicationNames,
                 metadata: commandMetadata[.claude]
             ),
             commandStatus(
@@ -216,6 +274,7 @@ struct LocalAIStatusProvider: SpillStatusProvider {
                 processNames: normalizedProcessNames,
                 processCommands: processCommands,
                 installedExecutableNames: normalizedInstalledExecutableNames,
+                installedApplicationNames: normalizedInstalledApplicationNames,
                 metadata: commandMetadata[.antigravity]
             ),
             commandStatus(
@@ -223,6 +282,7 @@ struct LocalAIStatusProvider: SpillStatusProvider {
                 processNames: normalizedProcessNames,
                 processCommands: processCommands,
                 installedExecutableNames: normalizedInstalledExecutableNames,
+                installedApplicationNames: normalizedInstalledApplicationNames,
                 metadata: commandMetadata[.ollama],
                 runtimeModel: ollamaRuntime?.activeModel
             ),
@@ -235,11 +295,13 @@ struct LocalAIStatusProvider: SpillStatusProvider {
         processNames: Set<String>,
         processCommands: [String],
         installedExecutableNames: Set<String>,
+        installedApplicationNames: Set<String>,
         metadata commandMetadata: LocalAIToolMetadata?,
         runtimeModel: String? = nil
     ) -> LocalAIToolStatus? {
         let executableNames = kind.executableNames
-        guard !executableNames.isEmpty else {
+        let applicationNames = kind.applicationNames
+        guard !executableNames.isEmpty || !applicationNames.isEmpty else {
             return nil
         }
 
@@ -258,21 +320,102 @@ struct LocalAIStatusProvider: SpillStatusProvider {
             processCommands: processCommands
         )
         let isInstalled = executableNames.contains { installedExecutableNames.contains($0) }
+            || applicationNames.contains { installedApplicationNames.contains($0.lowercased()) }
 
-        guard isRunning || isInstalled else {
+        guard isInstalled else {
             return nil
         }
 
+        let serverStatus = antigravityServerStatus(
+            for: kind,
+            isRunning: isRunning,
+            processCommands: processCommands
+        )
+        let enrichedMetadata = LocalAIToolMetadata(
+            model: metadata.model,
+            version: metadata.version,
+            source: metadata.source,
+            serverStatus: serverStatus
+        )
+
+        let value = commandValue(isRunning: isRunning, serverStatus: serverStatus)
+        let subtitle = commandSubtitle(
+            metadata: enrichedMetadata,
+            isRunning: isRunning
+        )
+        let state = commandState(isRunning: isRunning, serverStatus: serverStatus)
+
         return LocalAIToolStatus(
             kind: kind,
-            value: isRunning ? "Active" : "Idle",
-            subtitle: compactSubtitle(
-                metadata: metadata,
-                fallback: isRunning ? "Process Running" : "Installed"
-            ),
-            state: isRunning ? .active : .normal,
-            metadata: metadata
+            value: value,
+            subtitle: subtitle,
+            state: state,
+            metadata: enrichedMetadata
         )
+    }
+
+    private static func commandValue(
+        isRunning: Bool,
+        serverStatus: LocalAIToolServerStatus?
+    ) -> String {
+        if serverStatus?.state == .stopped {
+            return "Server Down"
+        }
+
+        return isRunning ? "Active" : "Idle"
+    }
+
+    private static func commandSubtitle(
+        metadata: LocalAIToolMetadata,
+        isRunning: Bool
+    ) -> String {
+        if isRunning,
+           let serverStatus = metadata.serverStatus {
+            return serverStatus.value
+        }
+
+        return compactSubtitle(
+            metadata: metadata,
+            fallback: isRunning ? "Process Running" : "Installed"
+        )
+    }
+
+    private static func commandState(
+        isRunning: Bool,
+        serverStatus: LocalAIToolServerStatus?
+    ) -> SpillStatusState {
+        if serverStatus?.state == .stopped {
+            return .warning
+        }
+
+        return isRunning ? .active : .normal
+    }
+
+    private static func antigravityServerStatus(
+        for kind: LocalAIToolKind,
+        isRunning: Bool,
+        processCommands: [String]
+    ) -> LocalAIToolServerStatus? {
+        guard kind == .antigravity, isRunning else {
+            return nil
+        }
+
+        if hasAntigravityServer(processCommands: processCommands) {
+            return LocalAIToolServerStatus(name: "Server", state: .running)
+        }
+
+        return LocalAIToolServerStatus(
+            name: "Server",
+            state: processCommands.isEmpty ? .unknown : .stopped
+        )
+    }
+
+    private static func hasAntigravityServer(processCommands: [String]) -> Bool {
+        processCommands.contains { command in
+            let normalizedCommand = command.lowercased()
+            return normalizedCommand.contains("mcp-server")
+                && normalizedCommand.contains("antigravity")
+        }
     }
 
     private static func openAIStatus(environment: [String: String]) -> LocalAIToolStatus? {
@@ -449,6 +592,35 @@ private enum LocalExecutableDetector {
         }
 
         return uniquePaths
+    }
+}
+
+private enum LocalApplicationDetector {
+    static func installedApplicationNames(for kinds: [LocalAIToolKind]) -> Set<String> {
+        let applicationNames = kinds.flatMap(\.applicationNames)
+        guard !applicationNames.isEmpty else {
+            return []
+        }
+
+        let fileManager = FileManager.default
+        let directories = [
+            "/Applications",
+            "\(NSHomeDirectory())/Applications"
+        ]
+        var installedNames = Set<String>()
+
+        for applicationName in applicationNames {
+            let appBundleName = "\(applicationName).app"
+            let isInstalled = directories.contains { directory in
+                fileManager.fileExists(atPath: "\(directory)/\(appBundleName)")
+            }
+
+            if isInstalled {
+                installedNames.insert(applicationName)
+            }
+        }
+
+        return installedNames
     }
 }
 
