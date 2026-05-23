@@ -18,7 +18,7 @@ final class LocalAIStatusProviderTests: XCTestCase {
         XCTAssertEqual(statuses.first { $0.kind == .openAI }?.state, .normal)
     }
 
-    func testClaudeGeminiOllamaAndOpenAIModelMetadataMapping() {
+    func testClaudeAntigravityOllamaAndOpenAIModelMetadataMapping() {
         let statuses = LocalAIStatusProvider.statuses(
             environment: [
                 "OPENAI_API_KEY": "secret",
@@ -27,22 +27,22 @@ final class LocalAIStatusProviderTests: XCTestCase {
             processNames: [],
             processCommands: [
                 "/opt/homebrew/bin/claude --model claude-sonnet-4-5",
-                "/opt/homebrew/bin/gemini -m gemini-2.5-pro"
+                "/opt/homebrew/bin/antigravity -m ag-pro"
             ],
-            installedExecutableNames: ["claude", "gemini", "ollama"],
+            installedExecutableNames: ["claude", "antigravity", "ollama"],
             commandMetadata: [
                 .claude: LocalAIToolMetadata(model: nil, version: "2.1.0", source: "Command"),
-                .gemini: LocalAIToolMetadata(model: nil, version: "0.6.1", source: "Command"),
+                .antigravity: LocalAIToolMetadata(model: nil, version: "0.6.1", source: "Command"),
                 .ollama: LocalAIToolMetadata(model: nil, version: "0.12.0", source: "Command")
             ],
             ollamaRuntime: LocalOllamaRuntimeSummary(activeModel: "llama3.2:latest")
         )
 
-        XCTAssertEqual(statuses.map(\.kind), [.claude, .gemini, .ollama, .openAI])
+        XCTAssertEqual(statuses.map(\.kind), [.claude, .antigravity, .ollama, .openAI])
         XCTAssertEqual(statuses.first { $0.kind == .claude }?.value, "Active")
         XCTAssertEqual(statuses.first { $0.kind == .claude }?.subtitle, "claude-sonnet-4-5")
         XCTAssertEqual(statuses.first { $0.kind == .claude }?.metadata.version, "2.1.0")
-        XCTAssertEqual(statuses.first { $0.kind == .gemini }?.subtitle, "gemini-2.5-pro")
+        XCTAssertEqual(statuses.first { $0.kind == .antigravity }?.subtitle, "ag-pro")
         XCTAssertEqual(statuses.first { $0.kind == .ollama }?.subtitle, "llama3.2:latest")
         XCTAssertEqual(statuses.first { $0.kind == .ollama }?.metadata.version, "0.12.0")
         XCTAssertEqual(statuses.first { $0.kind == .openAI }?.title, "OpenAI API")
@@ -79,13 +79,26 @@ final class LocalAIStatusProviderTests: XCTestCase {
         let statuses = LocalAIStatusProvider.statuses(
             environment: [:],
             processNames: [],
-            processCommands: ["/usr/bin/env GEMINI_API_KEY=set /opt/homebrew/bin/gemini -m gemini-2.5-pro"],
+            processCommands: ["/usr/bin/env ANTIGRAVITY_HOME=/tmp /opt/homebrew/bin/antigravity -m ag-pro"],
             installedExecutableNames: []
         )
 
-        XCTAssertEqual(statuses.map(\.kind), [.gemini])
+        XCTAssertEqual(statuses.map(\.kind), [.antigravity])
         XCTAssertEqual(statuses.first?.value, "Active")
-        XCTAssertEqual(statuses.first?.subtitle, "gemini-2.5-pro")
+        XCTAssertEqual(statuses.first?.subtitle, "ag-pro")
+    }
+
+    func testAntigravityCliAliasIsDetected() {
+        let statuses = LocalAIStatusProvider.statuses(
+            environment: [:],
+            processNames: [],
+            processCommands: ["/opt/homebrew/bin/antigravity-cli --model ag-lite"],
+            installedExecutableNames: []
+        )
+
+        XCTAssertEqual(statuses.map(\.kind), [.antigravity])
+        XCTAssertEqual(statuses.first?.value, "Active")
+        XCTAssertEqual(statuses.first?.subtitle, "ag-lite")
     }
 
     func testCommandLineDetectionDoesNotMatchExecutableOnlyFromArguments() {

@@ -288,7 +288,7 @@ struct AgentCatCard: View {
                 }
             }
 
-            Text("A companion app for visualizing local AI agent activity across Codex, Claude Code, Gemini CLI, and other development tools.")
+            Text("A companion app for visualizing local AI agent activity across Codex, Claude Code, Antigravity CLI, and other development tools.")
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .lineSpacing(3)

@@ -3,7 +3,7 @@ import Foundation
 enum LocalAIToolKind: String, CaseIterable, Identifiable, Sendable {
     case codex
     case claude
-    case gemini
+    case antigravity
     case ollama
     case openAI
 
@@ -17,8 +17,8 @@ enum LocalAIToolKind: String, CaseIterable, Identifiable, Sendable {
             return "Codex"
         case .claude:
             return "Claude"
-        case .gemini:
-            return "Gemini"
+        case .antigravity:
+            return "Antigravity"
         case .ollama:
             return "Ollama"
         case .openAI:
@@ -32,7 +32,7 @@ enum LocalAIToolKind: String, CaseIterable, Identifiable, Sendable {
             return "terminal.fill"
         case .claude:
             return "terminal.fill"
-        case .gemini:
+        case .antigravity:
             return "terminal.fill"
         case .ollama:
             return "cpu"
@@ -41,19 +41,23 @@ enum LocalAIToolKind: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
-    var executableName: String? {
+    var executableNames: [String] {
         switch self {
         case .codex:
-            return "codex"
+            return ["codex"]
         case .claude:
-            return "claude"
-        case .gemini:
-            return "gemini"
+            return ["claude"]
+        case .antigravity:
+            return ["antigravity", "antigravity-cli"]
         case .ollama:
-            return "ollama"
+            return ["ollama"]
         case .openAI:
-            return nil
+            return []
         }
+    }
+
+    var executableName: String? {
+        executableNames.first
     }
 }
 
@@ -117,7 +121,7 @@ struct LocalAIToolStatus: Identifiable, Hashable, Sendable {
             return 10
         case .claude:
             return 20
-        case .gemini:
+        case .antigravity:
             return 30
         case .ollama:
             return 40
@@ -140,7 +144,7 @@ struct LocalAIStatusProvider: SpillStatusProvider {
     static func statuses() -> [LocalAIToolStatus] {
         let environment = ProcessInfo.processInfo.environment
         let executablePaths = LocalExecutableDetector.installedExecutablePaths(
-            for: [.codex, .claude, .gemini, .ollama],
+            for: [.codex, .claude, .antigravity, .ollama],
             environment: environment
         )
 
@@ -208,11 +212,11 @@ struct LocalAIStatusProvider: SpillStatusProvider {
                 metadata: commandMetadata[.claude]
             ),
             commandStatus(
-                kind: .gemini,
+                kind: .antigravity,
                 processNames: normalizedProcessNames,
                 processCommands: processCommands,
                 installedExecutableNames: normalizedInstalledExecutableNames,
-                metadata: commandMetadata[.gemini]
+                metadata: commandMetadata[.antigravity]
             ),
             commandStatus(
                 kind: .ollama,
@@ -234,7 +238,8 @@ struct LocalAIStatusProvider: SpillStatusProvider {
         metadata commandMetadata: LocalAIToolMetadata?,
         runtimeModel: String? = nil
     ) -> LocalAIToolStatus? {
-        guard let executableName = kind.executableName else {
+        let executableNames = kind.executableNames
+        guard !executableNames.isEmpty else {
             return nil
         }
 
@@ -248,11 +253,11 @@ struct LocalAIStatusProvider: SpillStatusProvider {
             runtimeModel: runtimeModel
         )
         let isRunning = hasRunningProcess(
-            named: executableName,
+            namedAnyOf: executableNames,
             processNames: processNames,
             processCommands: processCommands
         )
-        let isInstalled = installedExecutableNames.contains(executableName)
+        let isInstalled = executableNames.contains { installedExecutableNames.contains($0) }
 
         guard isRunning || isInstalled else {
             return nil
@@ -332,17 +337,19 @@ struct LocalAIStatusProvider: SpillStatusProvider {
     }
 
     private static func hasRunningProcess(
-        named name: String,
+        namedAnyOf names: [String],
         processNames: Set<String>,
         processCommands: [String]
     ) -> Bool {
-        processNames.contains(name)
-            || processNames.contains { processName in
-                processName.hasSuffix("/\(name)")
-                    || URL(fileURLWithPath: processName).lastPathComponent == name
-            }
-            || processCommands.contains { command in
-                commandLine(command, matchesExecutableNamed: name)
+        names.contains { name in
+            processNames.contains(name)
+                || processNames.contains { processName in
+                    processName.hasSuffix("/\(name)")
+                        || URL(fileURLWithPath: processName).lastPathComponent == name
+                }
+                || processCommands.contains { command in
+                    commandLine(command, matchesExecutableNamed: name)
+                }
             }
     }
 
@@ -383,7 +390,7 @@ private enum LocalExecutableDetector {
         for kinds: [LocalAIToolKind],
         environment: [String: String]
     ) -> [String: String] {
-        let executableNames = kinds.compactMap(\.executableName)
+        let executableNames = kinds.flatMap(\.executableNames)
         let directories = searchDirectories(environment: environment)
         let fileManager = FileManager.default
         var installedPaths = [String: String]()
@@ -450,11 +457,13 @@ private enum LocalAIProcessMetadataReader {
         for kind: LocalAIToolKind,
         processCommands: [String]
     ) -> LocalAIToolMetadata? {
-        guard let executableName = kind.executableName else {
+        guard !kind.executableNames.isEmpty else {
             return nil
         }
 
-        for command in processCommands where LocalAIStatusProvider.commandLine(command, matchesExecutableNamed: executableName) {
+        for command in processCommands where kind.executableNames.contains(where: { executableName in
+            LocalAIStatusProvider.commandLine(command, matchesExecutableNamed: executableName)
+        }) {
             guard let model = LocalAICommandLineParser.modelArgument(in: command) else {
                 continue
             }
@@ -509,8 +518,7 @@ private enum LocalAICommandMetadataReader {
         var metadata = [LocalAIToolKind: LocalAIToolMetadata]()
 
         for kind in LocalAIToolKind.allCases {
-            guard let executableName = kind.executableName,
-                  let executablePath = executablePaths[executableName],
+            guard let executablePath = kind.executableNames.compactMap({ executablePaths[$0] }).first,
                   let version = version(executablePath: executablePath)
             else {
                 continue
