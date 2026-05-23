@@ -7,6 +7,20 @@
     <title>Spill - Compact macOS control tray</title>
     <link rel="icon" href="assets/spill-icon.png"/>
     <link rel="apple-touch-icon" href="assets/spill-icon.png"/>
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website"/>
+    <meta property="og:url" content="https://spill.thdev.app/"/>
+    <meta property="og:title" content="Spill - Compact macOS control tray"/>
+    <meta property="og:description" content="Spill is a compact macOS control tray for crowded menu bars, system status, window actions, pinned shortcuts, and local AI state."/>
+    <meta property="og:image" content="https://spill.thdev.app/assets/spill-og.png"/>
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image"/>
+    <meta property="twitter:url" content="https://spill.thdev.app/"/>
+    <meta property="twitter:title" content="Spill - Compact macOS control tray"/>
+    <meta property="twitter:description" content="Spill is a compact macOS control tray for crowded menu bars, system status, window actions, pinned shortcuts, and local AI state."/>
+    <meta property="twitter:image" content="https://spill.thdev.app/assets/spill-og.png"/>
     <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&amp;display=swap" rel="stylesheet"/>
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
@@ -101,7 +115,7 @@
     <style>
         @media (min-width: 1024px) {
             html {
-                scroll-snap-type: y mandatory;
+                scroll-snap-type: y proximity;
                 scroll-behavior: smooth;
             }
             .snap-shell {
@@ -111,7 +125,7 @@
                 min-height: 100vh;
                 min-height: 100svh;
                 scroll-snap-align: start;
-                scroll-snap-stop: always;
+                scroll-snap-stop: normal;
             }
             .snap-footer {
                 scroll-snap-align: end;
@@ -270,7 +284,21 @@
     <nav class="fixed top-6 left-1/2 -translate-x-1/2 z-50 w-[95%] max-w-5xl glass-panel-deep rounded-full px-6 md:px-8 py-3 flex items-center justify-between">
         <div class="flex items-center gap-8 md:gap-12">
             <a class="flex items-center gap-2.5 text-2xl font-black text-primary tracking-tight" href="#hero">
-                <img src="assets/spill-icon.png" alt="" class="app-icon app-icon-sm"/>
+                <svg width="32" height="32" class="w-8 h-8 text-primary shrink-0" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <defs>
+                        <linearGradient id="dropletGradNav" x1="12%" y1="10%" x2="88%" y2="90%">
+                            <stop offset="0%" stop-color="#31dece"/>
+                            <stop offset="100%" stop-color="#0058bc"/>
+                        </linearGradient>
+                    </defs>
+                    <!-- Ripple Waves (Water rippling) -->
+                    <path d="M6 30C13 32.5 27 32.5 34 30C27 28 13 28 6 30Z" fill="url(#dropletGradNav)" opacity="0.18"/>
+                    <path d="M11 31.5C16 33 24 33 29 31.5C24 30.2 16 30.2 11 31.5Z" fill="url(#dropletGradNav)" opacity="0.32"/>
+                    <!-- Water Droplet dripping -->
+                    <path d="M20 6C20 6 11 18 11 23C11 28 15 30.5 20 30.5C25 30.5 29 28 29 23C29 18 20 6 20 6Z" fill="url(#dropletGradNav)"/>
+                    <!-- Inner Gloss Highlight -->
+                    <path d="M17 20C16.5 21.2 16.5 22.8 17 24" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round" opacity="0.75"/>
+                </svg>
                 <span>Spill</span>
             </a>
             <div class="hidden md:flex items-center gap-8">
@@ -302,12 +330,23 @@
                         A compact control tray for crowded Mac menu bars. Open one small trigger for system status,
                         window actions, pinned shortcuts, sleep guard, and local AI tool state.
                     </p>
-                    <div class="flex flex-wrap items-center justify-center lg:justify-start gap-3">
-                        <a class="inline-flex items-center gap-2 rounded-full bg-on-surface text-white px-4 py-2 text-sm font-black hover:bg-inverse-surface transition-colors" href="https://github.com/taehwandev/Spill" target="_blank" rel="noopener" data-analytics-event="open_source_link_clicked" data-analytics-location="hero">
-                            <span class="material-symbols-outlined text-[17px]">code</span>
-                            Open source
+                    <div class="flex flex-wrap items-center justify-center lg:justify-start gap-4">
+                        <a class="bg-primary text-on-primary px-7 py-3 rounded-full text-sm font-black shadow-xl shadow-primary/20 hover:shadow-2xl hover:scale-[1.02] transition-all flex items-center gap-2" href="https://github.com/taehwandev/Spill/releases/latest/download/Spill-macos.dmg" data-analytics-event="download_direct" data-analytics-location="hero">
+                            <span class="material-symbols-outlined text-[18px]">download</span>
+                            Download for macOS (.dmg)
                         </a>
-                        <span class="text-sm font-semibold text-on-surface-variant">Built in public and distributed directly from GitHub.</span>
+                        <a class="inline-flex items-center gap-2 rounded-full border border-outline-variant bg-white/50 text-on-surface px-6 py-3 text-sm font-bold hover:bg-white/80 transition-all hover:scale-[1.02]" href="#download" data-analytics-event="download_intent" data-analytics-location="hero_terminal">
+                            <span class="material-symbols-outlined text-[18px]">terminal</span>
+                            Install via Terminal
+                        </a>
+                    </div>
+                    <div class="flex items-center justify-center lg:justify-start gap-2.5 text-xs font-semibold text-on-surface-variant pt-2">
+                        <a class="hover:text-primary transition-colors flex items-center gap-1" href="https://github.com/taehwandev/Spill" target="_blank" rel="noopener" data-analytics-event="open_source_link_clicked" data-analytics-location="hero_sub">
+                            <span class="material-symbols-outlined text-[14px]">code</span>
+                            GitHub Repository
+                        </a>
+                        <span>•</span>
+                        <span>Distributed directly from GitHub Releases</span>
                     </div>
                 </div>
 
@@ -353,7 +392,21 @@
                                 </div>
                                 <div class="absolute top-6 right-5 w-[344px] max-w-[80%] glass-panel-deep rounded-[28px] p-[14px] shadow-2xl">
                                     <div class="flex items-center gap-3">
-                                        <img src="assets/spill-icon.png" alt="" class="app-icon app-icon-md"/>
+                                        <svg width="40" height="40" class="w-10 h-10 text-primary shrink-0" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                            <defs>
+                                                <linearGradient id="dropletGradMock" x1="12%" y1="10%" x2="88%" y2="90%">
+                                                    <stop offset="0%" stop-color="#31dece"/>
+                                                    <stop offset="100%" stop-color="#0058bc"/>
+                                                </linearGradient>
+                                            </defs>
+                                            <!-- Ripple Waves (Water rippling) -->
+                                            <path d="M6 30C13 32.5 27 32.5 34 30C27 28 13 28 6 30Z" fill="url(#dropletGradMock)" opacity="0.18"/>
+                                            <path d="M11 31.5C16 33 24 33 29 31.5C24 30.2 16 30.2 11 31.5Z" fill="url(#dropletGradMock)" opacity="0.32"/>
+                                            <!-- Water Droplet dripping -->
+                                            <path d="M20 6C20 6 11 18 11 23C11 28 15 30.5 20 30.5C25 30.5 29 28 29 23C29 18 20 6 20 6Z" fill="url(#dropletGradMock)"/>
+                                            <!-- Inner Gloss Highlight -->
+                                            <path d="M17 20C16.5 21.2 16.5 22.8 17 24" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round" opacity="0.75"/>
+                                        </svg>
                                         <div class="min-w-0">
                                             <div class="font-black text-sm leading-tight">Spill</div>
                                             <div class="text-[11px] text-on-surface-variant font-semibold truncate">12 items, 4 pinned</div>
@@ -382,7 +435,7 @@
                                                 <div class="min-w-0 flex-1">
                                                     <div class="flex items-baseline gap-1.5">
                                                         <span class="text-[11px] font-black">CPU</span>
-                                                        <span class="text-[15px] font-black text-primary">18%</span>
+                                                        <span id="mock-cpu-pct" class="text-[15px] font-black text-primary">18%</span>
                                                     </div>
                                                     <div class="text-[10px] font-semibold text-on-surface-variant truncate">8-core balanced</div>
                                                 </div>
@@ -405,9 +458,9 @@
                                                 <div class="min-w-0 flex-1">
                                                     <div class="flex items-baseline gap-1.5">
                                                         <span class="text-[11px] font-black">Memory</span>
-                                                        <span class="text-[15px] font-black text-secondary">62%</span>
+                                                        <span id="mock-mem-pct" class="text-[15px] font-black text-secondary">62%</span>
                                                     </div>
-                                                    <div class="text-[10px] font-semibold text-on-surface-variant truncate">5.8 GB available</div>
+                                                    <div id="mock-mem-sub" class="text-[10px] font-semibold text-on-surface-variant truncate">5.8 GB available</div>
                                                 </div>
                                                 <svg class="w-20 h-7" viewBox="0 0 96 32" aria-hidden="true">
                                                     <path d="M2 24 C12 10 20 19 30 13 S48 12 58 19 S78 26 94 8" fill="none" stroke="#4c4aca" stroke-width="3" stroke-linecap="round" class="live-line" style="--dash: 145; --speed: 3.2s;"></path>
@@ -422,9 +475,9 @@
                                                 <div class="min-w-0 flex-1">
                                                     <div class="flex items-baseline gap-1.5">
                                                         <span class="text-[11px] font-black">Network</span>
-                                                        <span class="text-[15px] font-black text-blue-600">1.4</span>
+                                                        <span id="mock-net-speed" class="text-[15px] font-black text-blue-600">1.4</span>
                                                     </div>
-                                                    <div class="text-[10px] font-semibold text-orange-500 truncate">0.3 MB/s upload</div>
+                                                    <div id="mock-net-sub" class="text-[10px] font-semibold text-orange-500 truncate">0.3 MB/s upload</div>
                                                 </div>
                                                 <svg class="w-20 h-7" viewBox="0 0 96 32" aria-hidden="true">
                                                     <path d="M2 22 C10 12 18 20 26 15 S42 6 50 16 S66 27 76 18 S88 12 94 16" fill="none" stroke="#0070eb" stroke-width="2.6" stroke-linecap="round" class="live-line" style="--dash: 150; --speed: 2.8s;"></path>
@@ -516,10 +569,10 @@
                         <div class="pt-4 border-t border-surface-variant/50">
                             <div class="flex justify-between items-end">
                                 <span class="text-xs font-bold text-on-surface/40 uppercase">Real-time usage</span>
-                                <span class="text-2xl font-black text-primary">18.4%</span>
+                                <span id="large-cpu-val" class="text-2xl font-black text-primary">18.4%</span>
                             </div>
                             <div class="h-1.5 bg-surface-container mt-2 rounded-full overflow-hidden">
-                                <div class="h-full bg-primary rounded-full meter-fill" style="--from: 18%; --to: 34%; width: 18%;"></div>
+                                <div id="large-cpu-bar" class="h-full bg-primary rounded-full meter-fill" style="--from: 18%; --to: 34%; width: 18.4%;"></div>
                             </div>
                         </div>
                     </article>
@@ -546,10 +599,10 @@
                         <div class="pt-4 border-t border-surface-variant/50">
                             <div class="flex justify-between items-end">
                                 <span class="text-xs font-bold text-on-surface/40 uppercase">Memory load</span>
-                                <span class="text-2xl font-black text-secondary">62%</span>
+                                <span id="large-mem-val" class="text-2xl font-black text-secondary">62%</span>
                             </div>
                             <div class="h-1.5 bg-surface-container mt-2 rounded-full overflow-hidden">
-                                <div class="h-full bg-secondary rounded-full meter-fill" style="--from: 54%; --to: 68%; width: 62%; --speed: 4.2s;"></div>
+                                <div id="large-mem-bar" class="h-full bg-secondary rounded-full meter-fill" style="--from: 54%; --to: 68%; width: 62%; --speed: 4.2s;"></div>
                             </div>
                         </div>
                     </article>
@@ -575,10 +628,10 @@
                         <div class="pt-4 border-t border-surface-variant/50">
                             <div class="flex justify-between items-end">
                                 <span class="text-xs font-bold text-on-surface/40 uppercase">Receive</span>
-                                <span class="text-2xl font-black text-tertiary">1.4 MB/s</span>
+                                <span id="large-net-val" class="text-2xl font-black text-tertiary">1.4 MB/s</span>
                             </div>
                             <div class="h-1.5 bg-surface-container mt-2 rounded-full overflow-hidden">
-                                <div class="h-full bg-tertiary rounded-full meter-fill" style="--from: 28%; --to: 62%; width: 54%; --speed: 3.2s;"></div>
+                                <div id="large-net-bar" class="h-full bg-tertiary rounded-full meter-fill" style="--from: 28%; --to: 62%; width: 54%; --speed: 3.2s;"></div>
                             </div>
                         </div>
                     </article>
@@ -729,9 +782,9 @@
             <div class="max-w-7xl mx-auto w-full grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
                 <div class="space-y-8">
                     <span class="text-label-caps text-primary font-black">Download</span>
-                    <h2 class="text-display-lg-mobile md:text-5xl font-extrabold leading-tight">Install Spill from Terminal.</h2>
+                    <h2 class="text-display-lg-mobile md:text-5xl font-extrabold leading-tight">Get Spill for macOS.</h2>
                     <p class="text-body-lg text-on-surface-variant max-w-xl">
-                        The public install path is command-based for now. Paste the command below, follow the prompts, and Spill is ready from your Mac menu bar.
+                        Choose the installation method that fits your workflow. Paste the terminal command for automated setup, or download the direct installer bundle.
                     </p>
                     <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-xl">
                         <div class="rounded-2xl bg-white/80 border border-outline-variant/30 p-4">
@@ -747,6 +800,18 @@
                             <div class="mt-1 text-sm font-black">Launch Spill</div>
                         </div>
                     </div>
+                    <div class="pt-6 border-t border-outline-variant/30 flex flex-wrap gap-4 items-center max-w-xl">
+                        <span class="text-sm font-black text-on-surface/60">Preferred direct install?</span>
+                        <a class="inline-flex items-center gap-1.5 text-sm font-bold text-primary hover:underline hover:scale-[1.01] transition-transform" href="https://github.com/taehwandev/Spill/releases/latest/download/Spill-macos.dmg" data-analytics-event="download_direct" data-analytics-location="download_section">
+                            <span class="material-symbols-outlined text-[18px]">download</span>
+                            Download DMG
+                        </a>
+                        <span class="text-on-surface/20">|</span>
+                        <a class="inline-flex items-center gap-1.5 text-sm font-bold text-primary hover:underline hover:scale-[1.01] transition-transform" href="https://github.com/taehwandev/Spill/releases/latest/download/Spill-macos.zip" data-analytics-event="download_zip" data-analytics-location="download_section">
+                            <span class="material-symbols-outlined text-[18px]">compress</span>
+                            Download ZIP
+                        </a>
+                    </div>
                 </div>
                 <div class="relative">
                     <div class="absolute -inset-5 bg-primary/15 blur-3xl rounded-full"></div>
@@ -759,27 +824,29 @@
                             </div>
                             <span class="text-xs font-black text-inverse-on-surface/45">spill-install</span>
                         </div>
-                        <div class="mt-7 rounded-2xl bg-white/5 border border-white/10 p-4">
-                            <div class="text-[11px] font-black uppercase tracking-[0.16em] text-inverse-on-surface/45">Install command</div>
-                            <div class="mt-4 flex items-start gap-4">
-                                <code id="install-command" class="font-mono text-sm md:text-base leading-relaxed break-all text-inverse-on-surface">/bin/bash -c "$(curl -fsSL https://spill.thdev.app/install.sh)"</code>
-                                <button class="shrink-0 rounded-xl bg-white/10 px-3 py-2 text-xs font-black text-inverse-on-surface hover:bg-white/15 transition-colors" type="button" data-copy='/bin/bash -c "$(curl -fsSL https://spill.thdev.app/install.sh)"'>
-                                    Copy
-                                </button>
+                        <div id="terminal-body" class="transition-all duration-500">
+                            <div class="mt-7 rounded-2xl bg-white/5 border border-white/10 p-4">
+                                <div class="text-[11px] font-black uppercase tracking-[0.16em] text-inverse-on-surface/45">Install command</div>
+                                <div class="mt-4 flex items-start gap-4">
+                                    <code id="install-command" class="font-mono text-sm md:text-base leading-relaxed break-all text-inverse-on-surface">/bin/bash -c "$(curl -fsSL https://spill.thdev.app/install.sh)"</code>
+                                    <button id="copy-installer-btn" class="shrink-0 rounded-xl bg-white/10 px-3 py-2 text-xs font-black text-inverse-on-surface hover:bg-white/15 transition-colors" type="button" data-copy='/bin/bash -c "$(curl -fsSL https://spill.thdev.app/install.sh)"'>
+                                        Copy
+                                    </button>
+                                </div>
                             </div>
-                        </div>
-                        <div class="mt-6 space-y-3 text-sm font-semibold text-inverse-on-surface/70">
-                            <div class="flex items-center gap-3">
-                                <span class="h-2 w-2 rounded-full bg-emerald-400"></span>
-                                <span>Fetch latest installer script</span>
-                            </div>
-                            <div class="flex items-center gap-3">
-                                <span class="h-2 w-2 rounded-full bg-primary-fixed-dim"></span>
-                                <span>Install Spill for macOS</span>
-                            </div>
-                            <div class="flex items-center gap-3">
-                                <span class="h-2 w-2 rounded-full bg-secondary-fixed-dim"></span>
-                                <span>Open the menu bar control tray</span>
+                            <div class="mt-6 space-y-3 text-sm font-semibold text-inverse-on-surface/70">
+                                <div class="flex items-center gap-3">
+                                    <span class="h-2 w-2 rounded-full bg-emerald-400"></span>
+                                    <span>Fetch latest installer script</span>
+                                </div>
+                                <div class="flex items-center gap-3">
+                                    <span class="h-2 w-2 rounded-full bg-primary-fixed-dim"></span>
+                                    <span>Install Spill for macOS</span>
+                                </div>
+                                <div class="flex items-center gap-3">
+                                    <span class="h-2 w-2 rounded-full bg-secondary-fixed-dim"></span>
+                                    <span>Open the menu bar control tray</span>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -821,15 +888,15 @@
                         <div class="mt-6 grid grid-cols-3 gap-3">
                             <div class="rounded-2xl bg-secondary/10 p-4">
                                 <div class="text-[10px] font-black uppercase text-secondary/70">Codex</div>
-                                <div class="mt-2 text-2xl font-black text-secondary">42k</div>
+                                <div id="mock-codex-val" class="mt-2 text-2xl font-black text-secondary">42.2k</div>
                             </div>
                             <div class="rounded-2xl bg-primary/10 p-4">
                                 <div class="text-[10px] font-black uppercase text-primary/70">Claude</div>
-                                <div class="mt-2 text-2xl font-black text-primary">18k</div>
+                                <div id="mock-claude-val" class="mt-2 text-2xl font-black text-primary">18.4k</div>
                             </div>
                             <div class="rounded-2xl bg-tertiary/10 p-4">
                                 <div class="text-[10px] font-black uppercase text-tertiary/70">Gemini</div>
-                                <div class="mt-2 text-2xl font-black text-tertiary">9k</div>
+                                <div id="mock-gemini-val" class="mt-2 text-2xl font-black text-tertiary">9.1k</div>
                             </div>
                         </div>
 
@@ -854,7 +921,21 @@
         <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-start md:items-center gap-10">
             <div class="space-y-3">
                 <div class="flex items-center gap-3">
-                    <img src="assets/spill-icon.png" alt="" class="app-icon app-icon-md"/>
+                    <svg width="40" height="40" class="w-10 h-10 text-primary shrink-0" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <defs>
+                            <linearGradient id="dropletGradFooter" x1="12%" y1="10%" x2="88%" y2="90%">
+                                <stop offset="0%" stop-color="#31dece"/>
+                                <stop offset="100%" stop-color="#0058bc"/>
+                            </linearGradient>
+                        </defs>
+                        <!-- Ripple Waves (Water rippling) -->
+                        <path d="M6 30C13 32.5 27 32.5 34 30C27 28 13 28 6 30Z" fill="url(#dropletGradFooter)" opacity="0.18"/>
+                        <path d="M11 31.5C16 33 24 33 29 31.5C24 30.2 16 30.2 11 31.5Z" fill="url(#dropletGradFooter)" opacity="0.32"/>
+                        <!-- Water Droplet dripping -->
+                        <path d="M20 6C20 6 11 18 11 23C11 28 15 30.5 20 30.5C25 30.5 29 28 29 23C29 18 20 6 20 6Z" fill="url(#dropletGradFooter)"/>
+                        <!-- Inner Gloss Highlight -->
+                        <path d="M17 20C16.5 21.2 16.5 22.8 17 24" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round" opacity="0.75"/>
+                    </svg>
                     <div class="text-2xl font-black text-primary tracking-tight">Spill</div>
                 </div>
                 <p class="text-on-surface-variant max-w-sm">Open-source compact control tray for macOS. Direct distribution outside the Mac App Store.</p>
@@ -948,30 +1029,162 @@
             source: "landing"
         });
 
-        const copyButton = document.querySelector("[data-copy]");
+        // Dynamic fluctuation for mock dashboard metrics (Smooth wave synchronization)
+        function startMetricsFluctuation() {
+            const cpuPct = document.getElementById("mock-cpu-pct");
+            const memPct = document.getElementById("mock-mem-pct");
+            const memSub = document.getElementById("mock-mem-sub");
+            const netSpeed = document.getElementById("mock-net-speed");
+            const netSub = document.getElementById("mock-net-sub");
 
-        if (copyButton) {
-            copyButton.addEventListener("click", async () => {
-                const value = copyButton.getAttribute("data-copy") || "";
-                const originalText = copyButton.textContent.trim() || "Copy";
+            // Large cards in Performance Hub
+            const largeCpuVal = document.getElementById("large-cpu-val");
+            const largeCpuBar = document.getElementById("large-cpu-bar");
+            const largeMemVal = document.getElementById("large-mem-val");
+            const largeMemBar = document.getElementById("large-mem-bar");
+            const largeNetVal = document.getElementById("large-net-val");
+            const largeNetBar = document.getElementById("large-net-bar");
+
+            // Add smooth CSS transitions to the progress indicators so they glide elegantly
+            const progressBars = [largeCpuBar, largeMemBar, largeNetBar];
+            progressBars.forEach(bar => {
+                if (bar) {
+                    bar.style.transition = "width 280ms ease-out";
+                }
+            });
+
+            setInterval(() => {
+                const now = Date.now();
+
+                // 1. CPU: Smooth sine wave fluctuating organically between 13.5% and 24.5%
+                const cpuVal = (19.0 + Math.sin(now / 1500) * 4.5 + Math.cos(now / 750) * 1.0).toFixed(1);
+                const cpuInt = Math.round(parseFloat(cpuVal));
+
+                if (cpuPct) cpuPct.textContent = `${cpuInt}%`;
+                if (largeCpuVal) largeCpuVal.textContent = `${cpuVal}%`;
+                if (largeCpuBar) largeCpuBar.style.width = `${cpuVal}%`;
+
+                // 2. Memory: Smooth slowly moving sine wave between 59.2% and 63.8%
+                const memVal = (61.5 + Math.sin(now / 3000) * 2.3).toFixed(1);
+                const memInt = Math.round(parseFloat(memVal));
+                const available = ((100 - parseFloat(memVal)) * 16 / 100).toFixed(1);
+
+                if (memPct) memPct.textContent = `${memInt}%`;
+                if (memSub) memSub.textContent = `${available} GB available`;
+                if (largeMemVal) largeMemVal.textContent = `${memInt}%`;
+                if (largeMemBar) largeMemBar.style.width = `${memVal}%`;
+
+                // 3. Network: Smooth lively network activity wave between 1.0 MB/s and 3.6 MB/s
+                const netVal = (2.3 + Math.sin(now / 1100) * 1.1 + Math.sin(now / 550) * 0.2).toFixed(1);
+                const uploadVal = (0.3 + Math.cos(now / 1300) * 0.12 + Math.sin(now / 650) * 0.04).toFixed(1);
+
+                if (netSpeed) netSpeed.textContent = netVal;
+                if (netSub) netSub.textContent = `${uploadVal} MB/s upload`;
+                if (largeNetVal) largeNetVal.textContent = `${netVal} MB/s`;
+
+                // Map download range smoothly to progress bar width (25% - 85% range)
+                const barWidth = (25 + ((parseFloat(netVal) - 0.7) / 3.5) * 60).toFixed(1);
+                if (largeNetBar) largeNetBar.style.width = `${barWidth}%`;
+
+            }, 250); // Frequent updates for fluid visual matching
+        }
+
+        // Live counter ticker for AgentCat metrics
+        function startAgentCatCounters() {
+            const codexVal = document.getElementById("mock-codex-val");
+            const claudeVal = document.getElementById("mock-claude-val");
+            const geminiVal = document.getElementById("mock-gemini-val");
+
+            let codexCount = 42200;
+            let claudeCount = 18400;
+            let geminiCount = 9100;
+
+            setInterval(() => {
+                if (codexVal) {
+                    codexCount += Math.floor(Math.random() * 5);
+                    codexVal.textContent = `${(codexCount / 1000).toFixed(1)}k`;
+                }
+                if (claudeVal) {
+                    claudeCount += Math.floor(Math.random() * 3);
+                    claudeVal.textContent = `${(claudeCount / 1000).toFixed(1)}k`;
+                }
+                if (geminiVal) {
+                    geminiCount += Math.floor(Math.random() * 2);
+                    geminiVal.textContent = `${(geminiCount / 1000).toFixed(1)}k`;
+                }
+            }, 3000);
+        }
+
+        // Interactive terminal installation simulation
+        function triggerTerminalSimulation() {
+            const terminalBody = document.getElementById("terminal-body");
+            if (!terminalBody) return;
+
+            terminalBody.style.opacity = "0";
+
+            setTimeout(() => {
+                terminalBody.innerHTML = `
+                    <div class="mt-7 font-mono text-[11px] md:text-[13px] space-y-2.5 text-inverse-on-surface/90">
+                        <div class="text-inverse-on-surface/40 flex items-center gap-1.5">
+                            <span class="animate-pulse">●</span> /bin/bash -c "$(curl -fsSL https://spill.thdev.app/install.sh)"
+                        </div>
+                        <div id="sim-line-1" class="opacity-0 transition-opacity duration-300">📡 Fetching latest Spill release version...</div>
+                        <div id="sim-line-2" class="opacity-0 transition-opacity duration-300">⚡ Download complete: Spill-macos.zip (100%)</div>
+                        <div id="sim-line-3" class="opacity-0 transition-opacity duration-300">📂 Moving Spill.app to /Applications folder...</div>
+                        <div id="sim-line-4" class="opacity-0 transition-opacity duration-300">✓ Setting up autostart & launch configurations...</div>
+                        <div id="sim-line-5" class="opacity-0 transition-opacity duration-500 text-emerald-400 font-bold mt-4 flex items-center gap-2">
+                            🚀 Spill is successfully installed and running!
+                        </div>
+                        <div id="sim-line-6" class="opacity-0 transition-opacity duration-500 mt-4 pt-3 border-t border-white/5 text-[11px] text-inverse-on-surface/40 font-sans flex items-center justify-between">
+                            <span>Check Spill under your Mac's notch!</span>
+                            <a class="text-primary-fixed-dim hover:underline font-bold" href="https://github.com/taehwandev/Spill/releases/latest/download/Spill-macos.dmg">Need DMG instead?</a>
+                        </div>
+                    </div>
+                `;
+                terminalBody.style.opacity = "1";
+
+                setTimeout(() => document.getElementById("sim-line-1").classList.remove("opacity-0"), 400);
+                setTimeout(() => document.getElementById("sim-line-2").classList.remove("opacity-0"), 1000);
+                setTimeout(() => document.getElementById("sim-line-3").classList.remove("opacity-0"), 1600);
+                setTimeout(() => document.getElementById("sim-line-4").classList.remove("opacity-0"), 2200);
+                setTimeout(() => document.getElementById("sim-line-5").classList.remove("opacity-0"), 2800);
+                setTimeout(() => document.getElementById("sim-line-6").classList.remove("opacity-0"), 3400);
+            }, 300);
+        }
+
+        // Setup copy buttons
+        document.querySelectorAll("[data-copy]").forEach((copyBtn) => {
+            copyBtn.addEventListener("click", async () => {
+                const value = copyBtn.getAttribute("data-copy") || "";
+                const originalText = copyBtn.textContent.trim() || "Copy";
 
                 try {
                     await navigator.clipboard.writeText(value);
-                    copyButton.textContent = "Copied";
+                    copyBtn.textContent = "Copied";
                 } catch {
-                    copyButton.textContent = "Select";
+                    copyBtn.textContent = "Select";
                 }
 
                 trackAptabaseEvent("install_command_copy", {
                     source: "landing",
-                    status: copyButton.textContent === "Copied" ? "copied" : "select"
+                    status: copyBtn.textContent === "Copied" ? "copied" : "select"
                 });
 
+                if (copyBtn.id === "copy-installer-btn") {
+                    triggerTerminalSimulation();
+                }
+
                 window.setTimeout(() => {
-                    copyButton.textContent = originalText;
+                    copyBtn.textContent = originalText;
                 }, 1400);
             });
-        }
+        });
+
+        // Initialize scripts
+        window.addEventListener("DOMContentLoaded", () => {
+            startMetricsFluctuation();
+            startAgentCatCounters();
+        });
     </script>
 </body>
 </html>
