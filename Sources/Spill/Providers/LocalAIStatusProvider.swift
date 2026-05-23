@@ -63,7 +63,7 @@ enum LocalAIToolKind: String, CaseIterable, Identifiable, Sendable {
     var applicationNames: [String] {
         switch self {
         case .antigravity:
-            return ["Antigravity"]
+            return ["Antigravity", "Antigravity IDE"]
         case .codex, .claude, .ollama, .openAI:
             return []
         }
@@ -286,7 +286,7 @@ struct LocalAIStatusProvider: SpillStatusProvider {
             runtimeModel: runtimeModel
         )
         let isRunning = hasRunningProcess(
-            namedAnyOf: executableNames,
+            namedAnyOf: executableNames + applicationNames,
             processNames: processNames,
             processCommands: processCommands
         )
@@ -403,14 +403,15 @@ struct LocalAIStatusProvider: SpillStatusProvider {
         processNames: Set<String>,
         processCommands: [String]
     ) -> Bool {
-        names.contains { name in
-            processNames.contains(name)
+        names.contains { rawName in
+            let name = rawName.lowercased()
+            return processNames.contains(name)
                 || processNames.contains { processName in
                     processName.hasSuffix("/\(name)")
                         || URL(fileURLWithPath: processName).lastPathComponent == name
                 }
                 || processCommands.contains { command in
-                    commandLine(command, matchesExecutableNamed: name)
+                    commandLine(command, matchesExecutableNamed: rawName)
                 }
             }
     }

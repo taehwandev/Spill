@@ -140,6 +140,38 @@ final class LocalAIStatusProviderTests: XCTestCase {
         XCTAssertEqual(statuses.first?.subtitle, "Process Running")
     }
 
+    func testAntigravityIDEInstalledAppUsesLocalProcessStateOnly() {
+        let statuses = LocalAIStatusProvider.statuses(
+            environment: [:],
+            processNames: ["Antigravity IDE"],
+            processCommands: [
+                "/Applications/Antigravity IDE.app/Contents/MacOS/Antigravity IDE"
+            ],
+            installedExecutableNames: [],
+            installedApplicationNames: ["Antigravity IDE"]
+        )
+
+        XCTAssertEqual(statuses.map(\.kind), [.antigravity])
+        XCTAssertEqual(statuses.first?.value, "Active")
+        XCTAssertEqual(statuses.first?.subtitle, "Process Running")
+    }
+
+    func testAntigravityMCPServerOnlyDoesNotMarkAppActive() {
+        let statuses = LocalAIStatusProvider.statuses(
+            environment: [:],
+            processNames: [],
+            processCommands: [
+                "/Users/me/.pencil/mcp/antigravity/out/mcp-server-darwin-arm64 --app antigravity"
+            ],
+            installedExecutableNames: [],
+            installedApplicationNames: ["Antigravity"]
+        )
+
+        XCTAssertEqual(statuses.map(\.kind), [.antigravity])
+        XCTAssertEqual(statuses.first?.value, "Idle")
+        XCTAssertEqual(statuses.first?.subtitle, "Installed")
+    }
+
     func testRunningCommandIsHiddenWhenToolIsNotInstalled() {
         let statuses = LocalAIStatusProvider.statuses(
             environment: [:],
