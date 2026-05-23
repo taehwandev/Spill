@@ -14,3 +14,6 @@ DerivedData/
 # Local experiments and probes
 test*.swift
 test*.tiff
+
+# Local agent/tool state
+.antigravitycli/
