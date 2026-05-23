@@ -17,3 +17,5 @@ test*.tiff
 
 # Local agent/tool state
 .antigravitycli/
+# VibeGuard local secrets
+.env.vibeguard.local

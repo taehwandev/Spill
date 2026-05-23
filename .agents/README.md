@@ -3,17 +3,20 @@
 This folder is the working source of truth for agent-driven implementation.
 
 Repo-local Spill docs define product direction, paths, commands, release policy,
-and macOS-specific constraints. For platform-neutral agent behavior, also consult
-the shared library at `/Users/taehwankwon/Documents/KeyFlowVault/agent/AGENTS.md`
-and use its `index.md` to load only relevant common cards.
+and macOS-specific constraints. Platform-neutral agent behavior lives in the
+shared AgentPlaybook checkout at
+`/Users/taehwankwon/Documents/KeyFlowVault/AgentPlaybook`.
+
+Use AgentPlaybook `index.md` to load only the smallest relevant common,
+workflow, platform, or review cards. Keep only Spill-specific policy here.
 
 ## Documents
 
 - `specs/prd.md`: Product requirements and scope.
 - `specs/ard.md`: Architecture requirements, decisions, constraints, and module boundaries.
 - `workflows/implementation.md`: How agents should plan, implement, verify, and ship work.
-- `workflows/ambiguity-gate.md`: Shared ambiguity, clarification, and assumption rules for all agents.
-- `workflows/persona-review.md`: Reusable multi-perspective review method for code, product, UX, architecture, reliability, permission, and QA reviews.
+- `workflows/ambiguity-gate.md`: Spill-specific ambiguity overlay on the shared AgentPlaybook gate.
+- `workflows/persona-review.md`: Spill-specific review overlay on the shared AgentPlaybook review workflow.
 - `workflows/release.md`: Release request contract, versioning, tagging, packaging, publication, and closeout steps.
 - `checklists/release.md`: Quick release gate that points back to the full release workflow.
 - `tasks/roadmap.yml`: Structured implementation milestones and acceptance checks.
@@ -45,8 +48,8 @@ The app should not:
 3. Keep changes small and milestone-oriented.
 4. Prefer public macOS APIs. Accessibility is allowed when explicitly scoped.
 5. When a behavior is best-effort, show that clearly in UI and docs.
-6. Before writing a feature PRD, complete the intake necessity check and the shared ambiguity gate.
-7. Follow `workflows/ambiguity-gate.md`: classify unknowns, research repo-answerable details, ask only blocking questions, and stop before PRD authoring while clarity is `needs-clarification`.
+6. Before writing a feature PRD, complete the intake necessity check and the Spill ambiguity overlay.
+7. Follow AgentPlaybook for general agent discipline, editing safety, reviews, and verification policy.
 8. Write repository docs, task artifacts, comments, and scripts in English.
 9. For UI-scoped work, inspect the Stitch source in `design/stitch.md` before implementing SwiftUI changes.
 
