@@ -26,7 +26,6 @@ SPARKLE_PUBLIC_ED_KEY="${SPILL_SPARKLE_PUBLIC_ED_KEY:-}"
 SPARKLE_FEED_URL="${SPILL_SPARKLE_FEED_URL:-https://github.com/taehwandev/Spill/releases/latest/download/appcast.xml}"
 SPARKLE_INFO_PLIST_ENTRY=""
 ENTITLEMENTS_PATH="$ROOT_DIR/.build/Spill.entitlements"
-CODESIGN_ENTITLEMENTS_ARGS=()
 
 sign_sparkle_framework() {
     local sparkle_version_dir="$FRAMEWORKS_DIR/Sparkle.framework/Versions/B"
@@ -70,7 +69,6 @@ if [[ "$SIGN_IDENTITY" == "-" ]]; then
 </dict>
 </plist>
 PLIST
-    CODESIGN_ENTITLEMENTS_ARGS=(--entitlements "$ENTITLEMENTS_PATH")
 else
     rm -f "$ENTITLEMENTS_PATH"
 fi
@@ -138,12 +136,21 @@ PLIST
 
 sign_sparkle_framework
 
-codesign \
-    --force \
-    --options runtime \
-    --sign "$SIGN_IDENTITY" \
-    "${CODESIGN_ENTITLEMENTS_ARGS[@]}" \
-    --requirements "=designated => identifier \"$BUNDLE_ID\"" \
-    "$APP_DIR"
+if [[ "$SIGN_IDENTITY" == "-" ]]; then
+    codesign \
+        --force \
+        --options runtime \
+        --sign "$SIGN_IDENTITY" \
+        --entitlements "$ENTITLEMENTS_PATH" \
+        --requirements "=designated => identifier \"$BUNDLE_ID\"" \
+        "$APP_DIR"
+else
+    codesign \
+        --force \
+        --options runtime \
+        --sign "$SIGN_IDENTITY" \
+        --requirements "=designated => identifier \"$BUNDLE_ID\"" \
+        "$APP_DIR"
+fi
 
 echo "Built $APP_DIR"
