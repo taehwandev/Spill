@@ -179,7 +179,7 @@ jobs:
             echo "signing_note=Developer ID signed without notarization. Gatekeeper warnings can still appear." >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Prepare optional Sparkle signing
+      - name: Prepare Sparkle signing
         id: sparkle
         shell: bash
         env:
@@ -188,14 +188,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [[ -z "$SPARKLE_PUBLIC_ED_KEY" && -z "$SPARKLE_PRIVATE_ED_KEY" ]]; then
-            echo "private_key_file=" >> "$GITHUB_OUTPUT"
-            echo "sparkle_note=Sparkle appcast disabled." >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
           if [[ -z "$SPARKLE_PUBLIC_ED_KEY" || -z "$SPARKLE_PRIVATE_ED_KEY" ]]; then
-            echo "Sparkle updates require both SPARKLE_PUBLIC_ED_KEY and SPARKLE_PRIVATE_ED_KEY." >&2
+            echo "Official releases require both SPARKLE_PUBLIC_ED_KEY and SPARKLE_PRIVATE_ED_KEY for in-app updates." >&2
             exit 2
           fi
 
@@ -327,7 +321,7 @@ jobs:
           - Spill-$version-macos.pkg when a Developer ID Installer identity is configured
           - Spill-macos.dmg and Spill-macos.zip for stable website download links
           - update.json for manual in-app update checks
-          - appcast.xml when Sparkle signing is configured
+          - appcast.xml for Sparkle in-app updates
           - checksums.txt
 
           Signing:

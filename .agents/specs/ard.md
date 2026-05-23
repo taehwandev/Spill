@@ -159,6 +159,7 @@ Distribution requirements:
 - Stapled ticket.
 - DMG or zip release artifact.
 - GitHub Releases.
+- Sparkle appcast for in-app updates.
 - Optional Homebrew Cask.
 
 ### ARD-008: Lightweight Feature Store Architecture

@@ -229,7 +229,6 @@ Acceptance:
   - Calendar next event
   - Gmail unread count
 - Custom user scripts.
-- Sparkle updates.
 - Homebrew Cask.
 - Optional ScreenCaptureKit experiments for user-approved visual previews.
 

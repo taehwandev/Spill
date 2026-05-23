@@ -10,5 +10,8 @@
     "envGitignore": true,
     "envExample": true,
     "simpleSecretQuarantine": true
+  },
+  "update": {
+    "checkIntervalDays": 7
   }
 }

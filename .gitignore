@@ -19,3 +19,17 @@ test*.tiff
 .antigravitycli/
 # VibeGuard local secrets
 .env.vibeguard.local
+!.env.sample
+!.env.template
+!.env.dist
+!.env.defaults
+!.env.schema
+!.env*.default
+!.env*.defaults
+!.env*.dist
+!.env*.example
+!.env*.sample
+!.env*.schema
+!.env*.template
+# VibeGuard local state
+.vibeguard/

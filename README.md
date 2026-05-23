@@ -172,20 +172,23 @@ bundle and archives, and uploads these assets:
 - `Spill-macos.dmg`
 - `Spill-macos.zip`
 - `Spill-macos.pkg`, when Developer ID Installer signing is configured
-- `appcast.xml`, when Sparkle signing secrets are configured
+- `update.json`
+- `appcast.xml`
 - `checksums.txt`
 
 The stable `Spill-macos.*` asset names are used by the download site. The workflow
 can also be started manually from GitHub Actions with a per-week release count.
 Manual runs compute the version from the current UTC ISO year/week plus that
-count. Official signed releases can use Sparkle for in-app update checks,
-downloads, and app replacement. The workflow uploads `appcast.xml` when
-`SPARKLE_PUBLIC_ED_KEY` and `SPARKLE_PRIVATE_ED_KEY` are configured. The
-workflow also uploads `update.json`, a small static manifest used as the fallback
-manual Check for Updates path when Sparkle is not configured in the app bundle.
+count. Official releases use Sparkle for in-app update checks, downloads, and
+app replacement. The workflow requires `SPARKLE_PUBLIC_ED_KEY` and
+`SPARKLE_PRIVATE_ED_KEY` so it can embed `SUPublicEDKey` and upload
+`appcast.xml`. The workflow also uploads `update.json`, a small static manifest
+used for dashboard update discovery and as the fallback manual Check for Updates
+path when Sparkle is not configured in the app bundle.
 
-Unsigned test releases work without secrets and are ad-hoc signed. For official
-Developer ID signing and notarization, configure these repository secrets:
+Local unsigned test packages can be built without secrets and are ad-hoc signed.
+For official GitHub releases, configure the Sparkle secrets below. For Developer
+ID signing and notarization, configure the Apple signing secrets as well:
 
 - `MACOS_DEVELOPER_ID_CERTIFICATE_BASE64`: base64-encoded `.p12` certificate.
 - `MACOS_DEVELOPER_ID_CERTIFICATE_PASSWORD`: `.p12` import password.
@@ -197,17 +200,17 @@ Developer ID signing and notarization, configure these repository secrets:
 - `APPLE_ID`: Apple ID used for notarization.
 - `APPLE_TEAM_ID`: Apple Developer Team ID.
 - `APPLE_APP_SPECIFIC_PASSWORD`: app-specific password for `notarytool`.
-- `SPARKLE_PUBLIC_ED_KEY`: optional Sparkle public EdDSA key embedded as `SUPublicEDKey`.
-- `SPARKLE_PRIVATE_ED_KEY`: optional Sparkle private EdDSA key used by `generate_appcast`.
+- `SPARKLE_PUBLIC_ED_KEY`: Sparkle public EdDSA key embedded as `SUPublicEDKey`.
+- `SPARKLE_PRIVATE_ED_KEY`: Sparkle private EdDSA key used by `generate_appcast`.
 
 If the Developer ID certificate secrets are present, the workflow signs with that
 identity. If the Apple notarization secrets are also present, the workflow stores a
 temporary `notarytool` profile and notarizes the app and DMG before publishing.
 If the Developer ID Installer secrets are also present, the workflow additionally
-builds, signs, notarizes, and uploads stable `.pkg` installer assets. If both
-Sparkle secrets are present, the app's Check for Updates action uses Sparkle's
-in-app updater first; otherwise it falls back to the public `update.json`
-manifest and opens the installer package or DMG externally.
+builds, signs, notarizes, and uploads stable `.pkg` installer assets. When
+Sparkle is configured in the app bundle, Check for Updates uses Sparkle's in-app
+updater first. Older non-Sparkle builds still fall back to the public
+`update.json` manifest and open the installer package or DMG externally.
 
 Optional telemetry secrets:
 
