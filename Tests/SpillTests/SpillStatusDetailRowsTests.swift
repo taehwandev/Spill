@@ -35,33 +35,33 @@ final class SpillStatusDetailRowsTests: XCTestCase {
         XCTAssertEqual(rows.map(\.value), ["Active", "llama3.2:latest", "llama3.2:latest", "0.12.0", "Ollama Runtime"])
     }
 
-    func testAIRowsIncludeMCPMetadata() {
+    func testAIRowsIncludeServerMetadata() {
         let rows = SpillStatusDetailRows.rows(
             for: LocalAIToolStatus(
                 kind: .antigravity,
                 value: "Active",
-                subtitle: "MCP Running",
+                subtitle: "Server Running",
                 state: .active,
                 metadata: LocalAIToolMetadata(
                     model: nil,
                     version: nil,
                     source: nil,
-                    mcpStatus: LocalAIToolMCPStatus(
-                        name: "MCP",
+                    serverStatus: LocalAIToolServerStatus(
+                        name: "Server",
                         state: .running,
-                        detail: "Detected local Antigravity MCP process"
+                        detail: "Detected Antigravity MCP server process"
                     )
                 )
             )
         )
 
-        XCTAssertEqual(rows.map(\.label), ["Status", "Detail", "MCP", "Check", "Evidence"])
+        XCTAssertEqual(rows.map(\.label), ["Status", "Detail", "Server", "Check", "Evidence"])
         XCTAssertEqual(rows.map(\.value), [
             "Active",
-            "MCP Running",
+            "Server Running",
             "Running",
             "Local process list",
-            "Detected local Antigravity MCP process"
+            "Detected Antigravity MCP server process"
         ])
     }
 }

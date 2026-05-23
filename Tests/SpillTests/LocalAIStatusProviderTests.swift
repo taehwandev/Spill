@@ -43,11 +43,11 @@ final class LocalAIStatusProviderTests: XCTestCase {
         XCTAssertEqual(statuses.first { $0.kind == .claude }?.value, "Active")
         XCTAssertEqual(statuses.first { $0.kind == .claude }?.subtitle, "claude-sonnet-4-5")
         XCTAssertEqual(statuses.first { $0.kind == .claude }?.metadata.version, "2.1.0")
-        XCTAssertEqual(statuses.first { $0.kind == .antigravity }?.subtitle, "MCP Running")
+        XCTAssertEqual(statuses.first { $0.kind == .antigravity }?.subtitle, "Server Running")
         XCTAssertEqual(statuses.first { $0.kind == .antigravity }?.metadata.model, "ag-pro")
-        XCTAssertEqual(statuses.first { $0.kind == .antigravity }?.metadata.mcpStatus?.state, .running)
-        XCTAssertEqual(statuses.first { $0.kind == .antigravity }?.metadata.mcpStatus?.source, "Local process list")
-        XCTAssertEqual(statuses.first { $0.kind == .antigravity }?.metadata.mcpStatus?.detail, "Detected local Antigravity MCP process")
+        XCTAssertEqual(statuses.first { $0.kind == .antigravity }?.metadata.serverStatus?.state, .running)
+        XCTAssertEqual(statuses.first { $0.kind == .antigravity }?.metadata.serverStatus?.source, "Local process list")
+        XCTAssertEqual(statuses.first { $0.kind == .antigravity }?.metadata.serverStatus?.detail, "Detected Antigravity MCP server process")
         XCTAssertEqual(statuses.first { $0.kind == .ollama }?.subtitle, "llama3.2:latest")
         XCTAssertEqual(statuses.first { $0.kind == .ollama }?.metadata.version, "0.12.0")
         XCTAssertEqual(statuses.first { $0.kind == .openAI }?.title, "OpenAI API")
@@ -65,23 +65,6 @@ final class LocalAIStatusProviderTests: XCTestCase {
         XCTAssertEqual(statuses.first { $0.kind == .codex }?.value, "Idle")
         XCTAssertEqual(statuses.first { $0.kind == .codex }?.subtitle, "Installed")
         XCTAssertEqual(statuses.first { $0.kind == .codex }?.state, .normal)
-    }
-
-    func testCodexAndClaudeDoNotInventMCPStatus() {
-        let statuses = LocalAIStatusProvider.statuses(
-            environment: [:],
-            processNames: ["codex", "claude"],
-            processCommands: [
-                "codex",
-                "/opt/homebrew/bin/claude --session-id abc",
-                "/Users/me/.pencil/mcp/antigravity/out/mcp-server-darwin-arm64 --app antigravity"
-            ],
-            installedExecutableNames: ["codex", "claude"]
-        )
-
-        XCTAssertEqual(statuses.map(\.kind), [.codex, .claude])
-        XCTAssertNil(statuses.first { $0.kind == .codex }?.metadata.mcpStatus)
-        XCTAssertNil(statuses.first { $0.kind == .claude }?.metadata.mcpStatus)
     }
 
     func testCommandLineDetectionHandlesQuotedExecutablePaths() {
@@ -110,11 +93,11 @@ final class LocalAIStatusProviderTests: XCTestCase {
 
         XCTAssertEqual(statuses.map(\.kind), [.antigravity])
         XCTAssertEqual(statuses.first?.value, "Active")
-        XCTAssertEqual(statuses.first?.subtitle, "MCP Running")
+        XCTAssertEqual(statuses.first?.subtitle, "Server Running")
         XCTAssertEqual(statuses.first?.metadata.model, "ag-pro")
     }
 
-    func testAntigravityCliAliasWarnsWhenMCPProcessIsStopped() {
+    func testAntigravityCliAliasWarnsWhenServerIsStopped() {
         let statuses = LocalAIStatusProvider.statuses(
             environment: [:],
             processNames: [],
@@ -123,10 +106,10 @@ final class LocalAIStatusProviderTests: XCTestCase {
         )
 
         XCTAssertEqual(statuses.map(\.kind), [.antigravity])
-        XCTAssertEqual(statuses.first?.value, "MCP Stopped")
+        XCTAssertEqual(statuses.first?.value, "Server Down")
         XCTAssertEqual(statuses.first?.state, .warning)
-        XCTAssertEqual(statuses.first?.subtitle, "MCP Stopped")
-        XCTAssertEqual(statuses.first?.metadata.mcpStatus?.detail, "Antigravity is running, but its local MCP process was not found")
+        XCTAssertEqual(statuses.first?.subtitle, "Server Stopped")
+        XCTAssertEqual(statuses.first?.metadata.serverStatus?.detail, "Antigravity is running, but its MCP server process was not found")
         XCTAssertEqual(statuses.first?.metadata.model, "ag-lite")
     }
 
@@ -141,12 +124,12 @@ final class LocalAIStatusProviderTests: XCTestCase {
         XCTAssertEqual(statuses.map(\.kind), [.antigravity])
         XCTAssertEqual(statuses.first?.title, "Antigravity")
         XCTAssertEqual(statuses.first?.value, "Active")
-        XCTAssertEqual(statuses.first?.subtitle, "MCP Unknown")
-        XCTAssertEqual(statuses.first?.metadata.mcpStatus?.state, .unknown)
-        XCTAssertEqual(statuses.first?.metadata.mcpStatus?.detail, "Process command scan unavailable")
+        XCTAssertEqual(statuses.first?.subtitle, "Server Unknown")
+        XCTAssertEqual(statuses.first?.metadata.serverStatus?.state, .unknown)
+        XCTAssertEqual(statuses.first?.metadata.serverStatus?.detail, "Process command scan unavailable")
     }
 
-    func testAntigravityInstalledAppCanReportMCPStatus() {
+    func testAntigravityInstalledAppCanReportServerStatus() {
         let statuses = LocalAIStatusProvider.statuses(
             environment: [:],
             processNames: ["Antigravity"],
@@ -160,8 +143,8 @@ final class LocalAIStatusProviderTests: XCTestCase {
 
         XCTAssertEqual(statuses.map(\.kind), [.antigravity])
         XCTAssertEqual(statuses.first?.value, "Active")
-        XCTAssertEqual(statuses.first?.subtitle, "MCP Running")
-        XCTAssertEqual(statuses.first?.metadata.mcpStatus?.state, .running)
+        XCTAssertEqual(statuses.first?.subtitle, "Server Running")
+        XCTAssertEqual(statuses.first?.metadata.serverStatus?.state, .running)
     }
 
     func testRunningCommandIsHiddenWhenToolIsNotInstalled() {

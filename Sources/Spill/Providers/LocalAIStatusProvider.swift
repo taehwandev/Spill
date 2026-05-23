@@ -70,7 +70,7 @@ enum LocalAIToolKind: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
-enum LocalAIToolMCPState: String, Hashable, Sendable {
+enum LocalAIToolServerState: String, Hashable, Sendable {
     case running
     case stopped
     case unknown
@@ -87,9 +87,9 @@ enum LocalAIToolMCPState: String, Hashable, Sendable {
     }
 }
 
-struct LocalAIToolMCPStatus: Hashable, Sendable {
+struct LocalAIToolServerStatus: Hashable, Sendable {
     let name: String
-    let state: LocalAIToolMCPState
+    let state: LocalAIToolServerState
     let source: String
     let detail: String
 
@@ -99,7 +99,7 @@ struct LocalAIToolMCPStatus: Hashable, Sendable {
 
     init(
         name: String,
-        state: LocalAIToolMCPState,
+        state: LocalAIToolServerState,
         source: String = "Local process list",
         detail: String = ""
     ) {
@@ -116,18 +116,18 @@ struct LocalAIToolMetadata: Hashable, Sendable {
     let model: String?
     let version: String?
     let source: String?
-    let mcpStatus: LocalAIToolMCPStatus?
+    let serverStatus: LocalAIToolServerStatus?
 
     init(
         model: String?,
         version: String?,
         source: String?,
-        mcpStatus: LocalAIToolMCPStatus? = nil
+        serverStatus: LocalAIToolServerStatus? = nil
     ) {
         self.model = model
         self.version = version
         self.source = source
-        self.mcpStatus = mcpStatus
+        self.serverStatus = serverStatus
     }
 }
 
@@ -340,7 +340,7 @@ struct LocalAIStatusProvider: SpillStatusProvider {
             return nil
         }
 
-        let mcpStatus = antigravityMCPStatus(
+        let serverStatus = antigravityServerStatus(
             for: kind,
             isRunning: isRunning,
             processCommands: processCommands
@@ -349,15 +349,15 @@ struct LocalAIStatusProvider: SpillStatusProvider {
             model: metadata.model,
             version: metadata.version,
             source: metadata.source,
-            mcpStatus: mcpStatus
+            serverStatus: serverStatus
         )
 
-        let value = commandValue(isRunning: isRunning, mcpStatus: mcpStatus)
+        let value = commandValue(isRunning: isRunning, serverStatus: serverStatus)
         let subtitle = commandSubtitle(
             metadata: enrichedMetadata,
             isRunning: isRunning
         )
-        let state = commandState(isRunning: isRunning, mcpStatus: mcpStatus)
+        let state = commandState(isRunning: isRunning, serverStatus: serverStatus)
 
         return LocalAIToolStatus(
             kind: kind,
@@ -370,10 +370,10 @@ struct LocalAIStatusProvider: SpillStatusProvider {
 
     private static func commandValue(
         isRunning: Bool,
-        mcpStatus: LocalAIToolMCPStatus?
+        serverStatus: LocalAIToolServerStatus?
     ) -> String {
-        if mcpStatus?.state == .stopped {
-            return "MCP Stopped"
+        if serverStatus?.state == .stopped {
+            return "Server Down"
         }
 
         return isRunning ? "Active" : "Idle"
@@ -384,8 +384,8 @@ struct LocalAIStatusProvider: SpillStatusProvider {
         isRunning: Bool
     ) -> String {
         if isRunning,
-           let mcpStatus = metadata.mcpStatus {
-            return mcpStatus.value
+           let serverStatus = metadata.serverStatus {
+            return serverStatus.value
         }
 
         return compactSubtitle(
@@ -396,42 +396,42 @@ struct LocalAIStatusProvider: SpillStatusProvider {
 
     private static func commandState(
         isRunning: Bool,
-        mcpStatus: LocalAIToolMCPStatus?
+        serverStatus: LocalAIToolServerStatus?
     ) -> SpillStatusState {
-        if mcpStatus?.state == .stopped {
+        if serverStatus?.state == .stopped {
             return .warning
         }
 
         return isRunning ? .active : .normal
     }
 
-    private static func antigravityMCPStatus(
+    private static func antigravityServerStatus(
         for kind: LocalAIToolKind,
         isRunning: Bool,
         processCommands: [String]
-    ) -> LocalAIToolMCPStatus? {
+    ) -> LocalAIToolServerStatus? {
         guard kind == .antigravity, isRunning else {
             return nil
         }
 
-        if hasAntigravityMCPProcess(processCommands: processCommands) {
-            return LocalAIToolMCPStatus(
-                name: "MCP",
+        if hasAntigravityServer(processCommands: processCommands) {
+            return LocalAIToolServerStatus(
+                name: "Server",
                 state: .running,
-                detail: "Detected local Antigravity MCP process"
+                detail: "Detected Antigravity MCP server process"
             )
         }
 
-        return LocalAIToolMCPStatus(
-            name: "MCP",
+        return LocalAIToolServerStatus(
+            name: "Server",
             state: processCommands.isEmpty ? .unknown : .stopped,
             detail: processCommands.isEmpty
                 ? "Process command scan unavailable"
-                : "Antigravity is running, but its local MCP process was not found"
+                : "Antigravity is running, but its MCP server process was not found"
         )
     }
 
-    private static func hasAntigravityMCPProcess(processCommands: [String]) -> Bool {
+    private static func hasAntigravityServer(processCommands: [String]) -> Bool {
         processCommands.contains { command in
             let normalizedCommand = command.lowercased()
             return normalizedCommand.contains("mcp-server")
