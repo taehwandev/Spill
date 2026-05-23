@@ -13,15 +13,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let aiStatusStore = AIStatusStore()
     private let cloudServiceStatusStore = CloudServiceStatusStore()
     private let windowActionStore = WindowActionStore()
-    private let sparkleUpdateController = SparkleUpdateController()
-    private lazy var updateCheckStore = UpdateCheckStore(
-        isInAppUpdaterAvailable: { [sparkleUpdateController] in
-            sparkleUpdateController.isAvailable
-        },
-        runInAppUpdateCheck: { [sparkleUpdateController] _ in
-            sparkleUpdateController.checkForUpdates()
-        }
-    )
+    private let sparkleUpdateController: SparkleUpdateController
+    private let updateCheckStore: UpdateCheckStore
     private lazy var panelStore = PanelStore(
         settings: settings,
         scanner: scanner,
@@ -64,6 +57,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusRefreshTask: Task<Void, Never>?
     private var isSpillPanelVisible = false
     private var cancellables = Set<AnyCancellable>()
+
+    override init() {
+        let sparkleUpdateController = SparkleUpdateController()
+        self.sparkleUpdateController = sparkleUpdateController
+        updateCheckStore = UpdateCheckStore(
+            isInAppUpdaterAvailable: {
+                sparkleUpdateController.isAvailable
+            },
+            runInAppUpdateCheck: { _ in
+                sparkleUpdateController.checkForUpdates()
+            }
+        )
+        super.init()
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         configureMainMenu()
