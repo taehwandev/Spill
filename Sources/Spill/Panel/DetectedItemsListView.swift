@@ -97,19 +97,35 @@ private struct DetectedItemRow: View {
 
             Button {
                 if isSelected {
-                    settings.hideItem(item)
+                    settings.setItem(item, selected: false)
                 } else {
                     settings.setItem(item, selected: true)
                 }
             } label: {
-                Image(systemName: selectionIconName)
+                Image(systemName: pinIconName)
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(selectionColor)
+                    .foregroundStyle(pinColor)
                     .frame(width: 24, height: 24)
             }
             .buttonStyle(.plain)
-            .help(selectionHelpText)
-            .accessibilityLabel(selectionHelpText)
+            .help(pinHelpText)
+            .accessibilityLabel(pinHelpText)
+
+            Button {
+                if isHidden {
+                    settings.showItem(item)
+                } else {
+                    settings.hideItem(item)
+                }
+            } label: {
+                Image(systemName: visibilityIconName)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(visibilityColor)
+                    .frame(width: 24, height: 24)
+            }
+            .buttonStyle(.plain)
+            .help(visibilityHelpText)
+            .accessibilityLabel(visibilityHelpText)
 
             if item.isNotchCandidate {
                 Image(systemName: "camera.viewfinder")
@@ -119,6 +135,7 @@ private struct DetectedItemRow: View {
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 6)
+        .opacity(isHidden ? 0.56 : 1)
     }
 
     private var icon: some View {
@@ -148,15 +165,27 @@ private struct DetectedItemRow: View {
         settings.isItemHidden(item)
     }
 
-    private var selectionIconName: String {
-        isSelected ? "minus.circle.fill" : "plus.circle"
+    private var pinIconName: String {
+        isSelected ? "pin.fill" : "pin"
     }
 
-    private var selectionColor: Color {
-        isSelected ? .secondary : (isHidden ? .accentColor : .secondary)
+    private var pinColor: Color {
+        isSelected ? .teal : .secondary
     }
 
-    private var selectionHelpText: String {
-        isSelected ? "Hide from Spill Bar" : "Add to Spill Bar"
+    private var pinHelpText: String {
+        isSelected ? "Unpin from Spill" : "Pin in Spill"
+    }
+
+    private var visibilityIconName: String {
+        isHidden ? "eye.slash.fill" : "eye"
+    }
+
+    private var visibilityColor: Color {
+        isHidden ? .orange : .secondary
+    }
+
+    private var visibilityHelpText: String {
+        isHidden ? "Show in Spill" : "Hide in Spill"
     }
 }

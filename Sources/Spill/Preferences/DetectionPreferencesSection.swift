@@ -23,6 +23,13 @@ struct DetectionPreferencesSection: View {
                 .disabled(!accessibilityTrusted || scanner.isScanning)
             }
 
+            Picker("Panel items", selection: $settings.displayMode) {
+                ForEach(SpillDisplayMode.allCases) { mode in
+                    Text(mode.title).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+
             Toggle("Auto refresh", isOn: $settings.autoRefreshEnabled)
 
             VStack(alignment: .leading, spacing: 6) {

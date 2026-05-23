@@ -256,6 +256,16 @@ final class SpillSettingsTests: XCTestCase {
         XCTAssertEqual(settings.enabledMenuBarStatusItems, [.cpu, .caffeine])
     }
 
+    func testDisplayModePersists() {
+        let defaults = makeDefaults()
+        let settings = SpillSettings(defaults: defaults)
+
+        settings.displayMode = .selectedItems
+
+        XCTAssertEqual(defaults.string(forKey: "displayMode"), "selectedItems")
+        XCTAssertEqual(SpillSettings(defaults: defaults).displayMode, .selectedItems)
+    }
+
     func testMenuBarStatusDisplayOptionsPersist() {
         let defaults = makeDefaults()
         let settings = SpillSettings(defaults: defaults)
