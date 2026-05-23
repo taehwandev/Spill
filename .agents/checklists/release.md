@@ -82,7 +82,7 @@ is the quick gate before closeout.
 - [ ] Latest stable DMG URL resolves.
 - [ ] Latest stable ZIP URL resolves.
 - [ ] Latest `update.json` URL resolves.
-- [ ] `https://thdev.app/Spill/` resolves.
+- [ ] `https://spill.thdev.app/` resolves.
 - [ ] Manual Check for Updates can discover the new release from an older build.
 
 ## Closeout

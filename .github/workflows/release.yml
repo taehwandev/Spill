@@ -36,7 +36,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6.0.2
 
       - name: Resolve release version
         id: version
@@ -181,13 +181,19 @@ jobs:
         run: |
           set -euo pipefail
           version="${{ steps.version.outputs.version }}"
+          notary_profile="${{ steps.signing.outputs.notary_profile }}"
 
           codesign --verify --deep --strict --verbose=2 .build/Spill.app
           hdiutil verify ".build/release-artifacts/Spill-$version-macos.dmg"
           unzip -t ".build/release-artifacts/Spill-$version-macos.zip"
 
+          if [[ -n "$notary_profile" ]]; then
+            spctl --assess --type execute --verbose=4 .build/Spill.app
+            spctl --assess --type open --verbose=4 ".build/release-artifacts/Spill-$version-macos.dmg"
+          fi
+
       - name: Upload workflow artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: Spill-${{ steps.version.outputs.version }}-macos
           path: |
@@ -202,6 +208,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          SIGNING_NOTE: ${{ steps.signing.outputs.signing_note }}
         run: |
           set -euo pipefail
 
@@ -210,6 +217,21 @@ jobs:
           artifacts_dir=".build/release-artifacts"
           notes_file="$RUNNER_TEMP/release-notes.md"
           draft="${PUBLISH_DRAFT:-false}"
+          install_note=""
+
+          if [[ "$SIGNING_NOTE" != "Developer ID signed and notarized." ]]; then
+            install_note='
+          Install ad-hoc or non-notarized builds:
+          ```bash
+          /bin/bash -c "$(curl -fsSL https://spill.thdev.app/install.sh)"
+          ```
+
+          If Spill is already in Applications:
+          ```bash
+          sudo xattr -dr com.apple.quarantine /Applications/Spill.app
+          open /Applications/Spill.app
+          ```'
+          fi
 
           cat > "$notes_file" <<NOTES
           Spill $version for macOS.
@@ -222,18 +244,8 @@ jobs:
           - checksums.txt
 
           Signing:
-          ${{ steps.signing.outputs.signing_note }}
-
-          Install unsigned/ad-hoc builds:
-          \`\`\`bash
-          /bin/bash -c "\$(curl -fsSL https://thdev.app/Spill/install.sh)"
-          \`\`\`
-
-          If Spill is already in Applications:
-          \`\`\`bash
-          sudo xattr -dr com.apple.quarantine /Applications/Spill.app
-          open /Applications/Spill.app
-          \`\`\`
+          $SIGNING_NOTE
+          $install_note
           NOTES
 
           assets=(

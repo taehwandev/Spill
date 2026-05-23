@@ -297,7 +297,7 @@ After GitHub publication, verify stable public URLs:
 curl -I -L https://github.com/taehwandev/Spill/releases/latest/download/Spill-macos.dmg
 curl -I -L https://github.com/taehwandev/Spill/releases/latest/download/Spill-macos.zip
 curl -fsSL https://github.com/taehwandev/Spill/releases/latest/download/update.json
-curl -I -L https://thdev.app/Spill/
+curl -I -L https://spill.thdev.app/
 ```
 
 Open the release page and confirm:

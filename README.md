@@ -114,17 +114,17 @@ This writes:
 - `.build/release-artifacts/Spill-2026.20.1-macos.dmg`
 
 Without Apple credentials these artifacts are ad-hoc signed and useful for local
-testing or trusted manual sharing. Public distribution without Gatekeeper warnings
-requires Apple Developer ID signing and notarization.
+testing or trusted manual sharing. Official public distribution should use
+Developer ID signing and notarization so Gatekeeper can validate the app.
 
-### Installing unsigned releases
+### Installing ad-hoc test releases
 
-Current public builds are ad-hoc signed unless Developer ID secrets are
-configured. macOS can show an unsigned downloaded app as damaged and offer to move
-it to Trash. For trusted test installs, use the hosted installer command:
+Ad-hoc builds are for local validation only. macOS can show an unsigned
+downloaded app as damaged and offer to move it to Trash. For trusted test
+installs, use the hosted installer command:
 
 ```bash
-/bin/bash -c "$(curl -fsSL https://thdev.app/Spill/install.sh)"
+/bin/bash -c "$(curl -fsSL https://spill.thdev.app/install.sh)"
 ```
 
 The installer downloads the latest ZIP release, copies `Spill.app` to
@@ -139,6 +139,7 @@ open /Applications/Spill.app
 Developer ID release example:
 
 ```bash
+SPILL_VERSION=2026.21.2 \
 SPILL_SIGN_IDENTITY="Developer ID Application: Example Name (TEAMID)" \
 SPILL_NOTARY_KEYCHAIN_PROFILE="spill-notary" \
 ./scripts/package-release.sh
@@ -147,15 +148,17 @@ SPILL_NOTARY_KEYCHAIN_PROFILE="spill-notary" \
 Before running that command, store notarization credentials with `xcrun notarytool
 store-credentials`. Release versions use `ISO-year.ISO-week.release-count`, such
 as `2026.20.1`. The default local version is the current ISO year/week with
-release count `1`. Use `SPILL_VERSION`, `SPILL_BUILD`, and `SPILL_BUNDLE_ID` to
-override release metadata.
+release count `1`. `SPILL_BUILD` defaults to the final version component, so
+`SPILL_VERSION=2026.21.2` uses build `2` unless overridden. Use
+`SPILL_VERSION`, `SPILL_BUILD`, and `SPILL_BUNDLE_ID` to override release
+metadata.
 
 ### GitHub Releases
 
 Push a version tag to create or update a GitHub Release:
 
 ```bash
-git tag v2026.20.1
+git tag -a v2026.20.1 -m "Release 2026.20.1"
 git push origin v2026.20.1
 ```
 
@@ -177,8 +180,8 @@ latest GitHub Release asset URL and opens the stable DMG download when a newer
 version is available. Spill does not run background update checks or install
 updates automatically in the MVP.
 
-Unsigned test releases work without secrets and are ad-hoc signed. For Developer
-ID signing and notarization, configure these repository secrets:
+Unsigned test releases work without secrets and are ad-hoc signed. For official
+Developer ID signing and notarization, configure these repository secrets:
 
 - `MACOS_DEVELOPER_ID_CERTIFICATE_BASE64`: base64-encoded `.p12` certificate.
 - `MACOS_DEVELOPER_ID_CERTIFICATE_PASSWORD`: `.p12` import password.
@@ -213,9 +216,9 @@ stable release assets:
 - `https://github.com/taehwandev/Spill/releases/latest/download/Spill-macos.zip`
 
 The deploy workflow attempts to enable GitHub Pages with the GitHub Actions
-source. If repository policy blocks automatic enablement, enable GitHub Pages
-manually with the GitHub Actions source. A custom domain can be added later
-without changing the release workflow.
+source and publishes the site for `spill.thdev.app`. If repository policy blocks
+automatic enablement, enable GitHub Pages manually with the GitHub Actions source
+and set the custom domain to `spill.thdev.app`.
 
 ## Verify
 

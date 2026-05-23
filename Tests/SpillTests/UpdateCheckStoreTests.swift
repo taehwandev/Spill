@@ -47,7 +47,7 @@ final class UpdateCheckStoreTests: XCTestCase {
         store.copyInstallCommand(source: "test")
 
         XCTAssertEqual(copiedText, UpdateCheckStore.defaultInstallCommand)
-        XCTAssertEqual(store.installCommand, #"/bin/bash -c "$(curl -fsSL https://thdev.app/Spill/install.sh)""#)
+        XCTAssertEqual(store.installCommand, #"/bin/bash -c "$(curl -fsSL https://spill.thdev.app/install.sh)""#)
     }
 
     func testCopyInstallCommandDoesNothingBeforeAvailableUpdate() {
