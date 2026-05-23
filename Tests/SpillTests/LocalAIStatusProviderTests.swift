@@ -43,9 +43,8 @@ final class LocalAIStatusProviderTests: XCTestCase {
         XCTAssertEqual(statuses.first { $0.kind == .claude }?.value, "Active")
         XCTAssertEqual(statuses.first { $0.kind == .claude }?.subtitle, "claude-sonnet-4-5")
         XCTAssertEqual(statuses.first { $0.kind == .claude }?.metadata.version, "2.1.0")
-        XCTAssertEqual(statuses.first { $0.kind == .antigravity }?.subtitle, "Server Running")
+        XCTAssertEqual(statuses.first { $0.kind == .antigravity }?.subtitle, "ag-pro")
         XCTAssertEqual(statuses.first { $0.kind == .antigravity }?.metadata.model, "ag-pro")
-        XCTAssertEqual(statuses.first { $0.kind == .antigravity }?.metadata.serverStatus?.state, .running)
         XCTAssertEqual(statuses.first { $0.kind == .ollama }?.subtitle, "llama3.2:latest")
         XCTAssertEqual(statuses.first { $0.kind == .ollama }?.metadata.version, "0.12.0")
         XCTAssertEqual(statuses.first { $0.kind == .openAI }?.title, "OpenAI API")
@@ -91,11 +90,11 @@ final class LocalAIStatusProviderTests: XCTestCase {
 
         XCTAssertEqual(statuses.map(\.kind), [.antigravity])
         XCTAssertEqual(statuses.first?.value, "Active")
-        XCTAssertEqual(statuses.first?.subtitle, "Server Running")
+        XCTAssertEqual(statuses.first?.subtitle, "ag-pro")
         XCTAssertEqual(statuses.first?.metadata.model, "ag-pro")
     }
 
-    func testAntigravityCliAliasWarnsWhenServerIsStopped() {
+    func testAntigravityCliAliasUsesProcessMetadataOnly() {
         let statuses = LocalAIStatusProvider.statuses(
             environment: [:],
             processNames: [],
@@ -104,9 +103,9 @@ final class LocalAIStatusProviderTests: XCTestCase {
         )
 
         XCTAssertEqual(statuses.map(\.kind), [.antigravity])
-        XCTAssertEqual(statuses.first?.value, "Server Down")
-        XCTAssertEqual(statuses.first?.state, .warning)
-        XCTAssertEqual(statuses.first?.subtitle, "Server Stopped")
+        XCTAssertEqual(statuses.first?.value, "Active")
+        XCTAssertEqual(statuses.first?.state, .active)
+        XCTAssertEqual(statuses.first?.subtitle, "ag-lite")
         XCTAssertEqual(statuses.first?.metadata.model, "ag-lite")
     }
 
@@ -121,11 +120,10 @@ final class LocalAIStatusProviderTests: XCTestCase {
         XCTAssertEqual(statuses.map(\.kind), [.antigravity])
         XCTAssertEqual(statuses.first?.title, "Antigravity")
         XCTAssertEqual(statuses.first?.value, "Active")
-        XCTAssertEqual(statuses.first?.subtitle, "Server Unknown")
-        XCTAssertEqual(statuses.first?.metadata.serverStatus?.state, .unknown)
+        XCTAssertEqual(statuses.first?.subtitle, "Process Running")
     }
 
-    func testAntigravityInstalledAppCanReportServerStatus() {
+    func testAntigravityInstalledAppUsesLocalProcessStateOnly() {
         let statuses = LocalAIStatusProvider.statuses(
             environment: [:],
             processNames: ["Antigravity"],
@@ -139,8 +137,7 @@ final class LocalAIStatusProviderTests: XCTestCase {
 
         XCTAssertEqual(statuses.map(\.kind), [.antigravity])
         XCTAssertEqual(statuses.first?.value, "Active")
-        XCTAssertEqual(statuses.first?.subtitle, "Server Running")
-        XCTAssertEqual(statuses.first?.metadata.serverStatus?.state, .running)
+        XCTAssertEqual(statuses.first?.subtitle, "Process Running")
     }
 
     func testRunningCommandIsHiddenWhenToolIsNotInstalled() {

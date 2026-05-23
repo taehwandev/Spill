@@ -70,50 +70,21 @@ enum LocalAIToolKind: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
-enum LocalAIToolServerState: String, Hashable, Sendable {
-    case running
-    case stopped
-    case unknown
-
-    var title: String {
-        switch self {
-        case .running:
-            return "Running"
-        case .stopped:
-            return "Stopped"
-        case .unknown:
-            return "Unknown"
-        }
-    }
-}
-
-struct LocalAIToolServerStatus: Hashable, Sendable {
-    let name: String
-    let state: LocalAIToolServerState
-
-    var value: String {
-        "\(name) \(state.title)"
-    }
-}
-
 struct LocalAIToolMetadata: Hashable, Sendable {
     static let empty = LocalAIToolMetadata(model: nil, version: nil, source: nil)
 
     let model: String?
     let version: String?
     let source: String?
-    let serverStatus: LocalAIToolServerStatus?
 
     init(
         model: String?,
         version: String?,
-        source: String?,
-        serverStatus: LocalAIToolServerStatus? = nil
+        source: String?
     ) {
         self.model = model
         self.version = version
         self.source = source
-        self.serverStatus = serverStatus
     }
 }
 
@@ -326,24 +297,18 @@ struct LocalAIStatusProvider: SpillStatusProvider {
             return nil
         }
 
-        let serverStatus = antigravityServerStatus(
-            for: kind,
-            isRunning: isRunning,
-            processCommands: processCommands
-        )
         let enrichedMetadata = LocalAIToolMetadata(
             model: metadata.model,
             version: metadata.version,
-            source: metadata.source,
-            serverStatus: serverStatus
+            source: metadata.source
         )
 
-        let value = commandValue(isRunning: isRunning, serverStatus: serverStatus)
+        let value = commandValue(isRunning: isRunning)
         let subtitle = commandSubtitle(
             metadata: enrichedMetadata,
             isRunning: isRunning
         )
-        let state = commandState(isRunning: isRunning, serverStatus: serverStatus)
+        let state = commandState(isRunning: isRunning)
 
         return LocalAIToolStatus(
             kind: kind,
@@ -354,14 +319,7 @@ struct LocalAIStatusProvider: SpillStatusProvider {
         )
     }
 
-    private static func commandValue(
-        isRunning: Bool,
-        serverStatus: LocalAIToolServerStatus?
-    ) -> String {
-        if serverStatus?.state == .stopped {
-            return "Server Down"
-        }
-
+    private static func commandValue(isRunning: Bool) -> String {
         return isRunning ? "Active" : "Idle"
     }
 
@@ -369,53 +327,14 @@ struct LocalAIStatusProvider: SpillStatusProvider {
         metadata: LocalAIToolMetadata,
         isRunning: Bool
     ) -> String {
-        if isRunning,
-           let serverStatus = metadata.serverStatus {
-            return serverStatus.value
-        }
-
         return compactSubtitle(
             metadata: metadata,
             fallback: isRunning ? "Process Running" : "Installed"
         )
     }
 
-    private static func commandState(
-        isRunning: Bool,
-        serverStatus: LocalAIToolServerStatus?
-    ) -> SpillStatusState {
-        if serverStatus?.state == .stopped {
-            return .warning
-        }
-
+    private static func commandState(isRunning: Bool) -> SpillStatusState {
         return isRunning ? .active : .normal
-    }
-
-    private static func antigravityServerStatus(
-        for kind: LocalAIToolKind,
-        isRunning: Bool,
-        processCommands: [String]
-    ) -> LocalAIToolServerStatus? {
-        guard kind == .antigravity, isRunning else {
-            return nil
-        }
-
-        if hasAntigravityServer(processCommands: processCommands) {
-            return LocalAIToolServerStatus(name: "Server", state: .running)
-        }
-
-        return LocalAIToolServerStatus(
-            name: "Server",
-            state: processCommands.isEmpty ? .unknown : .stopped
-        )
-    }
-
-    private static func hasAntigravityServer(processCommands: [String]) -> Bool {
-        processCommands.contains { command in
-            let normalizedCommand = command.lowercased()
-            return normalizedCommand.contains("mcp-server")
-                && normalizedCommand.contains("antigravity")
-        }
     }
 
     private static func openAIStatus(environment: [String: String]) -> LocalAIToolStatus? {

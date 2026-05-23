@@ -121,10 +121,6 @@ enum SpillStatusDetailRows {
             rows.append(SpillStatusDetailRow(label: "Source", value: source))
         }
 
-        if let serverStatus = status.metadata.serverStatus {
-            rows.append(SpillStatusDetailRow(label: "Server", value: serverStatus.state.title))
-        }
-
         return rows
     }
 
