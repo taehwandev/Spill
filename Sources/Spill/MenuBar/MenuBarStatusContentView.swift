@@ -10,9 +10,17 @@ final class MenuBarStatusContentView: NSView {
     private static let iconOnlyChipWidth: CGFloat = 22
     private static let triggerChipWidth: CGFloat = 30
     private static let valueOnlyHorizontalPadding: CGFloat = 10
+    private static let stackedChipMinWidth: CGFloat = 30
+    private static let stackedHorizontalPadding: CGFloat = 8
     private static let textFont = NSFont.monospacedDigitSystemFont(ofSize: 13.5, weight: .light)
+    fileprivate static let stackedTextFont = NSFont.monospacedDigitSystemFont(ofSize: 8.2, weight: .medium)
 
     private let segments: [MenuBarStatusSegment]
+
+    private enum ChipDescriptor {
+        case single(MenuBarStatusSegment)
+        case stacked([MenuBarStatusSegment])
+    }
 
     init(segments: [MenuBarStatusSegment]) {
         self.segments = segments
@@ -42,27 +50,121 @@ final class MenuBarStatusContentView: NSView {
             return 26
         }
 
-        let chipTotal = segments.reduce(CGFloat.zero) { partial, segment in
-            partial + chipWidth(for: segment)
+        let chips = chipDescriptors(for: segments)
+        let chipTotal = chips.reduce(CGFloat.zero) { partial, descriptor in
+            partial + chipWidth(for: descriptor)
         }
-        let gapTotal = CGFloat(max(segments.count - 1, 0)) * gap
+        let gapTotal = CGFloat(max(chips.count - 1, 0)) * gap
         return sidePadding + chipTotal + gapTotal + sidePadding
     }
 
     static func segmentKind(at point: NSPoint, in segments: [MenuBarStatusSegment]) -> MenuBarStatusSegment.Kind? {
         var currentX = sidePadding
 
-        for segment in segments {
-            let width = chipWidth(for: segment)
+        for descriptor in chipDescriptors(for: segments) {
+            let width = chipWidth(for: descriptor)
             let frame = NSRect(x: currentX, y: 0, width: width, height: height)
             if frame.contains(point) {
-                return segment.kind
+                return segmentKind(at: point, in: frame, descriptor: descriptor)
             }
 
             currentX += width + gap
         }
 
         return nil
+    }
+
+    private static func chipDescriptors(for segments: [MenuBarStatusSegment]) -> [ChipDescriptor] {
+        var descriptors: [ChipDescriptor] = []
+        var index = 0
+
+        while index < segments.count {
+            let segment = segments[index]
+            guard isStackableCompactStatus(segment) else {
+                descriptors.append(.single(segment))
+                index += 1
+                continue
+            }
+
+            var stack = [segment]
+            var nextIndex = index + 1
+            while nextIndex < segments.count,
+                  stack.count < 2,
+                  isStackableCompactStatus(segments[nextIndex]) {
+                stack.append(segments[nextIndex])
+                nextIndex += 1
+            }
+
+            if stack.count > 1 {
+                descriptors.append(.stacked(stack))
+                index = nextIndex
+            } else {
+                descriptors.append(.single(segment))
+                index += 1
+            }
+        }
+
+        return descriptors
+    }
+
+    private static func isStackableCompactStatus(_ segment: MenuBarStatusSegment) -> Bool {
+        guard segment.isValueOnly, !segment.value.isEmpty else {
+            return false
+        }
+
+        switch segment.kind {
+        case .cpu, .memory:
+            return true
+        case .caffeine, .sleepGuard, .trigger:
+            return false
+        }
+    }
+
+    private static func segmentKind(
+        at point: NSPoint,
+        in frame: NSRect,
+        descriptor: ChipDescriptor
+    ) -> MenuBarStatusSegment.Kind? {
+        switch descriptor {
+        case let .single(segment):
+            return segment.kind
+        case let .stacked(segments):
+            guard !segments.isEmpty else {
+                return nil
+            }
+
+            let rowHeight = frame.height / CGFloat(segments.count)
+            let rowFromBottom = min(max(Int((point.y - frame.minY) / rowHeight), 0), segments.count - 1)
+            let index = segments.count - 1 - rowFromBottom
+            return segments[index].kind
+        }
+    }
+
+    private static func chipWidth(for descriptor: ChipDescriptor) -> CGFloat {
+        switch descriptor {
+        case let .single(segment):
+            return chipWidth(for: segment)
+        case let .stacked(segments):
+            return stackedChipWidth(for: segments)
+        }
+    }
+
+    private static func chipHeight(for descriptor: ChipDescriptor) -> CGFloat {
+        switch descriptor {
+        case let .single(segment):
+            return chipHeight(for: segment)
+        case .stacked:
+            return height
+        }
+    }
+
+    private static func stackedChipWidth(for segments: [MenuBarStatusSegment]) -> CGFloat {
+        let maxTextWidth = segments.reduce(CGFloat.zero) { partial, segment in
+            let textWidth = (segment.value as NSString).size(withAttributes: [.font: stackedTextFont]).width
+            return max(partial, ceil(textWidth))
+        }
+
+        return max(stackedChipMinWidth, maxTextWidth + stackedHorizontalPadding)
     }
 
     private static func chipWidth(for segment: MenuBarStatusSegment) -> CGFloat {
@@ -89,14 +191,21 @@ final class MenuBarStatusContentView: NSView {
     private func installChips() {
         var previous: NSView?
 
-        for segment in segments {
-            let chip = MenuBarMetricChipView(segment: segment)
+        for descriptor in Self.chipDescriptors(for: segments) {
+            let chip: NSView
+            switch descriptor {
+            case let .single(segment):
+                chip = MenuBarMetricChipView(segment: segment)
+            case let .stacked(segments):
+                chip = MenuBarStackedMetricChipView(segments: segments)
+            }
+
             addSubview(chip)
 
             var constraints = [
                 chip.centerYAnchor.constraint(equalTo: centerYAnchor),
-                chip.widthAnchor.constraint(equalToConstant: Self.chipWidth(for: segment)),
-                chip.heightAnchor.constraint(equalToConstant: Self.chipHeight(for: segment))
+                chip.widthAnchor.constraint(equalToConstant: Self.chipWidth(for: descriptor)),
+                chip.heightAnchor.constraint(equalToConstant: Self.chipHeight(for: descriptor))
             ]
 
             if let previous {
@@ -112,6 +221,88 @@ final class MenuBarStatusContentView: NSView {
         if let previous {
             previous.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -Self.sidePadding).isActive = true
         }
+    }
+}
+
+@MainActor
+private final class MenuBarStackedMetricChipView: NSView {
+    private let segments: [MenuBarStatusSegment]
+
+    init(segments: [MenuBarStatusSegment]) {
+        self.segments = segments
+        super.init(frame: .zero)
+
+        translatesAutoresizingMaskIntoConstraints = false
+        installLabels()
+        setAccessibilityLabel(accessibilityText)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    private func installLabels() {
+        let labels = segments.map(makeLabel(for:))
+        labels.forEach(addSubview)
+
+        guard labels.count == 2 else {
+            labels.first.map { label in
+                NSLayoutConstraint.activate([
+                    label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 3),
+                    label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -3),
+                    label.centerYAnchor.constraint(equalTo: centerYAnchor)
+                ])
+            }
+            return
+        }
+
+        NSLayoutConstraint.activate([
+            labels[0].topAnchor.constraint(equalTo: topAnchor, constant: 1),
+            labels[0].leadingAnchor.constraint(equalTo: leadingAnchor, constant: 3),
+            labels[0].trailingAnchor.constraint(equalTo: trailingAnchor, constant: -3),
+
+            labels[1].bottomAnchor.constraint(equalTo: bottomAnchor, constant: -1),
+            labels[1].leadingAnchor.constraint(equalTo: leadingAnchor, constant: 3),
+            labels[1].trailingAnchor.constraint(equalTo: trailingAnchor, constant: -3)
+        ])
+    }
+
+    private func makeLabel(for segment: MenuBarStatusSegment) -> NSTextField {
+        let label = NSTextField(labelWithString: segment.value)
+        label.translatesAutoresizingMaskIntoConstraints = false
+        label.font = MenuBarStatusContentView.stackedTextFont
+        label.alignment = .center
+        label.lineBreakMode = .byClipping
+        label.textColor = textColor(for: segment)
+        label.setContentCompressionResistancePriority(.required, for: .horizontal)
+        label.setContentHuggingPriority(.required, for: .horizontal)
+        return label
+    }
+
+    private func textColor(for segment: MenuBarStatusSegment) -> NSColor {
+        switch segment.state {
+        case .normal:
+            return .labelColor
+        case .active, .refreshing:
+            return .systemTeal
+        case .warning:
+            return .systemOrange
+        case .unavailable:
+            return .secondaryLabelColor
+        }
+    }
+
+    private var accessibilityText: String {
+        segments
+            .map { segment in
+                guard !segment.value.isEmpty else {
+                    return segment.title
+                }
+
+                return "\(segment.title) \(segment.value)"
+            }
+            .joined(separator: ", ")
     }
 }
 

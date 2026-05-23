@@ -234,6 +234,33 @@ final class MenuBarStatusContentViewTests: XCTestCase {
         XCTAssertLessThanOrEqual(MenuBarStatusContentView.preferredWidth(for: segments), 96)
     }
 
+    func testCompactCpuMemorySegmentsStackIntoNarrowChip() {
+        let cpu = makeStatusSegment(kind: .cpu, value: "90.0%").valueOnlyMenuBarSegment()
+        let memory = makeStatusSegment(kind: .memory, value: "90.0%").valueOnlyMenuBarSegment()
+        let stackedWidth = MenuBarStatusContentView.preferredWidth(for: [cpu, memory])
+        let separatedWidth = MenuBarStatusContentView.preferredWidth(for: [cpu])
+            + MenuBarStatusContentView.preferredWidth(for: [memory])
+
+        XCTAssertLessThan(stackedWidth, separatedWidth)
+        XCTAssertLessThan(stackedWidth, 60)
+    }
+
+    func testCompactCpuMemoryStackHitTestingSplitsRows() {
+        let cpu = makeStatusSegment(kind: .cpu, value: "90.0%").valueOnlyMenuBarSegment()
+        let memory = makeStatusSegment(kind: .memory, value: "90.0%").valueOnlyMenuBarSegment()
+        let segments = [cpu, memory]
+        let chipCenterX = MenuBarStatusContentView.preferredWidth(for: segments) / 2
+
+        XCTAssertEqual(
+            MenuBarStatusContentView.segmentKind(at: NSPoint(x: chipCenterX, y: 17), in: segments),
+            .cpu
+        )
+        XCTAssertEqual(
+            MenuBarStatusContentView.segmentKind(at: NSPoint(x: chipCenterX, y: 5), in: segments),
+            .memory
+        )
+    }
+
     func testDropTriggerUsesSystemSymbolFallback() {
         let image = MenuBarTriggerIconRenderer.image(
             style: .spill,
