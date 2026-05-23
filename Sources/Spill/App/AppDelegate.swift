@@ -615,7 +615,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appMenu.addItem(mainMenuItem(title: "Check for Updates...", action: #selector(checkForUpdatesFromMainMenu), keyEquivalent: ""))
         appMenu.addItem(mainMenuItem(title: "Preferences...", action: #selector(showPreferencesFromMainMenu), keyEquivalent: ","))
         appMenu.addItem(.separator())
-        appMenu.addItem(mainMenuItem(title: "Quit Spill", action: #selector(quitFromMainMenu), keyEquivalent: "q"))
+        appMenu.addItem(mainMenuItem(title: "Quit Spill", action: #selector(quitFromMainMenu), keyEquivalent: ""))
         NSApp.mainMenu = mainMenu
     }
 

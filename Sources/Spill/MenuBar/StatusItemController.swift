@@ -492,7 +492,7 @@ final class StatusItemController: NSObject {
         menu.addItem(menuItem(title: "Check for Updates...", action: #selector(checkForUpdatesFromMenu), keyEquivalent: ""))
         menu.addItem(menuItem(title: "Preferences...", action: #selector(showPreferencesFromMenu), keyEquivalent: ","))
         menu.addItem(.separator())
-        menu.addItem(menuItem(title: "Quit Spill", action: #selector(quitFromMenu), keyEquivalent: "q"))
+        menu.addItem(menuItem(title: "Quit Spill", action: #selector(quitFromMenu), keyEquivalent: ""))
 
         if let event {
             NSMenu.popUpContextMenu(menu, with: event, for: button)

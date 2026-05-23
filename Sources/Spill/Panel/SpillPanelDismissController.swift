@@ -26,7 +26,7 @@ final class SpillPanelDismissController {
                 return event
             }
 
-            if eventWindow !== panel {
+            if !Self.isEventWindowInsidePanelSurface(eventWindow, panel: panel) {
                 Task { @MainActor in
                     onDismiss()
                 }
@@ -46,6 +46,18 @@ final class SpillPanelDismissController {
             NSEvent.removeMonitor(localMonitor)
             self.localMonitor = nil
         }
+    }
+
+    static func isEventWindowInsidePanelSurface(_ eventWindow: NSWindow, panel: NSPanel) -> Bool {
+        if eventWindow === panel {
+            return true
+        }
+
+        if eventWindow.parent === panel {
+            return true
+        }
+
+        return panel.childWindows?.contains { $0 === eventWindow } == true
     }
 }
 
