@@ -264,11 +264,11 @@ struct SpillBarView: View {
                 Spacer(minLength: 8)
 
                 metricChart(for: module, status: status)
-                    .frame(width: 96, height: 28)
+                    .frame(width: 132, height: 44)
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 7)
-            .frame(minHeight: 56)
+            .frame(minHeight: 64)
             .background(
                 hoveredStatusModule == module ? Color.primary.opacity(0.07) : Color.primary.opacity(0.04),
                 in: RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -456,19 +456,44 @@ struct SpillBarView: View {
 
     @ViewBuilder
     private func metricChart(for module: SpillStatusModule, status: SpillStatusMeterSnapshot) -> some View {
-        let currentCoreValues = statusStore.cpuCoreHistory.map { $0.last ?? 0 }
-
-        if module == .cpu,
-           settings.showsCPUCoreChart,
-           !currentCoreValues.isEmpty
-        {
-            CPUCoreBarChartView(coreValues: currentCoreValues, tint: status.state.panelTint)
-        } else {
+        switch module {
+        case .cpu:
+            let currentCoreValues = settings.showsCPUCoreChart
+                ? statusStore.cpuCoreHistory.map { $0.last ?? 0 }
+                : []
+            ResourceLoadChartView(
+                primaryTitle: "Active",
+                secondaryTitle: "Idle",
+                primaryRatio: statusStore.cpu.usageRatio,
+                secondaryRatio: statusStore.cpu.availableRatio,
+                peakRatio: peakUsageRatio(for: .cpu, currentRatio: statusStore.cpu.usageRatio),
+                thresholdRatio: 0.9,
+                history: statusStore.history(for: .cpu),
+                tint: status.state.panelTint,
+                barValues: currentCoreValues
+            )
+        case .memory:
+            ResourceLoadChartView(
+                primaryTitle: "Used",
+                secondaryTitle: "Free",
+                primaryRatio: statusStore.memory.usageRatio,
+                secondaryRatio: max(0, 1 - statusStore.memory.usageRatio),
+                peakRatio: peakUsageRatio(for: .memory, currentRatio: statusStore.memory.usageRatio),
+                thresholdRatio: 0.9,
+                history: statusStore.history(for: .memory),
+                tint: status.state.panelTint
+            )
+        default:
             MetricSparklineView(
                 series: sparklineSeries(for: module, tint: status.state.panelTint),
                 normalizesToSeriesMaximum: module == .network
             )
         }
+    }
+
+    private func peakUsageRatio(for module: SpillStatusModule, currentRatio: Double) -> Double {
+        let historyPeak = statusStore.history(for: module).max() ?? currentRatio
+        return max(historyPeak, currentRatio).clamped(to: 0...1)
     }
 
     private func metricValueTint(for module: SpillStatusModule, state: SpillStatusState) -> Color {
@@ -812,6 +837,109 @@ struct SpillBarView: View {
 private struct MetricSparklineSeries {
     let values: [Double]
     let tint: Color
+}
+
+private struct ResourceLoadChartView: View {
+    let primaryTitle: String
+    let secondaryTitle: String
+    let primaryRatio: Double
+    let secondaryRatio: Double
+    let peakRatio: Double
+    let thresholdRatio: Double
+    let history: [Double]
+    let tint: Color
+    var barValues: [Double] = []
+
+    private var normalizedPrimaryRatio: Double {
+        primaryRatio.clamped(to: 0...1)
+    }
+
+    private var normalizedSecondaryRatio: Double {
+        secondaryRatio.clamped(to: 0...1)
+    }
+
+    private var normalizedPeakRatio: Double {
+        peakRatio.clamped(to: 0...1)
+    }
+
+    private var normalizedThresholdRatio: Double {
+        thresholdRatio.clamped(to: 0...1)
+    }
+
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 3) {
+            HStack(spacing: 5) {
+                legendDot(color: tint)
+
+                Text(primaryTitle)
+                    .font(.system(size: 7.5, weight: .bold, design: .rounded))
+                    .lineLimit(1)
+                    .foregroundStyle(tint)
+
+                Spacer(minLength: 4)
+
+                Text("Pk \(Self.percentText(normalizedPeakRatio))")
+                    .font(.system(size: 7.5, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .foregroundStyle(normalizedPeakRatio >= normalizedThresholdRatio ? Color.red : .secondary)
+            }
+
+            GeometryReader { proxy in
+                let width = proxy.size.width
+                let markerX = max(0, min(width - 1, width * normalizedThresholdRatio))
+
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(.secondary.opacity(0.18))
+
+                    Capsule()
+                        .fill(tint.opacity(normalizedPrimaryRatio >= normalizedThresholdRatio ? 0.92 : 0.74))
+                        .frame(width: max(2, width * normalizedPrimaryRatio))
+
+                    Rectangle()
+                        .fill(.primary.opacity(0.46))
+                        .frame(width: 1, height: 9)
+                        .offset(x: markerX)
+                }
+            }
+            .frame(height: 8)
+
+            Group {
+                if barValues.isEmpty {
+                    MetricSparklineView(
+                        series: [MetricSparklineSeries(values: history, tint: tint)]
+                    )
+                } else {
+                    CPUCoreBarChartView(coreValues: barValues, tint: tint)
+                }
+            }
+            .frame(height: 14)
+
+            HStack(spacing: 4) {
+                Text("\(primaryTitle) \(Self.percentText(normalizedPrimaryRatio))")
+                    .foregroundStyle(tint.opacity(0.9))
+
+                Spacer(minLength: 4)
+
+                Text("\(secondaryTitle) \(Self.percentText(normalizedSecondaryRatio))")
+                    .foregroundStyle(.secondary)
+            }
+            .font(.system(size: 7.5, weight: .semibold, design: .rounded))
+            .monospacedDigit()
+            .lineLimit(1)
+        }
+    }
+
+    private func legendDot(color: Color) -> some View {
+        Circle()
+            .fill(color)
+            .frame(width: 5, height: 5)
+    }
+
+    private static func percentText(_ ratio: Double) -> String {
+        "\(Int((ratio.clamped(to: 0...1) * 100).rounded()))%"
+    }
 }
 
 private struct CPUCoreBarChartView: View {

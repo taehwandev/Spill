@@ -139,7 +139,7 @@ struct SystemCPUProvider: SpillStatusProvider {
 
         return SystemCPUStatus(
             value: percentText(ratio),
-            subtitle: "\(percentText(idleRatio)) available",
+            subtitle: "\(percentText(ratio)) active / \(percentText(idleRatio)) idle",
             usageRatio: ratio,
             availableRatio: idleRatio,
             userRatio: (Double(userDelta) / Double(totalDelta)).clamped(to: 0...1),
@@ -222,7 +222,7 @@ struct SystemCPUProvider: SpillStatusProvider {
     private static func zeroStatus() -> SystemCPUStatus {
         SystemCPUStatus(
             value: "0.0%",
-            subtitle: "100.0% available",
+            subtitle: "0.0% active / 100.0% idle",
             usageRatio: 0,
             availableRatio: 1,
             userRatio: 0,

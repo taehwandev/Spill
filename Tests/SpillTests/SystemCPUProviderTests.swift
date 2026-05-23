@@ -9,7 +9,7 @@ final class SystemCPUProviderTests: XCTestCase {
         )
 
         XCTAssertEqual(status.value, "25.0%")
-        XCTAssertEqual(status.subtitle, "75.0% available")
+        XCTAssertEqual(status.subtitle, "25.0% active / 75.0% idle")
         XCTAssertEqual(status.usageRatio, 0.25, accuracy: 0.0001)
         XCTAssertEqual(status.availableRatio, 0.75, accuracy: 0.0001)
         XCTAssertEqual(status.userRatio, 0.25, accuracy: 0.0001)
@@ -162,7 +162,7 @@ final class SystemCPUProviderTests: XCTestCase {
         let status = SystemCPUProvider.status(previous: reading, current: reading)
 
         XCTAssertEqual(status.value, "0.0%")
-        XCTAssertEqual(status.subtitle, "100.0% available")
+        XCTAssertEqual(status.subtitle, "0.0% active / 100.0% idle")
         XCTAssertEqual(status.state, .normal)
     }
 
@@ -196,7 +196,7 @@ final class SystemCPUProviderTests: XCTestCase {
         XCTAssertEqual(item.providerID.rawValue, "system")
         XCTAssertEqual(item.title, "CPU")
         XCTAssertEqual(item.value, "25.0%")
-        XCTAssertEqual(item.subtitle, "75.0% available")
+        XCTAssertEqual(item.subtitle, "25.0% active / 75.0% idle")
         XCTAssertEqual(item.symbolName, "cpu")
         XCTAssertEqual(item.state, .normal)
         XCTAssertEqual(item.sortPriority, 5)

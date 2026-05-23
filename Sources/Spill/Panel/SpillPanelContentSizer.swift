@@ -9,7 +9,7 @@ enum SpillPanelContentSizer {
     private static let sectionHeaderHeight: CGFloat = 14
     private static let statusSectionSpacing: CGFloat = 6
     private static let sectionContentSpacing: CGFloat = 5
-    private static let statusRowHeight: CGFloat = 56
+    private static let statusRowHeight: CGFloat = 64
     private static let statusRowSpacing: CGFloat = 7
     private static let aiPillHeight: CGFloat = 60
     private static let windowActionHeight: CGFloat = 58
