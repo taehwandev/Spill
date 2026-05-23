@@ -320,7 +320,7 @@ struct SpillBarView: View {
                         subtitle: status.subtitle,
                         symbolName: status.symbolName,
                         tint: status.state.panelTint,
-                        serverStatus: status.metadata.serverStatus
+                        mcpStatus: status.metadata.mcpStatus
                     )
                     .help(aiHelpText(for: status))
                     .accessibilityLabel(aiHelpText(for: status))
@@ -342,7 +342,7 @@ struct SpillBarView: View {
         subtitle: String?,
         symbolName: String,
         tint: Color,
-        serverStatus: LocalAIToolServerStatus? = nil,
+        mcpStatus: LocalAIToolMCPStatus? = nil,
         detailRows: [SpillStatusDetailRow] = []
     ) -> some View {
         Button {
@@ -354,7 +354,7 @@ struct SpillBarView: View {
                 subtitle: subtitle,
                 symbolName: symbolName,
                 tint: tint,
-                serverStatus: serverStatus,
+                mcpStatus: mcpStatus,
                 detailRows: detailRows
             )
         }
@@ -370,7 +370,7 @@ struct SpillBarView: View {
         subtitle: String?,
         symbolName: String,
         tint: Color,
-        serverStatus: LocalAIToolServerStatus?,
+        mcpStatus: LocalAIToolMCPStatus?,
         detailRows: [SpillStatusDetailRow]
     ) -> some View {
         VStack(alignment: .leading, spacing: 5) {
@@ -402,8 +402,8 @@ struct SpillBarView: View {
                 }
             }
 
-            if let serverStatus {
-                serverStatusBadge(serverStatus)
+            if let mcpStatus {
+                mcpStatusBadge(mcpStatus)
             }
 
             if !detailRows.isEmpty {
@@ -423,21 +423,21 @@ struct SpillBarView: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
-        .frame(minHeight: compactStatusPillMinHeight(hasServerStatus: serverStatus != nil, hasDetailRows: !detailRows.isEmpty))
+        .frame(minHeight: compactStatusPillMinHeight(hasMCPStatus: mcpStatus != nil, hasDetailRows: !detailRows.isEmpty))
         .frame(maxWidth: .infinity)
         .background(.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
-    private func compactStatusPillMinHeight(hasServerStatus: Bool, hasDetailRows: Bool) -> CGFloat {
+    private func compactStatusPillMinHeight(hasMCPStatus: Bool, hasDetailRows: Bool) -> CGFloat {
         if hasDetailRows {
             return 92
         }
 
-        return hasServerStatus ? 74 : 60
+        return hasMCPStatus ? 74 : 60
     }
 
-    private func serverStatusBadge(_ status: LocalAIToolServerStatus) -> some View {
-        let tint = serverStatusTint(status.state)
+    private func mcpStatusBadge(_ status: LocalAIToolMCPStatus) -> some View {
+        let tint = mcpStatusTint(status.state)
 
         return HStack(spacing: 5) {
             Circle()
@@ -459,7 +459,7 @@ struct SpillBarView: View {
         }
     }
 
-    private func serverStatusTint(_ state: LocalAIToolServerState) -> Color {
+    private func mcpStatusTint(_ state: LocalAIToolMCPState) -> Color {
         switch state {
         case .running:
             return .green
@@ -873,11 +873,11 @@ struct SpillBarView: View {
     private func aiHelpText(for status: LocalAIToolStatus) -> String {
         var parts = [statusHelpText(title: status.title, value: status.value, subtitle: status.subtitle)]
 
-        if let serverStatus = status.metadata.serverStatus {
-            parts.append(serverStatus.source)
+        if let mcpStatus = status.metadata.mcpStatus {
+            parts.append(mcpStatus.source)
 
-            if !serverStatus.detail.isEmpty {
-                parts.append(serverStatus.detail)
+            if !mcpStatus.detail.isEmpty {
+                parts.append(mcpStatus.detail)
             }
         }
 

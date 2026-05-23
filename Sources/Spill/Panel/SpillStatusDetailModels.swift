@@ -121,12 +121,12 @@ enum SpillStatusDetailRows {
             rows.append(SpillStatusDetailRow(label: "Source", value: source))
         }
 
-        if let serverStatus = status.metadata.serverStatus {
-            rows.append(SpillStatusDetailRow(label: "Server", value: serverStatus.state.title))
-            rows.append(SpillStatusDetailRow(label: "Check", value: serverStatus.source))
+        if let mcpStatus = status.metadata.mcpStatus {
+            rows.append(SpillStatusDetailRow(label: "MCP", value: mcpStatus.state.title))
+            rows.append(SpillStatusDetailRow(label: "Check", value: mcpStatus.source))
 
-            if !serverStatus.detail.isEmpty {
-                rows.append(SpillStatusDetailRow(label: "Evidence", value: serverStatus.detail))
+            if !mcpStatus.detail.isEmpty {
+                rows.append(SpillStatusDetailRow(label: "Evidence", value: mcpStatus.detail))
             }
         }
 
