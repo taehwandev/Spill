@@ -13,6 +13,7 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
     private let sleepGuard: SleepGuardController
     private let statusStore: SystemStatusStore
     private let aiStatusStore: AIStatusStore
+    private let cloudServiceStatusStore: CloudServiceStatusStore
     private let windowActionStore: WindowActionStore
     private let updateStore: UpdateCheckStore
     private let visibilityChanged: (Bool) -> Void
@@ -33,6 +34,7 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
         panelStore: PanelStore,
         statusStore: SystemStatusStore = SystemStatusStore(),
         aiStatusStore: AIStatusStore = AIStatusStore(),
+        cloudServiceStatusStore: CloudServiceStatusStore = CloudServiceStatusStore(),
         windowActionStore: WindowActionStore = WindowActionStore(),
         updateStore: UpdateCheckStore = UpdateCheckStore(),
         sleepGuard: SleepGuardController,
@@ -44,6 +46,7 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
         self.panelStore = panelStore
         self.statusStore = statusStore
         self.aiStatusStore = aiStatusStore
+        self.cloudServiceStatusStore = cloudServiceStatusStore
         self.windowActionStore = windowActionStore
         self.updateStore = updateStore
         self.sleepGuard = sleepGuard
@@ -222,6 +225,7 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
                 settings: settings,
                 statusStore: statusStore,
                 aiStatusStore: aiStatusStore,
+                cloudServiceStatusStore: cloudServiceStatusStore,
                 windowActionStore: windowActionStore,
                 sleepGuard: sleepGuard,
                 updateStore: updateStore

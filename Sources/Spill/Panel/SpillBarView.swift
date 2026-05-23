@@ -5,6 +5,7 @@ struct SpillBarView: View {
     @ObservedObject var settings: SpillSettings
     @ObservedObject var statusStore: SystemStatusStore
     @ObservedObject var aiStatusStore: AIStatusStore
+    @ObservedObject var cloudServiceStatusStore: CloudServiceStatusStore
     @ObservedObject var windowActionStore: WindowActionStore
     @ObservedObject var sleepGuard: SleepGuardController
     @ObservedObject var updateStore: UpdateCheckStore
@@ -13,6 +14,7 @@ struct SpillBarView: View {
     @State private var pendingDismissWorkItem: DispatchWorkItem?
     @State private var hoveredStatusModule: SpillStatusModule? = nil
     @State private var didCopyUpdateInstallCommand = false
+    @State private var showsServiceStatusDashboard = false
 
     private var panelState: PanelState {
         panelStore.state
@@ -309,7 +311,7 @@ struct SpillBarView: View {
 
     private var aiSection: some View {
         VStack(spacing: 5) {
-            sectionHeader("AI", symbolName: "sparkles")
+            aiSectionHeader
 
             HStack(spacing: 6) {
                 ForEach(aiStatusStore.statuses) { status in
@@ -326,6 +328,40 @@ struct SpillBarView: View {
                 }
             }
         }
+    }
+
+    private var aiSectionHeader: some View {
+        HStack(spacing: 8) {
+            Text("AI")
+                .font(.system(size: 9.5, weight: .bold))
+                .tracking(1.2)
+                .foregroundStyle(.secondary.opacity(0.7))
+
+            Spacer()
+
+            Button {
+                showsServiceStatusDashboard = true
+                cloudServiceStatusStore.refreshIfNeeded()
+            } label: {
+                Label("Status", systemImage: "cloud.fill")
+                    .font(.system(size: 9.5, weight: .bold))
+                    .lineLimit(1)
+                    .padding(.horizontal, 7)
+                    .frame(height: 22)
+                    .background(.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .popover(isPresented: $showsServiceStatusDashboard, arrowEdge: .top) {
+                CloudServiceStatusDashboardView(store: cloudServiceStatusStore)
+            }
+            .help("Official service status")
+
+            Image(systemName: "sparkles")
+                .font(.system(size: 10.5, weight: .bold))
+                .foregroundStyle(.secondary.opacity(0.7))
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("AI")
     }
 
     private func detailButton(

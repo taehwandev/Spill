@@ -11,6 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let sleepGuard = SleepGuardController()
     private let statusStore = SystemStatusStore(cpuInitialSampleIntervalNanoseconds: 250_000_000)
     private let aiStatusStore = AIStatusStore()
+    private let cloudServiceStatusStore = CloudServiceStatusStore()
     private let windowActionStore = WindowActionStore()
     private let updateCheckStore = UpdateCheckStore()
     private lazy var panelStore = PanelStore(
@@ -30,6 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panelStore: panelStore,
         statusStore: statusStore,
         aiStatusStore: aiStatusStore,
+        cloudServiceStatusStore: cloudServiceStatusStore,
         windowActionStore: windowActionStore,
         updateStore: updateCheckStore,
         sleepGuard: sleepGuard,
