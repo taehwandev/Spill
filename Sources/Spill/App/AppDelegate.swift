@@ -257,6 +257,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         if spillPanelController.isVisible {
             SpillTelemetry.shared.track("panel_opened", props: ["source": source])
+            updateCheckStore.checkForUpdatesIfNeeded(source: "panel_open")
         }
 
         if !AccessibilityPermission.isTrusted {

@@ -90,7 +90,7 @@ struct SpillBarView: View {
                 Circle()
                     .fill(Color.teal.opacity(0.14))
 
-                Image(systemName: updateStore.availableUpdate?.usesInstallerPackage == true ? "shippingbox.fill" : "terminal.fill")
+                Image(systemName: updateBannerSymbolName)
                     .foregroundStyle(.teal)
                     .font(.system(size: 11, weight: .semibold))
             }
@@ -109,15 +109,21 @@ struct SpillBarView: View {
 
             Spacer(minLength: 6)
 
-            updateBannerButton(
-                symbolName: didCopyUpdateInstallCommand ? "checkmark" : "doc.on.doc",
-                title: didCopyUpdateInstallCommand ? "Copied" : "Copy install command"
-            ) {
-                copyUpdateInstallCommand()
-            }
+            if updateStore.usesInAppUpdater {
+                updateBannerButton(symbolName: "arrow.down.circle.fill", title: "Update now") {
+                    updateStore.checkForUpdates(source: "panel_update_banner")
+                }
+            } else {
+                updateBannerButton(
+                    symbolName: didCopyUpdateInstallCommand ? "checkmark" : "doc.on.doc",
+                    title: didCopyUpdateInstallCommand ? "Copied" : "Copy install command"
+                ) {
+                    copyUpdateInstallCommand()
+                }
 
-            updateBannerButton(symbolName: updateOpenButtonSymbolName, title: updateOpenButtonTitle) {
-                updateStore.openUpdate(source: "panel")
+                updateBannerButton(symbolName: updateOpenButtonSymbolName, title: updateOpenButtonTitle) {
+                    updateStore.openUpdate(source: "panel")
+                }
             }
         }
         .padding(.horizontal, 9)
@@ -137,10 +143,22 @@ struct SpillBarView: View {
         return "Update \(version)"
     }
 
+    private var updateBannerSymbolName: String {
+        if updateStore.usesInAppUpdater {
+            return "arrow.down.circle.fill"
+        }
+
+        return updateStore.availableUpdate?.usesInstallerPackage == true ? "shippingbox.fill" : "terminal.fill"
+    }
+
     private var updateBannerSubtitle: String {
-        updateStore.availableUpdate?.usesInstallerPackage == true
+        if updateStore.usesInAppUpdater {
+            return "In-app update ready"
+        }
+
+        return updateStore.availableUpdate?.usesInstallerPackage == true
             ? "Signed installer package"
-            : "Copy install command"
+            : "Manual installer"
     }
 
     private var updateOpenButtonTitle: String {

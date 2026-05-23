@@ -19,19 +19,14 @@ struct UpdatePreferencesSection: View {
 
             updateStatus
 
-            if store.canOpenUpdate {
+            if showsManualFallbackActions {
                 installCommandView
             }
 
             HStack(spacing: 8) {
-                Button {
-                    store.checkForUpdates(source: "preferences")
-                } label: {
-                    Label(checkButtonTitle, systemImage: "arrow.clockwise")
-                }
-                .disabled(store.isChecking)
+                checkForUpdatesButton
 
-                if store.canOpenUpdate {
+                if showsManualFallbackActions {
                     Button {
                         copyInstallCommand()
                     } label: {
@@ -61,6 +56,26 @@ struct UpdatePreferencesSection: View {
         }
     }
 
+    @ViewBuilder
+    private var checkForUpdatesButton: some View {
+        if store.canOpenUpdate && store.usesInAppUpdater {
+            Button {
+                store.checkForUpdates(source: "preferences")
+            } label: {
+                Label(checkButtonTitle, systemImage: "arrow.down.circle")
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(store.isChecking)
+        } else {
+            Button {
+                store.checkForUpdates(source: "preferences")
+            } label: {
+                Label(checkButtonTitle, systemImage: "arrow.clockwise")
+            }
+            .disabled(store.isChecking)
+        }
+    }
+
     private var installCommandView: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
@@ -87,9 +102,7 @@ struct UpdatePreferencesSection: View {
     private var updateStatus: some View {
         switch store.state {
         case .idle:
-            Text(store.usesInAppUpdater
-                ? "Updates can be downloaded and installed inside the app."
-                : "Manual checks use the latest GitHub release metadata.")
+            Text(idleStatusMessage)
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         case .checking:
@@ -101,7 +114,7 @@ struct UpdatePreferencesSection: View {
                 .font(.footnote)
                 .foregroundStyle(.green)
         case .available(let update):
-            Label(availableUpdateMessage(for: update), systemImage: update.usesInstallerPackage ? "shippingbox.fill" : "arrow.down.circle.fill")
+            Label(availableUpdateMessage(for: update), systemImage: availableUpdateSymbolName(for: update))
                 .font(.footnote)
                 .foregroundStyle(.blue)
         case .unsupported(let update, let currentMacOS):
@@ -115,8 +128,28 @@ struct UpdatePreferencesSection: View {
         }
     }
 
+    private var showsManualFallbackActions: Bool {
+        store.canOpenUpdate && !store.usesInAppUpdater
+    }
+
+    private var idleStatusMessage: String {
+        if store.usesInAppUpdater {
+            return "Dashboard checks once per day. Use Check for Updates here to start the in-app updater."
+        }
+
+        return "Dashboard checks once per day. Manual checks use the latest GitHub release metadata."
+    }
+
     private var checkButtonTitle: String {
-        store.isChecking ? "Checking" : "Check for Updates"
+        if store.isChecking {
+            return "Checking"
+        }
+
+        if store.canOpenUpdate && store.usesInAppUpdater {
+            return "Update Now"
+        }
+
+        return "Check for Updates"
     }
 
     private var openUpdateTitle: String {
@@ -132,11 +165,23 @@ struct UpdatePreferencesSection: View {
     }
 
     private func availableUpdateMessage(for update: AvailableUpdate) -> String {
+        if store.usesInAppUpdater {
+            return "Version \(update.latestVersion) is available. Update inside the app."
+        }
+
         if update.usesInstallerPackage {
             return "Version \(update.latestVersion) is available. Open the signed installer package to update."
         }
 
         return "Version \(update.latestVersion) is available. Copy the terminal command or download the DMG."
+    }
+
+    private func availableUpdateSymbolName(for update: AvailableUpdate) -> String {
+        if store.usesInAppUpdater {
+            return "arrow.down.circle.fill"
+        }
+
+        return update.usesInstallerPackage ? "shippingbox.fill" : "arrow.down.circle.fill"
     }
 
     private func copyInstallCommand() {

@@ -7,11 +7,17 @@ final class UpdateCheckStore: ObservableObject {
 
     @Published private(set) var state: UpdateCheckState
 
+    private static let automaticDashboardCheckKey = "dev.spill.update.lastDashboardCheckAt"
+    private static let automaticDashboardCheckInterval: TimeInterval = 24 * 60 * 60
+
     private let checker: UpdateChecker
     private let openURL: (URL) -> Void
     private let copyText: @MainActor (String) -> Void
     private let isInAppUpdaterAvailable: @MainActor () -> Bool
     private let runInAppUpdateCheck: @MainActor (String) -> Bool
+    private let defaults: UserDefaults
+    private let now: () -> Date
+    private let automaticDashboardCheckInterval: TimeInterval
     private var checkTask: Task<Void, Never>?
 
     init(
@@ -19,13 +25,19 @@ final class UpdateCheckStore: ObservableObject {
         openURL: @escaping (URL) -> Void = { NSWorkspace.shared.open($0) },
         copyText: @escaping @MainActor (String) -> Void = UpdateCheckStore.copyToPasteboard(_:),
         isInAppUpdaterAvailable: @escaping @MainActor () -> Bool = { false },
-        runInAppUpdateCheck: @escaping @MainActor (String) -> Bool = { _ in false }
+        runInAppUpdateCheck: @escaping @MainActor (String) -> Bool = { _ in false },
+        defaults: UserDefaults = .standard,
+        now: @escaping () -> Date = Date.init,
+        automaticDashboardCheckInterval: TimeInterval = UpdateCheckStore.automaticDashboardCheckInterval
     ) {
         self.checker = checker
         self.openURL = openURL
         self.copyText = copyText
         self.isInAppUpdaterAvailable = isInAppUpdaterAvailable
         self.runInAppUpdateCheck = runInAppUpdateCheck
+        self.defaults = defaults
+        self.now = now
+        self.automaticDashboardCheckInterval = automaticDashboardCheckInterval
         state = .idle(currentVersion: checker.currentVersion)
     }
 
@@ -84,11 +96,37 @@ final class UpdateCheckStore: ObservableObject {
             return
         }
 
+        checkManifestForUpdates(source: source, engine: "manifest")
+    }
+
+    func checkForUpdatesIfNeeded(source: String = "dashboard") {
+        guard !isChecking else {
+            return
+        }
+
+        let currentDate = now()
+        if let lastCheckAt = lastDashboardCheckAt,
+           currentDate.timeIntervalSince(lastCheckAt) < automaticDashboardCheckInterval {
+            SpillTelemetry.shared.track(
+                "update_check_skipped",
+                props: [
+                    "source": source,
+                    "reason": "dashboard_cache"
+                ]
+            )
+            return
+        }
+
+        lastDashboardCheckAt = currentDate
+        checkManifestForUpdates(source: source, engine: "manifest_dashboard")
+    }
+
+    private func checkManifestForUpdates(source: String, engine: String) {
         SpillTelemetry.shared.track(
             "update_check_started",
             props: [
                 "source": source,
-                "engine": "manifest"
+                "engine": engine
             ]
         )
         checkTask?.cancel()
@@ -124,6 +162,24 @@ final class UpdateCheckStore: ObservableObject {
                         "result": "failed"
                     ]
                 )
+            }
+        }
+    }
+
+    private var lastDashboardCheckAt: Date? {
+        get {
+            guard let timestamp = defaults.object(forKey: Self.automaticDashboardCheckKey) as? Double,
+                  timestamp > 0 else {
+                return nil
+            }
+
+            return Date(timeIntervalSince1970: timestamp)
+        }
+        set {
+            if let newValue {
+                defaults.set(newValue.timeIntervalSince1970, forKey: Self.automaticDashboardCheckKey)
+            } else {
+                defaults.removeObject(forKey: Self.automaticDashboardCheckKey)
             }
         }
     }

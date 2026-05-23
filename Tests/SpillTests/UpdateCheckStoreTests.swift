@@ -138,6 +138,99 @@ final class UpdateCheckStoreTests: XCTestCase {
         XCTAssertEqual(store.availableUpdate?.latestVersion, "2026.20.2")
     }
 
+    func testDashboardCheckRunsManifestOncePerInterval() async throws {
+        let data = updateManifestData(latestVersion: "2026.20.2")
+        let loadCounter = LockedCounter()
+        let defaults = makeDefaults()
+        var currentDate = Date(timeIntervalSince1970: 100)
+        let checker = UpdateChecker(
+            currentVersion: "2026.20.1",
+            currentMacOS: DottedVersion("14.5.0")!,
+            dataLoader: { _ in
+                loadCounter.increment()
+                return data
+            }
+        )
+        let store = UpdateCheckStore(
+            checker: checker,
+            openURL: { _ in },
+            copyText: { _ in },
+            defaults: defaults,
+            now: { currentDate }
+        )
+
+        store.checkForUpdatesIfNeeded(source: "panel_open")
+        try await waitForAvailableUpdate(in: store)
+        store.checkForUpdatesIfNeeded(source: "panel_open")
+
+        XCTAssertEqual(loadCounter.value, 1)
+
+        currentDate = currentDate.addingTimeInterval((24 * 60 * 60) + 1)
+        store.checkForUpdatesIfNeeded(source: "panel_open")
+        try await waitForAvailableUpdate(in: store)
+
+        XCTAssertEqual(loadCounter.value, 2)
+    }
+
+    func testDashboardCheckDoesNotUseSparkleForegroundUpdater() async throws {
+        let data = updateManifestData(latestVersion: "2026.20.2")
+        let loadCounter = LockedCounter()
+        let sparkleCounter = LockedCounter()
+        let checker = UpdateChecker(
+            currentVersion: "2026.20.1",
+            currentMacOS: DottedVersion("14.5.0")!,
+            dataLoader: { _ in
+                loadCounter.increment()
+                return data
+            }
+        )
+        let store = UpdateCheckStore(
+            checker: checker,
+            openURL: { _ in },
+            copyText: { _ in },
+            isInAppUpdaterAvailable: { true },
+            runInAppUpdateCheck: { _ in
+                sparkleCounter.increment()
+                return true
+            },
+            defaults: makeDefaults()
+        )
+
+        store.checkForUpdatesIfNeeded(source: "panel_open")
+        try await waitForAvailableUpdate(in: store)
+
+        XCTAssertEqual(loadCounter.value, 1)
+        XCTAssertEqual(sparkleCounter.value, 0)
+        XCTAssertEqual(store.availableUpdate?.latestVersion, "2026.20.2")
+    }
+
+    func testManualCheckBypassesDashboardCache() async throws {
+        let data = updateManifestData(latestVersion: "2026.20.2")
+        let loadCounter = LockedCounter()
+        let defaults = makeDefaults()
+        let checker = UpdateChecker(
+            currentVersion: "2026.20.1",
+            currentMacOS: DottedVersion("14.5.0")!,
+            dataLoader: { _ in
+                loadCounter.increment()
+                return data
+            }
+        )
+        let store = UpdateCheckStore(
+            checker: checker,
+            openURL: { _ in },
+            copyText: { _ in },
+            defaults: defaults
+        )
+
+        store.checkForUpdatesIfNeeded(source: "panel_open")
+        try await waitForAvailableUpdate(in: store)
+        store.checkForUpdates(source: "preferences")
+        try await waitForAvailableUpdate(in: store)
+
+        XCTAssertEqual(loadCounter.value, 2)
+    }
+
     func testCopyInstallCommandDoesNothingBeforeAvailableUpdate() {
         let checker = UpdateChecker(
             currentVersion: "2026.20.1",
@@ -156,6 +249,26 @@ final class UpdateCheckStoreTests: XCTestCase {
         XCTAssertNil(copiedText)
     }
 
+    private func updateManifestData(latestVersion: String) -> Data {
+        """
+        {
+          "latestVersion": "\(latestVersion)",
+          "build": "42",
+          "minimumMacOS": "14.0",
+          "downloadURL": "https://github.com/taehwandev/Spill/releases/latest/download/Spill-macos.dmg",
+          "releaseNotesURL": "https://github.com/taehwandev/Spill/releases/latest",
+          "publishedAt": "2026-05-17T00:00:00Z"
+        }
+        """.data(using: .utf8)!
+    }
+
+    private func makeDefaults() -> UserDefaults {
+        let suiteName = "dev.spill.UpdateCheckStoreTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        return defaults
+    }
+
     private func waitForAvailableUpdate(in store: UpdateCheckStore) async throws {
         for _ in 0..<20 {
             if store.canOpenUpdate {
@@ -166,5 +279,22 @@ final class UpdateCheckStoreTests: XCTestCase {
         }
 
         XCTFail("Expected update store to reach available state.")
+    }
+}
+
+private final class LockedCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+
+    var value: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return count
+    }
+
+    func increment() {
+        lock.lock()
+        count += 1
+        lock.unlock()
     }
 }
