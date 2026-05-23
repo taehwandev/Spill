@@ -3,6 +3,8 @@ import AppKit
 @MainActor
 final class StatusItemController: NSObject {
     private let defaultLength: CGFloat = 26
+    private static let inactiveMaximumStatusItemLength: CGFloat = 190
+    private static let activeSleepGuardMaximumStatusItemLength: CGFloat = 176
     private let settings: SpillSettings
     private let statusStore: SystemStatusStore
     private let sleepGuard: SleepGuardController
@@ -68,10 +70,11 @@ final class StatusItemController: NSObject {
         )
         let performanceEffect = menuBarPerformanceEffect
         let sleepGuardSegment = sleepGuardMenuBarSegment
-        let segments = Self.orderedSegments(
+        let segments = Self.visibleSegments(
             trigger: triggerSegment(performanceEffect: performanceEffect),
             statusSegments: summary.segments,
-            caffeineSegment: sleepGuardSegment
+            caffeineSegment: sleepGuardSegment,
+            maximumWidth: maximumStatusItemLength
         )
         let segmentsChanged = segments != currentSegments
         currentSegments = segments
@@ -126,6 +129,61 @@ final class StatusItemController: NSObject {
         caffeineSegment: MenuBarStatusSegment?
     ) -> [MenuBarStatusSegment] {
         [caffeineSegment].compactMap { $0 } + [trigger] + statusSegments
+    }
+
+    static func visibleSegments(
+        trigger: MenuBarStatusSegment,
+        statusSegments: [MenuBarStatusSegment],
+        caffeineSegment: MenuBarStatusSegment?,
+        maximumWidth: CGFloat
+    ) -> [MenuBarStatusSegment] {
+        let requestedSegments = orderedSegments(
+            trigger: trigger,
+            statusSegments: statusSegments,
+            caffeineSegment: caffeineSegment
+        )
+        guard MenuBarStatusContentView.preferredWidth(for: requestedSegments) > maximumWidth else {
+            return requestedSegments
+        }
+
+        let compactCaffeineSegment = caffeineSegment?.withoutMenuBarValue()
+        var visibleStatusSegments = statusSegments.map { $0.valueOnlyMenuBarSegment() }
+        var fittedSegments = orderedSegments(
+            trigger: trigger,
+            statusSegments: visibleStatusSegments,
+            caffeineSegment: compactCaffeineSegment
+        )
+
+        while !visibleStatusSegments.isEmpty,
+              MenuBarStatusContentView.preferredWidth(for: fittedSegments) > maximumWidth {
+            visibleStatusSegments.removeLast()
+            fittedSegments = orderedSegments(
+                trigger: trigger,
+                statusSegments: visibleStatusSegments,
+                caffeineSegment: compactCaffeineSegment
+            )
+        }
+
+        if MenuBarStatusContentView.preferredWidth(for: fittedSegments) <= maximumWidth {
+            return fittedSegments
+        }
+
+        let essentialSegments = orderedSegments(
+            trigger: trigger,
+            statusSegments: [],
+            caffeineSegment: compactCaffeineSegment
+        )
+        guard MenuBarStatusContentView.preferredWidth(for: essentialSegments) > maximumWidth else {
+            return essentialSegments
+        }
+
+        return [trigger]
+    }
+
+    private var maximumStatusItemLength: CGFloat {
+        sleepGuard.isActive
+            ? Self.activeSleepGuardMaximumStatusItemLength
+            : Self.inactiveMaximumStatusItemLength
     }
 
     private func configureTriggerButton() {

@@ -9,6 +9,7 @@ final class MenuBarStatusContentView: NSView {
     private static let triggerChipHeight: CGFloat = 20
     private static let iconOnlyChipWidth: CGFloat = 22
     private static let triggerChipWidth: CGFloat = 30
+    private static let valueOnlyHorizontalPadding: CGFloat = 10
     private static let textFont = NSFont.monospacedDigitSystemFont(ofSize: 13.5, weight: .light)
 
     private let segments: [MenuBarStatusSegment]
@@ -74,6 +75,10 @@ final class MenuBarStatusContentView: NSView {
         }
 
         let textWidth = (segment.value as NSString).size(withAttributes: [.font: textFont]).width
+        if segment.isValueOnly {
+            return ceil(textWidth) + valueOnlyHorizontalPadding
+        }
+
         return ceil(textWidth) + 29
     }
 
@@ -226,6 +231,17 @@ private final class MenuBarMetricChipView: NSView {
     }
 
     private func installSubviews() {
+        if segment.isValueOnly, !segment.value.isEmpty {
+            addSubview(valueLabel)
+
+            NSLayoutConstraint.activate([
+                valueLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 5),
+                valueLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -5),
+                valueLabel.centerYAnchor.constraint(equalTo: centerYAnchor)
+            ])
+            return
+        }
+
         addSubview(iconView)
 
         if segment.value.isEmpty {
@@ -289,7 +305,7 @@ private final class MenuBarMetricChipView: NSView {
 
     private var hasCustomTriggerIcon: Bool {
         switch segment.visualStyle {
-        case .symbol:
+        case .symbol, .valueOnly:
             return false
         case .trigger:
             return false
@@ -304,4 +320,14 @@ private final class MenuBarMetricChipView: NSView {
         return "\(segment.title) \(segment.value)"
     }
 
+}
+
+private extension MenuBarStatusSegment {
+    var isValueOnly: Bool {
+        if case .valueOnly = visualStyle {
+            return true
+        }
+
+        return false
+    }
 }

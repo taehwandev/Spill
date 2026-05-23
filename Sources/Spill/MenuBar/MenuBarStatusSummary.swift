@@ -11,6 +11,7 @@ struct MenuBarStatusSegment: Equatable {
 
     enum VisualStyle: Equatable {
         case symbol
+        case valueOnly
         case trigger(MenuBarTriggerIconStyle)
     }
 
@@ -47,6 +48,38 @@ struct MenuBarStatusSegment: Equatable {
         self.symbolName = symbolName
         self.visualStyle = visualStyle
         self.animates = animates
+    }
+}
+
+extension MenuBarStatusSegment {
+    func withoutMenuBarValue() -> MenuBarStatusSegment {
+        MenuBarStatusSegment(
+            kind: kind,
+            title: title,
+            shortTitle: shortTitle,
+            value: "",
+            displayText: "",
+            usageRatio: usageRatio,
+            state: state,
+            symbolName: symbolName,
+            visualStyle: visualStyle,
+            animates: animates
+        )
+    }
+
+    func valueOnlyMenuBarSegment() -> MenuBarStatusSegment {
+        MenuBarStatusSegment(
+            kind: kind,
+            title: title,
+            shortTitle: shortTitle,
+            value: value,
+            displayText: displayText,
+            usageRatio: usageRatio,
+            state: state,
+            symbolName: symbolName,
+            visualStyle: .valueOnly,
+            animates: false
+        )
     }
 }
 

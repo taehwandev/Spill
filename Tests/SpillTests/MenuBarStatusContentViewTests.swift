@@ -174,6 +174,66 @@ final class MenuBarStatusContentViewTests: XCTestCase {
         }
     }
 
+    func testVisibleSegmentsKeepAllRequestedSegmentsWhenTheyFit() {
+        let trigger = makeTriggerSegment()
+        let caffeine = makeCaffeineSegment(value: "15m", active: true)
+        let cpu = makeStatusSegment(kind: .cpu, value: "20.0%")
+        let memory = makeStatusSegment(kind: .memory, value: "60.0%")
+
+        let segments = StatusItemController.visibleSegments(
+            trigger: trigger,
+            statusSegments: [cpu, memory],
+            caffeineSegment: caffeine,
+            maximumWidth: 1_000
+        )
+
+        XCTAssertEqual(segments.map(\.kind), [.caffeine, .trigger, .cpu, .memory])
+        XCTAssertEqual(segments.first?.value, "15m")
+    }
+
+    func testVisibleSegmentsUseValueOnlyStatusSegmentsWhenActiveStateWouldOverflow() {
+        let trigger = makeTriggerSegment()
+        let caffeine = makeCaffeineSegment(value: "1h 59m", active: true)
+        let cpu = makeStatusSegment(kind: .cpu, value: "90.0%")
+        let memory = makeStatusSegment(kind: .memory, value: "90.0%")
+        let compactSegments = StatusItemController.orderedSegments(
+            trigger: trigger,
+            statusSegments: [cpu.valueOnlyMenuBarSegment(), memory.valueOnlyMenuBarSegment()],
+            caffeineSegment: caffeine.withoutMenuBarValue()
+        )
+        let compactWidth = MenuBarStatusContentView.preferredWidth(for: compactSegments)
+
+        let segments = StatusItemController.visibleSegments(
+            trigger: trigger,
+            statusSegments: [cpu, memory],
+            caffeineSegment: caffeine,
+            maximumWidth: compactWidth
+        )
+
+        XCTAssertEqual(segments.map(\.kind), [.caffeine, .trigger, .cpu, .memory])
+        XCTAssertEqual(segments.first?.value, "")
+        XCTAssertEqual(segments.suffix(2).map(\.value), ["90.0%", "90.0%"])
+        XCTAssertEqual(segments.suffix(2).map(\.visualStyle), [.valueOnly, .valueOnly])
+        XCTAssertLessThanOrEqual(MenuBarStatusContentView.preferredWidth(for: segments), compactWidth)
+    }
+
+    func testVisibleSegmentsDropStatusOnlyAfterValueOnlySegmentsStillOverflow() {
+        let trigger = makeTriggerSegment()
+        let caffeine = makeCaffeineSegment(value: "1h 59m", active: true)
+        let cpu = makeStatusSegment(kind: .cpu, value: "90.0%")
+        let memory = makeStatusSegment(kind: .memory, value: "90.0%")
+
+        let segments = StatusItemController.visibleSegments(
+            trigger: trigger,
+            statusSegments: [cpu, memory],
+            caffeineSegment: caffeine,
+            maximumWidth: 96
+        )
+
+        XCTAssertEqual(segments.map(\.kind), [.caffeine, .trigger])
+        XCTAssertLessThanOrEqual(MenuBarStatusContentView.preferredWidth(for: segments), 96)
+    }
+
     func testDropTriggerUsesSystemSymbolFallback() {
         let image = MenuBarTriggerIconRenderer.image(
             style: .spill,
@@ -183,5 +243,74 @@ final class MenuBarStatusContentViewTests: XCTestCase {
         )
 
         XCTAssertNil(image)
+    }
+
+    private func makeTriggerSegment() -> MenuBarStatusSegment {
+        MenuBarStatusSegment(
+            kind: .trigger,
+            title: "Spill",
+            shortTitle: "Spill",
+            value: "",
+            displayText: "",
+            usageRatio: 0,
+            state: .normal,
+            symbolName: "drop.fill"
+        )
+    }
+
+    private func makeCaffeineSegment(value: String = "", active: Bool = false) -> MenuBarStatusSegment {
+        MenuBarStatusSegment(
+            kind: .caffeine,
+            title: "Caffeine",
+            shortTitle: "CAF",
+            value: value,
+            displayText: value,
+            usageRatio: 0,
+            state: active ? .active : .unavailable,
+            symbolName: active ? "cup.and.saucer.fill" : "cup.and.saucer"
+        )
+    }
+
+    private func makeStatusSegment(
+        kind: MenuBarStatusSegment.Kind,
+        value: String
+    ) -> MenuBarStatusSegment {
+        let title: String
+        let shortTitle: String
+        let symbolName: String
+
+        switch kind {
+        case .cpu:
+            title = "CPU"
+            shortTitle = "CPU"
+            symbolName = "cpu"
+        case .memory:
+            title = "Memory"
+            shortTitle = "MEM"
+            symbolName = "memorychip"
+        case .caffeine:
+            title = "Caffeine"
+            shortTitle = "CAF"
+            symbolName = "cup.and.saucer"
+        case .sleepGuard:
+            title = "Sleep Guard"
+            shortTitle = "Sleep"
+            symbolName = "moon"
+        case .trigger:
+            title = "Spill"
+            shortTitle = "Spill"
+            symbolName = "drop.fill"
+        }
+
+        return MenuBarStatusSegment(
+            kind: kind,
+            title: title,
+            shortTitle: shortTitle,
+            value: value,
+            displayText: value,
+            usageRatio: 0,
+            state: .normal,
+            symbolName: symbolName
+        )
     }
 }
