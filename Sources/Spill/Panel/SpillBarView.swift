@@ -160,22 +160,8 @@ struct SpillBarView: View {
 
     private var header: some View {
         HStack(spacing: 12) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 11, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [.teal, .indigo],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .shadow(color: .indigo.opacity(0.25), radius: 3, y: 1)
-
-                Image(systemName: panelState.readiness.symbolName)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(.white)
-            }
-            .frame(width: 34, height: 34)
+            SpillBrandIconView()
+                .frame(width: 34, height: 34)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("Spill")

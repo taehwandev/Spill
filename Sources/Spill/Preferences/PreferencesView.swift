@@ -65,48 +65,6 @@ struct PreferenceCard<Content: View>: View {
     }
 }
 
-// Official Spill Wave Logo Shape (extracted from generate-app-icon.swift Bezier curves)
-struct SpillLogoShape: Shape {
-    func path(in rect: CGRect) -> Path {
-        let width = rect.width
-        let height = rect.height
-        var path = Path()
-
-        path.move(to: CGPoint(x: width * 0.22, y: height * 0.43))
-        path.addCurve(
-            to: CGPoint(x: width * 0.39, y: height * 0.56),
-            control1: CGPoint(x: width * 0.22, y: height * 0.52),
-            control2: CGPoint(x: width * 0.30, y: height * 0.58)
-        )
-        path.addCurve(
-            to: CGPoint(x: width * 0.54, y: height * 0.51),
-            control1: CGPoint(x: width * 0.45, y: height * 0.55),
-            control2: CGPoint(x: width * 0.48, y: height * 0.50)
-        )
-        path.addCurve(
-            to: CGPoint(x: width * 0.80, y: height * 0.47),
-            control1: CGPoint(x: width * 0.64, y: height * 0.55),
-            control2: CGPoint(x: width * 0.79, y: height * 0.57)
-        )
-        path.addCurve(
-            to: CGPoint(x: width * 0.65, y: height * 0.31),
-            control1: CGPoint(x: width * 0.81, y: height * 0.36),
-            control2: CGPoint(x: width * 0.74, y: height * 0.31)
-        )
-        path.addLine(to: CGPoint(x: width * 0.34, y: height * 0.31))
-        path.addCurve(
-            to: CGPoint(x: width * 0.22, y: height * 0.43),
-            control1: CGPoint(x: width * 0.25, y: height * 0.31),
-            control2: CGPoint(x: width * 0.21, y: height * 0.36)
-        )
-        path.closeSubpath()
-
-        // Flip Y-axis perfectly from AppKit (bottom-left origin) to SwiftUI (top-left origin)
-        let transform = CGAffineTransform(scaleX: 1, y: -1).translatedBy(x: 0, y: -height)
-        return path.applying(transform)
-    }
-}
-
 struct PreferencesView: View {
     @ObservedObject var settings: SpillSettings
     @ObservedObject var scanner: AXMenuBarItemScanner
@@ -121,21 +79,8 @@ struct PreferencesView: View {
             VStack(alignment: .leading, spacing: 20) {
                 // Header Brand Section
                 HStack(spacing: 12) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill(
-                                LinearGradient(
-                                    colors: [.teal, .indigo],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
-                            .shadow(color: .indigo.opacity(0.2), radius: 2, y: 1)
-
-                        SpillLogoShape()
-                            .fill(.white)
-                    }
-                    .frame(width: 34, height: 34)
+                    SpillBrandIconView()
+                        .frame(width: 34, height: 34)
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Spill")
