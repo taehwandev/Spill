@@ -128,6 +128,30 @@ final class SystemStatusStoreTests: XCTestCase {
         XCTAssertEqual(store.cpu.state, .normal)
     }
 
+    func testCPUInitialSampleCanPrimeFirstRefresh() async {
+        var readings = [
+            SystemCPUReading(userTicks: 10, systemTicks: 10, idleTicks: 80, niceTicks: 0),
+            SystemCPUReading(userTicks: 20, systemTicks: 20, idleTicks: 160, niceTicks: 0)
+        ]
+        let store = SystemStatusStore(
+            cpuReader: {
+                readings.removeFirst()
+            },
+            memoryReader: { .unavailableTestValue },
+            storageReader: { .unavailableTestValue },
+            gpuReader: { .unavailableTestValue },
+            networkReader: { nil },
+            powerReader: { .unavailableTestValue },
+            cpuInitialSampleIntervalNanoseconds: 1,
+            networkInitialSampleIntervalNanoseconds: 0
+        )
+
+        await store.refresh(enabledModules: [.cpu])
+
+        XCTAssertEqual(store.cpu.value, "20.0%")
+        XCTAssertEqual(store.cpu.state, .normal)
+    }
+
     func testRepeatedRefreshUpdatesCachedValues() async {
         var cpuReadCount = 0
         var memoryReadCount = 0

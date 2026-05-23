@@ -10,20 +10,27 @@ final class MenuBarStatusContentView: NSView {
     private static let iconOnlyChipWidth: CGFloat = 22
     private static let triggerChipWidth: CGFloat = 30
     private static let valueOnlyHorizontalPadding: CGFloat = 10
-    private static let stackedChipMinWidth: CGFloat = 30
-    private static let stackedHorizontalPadding: CGFloat = 8
+    private static let compactStackChipMinWidth: CGFloat = 30
+    private static let compactStackHorizontalPadding: CGFloat = 8
+    private static let verticalChipMinWidth: CGFloat = 33
+    private static let verticalHorizontalPadding: CGFloat = 9
     private static let textFont = NSFont.monospacedDigitSystemFont(ofSize: 13.5, weight: .light)
-    fileprivate static let stackedTextFont = NSFont.monospacedDigitSystemFont(ofSize: 8.2, weight: .medium)
+    fileprivate static let compactStackTextFont = NSFont.monospacedDigitSystemFont(ofSize: 8.2, weight: .medium)
+    fileprivate static let verticalTitleFont = NSFont.systemFont(ofSize: 7.2, weight: .semibold)
+    fileprivate static let verticalValueFont = NSFont.monospacedDigitSystemFont(ofSize: 11.2, weight: .medium)
 
     private let segments: [MenuBarStatusSegment]
+    private let layoutStyle: MenuBarStatusLayoutStyle
 
     private enum ChipDescriptor {
         case single(MenuBarStatusSegment)
-        case stacked([MenuBarStatusSegment])
+        case compactStack([MenuBarStatusSegment])
+        case vertical(MenuBarStatusSegment)
     }
 
-    init(segments: [MenuBarStatusSegment]) {
+    init(segments: [MenuBarStatusSegment], layoutStyle: MenuBarStatusLayoutStyle = .inline) {
         self.segments = segments
+        self.layoutStyle = layoutStyle
         super.init(frame: .zero)
 
         translatesAutoresizingMaskIntoConstraints = false
@@ -38,19 +45,22 @@ final class MenuBarStatusContentView: NSView {
     }
 
     override var intrinsicContentSize: NSSize {
-        NSSize(width: Self.preferredWidth(for: segments), height: Self.height)
+        NSSize(width: Self.preferredWidth(for: segments, layoutStyle: layoutStyle), height: Self.height)
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
         nil
     }
 
-    static func preferredWidth(for segments: [MenuBarStatusSegment]) -> CGFloat {
+    static func preferredWidth(
+        for segments: [MenuBarStatusSegment],
+        layoutStyle: MenuBarStatusLayoutStyle = .inline
+    ) -> CGFloat {
         guard !segments.isEmpty else {
             return 26
         }
 
-        let chips = chipDescriptors(for: segments)
+        let chips = chipDescriptors(for: segments, layoutStyle: layoutStyle)
         let chipTotal = chips.reduce(CGFloat.zero) { partial, descriptor in
             partial + chipWidth(for: descriptor)
         }
@@ -58,10 +68,14 @@ final class MenuBarStatusContentView: NSView {
         return sidePadding + chipTotal + gapTotal + sidePadding
     }
 
-    static func segmentKind(at point: NSPoint, in segments: [MenuBarStatusSegment]) -> MenuBarStatusSegment.Kind? {
+    static func segmentKind(
+        at point: NSPoint,
+        in segments: [MenuBarStatusSegment],
+        layoutStyle: MenuBarStatusLayoutStyle = .inline
+    ) -> MenuBarStatusSegment.Kind? {
         var currentX = sidePadding
 
-        for descriptor in chipDescriptors(for: segments) {
+        for descriptor in chipDescriptors(for: segments, layoutStyle: layoutStyle) {
             let width = chipWidth(for: descriptor)
             let frame = NSRect(x: currentX, y: 0, width: width, height: height)
             if frame.contains(point) {
@@ -74,7 +88,16 @@ final class MenuBarStatusContentView: NSView {
         return nil
     }
 
-    private static func chipDescriptors(for segments: [MenuBarStatusSegment]) -> [ChipDescriptor] {
+    private static func chipDescriptors(
+        for segments: [MenuBarStatusSegment],
+        layoutStyle: MenuBarStatusLayoutStyle
+    ) -> [ChipDescriptor] {
+        if layoutStyle == .stacked {
+            return segments.map { segment in
+                isVerticalStatus(segment) ? .vertical(segment) : .single(segment)
+            }
+        }
+
         var descriptors: [ChipDescriptor] = []
         var index = 0
 
@@ -96,7 +119,7 @@ final class MenuBarStatusContentView: NSView {
             }
 
             if stack.count > 1 {
-                descriptors.append(.stacked(stack))
+                descriptors.append(.compactStack(stack))
                 index = nextIndex
             } else {
                 descriptors.append(.single(segment))
@@ -105,6 +128,19 @@ final class MenuBarStatusContentView: NSView {
         }
 
         return descriptors
+    }
+
+    private static func isVerticalStatus(_ segment: MenuBarStatusSegment) -> Bool {
+        guard !segment.value.isEmpty else {
+            return false
+        }
+
+        switch segment.kind {
+        case .cpu, .memory:
+            return true
+        case .caffeine, .sleepGuard, .trigger:
+            return false
+        }
     }
 
     private static func isStackableCompactStatus(_ segment: MenuBarStatusSegment) -> Bool {
@@ -128,7 +164,9 @@ final class MenuBarStatusContentView: NSView {
         switch descriptor {
         case let .single(segment):
             return segment.kind
-        case let .stacked(segments):
+        case let .vertical(segment):
+            return segment.kind
+        case let .compactStack(segments):
             guard !segments.isEmpty else {
                 return nil
             }
@@ -144,8 +182,10 @@ final class MenuBarStatusContentView: NSView {
         switch descriptor {
         case let .single(segment):
             return chipWidth(for: segment)
-        case let .stacked(segments):
-            return stackedChipWidth(for: segments)
+        case let .compactStack(segments):
+            return compactStackChipWidth(for: segments)
+        case let .vertical(segment):
+            return verticalChipWidth(for: segment)
         }
     }
 
@@ -153,18 +193,37 @@ final class MenuBarStatusContentView: NSView {
         switch descriptor {
         case let .single(segment):
             return chipHeight(for: segment)
-        case .stacked:
+        case .compactStack, .vertical:
             return height
         }
     }
 
-    private static func stackedChipWidth(for segments: [MenuBarStatusSegment]) -> CGFloat {
+    private static func compactStackChipWidth(for segments: [MenuBarStatusSegment]) -> CGFloat {
         let maxTextWidth = segments.reduce(CGFloat.zero) { partial, segment in
-            let textWidth = (segment.value as NSString).size(withAttributes: [.font: stackedTextFont]).width
+            let textWidth = (segment.value as NSString).size(withAttributes: [.font: compactStackTextFont]).width
             return max(partial, ceil(textWidth))
         }
 
-        return max(stackedChipMinWidth, maxTextWidth + stackedHorizontalPadding)
+        return max(compactStackChipMinWidth, maxTextWidth + compactStackHorizontalPadding)
+    }
+
+    private static func verticalChipWidth(for segment: MenuBarStatusSegment) -> CGFloat {
+        let titleWidth = (verticalTitle(for: segment) as NSString).size(
+            withAttributes: [.font: verticalTitleFont]
+        ).width
+        let valueWidth = (segment.value as NSString).size(withAttributes: [.font: verticalValueFont]).width
+        return max(verticalChipMinWidth, ceil(max(titleWidth, valueWidth)) + verticalHorizontalPadding)
+    }
+
+    fileprivate static func verticalTitle(for segment: MenuBarStatusSegment) -> String {
+        switch segment.kind {
+        case .memory:
+            return "RAM"
+        case .cpu:
+            return "CPU"
+        case .caffeine, .sleepGuard, .trigger:
+            return segment.shortTitle
+        }
     }
 
     private static func chipWidth(for segment: MenuBarStatusSegment) -> CGFloat {
@@ -191,13 +250,15 @@ final class MenuBarStatusContentView: NSView {
     private func installChips() {
         var previous: NSView?
 
-        for descriptor in Self.chipDescriptors(for: segments) {
+        for descriptor in Self.chipDescriptors(for: segments, layoutStyle: layoutStyle) {
             let chip: NSView
             switch descriptor {
             case let .single(segment):
                 chip = MenuBarMetricChipView(segment: segment)
-            case let .stacked(segments):
-                chip = MenuBarStackedMetricChipView(segments: segments)
+            case let .compactStack(segments):
+                chip = MenuBarCompactStackMetricChipView(segments: segments)
+            case let .vertical(segment):
+                chip = MenuBarVerticalMetricChipView(segment: segment)
             }
 
             addSubview(chip)
@@ -225,7 +286,7 @@ final class MenuBarStatusContentView: NSView {
 }
 
 @MainActor
-private final class MenuBarStackedMetricChipView: NSView {
+private final class MenuBarCompactStackMetricChipView: NSView {
     private let segments: [MenuBarStatusSegment]
 
     init(segments: [MenuBarStatusSegment]) {
@@ -271,7 +332,7 @@ private final class MenuBarStackedMetricChipView: NSView {
     private func makeLabel(for segment: MenuBarStatusSegment) -> NSTextField {
         let label = NSTextField(labelWithString: segment.value)
         label.translatesAutoresizingMaskIntoConstraints = false
-        label.font = MenuBarStatusContentView.stackedTextFont
+        label.font = MenuBarStatusContentView.compactStackTextFont
         label.alignment = .center
         label.lineBreakMode = .byClipping
         label.textColor = textColor(for: segment)
@@ -303,6 +364,80 @@ private final class MenuBarStackedMetricChipView: NSView {
                 return "\(segment.title) \(segment.value)"
             }
             .joined(separator: ", ")
+    }
+}
+
+@MainActor
+private final class MenuBarVerticalMetricChipView: NSView {
+    private let segment: MenuBarStatusSegment
+    private let titleLabel = NSTextField(labelWithString: "")
+    private let valueLabel = NSTextField(labelWithString: "")
+
+    init(segment: MenuBarStatusSegment) {
+        self.segment = segment
+        super.init(frame: .zero)
+
+        translatesAutoresizingMaskIntoConstraints = false
+        configureLabels()
+        installLabels()
+        setAccessibilityLabel(accessibilityText)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    private func configureLabels() {
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        titleLabel.stringValue = MenuBarStatusContentView.verticalTitle(for: segment)
+        titleLabel.font = MenuBarStatusContentView.verticalTitleFont
+        titleLabel.alignment = .center
+        titleLabel.lineBreakMode = .byClipping
+        titleLabel.textColor = .secondaryLabelColor
+        titleLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
+        titleLabel.setContentHuggingPriority(.required, for: .horizontal)
+
+        valueLabel.translatesAutoresizingMaskIntoConstraints = false
+        valueLabel.stringValue = segment.value
+        valueLabel.font = MenuBarStatusContentView.verticalValueFont
+        valueLabel.alignment = .center
+        valueLabel.lineBreakMode = .byClipping
+        valueLabel.textColor = valueColor
+        valueLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
+        valueLabel.setContentHuggingPriority(.required, for: .horizontal)
+    }
+
+    private func installLabels() {
+        addSubview(titleLabel)
+        addSubview(valueLabel)
+
+        NSLayoutConstraint.activate([
+            titleLabel.topAnchor.constraint(equalTo: topAnchor, constant: 1),
+            titleLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 3),
+            titleLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -3),
+
+            valueLabel.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -1),
+            valueLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 3),
+            valueLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -3)
+        ])
+    }
+
+    private var valueColor: NSColor {
+        switch segment.state {
+        case .normal:
+            return .labelColor
+        case .active, .refreshing:
+            return .systemTeal
+        case .warning:
+            return .systemOrange
+        case .unavailable:
+            return .secondaryLabelColor
+        }
+    }
+
+    private var accessibilityText: String {
+        "\(segment.title) \(segment.value)"
     }
 }
 

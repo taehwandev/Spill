@@ -9,7 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let settings = SpillSettings.shared
     private let scanner = AXMenuBarItemScanner()
     private let sleepGuard = SleepGuardController()
-    private let statusStore = SystemStatusStore()
+    private let statusStore = SystemStatusStore(cpuInitialSampleIntervalNanoseconds: 250_000_000)
     private let aiStatusStore = AIStatusStore()
     private let windowActionStore = WindowActionStore()
     private let updateCheckStore = UpdateCheckStore()
@@ -457,6 +457,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .dropFirst()
             .sink { [weak self] _ in
                 SpillTelemetry.shared.track("preference_changed", props: ["name": "menu_bar_status_display_style"])
+                self?.statusItemController?.refresh()
+            }
+            .store(in: &cancellables)
+
+        settings.$menuBarStatusLayoutStyle
+            .dropFirst()
+            .sink { [weak self] _ in
+                SpillTelemetry.shared.track("preference_changed", props: ["name": "menu_bar_status_layout_style"])
                 self?.statusItemController?.refresh()
             }
             .store(in: &cancellables)

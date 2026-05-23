@@ -51,6 +51,13 @@ struct StatusModulesPreferencesSection: View {
                 }
             }
 
+            Picker("Layout", selection: $settings.menuBarStatusLayoutStyle) {
+                ForEach(MenuBarStatusLayoutStyle.allCases) { layout in
+                    Text(layout.title).tag(layout)
+                }
+            }
+            .pickerStyle(.segmented)
+
             Picker("Format", selection: $settings.menuBarStatusDisplayStyle) {
                 ForEach(MenuBarStatusDisplayStyle.allCases) { style in
                     Text(style.title).tag(style)
@@ -112,9 +119,17 @@ struct StatusModulesPreferencesSection: View {
             }
 
             let value = settings.menuBarStatusPrecision.percentText(for: previewValues[item] ?? 0)
+            if settings.menuBarStatusLayoutStyle == .stacked {
+                return "\(stackedPreviewTitle(for: item)) \(value)"
+            }
+
             return settings.menuBarStatusDisplayStyle.text(label: item.shortTitle, value: value)
         }
 
         return parts.isEmpty ? "Icon Only" : parts.joined(separator: "  ")
+    }
+
+    private func stackedPreviewTitle(for item: SpillMenuBarStatusItem) -> String {
+        item == .memory ? "RAM" : item.shortTitle
     }
 }

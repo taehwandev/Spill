@@ -26,6 +26,7 @@ final class SystemStatusStore: ObservableObject {
     private let networkReader: NetworkReader
     private let powerReader: PowerReader
     private let maximumHistoryCount = 24
+    private let cpuInitialSampleIntervalNanoseconds: UInt64
     private let networkInitialSampleIntervalNanoseconds: UInt64
     private var previousCPUReading: SystemCPUReading?
     private var previousNetworkReading: SystemNetworkReading?
@@ -44,6 +45,7 @@ final class SystemStatusStore: ObservableObject {
         gpuReader: @escaping GPUReader = { SystemGPUProvider.status() },
         networkReader: @escaping NetworkReader = { SystemNetworkProvider.currentReading() },
         powerReader: @escaping PowerReader = { SystemPowerProvider.status() },
+        cpuInitialSampleIntervalNanoseconds: UInt64 = 0,
         networkInitialSampleIntervalNanoseconds: UInt64 = 250_000_000
     ) {
         self.cpu = cpu
@@ -70,6 +72,7 @@ final class SystemStatusStore: ObservableObject {
         self.gpuReader = gpuReader
         self.networkReader = networkReader
         self.powerReader = powerReader
+        self.cpuInitialSampleIntervalNanoseconds = cpuInitialSampleIntervalNanoseconds
         self.networkInitialSampleIntervalNanoseconds = networkInitialSampleIntervalNanoseconds
     }
 
@@ -118,8 +121,9 @@ final class SystemStatusStore: ObservableObject {
         }
 
         if enabledModules.contains(.cpu) {
+            let previousReading = await cpuPreviousReadingForRefresh()
             let currentCPUReading = cpuReader()
-            cpu = SystemCPUProvider.status(previous: previousCPUReading, current: currentCPUReading)
+            cpu = SystemCPUProvider.status(previous: previousReading, current: currentCPUReading)
             if let currentCPUReading {
                 previousCPUReading = currentCPUReading
             }
@@ -130,6 +134,24 @@ final class SystemStatusStore: ObservableObject {
             previousCPUReading = nil
             cpuCoreHistory = []
         }
+    }
+
+    private func cpuPreviousReadingForRefresh() async -> SystemCPUReading? {
+        if let previousCPUReading {
+            return previousCPUReading
+        }
+
+        guard cpuInitialSampleIntervalNanoseconds > 0 else {
+            return nil
+        }
+
+        let initialReading = cpuReader()
+        guard initialReading != nil else {
+            return nil
+        }
+
+        try? await Task.sleep(nanoseconds: cpuInitialSampleIntervalNanoseconds)
+        return initialReading
     }
 
     func history(for module: SpillStatusModule) -> [Double] {

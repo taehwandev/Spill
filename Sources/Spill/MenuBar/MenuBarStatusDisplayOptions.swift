@@ -27,6 +27,24 @@ enum MenuBarStatusDisplayStyle: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
+enum MenuBarStatusLayoutStyle: String, CaseIterable, Identifiable, Sendable {
+    case inline
+    case stacked
+
+    var id: String {
+        rawValue
+    }
+
+    var title: String {
+        switch self {
+        case .inline:
+            return "Inline"
+        case .stacked:
+            return "Stacked"
+        }
+    }
+}
+
 enum MenuBarStatusPrecision: Int, CaseIterable, Identifiable, Sendable {
     case whole = 0
     case tenths = 1

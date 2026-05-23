@@ -95,6 +95,10 @@ final class SpillSettings: ObservableObject {
         didSet { defaults.set(menuBarStatusDisplayStyle.rawValue, forKey: Keys.menuBarStatusDisplayStyle) }
     }
 
+    @Published var menuBarStatusLayoutStyle: MenuBarStatusLayoutStyle {
+        didSet { defaults.set(menuBarStatusLayoutStyle.rawValue, forKey: Keys.menuBarStatusLayoutStyle) }
+    }
+
     @Published var menuBarStatusPrecision: MenuBarStatusPrecision {
         didSet { defaults.set(menuBarStatusPrecision.rawValue, forKey: Keys.menuBarStatusPrecision) }
     }
@@ -183,6 +187,9 @@ final class SpillSettings: ObservableObject {
         let styleRawValue = defaults.string(forKey: Keys.menuBarStatusDisplayStyle)
             ?? MenuBarStatusDisplayStyle.labelAndPercent.rawValue
         menuBarStatusDisplayStyle = MenuBarStatusDisplayStyle(rawValue: styleRawValue) ?? .labelAndPercent
+        let layoutRawValue = defaults.string(forKey: Keys.menuBarStatusLayoutStyle)
+            ?? MenuBarStatusLayoutStyle.inline.rawValue
+        menuBarStatusLayoutStyle = MenuBarStatusLayoutStyle(rawValue: layoutRawValue) ?? .inline
         let precisionRawValue = defaults.object(forKey: Keys.menuBarStatusPrecision) as? Int
             ?? MenuBarStatusPrecision.tenths.rawValue
         menuBarStatusPrecision = MenuBarStatusPrecision(rawValue: precisionRawValue) ?? .tenths
@@ -470,6 +477,7 @@ private enum Keys {
     static let enabledMenuBarStatusItems = "enabledMenuBarStatusItems"
     static let showsCPUCoreChart = "showsCPUCoreChart"
     static let menuBarStatusDisplayStyle = "menuBarStatusDisplayStyle"
+    static let menuBarStatusLayoutStyle = "menuBarStatusLayoutStyle"
     static let menuBarStatusPrecision = "menuBarStatusPrecision"
     static let menuBarStatusHighlightThreshold = "menuBarStatusHighlightThreshold"
     static let menuBarTriggerIconStyle = "menuBarTriggerIconStyle"

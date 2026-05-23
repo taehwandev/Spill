@@ -261,6 +261,60 @@ final class MenuBarStatusContentViewTests: XCTestCase {
         )
     }
 
+    func testStackedLayoutRendersTitleOverValueChips() {
+        let cpu = makeStatusSegment(kind: .cpu, value: "5%")
+        let memory = makeStatusSegment(kind: .memory, value: "20%")
+        let view = MenuBarStatusContentView(segments: [cpu, memory], layoutStyle: .stacked)
+        let labels = view.subviews
+            .flatMap(\.subviews)
+            .compactMap { $0 as? NSTextField }
+            .map(\.stringValue)
+
+        XCTAssertEqual(labels, ["CPU", "5%", "RAM", "20%"])
+    }
+
+    func testStackedLayoutUsesSeparateMetricHitTargets() {
+        let cpu = makeStatusSegment(kind: .cpu, value: "90.0%")
+        let memory = makeStatusSegment(kind: .memory, value: "90.0%")
+        let segments = [cpu, memory]
+        let cpuOnlyWidth = MenuBarStatusContentView.preferredWidth(for: [cpu], layoutStyle: .stacked)
+
+        XCTAssertEqual(
+            MenuBarStatusContentView.segmentKind(
+                at: NSPoint(x: 4, y: 17),
+                in: segments,
+                layoutStyle: .stacked
+            ),
+            .cpu
+        )
+        XCTAssertEqual(
+            MenuBarStatusContentView.segmentKind(
+                at: NSPoint(x: 4, y: 5),
+                in: segments,
+                layoutStyle: .stacked
+            ),
+            .cpu
+        )
+        XCTAssertEqual(
+            MenuBarStatusContentView.segmentKind(
+                at: NSPoint(x: cpuOnlyWidth + 4, y: 10),
+                in: segments,
+                layoutStyle: .stacked
+            ),
+            .memory
+        )
+    }
+
+    func testStackedLayoutIsNarrowerThanInlineMetrics() {
+        let cpu = makeStatusSegment(kind: .cpu, value: "90.0%")
+        let memory = makeStatusSegment(kind: .memory, value: "90.0%")
+
+        XCTAssertLessThan(
+            MenuBarStatusContentView.preferredWidth(for: [cpu, memory], layoutStyle: .stacked),
+            MenuBarStatusContentView.preferredWidth(for: [cpu, memory], layoutStyle: .inline)
+        )
+    }
+
     func testDropTriggerUsesSystemSymbolFallback() {
         let image = MenuBarTriggerIconRenderer.image(
             style: .spill,
