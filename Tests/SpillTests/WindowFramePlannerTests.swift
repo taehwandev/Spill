@@ -96,6 +96,30 @@ final class WindowFramePlannerTests: XCTestCase {
         )
     }
 
+    func testTargetFrameReturnsNilForInvalidWindowFrame() {
+        let snapshot = WindowFrameSnapshot(
+            windowFrame: CGRect(x: CGFloat.nan, y: 100, width: 400, height: 300),
+            visibleFrames: [CGRect(x: 0, y: 0, width: 1440, height: 900)]
+        )
+
+        XCTAssertNil(WindowFramePlanner.targetFrame(for: .maximize, snapshot: snapshot, restoreFrame: nil))
+    }
+
+    func testTargetFrameIgnoresInvalidVisibleFrames() {
+        let snapshot = WindowFrameSnapshot(
+            windowFrame: CGRect(x: 1500, y: 100, width: 400, height: 300),
+            visibleFrames: [
+                CGRect(x: 0, y: 0, width: CGFloat.nan, height: 900),
+                CGRect(x: 1440, y: 0, width: 1280, height: 800)
+            ]
+        )
+
+        XCTAssertEqual(
+            WindowFramePlanner.targetFrame(for: .maximize, snapshot: snapshot, restoreFrame: nil),
+            CGRect(x: 1440, y: 0, width: 1280, height: 800)
+        )
+    }
+
     func testCornerFramesUseVisibleFrameQuarters() {
         let snapshot = WindowFrameSnapshot(
             windowFrame: CGRect(x: 100, y: 100, width: 400, height: 300),
@@ -154,6 +178,22 @@ final class WindowFramePlannerTests: XCTestCase {
         )
     }
 
+    func testDisplayMoveSkipsInvalidVisibleFrames() {
+        let snapshot = WindowFrameSnapshot(
+            windowFrame: CGRect(x: 100, y: 100, width: 400, height: 300),
+            visibleFrames: [
+                CGRect(x: 0, y: 0, width: 1440, height: 900),
+                CGRect(x: 1440, y: CGFloat.nan, width: 1280, height: 800),
+                CGRect(x: 2720, y: 0, width: 1280, height: 800)
+            ]
+        )
+
+        XCTAssertEqual(
+            WindowFramePlanner.targetFrame(for: .nextDisplay, snapshot: snapshot, restoreFrame: nil),
+            CGRect(x: 3160, y: 250, width: 400, height: 300)
+        )
+    }
+
     func testRestoreUsesSavedFrame() {
         let restoreFrame = CGRect(x: 120, y: 160, width: 640, height: 480)
         let snapshot = WindowFrameSnapshot(
@@ -164,6 +204,21 @@ final class WindowFramePlannerTests: XCTestCase {
         XCTAssertEqual(
             WindowFramePlanner.targetFrame(for: .restore, snapshot: snapshot, restoreFrame: restoreFrame),
             restoreFrame
+        )
+    }
+
+    func testRestoreRejectsInvalidSavedFrame() {
+        let snapshot = WindowFrameSnapshot(
+            windowFrame: CGRect(x: 0, y: 0, width: 1440, height: 900),
+            visibleFrames: [CGRect(x: 0, y: 0, width: 1440, height: 900)]
+        )
+
+        XCTAssertNil(
+            WindowFramePlanner.targetFrame(
+                for: .restore,
+                snapshot: snapshot,
+                restoreFrame: CGRect(x: 120, y: CGFloat.infinity, width: 640, height: 480)
+            )
         )
     }
 

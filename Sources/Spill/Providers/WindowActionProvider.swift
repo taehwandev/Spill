@@ -8,14 +8,15 @@ struct WindowFrameSnapshot: Hashable, Sendable {
     let visibleFrames: [CGRect]
 
     var activeVisibleFrame: CGRect? {
-        guard !visibleFrames.isEmpty else {
+        let usableVisibleFrames = visibleFrames.filter(\.isUsableWindowFrame)
+        guard !usableVisibleFrames.isEmpty else {
             return nil
         }
 
         let center = CGPoint(x: windowFrame.midX, y: windowFrame.midY)
-        return visibleFrames.first { $0.contains(center) }
-            ?? visibleFrames.first { $0.intersects(windowFrame) }
-            ?? visibleFrames.first
+        return usableVisibleFrames.first { $0.contains(center) }
+            ?? usableVisibleFrames.first { $0.intersects(windowFrame) }
+            ?? usableVisibleFrames.first
     }
 }
 
@@ -25,6 +26,10 @@ enum WindowFramePlanner {
         snapshot: WindowFrameSnapshot,
         restoreFrame: CGRect?
     ) -> CGRect? {
+        guard snapshot.windowFrame.isUsableWindowFrame else {
+            return nil
+        }
+
         guard let visibleFrame = snapshot.activeVisibleFrame else {
             return nil
         }
@@ -108,7 +113,11 @@ enum WindowFramePlanner {
 
             return movedFrame(from: snapshot.windowFrame, to: targetVisibleFrame)
         case .restore:
-            return restoreFrame?.integral
+            guard let restoreFrame, restoreFrame.isUsableWindowFrame else {
+                return nil
+            }
+
+            return restoreFrame.integral
         }
     }
 
@@ -121,13 +130,14 @@ enum WindowFramePlanner {
     }
 
     private static func adjacentVisibleFrame(from current: CGRect, in frames: [CGRect], offset: Int) -> CGRect? {
-        guard frames.count > 1,
+        let usableFrames = frames.filter(\.isUsableWindowFrame)
+        guard usableFrames.count > 1,
               offset != 0
         else {
             return nil
         }
 
-        let orderedFrames = frames.sorted { lhs, rhs in
+        let orderedFrames = usableFrames.sorted { lhs, rhs in
             if lhs.midX == rhs.midX {
                 return lhs.midY < rhs.midY
             }
@@ -596,6 +606,13 @@ extension WindowActionKind {
 
 private extension CGRect {
     var isUsableWindowFrame: Bool {
-        width > 0 && height > 0 && isNull == false && isInfinite == false
+        !isNull
+            && !isInfinite
+            && minX.isFinite
+            && minY.isFinite
+            && width.isFinite
+            && height.isFinite
+            && width > 0
+            && height > 0
     }
 }
