@@ -88,11 +88,11 @@ struct CloudServiceStatusDashboardView: View {
         HStack(alignment: .top, spacing: 8) {
             ZStack {
                 RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(item.health.panelTint.opacity(0.14))
+                    .fill(item.health.serverStatusTint.opacity(0.14))
 
                 Image(systemName: item.symbolName)
                     .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(item.health.panelTint)
+                    .foregroundStyle(item.health.serverStatusTint)
             }
             .frame(width: 26, height: 26)
 
@@ -106,7 +106,7 @@ struct CloudServiceStatusDashboardView: View {
 
                     Text(item.health.title)
                         .font(.system(size: 10, weight: .bold, design: .rounded))
-                        .foregroundStyle(item.health.panelTint)
+                        .foregroundStyle(item.health.serverStatusTint)
                         .lineLimit(1)
                 }
 
@@ -157,22 +157,5 @@ struct CloudServiceStatusDashboardView: View {
         }
 
         return "\(max(1, minutes / 60))h ago"
-    }
-}
-
-private extension CloudServiceHealth {
-    var panelTint: Color {
-        switch self {
-        case .operational:
-            return .green
-        case .degraded:
-            return .orange
-        case .outage:
-            return .red
-        case .maintenance:
-            return .blue
-        case .unknown:
-            return .secondary
-        }
     }
 }

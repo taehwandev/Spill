@@ -351,13 +351,13 @@ struct SpillBarView: View {
 
             LazyVGrid(columns: aiToolColumns, alignment: .leading, spacing: 7) {
                 ForEach(aiStatusStore.statuses) { status in
-                    let serviceIssue = serviceIssue(for: status.kind)
-                    let helpText = aiToolHelpText(status, serviceIssue: serviceIssue)
+                    let serviceStatus = serviceStatus(for: status.kind)
+                    let helpText = aiToolHelpText(status, serviceStatus: serviceStatus)
 
                     Button {
                         panelStore.send(.setStatusDetailTarget(.ai(status.kind)))
                     } label: {
-                        compactAIToolPill(status, serviceIssue: serviceIssue)
+                        compactAIToolPill(status, serviceStatus: serviceStatus)
                     }
                     .buttonStyle(.plain)
                     .popover(isPresented: detailBinding(for: .ai(status.kind)), arrowEdge: .top) {
@@ -428,16 +428,11 @@ struct SpillBarView: View {
             return "Checking"
         }
 
-        guard let snapshot = cloudServiceStatusStore.snapshot else {
-            return "Check"
+        guard let aggregateHealth = aggregateServiceHealth else {
+            return "Server Status"
         }
 
-        let issueCount = serviceStatusIssueItems.count
-        if issueCount > 0 {
-            return issueCount == 1 ? "1 Issue" : "\(issueCount) Issues"
-        }
-
-        return "Services \(shortServiceCheckTime(snapshot.fetchedAt))"
+        return aggregateHealth.serverStatusHeaderTitle
     }
 
     private var serviceStatusHelpText: String {
@@ -445,9 +440,11 @@ struct SpillBarView: View {
             return "Click to fetch official service status details."
         }
 
-        let statusText = serviceStatusIssueItems.isEmpty
-            ? "No server issues"
-            : "\(serviceStatusIssueItems.count) server issue\(serviceStatusIssueItems.count == 1 ? "" : "s")"
+        let aggregateHealth = CloudServiceStatusPresentation.aggregateHealth(for: snapshot.items)
+        let issueCount = serviceStatusIssueItems.count
+        let statusText = issueCount == 0
+            ? "Server status \(aggregateHealth.title.lowercased())"
+            : "Server status \(aggregateHealth.title.lowercased()) with \(issueCount) issue\(issueCount == 1 ? "" : "s")"
         return "\(statusText). Last checked \(fullServiceCheckTime(snapshot.fetchedAt)). Click for per-service details."
     }
 
@@ -456,23 +453,11 @@ struct SpillBarView: View {
             return "arrow.triangle.2.circlepath"
         }
 
-        let issueItems = serviceStatusIssueItems
-        guard !issueItems.isEmpty else {
+        guard let aggregateHealth = aggregateServiceHealth else {
             return "cloud.fill"
         }
 
-        switch aggregateServiceHealth(for: issueItems) {
-        case .operational:
-            return "checkmark.circle.fill"
-        case .degraded:
-            return "exclamationmark.circle.fill"
-        case .outage:
-            return "exclamationmark.triangle.fill"
-        case .maintenance:
-            return "wrench.and.screwdriver.fill"
-        case .unknown:
-            return "questionmark.circle.fill"
-        }
+        return aggregateHealth.serverStatusSymbolName
     }
 
     private var serviceStatusTint: Color {
@@ -480,59 +465,33 @@ struct SpillBarView: View {
             return .blue
         }
 
-        let issueItems = serviceStatusIssueItems
-        guard !issueItems.isEmpty else {
+        guard let aggregateHealth = aggregateServiceHealth else {
             return .secondary
         }
 
-        switch aggregateServiceHealth(for: issueItems) {
-        case .outage:
-            return .red
-        case .degraded:
-            return .orange
-        case .maintenance:
-            return .blue
-        case .operational:
-            return .green
-        case .unknown:
-            return .secondary
-        }
+        return aggregateHealth.serverStatusTint
     }
 
     private var serviceStatusIssueItems: [CloudServiceStatusItem] {
         cloudServiceStatusStore.snapshot?.items.filter { $0.health.isServerIssue } ?? []
     }
 
-    private func aggregateServiceHealth(for items: [CloudServiceStatusItem]) -> CloudServiceHealth {
-        if items.contains(where: { $0.health == .outage }) {
-            return .outage
+    private var aggregateServiceHealth: CloudServiceHealth? {
+        cloudServiceStatusStore.snapshot.map {
+            CloudServiceStatusPresentation.aggregateHealth(for: $0.items)
         }
-
-        if items.contains(where: { $0.health == .degraded }) {
-            return .degraded
-        }
-
-        if items.contains(where: { $0.health == .maintenance }) {
-            return .maintenance
-        }
-
-        if items.contains(where: { $0.health == .operational }) {
-            return .operational
-        }
-
-        return .unknown
     }
 
-    private func serviceIssue(for kind: LocalAIToolKind) -> CloudServiceStatusItem? {
+    private func serviceStatus(for kind: LocalAIToolKind) -> CloudServiceStatusItem? {
         let serviceKinds = cloudServiceKinds(for: kind)
         guard !serviceKinds.isEmpty else {
             return nil
         }
 
         return cloudServiceStatusStore.snapshot?.items
-            .filter { serviceKinds.contains($0.kind) && $0.health.isServerIssue }
+            .filter { serviceKinds.contains($0.kind) }
             .sorted { lhs, rhs in
-                lhs.health.serverIssueRank > rhs.health.serverIssueRank
+                lhs.health.serverStatusRank > rhs.health.serverStatusRank
             }
             .first
     }
@@ -550,14 +509,6 @@ struct SpillBarView: View {
         case .openAI:
             return [.openAI]
         }
-    }
-
-    private func shortServiceCheckTime(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = .current
-        formatter.timeZone = .current
-        formatter.setLocalizedDateFormatFromTemplate("jm")
-        return formatter.string(from: date)
     }
 
     private func fullServiceCheckTime(_ date: Date) -> String {
@@ -662,7 +613,7 @@ struct SpillBarView: View {
 
     private func compactAIToolPill(
         _ status: LocalAIToolStatus,
-        serviceIssue: CloudServiceStatusItem?
+        serviceStatus: CloudServiceStatusItem?
     ) -> some View {
         let tint = status.state.panelTint
         let isActive = status.state == .active
@@ -681,7 +632,7 @@ struct SpillBarView: View {
 
                     Spacer(minLength: 4)
 
-                    aiStatusBadge(value: status.value, tint: tint, isRunning: isActive)
+                    aiStatusBadge(for: status, serviceStatus: serviceStatus)
                 }
 
                 HStack(spacing: 5) {
@@ -693,10 +644,6 @@ struct SpillBarView: View {
                         .foregroundStyle(isActive ? tint.opacity(0.86) : .secondary)
 
                     Spacer(minLength: 4)
-
-                    if let serviceIssue {
-                        aiServerIssueBadge(serviceIssue)
-                    }
                 }
             }
         }
@@ -727,8 +674,26 @@ struct SpillBarView: View {
         .frame(width: 24, height: 24)
     }
 
-    private func aiStatusBadge(value: String, tint: Color, isRunning: Bool) -> some View {
-        HStack(spacing: 4) {
+    @ViewBuilder
+    private func aiStatusBadge(
+        for status: LocalAIToolStatus,
+        serviceStatus: CloudServiceStatusItem?
+    ) -> some View {
+        if let serviceStatus {
+            aiServerStatusBadge(serviceStatus)
+        } else if cloudServiceKinds(for: status.kind).isEmpty {
+            aiLocalStatusBadge(status)
+        } else {
+            aiServerPendingBadge()
+        }
+    }
+
+    private func aiLocalStatusBadge(_ status: LocalAIToolStatus) -> some View {
+        let tint = status.state.panelTint
+        let isRunning = status.state == .active
+        let value = isRunning ? status.value : "Local"
+
+        return HStack(spacing: 4) {
             Circle()
                 .fill(tint)
                 .frame(width: 5, height: 5)
@@ -748,19 +713,38 @@ struct SpillBarView: View {
         )
     }
 
-    private func aiServerIssueBadge(_ item: CloudServiceStatusItem) -> some View {
-        HStack(spacing: 3) {
-            Image(systemName: item.health.serverIssueSymbolName)
+    private func aiServerPendingBadge() -> some View {
+        let tint = cloudServiceStatusStore.isLoading ? Color.blue : Color.secondary
+        let value = cloudServiceStatusStore.isLoading ? "Checking" : "Server"
+
+        return HStack(spacing: 4) {
+            Image(systemName: cloudServiceStatusStore.isLoading ? "arrow.triangle.2.circlepath" : "cloud.fill")
                 .font(.system(size: 8, weight: .bold))
 
-            Text(item.health.serverIssueBadgeTitle)
+            Text(value)
                 .font(.system(size: 8.5, weight: .bold, design: .rounded))
                 .lineLimit(1)
         }
         .padding(.horizontal, 5)
-        .frame(height: 16)
-        .foregroundStyle(item.health.serverIssueTint)
-        .background(item.health.serverIssueTint.opacity(0.13), in: Capsule())
+        .frame(height: 18)
+        .foregroundStyle(tint)
+        .background(tint.opacity(0.10), in: Capsule())
+        .help("Server status will appear after the next official status check.")
+    }
+
+    private func aiServerStatusBadge(_ item: CloudServiceStatusItem) -> some View {
+        HStack(spacing: 3) {
+            Image(systemName: item.health.serverStatusSymbolName)
+                .font(.system(size: 8, weight: .bold))
+
+            Text(item.health.serverStatusBadgeTitle)
+                .font(.system(size: 8.5, weight: .bold, design: .rounded))
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 5)
+        .frame(height: 18)
+        .foregroundStyle(item.health.serverStatusTint)
+        .background(item.health.serverStatusTint.opacity(0.13), in: Capsule())
         .help("\(item.title) server \(item.health.title): \(item.detail)")
     }
 
@@ -1164,11 +1148,11 @@ struct SpillBarView: View {
         return parts.joined(separator: " - ")
     }
 
-    private func aiToolHelpText(_ status: LocalAIToolStatus, serviceIssue: CloudServiceStatusItem?) -> String {
+    private func aiToolHelpText(_ status: LocalAIToolStatus, serviceStatus: CloudServiceStatusItem?) -> String {
         var text = statusHelpText(title: status.title, value: status.value, subtitle: status.subtitle)
 
-        if let serviceIssue {
-            text += " - Server \(serviceIssue.health.title)"
+        if let serviceStatus {
+            text += " - Server \(serviceStatus.health.title)"
         }
 
         return text
@@ -1192,75 +1176,6 @@ struct SpillBarView: View {
         return parts.joined(separator: " - ")
     }
 
-}
-
-private extension CloudServiceHealth {
-    var isServerIssue: Bool {
-        switch self {
-        case .degraded, .outage, .maintenance:
-            return true
-        case .operational, .unknown:
-            return false
-        }
-    }
-
-    var serverIssueRank: Int {
-        switch self {
-        case .outage:
-            return 3
-        case .degraded:
-            return 2
-        case .maintenance:
-            return 1
-        case .operational, .unknown:
-            return 0
-        }
-    }
-
-    var serverIssueBadgeTitle: String {
-        switch self {
-        case .outage:
-            return "Outage"
-        case .degraded:
-            return "Degraded"
-        case .maintenance:
-            return "Maint"
-        case .operational:
-            return "OK"
-        case .unknown:
-            return "Unknown"
-        }
-    }
-
-    var serverIssueSymbolName: String {
-        switch self {
-        case .outage:
-            return "exclamationmark.triangle.fill"
-        case .degraded:
-            return "exclamationmark.circle.fill"
-        case .maintenance:
-            return "wrench.and.screwdriver.fill"
-        case .operational:
-            return "checkmark.circle.fill"
-        case .unknown:
-            return "questionmark.circle.fill"
-        }
-    }
-
-    var serverIssueTint: Color {
-        switch self {
-        case .outage:
-            return .red
-        case .degraded:
-            return .orange
-        case .maintenance:
-            return .blue
-        case .operational:
-            return .green
-        case .unknown:
-            return .secondary
-        }
-    }
 }
 
 private struct MetricSparklineSeries {

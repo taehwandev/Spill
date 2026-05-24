@@ -320,7 +320,7 @@ struct LocalAIStatusProvider: SpillStatusProvider {
     }
 
     private static func commandValue(isRunning: Bool) -> String {
-        return isRunning ? "Running" : "Installed"
+        return isRunning ? "Running" : "Ready"
     }
 
     private static func commandSubtitle(
@@ -329,7 +329,7 @@ struct LocalAIStatusProvider: SpillStatusProvider {
     ) -> String {
         return compactSubtitle(
             metadata: metadata,
-            fallback: isRunning ? "Local process" : "Installed locally"
+            fallback: isRunning ? "Local process" : "Ready locally"
         )
     }
 

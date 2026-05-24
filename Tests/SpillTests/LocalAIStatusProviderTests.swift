@@ -51,7 +51,7 @@ final class LocalAIStatusProviderTests: XCTestCase {
         XCTAssertEqual(statuses.first { $0.kind == .openAI }?.subtitle, "gpt-5.2")
     }
 
-    func testInstalledToolsShowInstalledWhenNoProcessIsRunning() {
+    func testInstalledToolsShowReadyWhenNoProcessIsRunning() {
         let statuses = LocalAIStatusProvider.statuses(
             environment: [:],
             processNames: [],
@@ -59,8 +59,8 @@ final class LocalAIStatusProviderTests: XCTestCase {
         )
 
         XCTAssertEqual(statuses.map(\.kind), [.codex])
-        XCTAssertEqual(statuses.first { $0.kind == .codex }?.value, "Installed")
-        XCTAssertEqual(statuses.first { $0.kind == .codex }?.subtitle, "Installed locally")
+        XCTAssertEqual(statuses.first { $0.kind == .codex }?.value, "Ready")
+        XCTAssertEqual(statuses.first { $0.kind == .codex }?.subtitle, "Ready locally")
         XCTAssertEqual(statuses.first { $0.kind == .codex }?.state, .normal)
     }
 
@@ -168,8 +168,8 @@ final class LocalAIStatusProviderTests: XCTestCase {
         )
 
         XCTAssertEqual(statuses.map(\.kind), [.antigravity])
-        XCTAssertEqual(statuses.first?.value, "Installed")
-        XCTAssertEqual(statuses.first?.subtitle, "Installed locally")
+        XCTAssertEqual(statuses.first?.value, "Ready")
+        XCTAssertEqual(statuses.first?.subtitle, "Ready locally")
     }
 
     func testRunningCommandIsHiddenWhenToolIsNotInstalled() {
@@ -192,8 +192,8 @@ final class LocalAIStatusProviderTests: XCTestCase {
         )
 
         XCTAssertEqual(statuses.map(\.kind), [.codex])
-        XCTAssertEqual(statuses.first?.value, "Installed")
-        XCTAssertEqual(statuses.first?.subtitle, "Installed locally")
+        XCTAssertEqual(statuses.first?.value, "Ready")
+        XCTAssertEqual(statuses.first?.subtitle, "Ready locally")
     }
 
     func testMissingToolsAreHidden() {
