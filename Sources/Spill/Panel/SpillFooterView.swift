@@ -243,10 +243,14 @@ struct SpillFooterView: View {
         }
 
         if sleepGuard.activeDuration?.isIndefinite == true {
-            return "Caffeine - on until stopped"
+            return sleepGuard.keepsDisplayAwake
+                ? "Caffeine - on until stopped"
+                : "Caffeine - on until stopped - display may sleep"
         }
 
-        return "Caffeine - \(sleepGuard.remainingLabel) remaining"
+        return sleepGuard.keepsDisplayAwake
+            ? "Caffeine - \(sleepGuard.remainingLabel) remaining"
+            : "Caffeine - \(sleepGuard.remainingLabel) remaining - display may sleep"
     }
 
     private func powerHelpText(for status: SystemPowerStatus) -> String {

@@ -145,7 +145,21 @@ final class SpillSettings: ObservableObject {
         iconSpacing = Self.normalizedIconSpacing(defaults.object(forKey: Keys.iconSpacing) as? Double)
         showCountBadge = defaults.object(forKey: Keys.showCountBadge) as? Bool ?? true
         showPowerFooter = defaults.object(forKey: Keys.showPowerFooter) as? Bool ?? true
-        sleepGuardKeepsDisplayAwake = defaults.object(forKey: Keys.sleepGuardKeepsDisplayAwake) as? Bool ?? true
+        let persistedSleepGuardKeepsDisplayAwake = defaults.object(forKey: Keys.sleepGuardKeepsDisplayAwake) as? Bool
+        let migratedSleepGuardDisplayAwakeDefault = defaults.object(
+            forKey: Keys.sleepGuardDisplayAwakeDefaultMigrated
+        ) as? Bool ?? false
+        // Earlier builds could persist the old system-only default. Prefer the
+        // safer current default once, then preserve any later explicit opt-out.
+        if !migratedSleepGuardDisplayAwakeDefault, persistedSleepGuardKeepsDisplayAwake == false {
+            sleepGuardKeepsDisplayAwake = true
+            defaults.set(true, forKey: Keys.sleepGuardKeepsDisplayAwake)
+        } else {
+            sleepGuardKeepsDisplayAwake = persistedSleepGuardKeepsDisplayAwake ?? true
+        }
+        if !migratedSleepGuardDisplayAwakeDefault {
+            defaults.set(true, forKey: Keys.sleepGuardDisplayAwakeDefaultMigrated)
+        }
         sleepGuardShowsRemainingInMenuBar = defaults.object(forKey: Keys.sleepGuardShowsRemainingInMenuBar) as? Bool
             ?? false
         let persistedAllowsIndefinite = defaults.object(forKey: Keys.sleepGuardAllowsIndefinite) as? Bool ?? false
@@ -464,6 +478,7 @@ private enum Keys {
     static let showCountBadge = "showCountBadge"
     static let showPowerFooter = "showPowerFooter"
     static let sleepGuardKeepsDisplayAwake = "sleepGuardKeepsDisplayAwake"
+    static let sleepGuardDisplayAwakeDefaultMigrated = "sleepGuardDisplayAwakeDefaultMigrated"
     static let sleepGuardShowsRemainingInMenuBar = "sleepGuardShowsRemainingInMenuBar"
     static let sleepGuardAllowsIndefinite = "sleepGuardAllowsIndefinite"
     static let sleepGuardDefaultDuration = "sleepGuardDefaultDuration"

@@ -56,6 +56,27 @@ final class SpillSettingsTests: XCTestCase {
         XCTAssertFalse(settings.sleepGuardAllowsIndefinite)
     }
 
+    func testLegacySleepGuardDisplayAwakeFalseMigratesToOn() {
+        let defaults = makeDefaults()
+        defaults.set(false, forKey: "sleepGuardKeepsDisplayAwake")
+
+        let settings = SpillSettings(defaults: defaults)
+
+        XCTAssertTrue(settings.sleepGuardKeepsDisplayAwake)
+        XCTAssertTrue(defaults.bool(forKey: "sleepGuardKeepsDisplayAwake"))
+        XCTAssertTrue(defaults.bool(forKey: "sleepGuardDisplayAwakeDefaultMigrated"))
+    }
+
+    func testSleepGuardDisplayAwakeCanBeDisabledAfterMigration() {
+        let defaults = makeDefaults()
+        defaults.set(true, forKey: "sleepGuardDisplayAwakeDefaultMigrated")
+        defaults.set(false, forKey: "sleepGuardKeepsDisplayAwake")
+
+        let settings = SpillSettings(defaults: defaults)
+
+        XCTAssertFalse(settings.sleepGuardKeepsDisplayAwake)
+    }
+
     func testNumericLayoutSettingsNormalizeNonFiniteDefaults() {
         let defaults = makeDefaults()
         defaults.set(Double.nan, forKey: "iconSpacing")

@@ -415,9 +415,15 @@ final class StatusItemController: NSObject {
             if !sleepGuard.isActive {
                 parts.append("Caffeine chip: click to start for \(settings.sleepGuardDefaultDuration.menuTitle)")
             } else if sleepGuard.activeDuration?.isIndefinite == true {
-                parts.append("Caffeine chip: on until stopped - click to stop")
+                let detail = sleepGuard.keepsDisplayAwake
+                    ? "on until stopped"
+                    : "on until stopped, display may sleep"
+                parts.append("Caffeine chip: \(detail) - click to stop")
             } else {
-                parts.append("Caffeine chip: \(sleepGuard.remainingLabel) remaining - click to stop")
+                let detail = sleepGuard.keepsDisplayAwake
+                    ? "\(sleepGuard.remainingLabel) remaining"
+                    : "\(sleepGuard.remainingLabel) remaining, display may sleep"
+                parts.append("Caffeine chip: \(detail) - click to stop")
             }
         }
 
