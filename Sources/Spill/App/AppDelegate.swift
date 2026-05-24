@@ -129,8 +129,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ProcessInfo.processInfo.environment["SPILL_SMOKE_VALIDATE_PANEL_LAYOUT"] == "1"
     }
 
+    private var shouldStartSleepGuardInSmokeTest: Bool {
+        ProcessInfo.processInfo.environment["SPILL_SMOKE_START_SLEEP_GUARD"] == "1"
+    }
+
     private func startSmokeTestExitTimer() {
         print("SPILL_SMOKE_READY")
+
+        if shouldStartSleepGuardInSmokeTest {
+            startSleepGuardForSmokeTest()
+        }
 
         if shouldOpenPanelInSmokeTest {
             openPanelForSmokeTest()
@@ -147,6 +155,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.main.asyncAfter(deadline: .now() + exitDelay) {
             print("SPILL_SMOKE_EXIT")
             NSApp.terminate(nil)
+        }
+    }
+
+    private func startSleepGuardForSmokeTest() {
+        let didStart = sleepGuard.start(duration: .fifteenMinutes, keepDisplayAwake: true)
+        statusItemController?.refresh(isSpillBarVisible: spillPanelController.isVisible)
+
+        if didStart {
+            print("SPILL_SLEEP_GUARD_SMOKE_STARTED keepDisplayAwake=\(sleepGuard.keepsDisplayAwake)")
+        } else {
+            print("SPILL_SLEEP_GUARD_SMOKE_FAILED \(sleepGuard.errorMessage ?? "unknown error")")
         }
     }
 
