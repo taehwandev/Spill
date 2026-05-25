@@ -91,7 +91,7 @@ if ! otool -l "$MACOS_DIR/Spill" | grep -q "@executable_path/../Frameworks"; the
 fi
 
 ICONSET_DIR="$CONTENTS_DIR/AppIcon.iconset"
-swift "$ROOT_DIR/scripts/generate-app-icon.swift" "$ICONSET_DIR"
+swift "$ROOT_DIR/scripts/generate-app-icon.swift" "$ICONSET_DIR" "$ROOT_DIR/docs/assets/spill-icon.png"
 iconutil -c icns "$ICONSET_DIR" -o "$RESOURCES_DIR/AppIcon.icns"
 rm -rf "$ICONSET_DIR"
 
