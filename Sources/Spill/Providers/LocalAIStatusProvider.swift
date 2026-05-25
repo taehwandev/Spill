@@ -88,6 +88,67 @@ struct LocalAIToolMetadata: Hashable, Sendable {
     }
 }
 
+struct LocalAIToolActionRecommendation: Hashable, Sendable {
+    let title: String
+    let detail: String
+    let command: String?
+
+    static func recommendation(for status: LocalAIToolStatus) -> LocalAIToolActionRecommendation? {
+        guard status.state != .unavailable else {
+            return nil
+        }
+
+        switch status.kind {
+        case .codex, .claude, .antigravity:
+            guard let command = status.kind.executableName else {
+                return nil
+            }
+
+            return commandLineRecommendation(
+                status: status,
+                readyTitle: "Start from terminal",
+                activeTitle: "Continue in terminal",
+                command: command
+            )
+        case .ollama:
+            if status.state == .active {
+                return LocalAIToolActionRecommendation(
+                    title: "Inspect local models",
+                    detail: "Ollama is running locally.",
+                    command: "ollama list"
+                )
+            }
+
+            return LocalAIToolActionRecommendation(
+                title: "Start local server",
+                detail: "Run the local model server when you need it.",
+                command: "ollama serve"
+            )
+        case .openAI:
+            return LocalAIToolActionRecommendation(
+                title: "Use configured API",
+                detail: "OpenAI configuration is available; secret values stay hidden.",
+                command: nil
+            )
+        }
+    }
+
+    private static func commandLineRecommendation(
+        status: LocalAIToolStatus,
+        readyTitle: String,
+        activeTitle: String,
+        command: String
+    ) -> LocalAIToolActionRecommendation {
+        LocalAIToolActionRecommendation(
+            title: status.state == .active ? activeTitle : readyTitle,
+            detail: status.state == .active
+                ? "A local process is active. Open your terminal session to continue."
+                : "Copy the launch command and run it in your terminal.",
+            command: command
+        )
+    }
+}
+
 struct LocalAIToolStatus: Identifiable, Hashable, Sendable {
     let kind: LocalAIToolKind
     let value: String
@@ -119,6 +180,10 @@ struct LocalAIToolStatus: Identifiable, Hashable, Sendable {
 
     var symbolName: String {
         kind.symbolName
+    }
+
+    var actionRecommendation: LocalAIToolActionRecommendation? {
+        LocalAIToolActionRecommendation.recommendation(for: self)
     }
 
     var statusItem: SpillStatusItem {

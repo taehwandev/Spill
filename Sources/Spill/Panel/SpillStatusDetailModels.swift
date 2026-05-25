@@ -109,6 +109,14 @@ enum SpillStatusDetailRows {
             SpillStatusDetailRow(label: "Detail", value: status.subtitle ?? "N/A")
         ]
 
+        if let recommendation = status.actionRecommendation {
+            rows.append(SpillStatusDetailRow(label: "Next", value: recommendation.title))
+
+            if let command = recommendation.command {
+                rows.append(SpillStatusDetailRow(label: "Command", value: command))
+            }
+        }
+
         if let model = status.metadata.model, !model.isEmpty {
             rows.append(SpillStatusDetailRow(label: "Model", value: model))
         }

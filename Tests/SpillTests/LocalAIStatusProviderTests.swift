@@ -222,4 +222,48 @@ final class LocalAIStatusProviderTests: XCTestCase {
         XCTAssertEqual(item.subtitle, "API key/base URL")
         XCTAssertEqual(item.symbolName, "key.fill")
     }
+
+    func testActionRecommendationsUseStaticSafeCommands() {
+        let codex = LocalAIToolStatus(
+            kind: .codex,
+            value: "Ready",
+            subtitle: "Ready locally",
+            state: .normal
+        )
+        let ollama = LocalAIToolStatus(
+            kind: .ollama,
+            value: "Running",
+            subtitle: "Local process",
+            state: .active
+        )
+
+        XCTAssertEqual(codex.actionRecommendation?.title, "Start from terminal")
+        XCTAssertEqual(codex.actionRecommendation?.command, "codex")
+        XCTAssertEqual(ollama.actionRecommendation?.title, "Inspect local models")
+        XCTAssertEqual(ollama.actionRecommendation?.command, "ollama list")
+    }
+
+    func testOpenAIActionRecommendationDoesNotCopySecretReadingCommand() {
+        let openAI = LocalAIStatusProvider.statuses(
+            environment: ["OPENAI_API_KEY": "secret"],
+            processNames: [],
+            installedExecutableNames: []
+        )
+        .first { $0.kind == .openAI }
+
+        XCTAssertEqual(openAI?.actionRecommendation?.title, "Use configured API")
+        XCTAssertNil(openAI?.actionRecommendation?.command)
+        XCTAssertEqual(openAI?.actionRecommendation?.detail, "OpenAI configuration is available; secret values stay hidden.")
+    }
+
+    func testUnavailableAIStatusDoesNotExposeActionRecommendation() {
+        let unavailable = LocalAIToolStatus(
+            kind: .codex,
+            value: "N/A",
+            subtitle: nil,
+            state: .unavailable
+        )
+
+        XCTAssertNil(unavailable.actionRecommendation)
+    }
 }
