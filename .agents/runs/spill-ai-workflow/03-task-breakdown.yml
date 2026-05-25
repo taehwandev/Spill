@@ -1,0 +1,97 @@
+feature_id: spill-ai-workflow
+status: ready
+
+necessity:
+  decision: build
+  reason: >
+    Makes the existing AI strip actionable while staying inside Spill's compact
+    local control-tray product scope.
+  ambiguity:
+    clarity: clear
+    blockers_resolved: true
+    resolution_sources:
+      - maintainer
+      - repo-research
+      - assumption
+  clarification_required: false
+  questions: []
+
+tasks:
+  - id: spill-ai-workflow-T1
+    title: Add local AI next-action recommendation model
+    owner_role: builder
+    state: todo
+    depends_on: []
+    write_scope:
+      - Sources/Spill/Providers/LocalAIStatusProvider.swift
+      - Tests/SpillTests/LocalAIStatusProviderTests.swift
+    read_scope:
+      - .agents/specs/prd.md
+      - .agents/specs/ard.md
+      - .agents/runs/spill-ai-workflow/01-prd.md
+      - .agents/runs/spill-ai-workflow/02-ard.md
+    forbidden_scope:
+      - Sources/Spill/Providers/CloudServiceStatusProvider.swift
+    acceptance:
+      - Visible local AI statuses expose safe next-action recommendations.
+      - OpenAI configuration never exposes secret values.
+    verification:
+      commands:
+        - swift test --filter LocalAIStatusProviderTests
+      manual:
+        - None.
+
+  - id: spill-ai-workflow-T2
+    title: Show next-action rows in AI detail
+    owner_role: builder
+    state: todo
+    depends_on:
+      - spill-ai-workflow-T1
+    write_scope:
+      - Sources/Spill/Panel/SpillStatusDetailModels.swift
+      - Tests/SpillTests/SpillStatusDetailRowsTests.swift
+    read_scope:
+      - Sources/Spill/Providers/LocalAIStatusProvider.swift
+      - Sources/Spill/Panel/SpillStatusDetailPopover.swift
+    forbidden_scope:
+      - Sources/Spill/Providers/CloudServiceStatusProvider.swift
+    acceptance:
+      - AI detail rows include a Next row when a recommendation exists.
+    verification:
+      commands:
+        - swift test --filter SpillStatusDetailRowsTests
+      manual:
+        - None.
+
+  - id: spill-ai-workflow-T3
+    title: Add safe copy-command action to AI detail popover
+    owner_role: builder
+    state: todo
+    depends_on:
+      - spill-ai-workflow-T1
+    write_scope:
+      - Sources/Spill/Panel/SpillStatusDetailPopover.swift
+      - Sources/Spill/Panel/SpillBarView.swift
+    read_scope:
+      - Sources/Spill/App/UpdateCheckStore.swift
+    forbidden_scope:
+      - Sources/Spill/Providers/CloudServiceStatusProvider.swift
+    acceptance:
+      - The popover can render compact actions.
+      - AI command action copies only static safe command text.
+    verification:
+      commands:
+        - swift build
+      manual:
+        - Open an AI detail popover and confirm the command action is visible.
+
+parallel_groups:
+  - id: group-1
+    tasks:
+      - spill-ai-workflow-T1
+    rule: T1 owns shared model and must finish first.
+  - id: group-2
+    tasks:
+      - spill-ai-workflow-T2
+      - spill-ai-workflow-T3
+    rule: T2 and T3 can follow T1; they touch separate presentation files.
