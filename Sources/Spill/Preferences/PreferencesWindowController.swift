@@ -28,7 +28,7 @@ final class PreferencesWindowController {
     func show() {
         let window = ensureWindow()
         constrainToVisibleScreen(window)
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless()
         window.makeKey()

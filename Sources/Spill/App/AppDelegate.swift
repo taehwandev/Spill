@@ -170,7 +170,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func openPanelForSmokeTest() {
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         spillPanelController.show(
             anchorFrame: statusItemController?.buttonScreenFrame,
             dismissOnOutsideInteraction: false

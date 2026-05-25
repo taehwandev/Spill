@@ -223,7 +223,7 @@ final class LocalAIStatusProviderTests: XCTestCase {
         XCTAssertEqual(item.symbolName, "key.fill")
     }
 
-    func testActionRecommendationsUseStaticSafeCommands() {
+    func testActionRecommendationsDescribeNextStepWithoutCopyCommands() {
         let codex = LocalAIToolStatus(
             kind: .codex,
             value: "Ready",
@@ -238,12 +238,12 @@ final class LocalAIStatusProviderTests: XCTestCase {
         )
 
         XCTAssertEqual(codex.actionRecommendation?.title, "Start from terminal")
-        XCTAssertEqual(codex.actionRecommendation?.command, "codex")
+        XCTAssertEqual(codex.actionRecommendation?.detail, "Launch it from your terminal when you need a new session.")
         XCTAssertEqual(ollama.actionRecommendation?.title, "Inspect local models")
-        XCTAssertEqual(ollama.actionRecommendation?.command, "ollama list")
+        XCTAssertEqual(ollama.actionRecommendation?.detail, "Ollama is running locally.")
     }
 
-    func testOpenAIActionRecommendationDoesNotCopySecretReadingCommand() {
+    func testOpenAIActionRecommendationDoesNotExposeSecretValues() {
         let openAI = LocalAIStatusProvider.statuses(
             environment: ["OPENAI_API_KEY": "secret"],
             processNames: [],
@@ -252,7 +252,6 @@ final class LocalAIStatusProviderTests: XCTestCase {
         .first { $0.kind == .openAI }
 
         XCTAssertEqual(openAI?.actionRecommendation?.title, "Use configured API")
-        XCTAssertNil(openAI?.actionRecommendation?.command)
         XCTAssertEqual(openAI?.actionRecommendation?.detail, "OpenAI configuration is available; secret values stay hidden.")
     }
 

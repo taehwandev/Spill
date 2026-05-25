@@ -857,34 +857,10 @@ struct SpillBarView: View {
                 symbolName: status.symbolName,
                 tint: status.state.panelTint,
                 rows: SpillStatusDetailRows.rows(for: status),
-                actions: aiDetailActions(for: status),
+                actions: [],
                 showsInMenuBar: nil
             )
         }
-    }
-
-    private func aiDetailActions(for status: LocalAIToolStatus) -> [SpillStatusDetailAction] {
-        guard let command = status.actionRecommendation?.command else {
-            return []
-        }
-
-        return [
-            SpillStatusDetailAction(
-                id: "\(status.id).copy-command",
-                title: "Copy command",
-                symbolName: "doc.on.doc",
-                help: "Copy the command to the clipboard.",
-                completedTitle: "Copied"
-            ) {
-                copyAICommand(command)
-            }
-        ]
-    }
-
-    private func copyAICommand(_ command: String) {
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(command, forType: .string)
     }
 
     private func detailBinding(for target: SpillStatusDetailTarget) -> Binding<Bool> {

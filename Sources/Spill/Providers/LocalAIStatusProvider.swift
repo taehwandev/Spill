@@ -91,7 +91,6 @@ struct LocalAIToolMetadata: Hashable, Sendable {
 struct LocalAIToolActionRecommendation: Hashable, Sendable {
     let title: String
     let detail: String
-    let command: String?
 
     static func recommendation(for status: LocalAIToolStatus) -> LocalAIToolActionRecommendation? {
         guard status.state != .unavailable else {
@@ -100,35 +99,31 @@ struct LocalAIToolActionRecommendation: Hashable, Sendable {
 
         switch status.kind {
         case .codex, .claude, .antigravity:
-            guard let command = status.kind.executableName else {
+            guard status.kind.executableName != nil else {
                 return nil
             }
 
             return commandLineRecommendation(
                 status: status,
                 readyTitle: "Start from terminal",
-                activeTitle: "Continue in terminal",
-                command: command
+                activeTitle: "Continue in terminal"
             )
         case .ollama:
             if status.state == .active {
                 return LocalAIToolActionRecommendation(
                     title: "Inspect local models",
-                    detail: "Ollama is running locally.",
-                    command: "ollama list"
+                    detail: "Ollama is running locally."
                 )
             }
 
             return LocalAIToolActionRecommendation(
                 title: "Start local server",
-                detail: "Run the local model server when you need it.",
-                command: "ollama serve"
+                detail: "Run the local model server when you need it."
             )
         case .openAI:
             return LocalAIToolActionRecommendation(
                 title: "Use configured API",
-                detail: "OpenAI configuration is available; secret values stay hidden.",
-                command: nil
+                detail: "OpenAI configuration is available; secret values stay hidden."
             )
         }
     }
@@ -136,15 +131,13 @@ struct LocalAIToolActionRecommendation: Hashable, Sendable {
     private static func commandLineRecommendation(
         status: LocalAIToolStatus,
         readyTitle: String,
-        activeTitle: String,
-        command: String
+        activeTitle: String
     ) -> LocalAIToolActionRecommendation {
         LocalAIToolActionRecommendation(
             title: status.state == .active ? activeTitle : readyTitle,
             detail: status.state == .active
                 ? "A local process is active. Open your terminal session to continue."
-                : "Copy the launch command and run it in your terminal.",
-            command: command
+                : "Launch it from your terminal when you need a new session."
         )
     }
 }

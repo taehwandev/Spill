@@ -12,8 +12,8 @@ final class SpillStatusDetailRowsTests: XCTestCase {
             )
         )
 
-        XCTAssertEqual(rows.map(\.label), ["Status", "Detail", "Next", "Command"])
-        XCTAssertEqual(rows.map(\.value), ["Live", "Process Found", "Continue in terminal", "codex"])
+        XCTAssertEqual(rows.map(\.label), ["Status", "Detail", "Next"])
+        XCTAssertEqual(rows.map(\.value), ["Live", "Process Found", "Continue in terminal"])
     }
 
     func testAIRowsIncludeSafeModelAndVersionMetadata() {
@@ -31,12 +31,11 @@ final class SpillStatusDetailRowsTests: XCTestCase {
             )
         )
 
-        XCTAssertEqual(rows.map(\.label), ["Status", "Detail", "Next", "Command", "Model", "Version", "Source"])
+        XCTAssertEqual(rows.map(\.label), ["Status", "Detail", "Next", "Model", "Version", "Source"])
         XCTAssertEqual(rows.map(\.value), [
             "Running",
             "llama3.2:latest",
             "Inspect local models",
-            "ollama list",
             "llama3.2:latest",
             "0.12.0",
             "Ollama Runtime"
