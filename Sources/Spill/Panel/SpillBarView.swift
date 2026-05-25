@@ -857,7 +857,6 @@ struct SpillBarView: View {
                 symbolName: status.symbolName,
                 tint: status.state.panelTint,
                 rows: SpillStatusDetailRows.rows(for: status),
-                actions: [],
                 showsInMenuBar: nil
             )
         }
