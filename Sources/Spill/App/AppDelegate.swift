@@ -1,6 +1,5 @@
 import AppKit
 import Combine
-import UserNotifications
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -544,34 +543,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             .store(in: &cancellables)
 
-        updateCheckStore.$state
-            .dropFirst()
-            .removeDuplicates()
-            .sink { [weak self] state in
-                if case .available(let update) = state {
-                    self?.notifyUpdateAvailable(update)
-                }
-            }
-            .store(in: &cancellables)
-    }
-
-    private func notifyUpdateAvailable(_ update: AvailableUpdate) {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, _ in
-            guard granted else { return }
-
-            let content = UNMutableNotificationContent()
-            content.title = "Spill Update Available"
-            content.body = "Version \(update.latestVersion) is ready to download."
-            content.sound = .default
-
-            let request = UNNotificationRequest(
-                identifier: "spill.update.\(update.latestVersion)",
-                content: content,
-                trigger: nil
-            )
-
-            UNUserNotificationCenter.current().add(request)
-        }
     }
 
     private func configureStatusRefreshLoop() {

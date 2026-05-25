@@ -1,6 +1,6 @@
 import Foundation
 
-struct UpdateManifest: Decodable, Equatable, Sendable {
+struct UpdateManifest: Codable, Equatable, Sendable {
     let latestVersion: String
     let build: String?
     let minimumMacOS: String?

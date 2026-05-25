@@ -8,6 +8,7 @@ final class UpdateCheckStore: ObservableObject {
     @Published private(set) var state: UpdateCheckState
 
     private static let automaticDashboardCheckKey = "dev.spill.update.lastDashboardCheckAt"
+    private static let dashboardManifestCacheKey = "dev.spill.update.lastDashboardManifest"
     private static let automaticDashboardCheckInterval: TimeInterval = 24 * 60 * 60
 
     private let checker: UpdateChecker
@@ -38,7 +39,12 @@ final class UpdateCheckStore: ObservableObject {
         self.defaults = defaults
         self.now = now
         self.automaticDashboardCheckInterval = automaticDashboardCheckInterval
-        state = .idle(currentVersion: checker.currentVersion)
+        state = Self.cachedDashboardState(
+            defaults: defaults,
+            checker: checker,
+            now: now(),
+            automaticDashboardCheckInterval: automaticDashboardCheckInterval
+        ) ?? .idle(currentVersion: checker.currentVersion)
     }
 
     deinit {
@@ -72,6 +78,15 @@ final class UpdateCheckStore: ObservableObject {
         return false
     }
 
+    var showsDashboardUpdateStatus: Bool {
+        switch state {
+        case .checking, .upToDate, .available, .unsupported:
+            return true
+        case .idle, .failed:
+            return false
+        }
+    }
+
     var installCommand: String {
         Self.defaultInstallCommand
     }
@@ -85,14 +100,7 @@ final class UpdateCheckStore: ObservableObject {
             return
         }
 
-        if runInAppUpdateCheck(source) {
-            SpillTelemetry.shared.track(
-                "update_check_started",
-                props: [
-                    "source": source,
-                    "engine": "sparkle"
-                ]
-            )
+        if startInAppUpdateCheck(source: source) {
             return
         }
 
@@ -105,7 +113,8 @@ final class UpdateCheckStore: ObservableObject {
         }
 
         let currentDate = now()
-        if let lastCheckAt = lastDashboardCheckAt,
+        if hasKnownDashboardUpdateResult,
+           let lastCheckAt = lastDashboardCheckAt,
            currentDate.timeIntervalSince(lastCheckAt) < automaticDashboardCheckInterval {
             SpillTelemetry.shared.track(
                 "update_check_skipped",
@@ -117,11 +126,27 @@ final class UpdateCheckStore: ObservableObject {
             return
         }
 
-        lastDashboardCheckAt = currentDate
-        checkManifestForUpdates(source: source, engine: "manifest_dashboard")
+        checkManifestForUpdates(
+            source: source,
+            engine: "manifest_dashboard",
+            dashboardCheckDate: currentDate
+        )
     }
 
-    private func checkManifestForUpdates(source: String, engine: String) {
+    private var hasKnownDashboardUpdateResult: Bool {
+        switch state {
+        case .upToDate, .available, .unsupported:
+            return true
+        case .idle, .checking, .failed:
+            return false
+        }
+    }
+
+    private func checkManifestForUpdates(
+        source: String,
+        engine: String,
+        dashboardCheckDate: Date? = nil
+    ) {
         SpillTelemetry.shared.track(
             "update_check_started",
             props: [
@@ -141,6 +166,9 @@ final class UpdateCheckStore: ObservableObject {
             do {
                 let outcome = try await checker.check()
                 state = UpdateCheckState(outcome: outcome)
+                if let dashboardCheckDate {
+                    storeDashboardResult(outcome, checkedAt: dashboardCheckDate)
+                }
                 SpillTelemetry.shared.track(
                     "update_check_finished",
                     props: [
@@ -166,6 +194,58 @@ final class UpdateCheckStore: ObservableObject {
         }
     }
 
+    private static func cachedDashboardState(
+        defaults: UserDefaults,
+        checker: UpdateChecker,
+        now: Date,
+        automaticDashboardCheckInterval: TimeInterval
+    ) -> UpdateCheckState? {
+        guard let timestamp = defaults.object(forKey: automaticDashboardCheckKey) as? Double,
+              timestamp > 0,
+              now.timeIntervalSince(Date(timeIntervalSince1970: timestamp)) < automaticDashboardCheckInterval,
+              let data = defaults.data(forKey: dashboardManifestCacheKey),
+              let manifest = try? JSONDecoder().decode(UpdateManifest.self, from: data),
+              let cachedLatestVersion = DottedVersion(manifest.latestVersion),
+              let currentVersion = DottedVersion(checker.currentVersion),
+              cachedLatestVersion >= currentVersion,
+              let outcome = try? checker.outcome(for: manifest)
+        else {
+            return nil
+        }
+
+        return UpdateCheckState(outcome: outcome)
+    }
+
+    private func storeDashboardResult(_ outcome: UpdateCheckOutcome, checkedAt: Date) {
+        let manifest = dashboardManifest(for: outcome)
+
+        guard let data = try? JSONEncoder().encode(manifest) else {
+            defaults.removeObject(forKey: Self.dashboardManifestCacheKey)
+            lastDashboardCheckAt = nil
+            return
+        }
+
+        defaults.set(data, forKey: Self.dashboardManifestCacheKey)
+        lastDashboardCheckAt = checkedAt
+    }
+
+    private func dashboardManifest(for outcome: UpdateCheckOutcome) -> UpdateManifest {
+        switch outcome {
+        case .upToDate(_, let manifest):
+            return manifest
+        case .available(let update), .unsupported(let update, _):
+            return UpdateManifest(
+                latestVersion: update.latestVersion,
+                build: update.build,
+                minimumMacOS: update.minimumMacOS,
+                downloadURL: update.downloadURL,
+                packageURL: update.packageURL,
+                releaseNotesURL: update.releaseNotesURL,
+                publishedAt: update.publishedAt
+            )
+        }
+    }
+
     private var lastDashboardCheckAt: Date? {
         get {
             guard let timestamp = defaults.object(forKey: Self.automaticDashboardCheckKey) as? Double,
@@ -186,6 +266,10 @@ final class UpdateCheckStore: ObservableObject {
 
     func openUpdate(source: String = "preferences") {
         guard case .available(let update) = state else {
+            return
+        }
+
+        if startInAppUpdateCheck(source: source, eventName: "update_download_opened") {
             return
         }
 
@@ -227,6 +311,24 @@ final class UpdateCheckStore: ObservableObject {
         case .idle, .checking:
             return "unknown"
         }
+    }
+
+    private func startInAppUpdateCheck(
+        source: String,
+        eventName: String = "update_check_started"
+    ) -> Bool {
+        guard isInAppUpdaterAvailable(), runInAppUpdateCheck(source) else {
+            return false
+        }
+
+        SpillTelemetry.shared.track(
+            eventName,
+            props: [
+                "source": source,
+                "engine": "sparkle"
+            ]
+        )
+        return true
     }
 
     private static func copyToPasteboard(_ text: String) {

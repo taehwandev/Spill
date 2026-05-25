@@ -26,7 +26,7 @@ struct SpillBarView: View {
             VStack(spacing: 14) {
                 header
 
-                if updateStore.canOpenUpdate {
+                if updateStore.showsDashboardUpdateStatus {
                     updateBanner
                 }
 
@@ -89,10 +89,10 @@ struct SpillBarView: View {
         HStack(spacing: 8) {
             ZStack {
                 Circle()
-                    .fill(Color.teal.opacity(0.14))
+                    .fill(updateBannerTint.opacity(0.14))
 
                 Image(systemName: updateBannerSymbolName)
-                    .foregroundStyle(.teal)
+                    .foregroundStyle(updateBannerTint)
                     .font(.system(size: 11, weight: .semibold))
             }
             .frame(width: 24, height: 24)
@@ -110,11 +110,11 @@ struct SpillBarView: View {
 
             Spacer(minLength: 6)
 
-            if updateStore.usesInAppUpdater {
+            if updateStore.canOpenUpdate && updateStore.usesInAppUpdater {
                 updateBannerButton(symbolName: "arrow.down.circle.fill", title: "Update now") {
-                    updateStore.checkForUpdates(source: "panel_update_banner")
+                    updateStore.openUpdate(source: "panel_update_banner")
                 }
-            } else {
+            } else if updateStore.canOpenUpdate {
                 updateBannerButton(
                     symbolName: didCopyUpdateInstallCommand ? "checkmark" : "doc.on.doc",
                     title: didCopyUpdateInstallCommand ? "Copied" : "Copy install command"
@@ -129,37 +129,75 @@ struct SpillBarView: View {
         }
         .padding(.horizontal, 9)
         .padding(.vertical, 7)
-        .background(Color.teal.opacity(0.08), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .background(updateBannerTint.opacity(0.08), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(Color.teal.opacity(0.18), lineWidth: 0.8)
+                .stroke(updateBannerTint.opacity(0.18), lineWidth: 0.8)
         )
     }
 
     private var updateBannerTitle: String {
-        guard let version = updateStore.availableUpdate?.latestVersion else {
-            return "Update Ready"
+        switch updateStore.state {
+        case .checking:
+            return "Checking Updates"
+        case .upToDate:
+            return "Up to Date"
+        case .available(let update):
+            return "Update \(update.latestVersion)"
+        case .unsupported:
+            return "Update Requires macOS"
+        case .idle, .failed:
+            return "Update"
         }
-
-        return "Update \(version)"
     }
 
     private var updateBannerSymbolName: String {
-        if updateStore.usesInAppUpdater {
+        switch updateStore.state {
+        case .checking:
+            return "arrow.triangle.2.circlepath"
+        case .upToDate:
+            return "checkmark.circle.fill"
+        case .unsupported:
+            return "exclamationmark.triangle.fill"
+        case .available where updateStore.usesInAppUpdater:
             return "arrow.down.circle.fill"
+        case .available:
+            return updateStore.availableUpdate?.usesInstallerPackage == true ? "shippingbox.fill" : "terminal.fill"
+        case .idle, .failed:
+            return "arrow.clockwise"
         }
-
-        return updateStore.availableUpdate?.usesInstallerPackage == true ? "shippingbox.fill" : "terminal.fill"
     }
 
     private var updateBannerSubtitle: String {
-        if updateStore.usesInAppUpdater {
+        switch updateStore.state {
+        case .checking:
+            return "Looking for the latest release"
+        case .upToDate(_, let latestVersion):
+            return "Spill \(latestVersion) is current"
+        case .available where updateStore.usesInAppUpdater:
             return "In-app update ready"
+        case .available:
+            return updateStore.availableUpdate?.usesInstallerPackage == true
+                ? "Signed installer package"
+                : "Manual installer"
+        case .unsupported(let update, let currentMacOS):
+            return "Version \(update.latestVersion) needs macOS \(update.minimumMacOS ?? "newer than \(currentMacOS)")"
+        case .idle, .failed:
+            return "Update status"
         }
+    }
 
-        return updateStore.availableUpdate?.usesInstallerPackage == true
-            ? "Signed installer package"
-            : "Manual installer"
+    private var updateBannerTint: Color {
+        switch updateStore.state {
+        case .upToDate:
+            return .green
+        case .unsupported:
+            return .orange
+        case .checking, .idle, .failed:
+            return .secondary
+        case .available:
+            return .teal
+        }
     }
 
     private var updateOpenButtonTitle: String {

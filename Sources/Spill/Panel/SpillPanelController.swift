@@ -275,7 +275,7 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
             menuBarActionCount: menuBarActionCount,
             iconSpacing: CGFloat(settings.iconSpacing),
             visibleFrame: visibleFrame,
-            showsUpdateBanner: updateStore.canOpenUpdate
+            showsUpdateBanner: updateStore.showsDashboardUpdateStatus
         )
     }
 
