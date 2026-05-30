@@ -6,14 +6,16 @@ behavior comes from the local AgentPlaybook checkout.
 
 Shared AgentPlaybook library:
 
-- `/Users/taehwankwon/Documents/KeyFlowVault/AgentPlaybook/AGENTS.md`
-- `/Users/taehwankwon/Documents/KeyFlowVault/AgentPlaybook/index.md`
-- `/Users/taehwankwon/Documents/KeyFlowVault/AgentPlaybook/scripts/workflow.py`
-- `/Users/taehwankwon/Documents/KeyFlowVault/AgentPlaybook/scripts/agent-preflight.py`
-- `/Users/taehwankwon/Documents/KeyFlowVault/AgentPlaybook/scripts/agent-finish-check.py`
+- Default root: `~/Documents/KeyFlowVault/AgentPlaybook`
+- If the checkout lives elsewhere, set `AGENTPLAYBOOK_HOME` to that root.
+- `${AGENTPLAYBOOK_HOME:-$HOME/Documents/KeyFlowVault/AgentPlaybook}/AGENTS.md`
+- `${AGENTPLAYBOOK_HOME:-$HOME/Documents/KeyFlowVault/AgentPlaybook}/index.md`
+- `${AGENTPLAYBOOK_HOME:-$HOME/Documents/KeyFlowVault/AgentPlaybook}/scripts/workflow.py`
+- `${AGENTPLAYBOOK_HOME:-$HOME/Documents/KeyFlowVault/AgentPlaybook}/scripts/agent-preflight.py`
+- `${AGENTPLAYBOOK_HOME:-$HOME/Documents/KeyFlowVault/AgentPlaybook}/scripts/agent-finish-check.py`
 
-`/Users/taehwankwon/Documents/KeyFlowVault/agent` is a symlink to the same
-AgentPlaybook checkout.
+`~/Documents/KeyFlowVault/agent` may be a symlink to the same AgentPlaybook
+checkout.
 
 Use repo-local Spill instructions first. Use AgentPlaybook only to load the
 smallest relevant common, workflow, platform, or review cards for the task. Do
@@ -22,7 +24,7 @@ not copy shared playbook content into this repo when a pointer is enough.
 Routing and executable evidence:
 
 - For multi-step tasks, run
-  `python3 /Users/taehwankwon/Documents/KeyFlowVault/AgentPlaybook/scripts/workflow.py route <command> --request "<USER_REQUEST>"`
+  `python3 "${AGENTPLAYBOOK_HOME:-$HOME/Documents/KeyFlowVault/AgentPlaybook}/scripts/workflow.py" route <command> --request "<USER_REQUEST>"`
   before selecting shared docs, editing, reviewing, committing, or reporting
   completion. If the current request is a direct question, answer it first, then
   route with `--request-classified` and record that evidence.
@@ -42,7 +44,7 @@ Before PRD, ARD, task breakdown, or implementation work:
 
 VibeGuard gate:
 
-- Run `npx --yes @taehwandev/vibeguard audit . --rules /Users/taehwankwon/Documents/KeyFlowVault/AgentPlaybook` before and after documentation, code, config, dependency, data, deployment, or credential changes.
+- Run `npx --yes @taehwandev/vibeguard audit . --rules "${AGENTPLAYBOOK_HOME:-$HOME/Documents/KeyFlowVault/AgentPlaybook}"` before and after documentation, code, config, dependency, data, deployment, or credential changes.
 - Use `--fix` only for low-risk VibeGuard fixes, then inspect the diff.
 - Never print secret values. Ask before destructive data actions, production deploys, signing/notarization credential changes, paid-service/model usage increases, or recurring infrastructure.
 

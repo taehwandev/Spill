@@ -1,7 +1,7 @@
 {
   "mode": "guided",
   "display": "traffic-light",
-  "rulesPath": "/Users/taehwankwon/Documents/KeyFlowVault/AgentPlaybook",
+  "rulesPath": "~/Documents/KeyFlowVault/AgentPlaybook",
   "maxFileLines": 5000,
   "repository": {
     "visibility": "public"

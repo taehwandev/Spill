@@ -2,7 +2,7 @@
 
 Use the shared AgentPlaybook ambiguity gate first:
 
-`/Users/taehwankwon/Documents/KeyFlowVault/AgentPlaybook/workflows/ambiguity-gate.md`
+`${AGENTPLAYBOOK_HOME:-$HOME/Documents/KeyFlowVault/AgentPlaybook}/workflows/ambiguity-gate.md`
 
 This file adds only Spill-specific blockers.
 

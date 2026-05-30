@@ -2,11 +2,11 @@
 
 Use the shared AgentPlaybook multi-agent workflow first:
 
-`/Users/taehwankwon/Documents/KeyFlowVault/AgentPlaybook/workflows/multi-agent-collaboration.md`
+`${AGENTPLAYBOOK_HOME:-$HOME/Documents/KeyFlowVault/AgentPlaybook}/workflows/multi-agent-collaboration.md`
 
 For PRD, ARD, and delivery gates, also use:
 
-`/Users/taehwankwon/Documents/KeyFlowVault/AgentPlaybook/workflows/product-architecture-delivery.md`
+`${AGENTPLAYBOOK_HOME:-$HOME/Documents/KeyFlowVault/AgentPlaybook}/workflows/product-architecture-delivery.md`
 
 This file keeps only Spill-specific routing.
 

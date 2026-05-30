@@ -6,12 +6,14 @@ changes.
 
 Shared rules source:
 
-`/Users/taehwankwon/Documents/KeyFlowVault/AgentPlaybook`
+Default: `~/Documents/KeyFlowVault/AgentPlaybook`
+
+If the checkout lives elsewhere, set `AGENTPLAYBOOK_HOME` to that root.
 
 Required command shape:
 
 ```bash
-npx --yes @taehwandev/vibeguard audit . --rules /Users/taehwankwon/Documents/KeyFlowVault/AgentPlaybook
+npx --yes @taehwandev/vibeguard audit . --rules "${AGENTPLAYBOOK_HOME:-$HOME/Documents/KeyFlowVault/AgentPlaybook}"
 ```
 
 Use `--fix` only for low-risk VibeGuard fixes, then inspect the diff.

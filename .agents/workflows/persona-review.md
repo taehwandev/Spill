@@ -2,7 +2,7 @@
 
 Use the shared AgentPlaybook review workflow first:
 
-`/Users/taehwankwon/Documents/KeyFlowVault/AgentPlaybook/workflows/multi-perspective-review.md`
+`${AGENTPLAYBOOK_HOME:-$HOME/Documents/KeyFlowVault/AgentPlaybook}/workflows/multi-perspective-review.md`
 
 This file adds only Spill-specific review lenses and checks.
 

@@ -5,7 +5,8 @@ This folder is the working source of truth for agent-driven implementation.
 Repo-local Spill docs define product direction, paths, commands, release policy,
 and macOS-specific constraints. Platform-neutral agent behavior lives in the
 shared AgentPlaybook checkout at
-`/Users/taehwankwon/Documents/KeyFlowVault/AgentPlaybook`.
+`~/Documents/KeyFlowVault/AgentPlaybook` by default. If the checkout lives
+elsewhere, set `AGENTPLAYBOOK_HOME` to that root.
 
 Use AgentPlaybook `index.md` to load only the smallest relevant common,
 workflow, platform, or review cards. Keep only Spill-specific policy here.
