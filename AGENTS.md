@@ -9,6 +9,8 @@ Shared AgentPlaybook library:
 - `/Users/taehwankwon/Documents/KeyFlowVault/AgentPlaybook/AGENTS.md`
 - `/Users/taehwankwon/Documents/KeyFlowVault/AgentPlaybook/index.md`
 - `/Users/taehwankwon/Documents/KeyFlowVault/AgentPlaybook/scripts/workflow.py`
+- `/Users/taehwankwon/Documents/KeyFlowVault/AgentPlaybook/scripts/agent-preflight.py`
+- `/Users/taehwankwon/Documents/KeyFlowVault/AgentPlaybook/scripts/agent-finish-check.py`
 
 `/Users/taehwankwon/Documents/KeyFlowVault/agent` is a symlink to the same
 AgentPlaybook checkout.
@@ -16,6 +18,20 @@ AgentPlaybook checkout.
 Use repo-local Spill instructions first. Use AgentPlaybook only to load the
 smallest relevant common, workflow, platform, or review cards for the task. Do
 not copy shared playbook content into this repo when a pointer is enough.
+
+Routing and executable evidence:
+
+- For multi-step tasks, run
+  `python3 /Users/taehwankwon/Documents/KeyFlowVault/AgentPlaybook/scripts/workflow.py route <command> --request "<USER_REQUEST>"`
+  before selecting shared docs, editing, reviewing, committing, or reporting
+  completion. If the current request is a direct question, answer it first, then
+  route with `--request-classified` and record that evidence.
+- When the wrappers are available, run `agent-preflight.py` before editing,
+  reviewing, committing, or reporting completion, and run `agent-finish-check.py`
+  before final report, commit, release, or handoff. Pass evidence for every
+  required route gate.
+- Wrapper evidence under `.agentplaybook/` is local runtime evidence, not source.
+- Use human-visible gate signals: 🐱🔵 PENDING, 🐱🟢 GREEN, 🐱🟡 YELLOW, 🐱🔴 RED.
 
 Before PRD, ARD, task breakdown, or implementation work:
 
