@@ -29,7 +29,7 @@ tasks:
         - Hover or tap the Spill trigger next to the notch in the simulator and confirm the panel opens.
 
   - id: landing-page-showcase-T2
-    title: Implement live performance and Agent Cat telemetry animations
+    title: Implement live performance and telemetry animations
     owner_role: builder
     state: done
     depends_on:
@@ -42,7 +42,7 @@ tasks:
       - Sources/Spill/
     acceptance:
       - CPU SVG wave fluctuations are smooth and organic.
-      - Agent Cat terminal streams simulated model telemetry logs in real-time.
+      - Telemetry terminal streams simulated model telemetry logs in real-time.
     verification:
       commands:
         - python3 .agents/scripts/workflow.py verify

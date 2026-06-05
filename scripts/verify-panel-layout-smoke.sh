@@ -109,6 +109,12 @@ if ! grep -q "SPILL_PANEL_ACCESSIBILITY_OK" "$LOG_FILE"; then
     exit 1
 fi
 
+if ! grep -q "Token_Metering" "$LOG_FILE"; then
+    echo "FAIL: Spill panel accessibility did not include Token Metering in the panel."
+    cat "$LOG_FILE"
+    exit 1
+fi
+
 if ! grep -q "SPILL_SMOKE_EXIT" "$LOG_FILE"; then
     echo "FAIL: Spill did not report smoke shutdown."
     cat "$LOG_FILE"

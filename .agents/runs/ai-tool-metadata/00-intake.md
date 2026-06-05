@@ -9,7 +9,7 @@
 The maintainer asked whether Spill can show which model or version Ollama, GPT,
 Codex, Claude, and Gemini are using. The request also asks for a compact
 visualization rather than a large AI dashboard. The implementation should expose
-only safe local hints and keep Agent Cat as the richer telemetry product.
+only safe local hints and keep richer telemetry outside Spill.
 
 ## User Problem
 
@@ -69,7 +69,7 @@ model, version, and metadata source when available.
 - Do not inspect chat transcripts.
 - Do not parse secret-bearing private config files.
 - Do not call OpenAI, Anthropic, Gemini, or external APIs.
-- Do not build Agent Cat-style telemetry inside Spill.
+- Do not build rich external telemetry inside Spill.
 
 ## Open Questions
 

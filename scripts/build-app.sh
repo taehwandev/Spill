@@ -84,6 +84,13 @@ rm -rf "$APP_DIR"
 mkdir -p "$MACOS_DIR" "$RESOURCES_DIR" "$FRAMEWORKS_DIR"
 cp "$ROOT_DIR/.build/release/Spill" "$MACOS_DIR/Spill"
 
+ADAPTER_RESOURCES="$(find "$ROOT_DIR/.build" -path "*/release/Spill_Spill.bundle/adapters" -type d -print -quit)"
+if [[ -z "$ADAPTER_RESOURCES" ]]; then
+    echo "Spill adapter resources were not found after swift build." >&2
+    exit 2
+fi
+ditto "$ADAPTER_RESOURCES" "$RESOURCES_DIR/adapters"
+
 SPARKLE_FRAMEWORK="$(find "$ROOT_DIR/.build/artifacts/sparkle" -path "*/Sparkle.framework" -type d -print -quit)"
 if [[ -z "$SPARKLE_FRAMEWORK" ]]; then
     echo "Sparkle.framework was not found after swift build." >&2

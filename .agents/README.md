@@ -98,6 +98,12 @@ Run compact panel layout smoke verification:
 python3 .agents/scripts/workflow.py panel-layout-smoke
 ```
 
+Run local token metering queue smoke verification:
+
+```bash
+python3 .agents/scripts/workflow.py token-metering-smoke
+```
+
 Run menu bar status item click smoke verification:
 
 ```bash

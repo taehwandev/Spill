@@ -1,0 +1,136 @@
+feature_id: ai-token-metering-local-app
+status: ready
+
+necessity:
+  decision: build
+  reason: >
+    The macOS app needs to be the trusted local token event source and local
+    dashboard before cloud sync is meaningful.
+  ambiguity:
+    clarity: clear
+    blockers_resolved: true
+    resolution_sources:
+      - maintainer
+      - repo-research
+      - assumption
+  clarification_required: false
+  questions: []
+
+tasks:
+  - id: ai-token-metering-local-app-T1
+    title: Add Swift token usage model, sanitizer, and local store
+    owner_role: builder
+    state: todo
+    depends_on: []
+    write_scope:
+      - Sources/Spill/TokenMetering/**
+      - Tests/SpillTests/TokenUsageStoreTests.swift
+    read_scope:
+      - .agents/runs/ai-token-metering-local-app/01-prd.md
+      - .agents/runs/ai-token-metering-local-app/02-ard.md
+    forbidden_scope:
+      - Sources/Spill/MenuBar/**
+      - Sources/Spill/Accessibility/**
+    acceptance:
+      - Safe events encode to the web-compatible schema.
+      - Forbidden and unknown payload fields are rejected.
+      - Store handles empty, corrupt, append, replace, and clear paths.
+    verification:
+      commands:
+        - swift test
+
+  - id: ai-token-metering-local-app-T2
+    title: Start a loopback-only app bridge
+    owner_role: builder
+    state: todo
+    depends_on:
+      - ai-token-metering-local-app-T1
+    write_scope:
+      - Sources/Spill/TokenMetering/**
+      - Sources/Spill/App/AppDelegate.swift
+    read_scope:
+      - Sources/Spill/App/AppDelegate.swift
+    forbidden_scope:
+      - Sources/Spill/Accessibility/**
+      - Sources/Spill/MenuBar/**
+    acceptance:
+      - App starts bridge on 127.0.0.1 and continues if the port is unavailable.
+      - Bridge supports health, read, append, clear, and OPTIONS.
+    verification:
+      commands:
+        - swift build
+
+  - id: ai-token-metering-local-app-T3
+    title: Keep web preview behind the app-owned local store boundary
+    owner_role: builder
+    state: todo
+    depends_on:
+      - ai-token-metering-local-app-T2
+    write_scope:
+      - web/src/App.tsx
+      - web/src/styles.css
+      - web/src/features/tokenMeteringDashboard/**
+      - web/test/**
+    read_scope:
+      - web/src/features/tokenMeteringDashboard/syncSafeUsage.ts
+    forbidden_scope:
+      - web/package-lock.json
+      - web/package.json
+    acceptance:
+      - Web is labeled as the future cloud dashboard preview.
+      - Web does not present itself as the installed local dashboard.
+      - Browser fixture data does not replace app-owned local storage.
+    verification:
+      commands:
+        - npm test
+        - npm run build
+
+  - id: ai-token-metering-local-app-T4
+    title: Add native app local token dashboard and cloud-preview separation
+    owner_role: builder
+    state: done
+    depends_on:
+      - ai-token-metering-local-app-T3
+    write_scope:
+      - Sources/Spill/App/AppDelegate.swift
+      - Sources/Spill/MenuBar/StatusItemController.swift
+      - Sources/Spill/Preferences/**
+      - Sources/Spill/TokenMetering/**
+      - Tests/SpillTests/**
+      - web/src/features/tokenMeteringDashboard/**
+      - web/src/styles.css
+    read_scope:
+      - .agents/runs/ai-token-metering-web/01-prd.md
+      - .agents/runs/ai-token-metering-local-app/01-prd.md
+      - .agents/runs/ai-token-metering-local-app/02-ard.md
+    forbidden_scope:
+      - Package.swift
+      - Package.resolved
+      - web/package.json
+      - web/package-lock.json
+      - docs/**
+    acceptance:
+      - Preferences shows local-only as active for unsigned users.
+      - Preferences shows cloud aggregate as requiring login and explicit enablement.
+      - Preferences shows cloud detailed as a separate future token-only opt-in.
+      - Menu entry points open the native app local dashboard.
+      - Native app local dashboard aggregates the app-owned token store.
+      - Web dashboard keeps core overview visible and collapses lower-priority detail.
+      - Web dashboard is presented as cloud preview, not the local installed dashboard.
+      - No production auth, Supabase credentials, upload path, or external sync is added.
+    verification:
+      commands:
+        - swift test
+        - ./scripts/build-app.sh
+        - npm test
+        - npm run build
+        - git diff --check
+
+parallel_groups:
+  - id: local-app-then-web
+    tasks:
+      - ai-token-metering-local-app-T1
+      - ai-token-metering-local-app-T2
+      - ai-token-metering-local-app-T3
+      - ai-token-metering-local-app-T4
+    rule: Tasks are serialized because T4 depends on the app bridge and web dashboard contracts.

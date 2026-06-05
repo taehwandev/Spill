@@ -114,8 +114,9 @@ struct CloudServiceStatusProvider: Sendable {
         var items = [CloudServiceStatusItem]()
         items.append(contentsOf: await openAIItems())
         items.append(contentsOf: await claudeItems())
-        items.append(contentsOf: await googleItems())
-        items.append(antigravityItem())
+        let googleStatusItems = await googleItems()
+        items.append(contentsOf: googleStatusItems)
+        items.append(antigravityItem(from: googleStatusItems.first { $0.kind == .geminiAPI }))
 
         return CloudServiceStatusSnapshot(fetchedAt: now, items: items)
     }
@@ -204,12 +205,21 @@ struct CloudServiceStatusProvider: Sendable {
         }
     }
 
-    private func antigravityItem() -> CloudServiceStatusItem {
-        CloudServiceStatusItem(
+    private func antigravityItem(from geminiItem: CloudServiceStatusItem?) -> CloudServiceStatusItem {
+        guard let geminiItem else {
+            return CloudServiceStatusItem(
+                kind: .antigravity,
+                health: .unknown,
+                detail: "Gemini service status unavailable",
+                source: "Google Cloud Status"
+            )
+        }
+
+        return CloudServiceStatusItem(
             kind: .antigravity,
-            health: .unknown,
-            detail: "No dedicated public status endpoint configured",
-            source: "Google Antigravity"
+            health: geminiItem.health,
+            detail: "Using Gemini API status: \(geminiItem.detail)",
+            source: geminiItem.source
         )
     }
 

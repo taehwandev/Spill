@@ -21,6 +21,9 @@ Do not commit API keys, access tokens, or MCP configuration values to this repos
 - `Spill Advanced Feature Settings`
   - Screen ID: `c2c78f80b8d849b58bd7377d1706f85e`
   - Resource: `projects/7783735116268422117/screens/c2c78f80b8d849b58bd7377d1706f85e`
+- `Spill Pro: Structured Token Dashboard`
+  - Screen ID: `336bc2c93e6343529feff3317f5da0d7`
+  - Resource: `projects/7783735116268422117/screens/336bc2c93e6343529feff3317f5da0d7`
 
 ## Implementation Rule
 
@@ -38,3 +41,21 @@ The first native panel shell maps `Spill Multi-Widget Panel` to current app stat
 - Stitch quick status pill becomes the footer with Accessibility, scan, power, count, and time indicators.
 
 Do not render CPU, battery details beyond compact power state, AI, or window-management values until real providers are implemented and verified.
+
+## Current Token Metering Dashboard Mapping
+
+`Spill Pro: Structured Token Dashboard` is the current layout reference for
+the local token metering dashboard.
+
+- Top header maps to `TokenMeteringDashboardView.header`.
+- Left filter rail maps to the period/tool filters and future task, stage, and
+  source filters in `TokenUsageDashboardStore`.
+- Central analytics canvas maps to KPI, AI tool, task, stage, and source rows in
+  `TokenUsageDashboardSnapshot`.
+- Right detail rail maps to selected session/run detail and recent event rows.
+- Local receiver status tiles map to local inbox, optional HTTP bridge, and
+  on-demand adapter state in Preferences and dashboard diagnostics.
+
+Preserve the existing Spill theme. Future implementation work should change
+structure, scan order, and grouping before changing color, typography, or brand
+treatment.

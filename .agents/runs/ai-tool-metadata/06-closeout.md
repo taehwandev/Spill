@@ -38,7 +38,7 @@
 
 ## Follow-up Tasks
 
-- Consider an Agent Cat integration only as a separate product decision.
+- Consider external telemetry integration only as a separate product decision.
 
 ## Docs Updated
 

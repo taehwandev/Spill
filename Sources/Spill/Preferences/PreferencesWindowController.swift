@@ -11,18 +11,21 @@ final class PreferencesWindowController {
     private let scanner: AXMenuBarItemScanner
     private let updateStore: UpdateCheckStore
     private let showPanelAction: () -> Void
+    private let openTokenDashboardAction: () -> Void
     private var window: NSWindow?
 
     init(
         settings: SpillSettings,
         scanner: AXMenuBarItemScanner,
         updateStore: UpdateCheckStore,
-        showPanelAction: @escaping () -> Void
+        showPanelAction: @escaping () -> Void,
+        openTokenDashboardAction: @escaping () -> Void
     ) {
         self.settings = settings
         self.scanner = scanner
         self.updateStore = updateStore
         self.showPanelAction = showPanelAction
+        self.openTokenDashboardAction = openTokenDashboardAction
     }
 
     func show() {
@@ -43,7 +46,8 @@ final class PreferencesWindowController {
             settings: settings,
             scanner: scanner,
             updateStore: updateStore,
-            showPanelAction: showPanelAction
+            showPanelAction: showPanelAction,
+            openTokenDashboardAction: openTokenDashboardAction
         )
         let window = NSWindow(
             contentRect: defaultWindowFrame,

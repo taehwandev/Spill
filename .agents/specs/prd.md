@@ -79,6 +79,7 @@ Requirements:
 - Left click toggles Spill Panel.
 - Right click or Control-click opens a native menu with:
   - Show/Hide Spill Panel
+  - Open Local Token Dashboard
   - Refresh
   - Preferences
   - Quit
@@ -87,6 +88,7 @@ Requirements:
 Acceptance:
 
 - The trigger remains small.
+- Local token usage appears inside the panel AI section.
 - No invisible or oversized status items are created.
 - The app remains usable when the menu bar is crowded, subject to macOS status item limitations.
 
@@ -101,14 +103,118 @@ Requirements:
 - Sections:
   - Status Strip
   - AI Strip
-  - Pinned Actions
-  - Detected Items, if useful
+- Token Metering summary inside the AI Strip
+- Pinned Actions
+- Detected Items, if useful
 
 Acceptance:
 
 - Panel opens within 1 second.
 - Text and icons do not overlap.
 - Panel does not feel like a full dashboard.
+
+### 2A. Local Token Metering
+
+Requirements:
+
+- The native app reads safe token usage events from an app-owned local store.
+- The default receiver is a local event queue directory, not a required
+  background server.
+- Hooks and adapters write one event per file using `.tmp` then atomic rename
+  to `.json`; Spill imports complete `.json` files into the app-owned store.
+- Local receivers are global to the computer, not tied to a repository checkout.
+- Usage events use opaque ids such as `project_global` and never
+  store project names, file paths, prompts, commands, terminal output, logs,
+  diffs, source content, environment values, or secrets.
+- `run_id` is an opaque grouping key for a local run or turn. It is not a
+  human-readable session name.
+- If the dashboard exposes friendly session names, the name must come from a
+  user-controlled local alias or a configured safe label source. It must not be
+  derived from prompts, commands, file paths, repo names, transcript text,
+  branch names, ticket ids, user names, or private content.
+- Detailed workflow labels such as `analysis`, `prd_drafting`,
+  `code_generation`, `code_review`, `review_response`, `git_commit`,
+  `commit_message`, `pull_request`, `workflow_setup`, `ux_copy_review`, or
+  other user-defined safe slugs are allowed only when an agent, runtime,
+  workflow, or adapter has exact runtime usage metadata and sends the safe
+  local event contract.
+- `task_type` and `stage` are safe lowercase workflow slugs, not closed enums.
+  Spill provides recommended labels, but adapters may define custom reusable
+  categories that match `^[a-z][a-z0-9_]{1,40}$`.
+- Custom workflow labels must never encode task text, feature names, project
+  names, file names, branch names, ticket ids, user names, or private content.
+- Usage events include a safe `ai_tool` enum label so users can compare combined
+  local usage with per-tool usage for Codex, Claude, Antigravity/AGY,
+  direct OpenAI, and unknown tool sources without storing prompts, commands, file
+  paths, repo names, logs, diffs, source content, environment values, or
+  secrets.
+- The app should expose a global setup prompt in Preferences and on the web
+  setup surface for users who want all projects to report into the same local
+  meter. The prompt should tell capable agents to use the one-step setup helper
+  for installation or repair instead of asking users to copy or install Codex,
+  Claude, Antigravity/AGY, and OpenAI adapters one by one.
+- The global setup prompt must be silent: it must not cause agents to add
+  metering status lines to normal replies.
+- Local metering must not require a user-facing "start" or "check" action in
+  Spill. After the global prompt or adapter is applied, only agents or adapters
+  that expose exact runtime usage metadata can write safe local events.
+- The global setup prompt is a safety contract, not a runtime hook. If a
+  runtime does not expose exact token counts, it must skip event creation
+  instead of estimating or reading local logs.
+- Local tool adapters may be installed separately from the prompt when a tool
+  exposes exact token-only usage records in local state. Those adapters must
+  read only known numeric usage records, such as Codex `token_count` entries,
+  and must not parse or store prompts, responses, commands, file paths, working
+  directories, diffs, logs, source content, environment values, or secrets.
+- Spill should provide a one-step local setup helper that installs detected
+  Codex, Claude, Antigravity/AGY, and direct OpenAI adapter scripts and merges
+  known user-level hook config files after an explicit install/fix/apply user
+  request. Users should not need to run separate install steps per adapter.
+- Workflow-level hook setup must be opt-in and target a user-selected hook file
+  such as `.agents/hooks.json`; setup must not silently write project workflow
+  config files.
+- When a trusted workflow script already exposes safe reusable `task_type` or
+  `stage` labels, adapters should accept those labels through hook payload,
+  command flags, or environment variables instead of inferring labels from
+  prompts, commands, logs, source files, or transcripts.
+- When a static user-level hook cannot receive per-turn payload fields or
+  environment variables, agents may write a short-lived local label context
+  containing only `ai_tool`, `task_type`, `stage`, `updated_at`, and
+  `expires_at`. Adapters may read that context only for safe reusable labels
+  and must ignore expired or tool-mismatched contexts.
+- Adapters must not inspect transcripts, logs, command history, or source files
+  only to infer workflow labels. If hook payload, environment, or a valid
+  short-lived label context does not expose safe `task_type` or `stage` slugs,
+  the adapter should use `uncategorized` and the latest safe default stage
+  instead.
+- Codex metering should support an on-demand local session importer that reads
+  recent `~/.codex/sessions/**/rollout-*.jsonl` files when invoked by a trusted
+  hook or workflow, converts exact `event_msg/token_count` usage into safe Spill
+  events, and deduplicates spans before writing to the local event queue.
+- The local dashboard should provide a manual self-test that writes one small
+  synthetic token-only event through the local queue, but it must be presented
+  as diagnostics rather than the normal startup path.
+
+Acceptance:
+
+- Local token events appear without login when the local queue receives a safe
+  event.
+- Safe event validation rejects content-like fields.
+- Local dashboard shows combined usage and lets users filter by safe AI tool
+  labels.
+- Session rows are clearly treated as opaque local run groups unless a safe
+  local display-name option has been implemented.
+- Global setup instructions state that exact counts are required and estimates
+  should not be sent.
+- UI copy must not imply that a prompt alone can measure token usage.
+- Local setup UI offers a one-step installer path before exposing per-adapter
+  script and hook snippets.
+- Codex usage can be verified with a real `codex exec` run: the Codex session
+  importer must store the same exact input/output/reasoning totals that Codex
+  reports for the completed turn, without requiring a synthetic usage event.
+- The self-test event is local-only, clearly synthetic, uses only numeric
+  buckets and enum labels, and can demonstrate non-unknown source breakdowns
+  without implying real usage classification.
 
 ### 3. System Status Strip
 

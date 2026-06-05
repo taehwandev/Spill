@@ -7,7 +7,7 @@
 - Fully simulated interactive client-side macOS desktop, notch trigger, and panel dropdown simulator.
 - Live simulated Xcode window that responds in real-time to snaps (left, right, center, maximize).
 - Continuous CPU fluctuating SVG chart, memory radial dial, and storage usage widgets.
-- Dark-themed cyberpunk Agent Cat telemetry terminal printing real-time rolling logs.
+- Dark-themed telemetry terminal printing real-time rolling logs.
 - Clickable copy terminal code utility with instant toast notices.
 
 ## Changed Files

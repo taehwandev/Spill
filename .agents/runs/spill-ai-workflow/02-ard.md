@@ -19,8 +19,8 @@ Rationale: The current user value gap is "what should I do next?" not another
 data source. The existing statuses already know tool kind, running state, model,
 version, and source.
 
-Alternatives considered: Query AgentCat or parse private tool logs. Rejected
-because the maintainer clarified AgentCat is unrelated and private logs create
+Alternatives considered: Query external telemetry services or parse private tool logs. Rejected
+because the maintainer clarified external telemetry is unrelated and private logs create
 privacy and compatibility risk.
 
 ### D2: Copy Commands, Do Not Execute Them

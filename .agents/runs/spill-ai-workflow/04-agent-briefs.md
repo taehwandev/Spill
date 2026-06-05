@@ -65,7 +65,7 @@ Write scope:
 
 Do not edit:
 
-- AgentCat integration files or commands
+- external telemetry integration files or commands
 - release, signing, update, or dependency files
 - existing app icon script changes unless separately requested
 

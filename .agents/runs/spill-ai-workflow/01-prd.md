@@ -15,7 +15,7 @@ already detects.
 
 ## Resolved Inputs
 
-- maintainer decisions: AgentCat is unrelated and should not be part of this
+- maintainer decisions: external telemetry is unrelated and should not be part of this
   implementation.
 - repo-researched facts: Spill already detects Codex, Claude, Antigravity,
   Ollama, and OpenAI configuration; AI details already show status, model,
@@ -30,7 +30,7 @@ already detects.
 - Add safe per-tool actions in the AI detail popover.
 - Keep the compact AI strip visually lightweight.
 - Avoid exposing prompts, responses, secrets, raw logs, or private files.
-- Keep AgentCat out of this implementation path.
+- Keep external telemetry out of this implementation path.
 
 ## Non-goals
 
@@ -95,7 +95,7 @@ The detail popover must remain compact and fit the existing panel style.
 6. The copy-command button must only copy static safe command text, not values
    derived from secrets or raw process command lines.
 7. Detail rows and actions must be testable without launching the app.
-8. AgentCat must not be queried or referenced by the feature.
+8. External telemetry must not be queried or referenced by the feature.
 
 ## Behavior Scenarios
 
@@ -130,7 +130,7 @@ Then the AI strip remains hidden
 - AI detail rows include a `Next` recommendation for visible AI statuses.
 - Safe command actions exist for Codex, Claude, Antigravity, and Ollama.
 - OpenAI detail does not expose secrets or copy secret-reading commands.
-- No AgentCat command, model, type, or dependency is introduced.
+- No external telemetry command, model, type, or dependency is introduced.
 - Focused tests cover recommendation mapping and secret-safe rows.
 
 ## Metrics

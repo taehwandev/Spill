@@ -12,7 +12,7 @@
 - **Mobile Responsive Layout**: Verified that scrolling is fluid on touch-screens, section sizes adapt without clipping, and font sizes scale down automatically.
 - **Interactive Spill Mock**: Verified that clicking the menu bar trigger drops the panel smoothly, and clicking snap buttons alters the simulated window state live.
 - **Performance Widgets**: CPU sine wave fluctuates organically, memory needle dials, and storage widgets update correctly.
-- **Agent Cat Terminal**: Monospace logs roll downwards in real-time, and active token counters increment dynamically in standard intervals.
+- **Telemetry Terminal**: Monospace logs roll downwards in real-time, and active token counters increment dynamically in standard intervals.
 
 ## Regression Checks
 

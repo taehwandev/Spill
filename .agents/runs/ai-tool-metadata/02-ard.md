@@ -77,7 +77,7 @@ ps/process args + local command probes + environment -> LocalAIStatusProvider ->
 
 ### Manual
 
-- Open the panel on a machine with Codex, Claude, Gemini, Ollama, and Agent Cat installed.
+- Open the panel on a machine with Codex, Claude, Gemini, and Ollama installed.
 - Confirm metadata appears only when safely detected.
 
 ## Implementation Split

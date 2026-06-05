@@ -24,7 +24,9 @@ final class CloudServiceStatusProviderTests: XCTestCase {
         XCTAssertEqual(snapshot.items.first { $0.kind == .claudeCode }?.health, .operational)
         XCTAssertEqual(snapshot.items.first { $0.kind == .claudeAPI }?.health, .outage)
         XCTAssertEqual(snapshot.items.first { $0.kind == .geminiAPI }?.health, .degraded)
-        XCTAssertEqual(snapshot.items.first { $0.kind == .antigravity }?.health, .unknown)
+        XCTAssertEqual(snapshot.items.first { $0.kind == .antigravity }?.health, .degraded)
+        XCTAssertEqual(snapshot.items.first { $0.kind == .antigravity }?.source, "Google Cloud Status")
+        XCTAssertTrue(snapshot.items.first { $0.kind == .antigravity }?.detail.contains("Gemini API") == true)
     }
 
     func testProviderReturnsUnknownItemsWhenStatusSourceFails() async {
@@ -37,6 +39,7 @@ final class CloudServiceStatusProviderTests: XCTestCase {
         XCTAssertEqual(snapshot.items.first { $0.kind == .codex }?.health, .unknown)
         XCTAssertEqual(snapshot.items.first { $0.kind == .claudeCode }?.health, .unknown)
         XCTAssertEqual(snapshot.items.first { $0.kind == .geminiAPI }?.health, .unknown)
+        XCTAssertEqual(snapshot.items.first { $0.kind == .antigravity }?.health, .unknown)
     }
 
     private static let openAIStatusJSON = """

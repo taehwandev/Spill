@@ -7,11 +7,13 @@ struct SpillBarView: View {
     @ObservedObject var statusStore: SystemStatusStore
     @ObservedObject var aiStatusStore: AIStatusStore
     @ObservedObject var cloudServiceStatusStore: CloudServiceStatusStore
+    @ObservedObject var tokenUsageDashboardStore: TokenUsageDashboardStore
     @ObservedObject var windowActionStore: WindowActionStore
     @ObservedObject var sleepGuard: SleepGuardController
     @ObservedObject var updateStore: UpdateCheckStore
     let dismissAction: () -> Void
     let settingsAction: () -> Void
+    let tokenMeteringDetailAction: () -> Void
     @State private var pendingDismissWorkItem: DispatchWorkItem?
     @State private var hoveredStatusModule: SpillStatusModule? = nil
     @State private var didCopyUpdateInstallCommand = false
@@ -36,11 +38,9 @@ struct SpillBarView: View {
                     statusSection
                 }
 
-                if !aiStatusStore.statuses.isEmpty {
-                    Divider()
-                        .background(Color.primary.opacity(0.04))
-                    aiSection
-                }
+                Divider()
+                    .background(Color.primary.opacity(0.04))
+                aiSection
 
                 Divider()
                     .background(Color.primary.opacity(0.04))
@@ -388,25 +388,110 @@ struct SpillBarView: View {
         VStack(spacing: 7) {
             aiSectionHeader
 
-            LazyVGrid(columns: aiToolColumns, alignment: .leading, spacing: 7) {
-                ForEach(aiStatusStore.statuses) { status in
-                    let serviceStatus = serviceStatus(for: status.kind)
-                    let helpText = aiToolHelpText(status, serviceStatus: serviceStatus)
+            tokenMeteringSummary
 
-                    Button {
-                        panelStore.send(.setStatusDetailTarget(.ai(status.kind)))
-                    } label: {
-                        compactAIToolPill(status, serviceStatus: serviceStatus)
+            if !aiStatusStore.statuses.isEmpty {
+                LazyVGrid(columns: aiToolColumns, alignment: .leading, spacing: 7) {
+                    ForEach(aiStatusStore.statuses) { status in
+                        let serviceStatus = serviceStatus(for: status.kind)
+                        let helpText = aiToolHelpText(status, serviceStatus: serviceStatus)
+
+                        Button {
+                            panelStore.send(.setStatusDetailTarget(.ai(status.kind)))
+                        } label: {
+                            compactAIToolPill(status, serviceStatus: serviceStatus)
+                        }
+                        .buttonStyle(.plain)
+                        .popover(isPresented: detailBinding(for: .ai(status.kind)), arrowEdge: .top) {
+                            statusDetailPopover(for: .ai(status.kind))
+                        }
+                        .help(helpText)
+                        .accessibilityLabel(helpText)
                     }
-                    .buttonStyle(.plain)
-                    .popover(isPresented: detailBinding(for: .ai(status.kind)), arrowEdge: .top) {
-                        statusDetailPopover(for: .ai(status.kind))
-                    }
-                    .help(helpText)
-                    .accessibilityLabel(helpText)
                 }
             }
         }
+    }
+
+    private var tokenMeteringSummary: some View {
+        let snapshot = tokenUsageDashboardStore.snapshot
+        let topTask = snapshot.taskRows.first
+        let topSource = snapshot.sourceRows.first
+
+        return Button {
+            tokenMeteringDetailAction()
+        } label: {
+            HStack(spacing: 10) {
+                statusIconBadge(symbolName: "chart.bar.xaxis", tint: .teal)
+
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack(spacing: 6) {
+                        Text("Token Metering")
+                            .font(.system(size: 11.5, weight: .semibold))
+                            .lineLimit(1)
+
+                        Text("Local")
+                            .font(.system(size: 8.5, weight: .bold))
+                            .padding(.horizontal, 5)
+                            .frame(height: 17)
+                            .foregroundStyle(.teal)
+                            .background(.teal.opacity(0.12), in: Capsule())
+                    }
+
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(TokenUsageDashboardSnapshot.formatTokens(snapshot.totalTokens))
+                            .font(.system(size: 18, weight: .bold, design: .rounded))
+                            .monospacedDigit()
+
+                        Text("tokens")
+                            .font(.system(size: 9.5, weight: .semibold, design: .rounded))
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Text(tokenMeteringSubtitle(topTask: topTask, topSource: topSource, eventCount: snapshot.eventCount))
+                        .font(.system(size: 10, weight: .medium, design: .rounded))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.72)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer(minLength: 8)
+
+                Label("Details", systemImage: "chevron.right")
+                    .labelStyle(.iconOnly)
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .frame(minHeight: 74)
+            .frame(maxWidth: .infinity)
+            .background(.teal.opacity(0.06), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(.teal.opacity(0.10), lineWidth: 0.6)
+            }
+        }
+        .buttonStyle(.plain)
+        .onAppear {
+            tokenUsageDashboardStore.refresh()
+        }
+        .help("Open local token metering details")
+        .accessibilityLabel("Token Metering, \(snapshot.totalTokens) local tokens")
+    }
+
+    private func tokenMeteringSubtitle(
+        topTask: TokenUsageDashboardBarRow?,
+        topSource: TokenUsageDashboardBarRow?,
+        eventCount: Int
+    ) -> String {
+        guard eventCount > 0 else {
+            return "Open to copy global setup prompt"
+        }
+
+        let task = topTask.map { "\($0.title) \($0.value)" } ?? "No task split"
+        let source = topSource.map { "\($0.title) \($0.value)" } ?? "No source split"
+        return "\(eventCount) events / \(task) / \(source)"
     }
 
     private var aiToolColumns: [GridItem] {

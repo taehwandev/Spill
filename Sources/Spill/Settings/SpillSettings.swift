@@ -138,6 +138,10 @@ final class SpillSettings: ObservableObject {
         didSet { defaults.set(launchAtLogin, forKey: Keys.launchAtLogin) }
     }
 
+    @Published var tokenUsageBridgeEnabled: Bool {
+        didSet { defaults.set(tokenUsageBridgeEnabled, forKey: Keys.tokenUsageBridgeEnabled) }
+    }
+
     private let defaults: UserDefaults
 
     init(defaults: UserDefaults = .standard) {
@@ -220,6 +224,7 @@ final class SpillSettings: ObservableObject {
             from: defaults.stringArray(forKey: Keys.windowActionShortcutKeys)
         )
         launchAtLogin = LoginItemController.isEnabled
+        tokenUsageBridgeEnabled = defaults.object(forKey: Keys.tokenUsageBridgeEnabled) as? Bool ?? false
     }
 
     func selectionState(for item: MenuBarItemSnapshot) -> MenuBarItemSelectionState {
@@ -501,4 +506,5 @@ private enum Keys {
     static let hotKeyEnabled = "hotKeyEnabled"
     static let windowActionShortcutKeys = "windowActionShortcutKeys"
     static let launchAtLogin = "launchAtLogin"
+    static let tokenUsageBridgeEnabled = "tokenUsageBridgeEnabled"
 }

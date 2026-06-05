@@ -15,6 +15,7 @@ Commands:
   python3 .agents/scripts/workflow.py panel-open-smoke
   python3 .agents/scripts/workflow.py status-click-smoke
   python3 .agents/scripts/workflow.py panel-layout-smoke
+  python3 .agents/scripts/workflow.py token-metering-smoke
   python3 .agents/scripts/workflow.py sleep-guard-smoke
   python3 .agents/scripts/workflow.py new-run <feature-id>
 """
@@ -45,7 +46,14 @@ TEXT_SUFFIXES = {
     ".txt",
 }
 TEXT_FILENAMES = {"Package.swift", ".gitignore"}
-EXCLUDED_DIRS = {".git", ".build", ".swiftpm", "DerivedData"}
+EXCLUDED_DIRS = {
+    ".git",
+    ".build",
+    ".swiftpm",
+    "DerivedData",
+    "dist",
+    "node_modules",
+}
 
 
 class Result:
@@ -317,6 +325,10 @@ def panel_layout_smoke() -> None:
     subprocess.run([str(ROOT / "scripts" / "verify-panel-layout-smoke.sh")], cwd=ROOT, check=True)
 
 
+def token_metering_smoke() -> None:
+    subprocess.run([str(ROOT / "scripts" / "verify-token-metering-smoke.sh")], cwd=ROOT, check=True)
+
+
 def sleep_guard_smoke() -> None:
     subprocess.run([str(ROOT / "scripts" / "verify-sleep-guard-smoke.sh")], cwd=ROOT, check=True)
 
@@ -327,6 +339,7 @@ def verify_all() -> None:
     language_gates()
     code_gates()
     build()
+    token_metering_smoke()
 
 
 def main() -> None:
@@ -342,6 +355,7 @@ def main() -> None:
     commands.add_parser("panel-open-smoke")
     commands.add_parser("status-click-smoke")
     commands.add_parser("panel-layout-smoke")
+    commands.add_parser("token-metering-smoke")
     commands.add_parser("sleep-guard-smoke")
     new_run_parser = commands.add_parser("new-run")
     new_run_parser.add_argument("feature_id")
@@ -367,6 +381,8 @@ def main() -> None:
         status_click_smoke()
     elif args.command == "panel-layout-smoke":
         panel_layout_smoke()
+    elif args.command == "token-metering-smoke":
+        token_metering_smoke()
     elif args.command == "sleep-guard-smoke":
         sleep_guard_smoke()
     elif args.command == "new-run":
