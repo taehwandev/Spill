@@ -16,6 +16,15 @@ const defaultHookAdapters = "codex,claude,antigravity,openai";
 const alwaysInstallAdapters = new Set(defaultHookAdapters.split(","));
 const include = new Set((args.include ?? defaultHookAdapters).split(",").map((item) => item.trim()).filter(Boolean));
 const workflowHook = args.workflowHook ? expandHome(args.workflowHook) : null;
+const implementationDominantTaskTypes = new Set([
+  "code_generation",
+  "debugging",
+  "refactoring",
+  "test_generation",
+  "ui_design",
+  "prompt_design",
+  "workflow_setup",
+]);
 
 if (args.label) {
   const label = await writeRuntimeLabel({
@@ -269,7 +278,7 @@ async function writeJSONObject(path, value) {
 async function writeRuntimeLabel({ tool, taskType, stage, labelFile, ttlMinutes }) {
   const safeTool = safeToolLabel(tool);
   const safeTaskType = safeWorkflowSlug(taskType, "task_type");
-  const safeStage = safeWorkflowSlug(stage, "stage");
+  const safeStage = dominantStageForTask(safeTaskType, safeWorkflowSlug(stage, "stage"));
   const ttl = safeTTLMinutes(ttlMinutes);
   const now = new Date();
   const expiresAt = new Date(now.getTime() + ttl * 60 * 1000);
@@ -298,6 +307,13 @@ async function writeRuntimeLabel({ tool, taskType, stage, labelFile, ttlMinutes 
     label_file: target,
     expires_at: value.expires_at,
   };
+}
+
+function dominantStageForTask(taskType, stage) {
+  if (stage === "verify" && implementationDominantTaskTypes.has(taskType)) {
+    return "implement";
+  }
+  return stage;
 }
 
 async function resolveSourceRoot(option) {

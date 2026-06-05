@@ -9,6 +9,7 @@ Spill local queue.
 Install: configure AGY to call this script as a PostInvocation or Stop hook in ~/.gemini/config/hooks.json.
 """
 import datetime
+import hashlib
 import json
 import os
 import pathlib
@@ -31,6 +32,7 @@ LABEL_FILE = pathlib.Path(
 _OPAQUE_ID = re.compile(r'^[A-Za-z0-9_-]{6,64}$')
 _MODEL_ID = re.compile(r'^[A-Za-z0-9_.:-]{2,80}$')
 _SAFE_SLUG = re.compile(r'^[a-z][a-z0-9_]{1,40}$')
+_USED_LABEL_FILE = False
 
 
 def _opaque(value: str, fallback: str) -> str:
@@ -60,6 +62,7 @@ def _payload_value(payload: dict, *keys: str) -> str:
 
 
 def _safe_label(payload: dict, keys: tuple[str, ...], env_keys: tuple[str, ...], fallback: str) -> str:
+    global _USED_LABEL_FILE
     payload_label = _payload_value(payload, *keys)
     if _SAFE_SLUG.match(payload_label):
         return payload_label
@@ -71,6 +74,7 @@ def _safe_label(payload: dict, keys: tuple[str, ...], env_keys: tuple[str, ...],
 
     file_label = _label_file_value(*keys)
     if _SAFE_SLUG.match(file_label):
+        _USED_LABEL_FILE = True
         return file_label
 
     return fallback
@@ -117,6 +121,20 @@ def _enqueue_event(event: dict) -> None:
     os.replace(temporary_path, final_path)
 
 
+def _stable_span_id(*parts: str) -> str:
+    source = ":".join(parts)
+    return "span-" + hashlib.sha256(source.encode("utf-8")).hexdigest()[:12]
+
+
+def _consume_label_file() -> None:
+    if not _USED_LABEL_FILE:
+        return
+    try:
+        LABEL_FILE.unlink()
+    except Exception:
+        pass
+
+
 def main() -> None:
     try:
         payload = json.load(sys.stdin)
@@ -144,7 +162,7 @@ def main() -> None:
 
     session_id = str(payload.get("session_id", payload.get("conversationId", "")))
     run_id = _opaque(session_id, "run-" + uuid.uuid4().hex[:12])
-    span_id = "span-" + uuid.uuid4().hex[:12]
+    span_id = _stable_span_id(run_id, model, str(input_tokens), str(output_tokens), str(total))
     now = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.000Z")
 
     task_type = _safe_label(
@@ -189,6 +207,7 @@ def main() -> None:
     }
 
     _enqueue_event(event)
+    _consume_label_file()
 
 
 if __name__ == "__main__":

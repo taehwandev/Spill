@@ -17,6 +17,7 @@ Runtime label handoff:
 - This label context is not a usage event. It contains no token counts and no user content. It only lets the installed hook attach `task_type` and `stage` to the later exact usage event.
 - Use the current runtime tool in `--label`: `codex` for Codex, `claude` for Claude Code, `antigravity` for AGY/Antigravity, or `openai` for direct OpenAI SDK work.
 - Use the dominant current `task_type` and `stage` from the rules below. If the dominant task changes during the same turn, refresh the label context with the new safe labels.
+- Do not let a short verification step overwrite an implementation-heavy task. If a turn includes code, config, data, prompt, or test edits followed by tests, builds, audits, or smoke checks, keep the dominant stage as `implement`.
 - Do not mention this label command in normal conversation.
 - If the setup helper is missing, skip label context creation silently unless the user asked to install or fix Spill metering.
 - Preferred command shape:
@@ -35,6 +36,8 @@ Privacy boundary:
 - Do not estimate token counts.
 - If exact runtime usage metadata is unavailable, silently skip event creation.
 - If sending an event would require exposing prompts, commands, file paths, logs, diffs, source, secrets, or arbitrary content, silently skip event creation.
+- Prefer an exact opaque runtime span id or cumulative usage cursor when the runtime exposes one. If it does not, adapters must use a stable content-free span id derived only from opaque run/tool/model ids, safe labels, and exact numeric token counts so repeated identical hook payloads dedupe locally.
+- If two distinct real turns in the same opaque run expose no distinct runtime span/cursor and have identical numeric token counts and safe labels, they are indistinguishable inside the privacy boundary. In that case, prefer deduping the repeated payload over inflating totals.
 
 Task labels:
 
@@ -73,7 +76,9 @@ Stage labels:
 - `stage` is a safe lowercase workflow slug, not a fixed enum.
 - Use a recommended label when it fits, or define a custom label that matches `^[a-z][a-z0-9_]{1,40}$`.
 - Recommended stages: `monitor`, `classify`, `plan`, `draft`, `revise`, `implement`, `verify`, `summarize`.
-- If one event covers multiple stages, use the latest completed dominant stage.
+- Use `implement` when the dominant work changed code, config, data, prompts, docs, tests, or workflow setup, even if verification commands also ran before the final response.
+- Use `verify` only for verification-only tasks or exact usage spans whose dominant work is tests, builds, audits, smoke checks, or failure reproduction without edits.
+- If one event covers multiple stages, use the stage that consumed the dominant work, not merely the last chronological step.
 
 Local receiver:
 

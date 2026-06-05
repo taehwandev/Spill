@@ -28,7 +28,7 @@ export const tokenSourceLabels = {
   repo_context: "Repo context",
   tool_output: "Tool output",
   generated_output: "Generated output",
-  unknown: "Unknown aggregate"
+  unknown: "Source unavailable"
 } satisfies Record<TokenSource, string>;
 
 export const syncModeContent = {
@@ -206,7 +206,15 @@ function buildHotspots(
   events: readonly UsageEvent[],
   totalTokens: number
 ): HotspotRow[] {
-  return TOKEN_SOURCES.filter((source) => source !== "unknown").map((source) => {
+  const knownTotal = TOKEN_SOURCES.filter((source) => source !== "unknown").reduce(
+    (sum, source) =>
+      sum + events.reduce((eventSum, event) => eventSum + event.token_breakdown[source], 0),
+    0
+  );
+  const sources =
+    knownTotal === 0 ? TOKEN_SOURCES.filter((source) => source !== "unknown") : TOKEN_SOURCES;
+
+  return sources.map((source) => {
     const tokens = events.reduce(
       (sum, event) => sum + event.token_breakdown[source],
       0

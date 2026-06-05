@@ -317,14 +317,23 @@ struct TokenUsageDashboardSnapshot: Equatable {
     }
 
     private static func sourceTotals(events: [TokenUsageEvent]) -> [TokenUsageSource: Int] {
-        events.reduce(into: [:]) { result, event in
-            result[.system, default: 0] += event.tokenBreakdown.system
-            result[.user, default: 0] += event.tokenBreakdown.user
-            result[.history, default: 0] += event.tokenBreakdown.history
-            result[.repoContext, default: 0] += event.tokenBreakdown.repoContext
-            result[.toolOutput, default: 0] += event.tokenBreakdown.toolOutput
-            result[.generatedOutput, default: 0] += event.tokenBreakdown.generatedOutput
+        var totals: [TokenUsageSource: Int] = [:]
+        for event in events {
+            totals[.system, default: 0] += event.tokenBreakdown.system
+            totals[.user, default: 0] += event.tokenBreakdown.user
+            totals[.history, default: 0] += event.tokenBreakdown.history
+            totals[.repoContext, default: 0] += event.tokenBreakdown.repoContext
+            totals[.toolOutput, default: 0] += event.tokenBreakdown.toolOutput
+            totals[.generatedOutput, default: 0] += event.tokenBreakdown.generatedOutput
+            totals[.unknown, default: 0] += event.tokenBreakdown.unknown
         }
+        let knownTotal = totals.reduce(0) { partialResult, item in
+            item.key == .unknown ? partialResult : partialResult + item.value
+        }
+        if knownTotal == 0 {
+            return totals.filter { $0.key != .unknown }
+        }
+        return totals
     }
 
     private static func sessionRows(events: [TokenUsageEvent]) -> [TokenUsageDashboardSessionRow] {

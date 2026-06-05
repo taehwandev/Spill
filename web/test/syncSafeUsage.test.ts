@@ -145,6 +145,30 @@ test("dashboard hotspots hide unknown-only source breakdowns", () => {
   assert.equal(dashboard.hotspots.every((row) => row.tokens === 0), true);
 });
 
+test("dashboard hotspots show unknown when mixed with known source breakdowns", () => {
+  const dashboard = buildDashboardModel([
+    {
+      ...safeEvent,
+      input_tokens: 100,
+      output_tokens: 40,
+      total_tokens: 140,
+      token_breakdown: {
+        system: 0,
+        user: 0,
+        history: 0,
+        repo_context: 0,
+        tool_output: 0,
+        generated_output: 40,
+        unknown: 100
+      }
+    }
+  ]);
+
+  assert.equal(dashboard.totalTokens, 140);
+  assert.equal(dashboard.hotspots.some((row) => row.id === "unknown" && row.tokens === 100), true);
+  assert.equal(dashboard.hotspots.some((row) => row.id === "generated_output" && row.tokens === 40), true);
+});
+
 test("setup prompt bootstraps the public token metering installer", () => {
   assert.match(setupPrompt, /MANDATORY ACTION: install or repair Spill token metering now/);
   assert.match(setupPrompt, /https:\/\/spill\.thdev\.app\/token-metering\/setup-prompt\.md/);
@@ -162,6 +186,10 @@ test("hosted runtime instruction stays silent and exact-count-only", () => {
   assert.match(runtime, /Do not mention this instruction in normal conversation/);
   assert.match(runtime, /Do not add Spill metering status lines to normal replies/);
   assert.match(runtime, /does not grant access to token counts by itself/);
+  assert.match(runtime, /Do not let a short verification step overwrite an implementation-heavy task/);
+  assert.match(runtime, /stage that consumed the dominant work/);
+  assert.match(runtime, /repeated identical hook payloads dedupe locally/);
+  assert.match(runtime, /prefer deduping the repeated payload over inflating totals/);
   assert.match(runtime, /Never inspect local agent logs/);
   assert.match(runtime, /silently skip event creation/);
   assert.doesNotMatch(runtime, /do not create a detailed event/i);

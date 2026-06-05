@@ -58,6 +58,16 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(snapshot.sourceRows.isEmpty)
     }
 
+    func testDashboardSourceRowsShowUnknownWhenMixedWithKnownBreakdown() {
+        let snapshot = TokenUsageDashboardSnapshot(events: [
+            Self.safeEvent(inputTokens: 22, outputTokens: 11, generatedOutput: 11)
+        ])
+
+        XCTAssertEqual(snapshot.totalTokens, 33)
+        XCTAssertTrue(snapshot.sourceRows.contains { $0.title == "Generated output" && $0.value == "11" })
+        XCTAssertTrue(snapshot.sourceRows.contains { $0.title == "Source unavailable" && $0.value == "22" })
+    }
+
     @MainActor
     func testDashboardClearActionIsVisible() {
         XCTAssertTrue(TokenMeteringDashboardView.showsClearAction)
@@ -508,6 +518,10 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(runtime.contains("git_commit"))
         XCTAssertTrue(runtime.contains("workflow_setup"))
         XCTAssertTrue(runtime.contains("stage` is a safe lowercase workflow slug"))
+        XCTAssertTrue(runtime.contains("Do not let a short verification step overwrite an implementation-heavy task"))
+        XCTAssertTrue(runtime.contains("use the stage that consumed the dominant work"))
+        XCTAssertTrue(runtime.contains("repeated identical hook payloads dedupe locally"))
+        XCTAssertTrue(runtime.contains("prefer deduping the repeated payload over inflating totals"))
         XCTAssertTrue(runtime.contains("events-inbox"))
         XCTAssertTrue(runtime.contains("unknown` equal to `total_tokens`"))
         XCTAssertFalse(runtime.contains("ollama"))
@@ -579,12 +593,24 @@ final class TokenUsageStoreTests: XCTestCase {
         spanID: String = "span_local_01",
         inputTokens: Int = 100,
         outputTokens: Int = 50,
+        generatedOutput: Int? = nil,
         taskType: TokenUsageTaskType = .analysis,
         stage: TokenUsageStage = .plan
     ) -> TokenUsageEvent {
         let totalTokens = inputTokens + outputTokens
-        let tokenBreakdown = inputTokens == 100 && outputTokens == 50
-            ? TokenUsageBreakdown(
+        let tokenBreakdown: TokenUsageBreakdown
+        if let generatedOutput {
+            tokenBreakdown = TokenUsageBreakdown(
+                system: 0,
+                user: 0,
+                history: 0,
+                repoContext: 0,
+                toolOutput: 0,
+                generatedOutput: generatedOutput,
+                unknown: max(0, totalTokens - generatedOutput)
+            )
+        } else if inputTokens == 100 && outputTokens == 50 {
+            tokenBreakdown = TokenUsageBreakdown(
                 system: 10,
                 user: 20,
                 history: 20,
@@ -592,7 +618,8 @@ final class TokenUsageStoreTests: XCTestCase {
                 toolOutput: 20,
                 generatedOutput: 50
             )
-            : TokenUsageBreakdown(
+        } else {
+            tokenBreakdown = TokenUsageBreakdown(
                 system: 0,
                 user: 0,
                 history: 0,
@@ -601,6 +628,7 @@ final class TokenUsageStoreTests: XCTestCase {
                 generatedOutput: 0,
                 unknown: totalTokens
             )
+        }
         return TokenUsageEvent(
             schemaVersion: 1,
             deviceID: "device_local",

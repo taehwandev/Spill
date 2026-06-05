@@ -90,6 +90,28 @@ printf '%s' '{"usage":{"input_tokens":11,"output_tokens":7},"model":"gemini-2.5-
     | SPILL_TOKEN_USAGE_INBOX_DIR="$INBOX_DIR" \
       python3 "$ROOT_DIR/Sources/Spill/Resources/adapters/antigravity/spill-hook.py"
 
+AGY_DUP_INBOX="$ADAPTER_TMP_DIR/agy-duplicate-inbox"
+mkdir -p "$AGY_DUP_INBOX"
+for _ in 1 2; do
+    printf '%s' '{"usage":{"input_tokens":11,"output_tokens":7},"model":"gemini-2.5-pro","session_id":"agySmokeRun01","task_type":"code_review","stage":"verify"}' \
+        | SPILL_TOKEN_USAGE_INBOX_DIR="$AGY_DUP_INBOX" \
+          python3 "$ROOT_DIR/Sources/Spill/Resources/adapters/antigravity/spill-hook.py"
+done
+
+AGY_DUP_INBOX="$AGY_DUP_INBOX" node --input-type=module <<'NODE'
+import { readFile, readdir } from 'node:fs/promises';
+import { join } from 'node:path';
+
+const files = (await readdir(process.env.AGY_DUP_INBOX)).filter((file) => file.endsWith(".json"));
+if (files.length !== 2) {
+  throw new Error(`expected two AGY duplicate queue files, found ${files.length}`);
+}
+const spans = new Set(await Promise.all(files.map(async (file) => JSON.parse(await readFile(join(process.env.AGY_DUP_INBOX, file), "utf8")).span_id)));
+if (spans.size !== 1) {
+  throw new Error(`expected duplicate AGY payloads to share one stable span id, found ${spans.size}`);
+}
+NODE
+
 CLAUDE_TRANSCRIPT="$ADAPTER_TMP_DIR/claude-transcript.jsonl"
 CLAUDE_PAYLOAD="$ADAPTER_TMP_DIR/claude-payload.json"
 CLAUDE_TRANSCRIPT="$CLAUDE_TRANSCRIPT" CLAUDE_PAYLOAD="$CLAUDE_PAYLOAD" node --input-type=module <<'NODE'
@@ -123,6 +145,29 @@ SPILL_TOKEN_USAGE_INBOX_DIR="$INBOX_DIR" \
 SPILL_TOKEN_USAGE_TASK_TYPE="git_commit" \
 SPILL_TOKEN_USAGE_STAGE="summarize" \
 python3 "$ROOT_DIR/Sources/Spill/Resources/adapters/claude-code/spill-hook.py" <"$CLAUDE_PAYLOAD"
+
+CLAUDE_DUP_INBOX="$ADAPTER_TMP_DIR/claude-duplicate-inbox"
+mkdir -p "$CLAUDE_DUP_INBOX"
+for _ in 1 2; do
+    SPILL_TOKEN_USAGE_INBOX_DIR="$CLAUDE_DUP_INBOX" \
+    SPILL_TOKEN_USAGE_TASK_TYPE="git_commit" \
+    SPILL_TOKEN_USAGE_STAGE="summarize" \
+    python3 "$ROOT_DIR/Sources/Spill/Resources/adapters/claude-code/spill-hook.py" <"$CLAUDE_PAYLOAD"
+done
+
+CLAUDE_DUP_INBOX="$CLAUDE_DUP_INBOX" node --input-type=module <<'NODE'
+import { readFile, readdir } from 'node:fs/promises';
+import { join } from 'node:path';
+
+const files = (await readdir(process.env.CLAUDE_DUP_INBOX)).filter((file) => file.endsWith(".json"));
+if (files.length !== 2) {
+  throw new Error(`expected two Claude duplicate queue files, found ${files.length}`);
+}
+const spans = new Set(await Promise.all(files.map(async (file) => JSON.parse(await readFile(join(process.env.CLAUDE_DUP_INBOX, file), "utf8")).span_id)));
+if (spans.size !== 1) {
+  throw new Error(`expected duplicate Claude payloads to share one stable span id, found ${spans.size}`);
+}
+NODE
 
 CODEX_HOME_DIR="$ADAPTER_TMP_DIR/codex-home"
 CODEX_SESSION_DIR="$CODEX_HOME_DIR/sessions/2026/06/05"
@@ -178,6 +223,24 @@ node "$ROOT_DIR/scripts/spill-token-metering-setup.mjs" \
     --ttl-minutes 5 \
     --json >/dev/null
 
+NORMALIZED_LABEL_FILE="$ADAPTER_TMP_DIR/codex-normalized-label.json"
+node "$ROOT_DIR/scripts/spill-token-metering-setup.mjs" \
+    --label codex \
+    --task-type code_generation \
+    --stage verify \
+    --label-file "$NORMALIZED_LABEL_FILE" \
+    --ttl-minutes 5 \
+    --json >/dev/null
+
+NORMALIZED_LABEL_FILE="$NORMALIZED_LABEL_FILE" node --input-type=module <<'NODE'
+import { readFile } from 'node:fs/promises';
+
+const label = JSON.parse(await readFile(process.env.NORMALIZED_LABEL_FILE, "utf8"));
+if (label.task_type !== "code_generation" || label.stage !== "implement") {
+  throw new Error(`expected code_generation/implement label, found ${label.task_type}/${label.stage}`);
+}
+NODE
+
 node "$ROOT_DIR/scripts/spill-codex-session-importer.mjs" \
     --codex-home "$CODEX_HOME_DIR" \
     --transport file \
@@ -187,6 +250,118 @@ node "$ROOT_DIR/scripts/spill-codex-session-importer.mjs" \
     --label-file "$CODEX_LABEL_FILE" \
     --since-hours 1 \
     --json >/dev/null
+
+if [[ -e "$CODEX_LABEL_FILE" ]]; then
+    echo "FAIL: Codex label context should be consumed after a successful import."
+    exit 1
+fi
+
+CODEX_REGRESSION_HOME="$ADAPTER_TMP_DIR/codex-regression-home"
+CODEX_REGRESSION_INBOX="$ADAPTER_TMP_DIR/codex-regression-inbox"
+CODEX_REGRESSION_EVENTS="$ADAPTER_TMP_DIR/codex-regression-events.json"
+CODEX_REGRESSION_STATE="$ADAPTER_TMP_DIR/codex-regression-state.json"
+CODEX_REGRESSION_SESSION_DIR="$CODEX_REGRESSION_HOME/sessions/2026/06/05"
+mkdir -p "$CODEX_REGRESSION_SESSION_DIR" "$CODEX_REGRESSION_INBOX"
+CODEX_REGRESSION_SESSION="$CODEX_REGRESSION_SESSION_DIR/rollout-spill-regression.jsonl"
+CODEX_REGRESSION_SESSION="$CODEX_REGRESSION_SESSION" node --input-type=module <<'NODE'
+import { writeFile } from 'node:fs/promises';
+
+const base = Date.now() - 1000;
+const records = [
+  {
+    input_tokens: 100,
+    output_tokens: 10,
+    reasoning_output_tokens: 0,
+    total_tokens: 110,
+    total: { input_tokens: 100, output_tokens: 10, reasoning_output_tokens: 0, total_tokens: 110 },
+  },
+  {
+    input_tokens: 110,
+    output_tokens: 15,
+    reasoning_output_tokens: 0,
+    total_tokens: 125,
+    total: { input_tokens: 210, output_tokens: 25, reasoning_output_tokens: 0, total_tokens: 235 },
+  },
+  {
+    input_tokens: 120,
+    output_tokens: 20,
+    reasoning_output_tokens: 5,
+    total_tokens: 145,
+    total: { input_tokens: 330, output_tokens: 45, reasoning_output_tokens: 5, total_tokens: 375 },
+  },
+];
+const lines = [
+  {
+    timestamp: new Date(base).toISOString(),
+    type: "session_meta",
+    originator: "codex_cli_rs",
+    session_id: "codexRegressionRun01",
+    model: "gpt-5-codex",
+  },
+  ...records.map((record, index) => ({
+    timestamp: new Date(base + index + 1).toISOString(),
+    type: "event_msg",
+    payload: {
+      type: "token_count",
+      info: {
+        model: "gpt-5-codex",
+        last_token_usage: {
+          input_tokens: record.input_tokens,
+          cached_input_tokens: 0,
+          output_tokens: record.output_tokens,
+          reasoning_output_tokens: record.reasoning_output_tokens,
+          total_tokens: record.total_tokens,
+        },
+        total_token_usage: {
+          cached_input_tokens: 0,
+          ...record.total,
+        },
+      },
+    },
+  })),
+].map((line) => JSON.stringify(line)).join("\n");
+
+await writeFile(process.env.CODEX_REGRESSION_SESSION, `${lines}\n`);
+NODE
+
+node "$ROOT_DIR/scripts/spill-codex-session-importer.mjs" \
+    --codex-home "$CODEX_REGRESSION_HOME" \
+    --transport file \
+    --inbox "$CODEX_REGRESSION_INBOX" \
+    --events "$CODEX_REGRESSION_EVENTS" \
+    --state "$CODEX_REGRESSION_STATE" \
+    --task-type code_generation \
+    --stage implement \
+    --since-hours 1 \
+    --json >/dev/null
+
+node "$ROOT_DIR/scripts/spill-codex-session-importer.mjs" \
+    --codex-home "$CODEX_REGRESSION_HOME" \
+    --transport file \
+    --inbox "$CODEX_REGRESSION_INBOX" \
+    --events "$CODEX_REGRESSION_EVENTS" \
+    --state "$CODEX_REGRESSION_STATE" \
+    --task-type code_generation \
+    --stage implement \
+    --since-hours 1 \
+    --json >/dev/null
+
+CODEX_REGRESSION_INBOX="$CODEX_REGRESSION_INBOX" node --input-type=module <<'NODE'
+import { readFile, readdir } from 'node:fs/promises';
+import { join } from 'node:path';
+
+const files = (await readdir(process.env.CODEX_REGRESSION_INBOX)).filter((file) => file.endsWith(".json"));
+if (files.length !== 1) {
+  throw new Error(`expected one latest Codex usage event after two importer runs, found ${files.length}`);
+}
+const event = JSON.parse(await readFile(join(process.env.CODEX_REGRESSION_INBOX, files[0]), "utf8"));
+if (event.total_tokens !== 145 || event.input_tokens !== 120 || event.output_tokens !== 25) {
+  throw new Error(`expected latest Codex last usage 120/25/145, found ${event.input_tokens}/${event.output_tokens}/${event.total_tokens}`);
+}
+if (event.task_type !== "code_generation" || event.stage !== "implement") {
+  throw new Error(`expected code_generation/implement, found ${event.task_type}/${event.stage}`);
+}
+NODE
 
 INBOX_DIR="$INBOX_DIR" node --input-type=module <<'NODE'
 import { readFile, readdir } from 'node:fs/promises';

@@ -2,7 +2,7 @@
 
 import { createHash, randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { createInterface } from "node:readline";
 import { dirname, join } from "node:path";
 import { homedir } from "node:os";
@@ -122,7 +122,7 @@ async function importOnce() {
 
   for (const source of sources) {
     scannedFiles += 1;
-    const events = await parseSessionFile(source, afterDate);
+    const events = await parseSessionFile(source, afterDate, state);
     for (const event of events) {
       if (state.sentSpanIDs.includes(event.span_id) || storedSpans.has(event.span_id)) {
         skippedSeen += 1;
@@ -153,6 +153,9 @@ async function importOnce() {
   state.updatedAt = new Date().toISOString();
   if (!dryRun) {
     await writeState(statePath, state);
+    if (runtimeLabel.hasLabel && (importedEvents > 0 || markedExisting > 0 || skippedSeen > 0)) {
+      await unlink(labelPath).catch(() => {});
+    }
   }
 
   if (options.json) {
@@ -197,8 +200,7 @@ async function discoverCodexSessionFiles(root, after) {
   return files.sort();
 }
 
-async function parseSessionFile(path, after) {
-  const events = [];
+async function parseSessionFile(path, after, state) {
   const counters = {
     sessionID: "",
     sessionModel: "",
@@ -209,6 +211,7 @@ async function parseSessionFile(path, after) {
     previousReasoning: 0,
     eventIndex: 0,
   };
+  let latest = null;
 
   const stream = createReadStream(path, { encoding: "utf8" });
   stream.on("error", () => {});
@@ -236,29 +239,43 @@ async function parseSessionFile(path, after) {
       const timestamp = parsed.timestamp ? new Date(parsed.timestamp) : new Date();
       if (Number.isNaN(timestamp.getTime()) || timestamp < after) continue;
 
-      const usage = usageFromTokenCount(parsed.payload.info, counters);
+      const usage = usageRecordFromTokenCount(parsed.payload.info);
       if (!usage) continue;
 
-      counters.eventIndex += 1;
-      events.push(toSpillEvent({
-        sourcePath: path,
-        sessionID: counters.sessionID,
-        eventIndex: counters.eventIndex,
-        timestamp,
-        model: usage.model || counters.sessionModel || "codex-unknown",
-        inputTokens: usage.inputTokens,
-        outputTokens: usage.outputTokens,
-        cumulativeTotal: usage.cumulativeTotal,
-        taskType: taskTypeOverride ?? "uncategorized",
-        stage: stageOverride ?? "summarize",
-      }));
+      latest = { timestamp, usage };
     }
   } finally {
     lines.close();
     stream.destroy();
   }
 
-  return events;
+  if (!latest) return [];
+
+  const sessionKey = counters.sessionID || path;
+  const cursorKey = opaqueHash(sessionKey);
+  const cursor = state.sessionCursors[cursorKey];
+  const delta = usageDelta(latest.usage, cursor);
+  const nextCursor = cursorFromUsage(latest.usage);
+  if (nextCursor) {
+    state.sessionCursors[cursorKey] = nextCursor;
+  }
+  if (!delta) return [];
+
+  counters.eventIndex += 1;
+  return [
+    toSpillEvent({
+      sourcePath: path,
+      sessionID: counters.sessionID,
+      eventIndex: counters.eventIndex,
+      timestamp: latest.timestamp,
+      model: latest.usage.model || counters.sessionModel || "codex-unknown",
+      inputTokens: delta.inputTokens,
+      outputTokens: delta.outputTokens,
+      cumulativeTotal: latest.usage.total.totalTokens,
+      taskType: taskTypeOverride ?? "uncategorized",
+      stage: stageOverride ?? "summarize",
+    }),
+  ];
 }
 
 function captureSessionMeta(line, counters) {
@@ -267,44 +284,47 @@ function captureSessionMeta(line, counters) {
   counters.sessionModel = rawJSONField(line, "model") || counters.sessionModel;
 }
 
-function usageFromTokenCount(info, counters) {
+function usageRecordFromTokenCount(info) {
   if (!info || typeof info !== "object") return null;
 
   const total = tokenUsage(info.total_token_usage);
-  const cumulativeTotal = total.totalTokens ?? 0;
-  if (counters.previousCumulativeTotal !== null && counters.previousCumulativeTotal === cumulativeTotal) {
-    return null;
-  }
-  counters.previousCumulativeTotal = cumulativeTotal;
-
   const last = tokenUsage(info.last_token_usage);
-  let inputTokens = 0;
-  let outputTokens = 0;
-
-  if (last.hasAny) {
-    inputTokens = last.inputTokens;
-    outputTokens = last.outputTokens + last.reasoningTokens;
-  } else if (cumulativeTotal > 0 && total.hasAny) {
-    inputTokens = Math.max(0, total.inputTokens - counters.previousInput);
-    outputTokens =
-      Math.max(0, total.outputTokens - counters.previousOutput) +
-      Math.max(0, total.reasoningTokens - counters.previousReasoning);
-  }
-
-  if (total.hasAny) {
-    counters.previousInput = total.inputTokens;
-    counters.previousCached = total.cachedInputTokens;
-    counters.previousOutput = total.outputTokens;
-    counters.previousReasoning = total.reasoningTokens;
-  }
-
-  if (inputTokens === 0 && outputTokens === 0) return null;
+  if (!last.hasAny && !total.hasAny) return null;
 
   return {
     model: typeof info.model === "string" ? info.model : typeof info.model_name === "string" ? info.model_name : "",
-    inputTokens,
-    outputTokens,
-    cumulativeTotal,
+    last,
+    total,
+  };
+}
+
+function usageDelta(record, cursor) {
+  let inputTokens = 0;
+  let outputTokens = 0;
+
+  if (cursor && record.total.hasAny && record.total.totalTokens >= (cursor.totalTokens ?? 0)) {
+    inputTokens = Math.max(0, record.total.inputTokens - cursor.inputTokens);
+    outputTokens =
+      Math.max(0, record.total.outputTokens - cursor.outputTokens) +
+      Math.max(0, record.total.reasoningTokens - cursor.reasoningTokens);
+  } else if (record.last.hasAny) {
+    inputTokens = record.last.inputTokens;
+    outputTokens = record.last.outputTokens + record.last.reasoningTokens;
+  } else {
+    return null;
+  }
+
+  if (inputTokens === 0 && outputTokens === 0) return null;
+  return { inputTokens, outputTokens };
+}
+
+function cursorFromUsage(record) {
+  if (!record.total.hasAny) return null;
+  return {
+    inputTokens: record.total.inputTokens,
+    outputTokens: record.total.outputTokens,
+    reasoningTokens: record.total.reasoningTokens,
+    totalTokens: record.total.totalTokens,
   };
 }
 
@@ -506,12 +526,13 @@ async function readState(path) {
       return {
         updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : "",
         sentSpanIDs: parsed.sentSpanIDs.filter((value) => typeof value === "string"),
+        sessionCursors: plainObject(parsed.sessionCursors) ? parsed.sessionCursors : {},
       };
     }
   } catch {
     // Missing or corrupt state should not block local metering.
   }
-  return { updatedAt: "", sentSpanIDs: [] };
+  return { updatedAt: "", sentSpanIDs: [], sessionCursors: {} };
 }
 
 async function readRuntimeLabel(path, expectedTool) {
@@ -536,6 +557,7 @@ async function readRuntimeLabel(path, expectedTool) {
   return {
     taskType: optionalWorkflowSlug(parsed.task_type),
     stage: optionalWorkflowSlug(parsed.stage),
+    hasLabel: Boolean(optionalWorkflowSlug(parsed.task_type) || optionalWorkflowSlug(parsed.stage)),
   };
 }
 
@@ -592,6 +614,10 @@ function requiredValue(args, index, flag) {
     fail(`missing_value:${flag}`, true);
   }
   return value;
+}
+
+function plainObject(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 function printHelp() {

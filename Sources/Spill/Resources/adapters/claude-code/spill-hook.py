@@ -14,6 +14,7 @@ Install: add to ~/.claude/settings.json (or .claude/settings.json) Stop hooks:
   }
 """
 import datetime
+import hashlib
 import json
 import os
 import pathlib
@@ -41,6 +42,7 @@ _SAFE_SLUG = re.compile(r'^[a-z][a-z0-9_]{1,40}$')
 _WRITE_TOOLS = {'Edit', 'Write', 'MultiEdit', 'NotebookEdit'}
 # Tools that read without changing state.
 _READ_TOOLS = {'Read', 'Grep', 'WebFetch', 'WebSearch', 'LS'}
+_USED_LABEL_FILE = False
 
 
 def _opaque(value: str, fallback: str) -> str:
@@ -66,6 +68,7 @@ def _payload_value(payload: dict, *keys: str) -> str:
 
 
 def _safe_label(payload: dict, keys: tuple[str, ...], env_keys: tuple[str, ...], fallback: str) -> str:
+    global _USED_LABEL_FILE
     payload_label = _payload_value(payload, *keys)
     if _SAFE_SLUG.match(payload_label):
         return payload_label
@@ -77,6 +80,7 @@ def _safe_label(payload: dict, keys: tuple[str, ...], env_keys: tuple[str, ...],
 
     file_label = _label_file_value(*keys)
     if _SAFE_SLUG.match(file_label):
+        _USED_LABEL_FILE = True
         return file_label
 
     return fallback
@@ -121,6 +125,20 @@ def _enqueue_event(event: dict) -> None:
         f.write(json.dumps(event, separators=(",", ":")))
     os.chmod(temporary_path, 0o600)
     os.replace(temporary_path, final_path)
+
+
+def _stable_span_id(*parts: str) -> str:
+    source = ":".join(parts)
+    return "span-" + hashlib.sha256(source.encode("utf-8")).hexdigest()[:12]
+
+
+def _consume_label_file() -> None:
+    if not _USED_LABEL_FILE:
+        return
+    try:
+        LABEL_FILE.unlink()
+    except Exception:
+        pass
 
 
 def _infer_task_type(tool_names: set) -> str:
@@ -203,7 +221,7 @@ def main() -> None:
     model = raw_model if _MODEL_ID.match(raw_model) else "claude-unknown"
 
     run_id = _opaque(session_id, "run-" + uuid.uuid4().hex[:12])
-    span_id = "span-" + uuid.uuid4().hex[:12]
+    span_id = _stable_span_id(run_id, model, str(cache_read), str(fresh), str(output), str(total))
     now = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.000Z")
     inferred_task_type = _infer_task_type(tool_names)
     inferred_stage = _infer_stage(tool_names)
@@ -249,6 +267,7 @@ def main() -> None:
     }
 
     _enqueue_event(event)
+    _consume_label_file()
 
 
 if __name__ == "__main__":
