@@ -161,6 +161,21 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(TokenMeteringDashboardView.showsClearAction)
     }
 
+    func testDashboardViewKeepsAgentFilterRailAndSuppressesDefaultFocusBoxes() throws {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let dashboardView = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardView.swift"))
+        let preferencesView = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Preferences/PreferencesView.swift"))
+        let dashboardStore = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenUsageDashboardStore.swift"))
+
+        XCTAssertTrue(dashboardView.contains("railPanel(title: t(.aiTool))"))
+        XCTAssertTrue(dashboardView.contains("store.setSelectedTool(filter.tool)"))
+        XCTAssertTrue(dashboardView.contains(".focusEffectDisabled()"))
+        XCTAssertTrue(preferencesView.contains("private func sidebarItem"))
+        XCTAssertTrue(preferencesView.contains(".focusEffectDisabled()"))
+        XCTAssertTrue(dashboardStore.contains("@Published private(set) var unfilteredSnapshot"))
+        XCTAssertFalse(dashboardStore.contains("var unfilteredSnapshot: TokenUsageDashboardSnapshot {"))
+    }
+
     @MainActor
     func testDashboardStoreAddsAndClearsLocalTestEvents() {
         let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
@@ -178,6 +193,24 @@ final class TokenUsageStoreTests: XCTestCase {
     }
 
     @MainActor
+    func testDashboardStoreUnfilteredSnapshotBypassesSelectedToolFilter() throws {
+        let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
+        let dashboardStore = TokenUsageDashboardStore(usageStore: usageStore)
+
+        try usageStore.appendEvent(Self.safeEvent(aiTool: .codex, spanID: "span_codex"))
+        try usageStore.appendEvent(Self.safeEvent(aiTool: .claude, spanID: "span_claude"))
+        dashboardStore.refresh()
+
+        XCTAssertEqual(dashboardStore.snapshot.eventCount, 2)
+        XCTAssertEqual(dashboardStore.unfilteredSnapshot.eventCount, 2)
+
+        dashboardStore.setSelectedTool(.claude)
+        XCTAssertEqual(dashboardStore.snapshot.eventCount, 1)
+        XCTAssertEqual(dashboardStore.unfilteredSnapshot.eventCount, 2)
+    }
+
+    @MainActor
+
     func testDashboardStoreRefreshesWhenUsageStoreChangesExternally() async throws {
         let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
         let dashboardStore = TokenUsageDashboardStore(usageStore: usageStore)
@@ -319,6 +352,15 @@ final class TokenUsageStoreTests: XCTestCase {
         let event = try TokenUsageSanitizer.sanitizeEventJSONData(try jsonData(object))
 
         XCTAssertEqual(event.aiTool, .unknown)
+    }
+
+    func testAgyAIToolAliasDecodesAsAntigravity() throws {
+        var object = try decodedJSONObject(from: TokenUsageSanitizer.eventData(Self.safeEvent()))
+        object["ai_tool"] = "agy"
+
+        let event = try TokenUsageSanitizer.sanitizeEventJSONData(try jsonData(object))
+
+        XCTAssertEqual(event.aiTool, .antigravity)
     }
 
     func testSanitizerAcceptsCustomWorkflowLabels() throws {
@@ -576,10 +618,10 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(prompt.contains("downloads the latest open-source Spill adapter files from spill.thdev.app"))
         XCTAssertTrue(prompt.contains("SPILL_AI_TOOL=claude"))
         XCTAssertTrue(prompt.contains("SPILL_AI_TOOL=antigravity"))
-        XCTAssertTrue(prompt.contains("workflow.py"))
-        XCTAssertTrue(prompt.contains("agent-preflight.py"))
-        XCTAssertTrue(prompt.contains("agent-finish-check.py"))
         XCTAssertTrue(prompt.contains("Spill label handoff commands"))
+        XCTAssertTrue(prompt.contains("Workflow runner permissions are separate"))
+        XCTAssertFalse(prompt.contains("agent-preflight.py"))
+        XCTAssertFalse(prompt.contains("agent-finish-check.py"))
         XCTAssertTrue(prompt.contains("~/.codex/rules/default.rules"))
         XCTAssertTrue(prompt.contains("managed prefix_rule entries"))
         XCTAssertTrue(prompt.contains("Do not use broad python3, node, or shell-wide allow rules"))
@@ -643,10 +685,13 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(setup.contains("Codex is the OpenAI-backed agent runtime hook"))
         XCTAssertTrue(setup.contains("SPILL_AI_TOOL=claude"))
         XCTAssertTrue(setup.contains("SPILL_AI_TOOL=antigravity"))
-        XCTAssertTrue(setup.contains("workflow.py"))
-        XCTAssertTrue(setup.contains("agent-preflight.py"))
-        XCTAssertTrue(setup.contains("agent-finish-check.py"))
         XCTAssertTrue(setup.contains("Spill label handoff commands"))
+        XCTAssertTrue(setup.contains("Workflow runner permissions are separate"))
+        XCTAssertTrue(setup.contains("common safe path spellings"))
+        XCTAssertTrue(setup.contains("quoted `$HOME/...`"))
+        XCTAssertTrue(setup.contains("escaped\n`Application\\ Support`"))
+        XCTAssertFalse(setup.contains("agent-preflight.py"))
+        XCTAssertFalse(setup.contains("agent-finish-check.py"))
         XCTAssertTrue(setup.contains("~/.codex/rules/default.rules"))
         XCTAssertTrue(setup.contains("managed `prefix_rule` entries"))
         XCTAssertTrue(setup.contains("Do not use broad `python3`, `node`,\nor shell-wide allow rules"))
@@ -661,6 +706,7 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(setup.contains("Do you want Spill token usage to follow your workflow steps?"))
         XCTAssertTrue(setup.contains("per-turn labels must still\ncome from the runtime instruction"))
         XCTAssertTrue(setup.contains("Do not add `--if-absent` to workflow step labels"))
+        XCTAssertTrue(setup.contains("input alias for\nthe canonical `antigravity` event label"))
         XCTAssertTrue(setup.contains("script-based workflow entry points first"))
         XCTAssertTrue(setup.contains("wire labels in the script"))
         XCTAssertTrue(setup.contains("receiver-only integration"))
@@ -693,9 +739,15 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(runtime.contains("Use `git_commit`"))
         XCTAssertTrue(runtime.contains("SPILL_AI_TOOL"))
         XCTAssertTrue(runtime.contains("SPILL_TOKEN_USAGE_AI_TOOL"))
+        XCTAssertTrue(runtime.contains("normalized to the canonical `antigravity` event label"))
         XCTAssertTrue(runtime.contains("Never let Claude Code or Antigravity/AGY workflow routing fall back to"))
-        XCTAssertTrue(runtime.contains("agent-preflight.py"))
-        XCTAssertTrue(runtime.contains("agent-finish-check.py"))
+        XCTAssertTrue(runtime.contains("Workflow runner permissions are separate"))
+        XCTAssertFalse(runtime.contains("agent-preflight.py"))
+        XCTAssertFalse(runtime.contains("agent-finish-check.py"))
+        XCTAssertTrue(runtime.contains("equivalent exact helper\npath spellings"))
+        XCTAssertTrue(runtime.contains("$HOME/..."))
+        XCTAssertTrue(runtime.contains(#"${HOME}/..."#))
+        XCTAssertTrue(runtime.contains("quoted `$HOME/...`"))
         XCTAssertTrue(runtime.contains("task_type` is a safe lowercase workflow slug"))
         XCTAssertTrue(runtime.contains("git_commit"))
         XCTAssertTrue(runtime.contains("workflow_setup"))
@@ -718,7 +770,8 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(installer.contains("--include codex,claude,antigravity"))
         XCTAssertTrue(installer.contains("--source-root \"$TMP_DIR/adapters\""))
 
-        XCTAssertTrue(helper.contains("configureAgentPlaybookRuntimeDefaults"))
+        XCTAssertTrue(helper.contains("configureRuntimeLabelDefaults"))
+        XCTAssertFalse(helper.contains("configureAgentPlaybookRuntimeDefaults"))
         XCTAssertTrue(helper.contains("configureCodexRuntimeRules"))
         XCTAssertTrue(helper.contains(#".codex", "rules", "default.rules"#))
         XCTAssertTrue(helper.contains("prefix_rule("))
@@ -729,15 +782,20 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(helper.contains(#""antigravity""#))
         XCTAssertTrue(helper.contains(#".claude", "settings.json"#))
         XCTAssertTrue(helper.contains(#".gemini", "antigravity-cli", "settings.json"#))
-        XCTAssertTrue(helper.contains("workflow.py"))
-        XCTAssertTrue(helper.contains("agent-preflight.py"))
-        XCTAssertTrue(helper.contains("agent-finish-check.py"))
+        XCTAssertFalse(helper.contains("Allow trusted AgentPlaybook"))
         XCTAssertTrue(helper.contains("permissionPathVariants"))
+        XCTAssertTrue(helper.contains("homeEnvironmentPathVariants"))
+        XCTAssertTrue(helper.contains("doubleQuote(path)"))
+        XCTAssertTrue(helper.contains("$HOME/${suffix}"))
+        XCTAssertTrue(helper.contains(#"\${HOME}/${suffix}"#))
+        XCTAssertTrue(helper.contains(#"normalized === "agy""#))
+        XCTAssertTrue(helper.contains(#"return "antigravity""#))
         XCTAssertTrue(helper.contains("isStaleAgentRuntimePermissionEntry"))
         XCTAssertTrue(helper.contains("shellQuote(path)"))
         XCTAssertTrue(helper.contains("node ${path} --label ${tool}"))
+        XCTAssertTrue(helper.contains(#"pattern: ["node", path, "--label", "codex"]"#))
         XCTAssertFalse(helper.contains("python3 scripts/${script}"))
-        XCTAssertTrue(helper.contains("--agent-playbook-home"))
+        XCTAssertFalse(helper.contains("--agent-playbook-home"))
         XCTAssertTrue(helper.contains("--if-absent"))
         XCTAssertTrue(helper.contains("readActiveRuntimeLabel"))
         XCTAssertTrue(helper.contains(#""label_exists""#))
@@ -745,6 +803,9 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(agyHook.contains("model_name"))
         XCTAssertTrue(agyHook.contains("modelId"))
         XCTAssertTrue(agyHook.contains("modelVersion"))
+        XCTAssertTrue(agyHook.contains(#""antigravity", "agy""#))
+        XCTAssertTrue(agyHook.contains("usageMetadata"))
+        XCTAssertTrue(agyHook.contains("totalTokenCount"))
     }
 
     func testAdapterHookConfigsUseExactRuntimeHookShapes() throws {

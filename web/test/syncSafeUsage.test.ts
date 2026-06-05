@@ -190,6 +190,32 @@ test("dashboard uses only three local agent tools", () => {
   assert.deepEqual(dashboard.modelBreakdown.map((row) => row.tokens), [200]);
 });
 
+test("dashboard normalizes agy ai_tool alias to antigravity", () => {
+  const result = sanitizeUsageEvent({
+    ...safeEvent,
+    span_id: "span_005_agy_alias",
+    ai_tool: "agy",
+    total_tokens: 80,
+    input_tokens: 50,
+    output_tokens: 30
+  });
+
+  assert.equal(result.ok, true);
+  if (!result.ok) {
+    throw new Error("expected agy alias to sanitize");
+  }
+
+  const dashboard = buildDashboardModel([result.event]);
+
+  assert.equal(dashboard.totalTokens, 80);
+  assert.deepEqual(dashboard.aiToolBreakdown.map((row) => row.id), [
+    "codex",
+    "claude",
+    "antigravity"
+  ]);
+  assert.deepEqual(dashboard.aiToolBreakdown.map((row) => row.tokens), [0, 0, 80]);
+});
+
 test("dashboard hotspots show unknown when mixed with known source breakdowns", () => {
   const dashboard = buildDashboardModel([
     {
@@ -293,13 +319,18 @@ test("setup prompt bootstraps the public token metering installer", () => {
   assert.match(setupPrompt, /Codex is the OpenAI-backed agent runtime hook/);
   assert.match(setupPrompt, /SPILL_AI_TOOL=claude/);
   assert.match(setupPrompt, /SPILL_AI_TOOL=antigravity/);
-  assert.match(setupPrompt, /workflow\.py/);
-  assert.match(setupPrompt, /agent-preflight\.py/);
-  assert.match(setupPrompt, /agent-finish-check\.py/);
   assert.match(setupPrompt, /Spill label handoff commands/);
+  assert.match(setupPrompt, /Workflow runner permissions are separate/);
+  assert.match(setupPrompt, /common safe path spellings/);
+  assert.match(setupPrompt, /\$HOME\/\.\.\./);
+  assert.match(setupPrompt, /\$\{HOME\}\/\.\.\./);
+  assert.match(setupPrompt, /quoted \$HOME\/\.\.\./);
+  assert.match(setupPrompt, /escaped Application\\ Support/);
   assert.match(setupPrompt, /~\/\.codex\/rules\/default\.rules/);
   assert.match(setupPrompt, /managed prefix_rule entries/);
   assert.match(setupPrompt, /Do not use broad python3, node, or shell-wide allow rules/);
+  assert.doesNotMatch(setupPrompt, /agent-preflight\.py/);
+  assert.doesNotMatch(setupPrompt, /agent-finish-check\.py/);
   assert.match(setupPrompt, /Workflow integration is only for better labels/);
   assert.match(setupPrompt, /per-turn fallback labels must use --if-absent/);
   assert.match(setupPrompt, /always attempt the per-turn fallback label with --if-absent/);
@@ -320,6 +351,7 @@ test("setup prompt bootstraps the public token metering installer", () => {
   assert.match(setupPrompt, /work item titles/);
   assert.match(setupPrompt, /commit-message -> commit_message\/draft/);
   assert.match(setupPrompt, /--label <current-tool>/);
+  assert.match(setupPrompt, /agy, treat it as an input alias for the canonical antigravity event label/);
   assert.match(setupPrompt, /Never let Claude Code or Antigravity\/AGY workflow routing fall back to codex/);
   assert.doesNotMatch(setupPrompt, /workflow-setup-prompt\.md/);
   assert.match(setupPrompt, /Do not save only the runtime instruction and call the task done/);
