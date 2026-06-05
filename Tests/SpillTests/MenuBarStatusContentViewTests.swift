@@ -321,6 +321,17 @@ final class MenuBarStatusContentViewTests: XCTestCase {
         XCTAssertEqual(labels, ["CPU", "5%", "RAM", "20%"])
     }
 
+    func testStackedLayoutRendersAITokenCountVertically() {
+        let ai = makeStatusSegment(kind: .ai, value: "1.44M")
+        let view = MenuBarStatusContentView(segments: [ai], layoutStyle: .stacked)
+        let labels = view.subviews
+            .flatMap(\.subviews)
+            .compactMap { $0 as? NSTextField }
+            .map(\.stringValue)
+
+        XCTAssertEqual(labels, ["AI", "1.44M"])
+    }
+
     func testStackedLayoutUsesThemeAdaptiveTitleColor() {
         let cpu = makeStatusSegment(kind: .cpu, value: "5%")
         let memory = makeStatusSegment(kind: .memory, value: "20%")

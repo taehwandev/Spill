@@ -136,9 +136,9 @@ final class MenuBarStatusContentView: NSView {
         }
 
         switch segment.kind {
-        case .cpu, .memory:
+        case .cpu, .memory, .ai:
             return true
-        case .ai, .caffeine, .sleepGuard, .trigger:
+        case .caffeine, .sleepGuard, .trigger:
             return false
         }
     }
