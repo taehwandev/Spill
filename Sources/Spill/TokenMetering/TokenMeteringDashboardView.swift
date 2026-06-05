@@ -7,50 +7,67 @@ struct TokenMeteringDashboardView: View {
     @State private var isDiagnosticsExpanded = false
 
     var body: some View {
-        ScrollView(.vertical, showsIndicators: true) {
-            VStack(alignment: .leading, spacing: 18) {
-                header
-                kpiGrid
-                contentGrid
-                privacyContract
+        VStack(spacing: 0) {
+            topHeader
+
+            Divider()
+                .background(Color.primary.opacity(0.05))
+
+            HStack(alignment: .top, spacing: 16) {
+                leftRail
+                    .frame(width: 224)
+
+                ScrollView(.vertical, showsIndicators: true) {
+                    VStack(alignment: .leading, spacing: 16) {
+                        kpiStrip
+                        analyticsGrid
+                        sessionsTable
+                    }
+                    .padding(.vertical, 18)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                }
+
+                rightRail
+                    .frame(width: 286)
             }
-            .padding(22)
-            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .padding(.horizontal, 18)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
         .background(VisualEffectView(material: .sidebar, blendingMode: .withinWindow))
-        .frame(minWidth: 760, minHeight: 560)
+        .frame(minWidth: 1060, minHeight: 640)
         .onAppear {
             store.refresh()
         }
     }
 
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .top, spacing: 14) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color.teal.opacity(0.16))
+    private var topHeader: some View {
+        HStack(spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(Color.teal.opacity(0.15))
 
-                    Image(systemName: "chart.bar.xaxis")
-                        .font(.system(size: 20, weight: .bold))
-                        .foregroundStyle(.teal)
-                }
-                .frame(width: 44, height: 44)
+                Image(systemName: "chart.bar.xaxis")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(.teal)
+            }
+            .frame(width: 38, height: 38)
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Local Token Dashboard")
-                        .font(.system(size: 24, weight: .bold))
-                    Text("Spill is ready to receive safe local events. A prompt alone cannot read token counts; automatic reporting requires an agent runtime or adapter with exact usage metadata.")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 8) {
+                    Text("Local Token Metering")
+                        .font(.system(size: 18, weight: .bold))
+                    localOnlyBadge
                 }
 
-                Spacer(minLength: 16)
-
-                statusBadge
+                Text("Local inbox first. Optional bridge diagnostics only when enabled.")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
 
-            HStack(spacing: 10) {
+            Spacer(minLength: 16)
+
+            HStack(spacing: 8) {
                 Button {
                     store.refresh()
                 } label: {
@@ -60,104 +77,222 @@ struct TokenMeteringDashboardView: View {
                 Button {
                     copyToClipboard(TokenMeteringGlobalSetup.globalPrompt, target: "prompt")
                 } label: {
-                    Label(copiedTarget == "prompt" ? "Copied Prompt" : "Copy Agent Prompt", systemImage: copiedTarget == "prompt" ? "checkmark" : "doc.on.doc")
+                    Label(copiedTarget == "prompt" ? "Copied" : "Copy Prompt", systemImage: copiedTarget == "prompt" ? "checkmark" : "doc.on.doc")
                 }
 
                 Button(role: .destructive) {
                     store.clearLocalEvents()
                 } label: {
-                    Label("Clear Local Data", systemImage: "trash")
+                    Label("Clear", systemImage: "trash")
                 }
                 .disabled(store.snapshot.eventCount == 0)
             }
             .buttonStyle(.bordered)
             .font(.system(size: 11, weight: .semibold))
-
-            if let selfTestMessage = store.selfTestMessage {
-                Text(selfTestMessage.text)
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(selfTestMessage.isSuccess ? .green : .red)
-            }
-
-            if let lastError = store.lastError {
-                Text(lastError)
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.red)
-            }
-
-            periodFilterBar
-            toolFilterBar
-
-            diagnostics
         }
-        .padding(18)
-        .background(dashboardCardBackground)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 14)
     }
 
-    private var periodFilterBar: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Period")
-                .font(.system(size: 10, weight: .black))
-                .tracking(0.8)
-                .foregroundStyle(.secondary)
-
-            HStack(spacing: 8) {
-                ForEach(store.snapshot.periodFilters) { filter in
-                    Button {
-                        store.setSelectedPeriod(filter.period)
-                    } label: {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(filter.title)
-                                .font(.system(size: 10.5, weight: .bold))
-                            Text(filter.detail)
-                                .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                                .foregroundStyle(filter.isSelected ? .white.opacity(0.82) : .secondary)
+    private var leftRail: some View {
+        ScrollView(.vertical, showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 14) {
+                railPanel(title: "Period") {
+                    VStack(spacing: 7) {
+                        ForEach(store.snapshot.periodFilters) { filter in
+                            railFilterButton(
+                                title: filter.title,
+                                detail: filter.detail,
+                                isSelected: filter.isSelected
+                            ) {
+                                store.setSelectedPeriod(filter.period)
+                            }
                         }
-                        .padding(.horizontal, 10)
-                        .frame(height: 42)
-                        .frame(minWidth: 78, alignment: .leading)
-                        .foregroundStyle(filter.isSelected ? .white : .primary)
-                        .background(
-                            filter.isSelected ? Color.teal : Color.primary.opacity(0.05),
-                            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        )
                     }
-                    .buttonStyle(.plain)
+                }
+
+                railPanel(title: "AI Tool") {
+                    VStack(spacing: 7) {
+                        ForEach(store.snapshot.toolFilters) { filter in
+                            railFilterButton(
+                                title: filter.title,
+                                detail: filter.detail,
+                                isSelected: filter.isSelected
+                            ) {
+                                store.setSelectedTool(filter.tool)
+                            }
+                        }
+                    }
+                }
+
+                railPanel(title: "Workflow Focus") {
+                    VStack(spacing: 8) {
+                        compactSummaryRows(store.snapshot.taskRows.prefix(3), emptyText: "No task split")
+                        Divider().opacity(0.35)
+                        compactSummaryRows(store.snapshot.stageRows.prefix(3), emptyText: "No stage split")
+                    }
+                }
+
+                railPanel(title: "Receivers") {
+                    VStack(spacing: 8) {
+                        receiverTile(title: "Local Inbox", state: "Default", systemImage: "internaldrive", tint: .green)
+                        receiverTile(title: "HTTP Bridge", state: "Optional", systemImage: "network", tint: .secondary)
+                        receiverTile(title: "Adapters", state: "On demand", systemImage: "bolt.horizontal", tint: .teal)
+                    }
+                }
+
+                diagnostics
+            }
+            .padding(.vertical, 18)
+        }
+    }
+
+    private var kpiStrip: some View {
+        HStack(spacing: 12) {
+            ForEach(store.snapshot.kpis) { kpi in
+                VStack(alignment: .leading, spacing: 7) {
+                    Text(kpi.title.uppercased())
+                        .font(.system(size: 9, weight: .black))
+                        .tracking(1.0)
+                        .foregroundStyle(.secondary)
+                    Text(kpi.value)
+                        .font(.system(size: 21, weight: .bold))
+                        .foregroundStyle(kpi.id == "total" ? .teal : .primary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.72)
+                    Text(kpi.detail)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(14)
+                .background(dashboardCardBackground)
+            }
+        }
+    }
+
+    private var analyticsGrid: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 14) {
+                dashboardPanel(title: "AI Tool Distribution", subtitle: "Combined and per-tool local usage") {
+                    barRows(store.snapshot.toolRows, emptyText: "No AI tool data yet.")
+                }
+
+                dashboardPanel(title: "Workflow Breakdown", subtitle: "Task categories from safe slugs") {
+                    barRows(store.snapshot.taskRows, emptyText: "No workflow data yet.")
+                }
+            }
+
+            HStack(alignment: .top, spacing: 14) {
+                dashboardPanel(title: "Stage Breakdown", subtitle: "Plan, implement, verify, and custom phases") {
+                    barRows(store.snapshot.stageRows, emptyText: "No stage data yet.")
+                }
+
+                dashboardPanel(title: "Source Breakdown", subtitle: "Numeric buckets only") {
+                    barRows(store.snapshot.sourceRows, emptyText: "No source breakdown yet.")
                 }
             }
         }
     }
 
-    private var toolFilterBar: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("AI Tool")
-                .font(.system(size: 10, weight: .black))
-                .tracking(0.8)
-                .foregroundStyle(.secondary)
+    private var rightRail: some View {
+        ScrollView(.vertical, showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 14) {
+                detailPanel
+                sourcePanel
+                privacyPanel
+            }
+            .padding(.vertical, 18)
+        }
+    }
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(store.snapshot.toolFilters) { filter in
-                        Button {
-                            store.setSelectedTool(filter.tool)
-                        } label: {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(filter.title)
-                                    .font(.system(size: 10.5, weight: .bold))
-                                Text(filter.detail)
-                                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                                    .foregroundStyle(filter.isSelected ? .white.opacity(0.82) : .secondary)
-                            }
-                            .padding(.horizontal, 10)
-                            .frame(height: 42)
-                            .frame(minWidth: 86, alignment: .leading)
-                            .foregroundStyle(filter.isSelected ? .white : .primary)
-                            .background(
-                                filter.isSelected ? Color.teal : Color.primary.opacity(0.05),
-                                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            )
+    private var detailPanel: some View {
+        railPanel(title: "Selected Session") {
+            if let session = store.snapshot.sessions.first {
+                VStack(alignment: .leading, spacing: 11) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(session.runID)
+                            .font(.system(size: 11, weight: .bold, design: .monospaced))
+                            .lineLimit(2)
+                        Text(session.detail)
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    HStack {
+                        metricPill(title: "Total", value: session.value)
+                        metricPill(title: "Events", value: "\(store.snapshot.eventCount)")
+                    }
+                }
+            } else {
+                emptyMessage(
+                    title: "No session selected",
+                    detail: "Events will appear here after a local runtime or adapter records exact token counts."
+                )
+            }
+        }
+    }
+
+    private var sourcePanel: some View {
+        railPanel(title: "Source Detail") {
+            VStack(spacing: 8) {
+                compactSummaryRows(store.snapshot.sourceRows.prefix(5), emptyText: "No source buckets")
+            }
+        }
+    }
+
+    private var privacyPanel: some View {
+        railPanel(title: "Privacy Boundary") {
+            VStack(alignment: .leading, spacing: 9) {
+                Text("No prompts, commands, files, logs, diffs, source content, environment values, or secrets.")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                FlowingTokenMeteringLabels(labels: Array(TokenMeteringPreferencesModel.forbiddenContentLabels.prefix(6)))
+            }
+        }
+    }
+
+    private var sessionsTable: some View {
+        dashboardPanel(title: "Sessions", subtitle: "Recent local runs and spans") {
+            if store.snapshot.sessions.isEmpty {
+                emptyMessage(
+                    title: "No local token events yet",
+                    detail: "This is expected until an agent runtime or adapter exposes exact token counts."
+                )
+            } else {
+                VStack(spacing: 0) {
+                    HStack(spacing: 12) {
+                        tableHeader("Run")
+                        tableHeader("Spans")
+                            .frame(width: 150, alignment: .leading)
+                        tableHeader("Tokens")
+                            .frame(width: 96, alignment: .trailing)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 8)
+
+                    ForEach(store.snapshot.sessions.prefix(8)) { session in
+                        HStack(spacing: 12) {
+                            Text(session.runID)
+                                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                .lineLimit(1)
+                            Text(session.detail)
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .frame(width: 150, alignment: .leading)
+                            Text(session.value)
+                                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                .frame(width: 96, alignment: .trailing)
                         }
-                        .buttonStyle(.plain)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
+                        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 8))
+                        .padding(.top, 6)
                     }
                 }
             }
@@ -167,7 +302,7 @@ struct TokenMeteringDashboardView: View {
     private var diagnostics: some View {
         DisclosureGroup(isExpanded: $isDiagnosticsExpanded) {
             VStack(alignment: .leading, spacing: 8) {
-                Text("This only sends one synthetic local-only event to confirm the optional loopback HTTP bridge is reachable. It is not required for normal metering.")
+                Text("Sends one synthetic event through the optional HTTP bridge. Normal metering uses the local inbox and does not need this.")
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -177,99 +312,31 @@ struct TokenMeteringDashboardView: View {
                         await store.runLocalBridgeSelfTest()
                     }
                 } label: {
-                    Label(store.isRunningSelfTest ? "Sending Bridge Test" : "Send Bridge Test", systemImage: store.isRunningSelfTest ? "hourglass" : "paperplane")
+                    Label(store.isRunningSelfTest ? "Sending" : "Bridge Test", systemImage: store.isRunningSelfTest ? "hourglass" : "paperplane")
                 }
                 .disabled(store.isRunningSelfTest)
+
+                if let selfTestMessage = store.selfTestMessage {
+                    Text(selfTestMessage.text)
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(selfTestMessage.isSuccess ? .green : .red)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                if let lastError = store.lastError {
+                    Text(lastError)
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             .padding(.top, 8)
         } label: {
             Label("Diagnostics", systemImage: "stethoscope")
                 .font(.system(size: 11, weight: .semibold))
         }
-        .font(.system(size: 11, weight: .semibold))
-        .padding(.top, 2)
-    }
-
-    private func copyToClipboard(_ text: String, target: String) {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
-        copiedTarget = target
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
-            if copiedTarget == target {
-                copiedTarget = nil
-            }
-        }
-    }
-
-    private var statusBadge: some View {
-        VStack(alignment: .trailing, spacing: 4) {
-            Text("LOCAL ONLY")
-                .font(.system(size: 9, weight: .black))
-                .tracking(1.2)
-                .foregroundStyle(.green)
-            Text("No cloud transfer")
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(.secondary)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
-        .background(
-            Capsule(style: .continuous)
-                .fill(Color.green.opacity(0.11))
-        )
-    }
-
-    private var kpiGrid: some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 4), spacing: 12) {
-            ForEach(store.snapshot.kpis) { kpi in
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(kpi.title.uppercased())
-                        .font(.system(size: 9, weight: .black))
-                        .tracking(1.1)
-                        .foregroundStyle(.secondary)
-                    Text(kpi.value)
-                        .font(.system(size: 20, weight: .bold))
-                        .foregroundStyle(kpi.id == "total" ? .teal : .primary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.75)
-                    Text(kpi.detail)
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(14)
-                .background(dashboardCardBackground)
-            }
-        }
-    }
-
-    private var contentGrid: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            dashboardPanel(title: "AI Tools", subtitle: "Combined and filtered usage") {
-                barRows(store.snapshot.toolRows, emptyText: "No AI tool data yet.")
-            }
-
-            HStack(alignment: .top, spacing: 14) {
-                dashboardPanel(title: "Task Breakdown", subtitle: "Where local tokens went") {
-                    barRows(store.snapshot.taskRows, emptyText: "No local task data yet.")
-                }
-
-                dashboardPanel(title: "Stage Breakdown", subtitle: "Plan, implement, verify") {
-                    barRows(store.snapshot.stageRows, emptyText: "No local stage data yet.")
-                }
-            }
-
-            HStack(alignment: .top, spacing: 14) {
-                dashboardPanel(title: "Token Sources", subtitle: "Numeric source buckets only") {
-                    barRows(store.snapshot.sourceRows, emptyText: "No source breakdown yet.")
-                }
-
-                dashboardPanel(title: "Sessions", subtitle: "Recent local spans") {
-                    sessionRows
-                }
-            }
-        }
+        .padding(14)
+        .background(dashboardCardBackground)
     }
 
     private func dashboardPanel<Content: View>(
@@ -288,26 +355,95 @@ struct TokenMeteringDashboardView: View {
 
             content()
         }
-        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .frame(maxWidth: .infinity, minHeight: 260, alignment: .topLeading)
         .padding(16)
         .background(dashboardCardBackground)
+    }
+
+    private func railPanel<Content: View>(
+        title: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 11) {
+            Text(title.uppercased())
+                .font(.system(size: 9, weight: .black))
+                .tracking(1.0)
+                .foregroundStyle(.secondary)
+
+            content()
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .padding(14)
+        .background(dashboardCardBackground)
+    }
+
+    private func railFilterButton(
+        title: String,
+        detail: String,
+        isSelected: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 9) {
+                Circle()
+                    .fill(isSelected ? Color.teal : Color.primary.opacity(0.12))
+                    .frame(width: 8, height: 8)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.system(size: 11, weight: .bold))
+                        .lineLimit(1)
+                    Text(detail)
+                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(isSelected ? .white.opacity(0.82) : .secondary)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 10)
+            .frame(height: 42)
+            .foregroundStyle(isSelected ? .white : .primary)
+            .background(
+                isSelected ? Color.teal : Color.primary.opacity(0.045),
+                in: RoundedRectangle(cornerRadius: 9, style: .continuous)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func receiverTile(title: String, state: String, systemImage: String, tint: Color) -> some View {
+        HStack(spacing: 9) {
+            Image(systemName: systemImage)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(tint)
+                .frame(width: 18)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 11, weight: .bold))
+                Text(state)
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(10)
+        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
     }
 
     private func barRows(_ rows: [TokenUsageDashboardBarRow], emptyText: String) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             if rows.isEmpty {
-                Text(emptyText)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(12)
-                    .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
+                emptyMessage(title: emptyText, detail: "Waiting for safe local usage events.")
             } else {
-                ForEach(rows) { row in
+                ForEach(rows.prefix(6)) { row in
                     VStack(alignment: .leading, spacing: 6) {
                         HStack {
                             Text(row.title)
                                 .font(.system(size: 11, weight: .semibold))
+                                .lineLimit(1)
                             Spacer()
                             Text(row.value)
                                 .font(.system(size: 10, weight: .bold, design: .monospaced))
@@ -330,68 +466,91 @@ struct TokenMeteringDashboardView: View {
         }
     }
 
-    private var privacyContract: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Privacy Boundary")
-                        .font(.system(size: 15, weight: .bold))
-                    Text("Opaque run ids only. No prompts, commands, files, logs, or source content.")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                Text("\(store.snapshot.eventCount) events")
-                    .font(.system(size: 10, weight: .bold))
+    private func compactSummaryRows<T: Collection>(
+        _ rows: T,
+        emptyText: String
+    ) -> some View where T.Element == TokenUsageDashboardBarRow {
+        let rowsArray = Array(rows)
+
+        return VStack(alignment: .leading, spacing: 7) {
+            if rowsArray.isEmpty {
+                Text(emptyText)
+                    .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(.secondary)
-            }
-
-            FlowingTokenMeteringLabels(labels: TokenMeteringPreferencesModel.forbiddenContentLabels)
-        }
-        .padding(16)
-        .background(dashboardCardBackground)
-    }
-
-    private var sessionRows: some View {
-        Group {
-            if store.snapshot.sessions.isEmpty {
-                emptyLocalState
             } else {
-                VStack(spacing: 8) {
-                    ForEach(store.snapshot.sessions.prefix(8)) { session in
-                        HStack(spacing: 10) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(session.runID)
-                                    .font(.system(size: 11, weight: .bold, design: .monospaced))
-                                    .lineLimit(1)
-                                Text(session.detail)
-                                    .font(.system(size: 10, weight: .medium))
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Text(session.value)
-                                .font(.system(size: 11, weight: .bold, design: .monospaced))
-                        }
-                        .padding(11)
-                        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
+                ForEach(rowsArray) { row in
+                    HStack(spacing: 8) {
+                        Text(row.title)
+                            .font(.system(size: 10, weight: .semibold))
+                            .lineLimit(1)
+                        Spacer(minLength: 4)
+                        Text(row.value)
+                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            .foregroundStyle(.secondary)
                     }
                 }
             }
         }
     }
 
-    private var emptyLocalState: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("No local token events yet.")
-                .font(.system(size: 12, weight: .bold))
-            Text("This is expected until an agent runtime or adapter exposes exact token counts and sends the safe local event contract.")
-                .font(.system(size: 11, weight: .medium))
+    private func metricPill(title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title.uppercased())
+                .font(.system(size: 8, weight: .black))
+                .tracking(0.8)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.system(size: 12, weight: .bold, design: .monospaced))
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
+        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+    }
+
+    private func tableHeader(_ title: String) -> some View {
+        Text(title.uppercased())
+            .font(.system(size: 9, weight: .black))
+            .tracking(1.0)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func emptyMessage(title: String, detail: String) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title)
+                .font(.system(size: 11, weight: .bold))
+            Text(detail)
+                .font(.system(size: 10, weight: .medium))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(14)
+        .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
+        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 9))
+    }
+
+    private var localOnlyBadge: some View {
+        Text("LOCAL ONLY")
+            .font(.system(size: 8.5, weight: .black))
+            .tracking(0.9)
+            .foregroundStyle(.green)
+            .padding(.horizontal, 8)
+            .frame(height: 21)
+            .background(Color.green.opacity(0.11), in: Capsule(style: .continuous))
+    }
+
+    private func copyToClipboard(_ text: String, target: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        copiedTarget = target
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
+            if copiedTarget == target {
+                copiedTarget = nil
+            }
+        }
     }
 
     private var dashboardCardBackground: some ShapeStyle {
