@@ -424,7 +424,7 @@ struct SpillBarView: View {
     }
 
     private var tokenMeteringSummary: some View {
-        let snapshot = tokenUsageDashboardStore.snapshot
+        let snapshot = tokenUsageDashboardStore.unfilteredSnapshot
         let topTask = snapshot.taskRows.first
         let topSource = snapshot.sourceRows.first
 
@@ -853,7 +853,7 @@ struct SpillBarView: View {
     }
 
     private func toolTokenValue(for kind: LocalAIToolKind) -> String {
-        let snapshot = tokenUsageDashboardStore.snapshot
+        let snapshot = tokenUsageDashboardStore.unfilteredSnapshot
         let rawValue: String
         switch kind {
         case .codex:
@@ -875,7 +875,7 @@ struct SpillBarView: View {
     }
 
     private func toolTokenRatio(for kind: LocalAIToolKind) -> Double {
-        let snapshot = tokenUsageDashboardStore.snapshot
+        let snapshot = tokenUsageDashboardStore.unfilteredSnapshot
         let rawValue: String
         switch kind {
         case .codex:
@@ -897,7 +897,7 @@ struct SpillBarView: View {
     }
 
     private func tokenPercentageBadge(for kind: LocalAIToolKind) -> some View {
-        let snapshot = tokenUsageDashboardStore.snapshot
+        let snapshot = tokenUsageDashboardStore.unfilteredSnapshot
         let rawValue: String
         switch kind {
         case .codex:

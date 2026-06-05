@@ -54,6 +54,18 @@ final class TokenUsageDashboardStore: ObservableObject {
         lastError = nil
     }
 
+    var unfilteredSnapshot: TokenUsageDashboardSnapshot {
+        TokenUsageDashboardSnapshot(
+            events: events,
+            selectedTool: nil,
+            selectedPeriod: selectedPeriod,
+            selectedSessionID: selectedSessionID,
+            displayMode: displayMode,
+            language: language
+        )
+    }
+
+
     func setSelectedTool(_ tool: TokenUsageAITool?) {
         selectedTool = tool?.isDashboardTool == true ? tool : nil
         rebuildSnapshot()
