@@ -7,16 +7,26 @@ struct TokenMeteringPreferencesSection: View {
     @State private var copiedTarget: String?
     @State private var setupInstalledPath: URL?
     @State private var setupInstallResult: String?
+    @State private var setupInstallSucceeded = false
     @State private var advancedVisible = false
+    @State private var adapterStatuses: [String: TokenMeteringAdapterConnectionStatus] = [:]
+
+    private var currentLanguage: TokenMeteringLanguage {
+        TokenMeteringLanguage.current(appLanguage: settings.appLanguage)
+    }
+
+    private func t(_ key: TokenMeteringTextKey) -> String {
+        TokenMeteringL10n.text(key, language: currentLanguage)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             VStack(alignment: .leading, spacing: 6) {
-                Text("Local token metering")
+                Text(t(.preferencesTitle))
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(.primary)
 
-                Text("Spill stores safe token counts on this Mac. Login, cloud sync, and server transfer are not active in this app slice.")
+                Text(t(.preferencesSubtitle))
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .lineSpacing(3)
@@ -25,13 +35,13 @@ struct TokenMeteringPreferencesSection: View {
 
             VStack(alignment: .leading, spacing: 9) {
                 TokenMeteringOptionHeader(
-                    title: "Install prompt + one-step setup",
-                    state: "Recommended",
+                    title: t(.installPromptTitle),
+                    state: t(.recommended),
                     systemImage: "wand.and.stars",
                     tint: .teal
                 )
 
-                Text("Paste this into an AI with local shell access. It forces the AI to fetch the latest setup from spill.thdev.app, install Codex, Claude, and AGY hooks, then save only the runtime instruction.")
+                Text(t(.installPromptDetail))
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
                     .lineSpacing(2)
@@ -39,10 +49,15 @@ struct TokenMeteringPreferencesSection: View {
 
                 HStack(spacing: 6) {
                     Button {
-                        copyToClipboard(TokenMeteringGlobalSetup.globalPrompt, target: "prompt")
+                        copyToClipboard(
+                            TokenMeteringGlobalSetup.prompt(
+                                allowsLocalDisplayNames: settings.tokenMeteringPromptAllowsLocalDisplayNames
+                            ),
+                            target: "prompt"
+                        )
                     } label: {
                         Label(
-                            copiedTarget == "prompt" ? "Copied" : "Copy Install Prompt",
+                            copiedTarget == "prompt" ? t(.copied) : t(.copyInstallPrompt),
                             systemImage: copiedTarget == "prompt" ? "checkmark" : "doc.on.doc"
                         )
                     }
@@ -51,7 +66,7 @@ struct TokenMeteringPreferencesSection: View {
                         copyToClipboard(TokenMeteringSetupInstaller.setupCommand(), target: "setup_command_primary")
                     } label: {
                         Label(
-                            copiedTarget == "setup_command_primary" ? "Copied" : "Copy Web Setup",
+                            copiedTarget == "setup_command_primary" ? t(.copied) : t(.copyWebSetup),
                             systemImage: copiedTarget == "setup_command_primary" ? "checkmark" : "terminal"
                         )
                     }
@@ -59,7 +74,7 @@ struct TokenMeteringPreferencesSection: View {
                     Button {
                         openDashboardAction()
                     } label: {
-                        Label("Dashboard", systemImage: "chart.bar.xaxis")
+                        Label(t(.dashboard), systemImage: "chart.bar.xaxis")
                     }
                 }
                 .buttonStyle(.bordered)
@@ -71,10 +86,43 @@ struct TokenMeteringPreferencesSection: View {
                     .lineLimit(2)
                     .textSelection(.enabled)
 
+                Divider().opacity(0.45)
+
+                Toggle(isOn: $settings.tokenMeteringPromptAllowsLocalDisplayNames) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(spacing: 7) {
+                            Text(t(.promptDisplayNamesTitle))
+                                .font(.system(size: 10, weight: .bold))
+                            Text(settings.tokenMeteringPromptAllowsLocalDisplayNames ? t(.promptDisplayNamesEnabled) : t(.promptDisplayNamesDisabled))
+                                .font(.system(size: 8, weight: .bold))
+                                .foregroundStyle(settings.tokenMeteringPromptAllowsLocalDisplayNames ? .orange : .secondary)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(
+                                    Capsule(style: .continuous)
+                                        .fill(settings.tokenMeteringPromptAllowsLocalDisplayNames ? Color.orange.opacity(0.13) : Color.primary.opacity(0.06))
+                                )
+                        }
+                        Text(t(.promptDisplayNamesDetail))
+                            .font(.system(size: 9))
+                            .foregroundStyle(.secondary)
+                            .lineSpacing(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .toggleStyle(.switch)
+
+                if settings.tokenMeteringPromptAllowsLocalDisplayNames {
+                    Label(t(.promptDisplayNamesReapplyWarning), systemImage: "exclamationmark.triangle.fill")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
                 if let setupInstallResult {
                     Text(setupInstallResult)
                         .font(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(setupInstallResult.hasPrefix("Installed") ? .green : .red)
+                        .foregroundStyle(setupInstallSucceeded ? .green : .red)
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -82,12 +130,22 @@ struct TokenMeteringPreferencesSection: View {
             .padding(10)
             .background(tokenMeteringOptionBackground)
 
+            // Agent Connection Status
+            agentStatusSection
+
+            // Local & Remote Mode Status - Main visible area!
+            VStack(spacing: 8) {
+                ForEach(TokenMeteringPreferencesModel.modes) { mode in
+                    TokenMeteringModeRow(mode: mode)
+                }
+            }
+
             DisclosureGroup(isExpanded: $advancedVisible) {
                 VStack(alignment: .leading, spacing: 12) {
                     VStack(alignment: .leading, spacing: 9) {
                         TokenMeteringOptionHeader(
-                            title: "Local event queue",
-                            state: "Default",
+                            title: t(.localEventQueue),
+                            state: t(.defaultState),
                             systemImage: "tray.and.arrow.down",
                             tint: .green
                         )
@@ -105,7 +163,7 @@ struct TokenMeteringPreferencesSection: View {
                                 copyToClipboard(TokenUsageStore.defaultInboxURL().path, target: "inbox")
                             } label: {
                                 Label(
-                                    copiedTarget == "inbox" ? "Copied" : "Copy Path",
+                                    copiedTarget == "inbox" ? t(.copied) : t(.copyPath),
                                     systemImage: copiedTarget == "inbox" ? "checkmark" : "doc.on.doc"
                                 )
                             }
@@ -116,7 +174,7 @@ struct TokenMeteringPreferencesSection: View {
                     .background(tokenMeteringOptionBackground)
 
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Advanced install commands")
+                        Text(t(.advancedInstallCommands))
                             .font(.system(size: 10, weight: .bold))
                             .foregroundStyle(.secondary)
 
@@ -126,7 +184,7 @@ struct TokenMeteringPreferencesSection: View {
                                 copyToClipboard(TokenMeteringSetupInstaller.setupCommand(installedAt: setupURL), target: "setup_command")
                             } label: {
                                 Label(
-                                    copiedTarget == "setup_command" ? "Copied" : "Copy One-Step Command",
+                                    copiedTarget == "setup_command" ? t(.copied) : t(.copyOneStepCommand),
                                     systemImage: copiedTarget == "setup_command" ? "checkmark" : "terminal"
                                 )
                             }
@@ -135,28 +193,8 @@ struct TokenMeteringPreferencesSection: View {
                         .font(.system(size: 10, weight: .semibold))
                     }
 
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Adapter scripts")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(.secondary)
-
-                        ForEach(TokenMeteringAdapterKit.all) { adapter in
-                            TokenMeteringAdapterRow(
-                                adapter: adapter,
-                                copiedTarget: $copiedTarget,
-                                onCopy: copyToClipboard
-                            )
-                        }
-                    }
-
-                    VStack(spacing: 8) {
-                        ForEach(TokenMeteringPreferencesModel.modes) { mode in
-                            TokenMeteringModeRow(mode: mode)
-                        }
-                    }
-
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Never collected or uploaded")
+                        Text(t(.neverCollectedOrUploaded))
                             .font(.system(size: 10, weight: .bold))
                             .foregroundStyle(.secondary)
 
@@ -165,10 +203,13 @@ struct TokenMeteringPreferencesSection: View {
                 }
                 .padding(.top, 8)
             } label: {
-                Label("Advanced details", systemImage: "slider.horizontal.3")
+                Label(t(.advancedDetails), systemImage: "slider.horizontal.3")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.secondary)
             }
+        }
+        .onAppear {
+            refreshAdapterStatuses()
         }
     }
 
@@ -177,13 +218,16 @@ struct TokenMeteringPreferencesSection: View {
         do {
             try TokenMeteringSetupInstaller.install(to: destination)
             setupInstalledPath = destination
-            setupInstallResult = "Installed setup tool and adapter scripts."
+            setupInstallResult = t(.setupInstalled)
+            setupInstallSucceeded = true
+            refreshAdapterStatuses()
             copiedTarget = "setup_install"
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
                 if copiedTarget == "setup_install" { copiedTarget = nil }
             }
         } catch {
-            setupInstallResult = "Install failed: \(error.localizedDescription)"
+            setupInstallResult = TokenMeteringL10n.installFailed(error.localizedDescription, language: currentLanguage)
+            setupInstallSucceeded = false
         }
     }
 
@@ -202,6 +246,185 @@ struct TokenMeteringPreferencesSection: View {
                 copiedTarget = nil
             }
         }
+    }
+
+    private func status(for adapter: TokenMeteringAdapter) -> TokenMeteringAdapterConnectionStatus {
+        adapterStatuses[adapter.id] ?? .missing
+    }
+
+    private func refreshAdapterStatuses() {
+        adapterStatuses = Dictionary(
+            uniqueKeysWithValues: TokenMeteringAdapterKit.hookAdapters.map { adapter in
+                (adapter.id, TokenMeteringAdapterConnectionDiagnostics.status(for: adapter))
+            }
+        )
+    }
+
+    private var agentStatusSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label(t(.agentConnectionStatus), systemImage: "bolt.horizontal.circle.fill")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(.secondary)
+
+            VStack(spacing: 7) {
+                ForEach(TokenMeteringAdapterKit.hookAdapters) { adapter in
+                    let status = status(for: adapter)
+                    HStack(spacing: 10) {
+                        Image(systemName: status.isActive ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
+                            .font(.system(size: 13))
+                            .foregroundStyle(status.isActive ? .green : .orange)
+
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(adapter.title)
+                                .font(.system(size: 11, weight: .bold))
+                            Text(adapterStatusDetail(status, adapter: adapter))
+                                .font(.system(size: 9))
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Spacer()
+
+                        if !status.isActive {
+                            Button {
+                                let path = TokenMeteringAdapterKit.defaultInstallURL(for: adapter)
+                                if let config = adapter.hookConfig(installedAt: path) {
+                                    copyToClipboard(config, target: "prompt_\(adapter.id)")
+                                }
+                            } label: {
+                                Label(
+                                    copiedTarget == "prompt_\(adapter.id)" ? t(.copied) : t(.copyPrompt),
+                                    systemImage: copiedTarget == "prompt_\(adapter.id)" ? "checkmark" : "doc.on.doc"
+                                )
+                            }
+                            .buttonStyle(.bordered)
+                            .font(.system(size: 9, weight: .semibold))
+                        } else {
+                            Text(t(.active))
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundStyle(.green)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Capsule().fill(Color.green.opacity(0.12)))
+                        }
+                    }
+                    .padding(8)
+                    .background(Color.primary.opacity(0.025), in: RoundedRectangle(cornerRadius: 8))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color.primary.opacity(0.04), lineWidth: 0.5)
+                    }
+                }
+            }
+        }
+    }
+
+    private func adapterStatusDetail(
+        _ status: TokenMeteringAdapterConnectionStatus,
+        adapter: TokenMeteringAdapter
+    ) -> String {
+        if !status.scriptInstalled {
+            return t(.adapterSetupRequired)
+        }
+
+        if !status.hookConfigured {
+            return t(.adapterHookMissing)
+        }
+
+        return TokenMeteringL10n.adapterInstalled(
+            TokenMeteringAdapterKit.defaultInstallURL(for: adapter).lastPathComponent,
+            language: currentLanguage
+        )
+    }
+}
+
+private struct TokenMeteringAdapterConnectionStatus: Equatable {
+    let scriptInstalled: Bool
+    let hookConfigured: Bool
+
+    var isActive: Bool {
+        scriptInstalled && hookConfigured
+    }
+
+    static let missing = TokenMeteringAdapterConnectionStatus(scriptInstalled: false, hookConfigured: false)
+}
+
+private enum TokenMeteringAdapterConnectionDiagnostics {
+    static func status(for adapter: TokenMeteringAdapter) -> TokenMeteringAdapterConnectionStatus {
+        let scriptURL = TokenMeteringAdapterKit.defaultInstallURL(for: adapter)
+        let scriptInstalled = FileManager.default.fileExists(atPath: scriptURL.path)
+        return TokenMeteringAdapterConnectionStatus(
+            scriptInstalled: scriptInstalled,
+            hookConfigured: hookConfigured(for: adapter, scriptURL: scriptURL)
+        )
+    }
+
+    private static func hookConfigured(for adapter: TokenMeteringAdapter, scriptURL: URL) -> Bool {
+        switch adapter.aiTool {
+        case .claude:
+            return stopHookConfigured(
+                configURL: homeURL(".claude/settings.json"),
+                scriptURL: scriptURL
+            )
+        case .codex:
+            return stopHookConfigured(
+                configURL: homeURL(".codex/hooks.json"),
+                scriptURL: scriptURL
+            )
+        case .antigravity:
+            return agyHookConfigured(scriptURL: scriptURL)
+        case .openAI, .unknown:
+            return false
+        }
+    }
+
+    private static func stopHookConfigured(configURL: URL, scriptURL: URL) -> Bool {
+        guard let root = readJSONObject(configURL) as? [String: Any],
+              let hooks = root["hooks"] as? [String: Any],
+              let stop = hooks["Stop"]
+        else {
+            return false
+        }
+
+        return hookCommands(in: stop).contains { commandMatches($0, scriptURL: scriptURL) }
+    }
+
+    private static func agyHookConfigured(scriptURL: URL) -> Bool {
+        guard let root = readJSONObject(homeURL(".gemini/config/hooks.json")) as? [String: Any],
+              let spillMetering = root["spill-metering"] as? [String: Any],
+              let postInvocation = spillMetering["PostInvocation"]
+        else {
+            return false
+        }
+
+        return hookCommands(in: postInvocation).contains { commandMatches($0, scriptURL: scriptURL) }
+    }
+
+    private static func hookCommands(in value: Any) -> [String] {
+        if let dictionary = value as? [String: Any] {
+            let current = (dictionary["command"] as? String).map { [$0] } ?? []
+            return current + dictionary.values.flatMap { hookCommands(in: $0) }
+        }
+
+        if let array = value as? [Any] {
+            return array.flatMap { hookCommands(in: $0) }
+        }
+
+        return []
+    }
+
+    private static func commandMatches(_ command: String, scriptURL: URL) -> Bool {
+        command.contains(scriptURL.path)
+    }
+
+    private static func readJSONObject(_ url: URL) -> Any? {
+        guard let data = try? Data(contentsOf: url) else {
+            return nil
+        }
+        return try? JSONSerialization.jsonObject(with: data)
+    }
+
+    private static func homeURL(_ relativePath: String) -> URL {
+        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(relativePath)
     }
 }
 
@@ -231,126 +454,6 @@ private struct TokenMeteringOptionHeader: View {
                     Capsule(style: .continuous)
                         .fill(tint.opacity(0.12))
                 )
-        }
-    }
-}
-
-private struct TokenMeteringAdapterRow: View {
-    let adapter: TokenMeteringAdapter
-    @Binding var copiedTarget: String?
-    let onCopy: (String, String) -> Void
-    @State private var installedPath: URL?
-    @State private var installResult: String?
-
-    private var copyScriptKey: String { "script_\(adapter.id)" }
-    private var copyHookKey: String { "hook_\(adapter.id)" }
-    private var installKey: String { "install_\(adapter.id)" }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .top, spacing: 10) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(adapter.title)
-                        .font(.system(size: 11, weight: .bold))
-                    Text(adapter.subtitle)
-                        .font(.system(size: 10))
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer(minLength: 8)
-
-                HStack(spacing: 6) {
-                    Button {
-                        if let content = adapter.scriptContent {
-                            onCopy(content, copyScriptKey)
-                        }
-                    } label: {
-                        Label(
-                            copiedTarget == copyScriptKey ? "Copied" : "Copy Script",
-                            systemImage: copiedTarget == copyScriptKey ? "checkmark" : "doc.on.doc"
-                        )
-                    }
-                    .disabled(adapter.scriptContent == nil)
-
-                    Button {
-                        installAdapter()
-                    } label: {
-                        Label(
-                            copiedTarget == installKey ? "Installed" : "Install",
-                            systemImage: copiedTarget == installKey ? "checkmark" : "arrow.down.circle"
-                        )
-                    }
-                    .disabled(adapter.scriptURL == nil)
-                }
-                .buttonStyle(.bordered)
-                .font(.system(size: 10, weight: .semibold))
-            }
-
-            if let result = installResult {
-                Text(result)
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(result.hasPrefix("Installed") ? .green : .red)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            if adapter.hookConfigTemplate != nil {
-                let path = installedPath ?? TokenMeteringAdapterKit.defaultInstallURL(for: adapter)
-                let config = adapter.hookConfig(installedAt: path) ?? ""
-                HStack(alignment: .top, spacing: 8) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        if let target = adapter.hookConfigTarget {
-                            Text("Hook config → \(target)")
-                                .font(.system(size: 9, weight: .bold))
-                                .foregroundStyle(.secondary)
-                        }
-                        Text(config)
-                            .font(.system(size: 9, weight: .medium, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                            .textSelection(.enabled)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-
-                    Spacer(minLength: 8)
-
-                    Button {
-                        onCopy(config, copyHookKey)
-                    } label: {
-                        Label(
-                            copiedTarget == copyHookKey ? "Copied" : "Copy",
-                            systemImage: copiedTarget == copyHookKey ? "checkmark" : "doc.on.doc"
-                        )
-                    }
-                    .buttonStyle(.bordered)
-                    .font(.system(size: 10, weight: .semibold))
-                }
-                .padding(8)
-                .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 6))
-            }
-        }
-        .padding(10)
-        .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color(NSColor.controlBackgroundColor).opacity(0.35))
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(Color.primary.opacity(0.06), lineWidth: 1)
-        }
-    }
-
-    private func installAdapter() {
-        let destination = TokenMeteringAdapterKit.defaultInstallURL(for: adapter)
-        do {
-            try adapter.install(to: destination)
-            installedPath = destination
-            installResult = "Installed → \(destination.path)"
-            copiedTarget = installKey
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                if copiedTarget == installKey { copiedTarget = nil }
-            }
-        } catch {
-            installResult = "Install failed: \(error.localizedDescription)"
         }
     }
 }

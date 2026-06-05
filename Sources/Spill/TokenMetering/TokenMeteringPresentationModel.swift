@@ -1,5 +1,25 @@
 import Foundation
 
+enum TokenUsageDisplayMode: String, CaseIterable, Identifiable {
+    case tokens = "Tokens"
+    case percentage = "Share %"
+
+    var id: String { rawValue }
+
+    var localizedTitle: String {
+        localizedTitle(language: .current())
+    }
+
+    func localizedTitle(language: TokenMeteringLanguage) -> String {
+        switch self {
+        case .tokens:
+            return TokenMeteringL10n.text(.displayModeTokens, language: language)
+        case .percentage:
+            return TokenMeteringL10n.text(.displayModeShare, language: language)
+        }
+    }
+}
+
 struct TokenMeteringModeStatus: Identifiable, Equatable {
     let id: String
     let title: String
@@ -25,8 +45,10 @@ struct TokenUsageDashboardBarRow: Identifiable, Equatable {
 struct TokenUsageDashboardSessionRow: Identifiable, Equatable {
     let id: String
     let runID: String
+    let title: String
     let value: String
     let detail: String
+    let eventCount: Int
 }
 
 struct TokenUsageDashboardToolFilter: Identifiable, Equatable {
@@ -47,15 +69,19 @@ enum TokenUsageDashboardPeriod: String, CaseIterable, Equatable {
     case all
 
     var title: String {
+        title(language: .current())
+    }
+
+    func title(language: TokenMeteringLanguage) -> String {
         switch self {
         case .today:
-            return "Today"
+            return TokenMeteringL10n.text(.periodToday, language: language)
         case .sevenDays:
-            return "7 days"
+            return TokenMeteringL10n.text(.periodSevenDays, language: language)
         case .thirtyDays:
-            return "30 days"
+            return TokenMeteringL10n.text(.periodThirtyDays, language: language)
         case .all:
-            return "All"
+            return TokenMeteringL10n.text(.periodAll, language: language)
         }
     }
 }
@@ -79,39 +105,50 @@ struct TokenUsageSelfTestMessage: Equatable {
 struct TokenUsageDashboardSnapshot: Equatable {
     let eventCount: Int
     let totalTokens: Int
+    let displayMode: TokenUsageDisplayMode
     let kpis: [TokenUsageDashboardKPI]
     let periodFilters: [TokenUsageDashboardPeriodFilter]
     let toolFilters: [TokenUsageDashboardToolFilter]
     let toolRows: [TokenUsageDashboardBarRow]
+    let modelRows: [TokenUsageDashboardBarRow]
     let taskRows: [TokenUsageDashboardBarRow]
     let stageRows: [TokenUsageDashboardBarRow]
     let sourceRows: [TokenUsageDashboardBarRow]
     let sessions: [TokenUsageDashboardSessionRow]
+    let selectedSession: TokenUsageDashboardSessionRow?
 
     init(
         events: [TokenUsageEvent],
         selectedTool: TokenUsageAITool? = nil,
         selectedPeriod: TokenUsageDashboardPeriod = .all,
+        selectedSessionID: String? = nil,
+        displayMode: TokenUsageDisplayMode = .tokens,
+        language: TokenMeteringLanguage = .current(),
         now: Date = Date(),
         calendar: Calendar = .current
     ) {
+        self.displayMode = displayMode
+        let dashboardEvents = events.filter { $0.aiTool.isDashboardTool }
+        let selectedDashboardTool = selectedTool.flatMap { tool in
+            tool.isDashboardTool ? tool : nil
+        }
         let periodEvents = Self.filterEvents(
-            events,
+            dashboardEvents,
             selectedPeriod: selectedPeriod,
             now: now,
             calendar: calendar
         )
-        let visibleEvents = selectedTool.map { tool in
+        let visibleEvents = selectedDashboardTool.map { tool in
             periodEvents.filter { $0.aiTool == tool }
         } ?? periodEvents
         eventCount = visibleEvents.count
         totalTokens = visibleEvents.reduce(0) { $0 + $1.totalTokens }
 
-        let allPeriodTotals = Self.periodTotals(events: events, now: now, calendar: calendar)
+        let allPeriodTotals = Self.periodTotals(events: dashboardEvents, now: now, calendar: calendar)
         periodFilters = TokenUsageDashboardPeriod.allCases.map { period in
             TokenUsageDashboardPeriodFilter(
                 period: period,
-                title: period.title,
+                title: period.title(language: language),
                 detail: Self.formatTokens(allPeriodTotals[period, default: 0]),
                 isSelected: selectedPeriod == period
             )
@@ -119,83 +156,143 @@ struct TokenUsageDashboardSnapshot: Equatable {
 
         let allToolTotals = Self.toolTotals(events: periodEvents)
         toolFilters = Self.toolFilters(
-            selectedTool: selectedTool,
+            selectedTool: selectedDashboardTool,
             totals: allToolTotals,
-            totalEvents: periodEvents.count
+            totalEvents: periodEvents.count,
+            language: language
         )
 
         let inputTokens = visibleEvents.reduce(0) { $0 + $1.inputTokens }
         let outputTokens = visibleEvents.reduce(0) { $0 + $1.outputTokens }
-        let averageLatency = visibleEvents.isEmpty
-            ? 0
-            : visibleEvents.reduce(0) { $0 + $1.latencyMS } / visibleEvents.count
+        let latencySamples = visibleEvents.map(\.latencyMS).filter { $0 > 0 }
+        let averageLatency = latencySamples.isEmpty
+            ? nil
+            : latencySamples.reduce(0, +) / latencySamples.count
 
-        kpis = [
-            TokenUsageDashboardKPI(
-                id: "total",
-                title: "Total Tokens",
-                value: Self.formatTokens(totalTokens),
-                detail: "\(visibleEvents.count) local events"
-            ),
-            TokenUsageDashboardKPI(
-                id: "input",
-                title: "Input",
-                value: Self.formatTokens(inputTokens),
-                detail: Self.percentageDetail(value: inputTokens, total: totalTokens)
-            ),
-            TokenUsageDashboardKPI(
-                id: "output",
-                title: "Output",
-                value: Self.formatTokens(outputTokens),
-                detail: Self.percentageDetail(value: outputTokens, total: totalTokens)
-            ),
-            TokenUsageDashboardKPI(
-                id: "latency",
-                title: "Avg Latency",
-                value: "\(averageLatency) ms",
-                detail: "per local span"
-            )
-        ]
+        switch displayMode {
+        case .tokens:
+            kpis = [
+                TokenUsageDashboardKPI(
+                    id: "total",
+                    title: TokenMeteringL10n.text(.totalTokens, language: language),
+                    value: Self.formatTokens(totalTokens),
+                    detail: TokenMeteringL10n.localEventsDetail(eventCount: visibleEvents.count, language: language)
+                ),
+                TokenUsageDashboardKPI(
+                    id: "input",
+                    title: TokenMeteringL10n.text(.input, language: language),
+                    value: Self.formatTokens(inputTokens),
+                    detail: Self.percentageDetail(value: inputTokens, total: totalTokens, language: language)
+                ),
+                TokenUsageDashboardKPI(
+                    id: "output",
+                    title: TokenMeteringL10n.text(.output, language: language),
+                    value: Self.formatTokens(outputTokens),
+                    detail: Self.percentageDetail(value: outputTokens, total: totalTokens, language: language)
+                ),
+                TokenUsageDashboardKPI(
+                    id: "latency",
+                    title: TokenMeteringL10n.text(.avgLatency, language: language),
+                    value: averageLatency.map { "\($0) ms" } ?? TokenMeteringL10n.text(.latencyUnavailable, language: language),
+                    detail: averageLatency == nil
+                        ? TokenMeteringL10n.text(.runtimeTimingUnavailable, language: language)
+                        : TokenMeteringL10n.text(.perLocalSpan, language: language)
+                )
+            ]
+        case .percentage:
+            let totalPercent = totalTokens > 0 ? 100.0 : 0.0
+            let inputPercent = totalTokens > 0 ? (Double(inputTokens) / Double(totalTokens)) * 100.0 : 0.0
+            let outputPercent = totalTokens > 0 ? (Double(outputTokens) / Double(totalTokens)) * 100.0 : 0.0
+            kpis = [
+                TokenUsageDashboardKPI(
+                    id: "total",
+                    title: TokenMeteringL10n.text(.totalShare, language: language),
+                    value: Self.formatPercentage(totalPercent),
+                    detail: TokenMeteringL10n.localEventsDetail(eventCount: visibleEvents.count, language: language)
+                ),
+                TokenUsageDashboardKPI(
+                    id: "input",
+                    title: TokenMeteringL10n.text(.inputShare, language: language),
+                    value: Self.formatPercentage(inputPercent),
+                    detail: TokenMeteringL10n.tokenCountDetail(Self.formatTokens(inputTokens), language: language)
+                ),
+                TokenUsageDashboardKPI(
+                    id: "output",
+                    title: TokenMeteringL10n.text(.outputShare, language: language),
+                    value: Self.formatPercentage(outputPercent),
+                    detail: TokenMeteringL10n.tokenCountDetail(Self.formatTokens(outputTokens), language: language)
+                ),
+                TokenUsageDashboardKPI(
+                    id: "latency",
+                    title: TokenMeteringL10n.text(.avgLatency, language: language),
+                    value: averageLatency.map { "\($0) ms" } ?? TokenMeteringL10n.text(.latencyUnavailable, language: language),
+                    detail: averageLatency == nil
+                        ? TokenMeteringL10n.text(.runtimeTimingUnavailable, language: language)
+                        : TokenMeteringL10n.text(.perLocalSpan, language: language)
+                )
+            ]
+        }
 
+        let toolTokens = Self.toolTotals(events: visibleEvents)
         toolRows = Self.rows(
-            values: Self.toolTotals(events: visibleEvents),
-            total: totalTokens,
+            tokenValues: toolTokens,
+            totalTokens: totalTokens,
+            displayMode: displayMode,
             id: { $0.rawValue },
-            label: { $0.dashboardLabel }
+            label: { $0.dashboardLabel(language: language) }
         )
 
+        let modelTokens = Dictionary(grouping: visibleEvents, by: { Self.modelKey($0.model) })
+            .mapValues { $0.reduce(0) { $0 + $1.totalTokens } }
+        modelRows = Self.rows(
+            tokenValues: modelTokens,
+            totalTokens: totalTokens,
+            displayMode: displayMode,
+            id: { $0 },
+            label: { Self.modelLabel($0, language: language) }
+        )
+
+        let taskTokens = Dictionary(grouping: visibleEvents, by: \.taskType)
+            .mapValues { $0.reduce(0) { $0 + $1.totalTokens } }
         taskRows = Self.rows(
-            values: Dictionary(grouping: visibleEvents, by: \.taskType)
-                .mapValues { groupedEvents in
-                    groupedEvents.reduce(0) { $0 + $1.totalTokens }
-                },
-            total: totalTokens,
+            tokenValues: taskTokens,
+            totalTokens: totalTokens,
+            displayMode: displayMode,
             id: { $0.rawValue },
-            label: { $0.dashboardLabel }
+            label: { $0.dashboardLabel(language: language) }
         )
 
+        let stageTokens = Dictionary(grouping: visibleEvents, by: \.stage)
+            .mapValues { $0.reduce(0) { $0 + $1.totalTokens } }
         stageRows = Self.rows(
-            values: Dictionary(grouping: visibleEvents, by: \.stage)
-                .mapValues { groupedEvents in
-                    groupedEvents.reduce(0) { $0 + $1.totalTokens }
-                },
-            total: totalTokens,
+            tokenValues: stageTokens,
+            totalTokens: totalTokens,
+            displayMode: displayMode,
             id: { $0.rawValue },
-            label: { $0.dashboardLabel }
+            label: { $0.dashboardLabel(language: language) }
         )
 
+        let sourceTokens = Self.sourceTotals(events: visibleEvents)
         sourceRows = Self.rows(
-            values: Self.sourceTotals(events: visibleEvents),
-            total: totalTokens,
+            tokenValues: sourceTokens,
+            totalTokens: totalTokens,
+            displayMode: displayMode,
             id: { $0.rawValue },
-            label: { $0.label }
+            label: { $0.label(language: language) }
         )
 
-        sessions = Self.sessionRows(events: visibleEvents)
+        let sessionRows = Self.sessionRows(
+            events: visibleEvents,
+            displayMode: displayMode,
+            totalTokens: totalTokens,
+            language: language
+        )
+        sessions = sessionRows
+        selectedSession = sessionRows.first { $0.id == selectedSessionID } ?? sessionRows.first
     }
 
     private init(events: [TokenUsageEvent], selectedTool legacySelectedTool: TokenUsageAITool?) {
-        self.init(events: events, selectedTool: legacySelectedTool, selectedPeriod: .all)
+        self.init(events: events, selectedTool: legacySelectedTool, selectedPeriod: .all, selectedSessionID: nil, displayMode: .tokens)
     }
 
     static let empty = TokenUsageDashboardSnapshot(events: [])
@@ -261,27 +358,53 @@ struct TokenUsageDashboardSnapshot: Equatable {
         } ?? events
     }
 
+    static func formatPercentage(_ value: Double) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .percent
+        formatter.multiplier = 1
+        formatter.minimumFractionDigits = 1
+        formatter.maximumFractionDigits = 1
+        return formatter.string(from: NSNumber(value: value)) ?? String(format: "%.1f%%", value)
+    }
+
     private static func rows<Key: Hashable>(
-        values: [Key: Int],
-        total: Int,
+        tokenValues: [Key: Int],
+        totalTokens: Int,
+        displayMode: TokenUsageDisplayMode,
         id: (Key) -> String,
         label: (Key) -> String
     ) -> [TokenUsageDashboardBarRow] {
-        values
-            .filter { $0.value > 0 }
-            .sorted {
-                if $0.value == $1.value {
-                    return label($0.key) < label($1.key)
+        tokenValues.keys
+            .compactMap { key -> TokenUsageDashboardBarRow? in
+                let tokens = tokenValues[key, default: 0]
+
+                guard tokens > 0 else { return nil }
+
+                let valueStr: String
+                let ratio: Double
+
+                switch displayMode {
+                case .tokens:
+                    valueStr = Self.formatTokens(tokens)
+                    ratio = totalTokens > 0 ? Double(tokens) / Double(totalTokens) : 0.0
+                case .percentage:
+                    let pct = totalTokens > 0 ? (Double(tokens) / Double(totalTokens)) * 100.0 : 0.0
+                    valueStr = Self.formatPercentage(pct)
+                    ratio = totalTokens > 0 ? Double(tokens) / Double(totalTokens) : 0.0
                 }
-                return $0.value > $1.value
-            }
-            .map { key, value in
-                TokenUsageDashboardBarRow(
+
+                return TokenUsageDashboardBarRow(
                     id: id(key),
                     title: label(key),
-                    value: Self.formatTokens(value),
-                    ratio: total > 0 ? Double(value) / Double(total) : 0
+                    value: valueStr,
+                    ratio: ratio
                 )
+            }
+            .sorted { (row1, row2) -> Bool in
+                if row1.ratio == row2.ratio {
+                    return row1.title < row2.title
+                }
+                return row1.ratio > row2.ratio
             }
     }
 
@@ -295,19 +418,24 @@ struct TokenUsageDashboardSnapshot: Equatable {
     private static func toolFilters(
         selectedTool: TokenUsageAITool?,
         totals: [TokenUsageAITool: Int],
-        totalEvents: Int
+        totalEvents: Int,
+        language: TokenMeteringLanguage
     ) -> [TokenUsageDashboardToolFilter] {
         let allTotal = totals.values.reduce(0, +)
         let allFilter = TokenUsageDashboardToolFilter(
             tool: nil,
-            title: "All",
-            detail: "\(totalEvents) events / \(formatTokens(allTotal)) tokens",
+            title: TokenMeteringL10n.text(.allTools, language: language),
+            detail: TokenMeteringL10n.eventsTokensDetail(
+                eventCount: totalEvents,
+                tokens: formatTokens(allTotal),
+                language: language
+            ),
             isSelected: selectedTool == nil
         )
-        let toolFilters = TokenUsageAITool.allCases.map { tool in
+        let toolFilters = TokenUsageAITool.dashboardTools.map { tool in
             TokenUsageDashboardToolFilter(
                 tool: tool,
-                title: tool.dashboardLabel,
+                title: tool.dashboardLabel(language: language),
                 detail: formatTokens(totals[tool, default: 0]),
                 isSelected: selectedTool == tool
             )
@@ -327,78 +455,175 @@ struct TokenUsageDashboardSnapshot: Equatable {
             totals[.generatedOutput, default: 0] += event.tokenBreakdown.generatedOutput
             totals[.unknown, default: 0] += event.tokenBreakdown.unknown
         }
-        let knownTotal = totals.reduce(0) { partialResult, item in
-            item.key == .unknown ? partialResult : partialResult + item.value
-        }
-        if knownTotal == 0 {
-            return totals.filter { $0.key != .unknown }
-        }
         return totals
     }
 
-    private static func sessionRows(events: [TokenUsageEvent]) -> [TokenUsageDashboardSessionRow] {
-        Dictionary(grouping: events, by: \.runID)
-            .map { runID, groupedEvents in
-                let total = groupedEvents.reduce(0) { $0 + $1.totalTokens }
+    private static func sessionRows(
+        events: [TokenUsageEvent],
+        displayMode: TokenUsageDisplayMode,
+        totalTokens: Int,
+        language: TokenMeteringLanguage
+    ) -> [TokenUsageDashboardSessionRow] {
+        Dictionary(grouping: events, by: workItemKey(for:))
+            .map { key, groupedEvents in
+                let totalT = groupedEvents.reduce(0) { $0 + $1.totalTokens }
                 let latency = groupedEvents.reduce(0) { $0 + $1.latencyMS }
                 let latest = groupedEvents.map(\.createdAt).max() ?? "unknown"
-                return TokenUsageDashboardSessionRow(
-                    id: runID,
-                    runID: runID,
-                    value: Self.formatTokens(total),
-                    detail: "\(groupedEvents.count) spans / \(latency) ms / \(latest)"
+                let runIDs = Set(groupedEvents.map(\.runID))
+
+                let valueStr: String
+                switch displayMode {
+                case .tokens:
+                    valueStr = Self.formatTokens(totalT)
+                case .percentage:
+                    let pct = totalTokens > 0 ? (Double(totalT) / Double(totalTokens)) * 100.0 : 0.0
+                    valueStr = Self.formatPercentage(pct)
+                }
+
+                return (
+                    row: TokenUsageDashboardSessionRow(
+                        id: key.id,
+                        runID: key.id,
+                        title: Self.workItemTitle(key: key, language: language),
+                        value: valueStr,
+                        detail: TokenMeteringL10n.spansDetail(
+                            spanCount: groupedEvents.count,
+                            latencyMS: latency > 0 ? latency : nil,
+                            latest: latest,
+                            language: language
+                        ),
+                        eventCount: groupedEvents.count
+                    ),
+                    latest: latest,
+                    totalTokens: totalT,
+                    spanCount: groupedEvents.count,
+                    runCount: runIDs.count
                 )
             }
-            .sorted { $0.detail > $1.detail }
+            .sorted { lhs, rhs in
+                if lhs.latest != rhs.latest {
+                    return lhs.latest > rhs.latest
+                }
+                if lhs.totalTokens != rhs.totalTokens {
+                    return lhs.totalTokens > rhs.totalTokens
+                }
+                if lhs.spanCount != rhs.spanCount {
+                    return lhs.spanCount > rhs.spanCount
+                }
+                if lhs.runCount != rhs.runCount {
+                    return lhs.runCount > rhs.runCount
+                }
+                return lhs.row.title < rhs.row.title
+            }
+            .map(\.row)
     }
 
-    private static func percentageDetail(value: Int, total: Int) -> String {
+    private static func workItemKey(for event: TokenUsageEvent) -> TokenUsageDashboardWorkItemKey {
+        TokenUsageDashboardWorkItemKey(
+            aiTool: event.aiTool,
+            taskType: event.taskType,
+            stage: event.stage,
+            modelKey: modelKey(event.model),
+            dayBucket: String(event.createdAt.prefix(10))
+        )
+    }
+
+    private static func workItemTitle(
+        key: TokenUsageDashboardWorkItemKey,
+        language: TokenMeteringLanguage
+    ) -> String {
+        [
+            key.aiTool.dashboardLabel(language: language),
+            key.taskType.dashboardLabel(language: language),
+            key.stage.dashboardLabel(language: language)
+        ].joined(separator: " - ")
+    }
+
+    private static func modelKey(_ model: String) -> String {
+        let trimmed = model.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lowered = trimmed.lowercased()
+        if trimmed.isEmpty || lowered == "unknown" || lowered == "unknown_model" || lowered == "model_unknown" || lowered == "unavailable" {
+            return "model_unavailable"
+        }
+        return trimmed
+    }
+
+    private static func modelLabel(_ key: String, language: TokenMeteringLanguage) -> String {
+        key == "model_unavailable"
+            ? TokenMeteringL10n.text(.modelUnavailable, language: language)
+            : key
+    }
+
+    private static func percentageDetail(value: Int, total: Int, language: TokenMeteringLanguage) -> String {
         guard total > 0 else {
-            return "0% of total"
+            return TokenMeteringL10n.text(.zeroPercentOfTotal, language: language)
         }
 
         let percent = Int((Double(value) / Double(total) * 100).rounded())
-        return "\(percent)% of total"
+        return TokenMeteringL10n.percentOfTotal(percent, language: language)
+    }
+}
+
+private struct TokenUsageDashboardWorkItemKey: Hashable {
+    let aiTool: TokenUsageAITool
+    let taskType: TokenUsageTaskType
+    let stage: TokenUsageStage
+    let modelKey: String
+    let dayBucket: String
+
+    var id: String {
+        [
+            "work",
+            aiTool.rawValue,
+            taskType.rawValue,
+            stage.rawValue,
+            modelKey,
+            dayBucket
+        ]
+            .map(Self.safeIDPart)
+            .joined(separator: "_")
+    }
+
+    private static func safeIDPart(_ value: String) -> String {
+        let scalars = value.lowercased().unicodeScalars.map { scalar -> String in
+            CharacterSet.alphanumerics.contains(scalar) ? String(scalar) : "_"
+        }
+        return scalars.joined()
+            .split(separator: "_")
+            .joined(separator: "_")
     }
 }
 
 enum TokenMeteringPreferencesModel {
-    static let modes: [TokenMeteringModeStatus] = [
-        TokenMeteringModeStatus(
-            id: "local_only",
-            title: "Local only",
-            state: "Active without login",
-            detail: "Detailed token counts and safe categories stay in this app on this computer.",
-            isActive: true
-        ),
-        TokenMeteringModeStatus(
-            id: "cloud_aggregate",
-            title: "Cloud aggregate",
-            state: "Requires login and explicit enablement",
-            detail: "Future sync can send totals, timestamps, model ids, latency, and opaque ids only.",
-            isActive: false
-        ),
-        TokenMeteringModeStatus(
-            id: "cloud_detailed",
-            title: "Cloud detailed",
-            state: "Separate token-only opt-in",
-            detail: "Future drill-down can add task/source enum labels and numeric breakdowns, never content.",
-            isActive: false
-        )
-    ]
+    static var modes: [TokenMeteringModeStatus] {
+        [
+            TokenMeteringModeStatus(
+                id: "local_only",
+                title: TokenMeteringL10n.text(.modeLocalOnlyTitle),
+                state: TokenMeteringL10n.text(.modeLocalOnlyState),
+                detail: TokenMeteringL10n.text(.modeLocalOnlyDetail),
+                isActive: true
+            ),
+            TokenMeteringModeStatus(
+                id: "cloud_aggregate",
+                title: TokenMeteringL10n.text(.modeCloudAggregateTitle),
+                state: TokenMeteringL10n.text(.modeCloudAggregateState),
+                detail: TokenMeteringL10n.text(.modeCloudAggregateDetail),
+                isActive: false
+            ),
+            TokenMeteringModeStatus(
+                id: "cloud_detailed",
+                title: TokenMeteringL10n.text(.modeCloudDetailedTitle),
+                state: TokenMeteringL10n.text(.modeCloudDetailedState),
+                detail: TokenMeteringL10n.text(.modeCloudDetailedDetail),
+                isActive: false
+            )
+        ]
+    }
 
-    static let forbiddenContentLabels = [
-        "prompts",
-        "commands",
-        "responses",
-        "file paths",
-        "repo names",
-        "diffs",
-        "logs",
-        "source content",
-        "environment values",
-        "secrets"
-    ]
+    static var forbiddenContentLabels: [String] {
+        TokenMeteringL10n.forbiddenContentLabels()
+    }
 }
 
 private enum TokenUsageSource: Hashable {
@@ -410,22 +635,22 @@ private enum TokenUsageSource: Hashable {
     case generatedOutput
     case unknown
 
-    var label: String {
+    func label(language: TokenMeteringLanguage) -> String {
         switch self {
         case .system:
-            return "System"
+            return TokenMeteringL10n.text(.sourceSystem, language: language)
         case .user:
-            return "User"
+            return TokenMeteringL10n.text(.sourceUser, language: language)
         case .history:
-            return "History"
+            return TokenMeteringL10n.text(.sourceHistory, language: language)
         case .repoContext:
-            return "Repo context"
+            return TokenMeteringL10n.text(.sourceRepoContext, language: language)
         case .toolOutput:
-            return "Tool output"
+            return TokenMeteringL10n.text(.sourceToolOutput, language: language)
         case .generatedOutput:
-            return "Generated output"
+            return TokenMeteringL10n.text(.sourceGeneratedOutput, language: language)
         case .unknown:
-            return "Source unavailable"
+            return TokenMeteringL10n.text(.sourceUnavailable, language: language)
         }
     }
 }
@@ -453,15 +678,19 @@ extension TokenUsageSource {
 
 extension TokenUsageAITool {
     var dashboardLabel: String {
+        dashboardLabel(language: .current())
+    }
+
+    func dashboardLabel(language: TokenMeteringLanguage) -> String {
         switch self {
         case .unknown:
-            return "Unknown"
+            return TokenMeteringL10n.text(.unknownAITool, language: language)
         case .codex:
             return "Codex"
         case .claude:
             return "Claude"
         case .antigravity:
-            return "Antigravity"
+            return "Antigravity (agy)"
         case .openAI:
             return "OpenAI"
         }
@@ -469,60 +698,14 @@ extension TokenUsageAITool {
 }
 
 private extension TokenUsageTaskType {
-    var dashboardLabel: String {
-        [
-            "uncategorized": "Uncategorized",
-            "analysis": "Analysis",
-            "prd_drafting": "PRD drafting",
-            "architecture": "Architecture",
-            "code_generation": "Code generation",
-            "ui_design": "UI design",
-            "prompt_design": "Prompt design",
-            "refactoring": "Refactoring",
-            "code_review": "Code review",
-            "review_response": "Review response",
-            "test_generation": "Test generation",
-            "testing": "Testing",
-            "build_verification": "Build verification",
-            "debugging": "Debugging",
-            "bug_reproduction": "Bug reproduction",
-            "documentation": "Documentation",
-            "changelog": "Changelog",
-            "release_notes": "Release notes",
-            "release_packaging": "Release packaging",
-            "git_commit": "Git commit",
-            "commit_message": "Commit message",
-            "pull_request": "Pull request",
-            "workflow_setup": "Workflow setup"
-        ][rawValue] ?? rawValue.tokenUsageTitle
+    func dashboardLabel(language: TokenMeteringLanguage) -> String {
+        TokenMeteringL10n.taskLabel(rawValue, language: language)
     }
 }
 
 private extension TokenUsageStage {
-    var dashboardLabel: String {
-        [
-            "monitor": "Monitor",
-            "classify": "Classify",
-            "plan": "Plan",
-            "draft": "Draft",
-            "revise": "Revise",
-            "implement": "Implement",
-            "verify": "Verify",
-            "summarize": "Summarize"
-        ][rawValue] ?? rawValue.tokenUsageTitle
-    }
-}
-
-private extension String {
-    var tokenUsageTitle: String {
-        split(separator: "_")
-            .map { part in
-                guard let first = part.first else {
-                    return ""
-                }
-                return first.uppercased() + part.dropFirst()
-            }
-            .joined(separator: " ")
+    func dashboardLabel(language: TokenMeteringLanguage) -> String {
+        TokenMeteringL10n.stageLabel(rawValue, language: language)
     }
 }
 

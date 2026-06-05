@@ -8,15 +8,18 @@ final class TokenMeteringDashboardWindowController {
     private let minimumSize = NSSize(width: 720, height: 520)
     private let screenPadding: CGFloat = 32
     private let store: TokenUsageDashboardStore
+    private let settings: SpillSettings
     private var window: NSWindow?
 
-    init(store: TokenUsageDashboardStore) {
+    init(store: TokenUsageDashboardStore, settings: SpillSettings = .shared) {
         self.store = store
+        self.settings = settings
     }
 
     func show() {
         store.refresh()
         let window = ensureWindow()
+        updateWindowTitle(window)
         constrainToVisibleScreen(window)
         NSApp.activate()
         window.makeKeyAndOrderFront(nil)
@@ -29,7 +32,13 @@ final class TokenMeteringDashboardWindowController {
             return window
         }
 
-        let contentView = TokenMeteringDashboardView(store: store)
+        let contentView = TokenMeteringDashboardView(
+            store: store,
+            settings: settings,
+            titleDidChange: { [weak self] in
+                self?.updateWindowTitle()
+            }
+        )
         let window = NSWindow(
             contentRect: defaultWindowFrame,
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
@@ -37,7 +46,7 @@ final class TokenMeteringDashboardWindowController {
             defer: false
         )
 
-        window.title = "Spill Local Token Dashboard"
+        updateWindowTitle(window)
         window.titlebarAppearsTransparent = true
         window.isReleasedWhenClosed = false
         window.minSize = minimumSize
@@ -46,6 +55,14 @@ final class TokenMeteringDashboardWindowController {
         window.contentView = NSHostingView(rootView: contentView)
         self.window = window
         return window
+    }
+
+    private func updateWindowTitle(_ window: NSWindow? = nil) {
+        let target = window ?? self.window
+        target?.title = TokenMeteringL10n.text(
+            .dashboardTitle,
+            language: TokenMeteringLanguage.current(appLanguage: settings.appLanguage)
+        )
     }
 
     private var defaultWindowFrame: NSRect {

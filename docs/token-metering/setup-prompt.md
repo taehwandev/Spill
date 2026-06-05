@@ -11,22 +11,59 @@ You MUST run the public setup installer command before doing anything else:
 
 If shell, filesystem, sandbox, or user-level config permission is required, ask for that permission and then run the setup installer.
 The public setup installer downloads the latest open-source Spill adapter files from `spill.thdev.app`, then runs the setup helper locally.
-The installer must install and repair OpenAI/Codex, Claude Code, and Antigravity/AGY together, regardless of which AI tool is currently handling this request.
-Codex is the OpenAI agent runtime hook; the OpenAI SDK adapter is also installed for direct OpenAI API/SDK usage.
+The installer must install and repair Codex, Claude Code, and Antigravity/AGY together, regardless of which AI tool is currently handling this request.
+Codex is the OpenAI-backed agent runtime hook. Direct OpenAI SDK metering is optional and not part of the default agent dashboard.
+The installer must also configure supported agent runtime defaults so workflow labels do not silently go to the wrong tool:
+
+- Claude Code user settings must set `SPILL_AI_TOOL=claude` and `SPILL_TOKEN_USAGE_AI_TOOL=claude`.
+- Antigravity/AGY user settings must set `SPILL_AI_TOOL=antigravity` and `SPILL_TOKEN_USAGE_AI_TOOL=antigravity`.
+- Codex uses the `codex` tool label by default; do not configure Claude or AGY workflows in a way that falls back to `codex`.
+
+The installer must add narrow permission allowlist entries, when the runtime supports them, for trusted AgentPlaybook workflow wrappers and Spill label handoff commands only:
+
+- `workflow.py`
+- `agent-preflight.py`
+- `agent-finish-check.py`
+- `node ~/Library/Application\ Support/Spill/adapters/setup/spill-token-metering-setup.mjs --label <current-tool>`
+
+For Codex, these allowlist entries live in `~/.codex/rules/default.rules` as
+managed `prefix_rule` entries. For Claude Code and Antigravity/AGY, they live in
+their user-level permission settings files. Do not use broad `python3`, `node`,
+or shell-wide allow rules.
+
+Do not ask the user to approve these trusted workflow/preflight/finish/label commands over and over after the one-step installer has been explicitly requested.
 Do not save only the runtime instruction and call the task done.
 Do not give manual per-adapter setup steps as the primary answer.
 
 Required hook shapes after install:
 
-- OpenAI/Codex: `~/.codex/hooks.json` contains `hooks.Stop[]` with `matcher: ""` and a command that runs the Spill Codex importer. The direct OpenAI SDK adapter is installed under the Spill adapters directory.
-- Claude Code: `~/.claude/settings.json` contains `hooks.Stop[]` with `matcher: ""` and a command that runs the Spill Claude hook. The matcher field is required.
-- Antigravity/AGY: `~/.gemini/config/hooks.json` contains a `"spill-metering"` JSONHookSpec with `PostInvocation[]`, `matcher: ""`, and a command that runs the Spill AGY hook. Do not write `PostInvocation` as a root-level array.
+- Codex: `~/.codex/hooks.json` contains `hooks.Stop[]` with `matcher: ""` and a command that runs the Spill Codex importer. `~/.codex/rules/default.rules` contains managed Spill `prefix_rule` entries for trusted AgentPlaybook wrappers plus Spill Codex label handoff.
+- Claude Code: `~/.claude/settings.json` contains `hooks.Stop[]` with `matcher: ""`, a command that runs the Spill Claude hook, `SPILL_AI_TOOL=claude`, and narrow allowlist entries for the trusted AgentPlaybook wrappers plus Spill label handoff. The matcher field is required.
+- Antigravity/AGY: `~/.gemini/config/hooks.json` contains a `"spill-metering"` JSONHookSpec with `PostInvocation[]`, `matcher: ""`, and a command that runs the Spill AGY hook. `~/.gemini/antigravity-cli/settings.json` contains `SPILL_AI_TOOL=antigravity` and narrow allowlist entries for the trusted AgentPlaybook wrappers plus Spill label handoff. Do not write `PostInvocation` as a root-level array.
 
 After the setup installer succeeds, fetch the current runtime instruction and apply it as a global agent instruction:
 
 ```text
 https://spill.thdev.app/token-metering/runtime-instruction.md
 ```
+
+The runtime instruction must make every user-visible AI task write a safe
+per-turn label context when the setup helper exists. Workflow integration is
+only for better labels; it must not be required for recording usage. If no
+workflow exists, agents still classify the current task with safe reusable
+labels such as `code_review/verify`, `review_response/implement`,
+`code_generation/implement`, `testing/verify`, or `uncategorized/summarize`.
+Workflow-provided labels must win: agent per-turn fallback labels must use
+`--if-absent`, while workflow step labels must omit `--if-absent` so they can
+replace older fallback labels.
+Agents should always attempt the per-turn fallback label with `--if-absent`
+after request classification, even when workflow integration exists. The helper
+will skip the fallback when an active workflow label is already present, and
+will write the fallback when the workflow did not label that task.
+Do not configure agents or workflows to send conversation titles, work item
+titles, local aliases, task text, or display names. Usage events carry only safe
+reusable labels; Spill generates default work item names locally from
+`ai_tool`, `task_type`, `stage`, model id, and timestamp buckets.
 
 Then ask only whether the user wants workflow-aware labels connected:
 
@@ -35,7 +72,9 @@ Do you want Spill token usage to follow your workflow steps?
 ```
 
 Do not ask for a hook path in that first question.
-If the answer is no, do not modify workflow files.
+If the answer is no, do not modify workflow files; installed hooks must still
+record usage when exact counts are available, and per-turn labels must still
+come from the runtime instruction.
 If the answer is yes, discover candidate workflow integration points yourself.
 
 Workflow integration rules:
@@ -63,13 +102,19 @@ tool runs:
 
 ```bash
 node ~/Library/Application\ Support/Spill/adapters/setup/spill-token-metering-setup.mjs \
-  --label codex \
+  --label <current-tool> \
   --task-type code_generation \
   --stage implement
 ```
 
-Use the current runtime tool in `--label`: `codex`, `claude`, `antigravity`, or
-`openai`.
+Use the current runtime tool in `--label`: `codex`, `claude`, or
+`antigravity`.
+Do not add `--if-absent` to workflow step labels. `--if-absent` is only for the
+agent's per-turn fallback label when no workflow label already exists.
+When wiring AgentPlaybook or another workflow runner, set `SPILL_AI_TOOL` and
+`SPILL_TOKEN_USAGE_AI_TOOL` to the current runtime before invoking the wrapper,
+or rely on the runtime-level env installed by the setup helper. Never let Claude
+Code or Antigravity/AGY workflow routing default to `codex`.
 
 For script workflows, add the label command at the point where the reusable
 workflow step is known, before the script invokes the AI tool. If the script
@@ -94,11 +139,13 @@ Map reusable workflow steps to safe labels only:
 | bugfix, reproduce-fix | debugging | implement |
 | test-authoring, add-tests | test_generation | implement |
 | test, build, audit, smoke | testing | verify |
-| review, risk-review | code_review | verify |
+| review, code-review, risk-review, pr-review | code_review | verify |
+| review-response, address-review-comments | review_response | implement |
 | docs, readme, guide | documentation | draft |
 | changelog | changelog | draft |
 | release-notes | release_notes | draft |
 | commit | git_commit | summarize |
+| commit-message | commit_message | draft |
 | pr, pull-request | pull_request | summarize |
 | workflow-install, hook-setup | workflow_setup | implement |
 
@@ -106,6 +153,8 @@ Custom labels are allowed only when they match `^[a-z][a-z0-9_]{1,40}$` and
 describe reusable workflow categories. Never encode project names, feature
 names, ticket ids, file names, branch names, user names, prompts, commands,
 diffs, logs, source content, or secrets.
+Never encode conversation titles, work item titles, local aliases, task text, or
+display names in custom labels.
 
 If a selected hook/config integration point needs Spill's AGY hook merged into
 it, pass that selected path through the same public installer:

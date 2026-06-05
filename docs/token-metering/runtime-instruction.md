@@ -15,21 +15,51 @@ Runtime label handoff:
 
 - At the beginning of every user-visible task, after classifying the request and before running project tools, edits, tests, commits, or reviews, silently write or refresh a short-lived safe label context when the setup helper exists.
 - This label context is not a usage event. It contains no token counts and no user content. It only lets the installed hook attach `task_type` and `stage` to the later exact usage event.
+- Workflow integration is an enhancement, not a prerequisite. If no workflow
+  runner or workflow hook exists, still write the per-turn label context using
+  the safe task rules below.
+- Workflow-provided labels win. Per-turn fallback labels must call the setup
+  helper with `--if-absent` so they do not overwrite an active same-tool label
+  that a workflow runner already wrote for the current step.
+- Always attempt the per-turn fallback label with `--if-absent` after request
+  classification, even when a workflow integration exists. The helper will skip
+  the fallback when an active workflow label is already present, and will write
+  the fallback when the workflow did not label that task.
+- If the task cannot be classified safely, write `uncategorized/summarize`
+  instead of skipping label context. The later usage event should still be
+  recorded when exact counts are available.
+- Never skip usage event creation only because `task_type` or `stage` is
+  uncertain. Unknown workflow classification must degrade to safe fallback
+  labels, not to missing events.
 - Use the current runtime tool in `--label`: `codex` for Codex, `claude` for Claude Code, `antigravity` for AGY/Antigravity, or `openai` for direct OpenAI SDK work.
 - Use the dominant current `task_type` and `stage` from the rules below. If the dominant task changes during the same turn, refresh the label context with the new safe labels.
 - Do not let a short verification step overwrite an implementation-heavy task. If a turn includes code, config, data, prompt, or test edits followed by tests, builds, audits, or smoke checks, keep the dominant stage as `implement`.
 - Do not mention this label command in normal conversation.
 - If the setup helper is missing, skip label context creation silently unless the user asked to install or fix Spill metering.
+- When running AgentPlaybook workflow wrappers or other trusted workflow scripts,
+  set `SPILL_AI_TOOL` and `SPILL_TOKEN_USAGE_AI_TOOL` to the current runtime
+  tool, or rely on runtime-level env installed by the Spill setup helper.
+- Never let Claude Code or Antigravity/AGY workflow routing fall back to
+  `codex`; that makes label context land in the wrong tool file.
+- Trusted AgentPlaybook wrappers are `workflow.py`, `agent-preflight.py`, and
+  `agent-finish-check.py`. If the local runtime has a permission allowlist,
+  narrowly allow these wrappers and the setup helper `--label <current-tool>`
+  command after an explicit install/fix request, instead of prompting for the
+  same trusted commands on every task.
 - Preferred command shape:
 
 ```bash
-node ~/Library/Application\ Support/Spill/adapters/setup/spill-token-metering-setup.mjs --label codex --task-type debugging --stage implement
+node ~/Library/Application\ Support/Spill/adapters/setup/spill-token-metering-setup.mjs --label <current-tool> --task-type debugging --stage implement --if-absent
 ```
+
+Workflow runners that know the current safe step should omit `--if-absent` so
+their explicit workflow label replaces an older fallback label.
 
 Privacy boundary:
 
 - Send only numeric token counts, model id, timestamp, latency, and enum labels.
 - Never send prompts, responses, commands, file paths, repo names, branch names, commit messages, terminal output, logs, diffs, source code, environment values, or secrets.
+- Never send, derive, or store conversation titles, work item titles, local aliases, task text, or display names from prompts, commands, transcripts, logs, files, or responses. Spill generates default work item display names locally from safe `ai_tool`, `task_type`, `stage`, model id, and timestamp buckets. Any user alias is local-only app metadata and is not part of the usage event payload.
 - Never inspect local agent logs, transcripts, shell history, repository files, or hidden state to reconstruct token usage.
 - Use opaque ids only. For global project-wide use, use `project_global` and `artifact_global`.
 - Use `local_only` sync mode unless the user explicitly enables cloud sync in Spill.
@@ -70,6 +100,23 @@ Recommended task labels:
 - pull_request
 - workflow_setup
 - uncategorized
+
+Task label selection:
+
+- Use `code_review` for review-only work, risk review, PR review, design review,
+  architecture review, security review, or final review when the primary output
+  is findings, approval, or risk analysis.
+- Use `review_response` when the primary work is addressing review feedback,
+  revising a change after review, or applying reviewer-requested edits.
+- Use `git_commit` for creating commits and `commit_message` for commit message
+  drafting without making the commit.
+- Use `pull_request` for PR creation, PR description drafting, and PR update
+  summaries.
+- Use `testing` or `build_verification` for test, build, audit, smoke, or
+  verification-only work.
+- Use `analysis` for investigation without code, doc, test, config, commit, or
+  review output.
+- Use `uncategorized` only when no safe reusable category clearly dominates.
 
 Stage labels:
 

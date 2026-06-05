@@ -192,6 +192,13 @@ Rules:
   from prompts, commands, file paths, repo names, branch names, ticket ids,
   transcript text, logs, source content, user names, or other private content.
 - Cloud sync must not be triggered by local events.
+- Future account sync must keep token usage data sync and settings sync as
+  separate opt-in scopes. Usage data sync may never imply syncing local prompt
+  preferences, local aliases, adapter setup preferences, or dashboard display
+  preferences.
+- Settings sync must support selected-setting sync in addition to all-settings
+  sync so sensitive or workflow-specific local preferences can stay local while
+  usage aggregates sync.
 - Global agent setup instructions must be silent and must not add metering
   status lines to normal assistant replies.
 - Global agent setup instructions are not a runtime hook. They cannot expose

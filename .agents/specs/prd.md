@@ -128,10 +128,26 @@ Requirements:
   diffs, source content, environment values, or secrets.
 - `run_id` is an opaque grouping key for a local run or turn. It is not a
   human-readable session name.
+- `span_id` represents one recorded usage event, such as one final assistant
+  turn or one exact adapter span. A single chat conversation can contain many
+  spans and multiple work categories, so the dashboard must not treat a chat
+  title or raw run id as the primary usage unit.
 - If the dashboard exposes friendly session names, the name must come from a
   user-controlled local alias or a configured safe label source. It must not be
   derived from prompts, commands, file paths, repo names, transcript text,
   branch names, ticket ids, user names, or private content.
+- Local aliases are optional display metadata, not part of the safe usage event
+  schema. They must be stored only in the app-owned local store, remain
+  local-only by default, be clearable by the user, and apply to a selected work
+  item or technical run group instead of being treated as the title of a whole
+  conversation.
+- Future account sync must separate token usage data sync from settings sync.
+  Enabling usage data sync must not automatically sync local prompt preferences,
+  local aliases, dashboard display preferences, or adapter setup preferences.
+- Settings sync must support independent modes: local-only settings, sync all
+  settings, or sync selected settings. Prompt display-name policy, if enabled,
+  is one selectable settings-sync item rather than part of the token usage event
+  payload.
 - Detailed workflow labels such as `analysis`, `prd_drafting`,
   `code_generation`, `code_review`, `review_response`, `git_commit`,
   `commit_message`, `pull_request`, `workflow_setup`, `ux_copy_review`, or
@@ -144,15 +160,19 @@ Requirements:
 - Custom workflow labels must never encode task text, feature names, project
   names, file names, branch names, ticket ids, user names, or private content.
 - Usage events include a safe `ai_tool` enum label so users can compare combined
-  local usage with per-tool usage for Codex, Claude, Antigravity/AGY,
-  direct OpenAI, and unknown tool sources without storing prompts, commands, file
-  paths, repo names, logs, diffs, source content, environment values, or
-  secrets.
+  local usage with per-tool usage for Codex, Claude, and Antigravity/AGY without
+  storing prompts, commands, file paths, repo names, logs, diffs, source
+  content, environment values, or secrets.
+- Direct OpenAI SDK and unknown tool sources may exist for compatibility,
+  diagnostics, or future optional integrations, but they are not first-class
+  default agent dashboard categories for the local Codex/Claude/Antigravity
+  product surface.
 - The app should expose a global setup prompt in Preferences and on the web
   setup surface for users who want all projects to report into the same local
   meter. The prompt should tell capable agents to use the one-step setup helper
   for installation or repair instead of asking users to copy or install Codex,
-  Claude, Antigravity/AGY, and OpenAI adapters one by one.
+  Claude, and Antigravity/AGY adapters one by one. Direct OpenAI SDK metering
+  may be documented as an optional advanced path.
 - The global setup prompt must be silent: it must not cause agents to add
   metering status lines to normal replies.
 - Local metering must not require a user-facing "start" or "check" action in
@@ -167,9 +187,11 @@ Requirements:
   and must not parse or store prompts, responses, commands, file paths, working
   directories, diffs, logs, source content, environment values, or secrets.
 - Spill should provide a one-step local setup helper that installs detected
-  Codex, Claude, Antigravity/AGY, and direct OpenAI adapter scripts and merges
-  known user-level hook config files after an explicit install/fix/apply user
-  request. Users should not need to run separate install steps per adapter.
+  Codex, Claude, and Antigravity/AGY adapter scripts and merges known user-level
+  hook config files after an explicit install/fix/apply user request. Direct
+  OpenAI SDK metering remains an optional adapter path, not part of the default
+  install. Users should not need to run separate install steps per default
+  adapter.
 - Workflow-level hook setup must be opt-in and target a user-selected hook file
   such as `.agents/hooks.json`; setup must not silently write project workflow
   config files.
@@ -195,6 +217,55 @@ Requirements:
   synthetic token-only event through the local queue, but it must be presented
   as diagnostics rather than the normal startup path.
 
+Dashboard UX requirements:
+
+- The primary dashboard grouping is a human-readable "Work Items" surface, not
+  a raw "Runs" surface. A work item is a local aggregate of safe labels over the
+  selected time range, derived from `ai_tool`, `task_type`, `stage`, optional
+  trusted workflow labels, model id, and timestamp buckets.
+- Work item display names should be generated from safe reusable labels, for
+  example `Codex - Code generation - Implement` or `Claude Code - Code review -
+  Verify`. Raw `run_id` and `span_id` values may appear only in a collapsed
+  technical details or diagnostics view.
+- If a user assigns a local alias, that alias may override the generated display
+  name for the selected work item, but it must not change token totals, safe
+  workflow labels, model attribution, or the event payload.
+- The default time range should be `Today`, with explicit controls for `7 days`,
+  `30 days`, and `All`. The dashboard must make the active accumulation window
+  visible near total token KPIs so large all-time totals are not mistaken for
+  current work.
+- The default agent filter should include only installed first-class agent
+  tools: Codex, Claude Code, and Antigravity/AGY. Legacy `unknown` and optional
+  direct OpenAI SDK events should be hidden from the default dashboard and
+  available only in diagnostics or an explicit advanced filter.
+- The dashboard should show model usage from the exact `model` value reported by
+  the runtime or adapter. If the runtime does not report a model, the UI should
+  show `Model unavailable` rather than guessing from the provider, app, command,
+  prompt, or local logs.
+- Source breakdown rows must distinguish exact source buckets from runtime-total
+  fallback data. When only total counts are exact, the UI should show a label
+  such as `Runtime total only`, not `Unknown`, and explain that source buckets
+  were not exposed by the runtime.
+- Latency must be hidden or labeled `Unavailable` when the runtime did not
+  provide exact latency. The dashboard must not present `0 ms` as a real latency
+  KPI for events that omitted timing.
+- Every summary card, work item table, source breakdown, model breakdown, and
+  technical detail panel should have a short info affordance that explains what
+  is counted, what is inferred from safe labels, and what is unavailable because
+  of the privacy boundary.
+- Work item rows must be selectable. Selecting a row should update the detail
+  panel with safe aggregates for that work item: total/input/output tokens,
+  event count, agent tool, model breakdown, stage breakdown, source breakdown,
+  time range, label source, and optional local alias. It must not expose prompts,
+  commands, files, repo names, diffs, logs, or source content.
+- Technical run details are a diagnostics layer. They are useful for dedupe,
+  importer verification, and support, but they are not the default way users
+  understand where AI tokens were spent.
+- Repeated hook/importer execution for the same exact usage span must not
+  inflate totals. If a runtime cannot expose a distinct opaque span cursor, the
+  adapter should prefer stable content-free dedupe over counting the same
+  numeric payload multiple times.
+
 Acceptance:
 
 - Local token events appear without login when the local queue receives a safe
@@ -202,8 +273,21 @@ Acceptance:
 - Safe event validation rejects content-like fields.
 - Local dashboard shows combined usage and lets users filter by safe AI tool
   labels.
-- Session rows are clearly treated as opaque local run groups unless a safe
-  local display-name option has been implemented.
+- The default dashboard shows Work Items instead of raw run ids, and raw
+  `run_id`/`span_id` values appear only in diagnostics or technical details.
+- Work item rows are clickable and update a detail panel with safe local
+  aggregates for the selected item.
+- Local aliases, if implemented, are local-only display metadata and do not
+  change event payloads or cloud-safe schema fields.
+- Cloud/account sync options separate usage data sync from settings sync, and
+  settings sync can be disabled, all-settings, or selected-settings without
+  changing local event ingestion.
+- Session or technical run rows are clearly treated as opaque local run groups
+  unless a safe local display-name option has been implemented.
+- Time-range controls make the accumulation basis explicit, with `Today` as the
+  default view and `7 days`, `30 days`, and `All` available.
+- Missing model, source, and latency data are labeled as unavailable or runtime
+  total fallback instead of appearing as meaningful zeroes or generic unknowns.
 - Global setup instructions state that exact counts are required and estimates
   should not be sent.
 - UI copy must not imply that a prompt alone can measure token usage.

@@ -35,7 +35,7 @@ download "adapters/openai/spill-adapter.py"
 
 node "$TMP_DIR/adapters/setup/spill-token-metering-setup.mjs" \
     --apply \
-    --include codex,claude,antigravity,openai \
+    --include codex,claude,antigravity \
     --source-root "$TMP_DIR/adapters" \
     --json \
     "$@"

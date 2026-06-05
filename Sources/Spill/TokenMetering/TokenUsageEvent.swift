@@ -130,6 +130,12 @@ enum TokenUsageAITool: String, Codable, CaseIterable, Sendable {
     case antigravity
     case openAI = "openai"
 
+    static let dashboardTools: [Self] = [.codex, .claude, .antigravity]
+
+    var isDashboardTool: Bool {
+        Self.dashboardTools.contains(self)
+    }
+
     init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
         let value = try container.decode(String.self)

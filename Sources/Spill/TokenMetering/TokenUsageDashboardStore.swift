@@ -5,11 +5,15 @@ final class TokenUsageDashboardStore: ObservableObject {
     @Published private(set) var snapshot = TokenUsageDashboardSnapshot.empty
     @Published private(set) var selectedTool: TokenUsageAITool?
     @Published private(set) var selectedPeriod: TokenUsageDashboardPeriod = .today
+    @Published private(set) var selectedSessionID: String?
+    @Published private(set) var displayMode: TokenUsageDisplayMode = .tokens
+    @Published private(set) var language: TokenMeteringLanguage = .current()
     @Published private(set) var lastError: String?
     @Published private(set) var isRunningSelfTest = false
     @Published private(set) var selfTestMessage: TokenUsageSelfTestMessage?
 
     private let usageStore: TokenUsageStore
+    private var events: [TokenUsageEvent] = []
     private var eventsDidChangeObserver: NSObjectProtocol?
 
     init(usageStore: TokenUsageStore) {
@@ -33,22 +37,49 @@ final class TokenUsageDashboardStore: ObservableObject {
     }
 
     func refresh() {
+        events = usageStore.loadEvents()
+        rebuildSnapshot()
+    }
+
+    func rebuildSnapshot() {
         snapshot = TokenUsageDashboardSnapshot(
-            events: usageStore.loadEvents(),
+            events: events,
             selectedTool: selectedTool,
-            selectedPeriod: selectedPeriod
+            selectedPeriod: selectedPeriod,
+            selectedSessionID: selectedSessionID,
+            displayMode: displayMode,
+            language: language
         )
+        selectedSessionID = snapshot.selectedSession?.id
         lastError = nil
     }
 
     func setSelectedTool(_ tool: TokenUsageAITool?) {
-        selectedTool = tool
-        refresh()
+        selectedTool = tool?.isDashboardTool == true ? tool : nil
+        rebuildSnapshot()
     }
 
     func setSelectedPeriod(_ period: TokenUsageDashboardPeriod) {
         selectedPeriod = period
-        refresh()
+        rebuildSnapshot()
+    }
+
+    func selectSession(_ sessionID: String) {
+        selectedSessionID = sessionID
+        rebuildSnapshot()
+    }
+
+    func setDisplayMode(_ mode: TokenUsageDisplayMode) {
+        displayMode = mode
+        rebuildSnapshot()
+    }
+
+    func setLanguage(_ language: TokenMeteringLanguage) {
+        guard self.language != language else {
+            return
+        }
+        self.language = language
+        rebuildSnapshot()
     }
 
     func clearLocalEvents() {
@@ -57,7 +88,7 @@ final class TokenUsageDashboardStore: ObservableObject {
             selfTestMessage = nil
             refresh()
         } catch {
-            lastError = "Could not clear local token data."
+            lastError = TokenMeteringL10n.text(.clearFailed, language: language)
         }
     }
 
@@ -75,13 +106,13 @@ final class TokenUsageDashboardStore: ObservableObject {
             try usageStore.enqueueInboxEvent(event)
             refresh()
             selfTestMessage = TokenUsageSelfTestMessage(
-                text: "Local queue accepted and stored a categorized 64-token self-test event.",
+                text: TokenMeteringL10n.text(.queueSelfTestSuccess, language: language),
                 isSuccess: true
             )
         } catch {
-            lastError = "Local queue self-test failed."
+            lastError = TokenMeteringL10n.text(.queueSelfTestFailed, language: language)
             selfTestMessage = TokenUsageSelfTestMessage(
-                text: "Could not write to the local token metering queue.",
+                text: TokenMeteringL10n.text(.queueSelfTestWriteFailed, language: language),
                 isSuccess: false
             )
         }
@@ -105,7 +136,7 @@ final class TokenUsageDashboardStore: ObservableObject {
             artifactID: "artifact_selftest",
             runID: "run_selftest_\(compactTimestamp)",
             spanID: "span_selftest_\(index + 1)_\(compactTimestamp)",
-            aiTool: .unknown,
+            aiTool: .codex,
             taskType: .debugging,
             stage: .verify,
             model: "spill-self-test",
@@ -132,7 +163,7 @@ final class TokenUsageDashboardStore: ObservableObject {
             try usageStore.appendEvent(Self.makeLocalTestEvent(index: snapshot.eventCount))
             refresh()
         } catch {
-            lastError = "Could not save the local test event."
+            lastError = TokenMeteringL10n.text(.saveTestFailed, language: language)
         }
     }
 
@@ -144,7 +175,7 @@ final class TokenUsageDashboardStore: ObservableObject {
             .codeReview,
             .testGeneration
         ]
-        let tools: [TokenUsageAITool] = [.codex, .claude, .antigravity, .openAI]
+        let tools = TokenUsageAITool.dashboardTools
         let taskType = taskTypes[index % taskTypes.count]
         let aiTool = tools[index % tools.count]
         let inputTokens = 1_000 + index * 90

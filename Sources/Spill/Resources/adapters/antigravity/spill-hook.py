@@ -126,6 +126,23 @@ def _stable_span_id(*parts: str) -> str:
     return "span-" + hashlib.sha256(source.encode("utf-8")).hexdigest()[:12]
 
 
+def _payload_model(payload: dict) -> str:
+    keys = ("model", "model_name", "modelName", "model_id", "modelId", "modelVersion")
+    for container in (
+        payload,
+        payload.get("usage", {}),
+        payload.get("response", {}),
+        payload.get("metadata", {}),
+    ):
+        if not isinstance(container, dict):
+            continue
+        for key in keys:
+            value = container.get(key)
+            if isinstance(value, str) and _MODEL_ID.match(value):
+                return value
+    return "antigravity-unknown"
+
+
 def _consume_label_file() -> None:
     if not _USED_LABEL_FILE:
         return
@@ -157,8 +174,7 @@ def main() -> None:
     if total == 0:
         return
 
-    raw_model = payload.get("model", "")
-    model = raw_model if _MODEL_ID.match(raw_model) else "antigravity-unknown"
+    model = _payload_model(payload)
 
     session_id = str(payload.get("session_id", payload.get("conversationId", "")))
     run_id = _opaque(session_id, "run-" + uuid.uuid4().hex[:12])

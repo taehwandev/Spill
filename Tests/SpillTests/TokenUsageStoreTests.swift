@@ -9,11 +9,32 @@ final class TokenUsageStoreTests: XCTestCase {
 
         XCTAssertEqual(modes.map(\.id), ["local_only", "cloud_aggregate", "cloud_detailed"])
         XCTAssertEqual(modes.filter(\.isActive).map(\.id), ["local_only"])
-        XCTAssertTrue(modes[1].state.localizedCaseInsensitiveContains("login"))
-        XCTAssertTrue(modes[1].state.localizedCaseInsensitiveContains("explicit"))
-        XCTAssertTrue(modes[2].state.localizedCaseInsensitiveContains("separate"))
-        XCTAssertTrue(TokenMeteringPreferencesModel.forbiddenContentLabels.contains("commands"))
-        XCTAssertTrue(TokenMeteringPreferencesModel.forbiddenContentLabels.contains("prompts"))
+        XCTAssertEqual(modes[0].title, TokenMeteringL10n.text(.modeLocalOnlyTitle))
+        XCTAssertEqual(modes[1].state, TokenMeteringL10n.text(.modeCloudAggregateState))
+        XCTAssertEqual(modes[2].state, TokenMeteringL10n.text(.modeCloudDetailedState))
+        XCTAssertEqual(
+            TokenMeteringPreferencesModel.forbiddenContentLabels,
+            TokenMeteringL10n.forbiddenContentLabels()
+        )
+    }
+
+    func testTokenMeteringLocalizationCoversSupportedLanguages() {
+        XCTAssertEqual(TokenMeteringLanguage.current(preferredLanguages: ["ko-KR"], appLanguage: .automatic), .korean)
+        XCTAssertEqual(TokenMeteringLanguage.current(preferredLanguages: ["ja-JP"], appLanguage: .automatic), .japanese)
+        XCTAssertEqual(TokenMeteringLanguage.current(preferredLanguages: ["en-US"], appLanguage: .automatic), .english)
+        XCTAssertEqual(TokenMeteringLanguage.current(preferredLanguages: ["fr-FR"], appLanguage: .automatic), .english)
+        XCTAssertEqual(TokenMeteringLanguage.current(preferredLanguages: ["en-US"], appLanguage: .korean), .korean)
+        XCTAssertEqual(TokenMeteringL10n.text(.dashboardTitle, language: .english), "Local Token Metering")
+        XCTAssertEqual(TokenMeteringL10n.text(.dashboardTitle, language: .korean), "로컬 토큰 미터링")
+        XCTAssertEqual(TokenMeteringL10n.text(.dashboardTitle, language: .japanese), "ローカルトークン計測")
+        XCTAssertEqual(TokenMeteringL10n.text(.displayModeShare, language: .korean), "비중 %")
+        XCTAssertEqual(TokenMeteringL10n.text(.agentConnectionStatus, language: .korean), "에이전트 연결 상태")
+        XCTAssertEqual(TokenMeteringL10n.text(.adapterSetupRequired, language: .japanese), "ローカル追跡の設定が必要")
+        XCTAssertEqual(TokenMeteringL10n.adapterInstalled("spill-hook.py", language: .english), "Installed: spill-hook.py")
+        XCTAssertEqual(TokenMeteringL10n.hookConfigTarget("~/.claude/settings.json", language: .korean), "Hook 설정 -> ~/.claude/settings.json")
+        XCTAssertEqual(TokenMeteringL10n.taskLabel("git_commit", language: .korean), "Git 커밋")
+        XCTAssertEqual(TokenMeteringL10n.stageLabel("verify", language: .japanese), "検証")
+        XCTAssertEqual(TokenMeteringL10n.taskLabel("ux_copy_review", language: .english), "Ux Copy Review")
     }
 
     func testDashboardSnapshotAggregatesLocalEvents() {
@@ -23,9 +44,11 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(snapshot.totalTokens, 150)
         XCTAssertEqual(snapshot.kpis.first?.value, "150")
         XCTAssertEqual(snapshot.toolRows.map(\.title), ["Codex"])
-        XCTAssertEqual(snapshot.taskRows.map(\.title), ["Analysis"])
-        XCTAssertTrue(snapshot.sourceRows.contains { $0.title == "Generated output" && $0.value == "50" })
-        XCTAssertEqual(snapshot.sessions.first?.runID, "run_local_01")
+        XCTAssertEqual(snapshot.modelRows.map(\.title), ["local-manual"])
+        XCTAssertEqual(snapshot.taskRows.map(\.title), [TokenMeteringL10n.taskLabel("analysis")])
+        XCTAssertTrue(snapshot.sourceRows.contains { $0.title == TokenMeteringL10n.text(.sourceGeneratedOutput) && $0.value == "50" })
+        XCTAssertEqual(snapshot.sessions.first?.title, "Codex - Analysis - Plan")
+        XCTAssertEqual(snapshot.selectedSession?.title, "Codex - Analysis - Plan")
     }
 
     func testDashboardSnapshotFiltersByAITool() {
@@ -41,21 +64,86 @@ final class TokenUsageStoreTests: XCTestCase {
 
         XCTAssertEqual(allSnapshot.totalTokens, 180)
         XCTAssertEqual(allSnapshot.toolRows.map(\.title), ["Codex", "Claude"])
-        XCTAssertEqual(allSnapshot.toolFilters.first?.title, "All")
+        XCTAssertEqual(allSnapshot.toolFilters.first?.title, TokenMeteringL10n.text(.allTools))
         XCTAssertTrue(allSnapshot.toolFilters.first { $0.tool == .claude }?.detail.contains("30") == true)
         XCTAssertEqual(claudeSnapshot.eventCount, 1)
         XCTAssertEqual(claudeSnapshot.totalTokens, 30)
         XCTAssertEqual(claudeSnapshot.toolRows.map(\.title), ["Claude"])
-        XCTAssertEqual(claudeSnapshot.sessions.map(\.runID), ["run_local_01"])
+        XCTAssertEqual(claudeSnapshot.sessions.map(\.title), ["Claude - Analysis - Plan"])
     }
 
-    func testDashboardSourceRowsHideUnknownOnlyBreakdown() {
+    func testDashboardSnapshotShowsOnlySupportedAgentTools() {
+        let codex = Self.safeEvent(aiTool: .codex, spanID: "span_codex_01")
+        let unknown = Self.safeEvent(
+            aiTool: .unknown,
+            spanID: "span_unknown_01",
+            inputTokens: 900,
+            outputTokens: 100
+        )
+        let openAI = Self.safeEvent(
+            aiTool: .openAI,
+            spanID: "span_openai_01",
+            inputTokens: 400,
+            outputTokens: 100
+        )
+
+        let snapshot = TokenUsageDashboardSnapshot(events: [codex, unknown, openAI])
+        XCTAssertEqual(snapshot.totalTokens, 150)
+        XCTAssertEqual(snapshot.eventCount, 1)
+        XCTAssertEqual(snapshot.toolRows.map(\.title), ["Codex"])
+        XCTAssertEqual(snapshot.toolFilters.compactMap(\.tool), [.codex, .claude, .antigravity])
+
+        let unsupportedSelection = TokenUsageDashboardSnapshot(events: [codex], selectedTool: .unknown)
+        XCTAssertEqual(unsupportedSelection.totalTokens, 150)
+        XCTAssertTrue(unsupportedSelection.toolFilters.first?.isSelected == true)
+    }
+
+    func testDashboardSnapshotAggregatesModelRows() {
+        let codex = Self.safeEvent(
+            aiTool: .codex,
+            spanID: "span_model_codex_01",
+            inputTokens: 80,
+            outputTokens: 20,
+            model: "codex-test-model"
+        )
+        let claude = Self.safeEvent(
+            aiTool: .claude,
+            spanID: "span_model_claude_01",
+            inputTokens: 30,
+            outputTokens: 20,
+            model: "claude-test-model"
+        )
+
+        let snapshot = TokenUsageDashboardSnapshot(events: [codex, claude])
+        XCTAssertEqual(snapshot.modelRows.map(\.title), ["codex-test-model", "claude-test-model"])
+        XCTAssertEqual(snapshot.modelRows.map(\.value), ["100", "50"])
+
+        let percentageSnapshot = TokenUsageDashboardSnapshot(events: [codex, claude], displayMode: .percentage)
+        XCTAssertEqual(percentageSnapshot.modelRows.first?.title, "codex-test-model")
+        XCTAssertEqual(percentageSnapshot.modelRows.first?.value, "66.7%")
+
+        let claudeSnapshot = TokenUsageDashboardSnapshot(events: [codex, claude], selectedTool: .claude)
+        XCTAssertEqual(claudeSnapshot.modelRows.map(\.title), ["claude-test-model"])
+        XCTAssertEqual(claudeSnapshot.modelRows.map(\.value), ["50"])
+    }
+
+    func testDashboardSourceRowsShowUnknownOnlyBreakdownAsRuntimeTotal() {
         let snapshot = TokenUsageDashboardSnapshot(events: [
             Self.safeEvent(inputTokens: 22, outputTokens: 11)
         ])
 
         XCTAssertEqual(snapshot.totalTokens, 33)
-        XCTAssertTrue(snapshot.sourceRows.isEmpty)
+        XCTAssertTrue(snapshot.sourceRows.contains { $0.title == TokenMeteringL10n.text(.sourceUnavailable) && $0.value == "33" })
+    }
+
+    func testDashboardSnapshotMarksMissingLatencyAsUnavailable() {
+        let snapshot = TokenUsageDashboardSnapshot(events: [
+            Self.safeEvent(latencyMS: 0)
+        ])
+
+        XCTAssertEqual(snapshot.kpis.first(where: { $0.id == "latency" })?.value, TokenMeteringL10n.text(.latencyUnavailable))
+        XCTAssertEqual(snapshot.kpis.first(where: { $0.id == "latency" })?.detail, TokenMeteringL10n.text(.runtimeTimingUnavailable))
+        XCTAssertTrue(snapshot.sessions.first?.detail.contains(TokenMeteringL10n.text(.latencyUnavailable)) == true)
     }
 
     func testDashboardSourceRowsShowUnknownWhenMixedWithKnownBreakdown() {
@@ -64,8 +152,8 @@ final class TokenUsageStoreTests: XCTestCase {
         ])
 
         XCTAssertEqual(snapshot.totalTokens, 33)
-        XCTAssertTrue(snapshot.sourceRows.contains { $0.title == "Generated output" && $0.value == "11" })
-        XCTAssertTrue(snapshot.sourceRows.contains { $0.title == "Source unavailable" && $0.value == "22" })
+        XCTAssertTrue(snapshot.sourceRows.contains { $0.title == TokenMeteringL10n.text(.sourceGeneratedOutput) && $0.value == "11" })
+        XCTAssertTrue(snapshot.sourceRows.contains { $0.title == TokenMeteringL10n.text(.sourceUnavailable) && $0.value == "22" })
     }
 
     @MainActor
@@ -120,7 +208,7 @@ final class TokenUsageStoreTests: XCTestCase {
         let event = try XCTUnwrap(usageStore.loadEvents().first)
         XCTAssertEqual(event.projectID, "project_global")
         XCTAssertEqual(event.artifactID, "artifact_selftest")
-        XCTAssertEqual(event.aiTool, .unknown)
+        XCTAssertEqual(event.aiTool, .codex)
         XCTAssertEqual(event.taskType, .debugging)
         XCTAssertEqual(event.stage, .verify)
         XCTAssertEqual(event.model, "spill-self-test")
@@ -148,7 +236,7 @@ final class TokenUsageStoreTests: XCTestCase {
 
         XCTAssertEqual(dashboardStore.snapshot.eventCount, 0)
         XCTAssertEqual(dashboardStore.selfTestMessage?.isSuccess, false)
-        XCTAssertEqual(dashboardStore.lastError, "Local queue self-test failed.")
+        XCTAssertEqual(dashboardStore.lastError, TokenMeteringL10n.text(.queueSelfTestFailed))
     }
 
     func testSafeEventEncodesWithWebCompatibleKeys() throws {
@@ -244,8 +332,8 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(event.stage.rawValue, "handoff_review")
 
         let snapshot = TokenUsageDashboardSnapshot(events: [event])
-        XCTAssertEqual(snapshot.taskRows.first?.title, "Ux Copy Review")
-        XCTAssertEqual(snapshot.stageRows.first?.title, "Handoff Review")
+        XCTAssertEqual(snapshot.taskRows.first?.title, TokenMeteringL10n.taskLabel("ux_copy_review"))
+        XCTAssertEqual(snapshot.stageRows.first?.title, TokenMeteringL10n.stageLabel("handoff_review"))
     }
 
     func testDashboardUsesDetailedWorkflowLabels() {
@@ -273,9 +361,9 @@ final class TokenUsageStoreTests: XCTestCase {
         let snapshot = TokenUsageDashboardSnapshot(events: events)
         let taskTitles = Set(snapshot.taskRows.map(\.title))
 
-        XCTAssertTrue(taskTitles.contains("Code review"))
-        XCTAssertTrue(taskTitles.contains("Git commit"))
-        XCTAssertTrue(taskTitles.contains("Review response"))
+        XCTAssertTrue(taskTitles.contains(TokenMeteringL10n.taskLabel("code_review")))
+        XCTAssertTrue(taskTitles.contains(TokenMeteringL10n.taskLabel("git_commit")))
+        XCTAssertTrue(taskTitles.contains(TokenMeteringL10n.taskLabel("review_response")))
     }
 
     func testSanitizerRejectsUnsafeWorkflowLabels() throws {
@@ -486,11 +574,34 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(prompt.contains("If shell, filesystem, sandbox, or user-level config permission is required"))
         XCTAssertTrue(prompt.contains("ask for that permission and then run the installer"))
         XCTAssertTrue(prompt.contains("downloads the latest open-source Spill adapter files from spill.thdev.app"))
+        XCTAssertTrue(prompt.contains("SPILL_AI_TOOL=claude"))
+        XCTAssertTrue(prompt.contains("SPILL_AI_TOOL=antigravity"))
+        XCTAssertTrue(prompt.contains("workflow.py"))
+        XCTAssertTrue(prompt.contains("agent-preflight.py"))
+        XCTAssertTrue(prompt.contains("agent-finish-check.py"))
+        XCTAssertTrue(prompt.contains("Spill label handoff commands"))
+        XCTAssertTrue(prompt.contains("~/.codex/rules/default.rules"))
+        XCTAssertTrue(prompt.contains("managed prefix_rule entries"))
+        XCTAssertTrue(prompt.contains("Do not use broad python3, node, or shell-wide allow rules"))
+        XCTAssertTrue(prompt.contains("Workflow integration is only for better labels"))
+        XCTAssertTrue(prompt.contains("per-turn fallback labels must use --if-absent"))
+        XCTAssertTrue(prompt.contains("always attempt the per-turn fallback label with --if-absent"))
+        XCTAssertTrue(prompt.contains("Do not configure agents or workflows to send conversation titles"))
+        XCTAssertTrue(prompt.contains("Spill generates default work item names locally"))
+        XCTAssertFalse(prompt.contains("Optional Local Display Names Enabled"))
+        XCTAssertTrue(prompt.contains("code_review/verify"))
+        XCTAssertTrue(prompt.contains("review_response/implement"))
+        XCTAssertTrue(prompt.contains("uncategorized/summarize"))
         XCTAssertTrue(prompt.contains("Do you want Spill token usage to follow your workflow steps?"))
+        XCTAssertTrue(prompt.contains("per-turn labels must still come from the runtime instruction"))
+        XCTAssertTrue(prompt.contains("Do not add --if-absent to workflow step labels"))
         XCTAssertTrue(prompt.contains("script-based workflow entry points first"))
         XCTAssertTrue(prompt.contains("wire labels in the script first"))
         XCTAssertTrue(prompt.contains("receiver-only"))
         XCTAssertTrue(prompt.contains("write-code/edit/implement/patch -> code_generation/implement"))
+        XCTAssertTrue(prompt.contains("work item titles"))
+        XCTAssertTrue(prompt.contains("--label <current-tool>"))
+        XCTAssertTrue(prompt.contains("Never let Claude Code or Antigravity/AGY workflow routing fall back to codex"))
         XCTAssertTrue(prompt.contains("Do not save only the runtime instruction and call the task done"))
         XCTAssertTrue(prompt.contains("Do not give manual per-adapter setup steps as the primary answer"))
         XCTAssertTrue(prompt.contains("Do not claim Spill token metering is installed until these conditions are satisfied"))
@@ -503,24 +614,64 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertFalse(prompt.contains("root-level PostInvocation[] with matcher"))
     }
 
+    func testGlobalSetupPromptCanOptIntoLocalDisplayNames() {
+        let strictPrompt = TokenMeteringGlobalSetup.prompt(allowsLocalDisplayNames: false)
+        let optInPrompt = TokenMeteringGlobalSetup.prompt(allowsLocalDisplayNames: true)
+
+        XCTAssertEqual(strictPrompt, TokenMeteringGlobalSetup.globalPrompt)
+        XCTAssertFalse(strictPrompt.contains("Optional Local Display Names Enabled"))
+        XCTAssertTrue(optInPrompt.contains("Optional Local Display Names Enabled"))
+        XCTAssertTrue(optInPrompt.contains("not active until the user reapplies this copied prompt"))
+        XCTAssertTrue(optInPrompt.contains("separate from token usage data sync"))
+        XCTAssertTrue(optInPrompt.contains("settings sync for this selected setting"))
+        XCTAssertTrue(optInPrompt.contains("Do not send full commands or command text"))
+        XCTAssertTrue(optInPrompt.contains("Do not add display aliases to the usage event JSON body"))
+        XCTAssertTrue(optInPrompt.contains("Usage events must remain token-only"))
+    }
+
     func testHostedTokenMeteringSetupDocsDefineRuntimeContract() throws {
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let setup = try String(contentsOf: root.appendingPathComponent("docs/token-metering/setup-prompt.md"))
         let runtime = try String(contentsOf: root.appendingPathComponent("docs/token-metering/runtime-instruction.md"))
         let installer = try String(contentsOf: root.appendingPathComponent("docs/token-metering/install.sh"))
+        let helper = try String(contentsOf: root.appendingPathComponent("adapters/setup/spill-token-metering-setup.mjs"))
+        let agyHook = try String(contentsOf: root.appendingPathComponent("adapters/antigravity/spill-hook.py"))
 
         XCTAssertTrue(setup.contains("MANDATORY ACTION: install or repair Spill token metering now"))
         XCTAssertTrue(setup.contains("https://spill.thdev.app/token-metering/install.sh"))
-        XCTAssertTrue(setup.contains("install and repair OpenAI/Codex, Claude Code, and Antigravity/AGY together"))
-        XCTAssertTrue(setup.contains("Codex is the OpenAI agent runtime hook"))
+        XCTAssertTrue(setup.contains("install and repair Codex, Claude Code, and Antigravity/AGY together"))
+        XCTAssertTrue(setup.contains("Codex is the OpenAI-backed agent runtime hook"))
+        XCTAssertTrue(setup.contains("SPILL_AI_TOOL=claude"))
+        XCTAssertTrue(setup.contains("SPILL_AI_TOOL=antigravity"))
+        XCTAssertTrue(setup.contains("workflow.py"))
+        XCTAssertTrue(setup.contains("agent-preflight.py"))
+        XCTAssertTrue(setup.contains("agent-finish-check.py"))
+        XCTAssertTrue(setup.contains("Spill label handoff commands"))
+        XCTAssertTrue(setup.contains("~/.codex/rules/default.rules"))
+        XCTAssertTrue(setup.contains("managed `prefix_rule` entries"))
+        XCTAssertTrue(setup.contains("Do not use broad `python3`, `node`,\nor shell-wide allow rules"))
+        XCTAssertTrue(setup.contains("Workflow integration is\nonly for better labels"))
+        XCTAssertTrue(setup.contains("per-turn fallback labels must use\n`--if-absent`"))
+        XCTAssertTrue(setup.contains("Agents should always attempt the per-turn fallback label with `--if-absent`"))
+        XCTAssertTrue(setup.contains("Do not configure agents or workflows to send conversation titles"))
+        XCTAssertTrue(setup.contains("Spill generates default work item names locally"))
+        XCTAssertTrue(setup.contains("code_review/verify"))
+        XCTAssertTrue(setup.contains("review_response/implement"))
+        XCTAssertTrue(setup.contains("uncategorized/summarize"))
         XCTAssertTrue(setup.contains("Do you want Spill token usage to follow your workflow steps?"))
+        XCTAssertTrue(setup.contains("per-turn labels must still\ncome from the runtime instruction"))
+        XCTAssertTrue(setup.contains("Do not add `--if-absent` to workflow step labels"))
         XCTAssertTrue(setup.contains("script-based workflow entry points first"))
         XCTAssertTrue(setup.contains("wire labels in the script"))
         XCTAssertTrue(setup.contains("receiver-only integration"))
         XCTAssertTrue(setup.contains("write-code, edit, implement, patch"))
         XCTAssertTrue(setup.contains("code_generation"))
         XCTAssertTrue(setup.contains("git_commit"))
+        XCTAssertTrue(setup.contains("commit_message"))
+        XCTAssertTrue(setup.contains("--label <current-tool>"))
+        XCTAssertTrue(setup.contains("Never let Claude"))
         XCTAssertTrue(setup.contains("Never encode project names"))
+        XCTAssertTrue(setup.contains("Never encode conversation titles"))
         XCTAssertFalse(setup.contains("workflow-setup-prompt.md"))
         XCTAssertTrue(setup.contains(#"`~/.gemini/config/hooks.json` contains a `"spill-metering"` JSONHookSpec"#))
         XCTAssertTrue(setup.contains("Do not write `PostInvocation` as a root-level array"))
@@ -530,6 +681,21 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(runtime.contains("silent background metering instruction"))
         XCTAssertTrue(runtime.contains("Do not add Spill metering status lines to normal replies"))
         XCTAssertTrue(runtime.contains("short-lived safe label context"))
+        XCTAssertTrue(runtime.contains("Workflow integration is an enhancement, not a prerequisite"))
+        XCTAssertTrue(runtime.contains("Workflow-provided labels win"))
+        XCTAssertTrue(runtime.contains("--if-absent"))
+        XCTAssertTrue(runtime.contains("Always attempt the per-turn fallback label with `--if-absent`"))
+        XCTAssertTrue(runtime.contains("omit `--if-absent`"))
+        XCTAssertTrue(runtime.contains("uncategorized/summarize"))
+        XCTAssertTrue(runtime.contains("Never skip usage event creation only because"))
+        XCTAssertTrue(runtime.contains("Use `code_review` for review-only work"))
+        XCTAssertTrue(runtime.contains("Use `review_response`"))
+        XCTAssertTrue(runtime.contains("Use `git_commit`"))
+        XCTAssertTrue(runtime.contains("SPILL_AI_TOOL"))
+        XCTAssertTrue(runtime.contains("SPILL_TOKEN_USAGE_AI_TOOL"))
+        XCTAssertTrue(runtime.contains("Never let Claude Code or Antigravity/AGY workflow routing fall back to"))
+        XCTAssertTrue(runtime.contains("agent-preflight.py"))
+        XCTAssertTrue(runtime.contains("agent-finish-check.py"))
         XCTAssertTrue(runtime.contains("task_type` is a safe lowercase workflow slug"))
         XCTAssertTrue(runtime.contains("git_commit"))
         XCTAssertTrue(runtime.contains("workflow_setup"))
@@ -539,6 +705,8 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(runtime.contains("repeated identical hook payloads dedupe locally"))
         XCTAssertTrue(runtime.contains("prefer deduping the repeated payload over inflating totals"))
         XCTAssertTrue(runtime.contains("events-inbox"))
+        XCTAssertTrue(runtime.contains("Never send, derive, or store conversation titles"))
+        XCTAssertTrue(runtime.contains("Spill generates default work item display names locally"))
         XCTAssertTrue(runtime.contains("unknown` equal to `total_tokens`"))
         XCTAssertFalse(runtime.contains("ollama"))
 
@@ -547,8 +715,36 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(installer.contains("adapters/codex/spill-importer.mjs"))
         XCTAssertTrue(installer.contains("adapters/claude-code/spill-hook.py"))
         XCTAssertTrue(installer.contains("adapters/antigravity/spill-hook.py"))
-        XCTAssertTrue(installer.contains("--include codex,claude,antigravity,openai"))
+        XCTAssertTrue(installer.contains("--include codex,claude,antigravity"))
         XCTAssertTrue(installer.contains("--source-root \"$TMP_DIR/adapters\""))
+
+        XCTAssertTrue(helper.contains("configureAgentPlaybookRuntimeDefaults"))
+        XCTAssertTrue(helper.contains("configureCodexRuntimeRules"))
+        XCTAssertTrue(helper.contains(#".codex", "rules", "default.rules"#))
+        XCTAssertTrue(helper.contains("prefix_rule("))
+        XCTAssertTrue(helper.contains("spill-token-metering:begin"))
+        XCTAssertTrue(helper.contains("SPILL_AI_TOOL"))
+        XCTAssertTrue(helper.contains("SPILL_TOKEN_USAGE_AI_TOOL"))
+        XCTAssertTrue(helper.contains(#""claude""#))
+        XCTAssertTrue(helper.contains(#""antigravity""#))
+        XCTAssertTrue(helper.contains(#".claude", "settings.json"#))
+        XCTAssertTrue(helper.contains(#".gemini", "antigravity-cli", "settings.json"#))
+        XCTAssertTrue(helper.contains("workflow.py"))
+        XCTAssertTrue(helper.contains("agent-preflight.py"))
+        XCTAssertTrue(helper.contains("agent-finish-check.py"))
+        XCTAssertTrue(helper.contains("permissionPathVariants"))
+        XCTAssertTrue(helper.contains("isStaleAgentRuntimePermissionEntry"))
+        XCTAssertTrue(helper.contains("shellQuote(path)"))
+        XCTAssertTrue(helper.contains("node ${path} --label ${tool}"))
+        XCTAssertFalse(helper.contains("python3 scripts/${script}"))
+        XCTAssertTrue(helper.contains("--agent-playbook-home"))
+        XCTAssertTrue(helper.contains("--if-absent"))
+        XCTAssertTrue(helper.contains("readActiveRuntimeLabel"))
+        XCTAssertTrue(helper.contains(#""label_exists""#))
+
+        XCTAssertTrue(agyHook.contains("model_name"))
+        XCTAssertTrue(agyHook.contains("modelId"))
+        XCTAssertTrue(agyHook.contains("modelVersion"))
     }
 
     func testAdapterHookConfigsUseExactRuntimeHookShapes() throws {
@@ -604,14 +800,116 @@ final class TokenUsageStoreTests: XCTestCase {
         )
     }
 
+    func testDashboardSnapshotDisplayModes() {
+        let event = Self.safeEvent(
+            aiTool: .claude,
+            spanID: "span_cost_01",
+            inputTokens: 100_000,
+            outputTokens: 50_000,
+            taskType: .codeReview,
+            stage: .verify
+        )
+        let events = [event]
+
+        // 1. Tokens Mode
+        let tokensSnapshot = TokenUsageDashboardSnapshot(events: events, displayMode: .tokens)
+        XCTAssertEqual(tokensSnapshot.displayMode, .tokens)
+        XCTAssertEqual(tokensSnapshot.totalTokens, 150_000)
+        XCTAssertEqual(tokensSnapshot.kpis.first(where: { $0.id == "total" })?.value, "150,000")
+        XCTAssertEqual(tokensSnapshot.toolRows.first?.value, "150,000")
+        XCTAssertEqual(tokensSnapshot.sessions.first?.value, "150,000")
+
+        // 3. Percentage Mode
+        let percentageSnapshot = TokenUsageDashboardSnapshot(events: events, displayMode: .percentage)
+        XCTAssertEqual(percentageSnapshot.displayMode, .percentage)
+        XCTAssertEqual(percentageSnapshot.kpis.first(where: { $0.id == "total" })?.value, "100.0%")
+        XCTAssertEqual(percentageSnapshot.toolRows.first?.value, "100.0%")
+        XCTAssertEqual(percentageSnapshot.sessions.first?.value, "100.0%")
+
+        let emptyPercentageSnapshot = TokenUsageDashboardSnapshot(events: [], displayMode: .percentage)
+        XCTAssertEqual(emptyPercentageSnapshot.kpis.first(where: { $0.id == "total" })?.value, "0.0%")
+    }
+
+    func testDashboardSessionRowsSortByLatestThenTokensNotLocalizedDetail() {
+        let olderLarge = Self.safeEvent(
+            runID: "run_older_large",
+            spanID: "span_older_large",
+            inputTokens: 900,
+            outputTokens: 100,
+            taskType: .analysis,
+            stage: .plan,
+            model: "model-older",
+            createdAt: "2026-06-05T00:00:00.000Z"
+        )
+        let newerSmall = Self.safeEvent(
+            runID: "run_newer_small",
+            spanID: "span_newer_small",
+            inputTokens: 9,
+            outputTokens: 1,
+            taskType: .codeReview,
+            stage: .verify,
+            model: "model-review",
+            createdAt: "2026-06-05T00:01:00.000Z"
+        )
+        let sameLatestMoreTokens = Self.safeEvent(
+            runID: "run_same_latest_more_tokens",
+            spanID: "span_same_latest_more_tokens",
+            inputTokens: 90,
+            outputTokens: 10,
+            taskType: .codeGeneration,
+            stage: .implement,
+            model: "model-codegen",
+            createdAt: "2026-06-05T00:01:00.000Z"
+        )
+
+        let snapshot = TokenUsageDashboardSnapshot(events: [olderLarge, newerSmall, sameLatestMoreTokens])
+
+        XCTAssertEqual(
+            snapshot.sessions.map(\.title),
+            [
+                "Codex - Code generation - Implement",
+                "Codex - Code review - Verify",
+                "Codex - Analysis - Plan"
+            ]
+        )
+        XCTAssertFalse(snapshot.sessions.map(\.runID).contains("run_same_latest_more_tokens"))
+    }
+
+    func testDashboardSnapshotSelectsWorkItemBySafeID() {
+        let first = Self.safeEvent(
+            spanID: "span_first",
+            taskType: .analysis,
+            stage: .plan,
+            model: "model-first",
+            createdAt: "2026-06-05T00:00:00.000Z"
+        )
+        let second = Self.safeEvent(
+            spanID: "span_second",
+            taskType: .codeGeneration,
+            stage: .implement,
+            model: "model-second",
+            createdAt: "2026-06-05T00:01:00.000Z"
+        )
+        let initial = TokenUsageDashboardSnapshot(events: [first, second])
+        let selectedID = try! XCTUnwrap(initial.sessions.first { $0.title == "Codex - Analysis - Plan" }?.id)
+        let selected = TokenUsageDashboardSnapshot(events: [first, second], selectedSessionID: selectedID)
+
+        XCTAssertEqual(selected.selectedSession?.id, selectedID)
+        XCTAssertEqual(selected.selectedSession?.title, "Codex - Analysis - Plan")
+    }
+
     private static func safeEvent(
         aiTool: TokenUsageAITool = .codex,
+        runID: String = "run_local_01",
         spanID: String = "span_local_01",
         inputTokens: Int = 100,
         outputTokens: Int = 50,
         generatedOutput: Int? = nil,
         taskType: TokenUsageTaskType = .analysis,
-        stage: TokenUsageStage = .plan
+        stage: TokenUsageStage = .plan,
+        model: String = "local-manual",
+        latencyMS: Int = 20,
+        createdAt: String = "2026-06-05T00:00:00.000Z"
     ) -> TokenUsageEvent {
         let totalTokens = inputTokens + outputTokens
         let tokenBreakdown: TokenUsageBreakdown
@@ -650,18 +948,18 @@ final class TokenUsageStoreTests: XCTestCase {
             deviceID: "device_local",
             projectID: "project_local",
             artifactID: "artifact_one",
-            runID: "run_local_01",
+            runID: runID,
             spanID: spanID,
             aiTool: aiTool,
             taskType: taskType,
             stage: stage,
-            model: "local-manual",
+            model: model,
             inputTokens: inputTokens,
             outputTokens: outputTokens,
             totalTokens: totalTokens,
             tokenBreakdown: tokenBreakdown,
-            latencyMS: 20,
-            createdAt: "2026-06-05T00:00:00.000Z",
+            latencyMS: latencyMS,
+            createdAt: createdAt,
             syncMode: .localOnly
         )
     }

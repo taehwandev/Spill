@@ -3,11 +3,34 @@ import SwiftUI
 
 struct TokenMeteringDashboardView: View {
     @ObservedObject var store: TokenUsageDashboardStore
+    @ObservedObject private var settings: SpillSettings
     @State private var copiedTarget: String?
     @State private var isDiagnosticsExpanded = false
     @State private var hoveredFilterTitle: String? = nil
+    private let titleDidChange: () -> Void
 
     static let showsClearAction = true
+
+    init(
+        store: TokenUsageDashboardStore,
+        settings: SpillSettings = .shared,
+        titleDidChange: @escaping () -> Void = {}
+    ) {
+        self.store = store
+        _settings = ObservedObject(wrappedValue: settings)
+        self.titleDidChange = titleDidChange
+    }
+
+    private func t(_ key: TokenMeteringTextKey) -> String {
+        TokenMeteringL10n.text(
+            key,
+            language: currentLanguage
+        )
+    }
+
+    private var currentLanguage: TokenMeteringLanguage {
+        TokenMeteringLanguage.current(appLanguage: settings.appLanguage)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -39,7 +62,13 @@ struct TokenMeteringDashboardView: View {
         .background(VisualEffectView(material: .windowBackground, blendingMode: .withinWindow))
         .frame(minWidth: 1060, minHeight: 640)
         .onAppear {
+            titleDidChange()
+            store.setLanguage(currentLanguage)
             store.refresh()
+        }
+        .onChange(of: settings.appLanguage) { _, _ in
+            titleDidChange()
+            store.setLanguage(currentLanguage)
         }
     }
 
@@ -64,12 +93,13 @@ struct TokenMeteringDashboardView: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 8) {
-                    Text("Local Token Metering")
+                    Text(t(.dashboardTitle))
                         .font(.system(size: 18, weight: .bold))
+                    alphaBadge
                     localOnlyBadge
                 }
 
-                Text("Local queue first. Adapters write event files; Spill imports them into the app-owned store.")
+                Text(t(.dashboardSubtitle))
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -77,24 +107,46 @@ struct TokenMeteringDashboardView: View {
 
             Spacer(minLength: 16)
 
+            TokenMeteringInfoButton(
+                title: t(.displayModeInfoTitle),
+                detail: t(.displayModeInfoDetail)
+            )
+
+            Picker("", selection: Binding(
+                get: { store.displayMode },
+                set: { store.setDisplayMode($0) }
+            )) {
+                ForEach(TokenUsageDisplayMode.allCases) { mode in
+                    Text(mode.localizedTitle(language: currentLanguage)).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .frame(width: 240)
+
             HStack(spacing: 8) {
                 Button {
                     store.refresh()
                 } label: {
-                    Label("Refresh", systemImage: "arrow.clockwise")
+                    Label(t(.refresh), systemImage: "arrow.clockwise")
                 }
 
                 Button {
-                    copyToClipboard(TokenMeteringGlobalSetup.globalPrompt, target: "prompt")
+                    copyToClipboard(
+                        TokenMeteringGlobalSetup.prompt(
+                            allowsLocalDisplayNames: settings.tokenMeteringPromptAllowsLocalDisplayNames
+                        ),
+                        target: "prompt"
+                    )
                 } label: {
-                    Label(copiedTarget == "prompt" ? "Copied" : "Copy Prompt", systemImage: copiedTarget == "prompt" ? "checkmark" : "doc.on.doc")
+                    Label(copiedTarget == "prompt" ? t(.copied) : t(.copyPrompt), systemImage: copiedTarget == "prompt" ? "checkmark" : "doc.on.doc")
                 }
 
                 if Self.showsClearAction {
                     Button(role: .destructive) {
                         store.clearLocalEvents()
                     } label: {
-                        Label("Clear", systemImage: "trash")
+                        Label(t(.clear), systemImage: "trash")
                     }
                     .disabled(store.snapshot.eventCount == 0)
                 }
@@ -109,7 +161,7 @@ struct TokenMeteringDashboardView: View {
     private var leftRail: some View {
         ScrollView(.vertical, showsIndicators: false) {
             VStack(alignment: .leading, spacing: 14) {
-                railPanel(title: "Period") {
+                railPanel(title: t(.period)) {
                     VStack(spacing: 7) {
                         ForEach(store.snapshot.periodFilters) { filter in
                             railFilterButton(
@@ -123,7 +175,7 @@ struct TokenMeteringDashboardView: View {
                     }
                 }
 
-                railPanel(title: "AI Tool") {
+                railPanel(title: t(.aiTool)) {
                     VStack(spacing: 7) {
                         ForEach(store.snapshot.toolFilters) { filter in
                             railFilterButton(
@@ -137,18 +189,18 @@ struct TokenMeteringDashboardView: View {
                     }
                 }
 
-                railPanel(title: "Workflow Focus") {
+                railPanel(title: t(.workflowFocus)) {
                     VStack(spacing: 8) {
-                        compactSummaryRows(store.snapshot.taskRows.prefix(3), emptyText: "No task split")
+                        compactSummaryRows(store.snapshot.taskRows.prefix(3), emptyText: t(.noTaskSplit))
                         Divider().opacity(0.35)
-                        compactSummaryRows(store.snapshot.stageRows.prefix(3), emptyText: "No stage split")
+                        compactSummaryRows(store.snapshot.stageRows.prefix(3), emptyText: t(.noStageSplit))
                     }
                 }
 
-                railPanel(title: "Receivers") {
+                railPanel(title: t(.receivers)) {
                     VStack(spacing: 8) {
-                        receiverTile(title: "Local Queue", state: "Default", systemImage: "tray.and.arrow.down", tint: .green)
-                        receiverTile(title: "Adapters", state: "On demand", systemImage: "bolt.horizontal", tint: .teal)
+                        receiverTile(title: t(.localQueue), state: t(.defaultState), systemImage: "tray.and.arrow.down", tint: .green)
+                        receiverTile(title: t(.adapters), state: t(.onDemand), systemImage: "bolt.horizontal", tint: .teal)
                     }
                 }
 
@@ -194,22 +246,42 @@ struct TokenMeteringDashboardView: View {
     private var analyticsGrid: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top, spacing: 14) {
-                dashboardPanel(title: "AI Tool Distribution", subtitle: "Combined and per-tool local usage") {
-                    barRows(store.snapshot.toolRows, emptyText: "No AI tool data yet.")
+                dashboardPanel(
+                    title: t(.aiToolDistribution),
+                    subtitle: t(.aiToolDistributionSubtitle),
+                    infoTitle: t(.aiToolInfoTitle),
+                    infoDetail: t(.aiToolInfoDetail)
+                ) {
+                    barRows(store.snapshot.toolRows, emptyText: t(.noAIToolData))
                 }
 
-                dashboardPanel(title: "Workflow Breakdown", subtitle: "Task categories from safe slugs") {
-                    barRows(store.snapshot.taskRows, emptyText: "No workflow data yet.")
+                dashboardPanel(
+                    title: t(.workflowBreakdown),
+                    subtitle: t(.workflowBreakdownSubtitle),
+                    infoTitle: t(.workflowInfoTitle),
+                    infoDetail: t(.workflowInfoDetail)
+                ) {
+                    barRows(store.snapshot.taskRows, emptyText: t(.noWorkflowData))
                 }
             }
 
             HStack(alignment: .top, spacing: 14) {
-                dashboardPanel(title: "Stage Breakdown", subtitle: "Plan, implement, verify, and custom phases") {
-                    barRows(store.snapshot.stageRows, emptyText: "No stage data yet.")
+                dashboardPanel(
+                    title: t(.stageBreakdown),
+                    subtitle: t(.stageBreakdownSubtitle),
+                    infoTitle: t(.stageInfoTitle),
+                    infoDetail: t(.stageInfoDetail)
+                ) {
+                    barRows(store.snapshot.stageRows, emptyText: t(.noStageData))
                 }
 
-                dashboardPanel(title: "Source Breakdown", subtitle: "Numeric buckets only") {
-                    barRows(store.snapshot.sourceRows, emptyText: "No source breakdown yet.")
+                dashboardPanel(
+                    title: t(.sourceBreakdown),
+                    subtitle: t(.sourceBreakdownSubtitle),
+                    infoTitle: t(.sourceInfoTitle),
+                    infoDetail: t(.sourceInfoDetail)
+                ) {
+                    barRows(store.snapshot.sourceRows, emptyText: t(.noSourceBreakdown))
                 }
             }
         }
@@ -219,6 +291,7 @@ struct TokenMeteringDashboardView: View {
         ScrollView(.vertical, showsIndicators: false) {
             VStack(alignment: .leading, spacing: 14) {
                 detailPanel
+                modelPanel
                 sourcePanel
                 privacyPanel
             }
@@ -227,12 +300,16 @@ struct TokenMeteringDashboardView: View {
     }
 
     private var detailPanel: some View {
-        railPanel(title: "Selected Run") {
-            if let session = store.snapshot.sessions.first {
+        railPanel(
+            title: t(.selectedRun),
+            infoTitle: t(.runsInfoTitle),
+            infoDetail: t(.runsInfoDetail)
+        ) {
+            if let session = store.snapshot.selectedSession {
                 VStack(alignment: .leading, spacing: 11) {
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(session.runID)
-                            .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        Text(session.title)
+                            .font(.system(size: 11, weight: .bold))
                             .lineLimit(2)
                         Text(session.detail)
                             .font(.system(size: 10, weight: .medium))
@@ -241,80 +318,113 @@ struct TokenMeteringDashboardView: View {
                     }
 
                     HStack {
-                        metricPill(title: "Total", value: session.value)
-                        metricPill(title: "Events", value: "\(store.snapshot.eventCount)")
+                        metricPill(title: t(.total), value: session.value)
+                        metricPill(title: t(.events), value: "\(session.eventCount)")
                     }
                 }
             } else {
                 emptyMessage(
-                    title: "No run selected",
-                    detail: "Events will appear here after a local runtime or adapter records exact token counts."
+                    title: t(.noRunSelected),
+                    detail: t(.noRunSelectedDetail)
                 )
+            }
+        }
+    }
+
+    private var modelPanel: some View {
+        railPanel(
+            title: t(.modelBreakdown),
+            infoTitle: t(.modelInfoTitle),
+            infoDetail: t(.modelInfoDetail)
+        ) {
+            VStack(spacing: 8) {
+                compactSummaryRows(store.snapshot.modelRows.prefix(5), emptyText: t(.noModelData))
             }
         }
     }
 
     private var sourcePanel: some View {
-        railPanel(title: "Source Detail") {
+        railPanel(
+            title: t(.sourceDetail),
+            infoTitle: t(.sourceInfoTitle),
+            infoDetail: t(.sourceInfoDetail)
+        ) {
             VStack(spacing: 8) {
-                compactSummaryRows(store.snapshot.sourceRows.prefix(5), emptyText: "No source buckets")
+                compactSummaryRows(store.snapshot.sourceRows.prefix(5), emptyText: t(.noSourceBuckets))
             }
         }
     }
 
     private var privacyPanel: some View {
-        railPanel(title: "Privacy Boundary") {
+        railPanel(title: t(.privacyBoundary)) {
             VStack(alignment: .leading, spacing: 9) {
-                Text("No prompts, commands, files, logs, diffs, source content, environment values, or secrets.")
+                Text(t(.privacyBoundaryDetail))
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
-                FlowingTokenMeteringLabels(labels: Array(TokenMeteringPreferencesModel.forbiddenContentLabels.prefix(6)))
+                FlowingTokenMeteringLabels(
+                    labels: Array(TokenMeteringL10n.forbiddenContentLabels(language: currentLanguage).prefix(6))
+                )
             }
         }
     }
 
     private var sessionsTable: some View {
-        dashboardPanel(title: "Runs", subtitle: "Opaque local run groups and spans") {
+        dashboardPanel(
+            title: t(.runs),
+            subtitle: t(.runsSubtitle),
+            infoTitle: t(.runsInfoTitle),
+            infoDetail: t(.runsInfoDetail)
+        ) {
             if store.snapshot.sessions.isEmpty {
                 emptyMessage(
-                    title: "No local token events yet",
-                    detail: "This is expected until an agent runtime or adapter exposes exact token counts."
+                    title: t(.noLocalTokenEvents),
+                    detail: t(.noLocalTokenEventsDetail)
                 )
             } else {
                 VStack(spacing: 0) {
                     HStack(spacing: 12) {
-                        tableHeader("Run")
-                        tableHeader("Spans")
+                        tableHeader(t(.run))
+                        tableHeader(t(.events))
                             .frame(width: 150, alignment: .leading)
-                        tableHeader("Tokens")
+                        tableHeader(t(.tokens))
                             .frame(width: 96, alignment: .trailing)
                     }
                     .padding(.horizontal, 12)
                     .padding(.bottom, 8)
 
                     ForEach(store.snapshot.sessions.prefix(8)) { session in
-                        HStack(spacing: 12) {
-                            Text(session.runID)
-                                .font(.system(size: 11, weight: .bold, design: .monospaced))
-                                .lineLimit(1)
-                            Text(session.detail)
-                                .font(.system(size: 10, weight: .medium))
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                                .frame(width: 150, alignment: .leading)
-                            Text(session.value)
-                                .font(.system(size: 11, weight: .bold, design: .monospaced))
-                                .frame(width: 96, alignment: .trailing)
+                        let isSelected = store.snapshot.selectedSession?.id == session.id
+                        Button {
+                            store.selectSession(session.id)
+                        } label: {
+                            HStack(spacing: 12) {
+                                Text(session.title)
+                                    .font(.system(size: 11, weight: .bold))
+                                    .lineLimit(1)
+                                Text(session.detail)
+                                    .font(.system(size: 10, weight: .medium))
+                                    .foregroundStyle(isSelected ? .white.opacity(0.82) : .secondary)
+                                    .lineLimit(1)
+                                    .frame(width: 150, alignment: .leading)
+                                Text(session.value)
+                                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                    .frame(width: 96, alignment: .trailing)
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                            .foregroundStyle(isSelected ? .white : .primary)
+                            .background(
+                                isSelected ? Color.teal : Color.primary.opacity(0.025),
+                                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            )
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .stroke(isSelected ? Color.teal.opacity(0.35) : Color.primary.opacity(0.04), lineWidth: 0.5)
+                            }
                         }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 10)
-                        .background(Color.primary.opacity(0.025), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .stroke(Color.primary.opacity(0.04), lineWidth: 0.5)
-                        }
+                        .buttonStyle(.plain)
                         .padding(.top, 6)
                     }
                 }
@@ -325,7 +435,7 @@ struct TokenMeteringDashboardView: View {
     private var diagnostics: some View {
         DisclosureGroup(isExpanded: $isDiagnosticsExpanded) {
             VStack(alignment: .leading, spacing: 8) {
-                Text("Writes one synthetic event through the local queue and imports it into the app-owned store.")
+                Text(t(.diagnosticsDetail))
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -335,7 +445,7 @@ struct TokenMeteringDashboardView: View {
                         await store.runLocalQueueSelfTest()
                     }
                 } label: {
-                    Label(store.isRunningSelfTest ? "Writing" : "Queue Test", systemImage: store.isRunningSelfTest ? "hourglass" : "tray.and.arrow.down")
+                    Label(store.isRunningSelfTest ? t(.writing) : t(.queueTest), systemImage: store.isRunningSelfTest ? "hourglass" : "tray.and.arrow.down")
                 }
                 .disabled(store.isRunningSelfTest)
 
@@ -355,7 +465,7 @@ struct TokenMeteringDashboardView: View {
             }
             .padding(.top, 8)
         } label: {
-            Label("Diagnostics", systemImage: "stethoscope")
+            Label(t(.diagnostics), systemImage: "stethoscope")
                 .font(.system(size: 11, weight: .semibold))
         }
         .padding(14)
@@ -373,15 +483,23 @@ struct TokenMeteringDashboardView: View {
     private func dashboardPanel<Content: View>(
         title: String,
         subtitle: String,
+        infoTitle: String? = nil,
+        infoDetail: String? = nil,
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(.system(size: 15, weight: .bold))
-                Text(subtitle)
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(.secondary)
+            HStack(alignment: .top, spacing: 8) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.system(size: 15, weight: .bold))
+                    Text(subtitle)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 8)
+                if let infoTitle, let infoDetail {
+                    TokenMeteringInfoButton(title: infoTitle, detail: infoDetail)
+                }
             }
 
             content()
@@ -401,13 +519,21 @@ struct TokenMeteringDashboardView: View {
 
     private func railPanel<Content: View>(
         title: String,
+        infoTitle: String? = nil,
+        infoDetail: String? = nil,
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: 11) {
-            Text(title.uppercased())
-                .font(.system(size: 9, weight: .black))
-                .tracking(1.0)
-                .foregroundStyle(.secondary)
+            HStack(spacing: 6) {
+                Text(title.uppercased())
+                    .font(.system(size: 9, weight: .black))
+                    .tracking(1.0)
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 4)
+                if let infoTitle, let infoDetail {
+                    TokenMeteringInfoButton(title: infoTitle, detail: infoDetail)
+                }
+            }
 
             content()
         }
@@ -511,7 +637,7 @@ struct TokenMeteringDashboardView: View {
     private func barRows(_ rows: [TokenUsageDashboardBarRow], emptyText: String) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             if rows.isEmpty {
-                emptyMessage(title: emptyText, detail: "Waiting for safe local usage events.")
+                emptyMessage(title: emptyText, detail: t(.waitingForEvents))
             } else {
                 ForEach(rows.prefix(6)) { row in
                     VStack(alignment: .leading, spacing: 6) {
@@ -610,8 +736,18 @@ struct TokenMeteringDashboardView: View {
         .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 9))
     }
 
+    private var alphaBadge: some View {
+        Text("ALPHA")
+            .font(.system(size: 8.5, weight: .black))
+            .tracking(0.9)
+            .foregroundStyle(.orange)
+            .padding(.horizontal, 8)
+            .frame(height: 21)
+            .background(Color.orange.opacity(0.11), in: Capsule(style: .continuous))
+    }
+
     private var localOnlyBadge: some View {
-        Text("LOCAL ONLY")
+        Text(t(.localOnly))
             .font(.system(size: 8.5, weight: .black))
             .tracking(0.9)
             .foregroundStyle(.green)
@@ -634,5 +770,38 @@ struct TokenMeteringDashboardView: View {
 
     private var dashboardCardBackground: some ShapeStyle {
         .regularMaterial
+    }
+}
+
+private struct TokenMeteringInfoButton: View {
+    let title: String
+    let detail: String
+
+    @State private var isPresented = false
+
+    var body: some View {
+        Button {
+            isPresented.toggle()
+        } label: {
+            Image(systemName: "info.circle")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 22, height: 22)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(detail)
+        .popover(isPresented: $isPresented, arrowEdge: .top) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(title)
+                    .font(.system(size: 13, weight: .bold))
+                Text(detail)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(14)
+            .frame(width: 260, alignment: .leading)
+        }
     }
 }

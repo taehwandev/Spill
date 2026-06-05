@@ -12,7 +12,9 @@ const apply = args.apply === true;
 const force = args.force === true;
 const json = args.json === true;
 const installRoot = expandHome(args.installDir ?? join(homedir(), "Library/Application Support/Spill/adapters"));
-const defaultHookAdapters = "codex,claude,antigravity,openai";
+const setupHelperPath = join(installRoot, "setup", "spill-token-metering-setup.mjs");
+const agentPlaybookRoot = expandHome(args.agentPlaybookHome ?? process.env.AGENTPLAYBOOK_HOME ?? join(homedir(), "Documents/KeyFlowVault/AgentPlaybook"));
+const defaultHookAdapters = "codex,claude,antigravity";
 const alwaysInstallAdapters = new Set(defaultHookAdapters.split(","));
 const include = new Set((args.include ?? defaultHookAdapters).split(",").map((item) => item.trim()).filter(Boolean));
 const workflowHook = args.workflowHook ? expandHome(args.workflowHook) : null;
@@ -33,11 +35,13 @@ if (args.label) {
     stage: args.stage,
     labelFile: args.labelFile,
     ttlMinutes: args.ttlMinutes,
+    ifAbsent: args.ifAbsent === true,
   });
+  const action = label.skipped ? "label_exists" : "labeled";
   if (json) {
-    process.stdout.write(`${JSON.stringify({ action: "labeled", ...label }, null, 2)}\n`);
+    process.stdout.write(`${JSON.stringify({ action, ...label }, null, 2)}\n`);
   } else {
-    process.stdout.write(`labeled: ${label.tool} ${label.task_type}/${label.stage}\n`);
+    process.stdout.write(`${action}: ${label.tool} ${label.task_type}/${label.stage}\n`);
   }
   process.exit(0);
 }
@@ -105,6 +109,8 @@ if (workflowHook) {
   await mergeAgyHookFile(workflowHook, adapter.destination, "workflow");
 }
 
+await configureAgentPlaybookRuntimeDefaults();
+
 if (json) {
   process.stdout.write(`${JSON.stringify({ apply, source_root: sourceRoot, install_root: installRoot, results }, null, 2)}\n`);
 } else {
@@ -113,24 +119,23 @@ if (json) {
     process.stdout.write(`${result.action}: ${result.tool}${suffix}\n`);
   }
   if (!apply) {
-    process.stdout.write("dry-run: pass --apply to install OpenAI/Codex, Claude Code, and Antigravity/AGY metering in one pass.\n");
+    process.stdout.write("dry-run: pass --apply to install Codex, Claude Code, and Antigravity/AGY metering in one pass.\n");
   }
 }
 
 async function installSetupHelper() {
-  const destination = join(installRoot, "setup", "spill-token-metering-setup.mjs");
   if (!apply) {
-    results.push({ tool: "setup", action: "would_install", path: destination });
+    results.push({ tool: "setup", action: "would_install", path: setupHelperPath });
     return;
   }
 
   const source = fileURLToPath(import.meta.url);
-  await mkdir(dirname(destination), { recursive: true });
-  if (resolve(source) !== resolve(destination)) {
-    await copyFile(source, destination);
+  await mkdir(dirname(setupHelperPath), { recursive: true });
+  if (resolve(source) !== resolve(setupHelperPath)) {
+    await copyFile(source, setupHelperPath);
   }
-  await chmod(destination, 0o755);
-  results.push({ tool: "setup", action: "installed", path: destination });
+  await chmod(setupHelperPath, 0o755);
+  results.push({ tool: "setup", action: "installed", path: setupHelperPath });
 }
 
 async function installAdapter(adapter) {
@@ -163,8 +168,47 @@ async function configureCodex(scriptPath) {
 
 async function configureClaude(scriptPath) {
   const target = join(homedir(), ".claude", "settings.json");
-  const command = `python3 ${shellQuote(scriptPath)}`;
-  await mergeStopHookFile(target, command, 5, "claude", /Spill\/adapters\/claude-code\/spill-hook\.py|claude-code\/spill-hook\.py/);
+  const stopCommand = `SPILL_AI_TOOL=claude python3 ${shellQuote(scriptPath)}`;
+  await mergeStopHookFile(target, stopCommand, 5, "claude", /Spill\/adapters\/claude-code\/spill-hook\.py|claude-code\/spill-hook\.py/);
+  await mergeClaudeBaselineLabelHook(target);
+}
+
+async function mergeClaudeBaselineLabelHook(target) {
+  const workflowScript = join(agentPlaybookRoot, "scripts", "workflow.py");
+  const baselineCommand = `SPILL_AI_TOOL=claude python3 ${shellQuote(workflowScript)} route triage --request-classified`;
+  const match = /workflow\.py.*route.*triage.*--request-classified/;
+
+  if (!apply) {
+    results.push({ tool: "claude", action: "would_configure_baseline_label", path: target });
+    return;
+  }
+
+  const config = await readJSONObject(target);
+  const hooks = plainObject(config.hooks) ? config.hooks : {};
+  const groups = Array.isArray(hooks.UserPromptSubmit) ? hooks.UserPromptSubmit : [];
+  const cleaned = [];
+  for (const group of groups) {
+    if (!plainObject(group) || !Array.isArray(group.hooks)) {
+      cleaned.push(group);
+      continue;
+    }
+    const remaining = group.hooks.filter(
+      (hook) => !plainObject(hook) || typeof hook.command !== "string" || !match.test(hook.command)
+    );
+    if (remaining.length > 0) {
+      cleaned.push({ ...group, hooks: remaining });
+    }
+  }
+
+  cleaned.push({
+    matcher: "",
+    hooks: [{ type: "command", command: baselineCommand, timeout: 5 }],
+  });
+
+  hooks.UserPromptSubmit = cleaned;
+  config.hooks = hooks;
+  await writeJSONObject(target, config);
+  results.push({ tool: "claude", action: "configured_baseline_label", path: target });
 }
 
 async function configureAntigravity(scriptPath) {
@@ -254,6 +298,154 @@ async function mergeAgyHookFile(target, scriptPath, tool) {
   results.push({ tool, action: "configured", path: target });
 }
 
+async function configureAgentPlaybookRuntimeDefaults() {
+  if (include.has("codex")) {
+    await configureCodexRuntimeRules();
+  }
+  if (include.has("claude")) {
+    await configureAgentRuntimeSettings({
+      tool: "claude",
+      target: join(homedir(), ".claude", "settings.json"),
+      permissionPrefix: "Bash",
+    });
+  }
+  if (include.has("antigravity")) {
+    await configureAgentRuntimeSettings({
+      tool: "antigravity",
+      target: join(homedir(), ".gemini", "antigravity-cli", "settings.json"),
+      permissionPrefix: "command",
+    });
+  }
+}
+
+async function configureCodexRuntimeRules() {
+  const target = join(homedir(), ".codex", "rules", "default.rules");
+  const block = codexRuntimeRulesBlock();
+  if (!apply) {
+    results.push({ tool: "codex", action: "would_configure_agent_runtime", path: target });
+    return;
+  }
+
+  await writeManagedTextBlock({
+    path: target,
+    begin: "# spill-token-metering:begin",
+    end: "# spill-token-metering:end",
+    block,
+  });
+  results.push({ tool: "codex", action: "configured_agent_runtime", path: target });
+}
+
+function codexRuntimeRulesBlock() {
+  const rules = [];
+  const scripts = ["workflow.py", "agent-preflight.py", "agent-finish-check.py"];
+  for (const script of scripts) {
+    rules.push(codexPrefixRule({
+      pattern: ["python3", join(agentPlaybookRoot, "scripts", script)],
+      justification: `Allow trusted AgentPlaybook ${script} for Spill workflow labels and evidence.`,
+    }));
+  }
+  rules.push(codexPrefixRule({
+    pattern: ["node", setupHelperPath, "--label", "codex"],
+    justification: "Allow Spill Codex label handoff without repeated approval prompts.",
+  }));
+  return [
+    "# spill-token-metering:begin",
+    "# Managed by Spill token metering setup. Keep narrow; do not replace with broad python3/node allow rules.",
+    ...rules,
+    "# spill-token-metering:end",
+  ].join("\n");
+}
+
+function codexPrefixRule({ pattern, justification }) {
+  const encodedPattern = pattern.map((item) => JSON.stringify(item)).join(", ");
+  return [
+    "prefix_rule(",
+    `    pattern = [${encodedPattern}],`,
+    '    decision = "allow",',
+    `    justification = ${JSON.stringify(justification)},`,
+    ")",
+  ].join("\n");
+}
+
+async function configureAgentRuntimeSettings({ tool, target, permissionPrefix }) {
+  if (!apply) {
+    results.push({ tool, action: "would_configure_agent_runtime", path: target });
+    return;
+  }
+
+  const config = await readJSONObject(target);
+  const env = plainObject(config.env) ? config.env : {};
+  env.SPILL_AI_TOOL = tool;
+  env.SPILL_TOKEN_USAGE_AI_TOOL = tool;
+  config.env = env;
+
+  const permissions = plainObject(config.permissions) ? config.permissions : {};
+  const allow = Array.isArray(permissions.allow)
+    ? permissions.allow.filter(
+        (item) => typeof item === "string" && !isStaleAgentRuntimePermissionEntry(item, permissionPrefix)
+      )
+    : [];
+  const existing = new Set(allow);
+  for (const entry of agentRuntimePermissionEntries(tool, permissionPrefix)) {
+    if (!existing.has(entry)) {
+      allow.push(entry);
+      existing.add(entry);
+    }
+  }
+  permissions.allow = allow;
+  config.permissions = permissions;
+
+  await writeJSONObject(target, config);
+  results.push({ tool, action: "configured_agent_runtime", path: target });
+}
+
+function agentRuntimePermissionEntries(tool, permissionPrefix) {
+  const entries = [];
+  const scripts = ["workflow.py", "agent-preflight.py", "agent-finish-check.py"];
+  const commandForms = new Set();
+
+  for (const script of scripts) {
+    const absolute = join(agentPlaybookRoot, "scripts", script);
+    for (const path of permissionPathVariants(absolute)) {
+      addPermissionCommandVariants(commandForms, `python3 ${path}`);
+      addPermissionCommandVariants(commandForms, `SPILL_AI_TOOL=${tool} python3 ${path}`);
+      addPermissionCommandVariants(commandForms, `SPILL_TOKEN_USAGE_AI_TOOL=${tool} python3 ${path}`);
+    }
+  }
+
+  for (const path of permissionPathVariants(setupHelperPath)) {
+    addPermissionCommandVariants(commandForms, `node ${path} --label ${tool}`);
+  }
+
+  for (const command of commandForms) {
+    entries.push(`${permissionPrefix}(${command})`);
+  }
+  return entries;
+}
+
+function isStaleAgentRuntimePermissionEntry(entry, permissionPrefix) {
+  const prefix = `${permissionPrefix}(`;
+  if (!entry.startsWith(prefix) || !entry.endsWith(")")) return false;
+  const command = entry.slice(prefix.length, -1);
+  return /^(?:SPILL_(?:AI_TOOL|TOKEN_USAGE_AI_TOOL)=[a-z]+ )?python3 scripts\/(?:workflow\.py|agent-preflight\.py|agent-finish-check\.py)(?::\*| \*)?$/.test(command);
+}
+
+function addPermissionCommandVariants(commandForms, command) {
+  commandForms.add(command);
+  commandForms.add(`${command}:*`);
+  commandForms.add(`${command} *`);
+}
+
+function permissionPathVariants(path) {
+  const variants = new Set([path, shellQuote(path), escapePermissionPath(path)]);
+  const homeRelative = homeRelativePath(path);
+  if (homeRelative !== path) {
+    variants.add(homeRelative);
+    variants.add(escapePermissionPath(homeRelative));
+  }
+  return [...variants];
+}
+
 async function readJSONObject(path) {
   if (!await exists(path)) return {};
   const data = await readFile(path, "utf8");
@@ -275,7 +467,24 @@ async function writeJSONObject(path, value) {
   await rename(temporary, path);
 }
 
-async function writeRuntimeLabel({ tool, taskType, stage, labelFile, ttlMinutes }) {
+async function writeManagedTextBlock({ path, begin, end, block }) {
+  await mkdir(dirname(path), { recursive: true });
+  const before = await exists(path) ? await readFile(path, "utf8") : "";
+  const pattern = new RegExp(`${escapeRegExp(begin)}[\\s\\S]*?${escapeRegExp(end)}\\n?`, "m");
+  const normalizedBlock = `${block}\n`;
+  const after = pattern.test(before)
+    ? before.replace(pattern, normalizedBlock)
+    : `${before}${before && !before.endsWith("\n") ? "\n" : ""}${normalizedBlock}`;
+  if (after === before) return;
+  if (await exists(path)) {
+    await copyFile(path, `${path}.spill-backup-${STAMP}`);
+  }
+  const temporary = `${path}.tmp-${process.pid}`;
+  await writeFile(temporary, after, { mode: 0o600 });
+  await rename(temporary, path);
+}
+
+async function writeRuntimeLabel({ tool, taskType, stage, labelFile, ttlMinutes, ifAbsent }) {
   const safeTool = safeToolLabel(tool);
   const safeTaskType = safeWorkflowSlug(taskType, "task_type");
   const safeStage = dominantStageForTask(safeTaskType, safeWorkflowSlug(stage, "stage"));
@@ -287,6 +496,20 @@ async function writeRuntimeLabel({ tool, taskType, stage, labelFile, ttlMinutes 
     "Library/Application Support/Spill/token-metering/label-context",
     `${safeTool}.json`,
   ));
+  if (ifAbsent) {
+    const existing = await readActiveRuntimeLabel(target, safeTool, now);
+    if (existing) {
+      return {
+        tool: safeTool,
+        task_type: existing.task_type,
+        stage: existing.stage,
+        label_file: target,
+        expires_at: existing.expires_at,
+        skipped: true,
+      };
+    }
+  }
+
   const value = {
     ai_tool: safeTool,
     task_type: safeTaskType,
@@ -306,7 +529,29 @@ async function writeRuntimeLabel({ tool, taskType, stage, labelFile, ttlMinutes 
     stage: safeStage,
     label_file: target,
     expires_at: value.expires_at,
+    skipped: false,
   };
+}
+
+async function readActiveRuntimeLabel(path, expectedTool, now) {
+  try {
+    const data = JSON.parse(await readFile(path, "utf8"));
+    if (!plainObject(data)) return null;
+    if (data.ai_tool !== expectedTool) return null;
+    if (!safeWorkflowSlugOrEmpty(data.task_type)) return null;
+    if (!safeWorkflowSlugOrEmpty(data.stage)) return null;
+    const expiry = typeof data.expires_at === "string"
+      ? new Date(data.expires_at)
+      : null;
+    if (!expiry || Number.isNaN(expiry.getTime()) || expiry <= now) return null;
+    return {
+      task_type: data.task_type,
+      stage: data.stage,
+      expires_at: data.expires_at,
+    };
+  } catch {
+    return null;
+  }
 }
 
 function dominantStageForTask(taskType, stage) {
@@ -370,6 +615,9 @@ function parseArgs(values) {
     case "--json":
       parsed.json = true;
       break;
+    case "--if-absent":
+      parsed.ifAbsent = true;
+      break;
     case "--help":
     case "-h":
       printHelp();
@@ -379,6 +627,9 @@ function parseArgs(values) {
       break;
     case "--install-dir":
       parsed.installDir = requiredValue(values, ++index, value);
+      break;
+    case "--agent-playbook-home":
+      parsed.agentPlaybookHome = requiredValue(values, ++index, value);
       break;
     case "--source-root":
       parsed.sourceRoot = requiredValue(values, ++index, value);
@@ -422,22 +673,31 @@ function printHelp() {
 Options:
   --apply                 Copy adapters and merge known user-level hook config files in one pass.
   --force                 Install every included adapter even when it is not a default hook adapter or detected.
-  --include LIST          Comma list: codex,claude,antigravity,openai.
+  --include LIST          Comma list. Default: codex,claude,antigravity. Optional: openai.
   --workflow-hook PATH    Also add the Antigravity/AGY workflow hook to this selected hooks.json.
   --source-root PATH      Adapter source root. Default: repo or bundled adapters directory.
   --install-dir PATH      Adapter install root. Default: ~/Library/Application Support/Spill/adapters.
+  --agent-playbook-home PATH
+                          AgentPlaybook root for trusted workflow/preflight/finish command allowlists.
   --label TOOL            Write a short-lived safe task/stage label for codex, claude, antigravity, or openai.
+  --if-absent             With --label, keep an active same-tool label instead of overwriting it.
   --task-type SLUG        Safe task label for --label.
   --stage SLUG            Safe stage label for --label.
   --label-file PATH       Override the runtime label file path for --label.
   --ttl-minutes MINUTES   Runtime label expiry. Default: 30.
   --json                  Print JSON summary.
 
-Default mode is a dry-run. A normal --apply run installs OpenAI/Codex,
+Default mode is a dry-run. A normal --apply run installs Codex,
 Claude Code, and Antigravity/AGY metering together, even if the current
-agent is only one of those tools. Codex is the OpenAI agent runtime hook;
-the OpenAI SDK adapter is installed for direct OpenAI API/SDK usage.
+agent is only one of those tools. Codex is the OpenAI-backed agent
+runtime hook. The OpenAI SDK adapter is optional and installs only when
+included explicitly.
 The helper also installs or refreshes itself at the default setup command path.
+When Claude Code or Antigravity/AGY user settings exist, the helper sets
+SPILL_AI_TOOL for that runtime and adds narrow allowlist entries for trusted
+AgentPlaybook workflow.py, agent-preflight.py, agent-finish-check.py, and Spill
+label handoff commands so routine metering setup does not repeatedly ask for
+permission. Codex defaults to the codex tool label.
 The installer never reads prompts, transcripts, commands, logs, diffs, source
 files, environment values, or secrets.
 `);
@@ -447,6 +707,21 @@ function expandHome(path) {
   if (path === "~") return homedir();
   if (path.startsWith("~/")) return join(homedir(), path.slice(2));
   return path;
+}
+
+function homeRelativePath(path) {
+  const home = homedir();
+  if (path === home) return "~";
+  if (path.startsWith(`${home}/`)) return `~/${path.slice(home.length + 1)}`;
+  return path;
+}
+
+function escapePermissionPath(path) {
+  return path.replaceAll(" ", "\\ ");
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function plainObject(value) {
@@ -466,6 +741,10 @@ function safeWorkflowSlug(value, name) {
     throw new Error(`Invalid ${name}: ${value ?? ""}`);
   }
   return value;
+}
+
+function safeWorkflowSlugOrEmpty(value) {
+  return typeof value === "string" && /^[a-z][a-z0-9_]{1,40}$/.test(value);
 }
 
 function safeTTLMinutes(value) {
