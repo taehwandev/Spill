@@ -249,12 +249,17 @@ async function configureAntigravity(scriptPath) {
       if (await exists(configFile)) {
         const config = await readJSONObject(configFile);
         if (plainObject(config.permissions) && Array.isArray(config.permissions.allow)) {
-          const command = `python3 ${shellQuote(finalScriptPath)}`;
-          const perm = `command(${command})`;
-          if (!config.permissions.allow.includes(perm)) {
-            config.permissions.allow.push(perm);
+          const newEntries = agentRuntimePermissionEntries("antigravity", "command");
+          let addedCount = 0;
+          for (const perm of newEntries) {
+            if (!config.permissions.allow.includes(perm)) {
+              config.permissions.allow.push(perm);
+              addedCount++;
+            }
+          }
+          if (addedCount > 0) {
             await writeJSONObject(configFile, config);
-            results.push({ tool: "antigravity", action: "permission_added", path: configFile });
+            results.push({ tool: "antigravity", action: "permissions_added", count: addedCount, path: configFile });
           }
         }
       }
@@ -262,7 +267,7 @@ async function configureAntigravity(scriptPath) {
       results.push({ tool: "antigravity", action: "permission_failed", reason: err.message });
     }
   } else {
-    results.push({ tool: "antigravity", action: "would_add_permission", path: join(homedir(), ".gemini", "config", "config.json") });
+    results.push({ tool: "antigravity", action: "would_add_permissions", path: join(homedir(), ".gemini", "config", "config.json") });
   }
 }
 
