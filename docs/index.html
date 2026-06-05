@@ -187,17 +187,6 @@
             width: 72px;
             height: 72px;
         }
-        .agentcat-icon {
-            box-sizing: border-box;
-            background: #fff7ed;
-            object-fit: contain;
-            padding: 4px;
-        }
-        .agentcat-icon-sm {
-            width: 20px;
-            height: 20px;
-            padding: 2px;
-        }
         .mock-window {
             transition: transform 700ms cubic-bezier(.2,.9,.2,1), width 700ms cubic-bezier(.2,.9,.2,1);
         }
@@ -854,67 +843,6 @@
             </div>
         </section>
 
-        <section class="snap-page py-stack-gap-lg px-container-padding-mobile md:px-container-padding-desktop flex items-center" id="agentcat">
-            <div class="max-w-7xl mx-auto w-full grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
-                <div class="space-y-8">
-                    <div class="inline-flex items-center gap-3 rounded-full bg-secondary/10 border border-secondary/10 px-4 py-2">
-                        <img src="https://agentcat.app/assets/app-icon.png?v=20260514" alt="" class="app-icon agentcat-icon agentcat-icon-sm"/>
-                        <span class="text-label-caps text-secondary font-black">Also from the team</span>
-                    </div>
-                    <h2 class="text-display-lg-mobile md:text-5xl font-extrabold leading-tight">AgentCat keeps AI agent work visible.</h2>
-                    <p class="text-body-lg text-on-surface-variant max-w-xl">
-                        When Spill handles the Mac control tray, AgentCat gives your AI coding sessions a focused usage view for Codex, Claude, Gemini, and local tools.
-                    </p>
-                    <a class="inline-flex items-center gap-3 bg-secondary text-on-secondary px-7 py-3 rounded-full text-sm font-black shadow-xl shadow-secondary/20 hover:shadow-2xl hover:scale-[1.02] transition-all" href="https://agentcat.app/en" target="_blank" rel="noopener" data-analytics-event="agentcat_link_clicked" data-analytics-location="agentcat_section">
-                        <img src="https://agentcat.app/assets/app-icon.png?v=20260514" alt="" class="app-icon agentcat-icon agentcat-icon-sm"/>
-                        Visit AgentCat
-                        <span class="material-symbols-outlined text-[18px]">open_in_new</span>
-                    </a>
-                </div>
-                <div class="relative">
-                    <div class="absolute -inset-6 bg-secondary/10 blur-3xl rounded-full"></div>
-                    <div class="relative glass-panel-deep rounded-[2rem] p-6 md:p-8 shadow-2xl">
-                        <div class="flex items-center justify-between border-b border-on-surface/5 pb-5">
-                            <div class="flex items-center gap-3">
-                                <img src="https://agentcat.app/assets/app-icon.png?v=20260514" alt="" class="app-icon agentcat-icon app-icon-lg"/>
-                                <div>
-                                    <div class="text-xl font-black">AgentCat</div>
-                                    <div class="text-sm font-semibold text-on-surface-variant">AI agent activity</div>
-                                </div>
-                            </div>
-                            <span class="rounded-full bg-emerald-500/10 text-emerald-600 px-3 py-1 text-xs font-black">Live</span>
-                        </div>
-
-                        <div class="mt-6 grid grid-cols-3 gap-3">
-                            <div class="rounded-2xl bg-secondary/10 p-4">
-                                <div class="text-[10px] font-black uppercase text-secondary/70">Codex</div>
-                                <div id="mock-codex-val" class="mt-2 text-2xl font-black text-secondary">42.2k</div>
-                            </div>
-                            <div class="rounded-2xl bg-primary/10 p-4">
-                                <div class="text-[10px] font-black uppercase text-primary/70">Claude</div>
-                                <div id="mock-claude-val" class="mt-2 text-2xl font-black text-primary">18.4k</div>
-                            </div>
-                            <div class="rounded-2xl bg-tertiary/10 p-4">
-                                <div class="text-[10px] font-black uppercase text-tertiary/70">Gemini</div>
-                                <div id="mock-gemini-val" class="mt-2 text-2xl font-black text-tertiary">9.1k</div>
-                            </div>
-                        </div>
-
-                        <div class="mt-6 rounded-2xl bg-white/70 border border-white/70 p-4">
-                            <svg class="w-full h-28" viewBox="0 0 320 112" aria-hidden="true">
-                                <path d="M4 82 C34 46 54 78 78 54 S126 24 154 58 S204 104 238 54 S286 26 316 42" fill="none" stroke="#4c4aca" stroke-width="5" stroke-linecap="round" class="live-line" style="--dash: 390; --speed: 3.1s;"></path>
-                                <path d="M4 92 C42 88 56 56 92 82 S154 108 184 74 S244 36 278 66 S304 88 316 76" fill="none" stroke="#0070eb" stroke-width="4" stroke-linecap="round" opacity="0.55" class="live-line" style="--dash: 360; --speed: 3.8s;"></path>
-                                <path d="M4 108 H316" fill="none" stroke="#c1c6d7" stroke-width="1.5" stroke-linecap="round" opacity="0.75"></path>
-                            </svg>
-                            <div class="mt-3 flex items-center justify-between text-[11px] font-black text-on-surface/45 uppercase">
-                                <span>Usage timeline</span>
-                                <span>Local snapshot</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
     </main>
 
     <footer class="snap-footer border-t border-outline-variant/20 bg-white py-16 px-container-padding-mobile md:px-container-padding-desktop">
@@ -944,10 +872,6 @@
                 <a class="hover:text-primary transition-colors" href="https://github.com/taehwandev/Spill" data-analytics-event="open_source_link_clicked" data-analytics-location="footer">GitHub</a>
                 <a class="hover:text-primary transition-colors" href="https://github.com/taehwandev/Spill/releases" data-analytics-event="external_link_clicked" data-analytics-location="footer" data-analytics-destination="releases">Releases</a>
                 <a class="hover:text-primary transition-colors" href="https://www.keyflow.me/" target="_blank" rel="noopener" data-analytics-event="external_link_clicked" data-analytics-location="footer" data-analytics-destination="keyflow">KeyFlow</a>
-                <a class="inline-flex items-center gap-2 hover:text-primary transition-colors" href="https://agentcat.app/en" target="_blank" rel="noopener" data-analytics-event="agentcat_link_clicked" data-analytics-location="footer">
-                    <img src="https://agentcat.app/assets/app-icon.png?v=20260514" alt="" class="app-icon agentcat-icon agentcat-icon-sm"/>
-                    <span>AgentCat</span>
-                </a>
             </div>
         </div>
     </footer>
@@ -1089,32 +1013,6 @@
             }, 250); // Frequent updates for fluid visual matching
         }
 
-        // Live counter ticker for AgentCat metrics
-        function startAgentCatCounters() {
-            const codexVal = document.getElementById("mock-codex-val");
-            const claudeVal = document.getElementById("mock-claude-val");
-            const geminiVal = document.getElementById("mock-gemini-val");
-
-            let codexCount = 42200;
-            let claudeCount = 18400;
-            let geminiCount = 9100;
-
-            setInterval(() => {
-                if (codexVal) {
-                    codexCount += Math.floor(Math.random() * 5);
-                    codexVal.textContent = `${(codexCount / 1000).toFixed(1)}k`;
-                }
-                if (claudeVal) {
-                    claudeCount += Math.floor(Math.random() * 3);
-                    claudeVal.textContent = `${(claudeCount / 1000).toFixed(1)}k`;
-                }
-                if (geminiVal) {
-                    geminiCount += Math.floor(Math.random() * 2);
-                    geminiVal.textContent = `${(geminiCount / 1000).toFixed(1)}k`;
-                }
-            }, 3000);
-        }
-
         // Interactive terminal installation simulation
         function triggerTerminalSimulation() {
             const terminalBody = document.getElementById("terminal-body");
@@ -1183,7 +1081,6 @@
         // Initialize scripts
         window.addEventListener("DOMContentLoaded", () => {
             startMetricsFluctuation();
-            startAgentCatCounters();
         });
     </script>
 </body>
