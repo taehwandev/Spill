@@ -3,6 +3,7 @@
 @MainActor
 final class TokenUsageDashboardStore: ObservableObject {
     @Published private(set) var snapshot = TokenUsageDashboardSnapshot.empty
+    @Published private(set) var unfilteredSnapshot = TokenUsageDashboardSnapshot.empty
     @Published private(set) var selectedTool: TokenUsageAITool?
     @Published private(set) var selectedPeriod: TokenUsageDashboardPeriod = .today
     @Published private(set) var selectedSessionID: String?
@@ -42,7 +43,7 @@ final class TokenUsageDashboardStore: ObservableObject {
     }
 
     func rebuildSnapshot() {
-        snapshot = TokenUsageDashboardSnapshot(
+        let filteredSnapshot = TokenUsageDashboardSnapshot(
             events: events,
             selectedTool: selectedTool,
             selectedPeriod: selectedPeriod,
@@ -50,12 +51,9 @@ final class TokenUsageDashboardStore: ObservableObject {
             displayMode: displayMode,
             language: language
         )
-        selectedSessionID = snapshot.selectedSession?.id
-        lastError = nil
-    }
-
-    var unfilteredSnapshot: TokenUsageDashboardSnapshot {
-        TokenUsageDashboardSnapshot(
+        selectedSessionID = filteredSnapshot.selectedSession?.id
+        snapshot = filteredSnapshot
+        unfilteredSnapshot = TokenUsageDashboardSnapshot(
             events: events,
             selectedTool: nil,
             selectedPeriod: selectedPeriod,
@@ -63,8 +61,8 @@ final class TokenUsageDashboardStore: ObservableObject {
             displayMode: displayMode,
             language: language
         )
+        lastError = nil
     }
-
 
     func setSelectedTool(_ tool: TokenUsageAITool?) {
         selectedTool = tool?.isDashboardTool == true ? tool : nil
