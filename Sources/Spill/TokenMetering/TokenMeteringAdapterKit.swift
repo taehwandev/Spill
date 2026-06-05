@@ -13,11 +13,20 @@ struct TokenMeteringAdapter: Identifiable {
 
     var id: String { aiTool.rawValue }
 
+    var directoryName: String {
+        switch aiTool {
+        case .claude:
+            "claude-code"
+        default:
+            aiTool.rawValue
+        }
+    }
+
     var scriptURL: URL? {
         Bundle.main.url(
             forResource: scriptFileName.components(separatedBy: ".").first,
             withExtension: scriptFileName.components(separatedBy: ".").last,
-            subdirectory: "adapters/\(aiTool.rawValue)"
+            subdirectory: "adapters/\(directoryName)"
         )
     }
 
@@ -34,7 +43,7 @@ struct TokenMeteringAdapter: Identifiable {
 
     func install(to destination: URL) throws {
         guard let url = scriptURL else {
-            throw TokenMeteringAdapterInstallError.scriptNotFound
+            throw TokenMeteringAdapterInstallError.scriptNotFound(title)
         }
         try FileManager.default.createDirectory(
             at: destination.deletingLastPathComponent(),
@@ -53,14 +62,23 @@ struct TokenMeteringAdapter: Identifiable {
 }
 
 enum TokenMeteringAdapterInstallError: LocalizedError {
-    case scriptNotFound
+    case scriptNotFound(String)
 
     var errorDescription: String? {
-        "Adapter script not found in app bundle."
+        switch self {
+        case .scriptNotFound(let name):
+            "\(name) script not found in app bundle."
+        }
     }
 }
 
 enum TokenMeteringAdapterKit {
+    static let hookAdapters: [TokenMeteringAdapter] = [
+        claudeCode,
+        codex,
+        agy,
+    ]
+
     static let all: [TokenMeteringAdapter] = [
         claudeCode,
         codex,
@@ -74,14 +92,21 @@ enum TokenMeteringAdapterKit {
         subtitle: "Stop hook — transcript reader",
         scriptFileName: "spill-hook.py",
         hookConfigTemplate: """
-        Add to ~/.claude/settings.json under "hooks" → "Stop" → hooks array:
+        Add one entry to the "Stop" array in ~/.claude/settings.json.
+        ⚠️ "matcher" is required — omitting it prevents the hook from running.
+
         {
-          "type": "command",
-          "command": "python3 <script_path>",
-          "timeout": 5
+          "matcher": "",
+          "hooks": [
+            {
+              "type": "command",
+              "command": "python3 '<script_path>'",
+              "timeout": 5
+            }
+          ]
         }
         """,
-        hookConfigTarget: "~/.claude/settings.json"
+        hookConfigTarget: "~/.claude/settings.json → hooks.Stop"
     )
 
     static let codex = TokenMeteringAdapter(
@@ -91,14 +116,17 @@ enum TokenMeteringAdapterKit {
         scriptFileName: "spill-importer.mjs",
         hookConfigTemplate: """
         Add to ~/.codex/hooks.json:
+        The Stop group includes matcher so the setup shape stays consistent across hook runners.
+
         {
           "hooks": {
             "Stop": [
               {
+                "matcher": "",
                 "hooks": [
                   {
                     "type": "command",
-                    "command": "node <script_path> --since-hours 6",
+                    "command": "node '<script_path>' --since-hours 6",
                     "timeout": 30
                   }
                 ]
@@ -116,7 +144,9 @@ enum TokenMeteringAdapterKit {
         subtitle: "PostInvocation hook — token usage reporter",
         scriptFileName: "spill-hook.py",
         hookConfigTemplate: """
-        Add to your AGY hooks config:
+        Add root-level PostInvocation to ~/.gemini/config/hooks.json.
+        Do not nest this under "spill-metering"; nested AGY hook blocks are ignored.
+
         {
           "PostInvocation": [
             {
@@ -124,7 +154,7 @@ enum TokenMeteringAdapterKit {
               "hooks": [
                 {
                   "type": "command",
-                  "command": "python3 <script_path>",
+                  "command": "python3 '<script_path>'",
                   "timeout": 5
                 }
               ]
@@ -132,7 +162,7 @@ enum TokenMeteringAdapterKit {
           ]
         }
         """,
-        hookConfigTarget: ".agents/hooks.json"
+        hookConfigTarget: "~/.gemini/config/hooks.json → PostInvocation"
     )
 
     static let openai = TokenMeteringAdapter(
@@ -156,7 +186,7 @@ enum TokenMeteringAdapterKit {
         return base
             .appendingPathComponent("Spill", isDirectory: true)
             .appendingPathComponent("adapters", isDirectory: true)
-            .appendingPathComponent(adapter.aiTool.rawValue, isDirectory: true)
+            .appendingPathComponent(adapter.directoryName, isDirectory: true)
             .appendingPathComponent(adapter.scriptFileName)
     }
 }
@@ -184,10 +214,10 @@ enum TokenMeteringSetupInstaller {
 
     static func install(to destination: URL = defaultInstallURL()) throws {
         guard let url = scriptURL else {
-            throw TokenMeteringAdapterInstallError.scriptNotFound
+            throw TokenMeteringAdapterInstallError.scriptNotFound("Setup helper")
         }
 
-        for adapter in TokenMeteringAdapterKit.all {
+        for adapter in TokenMeteringAdapterKit.hookAdapters {
             try adapter.install(to: TokenMeteringAdapterKit.defaultInstallURL(for: adapter))
         }
 

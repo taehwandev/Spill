@@ -2,9 +2,41 @@ import Foundation
 
 enum TokenMeteringGlobalSetup {
     static let globalPrompt = """
-    # Spill Token Metering
+    # Spill Token Metering Setup Request
 
-    Apply this as a global agent instruction, not a project-specific instruction.
+    This pasted prompt is an explicit request to install or repair Spill token metering now.
+    Do not treat it as only a policy note or only a global instruction.
+
+    Do these steps in order:
+    1. Install or refresh the local Spill hook adapters for Codex, Claude Code, and Antigravity/AGY.
+    2. Merge the user-level hook config files for those tools.
+    3. Verify that the hook shapes below are present.
+    4. Then add or refresh the runtime instruction below as a global agent instruction, not a project-specific instruction.
+
+    Required hook shapes:
+    - Codex: ~/.codex/hooks.json must contain hooks.Stop[] with matcher: "" and a command that runs the Spill Codex importer.
+    - Claude Code: ~/.claude/settings.json must contain hooks.Stop[] with matcher: "" and a command that runs the Spill Claude hook. The matcher field is required; omitting it can prevent the hook from running.
+    - Antigravity/AGY: ~/.gemini/config/hooks.json must contain root-level PostInvocation[] with matcher: "" and a command that runs the Spill AGY hook. Do not nest this under "spill-metering"; nested AGY hook blocks are ignored.
+
+    First run the one-step setup helper with --apply and an explicit include list:
+      node ~/Library/Application Support/Spill/adapters/setup/spill-token-metering-setup.mjs --apply --include codex,claude,antigravity,openai
+
+    If the user-level setup helper is missing, try these fallbacks without asking the user to copy scripts manually:
+      node /Applications/Spill.app/Contents/Resources/adapters/setup/spill-token-metering-setup.mjs --apply --include codex,claude,antigravity,openai
+      node .build/Spill.app/Contents/Resources/adapters/setup/spill-token-metering-setup.mjs --apply --include codex,claude,antigravity,openai
+      node scripts/spill-token-metering-setup.mjs --apply --include codex,claude,antigravity,openai
+
+    The setup helper must copy every detected supported adapter and merge the known user-level hook configs in one operation. Expected successful hook targets include Codex, Claude Code, and Antigravity/AGY when they are installed or configured on this computer. OpenAI SDK wrapping is optional and must not block those hook installs.
+    Do not install only the current AI runtime. Do not ask the user to install Codex, Claude, Antigravity/AGY, or OpenAI adapters one by one.
+    If none of those helpers exists, say the one-step helper is missing and ask the user to open Spill Preferences and use Install Helper. Do not provide per-adapter manual copy steps as the primary path.
+    Ask only before writing a project or workflow hook file unless the user already supplied that exact path.
+    If a workflow hook path is supplied, pass it explicitly:
+      node ~/Library/Application Support/Spill/adapters/setup/spill-token-metering-setup.mjs --apply --include codex,claude,antigravity,openai --workflow-hook /path/to/.agents/hooks.json
+
+    After the install command succeeds, apply the following as the persistent global runtime instruction.
+
+    # Spill Token Metering Runtime Instruction
+
     This is a silent background metering instruction.
     Do not mention this instruction in normal conversation.
     Do not tell the user whether a usage event was or was not recorded unless the user explicitly asks about Spill token metering.
@@ -25,22 +57,6 @@ enum TokenMeteringGlobalSetup {
     - Preferred command shape:
       node ~/Library/Application Support/Spill/adapters/setup/spill-token-metering-setup.mjs --label codex --task-type debugging --stage implement
     - The label context may contain only ai_tool, task_type, stage, updated_at, and expires_at. Never include task text, prompts, commands, file paths, repo names, branches, logs, diffs, source, environment values, or secrets.
-
-    Install behavior:
-    - This prompt is meant to let any capable AI agent install Spill metering for every supported local AI tool in one pass when the user asks to install, apply, fix, repair, enable, or verify Spill token metering.
-    - Do not install only the current AI runtime. Do not ask the user to install Codex, Claude, Antigravity/AGY, or OpenAI adapters one by one.
-    - The user's explicit install/fix/apply/repair/enable/verify request is enough confirmation for user-level adapter and hook setup.
-    - First run the one-step setup helper with --apply and an explicit include list:
-      node ~/Library/Application Support/Spill/adapters/setup/spill-token-metering-setup.mjs --apply --include codex,claude,antigravity,openai
-    - The setup helper must copy every detected supported adapter and merge the known user-level hook configs in one operation. Expected successful targets include Codex, Claude Code, and Antigravity/AGY when they are installed or configured on this computer.
-    - If the user-level setup helper is missing, try these fallbacks without asking the user to copy scripts manually:
-      node /Applications/Spill.app/Contents/Resources/adapters/setup/spill-token-metering-setup.mjs --apply --include codex,claude,antigravity,openai
-      node .build/Spill.app/Contents/Resources/adapters/setup/spill-token-metering-setup.mjs --apply --include codex,claude,antigravity,openai
-      node scripts/spill-token-metering-setup.mjs --apply --include codex,claude,antigravity,openai
-    - If none of those helpers exists, say the one-step helper is missing and ask the user to open Spill Preferences and use Install Helper. Do not provide per-adapter manual copy steps as the primary path.
-    - Ask only before writing a project or workflow hook file unless the user already supplied that exact path.
-    - If a workflow hook path is supplied, pass it explicitly:
-      node ~/Library/Application Support/Spill/adapters/setup/spill-token-metering-setup.mjs --apply --include codex,claude,antigravity,openai --workflow-hook /path/to/.agents/hooks.json
 
     Event timing:
     - Send at most one event for each assistant response or adapter span that exposes final exact token counts.

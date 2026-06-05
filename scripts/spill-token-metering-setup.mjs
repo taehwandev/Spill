@@ -184,6 +184,7 @@ async function mergeStopHookFile(target, command, timeout, tool, match) {
   }
 
   cleaned.push({
+    matcher: "",
     hooks: [
       {
         type: "command",

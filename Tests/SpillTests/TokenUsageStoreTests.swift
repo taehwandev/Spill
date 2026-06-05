@@ -463,10 +463,18 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(prompt.contains("At the beginning of every user-visible task"))
         XCTAssertTrue(prompt.contains("This label context is not a usage event"))
         XCTAssertTrue(prompt.contains("Do not mention this label command in normal conversation"))
-        XCTAssertTrue(prompt.contains("install Spill metering for every supported local AI tool in one pass"))
+        XCTAssertTrue(prompt.contains("explicit request to install or repair Spill token metering now"))
+        XCTAssertTrue(prompt.contains("Do not treat it as only a policy note or only a global instruction"))
+        XCTAssertTrue(prompt.contains("Install or refresh the local Spill hook adapters for Codex, Claude Code, and Antigravity/AGY"))
+        XCTAssertTrue(prompt.contains("Then add or refresh the runtime instruction below as a global agent instruction"))
+        XCTAssertTrue(prompt.contains("Required hook shapes"))
+        XCTAssertTrue(prompt.contains("~/.codex/hooks.json must contain hooks.Stop[] with matcher"))
+        XCTAssertTrue(prompt.contains("~/.claude/settings.json must contain hooks.Stop[] with matcher"))
+        XCTAssertTrue(prompt.contains("~/.gemini/config/hooks.json must contain root-level PostInvocation[] with matcher"))
+        XCTAssertTrue(prompt.contains("Do not nest this under \"spill-metering\""))
         XCTAssertTrue(prompt.contains("Do not ask the user to install Codex, Claude, Antigravity/AGY, or OpenAI adapters one by one"))
         XCTAssertTrue(prompt.contains("Do not install only the current AI runtime"))
-        XCTAssertTrue(prompt.contains("install/fix/apply/repair/enable/verify request is enough confirmation"))
+        XCTAssertTrue(prompt.contains("OpenAI SDK wrapping is optional and must not block those hook installs"))
         XCTAssertTrue(prompt.contains("--include codex,claude,antigravity,openai"))
         XCTAssertTrue(prompt.contains("try these fallbacks without asking the user to copy scripts manually"))
         XCTAssertTrue(prompt.contains("events-inbox"))
@@ -509,6 +517,53 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(prompt.contains("--task-type SLUG"))
         XCTAssertTrue(prompt.contains("--label codex --task-type debugging --stage implement"))
         XCTAssertTrue(prompt.contains("short-lived safe label context"))
+    }
+
+    func testAdapterHookConfigsUseExactRuntimeHookShapes() throws {
+        let claudePath = URL(fileURLWithPath: "/tmp/Spill Support/adapters/claude-code/spill-hook.py")
+        let codexPath = URL(fileURLWithPath: "/tmp/Spill Support/adapters/codex/spill-importer.mjs")
+        let agyPath = URL(fileURLWithPath: "/tmp/Spill Support/adapters/antigravity/spill-hook.py")
+
+        let claudeConfig = try XCTUnwrap(TokenMeteringAdapterKit.claudeCode.hookConfig(installedAt: claudePath))
+        XCTAssertTrue(claudeConfig.contains(#""matcher": """#))
+        XCTAssertTrue(claudeConfig.contains("python3 '/tmp/Spill Support/adapters/claude-code/spill-hook.py'"))
+        XCTAssertTrue(claudeConfig.contains(#""timeout": 5"#))
+
+        let codexConfig = try XCTUnwrap(TokenMeteringAdapterKit.codex.hookConfig(installedAt: codexPath))
+        XCTAssertTrue(codexConfig.contains(#""hooks": {"#))
+        XCTAssertTrue(codexConfig.contains(#""Stop": ["#))
+        XCTAssertTrue(codexConfig.contains(#""matcher": """#))
+        XCTAssertTrue(codexConfig.contains("node '/tmp/Spill Support/adapters/codex/spill-importer.mjs' --since-hours 6"))
+        XCTAssertTrue(codexConfig.contains(#""timeout": 30"#))
+
+        let agyConfig = try XCTUnwrap(TokenMeteringAdapterKit.agy.hookConfig(installedAt: agyPath))
+        XCTAssertTrue(agyConfig.contains("root-level PostInvocation"))
+        XCTAssertTrue(agyConfig.contains(#""PostInvocation": ["#))
+        XCTAssertTrue(agyConfig.contains(#""matcher": """#))
+        XCTAssertTrue(agyConfig.contains("python3 '/tmp/Spill Support/adapters/antigravity/spill-hook.py'"))
+        XCTAssertTrue(agyConfig.contains("Do not nest this under \"spill-metering\""))
+    }
+
+    func testAdapterInstallPathsUseHookRuntimeDirectories() {
+        XCTAssertEqual(
+            TokenMeteringAdapterKit.hookAdapters.map(\.aiTool),
+            [.claude, .codex, .antigravity]
+        )
+        XCTAssertTrue(
+            TokenMeteringAdapterKit.defaultInstallURL(for: TokenMeteringAdapterKit.claudeCode)
+                .path
+                .contains("/adapters/claude-code/spill-hook.py")
+        )
+        XCTAssertTrue(
+            TokenMeteringAdapterKit.defaultInstallURL(for: TokenMeteringAdapterKit.codex)
+                .path
+                .contains("/adapters/codex/spill-importer.mjs")
+        )
+        XCTAssertTrue(
+            TokenMeteringAdapterKit.defaultInstallURL(for: TokenMeteringAdapterKit.agy)
+                .path
+                .contains("/adapters/antigravity/spill-hook.py")
+        )
     }
 
     private static func safeEvent(
