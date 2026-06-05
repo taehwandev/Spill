@@ -59,7 +59,7 @@ struct TokenMeteringDashboardView: View {
                     localOnlyBadge
                 }
 
-                Text("Local inbox first. Optional bridge diagnostics only when enabled.")
+                Text("Local queue first. Adapters write event files; Spill imports them into the app-owned store.")
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -135,8 +135,7 @@ struct TokenMeteringDashboardView: View {
 
                 railPanel(title: "Receivers") {
                     VStack(spacing: 8) {
-                        receiverTile(title: "Local Inbox", state: "Default", systemImage: "internaldrive", tint: .green)
-                        receiverTile(title: "HTTP Bridge", state: "Optional", systemImage: "network", tint: .secondary)
+                        receiverTile(title: "Local Queue", state: "Default", systemImage: "tray.and.arrow.down", tint: .green)
                         receiverTile(title: "Adapters", state: "On demand", systemImage: "bolt.horizontal", tint: .teal)
                     }
                 }
@@ -302,17 +301,17 @@ struct TokenMeteringDashboardView: View {
     private var diagnostics: some View {
         DisclosureGroup(isExpanded: $isDiagnosticsExpanded) {
             VStack(alignment: .leading, spacing: 8) {
-                Text("Sends one synthetic event through the optional HTTP bridge. Normal metering uses the local inbox and does not need this.")
+                Text("Writes one synthetic event through the local queue and imports it into the app-owned store.")
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
                 Button {
                     Task {
-                        await store.runLocalBridgeSelfTest()
+                        await store.runLocalQueueSelfTest()
                     }
                 } label: {
-                    Label(store.isRunningSelfTest ? "Sending" : "Bridge Test", systemImage: store.isRunningSelfTest ? "hourglass" : "paperplane")
+                    Label(store.isRunningSelfTest ? "Writing" : "Queue Test", systemImage: store.isRunningSelfTest ? "hourglass" : "tray.and.arrow.down")
                 }
                 .disabled(store.isRunningSelfTest)
 

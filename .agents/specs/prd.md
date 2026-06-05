@@ -118,10 +118,10 @@ Acceptance:
 Requirements:
 
 - The native app reads safe token usage events from an app-owned local store.
-- The default receiver is a local append-only JSONL inbox, not a required
+- The default receiver is a local event queue directory, not a required
   background server.
-- A loopback-only local bridge may be enabled as an optional compatibility
-  receiver for tools that can POST safe events.
+- Hooks and adapters write one event per file using `.tmp` then atomic rename
+  to `.json`; Spill imports complete `.json` files into the app-owned store.
 - Local receivers are global to the computer, not tied to a repository checkout.
 - Usage events use opaque ids such as `project_global` and never
   store project names, file paths, prompts, commands, terminal output, logs,
@@ -159,15 +159,15 @@ Requirements:
 - Codex metering should support an on-demand local session importer that reads
   recent `~/.codex/sessions/**/rollout-*.jsonl` files when invoked by a trusted
   hook or workflow, converts exact `event_msg/token_count` usage into safe Spill
-  events, and deduplicates spans before writing to the local inbox.
-- The local dashboard should provide a manual self-test that sends one small
-  synthetic token-only event through the loopback bridge, but it must be
-  presented as diagnostics rather than the normal startup path.
+  events, and deduplicates spans before writing to the local event queue.
+- The local dashboard should provide a manual self-test that writes one small
+  synthetic token-only event through the local queue, but it must be presented
+  as diagnostics rather than the normal startup path.
 
 Acceptance:
 
-- Local token events appear without login when the local inbox or optional
-  bridge receives a safe event.
+- Local token events appear without login when the local queue receives a safe
+  event.
 - Safe event validation rejects content-like fields.
 - Local dashboard shows combined usage and lets users filter by safe AI tool
   labels.

@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 
-import { appendFile, mkdir } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { mkdir, rename, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { homedir } from "node:os";
+import { randomUUID } from "node:crypto";
 
 const eventKeys = [
   "schema_version",
@@ -83,7 +84,7 @@ const transport = normalizedTransport(
 );
 const inboxPath =
   optionValue("--inbox") ||
-  process.env.SPILL_TOKEN_USAGE_INBOX_FILE ||
+  process.env.SPILL_TOKEN_USAGE_INBOX_DIR ||
   defaultInboxPath();
 
 const stdin = await readStdin();
@@ -261,8 +262,16 @@ function isSafeWorkflowSlug(value) {
 }
 
 async function appendInboxEvent(path, event) {
-  await mkdir(dirname(path), { recursive: true, mode: 0o700 });
-  await appendFile(path, `${JSON.stringify(event)}\n`, { encoding: "utf8", mode: 0o600 });
+  await mkdir(path, { recursive: true, mode: 0o700 });
+  const id = randomUUID();
+  const temporaryPath = join(path, `.${id}.tmp`);
+  const finalPath = join(path, `${id}.json`);
+  await writeFile(temporaryPath, JSON.stringify(event), {
+    encoding: "utf8",
+    mode: 0o600,
+    flag: "wx",
+  });
+  await rename(temporaryPath, finalPath);
 }
 
 async function postEvent(url, event) {
@@ -295,7 +304,7 @@ function normalizedTransport(value) {
 }
 
 function defaultInboxPath() {
-  return join(homedir(), "Library", "Application Support", "Spill", "token-metering", "events-inbox.jsonl");
+  return join(homedir(), "Library", "Application Support", "Spill", "token-metering", "events-inbox");
 }
 
 function fail(code, invalidInput) {

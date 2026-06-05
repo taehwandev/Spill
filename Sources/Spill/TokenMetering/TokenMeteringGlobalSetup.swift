@@ -100,10 +100,10 @@ enum TokenMeteringGlobalSetup {
     - If one event covers multiple stages, use the latest completed dominant stage.
 
     Local receiver:
-    - Prefer a trusted executable hook or adapter that appends one JSON line to the local Spill inbox:
-      ~/Library/Application Support/Spill/token-metering/events-inbox.jsonl
-    - If the user explicitly enables Spill's loopback HTTP bridge, the same event may be sent to:
-      http://127.0.0.1:48731/v1/usage/events
+    - Prefer a trusted executable hook or adapter that enqueues one JSON event file in the local Spill queue:
+      ~/Library/Application Support/Spill/token-metering/events-inbox/
+    - Write a unique .tmp file first, close it, then atomically rename it to .json in the same directory.
+    - Spill imports complete .json files into the app-owned local store and ignores partial .tmp files.
     - Do not run a continuous polling watcher just for Spill metering. Use runtime hooks or final exact usage spans when available.
 
     The JSON event must contain only these keys:

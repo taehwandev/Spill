@@ -10,15 +10,10 @@ final class TokenUsageDashboardStore: ObservableObject {
     @Published private(set) var selfTestMessage: TokenUsageSelfTestMessage?
 
     private let usageStore: TokenUsageStore
-    private let bridgeClient: TokenUsageBridgeClient
     private var eventsDidChangeObserver: NSObjectProtocol?
 
-    init(
-        usageStore: TokenUsageStore,
-        bridgeClient: TokenUsageBridgeClient = .live
-    ) {
+    init(usageStore: TokenUsageStore) {
         self.usageStore = usageStore
-        self.bridgeClient = bridgeClient
         eventsDidChangeObserver = NotificationCenter.default.addObserver(
             forName: TokenUsageStore.eventsDidChangeNotification,
             object: usageStore,
@@ -66,7 +61,7 @@ final class TokenUsageDashboardStore: ObservableObject {
         }
     }
 
-    func runLocalBridgeSelfTest() async {
+    func runLocalQueueSelfTest() async {
         guard !isRunningSelfTest else {
             return
         }
@@ -77,16 +72,16 @@ final class TokenUsageDashboardStore: ObservableObject {
 
         do {
             let event = Self.makeLocalSelfTestEvent(index: snapshot.eventCount)
-            try await bridgeClient.postEvent(event)
+            try usageStore.enqueueInboxEvent(event)
             refresh()
             selfTestMessage = TokenUsageSelfTestMessage(
-                text: "Optional HTTP bridge accepted a categorized 64-token self-test event.",
+                text: "Local queue accepted and stored a categorized 64-token self-test event.",
                 isSuccess: true
             )
         } catch {
-            lastError = "Optional HTTP bridge self-test failed."
+            lastError = "Local queue self-test failed."
             selfTestMessage = TokenUsageSelfTestMessage(
-                text: "Enable the loopback HTTP bridge in Preferences before running this diagnostic.",
+                text: "Could not write to the local token metering queue.",
                 isSuccess: false
             )
         }

@@ -28,6 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         store: tokenUsageStore,
         port: tokenUsageBridgePort
     )
+    private lazy var tokenUsageInboxMonitor = TokenUsageInboxMonitor(store: tokenUsageStore)
     private lazy var tokenUsageDashboardStore = TokenUsageDashboardStore(usageStore: tokenUsageStore)
     private lazy var tokenMeteringDashboardWindowController = TokenMeteringDashboardWindowController(
         store: tokenUsageDashboardStore
@@ -100,7 +101,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return TokenUsageStore.live()
         }
 
-        let inboxURL = environment["SPILL_TOKEN_USAGE_INBOX_FILE"]
+        let inboxURL = environment["SPILL_TOKEN_USAGE_INBOX_DIR"]
             .flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0) }
         return TokenUsageStore(
             fileURL: URL(fileURLWithPath: eventsFile),
@@ -153,6 +154,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         observeStateChanges()
+        tokenUsageInboxMonitor.start()
         configureTokenUsageBridge()
         configureStatusRefreshLoop()
 
@@ -313,6 +315,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         hotKeyController.stop()
         scanCoordinator.stop()
+        tokenUsageInboxMonitor.stop()
         tokenUsageBridgeServer.stop()
         statusRefreshTask?.cancel()
         sleepGuard.stop()
@@ -365,7 +368,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return false
         }
 
-        return isSmokeTest || settings.tokenUsageBridgeEnabled
+        return isSmokeTest
     }
 
     private func configureTokenUsageBridge() {
@@ -516,14 +519,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .sink { [weak self] _ in
                 SpillTelemetry.shared.track("preference_changed", props: ["name": "window_action_shortcuts"])
                 self?.configureHotKey()
-            }
-            .store(in: &cancellables)
-
-        settings.$tokenUsageBridgeEnabled
-            .dropFirst()
-            .sink { [weak self] _ in
-                SpillTelemetry.shared.track("preference_changed", props: ["name": "token_usage_bridge_enabled"])
-                self?.configureTokenUsageBridge()
             }
             .store(in: &cancellables)
 

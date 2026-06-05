@@ -25,8 +25,21 @@ final class TokenUsageStore: @unchecked Sendable {
 
     func loadEvents() -> [TokenUsageEvent] {
         lock.withLock {
+            loadEventsWithoutLock().events
+        }
+    }
+
+    @discardableResult
+    func importQueuedEvents() -> [TokenUsageEvent] {
+        let result = lock.withLock {
             loadEventsWithoutLock()
         }
+
+        if result.didImportQueuedEvents {
+            postEventsDidChange()
+        }
+
+        return result.events
     }
 
     @discardableResult
@@ -53,7 +66,7 @@ final class TokenUsageStore: @unchecked Sendable {
     func appendEvent(_ event: TokenUsageEvent) throws -> [TokenUsageEvent] {
         let nextEvents = try lock.withLock {
             try event.validate()
-            let currentEvents = loadEventsWithoutLock()
+            let currentEvents = loadEventsWithoutLock().events
             let nextEvents = currentEvents + [event]
 
             try FileManager.default.createDirectory(
@@ -77,6 +90,32 @@ final class TokenUsageStore: @unchecked Sendable {
             if let inboxURL, FileManager.default.fileExists(atPath: inboxURL.path) {
                 try FileManager.default.removeItem(at: inboxURL)
             }
+            if let legacyInboxURL = legacyJSONLInboxURL(),
+               FileManager.default.fileExists(atPath: legacyInboxURL.path) {
+                try FileManager.default.removeItem(at: legacyInboxURL)
+            }
+        }
+
+        postEventsDidChange()
+    }
+
+    func enqueueInboxEvent(_ event: TokenUsageEvent) throws {
+        let inboxURL = inboxURL ?? Self.defaultInboxURL()
+
+        try lock.withLock {
+            try event.validate()
+            try FileManager.default.createDirectory(
+                at: inboxURL,
+                withIntermediateDirectories: true
+            )
+
+            let eventID = UUID().uuidString.lowercased()
+            let temporaryURL = inboxURL.appendingPathComponent(".\(eventID).tmp")
+            let finalURL = inboxURL.appendingPathComponent("\(eventID).json")
+            let data = try TokenUsageSanitizer.eventData(event)
+
+            try data.write(to: temporaryURL, options: [.withoutOverwriting])
+            try FileManager.default.moveItem(at: temporaryURL, to: finalURL)
         }
 
         postEventsDidChange()
@@ -101,7 +140,7 @@ final class TokenUsageStore: @unchecked Sendable {
         return baseURL
             .appendingPathComponent("Spill", isDirectory: true)
             .appendingPathComponent("token-metering", isDirectory: true)
-            .appendingPathComponent("events-inbox.jsonl")
+            .appendingPathComponent("events-inbox", isDirectory: true)
     }
 
     static func live() -> TokenUsageStore {
@@ -111,8 +150,19 @@ final class TokenUsageStore: @unchecked Sendable {
         )
     }
 
-    private func loadEventsWithoutLock() -> [TokenUsageEvent] {
-        deduplicatedEvents(loadJSONEvents(from: fileURL) + loadInboxEvents())
+    private func loadEventsWithoutLock() -> StoreLoadResult {
+        let inboxResult = loadInboxEvents()
+        let events = deduplicatedEvents(loadJSONEvents(from: fileURL) + inboxResult.events)
+
+        if !inboxResult.consumedURLs.isEmpty {
+            try? persistEventsWithoutLock(events)
+            removeConsumedInboxFiles(inboxResult.consumedURLs)
+        }
+
+        return StoreLoadResult(
+            events: events,
+            didImportQueuedEvents: !inboxResult.consumedURLs.isEmpty
+        )
     }
 
     private func loadJSONEvents(from url: URL) -> [TokenUsageEvent] {
@@ -132,30 +182,86 @@ final class TokenUsageStore: @unchecked Sendable {
         }
     }
 
-    private func loadInboxEvents() -> [TokenUsageEvent] {
-        guard let inboxURL,
-              let data = try? Data(contentsOf: inboxURL),
+    private func loadInboxEvents() -> InboxReadResult {
+        var events = [TokenUsageEvent]()
+        var consumedURLs = [URL]()
+
+        if let inboxURL,
+           let urls = try? FileManager.default.contentsOfDirectory(
+            at: inboxURL,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+           ) {
+            for url in urls
+                .filter({ $0.pathExtension == "json" })
+                .sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
+                if let event = loadInboxEvent(from: url) {
+                    events.append(event)
+                }
+                consumedURLs.append(url)
+            }
+        }
+
+        if let legacyInboxURL = legacyJSONLInboxURL(),
+           let legacyEvents = loadLegacyJSONLInboxEvents(from: legacyInboxURL) {
+            events.append(contentsOf: legacyEvents)
+            consumedURLs.append(legacyInboxURL)
+        }
+
+        return InboxReadResult(events: events, consumedURLs: consumedURLs)
+    }
+
+    private func loadInboxEvent(from url: URL) -> TokenUsageEvent? {
+        guard let data = try? Data(contentsOf: url),
+              let event = try? TokenUsageSanitizer.sanitizeEventJSONData(data)
+        else {
+            return nil
+        }
+
+        return event
+    }
+
+    private func loadLegacyJSONLInboxEvents(from url: URL) -> [TokenUsageEvent]? {
+        guard let data = try? Data(contentsOf: url),
               let contents = String(data: data, encoding: .utf8)
         else {
-            return []
+            return nil
         }
 
         return contents
             .split(whereSeparator: \.isNewline)
             .compactMap { line -> TokenUsageEvent? in
-                guard let data = String(line).data(using: .utf8),
-                      let event = try? JSONDecoder().decode(TokenUsageEvent.self, from: data)
-                else {
+                guard let data = String(line).data(using: .utf8) else {
                     return nil
                 }
 
-                do {
-                    try event.validate()
-                    return event
-                } catch {
-                    return nil
-                }
+                return try? TokenUsageSanitizer.sanitizeEventJSONData(data)
             }
+    }
+
+    private func persistEventsWithoutLock(_ events: [TokenUsageEvent]) throws {
+        try FileManager.default.createDirectory(
+            at: fileURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        let data = try TokenUsageSanitizer.jsonEncoder.encode(events)
+        try data.write(to: fileURL, options: [.atomic])
+    }
+
+    private func removeConsumedInboxFiles(_ urls: [URL]) {
+        for url in urls {
+            try? FileManager.default.removeItem(at: url)
+        }
+    }
+
+    private func legacyJSONLInboxURL() -> URL? {
+        guard let inboxURL else {
+            return nil
+        }
+
+        return inboxURL
+            .deletingLastPathComponent()
+            .appendingPathComponent("events-inbox.jsonl")
     }
 
     private func deduplicatedEvents(_ events: [TokenUsageEvent]) -> [TokenUsageEvent] {
@@ -171,6 +277,16 @@ final class TokenUsageStore: @unchecked Sendable {
             object: self
         )
     }
+}
+
+private struct InboxReadResult {
+    let events: [TokenUsageEvent]
+    let consumedURLs: [URL]
+}
+
+private struct StoreLoadResult {
+    let events: [TokenUsageEvent]
+    let didImportQueuedEvents: Bool
 }
 
 private extension NSLock {

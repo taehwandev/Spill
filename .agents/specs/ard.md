@@ -148,24 +148,27 @@ Constraints:
 
 Decision:
 
-The native app owns an app-local token usage store. The default receiver is an
-append-only JSONL inbox that trusted hooks and adapters can write without
-opening a network port. A loopback-only token usage bridge is available as an
-optional compatibility receiver and writes accepted events into the same
-`TokenUsageStore`.
+The native app owns an app-local token usage store. The default receiver is a
+local event queue directory that trusted hooks and adapters can write without
+opening a network port. Writers create one unique `.tmp` file per event and
+atomically rename it to `.json`; Spill imports complete `.json` files into the
+same `TokenUsageStore`.
 
 Rationale:
 
-Project-specific setup would be easy to miss. A global local inbox plus a
+Project-specific setup would be easy to miss. A global local queue plus a
 global agent setup prompt or runtime hook lets Spill work across projects while
-keeping the safety boundary explicit. The HTTP bridge must not be required for
-normal metering because file append is cheaper, has a smaller surface area, and
-does not require a persistent port.
+keeping the safety boundary explicit. A queue directory is cheaper than a local
+server, avoids a persistent port, and avoids shared-file append races between
+concurrent agent hooks.
 
 Rules:
 
 - Local receivers store only numeric token counts, timestamps, model ids,
   opaque ids, safe enum labels such as `ai_tool`, and `local_only` sync mode.
+- Local queue writers must never append to a shared events file. They must write
+  a unique `.tmp` file, close it, then rename it to `.json` in the same
+  directory so Spill never imports partial writes.
 - Local receivers must reject or ignore prompt text, responses, commands, file
   paths, repo names, branch names, commit messages, terminal output, logs,
   diffs, source content, environment values, secrets, and arbitrary extra
@@ -193,7 +196,8 @@ Rules:
   supported local tool stores. For Codex, the importer runs on demand from a
   trusted hook or workflow, reads recent `~/.codex/sessions/**/rollout-*.jsonl`
   files, and parses only `event_msg/token_count` usage records plus safe opaque
-  session/model metadata. It must not parse or store prompts, assistant
+  session/model metadata. It must enqueue one event file per imported span and
+  must not parse or store prompts, assistant
   responses, commands, file paths, working directories, diffs, terminal output,
   source content, environment values, or secrets.
 - Codex importer spans are deduplicated with opaque hashes and stored as
@@ -201,9 +205,9 @@ Rules:
   project_global`, and `local_only` sync events.
 - The local app always reads the app-owned local store. UI must not imply that
   metering starts only after pressing a local check button.
-- A local dashboard self-test may post one synthetic `local_only` event through
-  the loopback bridge. The event must be clearly identifiable as self-test data
-  with opaque ids, safe enum labels, and numeric buckets only. It must be
+- A local dashboard self-test may enqueue one synthetic `local_only` event
+  through the local queue. The event must be clearly identifiable as self-test
+  data with opaque ids, safe enum labels, and numeric buckets only. It must be
   treated as optional diagnostics and must not read prompt text, commands, file
   paths, logs, source, environment values, or secrets.
 

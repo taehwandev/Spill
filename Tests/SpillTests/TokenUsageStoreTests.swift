@@ -80,19 +80,13 @@ final class TokenUsageStoreTests: XCTestCase {
     }
 
     @MainActor
-    func testDashboardStoreRunsLocalBridgeSelfTestThroughClient() async throws {
-        let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
-        let bridgeClient = TokenUsageBridgeClient { event in
-            try usageStore.appendEvent(event)
-        }
-        let dashboardStore = TokenUsageDashboardStore(
-            usageStore: usageStore,
-            bridgeClient: bridgeClient
-        )
+    func testDashboardStoreRunsLocalQueueSelfTest() async throws {
+        let usageStore = TokenUsageStore(fileURL: temporaryEventsURL(), inboxURL: temporaryInboxURL())
+        let dashboardStore = TokenUsageDashboardStore(usageStore: usageStore)
 
         XCTAssertEqual(dashboardStore.snapshot.eventCount, 0)
 
-        await dashboardStore.runLocalBridgeSelfTest()
+        await dashboardStore.runLocalQueueSelfTest()
 
         XCTAssertEqual(dashboardStore.snapshot.eventCount, 1)
         XCTAssertEqual(dashboardStore.snapshot.totalTokens, 64)
@@ -114,21 +108,23 @@ final class TokenUsageStoreTests: XCTestCase {
     }
 
     @MainActor
-    func testDashboardStoreReportsLocalBridgeSelfTestFailure() async {
-        let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
-        let bridgeClient = TokenUsageBridgeClient { _ in
-            throw TokenUsageBridgeClientError.invalidResponse(500)
-        }
-        let dashboardStore = TokenUsageDashboardStore(
-            usageStore: usageStore,
-            bridgeClient: bridgeClient
+    func testDashboardStoreReportsLocalQueueSelfTestFailure() async {
+        let blockedInboxURL = temporaryInboxURL()
+            .deletingLastPathComponent()
+            .appendingPathComponent("not-a-directory")
+        try? FileManager.default.createDirectory(
+            at: blockedInboxURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
         )
+        try? Data("blocked".utf8).write(to: blockedInboxURL)
+        let usageStore = TokenUsageStore(fileURL: temporaryEventsURL(), inboxURL: blockedInboxURL)
+        let dashboardStore = TokenUsageDashboardStore(usageStore: usageStore)
 
-        await dashboardStore.runLocalBridgeSelfTest()
+        await dashboardStore.runLocalQueueSelfTest()
 
         XCTAssertEqual(dashboardStore.snapshot.eventCount, 0)
         XCTAssertEqual(dashboardStore.selfTestMessage?.isSuccess, false)
-        XCTAssertEqual(dashboardStore.lastError, "Optional HTTP bridge self-test failed.")
+        XCTAssertEqual(dashboardStore.lastError, "Local queue self-test failed.")
     }
 
     func testSafeEventEncodesWithWebCompatibleKeys() throws {
@@ -252,7 +248,7 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(store.loadEvents(), [])
     }
 
-    func testStoreLoadsAppendOnlyInboxEventsAndDeduplicates() throws {
+    func testStoreDrainsQueuedInboxEventsAndDeduplicates() throws {
         let eventsURL = temporaryEventsURL()
         let inboxURL = temporaryInboxURL()
         let store = TokenUsageStore(fileURL: eventsURL, inboxURL: inboxURL)
@@ -266,25 +262,78 @@ final class TokenUsageStoreTests: XCTestCase {
 
         try store.replaceEvents([storedEvent])
         try FileManager.default.createDirectory(
-            at: inboxURL.deletingLastPathComponent(),
+            at: inboxURL,
             withIntermediateDirectories: true
         )
-        let inboxLines = [
-            String(data: try TokenUsageSanitizer.eventData(storedEvent), encoding: .utf8),
-            String(data: try TokenUsageSanitizer.eventData(inboxEvent), encoding: .utf8),
-            "{not-json"
-        ].compactMap { $0 }.joined(separator: "\n")
-        try Data("\(inboxLines)\n".utf8).write(to: inboxURL)
+        let duplicateURL = inboxURL.appendingPathComponent("001.json")
+        let inboxEventURL = inboxURL.appendingPathComponent("002.json")
+        let invalidURL = inboxURL.appendingPathComponent("003.json")
+        try TokenUsageSanitizer.eventData(storedEvent).write(to: duplicateURL)
+        try TokenUsageSanitizer.eventData(inboxEvent).write(to: inboxEventURL)
+        try Data("{not-json".utf8).write(to: invalidURL)
 
         let events = store.loadEvents()
 
         XCTAssertEqual(events.map(\.spanID), ["span_local_01", "span_inbox_01"])
         XCTAssertEqual(events.map(\.aiTool), [.codex, .claude])
+        XCTAssertEqual(store.loadEvents(), events)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: eventsURL.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: duplicateURL.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: inboxEventURL.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: invalidURL.path))
 
         try store.clearEvents()
         XCTAssertEqual(store.loadEvents(), [])
         XCTAssertFalse(FileManager.default.fileExists(atPath: eventsURL.path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: inboxURL.path))
+    }
+
+    func testStoreCanEnqueueInboxEventAtomically() throws {
+        let eventsURL = temporaryEventsURL()
+        let inboxURL = temporaryInboxURL()
+        let store = TokenUsageStore(fileURL: eventsURL, inboxURL: inboxURL)
+        let event = Self.safeEvent(aiTool: .claude, spanID: "span_queue_01")
+
+        try store.enqueueInboxEvent(event)
+
+        let queuedFiles = try FileManager.default.contentsOfDirectory(
+            at: inboxURL,
+            includingPropertiesForKeys: nil
+        )
+        XCTAssertEqual(queuedFiles.filter { $0.pathExtension == "json" }.count, 1)
+        XCTAssertEqual(queuedFiles.filter { $0.pathExtension == "tmp" }.count, 0)
+
+        XCTAssertEqual(store.loadEvents(), [event])
+        XCTAssertEqual(
+            try FileManager.default.contentsOfDirectory(
+                at: inboxURL,
+                includingPropertiesForKeys: nil
+            )
+            .filter { $0.pathExtension == "json" }
+            .count,
+            0
+        )
+    }
+
+    func testStoreMigratesLegacyJSONLInboxOnce() throws {
+        let eventsURL = temporaryEventsURL()
+        let inboxURL = temporaryInboxURL()
+        let store = TokenUsageStore(fileURL: eventsURL, inboxURL: inboxURL)
+        let legacyURL = inboxURL
+            .deletingLastPathComponent()
+            .appendingPathComponent("events-inbox.jsonl")
+        let event = Self.safeEvent(aiTool: .claude, spanID: "span_legacy_01")
+        let line = try XCTUnwrap(String(data: TokenUsageSanitizer.eventData(event), encoding: .utf8))
+
+        try FileManager.default.createDirectory(
+            at: legacyURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try Data("\(line)\n{not-json\n".utf8).write(to: legacyURL)
+
+        XCTAssertEqual(store.loadEvents(), [event])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: legacyURL.path))
+        XCTAssertEqual(store.loadEvents(), [event])
     }
 
     @MainActor
@@ -381,8 +430,8 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(prompt.contains("does not measure usage"))
         XCTAssertTrue(prompt.contains("does not grant access to token counts by itself"))
         XCTAssertTrue(prompt.contains("executable hook"))
-        XCTAssertTrue(prompt.contains("events-inbox.jsonl"))
-        XCTAssertTrue(prompt.contains("loopback HTTP bridge"))
+        XCTAssertTrue(prompt.contains("events-inbox"))
+        XCTAssertTrue(prompt.contains("Write a unique .tmp file first"))
         XCTAssertTrue(prompt.contains("ai_tool must be one of: codex, claude, antigravity, openai, unknown"))
         XCTAssertFalse(prompt.contains("ollama"))
         XCTAssertTrue(prompt.contains("Never inspect local agent logs"))
@@ -523,7 +572,7 @@ final class TokenUsageStoreTests: XCTestCase {
     private func temporaryInboxURL() -> URL {
         URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent(UUID().uuidString)
-            .appendingPathComponent("events-inbox.jsonl")
+            .appendingPathComponent("events-inbox", isDirectory: true)
     }
 
     private func jsonData(_ object: Any) throws -> Data {

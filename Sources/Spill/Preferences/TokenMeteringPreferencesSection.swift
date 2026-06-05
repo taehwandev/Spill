@@ -22,13 +22,13 @@ struct TokenMeteringPreferencesSection: View {
 
             VStack(alignment: .leading, spacing: 9) {
                 TokenMeteringOptionHeader(
-                    title: "Local file inbox",
+                    title: "Local event queue",
                     state: "Default",
-                    systemImage: "internaldrive",
+                    systemImage: "tray.and.arrow.down",
                     tint: .green
                 )
 
-                Text("Hooks and adapters can append safe JSONL events here without opening a local port. Spill reads this local store when the panel or dashboard refreshes.")
+                Text("Hooks and adapters enqueue one safe JSON event file per completed response. Spill imports complete .json files into the local store and ignores partial .tmp files.")
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
                     .lineSpacing(2)
@@ -55,30 +55,6 @@ struct TokenMeteringPreferencesSection: View {
             .background(tokenMeteringOptionBackground)
 
             VStack(alignment: .leading, spacing: 9) {
-                HStack(alignment: .center, spacing: 10) {
-                    TokenMeteringOptionHeader(
-                        title: "Loopback HTTP bridge",
-                        state: settings.tokenUsageBridgeEnabled ? "Enabled" : "Optional",
-                        systemImage: "network",
-                        tint: settings.tokenUsageBridgeEnabled ? .green : .secondary
-                    )
-
-                    Spacer(minLength: 8)
-
-                    Toggle("", isOn: $settings.tokenUsageBridgeEnabled)
-                        .labelsHidden()
-                }
-
-                Text("Use only for tools that can POST to 127.0.0.1:\(TokenUsageBridgeServer.defaultPort). The bridge is disabled by default; local file storage does not need it.")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
-                    .lineSpacing(2)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(10)
-            .background(tokenMeteringOptionBackground)
-
-            VStack(alignment: .leading, spacing: 9) {
                 TokenMeteringOptionHeader(
                     title: "On-demand adapters",
                     state: "No polling",
@@ -94,6 +70,26 @@ struct TokenMeteringPreferencesSection: View {
             }
             .padding(10)
             .background(tokenMeteringOptionBackground)
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Adapter scripts")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(.secondary)
+
+                Text("Each script captures exact token counts from its runtime and enqueues one event file. No polling; events are written only when the runtime finishes a response.")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .lineSpacing(2)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                ForEach(TokenMeteringAdapterKit.all) { adapter in
+                    TokenMeteringAdapterRow(
+                        adapter: adapter,
+                        copiedTarget: $copiedTarget,
+                        onCopy: copyToClipboard
+                    )
+                }
+            }
 
             VStack(spacing: 8) {
                 ForEach(TokenMeteringPreferencesModel.modes) { mode in
@@ -196,6 +192,126 @@ private struct TokenMeteringOptionHeader: View {
                     Capsule(style: .continuous)
                         .fill(tint.opacity(0.12))
                 )
+        }
+    }
+}
+
+private struct TokenMeteringAdapterRow: View {
+    let adapter: TokenMeteringAdapter
+    @Binding var copiedTarget: String?
+    let onCopy: (String, String) -> Void
+    @State private var installedPath: URL?
+    @State private var installResult: String?
+
+    private var copyScriptKey: String { "script_\(adapter.id)" }
+    private var copyHookKey: String { "hook_\(adapter.id)" }
+    private var installKey: String { "install_\(adapter.id)" }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 10) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(adapter.title)
+                        .font(.system(size: 11, weight: .bold))
+                    Text(adapter.subtitle)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer(minLength: 8)
+
+                HStack(spacing: 6) {
+                    Button {
+                        if let content = adapter.scriptContent {
+                            onCopy(content, copyScriptKey)
+                        }
+                    } label: {
+                        Label(
+                            copiedTarget == copyScriptKey ? "Copied" : "Copy Script",
+                            systemImage: copiedTarget == copyScriptKey ? "checkmark" : "doc.on.doc"
+                        )
+                    }
+                    .disabled(adapter.scriptContent == nil)
+
+                    Button {
+                        installAdapter()
+                    } label: {
+                        Label(
+                            copiedTarget == installKey ? "Installed" : "Install",
+                            systemImage: copiedTarget == installKey ? "checkmark" : "arrow.down.circle"
+                        )
+                    }
+                    .disabled(adapter.scriptURL == nil)
+                }
+                .buttonStyle(.bordered)
+                .font(.system(size: 10, weight: .semibold))
+            }
+
+            if let result = installResult {
+                Text(result)
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(result.hasPrefix("Installed") ? .green : .red)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if adapter.hookConfigTemplate != nil {
+                let path = installedPath ?? TokenMeteringAdapterKit.defaultInstallURL(for: adapter)
+                let config = adapter.hookConfig(installedAt: path) ?? ""
+                HStack(alignment: .top, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        if let target = adapter.hookConfigTarget {
+                            Text("Hook config → \(target)")
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundStyle(.secondary)
+                        }
+                        Text(config)
+                            .font(.system(size: 9, weight: .medium, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    Spacer(minLength: 8)
+
+                    Button {
+                        onCopy(config, copyHookKey)
+                    } label: {
+                        Label(
+                            copiedTarget == copyHookKey ? "Copied" : "Copy",
+                            systemImage: copiedTarget == copyHookKey ? "checkmark" : "doc.on.doc"
+                        )
+                    }
+                    .buttonStyle(.bordered)
+                    .font(.system(size: 10, weight: .semibold))
+                }
+                .padding(8)
+                .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 6))
+            }
+        }
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color(NSColor.controlBackgroundColor).opacity(0.35))
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.primary.opacity(0.06), lineWidth: 1)
+        }
+    }
+
+    private func installAdapter() {
+        let destination = TokenMeteringAdapterKit.defaultInstallURL(for: adapter)
+        do {
+            try adapter.install(to: destination)
+            installedPath = destination
+            installResult = "Installed → \(destination.path)"
+            copiedTarget = installKey
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                if copiedTarget == installKey { copiedTarget = nil }
+            }
+        } catch {
+            installResult = "Install failed: \(error.localizedDescription)"
         }
     }
 }

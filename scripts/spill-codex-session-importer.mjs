@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { appendFile, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { createInterface } from "node:readline";
 import { dirname, join } from "node:path";
 import { homedir } from "node:os";
@@ -26,14 +26,14 @@ const transport = normalizedTransport(
 );
 const inboxPath =
   options.inboxPath ??
-  process.env.SPILL_TOKEN_USAGE_INBOX_FILE ??
+  process.env.SPILL_TOKEN_USAGE_INBOX_DIR ??
   join(
     homedir(),
     "Library",
     "Application Support",
     "Spill",
     "token-metering",
-    "events-inbox.jsonl",
+    "events-inbox",
   );
 const eventsPath =
   options.eventsPath ??
@@ -523,14 +523,23 @@ async function postEvent(url, event) {
 }
 
 async function appendInboxEvent(path, event) {
-  await mkdir(dirname(path), { recursive: true, mode: 0o700 });
-  await appendFile(path, `${JSON.stringify(event)}\n`, { encoding: "utf8", mode: 0o600 });
+  await mkdir(path, { recursive: true, mode: 0o700 });
+  const id = randomUUID();
+  const temporaryPath = join(path, `.${id}.tmp`);
+  const finalPath = join(path, `${id}.json`);
+  await writeFile(temporaryPath, JSON.stringify(event), {
+    encoding: "utf8",
+    mode: 0o600,
+    flag: "wx",
+  });
+  await rename(temporaryPath, finalPath);
 }
 
 async function readLocalSpanIDs(eventsFile, inboxFile) {
   return new Set([
     ...await readJSONArraySpanIDs(eventsFile),
-    ...await readJSONLSpanIDs(inboxFile),
+    ...await readQueuedInboxSpanIDs(inboxFile),
+    ...await readJSONLSpanIDs(join(dirname(inboxFile), "events-inbox.jsonl")),
   ]);
 }
 
@@ -558,6 +567,25 @@ async function readJSONLSpanIDs(path) {
   for (const line of contents.split(/\r?\n/)) {
     if (line.trim().length === 0) continue;
     const parsed = safeJSON(line);
+    if (typeof parsed?.span_id === "string") {
+      spanIDs.push(parsed.span_id);
+    }
+  }
+  return spanIDs;
+}
+
+async function readQueuedInboxSpanIDs(path) {
+  let files = [];
+  try {
+    files = await readdir(path);
+  } catch {
+    return [];
+  }
+
+  const spanIDs = [];
+  for (const file of files) {
+    if (!file.endsWith(".json") || file.startsWith(".")) continue;
+    const parsed = safeJSON(await readFile(join(path, file), "utf8").catch(() => ""));
     if (typeof parsed?.span_id === "string") {
       spanIDs.push(parsed.span_id);
     }
@@ -648,7 +676,7 @@ Options:
   --interval-ms MS       Poll interval for --watch. Default: 5000.
   --codex-home PATH      Codex home. Default: CODEX_HOME or ~/.codex.
   --transport MODE       file or http. Default: file unless --endpoint is provided.
-  --inbox PATH           Local JSONL inbox. Default: ~/Library/Application Support/Spill/token-metering/events-inbox.jsonl.
+  --inbox PATH           Local event queue directory. Default: ~/Library/Application Support/Spill/token-metering/events-inbox.
   --events PATH          Local canonical events JSON. Used for file-transport dedupe.
   --endpoint URL         Spill event endpoint for --transport http.
   --state PATH           Import state path.
