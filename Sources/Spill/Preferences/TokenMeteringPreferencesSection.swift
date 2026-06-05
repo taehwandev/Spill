@@ -7,15 +7,16 @@ struct TokenMeteringPreferencesSection: View {
     @State private var copiedTarget: String?
     @State private var setupInstalledPath: URL?
     @State private var setupInstallResult: String?
+    @State private var advancedVisible = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             VStack(alignment: .leading, spacing: 6) {
-                Text("Current device is local-only.")
+                Text("Local token metering")
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(.primary)
 
-                Text("Spill aggregates token counts in the local app dashboard. Login and hosted sync are not configured in this app slice, so no server transfer is active.")
+                Text("Spill stores safe token counts on this Mac. Login, cloud sync, and server transfer are not active in this app slice.")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .lineSpacing(3)
@@ -24,64 +25,13 @@ struct TokenMeteringPreferencesSection: View {
 
             VStack(alignment: .leading, spacing: 9) {
                 TokenMeteringOptionHeader(
-                    title: "Local event queue",
-                    state: "Default",
-                    systemImage: "tray.and.arrow.down",
-                    tint: .green
-                )
-
-                Text("Hooks and adapters enqueue one safe JSON event file per completed response. Spill imports complete .json files into the local store and ignores partial .tmp files.")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
-                    .lineSpacing(2)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                HStack(spacing: 8) {
-                    Text(TokenUsageStore.defaultInboxURL().path)
-                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                        .textSelection(.enabled)
-
-                    Spacer(minLength: 8)
-
-                    Button {
-                        copyToClipboard(TokenUsageStore.defaultInboxURL().path, target: "inbox")
-                    } label: {
-                        Label(copiedTarget == "inbox" ? "Copied" : "Copy Path", systemImage: copiedTarget == "inbox" ? "checkmark" : "doc.on.doc")
-                    }
-                    .font(.system(size: 10, weight: .semibold))
-                }
-            }
-            .padding(10)
-            .background(tokenMeteringOptionBackground)
-
-            VStack(alignment: .leading, spacing: 9) {
-                TokenMeteringOptionHeader(
-                    title: "On-demand adapters",
-                    state: "No polling",
-                    systemImage: "bolt.horizontal",
-                    tint: .teal
-                )
-
-                Text("Codex, Claude, Antigravity, and direct OpenAI adapters should write one exact usage event when their runtime exposes final token counts. Continuous polling is not required for normal metering.")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
-                    .lineSpacing(2)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(10)
-            .background(tokenMeteringOptionBackground)
-
-            VStack(alignment: .leading, spacing: 9) {
-                TokenMeteringOptionHeader(
-                    title: "One-step setup",
+                    title: "Agent prompt + one-step setup",
                     state: "Recommended",
                     systemImage: "wand.and.stars",
                     tint: .teal
                 )
 
-                Text("Install the setup tool once, then run a single command to detect Codex, Claude, Antigravity, and OpenAI support. Hook config files are changed only when the copied command is run with --apply.")
+                Text("Use the global prompt once. When an agent is asked to install or fix Spill metering, the setup helper installs detected Codex, Claude, and AGY hooks in one pass.")
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
                     .lineSpacing(2)
@@ -90,30 +40,27 @@ struct TokenMeteringPreferencesSection: View {
                 let setupURL = setupInstalledPath ?? TokenMeteringSetupInstaller.defaultInstallURL()
                 HStack(spacing: 6) {
                     Button {
+                        copyToClipboard(TokenMeteringGlobalSetup.globalPrompt, target: "prompt")
+                    } label: {
+                        Label(
+                            copiedTarget == "prompt" ? "Copied" : "Copy Prompt",
+                            systemImage: copiedTarget == "prompt" ? "checkmark" : "doc.on.doc"
+                        )
+                    }
+
+                    Button {
                         installSetupTool()
                     } label: {
                         Label(
-                            copiedTarget == "setup_install" ? "Installed" : "Install Setup Tool",
+                            copiedTarget == "setup_install" ? "Installed" : "Install Helper",
                             systemImage: copiedTarget == "setup_install" ? "checkmark" : "arrow.down.circle"
                         )
                     }
 
                     Button {
-                        copyToClipboard(TokenMeteringSetupInstaller.setupCommand(installedAt: setupURL), target: "setup_command")
+                        openDashboardAction()
                     } label: {
-                        Label(
-                            copiedTarget == "setup_command" ? "Copied" : "Copy Setup Command",
-                            systemImage: copiedTarget == "setup_command" ? "checkmark" : "terminal"
-                        )
-                    }
-
-                    Button {
-                        copyToClipboard(TokenMeteringSetupInstaller.workflowSetupCommand(installedAt: setupURL), target: "workflow_command")
-                    } label: {
-                        Label(
-                            copiedTarget == "workflow_command" ? "Copied" : "Workflow Command",
-                            systemImage: copiedTarget == "workflow_command" ? "checkmark" : "point.3.connected.trianglepath.dotted"
-                        )
+                        Label("Dashboard", systemImage: "chart.bar.xaxis")
                     }
                 }
                 .buttonStyle(.bordered)
@@ -136,80 +83,103 @@ struct TokenMeteringPreferencesSection: View {
             .padding(10)
             .background(tokenMeteringOptionBackground)
 
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Adapter scripts")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(.secondary)
+            DisclosureGroup(isExpanded: $advancedVisible) {
+                VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 9) {
+                        TokenMeteringOptionHeader(
+                            title: "Local event queue",
+                            state: "Default",
+                            systemImage: "tray.and.arrow.down",
+                            tint: .green
+                        )
 
-                Text("Each script captures exact token counts from its runtime and enqueues one event file. No polling; events are written only when the runtime finishes a response.")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
-                    .lineSpacing(2)
-                    .fixedSize(horizontal: false, vertical: true)
+                        HStack(spacing: 8) {
+                            Text(TokenUsageStore.defaultInboxURL().path)
+                                .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
+                                .textSelection(.enabled)
 
-                ForEach(TokenMeteringAdapterKit.all) { adapter in
-                    TokenMeteringAdapterRow(
-                        adapter: adapter,
-                        copiedTarget: $copiedTarget,
-                        onCopy: copyToClipboard
-                    )
-                }
-            }
+                            Spacer(minLength: 8)
 
-            VStack(spacing: 8) {
-                ForEach(TokenMeteringPreferencesModel.modes) { mode in
-                    TokenMeteringModeRow(mode: mode)
-                }
-            }
+                            Button {
+                                copyToClipboard(TokenUsageStore.defaultInboxURL().path, target: "inbox")
+                            } label: {
+                                Label(
+                                    copiedTarget == "inbox" ? "Copied" : "Copy Path",
+                                    systemImage: copiedTarget == "inbox" ? "checkmark" : "doc.on.doc"
+                                )
+                            }
+                            .font(.system(size: 10, weight: .semibold))
+                        }
+                    }
+                    .padding(10)
+                    .background(tokenMeteringOptionBackground)
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Never collected or uploaded")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Advanced install commands")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(.secondary)
 
-                FlowingTokenMeteringLabels(labels: TokenMeteringPreferencesModel.forbiddenContentLabels)
-            }
+                        HStack(spacing: 6) {
+                            Button {
+                                let setupURL = setupInstalledPath ?? TokenMeteringSetupInstaller.defaultInstallURL()
+                                copyToClipboard(TokenMeteringSetupInstaller.setupCommand(installedAt: setupURL), target: "setup_command")
+                            } label: {
+                                Label(
+                                    copiedTarget == "setup_command" ? "Copied" : "Copy One-Step Command",
+                                    systemImage: copiedTarget == "setup_command" ? "checkmark" : "terminal"
+                                )
+                            }
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Global setup")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(.secondary)
+                            Button {
+                                let setupURL = setupInstalledPath ?? TokenMeteringSetupInstaller.defaultInstallURL()
+                                copyToClipboard(TokenMeteringSetupInstaller.workflowSetupCommand(installedAt: setupURL), target: "workflow_command")
+                            } label: {
+                                Label(
+                                    copiedTarget == "workflow_command" ? "Copied" : "Copy Workflow Command",
+                                    systemImage: copiedTarget == "workflow_command" ? "checkmark" : "point.3.connected.trianglepath.dotted"
+                                )
+                            }
+                        }
+                        .buttonStyle(.bordered)
+                        .font(.system(size: 10, weight: .semibold))
+                    }
 
-                Text("Use this prompt once in your global agent instructions. It sets the safety contract; actual automatic reporting still requires an agent runtime or adapter that exposes exact token counts.")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
-                    .lineSpacing(2)
-                    .fixedSize(horizontal: false, vertical: true)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Adapter scripts")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(.secondary)
 
-                HStack(spacing: 8) {
-                    Button {
-                        copyToClipboard(TokenMeteringGlobalSetup.globalPrompt, target: "prompt")
-                    } label: {
-                        Label(copiedTarget == "prompt" ? "Copied Prompt" : "Copy Agent Prompt", systemImage: copiedTarget == "prompt" ? "checkmark" : "doc.on.doc")
+                        ForEach(TokenMeteringAdapterKit.all) { adapter in
+                            TokenMeteringAdapterRow(
+                                adapter: adapter,
+                                copiedTarget: $copiedTarget,
+                                onCopy: copyToClipboard
+                            )
+                        }
+                    }
+
+                    VStack(spacing: 8) {
+                        ForEach(TokenMeteringPreferencesModel.modes) { mode in
+                            TokenMeteringModeRow(mode: mode)
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Never collected or uploaded")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(.secondary)
+
+                        FlowingTokenMeteringLabels(labels: TokenMeteringPreferencesModel.forbiddenContentLabels)
                     }
                 }
-                .buttonStyle(.bordered)
-                .font(.system(size: 11, weight: .semibold))
-            }
-
-            HStack(spacing: 8) {
-                Button {
-                    openDashboardAction()
-                } label: {
-                    Label("Open Local Dashboard", systemImage: "chart.bar.xaxis")
-                }
-                .buttonStyle(.borderedProminent)
-
-                Text("Detailed categories require exact usage metadata from the sending runtime or adapter. The dashboard is for viewing local events and optional diagnostics.")
-                    .font(.system(size: 10, weight: .medium))
+                .padding(.top, 8)
+            } label: {
+                Label("Advanced details", systemImage: "slider.horizontal.3")
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
             }
-            .font(.system(size: 11, weight: .semibold))
-
-            Text("The web dashboard is the future signed-in cloud surface. Local review happens here in the app.")
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(.secondary)
         }
     }
 

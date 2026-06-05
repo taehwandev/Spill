@@ -116,22 +116,20 @@ enum TokenMeteringAdapterKit {
         subtitle: "PostInvocation hook — token usage reporter",
         scriptFileName: "spill-hook.py",
         hookConfigTemplate: """
-        Add to your AGY hooks config under PostInvocation:
+        Add to your AGY hooks config:
         {
-          "spill-metering": {
-            "PostInvocation": [
-              {
-                "matcher": "",
-                "hooks": [
-                  {
-                    "type": "command",
-                    "command": "python3 <script_path>",
-                    "timeout": 5
-                  }
-                ]
-              }
-            ]
-          }
+          "PostInvocation": [
+            {
+              "matcher": "",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "python3 <script_path>",
+                  "timeout": 5
+                }
+              ]
+            }
+          ]
         }
         """,
         hookConfigTarget: ".agents/hooks.json"
@@ -209,11 +207,11 @@ enum TokenMeteringSetupInstaller {
     }
 
     static func setupCommand(installedAt scriptURL: URL = defaultInstallURL()) -> String {
-        "node \(shellQuote(scriptURL.path)) --apply"
+        "node \(shellQuote(scriptURL.path)) --apply --include codex,claude,antigravity,openai"
     }
 
     static func workflowSetupCommand(installedAt scriptURL: URL = defaultInstallURL()) -> String {
-        "node \(shellQuote(scriptURL.path)) --apply --workflow-hook /path/to/.agents/hooks.json"
+        "node \(shellQuote(scriptURL.path)) --apply --include codex,claude,antigravity,openai --workflow-hook /path/to/.agents/hooks.json"
     }
 
     private static func shellQuote(_ value: String) -> String {

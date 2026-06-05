@@ -15,18 +15,32 @@ enum TokenMeteringGlobalSetup {
     This instruction is only a safety contract. It is not a hook, does not measure usage, and does not grant access to token counts by itself.
     If your runtime or adapter does not expose exact token counts to an executable hook, silently skip event creation.
 
+    Runtime label handoff:
+    - At the beginning of every user-visible task, after classifying the request and before running project tools, edits, tests, commits, or reviews, silently write or refresh a short-lived safe label context when the setup helper exists.
+    - This label context is not a usage event. It contains no token counts and no user content. It only lets the installed hook attach task_type and stage to the later exact usage event.
+    - Use the current runtime tool in --label: codex for Codex, claude for Claude Code, antigravity for AGY/Antigravity, or openai for direct OpenAI SDK work.
+    - Use the dominant current task_type and stage from the rules below. If the dominant task changes during the same turn, refresh the label context with the new safe labels.
+    - Do not mention this label command in normal conversation.
+    - If the setup helper is missing, skip label context creation silently unless the user asked to install or fix Spill metering.
+    - Preferred command shape:
+      node ~/Library/Application Support/Spill/adapters/setup/spill-token-metering-setup.mjs --label codex --task-type debugging --stage implement
+    - The label context may contain only ai_tool, task_type, stage, updated_at, and expires_at. Never include task text, prompts, commands, file paths, repo names, branches, logs, diffs, source, environment values, or secrets.
+
     Install behavior:
-    - This prompt is meant to let an AI agent install Spill metering in one pass when the user asks to install, apply, fix, or verify Spill token metering.
-    - Do not ask the user to install Codex, Claude, Antigravity/AGY, or OpenAI adapters one by one.
-    - When the user asks for installation or repair, run the one-step setup helper with --apply if it exists:
-      node ~/Library/Application Support/Spill/adapters/setup/spill-token-metering-setup.mjs --apply
-    - The setup helper should copy every detected supported adapter and merge the known user-level hook configs in one operation.
-    - If the setup helper is not installed but the Spill repository is available, run the repo helper instead:
-      node scripts/spill-token-metering-setup.mjs --apply
-    - The user's explicit install/fix/apply request is enough confirmation for user-level adapter and hook setup.
+    - This prompt is meant to let any capable AI agent install Spill metering for every supported local AI tool in one pass when the user asks to install, apply, fix, repair, enable, or verify Spill token metering.
+    - Do not install only the current AI runtime. Do not ask the user to install Codex, Claude, Antigravity/AGY, or OpenAI adapters one by one.
+    - The user's explicit install/fix/apply/repair/enable/verify request is enough confirmation for user-level adapter and hook setup.
+    - First run the one-step setup helper with --apply and an explicit include list:
+      node ~/Library/Application Support/Spill/adapters/setup/spill-token-metering-setup.mjs --apply --include codex,claude,antigravity,openai
+    - The setup helper must copy every detected supported adapter and merge the known user-level hook configs in one operation. Expected successful targets include Codex, Claude Code, and Antigravity/AGY when they are installed or configured on this computer.
+    - If the user-level setup helper is missing, try these fallbacks without asking the user to copy scripts manually:
+      node /Applications/Spill.app/Contents/Resources/adapters/setup/spill-token-metering-setup.mjs --apply --include codex,claude,antigravity,openai
+      node .build/Spill.app/Contents/Resources/adapters/setup/spill-token-metering-setup.mjs --apply --include codex,claude,antigravity,openai
+      node scripts/spill-token-metering-setup.mjs --apply --include codex,claude,antigravity,openai
+    - If none of those helpers exists, say the one-step helper is missing and ask the user to open Spill Preferences and use Install Helper. Do not provide per-adapter manual copy steps as the primary path.
     - Ask only before writing a project or workflow hook file unless the user already supplied that exact path.
     - If a workflow hook path is supplied, pass it explicitly:
-      node ~/Library/Application Support/Spill/adapters/setup/spill-token-metering-setup.mjs --apply --workflow-hook /path/to/.agents/hooks.json
+      node ~/Library/Application Support/Spill/adapters/setup/spill-token-metering-setup.mjs --apply --include codex,claude,antigravity,openai --workflow-hook /path/to/.agents/hooks.json
 
     Event timing:
     - Send at most one event for each assistant response or adapter span that exposes final exact token counts.
@@ -145,10 +159,6 @@ enum TokenMeteringGlobalSetup {
     - Prefer payload fields named task_type/taskType and stage when the hook payload supports them.
     - Otherwise use SPILL_TOKEN_USAGE_TASK_TYPE or SPILL_WORKFLOW_TASK_TYPE, and SPILL_TOKEN_USAGE_STAGE or SPILL_WORKFLOW_STAGE.
     - For Codex importer workflows, pass --task-type SLUG and --stage SLUG when the workflow already knows the safe reusable labels.
-    - If an installed static hook cannot receive per-turn payload or environment labels, write a short-lived safe label context before work starts or when the dominant workflow category changes:
-      node ~/Library/Application Support/Spill/adapters/setup/spill-token-metering-setup.mjs --label codex --task-type code_review --stage verify
-    - Use the current runtime tool label in --label: codex, claude, antigravity, or openai.
-    - The label context may contain only ai_tool, task_type, stage, updated_at, and expires_at. Never include task text, prompts, commands, file paths, repo names, branches, logs, diffs, source, environment values, or secrets.
 
     The JSON event must contain only these keys:
     schema_version, device_id, project_id, artifact_id, run_id, span_id, ai_tool, task_type, stage, model, input_tokens, output_tokens, total_tokens, token_breakdown, latency_ms, created_at, sync_mode.

@@ -206,20 +206,35 @@ async function mergeAgyHookFile(target, scriptPath, tool) {
   }
 
   const config = await readJSONObject(target);
-  config["spill-metering"] = {
-    PostInvocation: [
+  const command = `python3 ${shellQuote(scriptPath)}`;
+  const timeout = 5;
+  const match = /spill-hook\.py/;
+
+  let list = config.PostInvocation || [];
+  if (Array.isArray(list)) {
+    list = list.map(group => {
+      if (!plainObject(group) || !Array.isArray(group.hooks)) return group;
+      const remaining = group.hooks.filter(hook => !plainObject(hook) || typeof hook.command !== "string" || !match.test(hook.command));
+      return { ...group, hooks: remaining };
+    }).filter(group => Array.isArray(group.hooks) && group.hooks.length > 0);
+  } else {
+    list = [];
+  }
+
+  list.push({
+    matcher: "",
+    hooks: [
       {
-        matcher: "",
-        hooks: [
-          {
-            type: "command",
-            command: `python3 ${shellQuote(scriptPath)}`,
-            timeout: 5,
-          },
-        ],
-      },
-    ],
-  };
+        type: "command",
+        command,
+        timeout,
+      }
+    ]
+  });
+
+  config.PostInvocation = list;
+  delete config["spill-metering"];
+
   await writeJSONObject(target, config);
   results.push({ tool, action: "configured", path: target });
 }
