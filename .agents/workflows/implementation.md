@@ -231,6 +231,7 @@ For every feature slice:
 - relevant workflow gates
 - `python3 .agents/scripts/workflow.py runtime-smoke` when app startup, menu bar trigger, app lifecycle, packaging, or permissions could be affected
 - `python3 .agents/scripts/workflow.py panel-layout-smoke` when panel layout, panel sizing, or visible status/action content could be affected
+- `python3 .agents/scripts/workflow.py token-metering-smoke` is mandatory when token metering bridge, storage, dashboard, prompt, or local privacy contract behavior could be affected. Do not report token metering work as verified without this smoke result.
 - launch app
 - open panel
 - confirm no UI overlap

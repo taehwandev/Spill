@@ -1,0 +1,722 @@
+#!/usr/bin/env node
+
+import { createHash } from "node:crypto";
+import { createReadStream } from "node:fs";
+import { appendFile, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { createInterface } from "node:readline";
+import { dirname, join } from "node:path";
+import { homedir } from "node:os";
+
+const DEFAULT_PORT = "48731";
+const DEFAULT_SINCE_HOURS = 24;
+const DEFAULT_WATCH_INTERVAL_MS = 5000;
+const MAX_LINE_BYTES = 1024 * 1024;
+
+const options = parseArgs(process.argv.slice(2));
+const codexHome = options.codexHome ?? process.env.CODEX_HOME ?? join(homedir(), ".codex");
+const port = process.env.SPILL_TOKEN_USAGE_PORT || DEFAULT_PORT;
+const endpoint =
+  options.endpoint ??
+  process.env.SPILL_TOKEN_USAGE_ENDPOINT ??
+  `http://127.0.0.1:${port}/v1/usage/events`;
+const transport = normalizedTransport(
+  options.transport ??
+    process.env.SPILL_TOKEN_USAGE_TRANSPORT ??
+    (options.endpoint || process.env.SPILL_TOKEN_USAGE_ENDPOINT ? "http" : "file"),
+);
+const inboxPath =
+  options.inboxPath ??
+  process.env.SPILL_TOKEN_USAGE_INBOX_FILE ??
+  join(
+    homedir(),
+    "Library",
+    "Application Support",
+    "Spill",
+    "token-metering",
+    "events-inbox.jsonl",
+  );
+const eventsPath =
+  options.eventsPath ??
+  process.env.SPILL_TOKEN_USAGE_EVENTS_FILE ??
+  join(
+    homedir(),
+    "Library",
+    "Application Support",
+    "Spill",
+    "token-metering",
+    "events.json",
+  );
+const statePath =
+  options.statePath ??
+  process.env.SPILL_CODEX_IMPORT_STATE ??
+  join(
+    homedir(),
+    "Library",
+    "Application Support",
+    "Spill",
+    "token-metering",
+    "codex-session-import-state.json",
+  );
+
+const strict = options.strict || process.env.SPILL_TOKEN_USAGE_IMPORT_STRICT === "1";
+const dryRun = options.dryRun;
+const markExisting = options.markExisting;
+const watch = options.watch;
+const intervalMS = options.intervalMS ?? DEFAULT_WATCH_INTERVAL_MS;
+const taskTypeOverride = safeWorkflowSlug(
+  options.taskType ?? process.env.SPILL_TOKEN_USAGE_TASK_TYPE ?? process.env.SPILL_WORKFLOW_TASK_TYPE,
+);
+const stageOverride = safeWorkflowSlug(
+  options.stage ?? process.env.SPILL_TOKEN_USAGE_STAGE ?? process.env.SPILL_WORKFLOW_STAGE,
+);
+const afterDate = options.after ? new Date(options.after) : sinceDate(options.sinceHours ?? DEFAULT_SINCE_HOURS);
+
+if (Number.isNaN(afterDate.getTime())) {
+  fail("invalid_after", true);
+}
+
+if (watch) {
+  while (true) {
+    await importOnce().catch((error) => {
+      if (strict) {
+        throw error;
+      }
+    });
+    await sleep(intervalMS);
+  }
+} else {
+  await importOnce();
+}
+
+async function importOnce() {
+  const state = await readState(statePath);
+  const storedSpans = dryRun
+    ? new Set()
+    : transport === "http"
+      ? await readBridgeSpanIDs(endpoint)
+      : await readLocalSpanIDs(eventsPath, inboxPath);
+  const sources = await discoverCodexSessionFiles(codexHome, afterDate);
+  let scannedFiles = 0;
+  let importedEvents = 0;
+  let markedExisting = 0;
+  let skippedSeen = 0;
+
+  for (const source of sources) {
+    scannedFiles += 1;
+    const events = await parseSessionFile(source, afterDate);
+    for (const event of events) {
+      if (state.sentSpanIDs.includes(event.span_id) || storedSpans.has(event.span_id)) {
+        skippedSeen += 1;
+        continue;
+      }
+
+      if (markExisting) {
+        markedExisting += 1;
+      } else if (dryRun) {
+        importedEvents += 1;
+      } else {
+        if (transport === "http") {
+          await postEvent(endpoint, event);
+        } else {
+          await appendInboxEvent(inboxPath, event);
+        }
+        importedEvents += 1;
+        storedSpans.add(event.span_id);
+      }
+
+      state.sentSpanIDs.push(event.span_id);
+      if (state.sentSpanIDs.length > 5000) {
+        state.sentSpanIDs = state.sentSpanIDs.slice(-5000);
+      }
+    }
+  }
+
+  state.updatedAt = new Date().toISOString();
+  if (!dryRun) {
+    await writeState(statePath, state);
+  }
+
+  if (options.json) {
+    process.stdout.write(`${JSON.stringify({
+      scanned_files: scannedFiles,
+      imported_events: importedEvents,
+      marked_existing: markedExisting,
+      skipped_seen: skippedSeen,
+      codex_home: codexHome,
+      endpoint,
+      transport,
+      inbox_path: transport === "file" ? inboxPath : undefined,
+      dry_run: dryRun,
+    })}\n`);
+  }
+}
+
+async function discoverCodexSessionFiles(root, after) {
+  const sessionsDir = join(root, "sessions");
+  const files = [];
+  const years = await safeReadDir(sessionsDir);
+  for (const year of years) {
+    if (!/^\d{4}$/.test(year)) continue;
+    const yearDir = join(sessionsDir, year);
+    for (const month of await safeReadDir(yearDir)) {
+      if (!/^\d{2}$/.test(month)) continue;
+      const monthDir = join(yearDir, month);
+      for (const day of await safeReadDir(monthDir)) {
+        if (!/^\d{2}$/.test(day)) continue;
+        const dayDir = join(monthDir, day);
+        for (const file of await safeReadDir(dayDir)) {
+          if (!file.startsWith("rollout-") || !file.endsWith(".jsonl")) continue;
+          const path = join(dayDir, file);
+          const info = await stat(path).catch(() => null);
+          if (!info?.isFile()) continue;
+          if (info.mtime < after) continue;
+          files.push(path);
+        }
+      }
+    }
+  }
+  return files.sort();
+}
+
+async function parseSessionFile(path, after) {
+  const events = [];
+  const counters = {
+    sessionID: "",
+    sessionModel: "",
+    previousCumulativeTotal: null,
+    previousInput: 0,
+    previousCached: 0,
+    previousOutput: 0,
+    previousReasoning: 0,
+    eventIndex: 0,
+  };
+  let turnSignals = emptyTurnSignals();
+
+  const stream = createReadStream(path, { encoding: "utf8" });
+  stream.on("error", () => {});
+  const lines = createInterface({ input: stream, crlfDelay: Infinity });
+
+  try {
+    for await (const line of lines) {
+      if (!line || line.length > MAX_LINE_BYTES) continue;
+      if (line.includes('"type":"session_meta"') || line.includes('"type": "session_meta"')) {
+        captureSessionMeta(line, counters);
+        continue;
+      }
+      if (line.includes('"type":"turn_context"') || line.includes('"type": "turn_context"')) {
+        const model = rawJSONField(line, "model");
+        if (model) counters.sessionModel = model;
+        continue;
+      }
+      captureTurnSignals(line, turnSignals);
+      if (!line.includes('"token_count"')) continue;
+
+      const parsed = safeJSON(line);
+      if (!parsed || parsed.type !== "event_msg" || parsed.payload?.type !== "token_count") {
+        continue;
+      }
+
+      const timestamp = parsed.timestamp ? new Date(parsed.timestamp) : new Date();
+      if (Number.isNaN(timestamp.getTime()) || timestamp < after) continue;
+
+      const usage = usageFromTokenCount(parsed.payload.info, counters);
+      if (!usage) continue;
+
+      counters.eventIndex += 1;
+      const classification = classifyTurn(turnSignals);
+      events.push(toSpillEvent({
+        sourcePath: path,
+        sessionID: counters.sessionID,
+        eventIndex: counters.eventIndex,
+        timestamp,
+        model: usage.model || counters.sessionModel || "codex-unknown",
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+        cumulativeTotal: usage.cumulativeTotal,
+        taskType: taskTypeOverride ?? classification.taskType,
+        stage: stageOverride ?? classification.stage,
+      }));
+      turnSignals = emptyTurnSignals();
+    }
+  } finally {
+    lines.close();
+    stream.destroy();
+  }
+
+  return events;
+}
+
+function emptyTurnSignals() {
+  return {
+    sawRead: false,
+    sawShell: false,
+    sawEdit: false,
+    sawTestCommand: false,
+    sawVerifyCommand: false,
+    sawReviewSignal: false,
+  };
+}
+
+function captureTurnSignals(line, signals) {
+  if (line.includes('"patch_apply_end"')) {
+    signals.sawEdit = true;
+    return;
+  }
+
+  if (!line.includes('"function_call"')) return;
+
+  const name = rawJSONField(line, "name");
+  if (!name) return;
+
+  if (isEditTool(name)) {
+    signals.sawEdit = true;
+    return;
+  }
+
+  if (isReadTool(name)) {
+    signals.sawRead = true;
+    return;
+  }
+
+  if (!isShellTool(name)) return;
+
+  signals.sawShell = true;
+  const command = extractCommandFromFunctionCall(line);
+  if (!command) return;
+
+  if (isTestCommand(command)) {
+    signals.sawTestCommand = true;
+  }
+  if (isVerifyCommand(command)) {
+    signals.sawVerifyCommand = true;
+  }
+  if (isReviewCommand(command)) {
+    signals.sawReviewSignal = true;
+  }
+}
+
+function classifyTurn(signals) {
+  let taskType = "uncategorized";
+  if (signals.sawTestCommand && !signals.sawEdit) {
+    taskType = "testing";
+  } else if (signals.sawEdit) {
+    taskType = "code_generation";
+  } else if (signals.sawReviewSignal) {
+    taskType = "code_review";
+  } else if (signals.sawRead || signals.sawShell) {
+    taskType = "analysis";
+  }
+
+  let stage = "monitor";
+  if (signals.sawTestCommand || signals.sawVerifyCommand) {
+    stage = "verify";
+  } else if (signals.sawEdit) {
+    stage = "implement";
+  } else if (signals.sawRead || signals.sawShell) {
+    stage = "plan";
+  }
+
+  return { taskType, stage };
+}
+
+function isEditTool(name) {
+  return /^(apply_patch|apply_diff|write_file|edit|write)$/i.test(name);
+}
+
+function isReadTool(name) {
+  return /^(read_file|read_dir|list_files|glob|grep|find|view_image)$/i.test(name);
+}
+
+function isShellTool(name) {
+  return /^(exec_command|bash|shell|run_command)$/i.test(name);
+}
+
+function extractCommandFromFunctionCall(line) {
+  const args = rawJSONField(line, "arguments");
+  if (!args) return "";
+  const parsed = safeJSON(args);
+  if (!parsed || typeof parsed !== "object") return "";
+  for (const key of ["cmd", "command", "script"]) {
+    if (typeof parsed[key] === "string") return parsed[key].slice(0, 2000);
+  }
+  return "";
+}
+
+function isTestCommand(command) {
+  return /\b(swift\s+test|xcodebuild\b[\s\S]*\btest\b|npm\s+(run\s+)?test|pnpm\s+(run\s+)?test|yarn\s+test|bun\s+test|pytest|vitest|jest|go\s+test|cargo\s+test|gradle\b[\s\S]*\btest\b|\.\/gradlew\b[\s\S]*\btest\b)\b/i.test(command);
+}
+
+function isVerifyCommand(command) {
+  return isTestCommand(command) ||
+    /\b(swift\s+build|xcodebuild|npm\s+(run\s+)?build|pnpm\s+(run\s+)?build|yarn\s+build|bun\s+run\s+build|cargo\s+build|go\s+build|gradle\b[\s\S]*\bbuild\b|\.\/gradlew\b[\s\S]*\bbuild\b|tsc\b|eslint\b|ruff\b|mypy\b|vibeguard\b|smoke|verify)\b/i.test(command);
+}
+
+function isReviewCommand(command) {
+  return /\b(git\s+diff|git\s+show|git\s+status|gh\s+pr\s+(view|diff|checks?))\b/i.test(command);
+}
+
+function captureSessionMeta(line, counters) {
+  if (!rawJSONField(line, "originator")?.toLowerCase().startsWith("codex")) return;
+  counters.sessionID = rawJSONField(line, "session_id") || counters.sessionID;
+  counters.sessionModel = rawJSONField(line, "model") || counters.sessionModel;
+}
+
+function usageFromTokenCount(info, counters) {
+  if (!info || typeof info !== "object") return null;
+
+  const total = tokenUsage(info.total_token_usage);
+  const cumulativeTotal = total.totalTokens ?? 0;
+  if (counters.previousCumulativeTotal !== null && counters.previousCumulativeTotal === cumulativeTotal) {
+    return null;
+  }
+  counters.previousCumulativeTotal = cumulativeTotal;
+
+  const last = tokenUsage(info.last_token_usage);
+  let inputTokens = 0;
+  let outputTokens = 0;
+
+  if (last.hasAny) {
+    inputTokens = last.inputTokens;
+    outputTokens = last.outputTokens + last.reasoningTokens;
+  } else if (cumulativeTotal > 0 && total.hasAny) {
+    inputTokens = Math.max(0, total.inputTokens - counters.previousInput);
+    outputTokens =
+      Math.max(0, total.outputTokens - counters.previousOutput) +
+      Math.max(0, total.reasoningTokens - counters.previousReasoning);
+  }
+
+  if (total.hasAny) {
+    counters.previousInput = total.inputTokens;
+    counters.previousCached = total.cachedInputTokens;
+    counters.previousOutput = total.outputTokens;
+    counters.previousReasoning = total.reasoningTokens;
+  }
+
+  if (inputTokens === 0 && outputTokens === 0) return null;
+
+  return {
+    model: typeof info.model === "string" ? info.model : typeof info.model_name === "string" ? info.model_name : "",
+    inputTokens,
+    outputTokens,
+    cumulativeTotal,
+  };
+}
+
+function tokenUsage(value) {
+  if (!value || typeof value !== "object") {
+    return {
+      hasAny: false,
+      inputTokens: 0,
+      cachedInputTokens: 0,
+      outputTokens: 0,
+      reasoningTokens: 0,
+      totalTokens: 0,
+    };
+  }
+
+  const inputTokens = safeToken(value.input_tokens);
+  const cachedInputTokens = safeToken(value.cached_input_tokens);
+  const outputTokens = safeToken(value.output_tokens);
+  const reasoningTokens = safeToken(value.reasoning_output_tokens);
+  const totalTokens = safeToken(value.total_tokens);
+
+  return {
+    hasAny: inputTokens > 0 || cachedInputTokens > 0 || outputTokens > 0 || reasoningTokens > 0 || totalTokens > 0,
+    inputTokens,
+    cachedInputTokens,
+    outputTokens,
+    reasoningTokens,
+    totalTokens,
+  };
+}
+
+function toSpillEvent({
+  sourcePath,
+  sessionID,
+  eventIndex,
+  timestamp,
+  model,
+  inputTokens,
+  outputTokens,
+  cumulativeTotal,
+  taskType,
+  stage,
+}) {
+  const totalTokens = inputTokens + outputTokens;
+  const sessionKey = sessionID || sourcePath;
+  const cumulativeKey = cumulativeTotal > 0 ? String(cumulativeTotal) : String(eventIndex);
+  const spanHash = opaqueHash(`${sourcePath}:${sessionKey}:${cumulativeKey}:${timestamp.toISOString()}`);
+  const runHash = opaqueHash(sessionKey);
+
+  return {
+    schema_version: 1,
+    device_id: "device_local",
+    project_id: "project_global",
+    artifact_id: "artifact_codex",
+    run_id: `run_${runHash}`,
+    span_id: `span_${spanHash}`,
+    ai_tool: "codex",
+    task_type: taskType,
+    stage,
+    model: safeModel(model),
+    input_tokens: inputTokens,
+    output_tokens: outputTokens,
+    total_tokens: totalTokens,
+    token_breakdown: {
+      system: 0,
+      user: 0,
+      history: 0,
+      repo_context: 0,
+      tool_output: 0,
+      generated_output: outputTokens,
+      unknown: inputTokens,
+    },
+    latency_ms: 0,
+    created_at: timestamp.toISOString(),
+    sync_mode: "local_only",
+  };
+}
+
+async function readBridgeSpanIDs(url) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const response = await fetch(url, {
+        headers: { "Connection": "close" },
+      });
+      if (!response.ok) return new Set();
+      const envelope = await response.json();
+      const events = Array.isArray(envelope.events) ? envelope.events : [];
+      return new Set(events.map((event) => event.span_id).filter((spanID) => typeof spanID === "string"));
+    } catch {
+      if (attempt < 2) {
+        await sleep(100 * (attempt + 1));
+        continue;
+      }
+      if (strict) fail("bridge_unavailable", false);
+      return new Set();
+    }
+  }
+  return new Set();
+}
+
+async function postEvent(url, event) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Connection": "close",
+        },
+        body: JSON.stringify(event),
+      });
+      if (!response.ok) fail(`bridge_http_${response.status}`, false);
+      return;
+    } catch {
+      if (attempt < 2) {
+        await sleep(100 * (attempt + 1));
+        continue;
+      }
+      fail("bridge_unavailable", false);
+    }
+  }
+}
+
+async function appendInboxEvent(path, event) {
+  await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+  await appendFile(path, `${JSON.stringify(event)}\n`, { encoding: "utf8", mode: 0o600 });
+}
+
+async function readLocalSpanIDs(eventsFile, inboxFile) {
+  return new Set([
+    ...await readJSONArraySpanIDs(eventsFile),
+    ...await readJSONLSpanIDs(inboxFile),
+  ]);
+}
+
+async function readJSONArraySpanIDs(path) {
+  try {
+    const parsed = JSON.parse(await readFile(path, "utf8"));
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((event) => event?.span_id)
+      .filter((spanID) => typeof spanID === "string");
+  } catch {
+    return [];
+  }
+}
+
+async function readJSONLSpanIDs(path) {
+  let contents = "";
+  try {
+    contents = await readFile(path, "utf8");
+  } catch {
+    return [];
+  }
+
+  const spanIDs = [];
+  for (const line of contents.split(/\r?\n/)) {
+    if (line.trim().length === 0) continue;
+    const parsed = safeJSON(line);
+    if (typeof parsed?.span_id === "string") {
+      spanIDs.push(parsed.span_id);
+    }
+  }
+  return spanIDs;
+}
+
+async function readState(path) {
+  try {
+    const parsed = JSON.parse(await readFile(path, "utf8"));
+    if (parsed && Array.isArray(parsed.sentSpanIDs)) {
+      return {
+        updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : "",
+        sentSpanIDs: parsed.sentSpanIDs.filter((value) => typeof value === "string"),
+      };
+    }
+  } catch {
+    // Missing or corrupt state should not block local metering.
+  }
+  return { updatedAt: "", sentSpanIDs: [] };
+}
+
+async function writeState(path, state) {
+  await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+  await writeFile(path, `${JSON.stringify(state, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+}
+
+async function safeReadDir(path) {
+  return readdir(path).catch(() => []);
+}
+
+function parseArgs(args) {
+  const parsed = {
+    json: false,
+    dryRun: false,
+    strict: false,
+    watch: false,
+  };
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === "--json") parsed.json = true;
+    else if (arg === "--dry-run") parsed.dryRun = true;
+    else if (arg === "--mark-existing") parsed.markExisting = true;
+    else if (arg === "--strict") parsed.strict = true;
+    else if (arg === "--watch") parsed.watch = true;
+    else if (arg === "--codex-home") parsed.codexHome = requiredValue(args, ++index, arg);
+    else if (arg === "--endpoint") parsed.endpoint = requiredValue(args, ++index, arg);
+    else if (arg === "--transport") parsed.transport = requiredValue(args, ++index, arg);
+    else if (arg === "--inbox") parsed.inboxPath = requiredValue(args, ++index, arg);
+    else if (arg === "--events") parsed.eventsPath = requiredValue(args, ++index, arg);
+    else if (arg === "--state") parsed.statePath = requiredValue(args, ++index, arg);
+    else if (arg === "--after") parsed.after = requiredValue(args, ++index, arg);
+    else if (arg === "--since-hours") parsed.sinceHours = Number(requiredValue(args, ++index, arg));
+    else if (arg === "--interval-ms") parsed.intervalMS = Number(requiredValue(args, ++index, arg));
+    else if (arg === "--task-type") parsed.taskType = requiredValue(args, ++index, arg);
+    else if (arg === "--stage") parsed.stage = requiredValue(args, ++index, arg);
+    else if (arg === "--help") {
+      printHelp();
+      process.exit(0);
+    } else {
+      fail(`unknown_arg:${arg}`, true);
+    }
+  }
+
+  return parsed;
+}
+
+function requiredValue(args, index, flag) {
+  const value = args[index];
+  if (!value || value.startsWith("--")) {
+    fail(`missing_value:${flag}`, true);
+  }
+  return value;
+}
+
+function printHelp() {
+  process.stdout.write(`Usage: spill-codex-session-importer.mjs [options]
+
+Options:
+  --json                 Print import summary as JSON.
+  --dry-run              Parse usage without writing local storage, posting to Spill, or writing state.
+  --mark-existing        Record parsed span ids in state without storing them.
+  --strict               Exit non-zero when the selected transport is unavailable.
+  --watch                Poll Codex sessions continuously. Not needed for hook-based metering.
+  --after ISO            Import token_count events at or after this timestamp.
+  --since-hours HOURS    Import recent events. Default: 24.
+  --interval-ms MS       Poll interval for --watch. Default: 5000.
+  --codex-home PATH      Codex home. Default: CODEX_HOME or ~/.codex.
+  --transport MODE       file or http. Default: file unless --endpoint is provided.
+  --inbox PATH           Local JSONL inbox. Default: ~/Library/Application Support/Spill/token-metering/events-inbox.jsonl.
+  --events PATH          Local canonical events JSON. Used for file-transport dedupe.
+  --endpoint URL         Spill event endpoint for --transport http.
+  --state PATH           Import state path.
+  --task-type SLUG       Override task_type with a safe workflow slug.
+  --stage SLUG           Override stage with a safe workflow slug.
+`);
+}
+
+function sinceDate(hours) {
+  const parsed = Number(hours);
+  const safeHours = Number.isFinite(parsed) && parsed >= 0 ? parsed : DEFAULT_SINCE_HOURS;
+  return new Date(Date.now() - safeHours * 60 * 60 * 1000);
+}
+
+function safeToken(value) {
+  return Number.isSafeInteger(value) && value > 0 ? value : 0;
+}
+
+function safeJSON(value) {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
+function rawJSONField(source, field) {
+  const match = new RegExp(`"${field}"\\s*:\\s*"((?:\\\\.|[^"\\\\])*)"`).exec(source);
+  if (!match) return "";
+  try {
+    return JSON.parse(`"${match[1]}"`);
+  } catch {
+    return match[1];
+  }
+}
+
+function opaqueHash(value) {
+  return createHash("sha256").update(value).digest("hex").slice(0, 24);
+}
+
+function safeModel(value) {
+  const cleaned = String(value || "codex-unknown").replace(/[^A-Za-z0-9_.:-]/g, "-").slice(0, 80);
+  return cleaned.length >= 2 ? cleaned : "codex-unknown";
+}
+
+function safeWorkflowSlug(value) {
+  if (value === undefined || value === null || value === "") return null;
+  if (!/^[a-z][a-z0-9_]{1,40}$/.test(String(value))) {
+    fail("invalid_workflow_slug", true);
+  }
+  return String(value);
+}
+
+function normalizedTransport(value) {
+  const normalized = String(value || "file").toLowerCase();
+  if (normalized === "file" || normalized === "http") {
+    return normalized;
+  }
+  fail("invalid_transport", true);
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function fail(code, alwaysExit) {
+  if (strict || alwaysExit) {
+    process.stderr.write(`spill-codex-session-importer: ${code}\n`);
+    process.exit(1);
+  }
+}
