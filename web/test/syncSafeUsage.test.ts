@@ -185,8 +185,11 @@ test("setup prompt bootstraps the public token metering installer", () => {
 
 test("workflow setup prompt asks for workflow mapping before edits", () => {
   assert.match(workflowSetupPrompt, /Workflow Setup Bootstrap/);
-  assert.match(workflowSetupPrompt, /Ask the user whether they use a workflow runner or hook file/);
-  assert.match(workflowSetupPrompt, /ask before editing/);
+  assert.match(workflowSetupPrompt, /Do you want Spill token usage to follow your workflow steps\?/);
+  assert.match(workflowSetupPrompt, /Do not ask for a hook path in that first question/);
+  assert.match(workflowSetupPrompt, /script-based workflow entry points first/);
+  assert.match(workflowSetupPrompt, /wire labels in the script first/);
+  assert.match(workflowSetupPrompt, /receiver-only/);
   assert.match(workflowSetupPrompt, /write-code\/edit\/implement\/patch -> code_generation\/implement/);
   assert.match(workflowSetupPrompt, /test\/build\/audit\/smoke -> testing\/verify/);
   assert.match(workflowSetupPrompt, /Never encode project names/);

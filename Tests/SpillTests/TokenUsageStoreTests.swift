@@ -545,7 +545,12 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(installer.contains("--include codex,claude,antigravity,openai"))
         XCTAssertTrue(installer.contains("--source-root \"$TMP_DIR/adapters\""))
 
-        XCTAssertTrue(workflow.contains("Do you use a workflow runner or hook file"))
+        XCTAssertTrue(workflow.contains("Do you want Spill token usage to follow your workflow steps?"))
+        XCTAssertTrue(workflow.contains("Do not ask for a hook path in this first question"))
+        XCTAssertTrue(workflow.contains("discover candidate workflow integration points yourself"))
+        XCTAssertTrue(workflow.contains("script-based workflow entry points first"))
+        XCTAssertTrue(workflow.contains("wire labels in the script"))
+        XCTAssertTrue(workflow.contains("receiver-only integration"))
         XCTAssertTrue(workflow.contains("write-code, edit, implement, patch"))
         XCTAssertTrue(workflow.contains("code_generation"))
         XCTAssertTrue(workflow.contains("testing"))
