@@ -43,7 +43,12 @@ export function PrivacySettings({
     <CollapsiblePanel
       description={messages.panels.tokenOnlyContractDescription}
       id="settings"
-      title={messages.panels.tokenOnlyContract}
+      title={
+        <>
+          {messages.panels.tokenOnlyContract}
+          <span className="alphaBadge">Alpha</span>
+        </>
+      }
     >
       <div className="settingsList">
         {rows.map((row) => (

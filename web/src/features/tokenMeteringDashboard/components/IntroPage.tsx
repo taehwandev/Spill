@@ -25,7 +25,10 @@ export function IntroPage({
   return (
     <>
       <nav className="introNav" aria-label={messages.intro.navLabel}>
-        <div className="introBrand">Spill</div>
+        <div className="introBrand">
+          Spill
+          <span className="alphaBadge">Alpha</span>
+        </div>
         <div className="introLinks">
           <a href="#features">{messages.nav.features}</a>
           <a href="#setup">{messages.nav.setup}</a>
@@ -61,7 +64,10 @@ export function IntroPage({
               </div>
               <div className="dashboardSnapshot">
                 <div className="snapshotTop">
-                  <strong>Spill</strong>
+                  <strong>
+                    Spill
+                    <span className="alphaBadge">Alpha</span>
+                  </strong>
                   <span>{messages.intro.tokenMetering}</span>
                 </div>
                 <div className="snapshotNav">

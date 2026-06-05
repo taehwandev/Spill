@@ -23,6 +23,12 @@ INBOX_DIR = pathlib.Path(
         pathlib.Path.home() / "Library/Application Support/Spill/token-metering/events-inbox",
     )
 )
+DIAGNOSTICS_DIR = pathlib.Path(
+    os.environ.get(
+        "SPILL_TOKEN_USAGE_DIAGNOSTICS_DIR",
+        pathlib.Path.home() / "Library/Application Support/Spill/token-metering/diagnostics",
+    )
+)
 LABEL_FILE = pathlib.Path(
     os.environ.get(
         "SPILL_TOKEN_USAGE_LABEL_FILE",
@@ -121,6 +127,60 @@ def _enqueue_event(event: dict) -> None:
     os.replace(temporary_path, final_path)
 
 
+def _write_diagnostic(reason: str, payload: dict = None) -> None:
+    if os.environ.get("SPILL_TOKEN_USAGE_DISABLE_DIAGNOSTICS") == "1":
+        return
+
+    diagnostic = {
+        "schema_version": 1,
+        "ai_tool": "antigravity",
+        "kind": "runtime_payload_mismatch",
+        "reason": reason,
+        "created_at": datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+        "expected_input_contracts": [
+            "top_level_input_output_tokens",
+            "usage_input_output_tokens",
+            "tokens_input_output",
+            "usage_metadata_total_tokens",
+            "spill_token_usage_normalized",
+        ],
+        "observed_safe_shape": _safe_payload_shape(payload),
+        "privacy": "No payload values, prompts, commands, file paths, logs, diffs, source, environment values, or secrets are stored.",
+    }
+
+    try:
+        DIAGNOSTICS_DIR.mkdir(parents=True, exist_ok=True)
+        temporary_path = DIAGNOSTICS_DIR / ".antigravity-latest.tmp"
+        final_path = DIAGNOSTICS_DIR / "antigravity-latest.json"
+        with open(temporary_path, "w") as f:
+            f.write(json.dumps(diagnostic, separators=(",", ":")))
+        os.chmod(temporary_path, 0o600)
+        os.replace(temporary_path, final_path)
+    except Exception:
+        pass
+
+
+def _safe_payload_shape(payload: dict = None) -> dict:
+    if not isinstance(payload, dict):
+        return {
+            "payload_object": False,
+            "has_exact_input_output": False,
+            "has_total_only": False,
+            "has_model_hint": False,
+            "has_opaque_run_hint": False,
+        }
+
+    containers = _token_containers(payload)
+    return {
+        "payload_object": True,
+        "has_exact_input_output": _has_any_int_field(containers, _INPUT_TOKEN_KEYS)
+        or _has_any_int_field(containers, _OUTPUT_TOKEN_KEYS),
+        "has_total_only": _has_any_int_field(containers, _TOTAL_TOKEN_KEYS),
+        "has_model_hint": _payload_model(payload) != "antigravity-unknown",
+        "has_opaque_run_hint": any(isinstance(payload.get(key), str) for key in ("session_id", "conversationId")),
+    }
+
+
 def _stable_span_id(*parts: str) -> str:
     source = ":".join(parts)
     return "span-" + hashlib.sha256(source.encode("utf-8")).hexdigest()[:12]
@@ -130,6 +190,10 @@ def _payload_model(payload: dict) -> str:
     keys = ("model", "model_name", "modelName", "model_id", "modelId", "modelVersion")
     for container in (
         payload,
+        payload.get("spill_token_usage", {}),
+        payload.get("spillTokenUsage", {}),
+        payload.get("token_usage", {}),
+        payload.get("tokenUsage", {}),
         payload.get("llm_request", {}),
         payload.get("llmRequest", {}),
         payload.get("usage", {}),
@@ -151,6 +215,92 @@ def _non_negative_int(value) -> int:
     except Exception:
         return 0
     return parsed if parsed > 0 else 0
+
+
+_INPUT_TOKEN_KEYS = (
+    "input_tokens",
+    "inputTokens",
+    "prompt_tokens",
+    "promptTokens",
+    "promptTokenCount",
+    "prompt_token_count",
+)
+_OUTPUT_TOKEN_KEYS = (
+    "output_tokens",
+    "outputTokens",
+    "completion_tokens",
+    "completionTokens",
+    "candidatesTokenCount",
+    "completion_token_count",
+)
+_TOTAL_TOKEN_KEYS = (
+    "total_tokens",
+    "totalTokens",
+    "totalTokenCount",
+    "total_token_count",
+)
+
+
+def _add_container(containers: list[dict], candidate) -> None:
+    if isinstance(candidate, dict):
+        containers.append(candidate)
+
+
+def _token_containers(payload: dict) -> list[dict]:
+    containers: list[dict] = []
+    _add_container(containers, payload)
+    for key in (
+        "spill_token_usage",
+        "spillTokenUsage",
+        "token_usage",
+        "tokenUsage",
+        "usage",
+        "usageMetadata",
+        "usage_metadata",
+        "tokens",
+        "response",
+        "llm_response",
+        "llmResponse",
+    ):
+        _add_container(containers, payload.get(key))
+
+    for key in ("response", "llm_response", "llmResponse"):
+        nested = payload.get(key)
+        if isinstance(nested, dict):
+            _add_container(containers, nested.get("usage"))
+            _add_container(containers, nested.get("usageMetadata"))
+            _add_container(containers, nested.get("usage_metadata"))
+
+    return containers
+
+
+def _first_positive_int(containers: list[dict], keys: tuple[str, ...]) -> int:
+    for container in containers:
+        for key in keys:
+            value = _non_negative_int(container.get(key))
+            if value > 0:
+                return value
+    return 0
+
+
+def _has_any_int_field(containers: list[dict], keys: tuple[str, ...]) -> bool:
+    return any(_non_negative_int(container.get(key)) > 0 for container in containers for key in keys)
+
+
+def _payload_token_counts(payload: dict) -> tuple[int, int, int, bool]:
+    containers = _token_containers(payload)
+    input_tokens = _first_positive_int(containers, _INPUT_TOKEN_KEYS)
+    output_tokens = _first_positive_int(containers, _OUTPUT_TOKEN_KEYS)
+    total = input_tokens + output_tokens
+
+    if total > 0:
+        return input_tokens, output_tokens, total, False
+
+    total = _first_positive_int(containers, _TOTAL_TOKEN_KEYS)
+    if total > 0:
+        return total, 0, total, True
+
+    return 0, 0, 0, False
 
 
 def _usage_metadata_total(payload: dict) -> int:
@@ -191,31 +341,29 @@ def _consume_label_file() -> None:
 
 def main() -> None:
     try:
-        payload = json.load(sys.stdin)
+        raw_payload = sys.stdin.read()
     except Exception:
+        _write_diagnostic("stdin_unavailable")
         return
 
-    # Extract tokens from standard fields
-    usage = payload.get("usage", {})
-    input_tokens = _non_negative_int(payload.get("input_tokens", usage.get("input_tokens", usage.get("prompt_tokens", 0))))
-    output_tokens = _non_negative_int(payload.get("output_tokens", usage.get("output_tokens", usage.get("completion_tokens", 0))))
+    if not raw_payload.strip():
+        _write_diagnostic("empty_stdin")
+        return
 
-    # Try alternate fields in case they are structured differently
-    if input_tokens == 0 and output_tokens == 0:
-        tokens_obj = payload.get("tokens", {})
-        input_tokens = _non_negative_int(tokens_obj.get("input", tokens_obj.get("prompt", 0)))
-        output_tokens = _non_negative_int(tokens_obj.get("output", tokens_obj.get("completion", 0)))
+    try:
+        payload = json.loads(raw_payload)
+    except Exception:
+        _write_diagnostic("invalid_json")
+        return
 
-    total = input_tokens + output_tokens
-    total_only = False
-    if total == 0:
-        total = _usage_metadata_total(payload)
-        if total > 0:
-            input_tokens = total
-            output_tokens = 0
-            total_only = True
+    if not isinstance(payload, dict):
+        _write_diagnostic("non_object_payload")
+        return
+
+    input_tokens, output_tokens, total, total_only = _payload_token_counts(payload)
 
     if total == 0:
+        _write_diagnostic("missing_exact_token_usage", payload)
         return
 
     model = _payload_model(payload)

@@ -721,11 +721,21 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertFalse(setup.contains("workflow-setup-prompt.md"))
         XCTAssertTrue(setup.contains(#"`~/.gemini/config/hooks.json` contains a `"spill-metering"` JSONHookSpec"#))
         XCTAssertTrue(setup.contains("Do not write `PostInvocation` as a root-level array"))
+        XCTAssertTrue(setup.contains("force one strict Spill output event schema"))
+        XCTAssertTrue(setup.contains("shared runtime hook input schema"))
+        XCTAssertTrue(setup.contains("hook payload exposes exact token usage fields"))
+        XCTAssertTrue(setup.contains("normalized `spill_token_usage` object"))
+        XCTAssertTrue(setup.contains("local-only safe diagnostic"))
         XCTAssertFalse(setup.contains("root-level `PostInvocation[]`"))
         XCTAssertFalse(setup.contains("Do not nest this under `\"spill-metering\"`"))
 
         XCTAssertTrue(runtime.contains("silent background metering instruction"))
         XCTAssertTrue(runtime.contains("Do not add Spill metering status lines to normal replies"))
+        XCTAssertTrue(runtime.contains("Runtime input normalization"))
+        XCTAssertTrue(runtime.contains("strict contract is the Spill output event schema"))
+        XCTAssertTrue(runtime.contains("Runtime hook input formats are allowed to differ by tool"))
+        XCTAssertTrue(runtime.contains("Antigravity/AGY `PostInvocation` hooks can execute"))
+        XCTAssertTrue(runtime.contains("write a local-only diagnostic"))
         XCTAssertTrue(runtime.contains("short-lived safe label context"))
         XCTAssertTrue(runtime.contains("Workflow integration is an enhancement, not a prerequisite"))
         XCTAssertTrue(runtime.contains("Workflow-provided labels win"))
@@ -806,6 +816,11 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(agyHook.contains(#""antigravity", "agy""#))
         XCTAssertTrue(agyHook.contains("usageMetadata"))
         XCTAssertTrue(agyHook.contains("totalTokenCount"))
+        XCTAssertTrue(agyHook.contains("SPILL_TOKEN_USAGE_DIAGNOSTICS_DIR"))
+        XCTAssertTrue(agyHook.contains("runtime_payload_mismatch"))
+        XCTAssertTrue(agyHook.contains("missing_exact_token_usage"))
+        XCTAssertTrue(agyHook.contains("spill_token_usage"))
+        XCTAssertTrue(agyHook.contains("No payload values"))
     }
 
     func testAdapterHookConfigsUseExactRuntimeHookShapes() throws {

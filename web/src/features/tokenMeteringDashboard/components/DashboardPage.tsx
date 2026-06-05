@@ -30,6 +30,7 @@ export function DashboardPage({
       <header className="dashboardHeader">
         <button className="dashboardBrand" onClick={onBack} type="button">
           {messages.dashboard.brand}
+          <span className="alphaBadge">Alpha</span>
         </button>
         <nav className="dashboardNav" aria-label={messages.dashboard.navLabel}>
           <a className="active" href="#overview">

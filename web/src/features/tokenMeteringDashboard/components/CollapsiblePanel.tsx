@@ -14,7 +14,7 @@ export function CollapsiblePanel({
   defaultOpen?: boolean;
   description: string;
   id: string;
-  title: string;
+  title: ReactNode;
 }) {
   const messages = getTokenMeteringMessages();
 

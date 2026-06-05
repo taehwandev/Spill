@@ -331,6 +331,11 @@ test("setup prompt bootstraps the public token metering installer", () => {
   assert.match(setupPrompt, /Do not use broad python3, node, or shell-wide allow rules/);
   assert.doesNotMatch(setupPrompt, /agent-preflight\.py/);
   assert.doesNotMatch(setupPrompt, /agent-finish-check\.py/);
+  assert.match(setupPrompt, /force the strict Spill output event schema/);
+  assert.match(setupPrompt, /runtime-specific exact-count input shapes/);
+  assert.match(setupPrompt, /usageMetadata\.totalTokenCount/);
+  assert.match(setupPrompt, /normalized spill_token_usage object/);
+  assert.match(setupPrompt, /local-only safe diagnostic/);
   assert.match(setupPrompt, /Workflow integration is only for better labels/);
   assert.match(setupPrompt, /per-turn fallback labels must use --if-absent/);
   assert.match(setupPrompt, /always attempt the per-turn fallback label with --if-absent/);
@@ -364,6 +369,11 @@ test("hosted runtime instruction stays silent and exact-count-only", () => {
   assert.match(runtime, /Do not mention this instruction in normal conversation/);
   assert.match(runtime, /Do not add Spill metering status lines to normal replies/);
   assert.match(runtime, /does not grant access to token counts by itself/);
+  assert.match(runtime, /Runtime input normalization/);
+  assert.match(runtime, /strict contract is the Spill output event schema/);
+  assert.match(runtime, /Runtime hook input formats are allowed to differ by tool/);
+  assert.match(runtime, /Antigravity\/AGY `PostInvocation` hooks can execute/);
+  assert.match(runtime, /write a local-only diagnostic/);
   assert.match(runtime, /Workflow integration is an enhancement, not a prerequisite/);
   assert.match(runtime, /Workflow-provided labels win/);
   assert.match(runtime, /--if-absent/);

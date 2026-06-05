@@ -4,6 +4,7 @@
 final class TokenUsageDashboardStore: ObservableObject {
     @Published private(set) var snapshot = TokenUsageDashboardSnapshot.empty
     @Published private(set) var unfilteredSnapshot = TokenUsageDashboardSnapshot.empty
+    @Published private(set) var liveUpdateMarker = TokenUsageLiveUpdateMarker.empty
     @Published private(set) var selectedTool: TokenUsageAITool?
     @Published private(set) var selectedPeriod: TokenUsageDashboardPeriod = .today
     @Published private(set) var selectedSessionID: String?
@@ -16,6 +17,8 @@ final class TokenUsageDashboardStore: ObservableObject {
     private let usageStore: TokenUsageStore
     private var events: [TokenUsageEvent] = []
     private var eventsDidChangeObserver: NSObjectProtocol?
+    private var hasRebuiltSnapshot = false
+    private var clearLiveUpdateTask: Task<Void, Never>?
 
     init(usageStore: TokenUsageStore) {
         self.usageStore = usageStore
@@ -35,14 +38,24 @@ final class TokenUsageDashboardStore: ObservableObject {
         if let eventsDidChangeObserver {
             NotificationCenter.default.removeObserver(eventsDidChangeObserver)
         }
+        clearLiveUpdateTask?.cancel()
     }
 
-    func refresh() {
+    func refresh(trackLiveUpdates: Bool = true) {
+        let previousEvents = events
         events = usageStore.loadEvents()
-        rebuildSnapshot()
+        rebuildSnapshot(
+            trackLiveUpdates: trackLiveUpdates && hasRebuiltSnapshot,
+            previousEvents: previousEvents
+        )
     }
 
-    func rebuildSnapshot() {
+    func rebuildSnapshot(
+        trackLiveUpdates: Bool = false,
+        previousEvents: [TokenUsageEvent]? = nil
+    ) {
+        let previousSnapshot = snapshot
+        let previousUnfilteredSnapshot = unfilteredSnapshot
         let filteredSnapshot = TokenUsageDashboardSnapshot(
             events: events,
             selectedTool: selectedTool,
@@ -62,6 +75,17 @@ final class TokenUsageDashboardStore: ObservableObject {
             language: language
         )
         lastError = nil
+        if trackLiveUpdates, let previousEvents {
+            publishLiveUpdates(
+                previousEvents: previousEvents,
+                nextEvents: events,
+                previousSnapshot: previousSnapshot,
+                nextSnapshot: filteredSnapshot,
+                previousUnfilteredSnapshot: previousUnfilteredSnapshot,
+                nextUnfilteredSnapshot: unfilteredSnapshot
+            )
+        }
+        hasRebuiltSnapshot = true
     }
 
     func setSelectedTool(_ tool: TokenUsageAITool?) {
@@ -96,7 +120,8 @@ final class TokenUsageDashboardStore: ObservableObject {
         do {
             try usageStore.clearEvents()
             selfTestMessage = nil
-            refresh()
+            liveUpdateMarker = .empty
+            refresh(trackLiveUpdates: false)
         } catch {
             lastError = TokenMeteringL10n.text(.clearFailed, language: language)
         }
@@ -175,6 +200,131 @@ final class TokenUsageDashboardStore: ObservableObject {
         } catch {
             lastError = TokenMeteringL10n.text(.saveTestFailed, language: language)
         }
+    }
+
+    func isLiveUpdated(_ id: String) -> Bool {
+        liveUpdateMarker.contains(id)
+    }
+
+    private func publishLiveUpdates(
+        previousEvents: [TokenUsageEvent],
+        nextEvents: [TokenUsageEvent],
+        previousSnapshot: TokenUsageDashboardSnapshot,
+        nextSnapshot: TokenUsageDashboardSnapshot,
+        previousUnfilteredSnapshot: TokenUsageDashboardSnapshot,
+        nextUnfilteredSnapshot: TokenUsageDashboardSnapshot
+    ) {
+        let ids = Self.liveUpdateIDs(
+            previousEvents: previousEvents,
+            nextEvents: nextEvents,
+            previousSnapshot: previousSnapshot,
+            nextSnapshot: nextSnapshot,
+            previousUnfilteredSnapshot: previousUnfilteredSnapshot,
+            nextUnfilteredSnapshot: nextUnfilteredSnapshot,
+            selectedTool: selectedTool,
+            selectedPeriod: selectedPeriod
+        )
+        guard !ids.isEmpty else {
+            return
+        }
+
+        clearLiveUpdateTask?.cancel()
+        let nextSequence = liveUpdateMarker.sequence + 1
+        liveUpdateMarker = TokenUsageLiveUpdateMarker(ids: ids, sequence: nextSequence)
+        clearLiveUpdateTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 1_600_000_000)
+            await MainActor.run { [weak self] in
+                guard let self, self.liveUpdateMarker.sequence == nextSequence else {
+                    return
+                }
+                self.liveUpdateMarker = .empty
+            }
+        }
+    }
+
+    private static func liveUpdateIDs(
+        previousEvents: [TokenUsageEvent],
+        nextEvents: [TokenUsageEvent],
+        previousSnapshot: TokenUsageDashboardSnapshot,
+        nextSnapshot: TokenUsageDashboardSnapshot,
+        previousUnfilteredSnapshot: TokenUsageDashboardSnapshot,
+        nextUnfilteredSnapshot: TokenUsageDashboardSnapshot,
+        selectedTool: TokenUsageAITool?,
+        selectedPeriod: TokenUsageDashboardPeriod
+    ) -> Set<String> {
+        let previousPeriodEvents = dashboardEvents(
+            previousEvents,
+            selectedTool: nil,
+            selectedPeriod: selectedPeriod
+        )
+        let nextPeriodEvents = dashboardEvents(
+            nextEvents,
+            selectedTool: nil,
+            selectedPeriod: selectedPeriod
+        )
+        let previousVisibleEvents = selectedTool.map { tool in
+            previousPeriodEvents.filter { $0.aiTool == tool }
+        } ?? previousPeriodEvents
+        let nextVisibleEvents = selectedTool.map { tool in
+            nextPeriodEvents.filter { $0.aiTool == tool }
+        } ?? nextPeriodEvents
+
+        var ids = Set<String>()
+
+        let previousVisibleTotal = previousVisibleEvents.reduce(0) { $0 + $1.totalTokens }
+        let nextVisibleTotal = nextVisibleEvents.reduce(0) { $0 + $1.totalTokens }
+        if nextVisibleTotal != previousVisibleTotal {
+            ids.formUnion(["kpi:total", "kpi:input", "kpi:output"])
+        }
+        if averageLatency(previousVisibleEvents) != averageLatency(nextVisibleEvents) {
+            ids.insert("kpi:latency")
+        }
+
+        appendChangedTotals(
+            to: &ids,
+            previous: tokenTotals(previousPeriodEvents, by: { $0.aiTool.rawValue }),
+            next: tokenTotals(nextPeriodEvents, by: { $0.aiTool.rawValue }),
+            prefixes: ["tool", "filter:tool"]
+        )
+        if previousPeriodEvents.reduce(0, { $0 + $1.totalTokens }) != nextPeriodEvents.reduce(0, { $0 + $1.totalTokens }) {
+            ids.insert("filter:tool:all")
+        }
+
+        appendChangedTotals(
+            to: &ids,
+            previous: tokenTotals(previousVisibleEvents, by: { $0.taskType.rawValue }),
+            next: tokenTotals(nextVisibleEvents, by: { $0.taskType.rawValue }),
+            prefixes: ["task"]
+        )
+        appendChangedTotals(
+            to: &ids,
+            previous: tokenTotals(previousVisibleEvents, by: { $0.stage.rawValue }),
+            next: tokenTotals(nextVisibleEvents, by: { $0.stage.rawValue }),
+            prefixes: ["stage"]
+        )
+        appendChangedTotals(
+            to: &ids,
+            previous: tokenTotals(previousVisibleEvents, by: { modelKey($0.model) }),
+            next: tokenTotals(nextVisibleEvents, by: { modelKey($0.model) }),
+            prefixes: ["model"]
+        )
+        appendChangedTotals(
+            to: &ids,
+            previous: sourceTotals(previousVisibleEvents),
+            next: sourceTotals(nextVisibleEvents),
+            prefixes: ["source"]
+        )
+
+        appendChangedRows(to: &ids, previous: previousSnapshot.kpis, next: nextSnapshot.kpis, prefix: "kpi")
+        appendChangedRows(to: &ids, previous: previousSnapshot.toolRows, next: nextSnapshot.toolRows, prefix: "tool")
+        appendChangedRows(to: &ids, previous: previousSnapshot.modelRows, next: nextSnapshot.modelRows, prefix: "model")
+        appendChangedRows(to: &ids, previous: previousSnapshot.taskRows, next: nextSnapshot.taskRows, prefix: "task")
+        appendChangedRows(to: &ids, previous: previousSnapshot.stageRows, next: nextSnapshot.stageRows, prefix: "stage")
+        appendChangedRows(to: &ids, previous: previousSnapshot.sourceRows, next: nextSnapshot.sourceRows, prefix: "source")
+        appendChangedRows(to: &ids, previous: previousSnapshot.sessions, next: nextSnapshot.sessions, prefix: "session")
+        appendChangedRows(to: &ids, previous: previousUnfilteredSnapshot.toolRows, next: nextUnfilteredSnapshot.toolRows, prefix: "tool")
+
+        return ids
     }
 
     private static func makeLocalTestEvent(index: Int) -> TokenUsageEvent {

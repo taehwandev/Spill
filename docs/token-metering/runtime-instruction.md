@@ -11,6 +11,24 @@ When exact runtime usage metadata is exposed by your runtime or adapter, use a l
 This instruction is only a safety contract. It is not a hook, does not measure usage, and does not grant access to token counts by itself.
 If your runtime or adapter does not expose exact token counts to an executable hook, silently skip event creation.
 
+Runtime input normalization:
+
+- The strict contract is the Spill output event schema below. Every adapter must
+  normalize runtime-specific hook payloads into that schema before enqueueing.
+- Runtime hook input formats are allowed to differ by tool. A runtime may expose
+  `input_tokens`/`output_tokens`, `usage.input_tokens`/`usage.output_tokens`,
+  `tokens.input`/`tokens.output`, `usageMetadata.totalTokenCount`, or a
+  normalized `spill_token_usage` object. The adapter may accept these input
+  shapes, but it must still write only the strict Spill event keys.
+- Do not assume a hook event has token usage merely because the hook runs.
+  Antigravity/AGY `PostInvocation` hooks can execute for tool steps or model
+  steps that do not expose exact token fields to the hook payload.
+- If a runtime hook executes but exposes no exact token count, the adapter must
+  not estimate. It may write a local-only diagnostic containing only fixed
+  booleans about whether expected token fields were present. Diagnostics must
+  never store payload values, prompts, responses, commands, file paths, logs,
+  diffs, source content, environment values, or secrets.
+
 Runtime label handoff:
 
 - At the beginning of every user-visible task, after classifying the request and before running project tools, edits, tests, commits, or reviews, silently write or refresh a short-lived safe label context when the setup helper exists.

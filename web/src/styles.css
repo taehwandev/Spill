@@ -1952,3 +1952,21 @@ td:nth-child(3) {
     flex-direction: column;
   }
 }
+
+.alphaBadge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  padding: 2px 7px 2px 8px;
+  font-size: 0.62rem;
+  font-weight: 850;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--secondary);
+  background: var(--secondary-muted);
+  border: 1px solid rgb(76 74 202 / 20%);
+  border-radius: 999px;
+  vertical-align: middle;
+  line-height: 1;
+}
+

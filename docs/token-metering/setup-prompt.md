@@ -45,6 +45,22 @@ Required hook shapes after install:
 - Claude Code: `~/.claude/settings.json` contains `hooks.Stop[]` with `matcher: ""`, a command that runs the Spill Claude hook, `SPILL_AI_TOOL=claude`, and narrow allowlist entries for Spill label handoff. The matcher field is required.
 - Antigravity/AGY: `~/.gemini/config/hooks.json` contains a `"spill-metering"` JSONHookSpec with `PostInvocation[]`, `matcher: ""`, and a command that runs the Spill AGY hook. `~/.gemini/antigravity-cli/settings.json` contains `SPILL_AI_TOOL=antigravity` and narrow allowlist entries for Spill label handoff. Do not write `PostInvocation` as a root-level array.
 
+The installed adapters must force one strict Spill output event schema, not one
+shared runtime hook input schema. Each runtime may expose usage differently, so
+adapters normalize supported exact-count input shapes into the Spill event keys.
+For Antigravity/AGY specifically, verify both things separately:
+
+- the `PostInvocation` hook is loaded and executing;
+- the hook payload exposes exact token usage fields such as
+  `input_tokens`/`output_tokens`, `usage.input_tokens`/`usage.output_tokens`,
+  `tokens.input`/`tokens.output`, `usageMetadata.totalTokenCount`, or a
+  normalized `spill_token_usage` object.
+
+If AGY runs the hook but does not expose exact token fields, the adapter must not
+invent usage. It should leave a local-only safe diagnostic under Spill's
+token-metering diagnostics directory and skip the usage event until the runtime
+or workflow provides exact counts.
+
 After the setup installer succeeds, fetch the current runtime instruction and apply it as a global agent instruction:
 
 ```text
