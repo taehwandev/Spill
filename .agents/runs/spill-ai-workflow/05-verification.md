@@ -23,7 +23,7 @@
 
 ## Feature Checks
 
-- [x] No new AgentCat integration, query, command, or dependency is introduced.
+- [x] No new external telemetry integration, query, command, or dependency is introduced.
 - [x] OpenAI API key values are not displayed or copied.
 - [x] No shell command is executed by the MVP action.
 

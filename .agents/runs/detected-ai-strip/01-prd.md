@@ -7,12 +7,12 @@
 ## Summary
 
 Make the Spill panel AI strip detection-based. The strip should appear only when
-Spill can show a useful local AI signal, keeping the panel compact and leaving
-rich AI telemetry to Agent Cat.
+Spill can show a useful local AI signal, keeping the panel compact and keeping
+rich AI telemetry out of this slice.
 
 ## Resolved Inputs
 
-- maintainer decisions: keep the AI feature lightweight and promotional because Agent Cat owns richer AI monitoring.
+- maintainer decisions: keep the AI feature lightweight and promotional; richer AI monitoring is out of scope.
 - repo-researched facts: the current implementation renders Codex, Ollama, and OpenAI rows even when they are missing.
 - assumptions: missing tools should be hidden instead of rendered as unavailable pills.
 
@@ -25,7 +25,7 @@ rich AI telemetry to Agent Cat.
 
 ## Non-goals
 
-- Agent Cat integration or telemetry.
+- External AI telemetry integration.
 - External network checks.
 - Secret display.
 - Detailed local AI dashboards.
@@ -99,7 +99,7 @@ Then the panel omits the AI strip and does not reserve AI section height
 ## Rollout
 
 - MVP: Codex, Ollama, and OpenAI configuration detection only.
-- later: richer telemetry remains outside this slice and may be delegated to Agent Cat.
+- later: richer telemetry remains outside this slice unless explicitly scoped.
 
 ## References
 

@@ -3,13 +3,13 @@
 ## Builder Brief
 
 Goal: make the existing AI strip optional and detection-based without adding
-network calls, new permissions, or Agent Cat integration.
+network calls, new permissions, or external telemetry integration.
 
 Implementation constraints:
 
 - Keep the provider local-only.
 - Preserve secret-safe OpenAI output.
-- Do not edit the unrelated Preferences Agent Cat promo work in this slice.
+- Do not edit unrelated Preferences promo work in this slice.
 - Hide missing AI providers instead of showing unavailable placeholder pills.
 
 Expected files:

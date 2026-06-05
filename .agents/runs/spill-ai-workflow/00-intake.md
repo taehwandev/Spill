@@ -3,7 +3,7 @@
 ## Request
 
 Refine the AI feature direction and continue into implementation without
-AgentCat integration. The feature should make Spill's existing AI strip more
+external telemetry integration. The feature should make Spill's existing AI strip more
 useful than a passive installed/running display. The first implementation slice
 should use Spill-owned local tool state and safe local actions only.
 
@@ -43,11 +43,11 @@ Unknown classification:
 - blocker: none
 - researchable: exact UI insertion points and existing panel detail patterns
 - assumable: launch commands can be copied first instead of executed directly
-- out-of-scope: AgentCat integration, prompt/log ingestion, usage dashboard
+- out-of-scope: external telemetry integration, prompt/log ingestion, usage dashboard
 
 Resolved inputs:
 
-- maintainer: AgentCat is not related to this implementation direction.
+- maintainer: external telemetry is not related to this implementation direction.
 - repo-research: Spill already has `LocalAIStatusProvider`, `AIStatusStore`,
   AI pills, status detail popovers, server-status badges, and pasteboard
   patterns in update flows.
@@ -89,7 +89,7 @@ Spill-launched workspaces.
 
 ## Non-goals
 
-- AgentCat integration.
+- External telemetry integration.
 - Prompt, response, raw log, token payload, or secret display.
 - A large usage dashboard.
 - Automatic command execution or terminal control.

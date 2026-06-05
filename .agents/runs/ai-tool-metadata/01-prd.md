@@ -29,7 +29,7 @@ Gemini, and Ollama are local command/process states.
 - Exact session reconstruction.
 - External network model lookup.
 - Secret display.
-- Agent Cat telemetry.
+- External AI telemetry.
 
 ## User Stories
 
@@ -98,7 +98,7 @@ Then the tool still appears as idle or active without version metadata
 ## Rollout
 
 - MVP: local process, command version, command argument, and Ollama runtime metadata only.
-- later: optional Agent Cat integration can provide richer telemetry.
+- later: optional external telemetry integration can provide richer telemetry.
 
 ## References
 

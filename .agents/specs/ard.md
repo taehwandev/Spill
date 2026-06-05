@@ -119,6 +119,94 @@ Constraints:
 - Use grouped pills and icon buttons.
 - Prefer icons and concise labels.
 
+### ARD-005A: Token Metering Lives Inside The AI Strip
+
+Decision:
+
+Token metering appears as a compact summary inside the existing AI strip of the
+Spill Panel. The visible menu bar trigger continues to toggle the panel. A
+separate native Local Token Dashboard may exist as a detail action from that
+summary, Preferences, or menus, but it must not replace the panel as the primary
+surface.
+
+Rationale:
+
+Token metering is AI usage state, so it belongs next to the existing local AI
+tool status. Putting it behind Preferences, a web dashboard, or replacing the
+panel makes the feature feel like setup work instead of a usable local meter.
+
+Constraints:
+
+- The status item remains a single small trigger.
+- Left click continues to toggle the compact Spill Panel.
+- The token summary must stay compact and must not turn the panel into a large
+  dashboard.
+- Detail actions must not start cloud sync, auth, network upload, or content
+  collection.
+
+### ARD-005B: Local Token Metering Uses App-Owned Local Receivers
+
+Decision:
+
+The native app owns an app-local token usage store. The default receiver is an
+append-only JSONL inbox that trusted hooks and adapters can write without
+opening a network port. A loopback-only token usage bridge is available as an
+optional compatibility receiver and writes accepted events into the same
+`TokenUsageStore`.
+
+Rationale:
+
+Project-specific setup would be easy to miss. A global local inbox plus a
+global agent setup prompt or runtime hook lets Spill work across projects while
+keeping the safety boundary explicit. The HTTP bridge must not be required for
+normal metering because file append is cheaper, has a smaller surface area, and
+does not require a persistent port.
+
+Rules:
+
+- Local receivers store only numeric token counts, timestamps, model ids,
+  opaque ids, safe enum labels such as `ai_tool`, and `local_only` sync mode.
+- Local receivers must reject or ignore prompt text, responses, commands, file
+  paths, repo names, branch names, commit messages, terminal output, logs,
+  diffs, source content, environment values, secrets, and arbitrary extra
+  fields.
+- Detailed task/source breakdowns require exact runtime usage metadata supplied
+  through the safe local event contract.
+- `task_type` and `stage` are extensible safe workflow slugs, not closed enums.
+  Spill publishes recommended labels, but AI runtimes, workflow hooks, and
+  adapters may define custom reusable categories that match
+  `^[a-z][a-z0-9_]{1,40}$`.
+- Custom workflow labels must not encode task text, feature names, project
+  names, file names, branch names, ticket ids, user names, or private content.
+- The `ai_tool` label is additive and content-free. Missing labels from older
+  local events decode as `unknown`; new hook-submitted events should include one
+  of `codex`, `claude`, `antigravity`, `ollama`, `openai`, or `unknown`.
+- Cloud sync must not be triggered by local events.
+- Global agent setup instructions must be silent and must not add metering
+  status lines to normal assistant replies.
+- Global agent setup instructions are not a runtime hook. They cannot expose
+  token counts by themselves, and the app must not imply otherwise.
+- Prompt-driven agents must never inspect local logs, transcripts, shell
+  history, repository files, or hidden state to reconstruct token usage.
+- A user-installed local importer is a separate runtime adapter, not an agent
+  prompt behavior. Importers may read only known exact token-usage records from
+  supported local tool stores. For Codex, the importer runs on demand from a
+  trusted hook or workflow, reads recent `~/.codex/sessions/**/rollout-*.jsonl`
+  files, and parses only `event_msg/token_count` usage records plus safe opaque
+  session/model metadata. It must not parse or store prompts, assistant
+  responses, commands, file paths, working directories, diffs, terminal output,
+  source content, environment values, or secrets.
+- Codex importer spans are deduplicated with opaque hashes and stored as
+  `ai_tool = codex`, `artifact_id = artifact_codex`, `project_id =
+  project_global`, and `local_only` sync events.
+- The local app always reads the app-owned local store. UI must not imply that
+  metering starts only after pressing a local check button.
+- A local dashboard self-test may post one synthetic `local_only` event through
+  the loopback bridge. The event must be clearly identifiable as self-test data
+  with opaque ids, safe enum labels, and numeric buckets only. It must be
+  treated as optional diagnostics and must not read prompt text, commands, file
+  paths, logs, source, environment values, or secrets.
+
 ### ARD-006: Permission Boundaries
 
 Decision:

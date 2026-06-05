@@ -7,8 +7,8 @@
 ## Request
 
 The maintainer questioned whether the AI section is useful when it always shows
-the same three providers. They clarified that Agent Cat is the richer local AI
-monitoring surface and that Spill should keep only a small promotional and
+the same three providers. They clarified that richer local AI monitoring is out
+of scope for this slice and that Spill should keep only a small promotional and
 glanceable signal. The requested slice is to make Spill's AI strip show only
 meaningful local state instead of fixed placeholder rows.
 
@@ -35,11 +35,11 @@ Unknown classification:
 - blocker: none
 - researchable: existing AI provider, panel sizing, smoke reports, and product specs
 - assumable: command installation can be inferred from executable paths and common Homebrew/user binary directories
-- out-of-scope: Agent Cat telemetry integration and external AI service probing
+- out-of-scope: external AI telemetry integration and external AI service probing
 
 Resolved inputs:
 
-- maintainer: AI should stay lightweight because Agent Cat is the richer AI monitoring product.
+- maintainer: AI should stay lightweight and avoid rich telemetry inside Spill.
 - repo-research: the current provider returns three fixed statuses, including missing states, and the panel always renders the AI section.
 - assumption: missing AI tools should be omitted entirely rather than shown as grey disabled pills.
 
@@ -69,7 +69,7 @@ secrets. If no AI signal is detected, the AI section takes no panel space.
 
 ## Non-goals
 
-- Do not add Agent Cat telemetry.
+- Do not add external AI telemetry.
 - Do not call OpenAI, Ollama HTTP endpoints, or any external service.
 - Do not show missing AI providers as placeholder rows.
 

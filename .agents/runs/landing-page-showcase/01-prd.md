@@ -23,8 +23,8 @@ Upgrade `docs/index.html` to implement an ultra-premium, interactive scroll-snap
 - **When** they view the CPU, Memory, or Storage cards,
 - **Then** they see organic live SVG line waves, moving gauge dials, and percentage counters updating in real-time.
 
-### Scenario 4: Exploring Agent Cat Integration
-- **Given** the user scrolls to the Agent Cat Collab section,
+### Scenario 4: Exploring Telemetry Mock
+- **Given** the user scrolls to the telemetry mock section,
 - **When** the dark-themed section enters the viewport,
 - **Then** a simulated command terminal automatically starts typing and printing real-time visual telemetry logs (token counts, latency stats, and active AI model events) in an ultra-premium neon monospace aesthetic.
 

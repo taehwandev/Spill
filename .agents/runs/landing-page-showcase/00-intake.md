@@ -6,7 +6,7 @@
 
 ## Request
 
-Modify the Spill landing page (`docs/index.html`) using the user's provided Tailwind CSS structure. Ensure the page operates as an ultra-premium, interactive page-by-page showcase optimized perfectly for both PC and mobile viewports. Integrate live CSS interactive mocks of Spill and Agent Cat rather than using static image placeholders, ensuring maximum visual engagement.
+Modify the Spill landing page (`docs/index.html`) using the user's provided Tailwind CSS structure. Ensure the page operates as an ultra-premium, interactive page-by-page showcase optimized perfectly for both PC and mobile viewports. Integrate live CSS interactive Spill-only mocks rather than using static image placeholders, ensuring maximum visual engagement.
 
 ## User Problem
 
@@ -39,7 +39,7 @@ Resolved inputs:
 
 - maintainer: None.
 - repo-research: `docs/assets/spill-icon.png` is the only local asset, which should be used as the branding anchor.
-- assumption: We will build fully client-side interactive simulators for both Spill and Agent Cat to completely replace static image placeholders.
+- assumption: We will build fully client-side interactive Spill simulators to completely replace static image placeholders.
 
 ## Target User
 
@@ -50,7 +50,7 @@ Prospective Spill users, developers, and open-source maintainers checking out Sp
 A stunning, responsive, fullscreen scroll-snapped landing page featuring:
 1. **Interactive macOS & Spill Simulator**: Toggle the Spill dropdown panel next to a simulated hardware notch and watch window snapping actions reflow simulated windows live.
 2. **Dynamic Performance Hub**: Live fluctuating SVG CPU waveform graphs, real-time memory dials, and interactive widgets.
-3. **Agent Cat Collab Hub**: Dark-themed cyberpunk terminal simulation with real-time rolling AI telemetry logs and provider stats.
+3. **Telemetry Collab Hub**: Dark-themed terminal simulation with real-time rolling AI telemetry logs and provider stats.
 4. **Clean-cut installation guides** and a terminal copy utility.
 5. **Open Source GitHub promotion**.
 

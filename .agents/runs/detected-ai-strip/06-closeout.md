@@ -43,7 +43,7 @@
 
 ## Follow-up Tasks
 
-- Keep richer AI telemetry out of Spill unless Agent Cat integration becomes a separate product decision.
+- Keep richer AI telemetry out of Spill unless a separate external telemetry integration becomes an explicit product decision.
 
 ## Docs Updated
 
