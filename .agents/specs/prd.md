@@ -133,9 +133,11 @@ Requirements:
   derived from prompts, commands, file paths, repo names, transcript text,
   branch names, ticket ids, user names, or private content.
 - Detailed workflow labels such as `analysis`, `prd_drafting`,
-  `code_generation`, `code_review`, `ux_copy_review`, or other user-defined
-  safe slugs are allowed only when an agent, runtime, workflow, or adapter has
-  exact runtime usage metadata and sends the safe local event contract.
+  `code_generation`, `code_review`, `review_response`, `git_commit`,
+  `commit_message`, `pull_request`, `workflow_setup`, `ux_copy_review`, or
+  other user-defined safe slugs are allowed only when an agent, runtime,
+  workflow, or adapter has exact runtime usage metadata and sends the safe
+  local event contract.
 - `task_type` and `stage` are safe lowercase workflow slugs, not closed enums.
   Spill provides recommended labels, but adapters may define custom reusable
   categories that match `^[a-z][a-z0-9_]{1,40}$`.
@@ -148,7 +150,9 @@ Requirements:
   secrets.
 - The app should expose a global setup prompt in Preferences and on the web
   setup surface for users who want all projects to report into the same local
-  meter.
+  meter. The prompt should tell capable agents to use the one-step setup helper
+  for installation or repair instead of asking users to copy or install Codex,
+  Claude, Antigravity/AGY, and OpenAI adapters one by one.
 - The global setup prompt must be silent: it must not cause agents to add
   metering status lines to normal replies.
 - Local metering must not require a user-facing "start" or "check" action in
@@ -164,7 +168,8 @@ Requirements:
   directories, diffs, logs, source content, environment values, or secrets.
 - Spill should provide a one-step local setup helper that installs detected
   Codex, Claude, Antigravity/AGY, and direct OpenAI adapter scripts and merges
-  known user-level hook config files only after explicit user action.
+  known user-level hook config files after an explicit install/fix/apply user
+  request. Users should not need to run separate install steps per adapter.
 - Workflow-level hook setup must be opt-in and target a user-selected hook file
   such as `.agents/hooks.json`; setup must not silently write project workflow
   config files.
@@ -172,10 +177,16 @@ Requirements:
   `stage` labels, adapters should accept those labels through hook payload,
   command flags, or environment variables instead of inferring labels from
   prompts, commands, logs, source files, or transcripts.
+- When a static user-level hook cannot receive per-turn payload fields or
+  environment variables, agents may write a short-lived local label context
+  containing only `ai_tool`, `task_type`, `stage`, `updated_at`, and
+  `expires_at`. Adapters may read that context only for safe reusable labels
+  and must ignore expired or tool-mismatched contexts.
 - Adapters must not inspect transcripts, logs, command history, or source files
-  only to infer workflow labels. If a hook payload does not expose safe
-  `task_type` or `stage` slugs, the adapter should use `uncategorized` and the
-  latest safe default stage instead.
+  only to infer workflow labels. If hook payload, environment, or a valid
+  short-lived label context does not expose safe `task_type` or `stage` slugs,
+  the adapter should use `uncategorized` and the latest safe default stage
+  instead.
 - Codex metering should support an on-demand local session importer that reads
   recent `~/.codex/sessions/**/rollout-*.jsonl` files when invoked by a trusted
   hook or workflow, converts exact `event_msg/token_count` usage into safe Spill

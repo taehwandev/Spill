@@ -57,6 +57,19 @@ const statePath =
     "token-metering",
     "codex-session-import-state.json",
   );
+const labelPath =
+  options.labelPath ??
+  process.env.SPILL_TOKEN_USAGE_LABEL_FILE ??
+  join(
+    homedir(),
+    "Library",
+    "Application Support",
+    "Spill",
+    "token-metering",
+    "label-context",
+    "codex.json",
+  );
+const runtimeLabel = await readRuntimeLabel(labelPath, "codex");
 
 const strict = options.strict || process.env.SPILL_TOKEN_USAGE_IMPORT_STRICT === "1";
 const dryRun = options.dryRun;
@@ -64,10 +77,16 @@ const markExisting = options.markExisting;
 const watch = options.watch;
 const intervalMS = options.intervalMS ?? DEFAULT_WATCH_INTERVAL_MS;
 const taskTypeOverride = safeWorkflowSlug(
-  options.taskType ?? process.env.SPILL_TOKEN_USAGE_TASK_TYPE ?? process.env.SPILL_WORKFLOW_TASK_TYPE,
+  options.taskType ??
+    process.env.SPILL_TOKEN_USAGE_TASK_TYPE ??
+    process.env.SPILL_WORKFLOW_TASK_TYPE ??
+    runtimeLabel.taskType,
 );
 const stageOverride = safeWorkflowSlug(
-  options.stage ?? process.env.SPILL_TOKEN_USAGE_STAGE ?? process.env.SPILL_WORKFLOW_STAGE,
+  options.stage ??
+    process.env.SPILL_TOKEN_USAGE_STAGE ??
+    process.env.SPILL_WORKFLOW_STAGE ??
+    runtimeLabel.stage,
 );
 const afterDate = options.after ? new Date(options.after) : sinceDate(options.sinceHours ?? DEFAULT_SINCE_HOURS);
 
@@ -495,6 +514,31 @@ async function readState(path) {
   return { updatedAt: "", sentSpanIDs: [] };
 }
 
+async function readRuntimeLabel(path, expectedTool) {
+  let parsed = null;
+  try {
+    parsed = JSON.parse(await readFile(path, "utf8"));
+  } catch {
+    return {};
+  }
+
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+  const tool = typeof parsed.ai_tool === "string" ? parsed.ai_tool : "";
+  if (tool && tool !== "unknown" && tool !== expectedTool) return {};
+
+  if (typeof parsed.expires_at === "string" && parsed.expires_at.length > 0) {
+    const expiresAt = new Date(parsed.expires_at);
+    if (Number.isNaN(expiresAt.getTime()) || Date.now() > expiresAt.getTime()) {
+      return {};
+    }
+  }
+
+  return {
+    taskType: optionalWorkflowSlug(parsed.task_type),
+    stage: optionalWorkflowSlug(parsed.stage),
+  };
+}
+
 async function writeState(path, state) {
   await mkdir(dirname(path), { recursive: true, mode: 0o700 });
   await writeFile(path, `${JSON.stringify(state, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
@@ -525,6 +569,7 @@ function parseArgs(args) {
     else if (arg === "--inbox") parsed.inboxPath = requiredValue(args, ++index, arg);
     else if (arg === "--events") parsed.eventsPath = requiredValue(args, ++index, arg);
     else if (arg === "--state") parsed.statePath = requiredValue(args, ++index, arg);
+    else if (arg === "--label-file") parsed.labelPath = requiredValue(args, ++index, arg);
     else if (arg === "--after") parsed.after = requiredValue(args, ++index, arg);
     else if (arg === "--since-hours") parsed.sinceHours = Number(requiredValue(args, ++index, arg));
     else if (arg === "--interval-ms") parsed.intervalMS = Number(requiredValue(args, ++index, arg));
@@ -567,14 +612,16 @@ Options:
   --events PATH          Local canonical events JSON. Used for file-transport dedupe.
   --endpoint URL         Spill event endpoint for --transport http.
   --state PATH           Import state path.
+  --label-file PATH      Short-lived safe task/stage label file.
   --task-type SLUG       Override task_type with a safe workflow slug.
   --stage SLUG           Override stage with a safe workflow slug.
 
 Reads only Codex token_count records and safe opaque session/model metadata.
 It does not infer task or stage labels from prompts, commands, tool output,
-file paths, diffs, logs, or transcript text. Use --task-type/--stage or the
+file paths, diffs, logs, or transcript text. Use --task-type/--stage, the
 matching SPILL_TOKEN_USAGE_TASK_TYPE/SPILL_TOKEN_USAGE_STAGE environment
-variables only when a trusted workflow already has safe reusable labels.
+variables, or a short-lived label file only when a trusted workflow or agent
+already has safe reusable labels.
 `);
 }
 
@@ -621,6 +668,11 @@ function safeWorkflowSlug(value) {
     fail("invalid_workflow_slug", true);
   }
   return String(value);
+}
+
+function optionalWorkflowSlug(value) {
+  if (typeof value !== "string") return null;
+  return /^[a-z][a-z0-9_]{1,40}$/.test(value) ? value : null;
 }
 
 function normalizedTransport(value) {

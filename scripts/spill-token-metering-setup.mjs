@@ -12,9 +12,26 @@ const apply = args.apply === true;
 const force = args.force === true;
 const json = args.json === true;
 const installRoot = expandHome(args.installDir ?? join(homedir(), "Library/Application Support/Spill/adapters"));
-const sourceRoot = await resolveSourceRoot(args.sourceRoot);
 const include = new Set((args.include ?? "codex,claude,antigravity,openai").split(",").map((item) => item.trim()).filter(Boolean));
 const workflowHook = args.workflowHook ? expandHome(args.workflowHook) : null;
+
+if (args.label) {
+  const label = await writeRuntimeLabel({
+    tool: args.label,
+    taskType: args.taskType,
+    stage: args.stage,
+    labelFile: args.labelFile,
+    ttlMinutes: args.ttlMinutes,
+  });
+  if (json) {
+    process.stdout.write(`${JSON.stringify({ action: "labeled", ...label }, null, 2)}\n`);
+  } else {
+    process.stdout.write(`labeled: ${label.tool} ${label.task_type}/${label.stage}\n`);
+  }
+  process.exit(0);
+}
+
+const sourceRoot = await resolveSourceRoot(args.sourceRoot);
 
 const adapters = {
   codex: {
@@ -56,6 +73,7 @@ const adapters = {
 };
 
 const results = [];
+await installSetupHelper();
 for (const adapter of Object.values(adapters)) {
   if (!include.has(adapter.id)) continue;
   const detected = force || await adapter.detect();
@@ -84,8 +102,24 @@ if (json) {
     process.stdout.write(`${result.action}: ${result.tool}${suffix}\n`);
   }
   if (!apply) {
-    process.stdout.write("dry-run: pass --apply to copy adapters and merge hook config files.\n");
+    process.stdout.write("dry-run: pass --apply to copy all detected adapters and merge known user-level hook config files in one pass.\n");
   }
+}
+
+async function installSetupHelper() {
+  const destination = join(installRoot, "setup", "spill-token-metering-setup.mjs");
+  if (!apply) {
+    results.push({ tool: "setup", action: "would_install", path: destination });
+    return;
+  }
+
+  const source = fileURLToPath(import.meta.url);
+  await mkdir(dirname(destination), { recursive: true });
+  if (resolve(source) !== resolve(destination)) {
+    await copyFile(source, destination);
+  }
+  await chmod(destination, 0o755);
+  results.push({ tool: "setup", action: "installed", path: destination });
 }
 
 async function installAdapter(adapter) {
@@ -211,6 +245,40 @@ async function writeJSONObject(path, value) {
   await rename(temporary, path);
 }
 
+async function writeRuntimeLabel({ tool, taskType, stage, labelFile, ttlMinutes }) {
+  const safeTool = safeToolLabel(tool);
+  const safeTaskType = safeWorkflowSlug(taskType, "task_type");
+  const safeStage = safeWorkflowSlug(stage, "stage");
+  const ttl = safeTTLMinutes(ttlMinutes);
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + ttl * 60 * 1000);
+  const target = expandHome(labelFile ?? join(
+    homedir(),
+    "Library/Application Support/Spill/token-metering/label-context",
+    `${safeTool}.json`,
+  ));
+  const value = {
+    ai_tool: safeTool,
+    task_type: safeTaskType,
+    stage: safeStage,
+    updated_at: now.toISOString(),
+    expires_at: expiresAt.toISOString(),
+  };
+
+  await mkdir(dirname(target), { recursive: true });
+  const temporary = `${target}.tmp-${process.pid}`;
+  await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
+  await rename(temporary, target);
+
+  return {
+    tool: safeTool,
+    task_type: safeTaskType,
+    stage: safeStage,
+    label_file: target,
+    expires_at: value.expires_at,
+  };
+}
+
 async function resolveSourceRoot(option) {
   if (option) return resolve(expandHome(option));
 
@@ -281,6 +349,21 @@ function parseArgs(values) {
     case "--workflow-hook":
       parsed.workflowHook = requiredValue(values, ++index, value);
       break;
+    case "--label":
+      parsed.label = requiredValue(values, ++index, value);
+      break;
+    case "--task-type":
+      parsed.taskType = requiredValue(values, ++index, value);
+      break;
+    case "--stage":
+      parsed.stage = requiredValue(values, ++index, value);
+      break;
+    case "--label-file":
+      parsed.labelFile = requiredValue(values, ++index, value);
+      break;
+    case "--ttl-minutes":
+      parsed.ttlMinutes = requiredValue(values, ++index, value);
+      break;
     default:
       throw new Error(`Unknown option: ${value}`);
     }
@@ -300,16 +383,25 @@ function printHelp() {
   process.stdout.write(`Usage: spill-token-metering-setup.mjs [options]
 
 Options:
-  --apply                 Copy detected adapters and merge hook config files.
+  --apply                 Copy all detected adapters and merge known user-level hook config files in one pass.
   --force                 Install included adapters even when the tool is not detected.
   --include LIST          Comma list: codex,claude,antigravity,openai.
   --workflow-hook PATH    Also add the Antigravity/AGY workflow hook to this selected hooks.json.
   --source-root PATH      Adapter source root. Default: repo or bundled adapters directory.
   --install-dir PATH      Adapter install root. Default: ~/Library/Application Support/Spill/adapters.
+  --label TOOL            Write a short-lived safe task/stage label for codex, claude, antigravity, or openai.
+  --task-type SLUG        Safe task label for --label.
+  --stage SLUG            Safe stage label for --label.
+  --label-file PATH       Override the runtime label file path for --label.
+  --ttl-minutes MINUTES   Runtime label expiry. Default: 30.
   --json                  Print JSON summary.
 
-Default mode is a dry-run. The installer never reads prompts, transcripts,
-commands, logs, diffs, source files, environment values, or secrets.
+Default mode is a dry-run. A normal --apply run detects Codex, Claude,
+Antigravity/AGY, and OpenAI support, then installs only the detected adapters.
+It does not require users to copy or install each adapter separately.
+The helper also installs or refreshes itself at the default setup command path.
+The installer never reads prompts, transcripts, commands, logs, diffs, source
+files, environment values, or secrets.
 `);
 }
 
@@ -321,6 +413,30 @@ function expandHome(path) {
 
 function plainObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function safeToolLabel(value) {
+  const normalized = String(value ?? "").toLowerCase();
+  if (["codex", "claude", "antigravity", "openai"].includes(normalized)) {
+    return normalized;
+  }
+  throw new Error(`Invalid --label tool: ${value}`);
+}
+
+function safeWorkflowSlug(value, name) {
+  if (typeof value !== "string" || !/^[a-z][a-z0-9_]{1,40}$/.test(value)) {
+    throw new Error(`Invalid ${name}: ${value ?? ""}`);
+  }
+  return value;
+}
+
+function safeTTLMinutes(value) {
+  if (value === undefined) return 30;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 1 || parsed > 240) {
+    throw new Error(`Invalid --ttl-minutes: ${value}`);
+  }
+  return parsed;
 }
 
 function shellQuote(value) {

@@ -15,6 +15,19 @@ enum TokenMeteringGlobalSetup {
     This instruction is only a safety contract. It is not a hook, does not measure usage, and does not grant access to token counts by itself.
     If your runtime or adapter does not expose exact token counts to an executable hook, silently skip event creation.
 
+    Install behavior:
+    - This prompt is meant to let an AI agent install Spill metering in one pass when the user asks to install, apply, fix, or verify Spill token metering.
+    - Do not ask the user to install Codex, Claude, Antigravity/AGY, or OpenAI adapters one by one.
+    - When the user asks for installation or repair, run the one-step setup helper with --apply if it exists:
+      node ~/Library/Application Support/Spill/adapters/setup/spill-token-metering-setup.mjs --apply
+    - The setup helper should copy every detected supported adapter and merge the known user-level hook configs in one operation.
+    - If the setup helper is not installed but the Spill repository is available, run the repo helper instead:
+      node scripts/spill-token-metering-setup.mjs --apply
+    - The user's explicit install/fix/apply request is enough confirmation for user-level adapter and hook setup.
+    - Ask only before writing a project or workflow hook file unless the user already supplied that exact path.
+    - If a workflow hook path is supplied, pass it explicitly:
+      node ~/Library/Application Support/Spill/adapters/setup/spill-token-metering-setup.mjs --apply --workflow-hook /path/to/.agents/hooks.json
+
     Event timing:
     - Send at most one event for each assistant response or adapter span that exposes final exact token counts.
     - Prefer the final response event for the user-visible assistant turn. Do not also send separate events for every tool call unless your runtime exposes those tool calls as separate exact usage spans with their own token counts.
@@ -52,13 +65,24 @@ enum TokenMeteringGlobalSetup {
     - prd_drafting
     - architecture
     - code_generation
+    - ui_design
+    - prompt_design
     - refactoring
     - code_review
+    - review_response
     - test_generation
     - testing
+    - build_verification
     - debugging
+    - bug_reproduction
     - documentation
+    - changelog
     - release_notes
+    - release_packaging
+    - git_commit
+    - commit_message
+    - pull_request
+    - workflow_setup
     - uncategorized
 
     Task label selection:
@@ -68,8 +92,18 @@ enum TokenMeteringGlobalSetup {
     - Use code_generation when the work is primarily writing or changing implementation code without a dominant debugging goal.
     - Use test_generation when the work is primarily adding or changing tests.
     - Use testing when the work is primarily running tests, builds, smoke checks, or verification commands without primarily changing tests.
+    - Use build_verification when the work is primarily build, package, smoke, audit, or release verification.
     - Use code_review when the work is primarily review findings or risk analysis.
-    - Use documentation, prd_drafting, or release_notes only when that artifact is the primary deliverable.
+    - Use review_response when the work is primarily responding to review comments or reconciling review feedback.
+    - Use git_commit when the work is primarily staging, committing, tagging, or checking commit state.
+    - Use commit_message when the work is primarily drafting or revising commit text without creating the commit.
+    - Use pull_request when the work is primarily drafting, reviewing, or updating PR metadata.
+    - Use workflow_setup when the work is primarily installing, configuring, or repairing agent hooks or workflow automation.
+    - Use ui_design when the work is primarily visual structure, layout, interaction, or design implementation.
+    - Use prompt_design when the work is primarily writing or revising agent instructions, prompts, or classification rules.
+    - Use bug_reproduction when the work is primarily reproducing a failure before the fix.
+    - Use documentation, prd_drafting, changelog, or release_notes only when that artifact is the primary deliverable.
+    - Use release_packaging when the work is primarily signing, packaging, notarization, tagging, or release artifact preparation.
     - Use analysis for answer-only reasoning or investigation without code/doc/test changes.
     - Use uncategorized when no label clearly dominates.
 
@@ -106,14 +140,15 @@ enum TokenMeteringGlobalSetup {
     - Spill imports complete .json files into the app-owned local store and ignores partial .tmp files.
     - Do not run a continuous polling watcher just for Spill metering. Use runtime hooks or final exact usage spans when available.
 
-    One-time adapter setup:
-    - If the user explicitly asks to install or fix Spill token metering hooks, prefer the local setup helper when it exists:
-      node ~/Library/Application Support/Spill/adapters/setup/spill-token-metering-setup.mjs --apply
-    - Ask before modifying user-level or workflow hook config files. Do not install hooks silently.
-    - The setup helper detects Codex, Claude, Antigravity, and OpenAI adapter support, installs matching adapter scripts, and merges known hook configs.
-    - If the user chooses a workflow hook file, pass it explicitly:
-      node ~/Library/Application Support/Spill/adapters/setup/spill-token-metering-setup.mjs --apply --workflow-hook /path/to/.agents/hooks.json
-    - If a trusted workflow already exposes safe reusable task_type or stage labels, prefer passing those labels through the runtime hook or adapter instead of inferring them from prompts, commands, logs, files, or transcripts.
+    Safe workflow label handoff:
+    - If a trusted workflow already exposes safe reusable task_type or stage labels, pass those labels through the runtime hook or adapter instead of inferring them from prompts, commands, logs, files, or transcripts.
+    - Prefer payload fields named task_type/taskType and stage when the hook payload supports them.
+    - Otherwise use SPILL_TOKEN_USAGE_TASK_TYPE or SPILL_WORKFLOW_TASK_TYPE, and SPILL_TOKEN_USAGE_STAGE or SPILL_WORKFLOW_STAGE.
+    - For Codex importer workflows, pass --task-type SLUG and --stage SLUG when the workflow already knows the safe reusable labels.
+    - If an installed static hook cannot receive per-turn payload or environment labels, write a short-lived safe label context before work starts or when the dominant workflow category changes:
+      node ~/Library/Application Support/Spill/adapters/setup/spill-token-metering-setup.mjs --label codex --task-type code_review --stage verify
+    - Use the current runtime tool label in --label: codex, claude, antigravity, or openai.
+    - The label context may contain only ai_tool, task_type, stage, updated_at, and expires_at. Never include task text, prompts, commands, file paths, repo names, branches, logs, diffs, source, environment values, or secrets.
 
     The JSON event must contain only these keys:
     schema_version, device_id, project_id, artifact_id, run_id, span_id, ai_tool, task_type, stage, model, input_tokens, output_tokens, total_tokens, token_breakdown, latency_ms, created_at, sync_mode.

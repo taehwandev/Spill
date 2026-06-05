@@ -6,6 +6,7 @@ APP_EXEC="$ROOT_DIR/.build/Spill.app/Contents/MacOS/Spill"
 LOG_FILE="${TMPDIR:-/tmp}/spill-token-metering-smoke.log"
 EVENTS_FILE="$(mktemp "${TMPDIR:-/tmp}/spill-token-metering-events.XXXXXX")"
 INBOX_DIR="$(mktemp -d "${TMPDIR:-/tmp}/spill-token-metering-inbox.XXXXXX")"
+ADAPTER_TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/spill-token-metering-adapters.XXXXXX")"
 PID=""
 
 cleanup() {
@@ -15,7 +16,7 @@ cleanup() {
     fi
 
     rm -f "$EVENTS_FILE"
-    rm -rf "$INBOX_DIR"
+    rm -rf "$INBOX_DIR" "$ADAPTER_TMP_DIR"
 }
 trap cleanup EXIT
 
@@ -85,6 +86,133 @@ if (tmpFiles.length !== 0) {
 console.log(`OK: token usage hook queued event ${process.env.HOOK_SPAN_ID}.`);
 NODE
 
+printf '%s' '{"usage":{"input_tokens":11,"output_tokens":7},"model":"gemini-2.5-pro","session_id":"agySmokeRun01","task_type":"code_review","stage":"verify"}' \
+    | SPILL_TOKEN_USAGE_INBOX_DIR="$INBOX_DIR" \
+      python3 "$ROOT_DIR/Sources/Spill/Resources/adapters/antigravity/spill-hook.py"
+
+CLAUDE_TRANSCRIPT="$ADAPTER_TMP_DIR/claude-transcript.jsonl"
+CLAUDE_PAYLOAD="$ADAPTER_TMP_DIR/claude-payload.json"
+CLAUDE_TRANSCRIPT="$CLAUDE_TRANSCRIPT" CLAUDE_PAYLOAD="$CLAUDE_PAYLOAD" node --input-type=module <<'NODE'
+import { writeFile } from 'node:fs/promises';
+
+const transcript = [
+  { message: { role: "user" } },
+  {
+    message: {
+      role: "assistant",
+      model: "claude-sonnet-4",
+      usage: {
+        input_tokens: 13,
+        cache_creation_input_tokens: 0,
+        cache_read_input_tokens: 2,
+        output_tokens: 5,
+      },
+      content: [{ type: "tool_use", name: "Read" }],
+    },
+  },
+].map((line) => JSON.stringify(line)).join("\n");
+
+await writeFile(process.env.CLAUDE_TRANSCRIPT, `${transcript}\n`);
+await writeFile(process.env.CLAUDE_PAYLOAD, JSON.stringify({
+  session_id: "claudeSmokeRun01",
+  transcript_path: process.env.CLAUDE_TRANSCRIPT,
+}));
+NODE
+
+SPILL_TOKEN_USAGE_INBOX_DIR="$INBOX_DIR" \
+SPILL_TOKEN_USAGE_TASK_TYPE="git_commit" \
+SPILL_TOKEN_USAGE_STAGE="summarize" \
+python3 "$ROOT_DIR/Sources/Spill/Resources/adapters/claude-code/spill-hook.py" <"$CLAUDE_PAYLOAD"
+
+CODEX_HOME_DIR="$ADAPTER_TMP_DIR/codex-home"
+CODEX_SESSION_DIR="$CODEX_HOME_DIR/sessions/2026/06/05"
+mkdir -p "$CODEX_SESSION_DIR"
+CODEX_SESSION="$CODEX_SESSION_DIR/rollout-spill-smoke.jsonl"
+CODEX_SESSION="$CODEX_SESSION" node --input-type=module <<'NODE'
+import { writeFile } from 'node:fs/promises';
+
+const timestamp = new Date().toISOString();
+const lines = [
+  {
+    timestamp,
+    type: "session_meta",
+    originator: "codex_cli_rs",
+    session_id: "codexSmokeRun01",
+    model: "gpt-5-codex",
+  },
+  {
+    timestamp,
+    type: "event_msg",
+    payload: {
+      type: "token_count",
+      info: {
+        model: "gpt-5-codex",
+        last_token_usage: {
+          input_tokens: 17,
+          cached_input_tokens: 0,
+          output_tokens: 6,
+          reasoning_output_tokens: 4,
+          total_tokens: 27,
+        },
+        total_token_usage: {
+          input_tokens: 17,
+          cached_input_tokens: 0,
+          output_tokens: 6,
+          reasoning_output_tokens: 4,
+          total_tokens: 27,
+        },
+      },
+    },
+  },
+].map((line) => JSON.stringify(line)).join("\n");
+
+await writeFile(process.env.CODEX_SESSION, `${lines}\n`);
+NODE
+
+CODEX_LABEL_FILE="$ADAPTER_TMP_DIR/codex-label.json"
+node "$ROOT_DIR/scripts/spill-token-metering-setup.mjs" \
+    --label codex \
+    --task-type review_response \
+    --stage revise \
+    --label-file "$CODEX_LABEL_FILE" \
+    --ttl-minutes 5 \
+    --json >/dev/null
+
+node "$ROOT_DIR/scripts/spill-codex-session-importer.mjs" \
+    --codex-home "$CODEX_HOME_DIR" \
+    --transport file \
+    --inbox "$INBOX_DIR" \
+    --events "$EVENTS_FILE" \
+    --state "$ADAPTER_TMP_DIR/codex-state.json" \
+    --label-file "$CODEX_LABEL_FILE" \
+    --since-hours 1 \
+    --json >/dev/null
+
+INBOX_DIR="$INBOX_DIR" node --input-type=module <<'NODE'
+import { readFile, readdir } from 'node:fs/promises';
+import { join } from 'node:path';
+
+const files = (await readdir(process.env.INBOX_DIR)).filter((file) => file.endsWith(".json"));
+if (files.length !== 4) {
+  throw new Error(`expected four queued JSON events after adapter checks, found ${files.length}`);
+}
+
+const events = await Promise.all(files.map(async (file) => JSON.parse(await readFile(join(process.env.INBOX_DIR, file), "utf8"))));
+const keys = new Set(events.map((event) => `${event.ai_tool}:${event.task_type}:${event.stage}`));
+for (const expected of [
+  "claude:debugging:verify",
+  "antigravity:code_review:verify",
+  "claude:git_commit:summarize",
+  "codex:review_response:revise",
+]) {
+  if (!keys.has(expected)) {
+    throw new Error(`missing adapter label event ${expected}`);
+  }
+}
+
+console.log("OK: AGY, Claude, and Codex adapters queued detailed task labels.");
+NODE
+
 SPILL_SMOKE_TEST=1 \
 SPILL_SMOKE_OPEN_PANEL=1 \
 SPILL_SMOKE_TEST_EXIT_AFTER=1.2 \
@@ -116,11 +244,14 @@ HOOK_SPAN_ID="$HOOK_SPAN_ID" EVENTS_FILE="$EVENTS_FILE" INBOX_DIR="$INBOX_DIR" n
 import { readFile, readdir } from 'node:fs/promises';
 
 const events = JSON.parse(await readFile(process.env.EVENTS_FILE, "utf8"));
-if (!Array.isArray(events) || events.length !== 1) {
-  throw new Error(`expected one stored event, found ${Array.isArray(events) ? events.length : "non-array"}`);
+if (!Array.isArray(events) || events.length !== 4) {
+  throw new Error(`expected four stored events, found ${Array.isArray(events) ? events.length : "non-array"}`);
 }
 
-const event = events[0];
+const event = events.find((candidate) => candidate.span_id === process.env.HOOK_SPAN_ID);
+if (!event) {
+  throw new Error("stored synthetic hook event missing");
+}
 if (event.span_id !== process.env.HOOK_SPAN_ID) {
   throw new Error(`stored span id mismatch: ${event.span_id}`);
 }
@@ -132,6 +263,17 @@ if (event.total_tokens !== 15 || event.input_tokens !== 9 || event.output_tokens
 }
 if (event.token_breakdown.unknown !== 15 || event.sync_mode !== "local_only") {
   throw new Error("stored hook event does not preserve local-only unknown breakdown");
+}
+
+const keys = new Set(events.map((candidate) => `${candidate.ai_tool}:${candidate.task_type}:${candidate.stage}`));
+for (const expected of [
+  "antigravity:code_review:verify",
+  "claude:git_commit:summarize",
+  "codex:review_response:revise",
+]) {
+  if (!keys.has(expected)) {
+    throw new Error(`stored events missing adapter label ${expected}`);
+  }
 }
 
 const remaining = (await readdir(process.env.INBOX_DIR)).filter((file) => file.endsWith(".json"));

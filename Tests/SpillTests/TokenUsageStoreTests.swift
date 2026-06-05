@@ -224,6 +224,36 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(snapshot.stageRows.first?.title, "Handoff Review")
     }
 
+    func testDashboardUsesDetailedWorkflowLabels() {
+        let events = [
+            Self.safeEvent(
+                aiTool: .codex,
+                spanID: "span_review_01",
+                taskType: .codeReview,
+                stage: .verify
+            ),
+            Self.safeEvent(
+                aiTool: .claude,
+                spanID: "span_commit_01",
+                taskType: .gitCommit,
+                stage: .summarize
+            ),
+            Self.safeEvent(
+                aiTool: .antigravity,
+                spanID: "span_response_01",
+                taskType: .reviewResponse,
+                stage: .revise
+            )
+        ]
+
+        let snapshot = TokenUsageDashboardSnapshot(events: events)
+        let taskTitles = Set(snapshot.taskRows.map(\.title))
+
+        XCTAssertTrue(taskTitles.contains("Code review"))
+        XCTAssertTrue(taskTitles.contains("Git commit"))
+        XCTAssertTrue(taskTitles.contains("Review response"))
+    }
+
     func testSanitizerRejectsUnsafeWorkflowLabels() throws {
         var object = try decodedJSONObject(from: TokenUsageSanitizer.eventData(Self.safeEvent()))
         object["task_type"] = "feature/login"
@@ -430,6 +460,9 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(prompt.contains("does not measure usage"))
         XCTAssertTrue(prompt.contains("does not grant access to token counts by itself"))
         XCTAssertTrue(prompt.contains("executable hook"))
+        XCTAssertTrue(prompt.contains("install Spill metering in one pass"))
+        XCTAssertTrue(prompt.contains("Do not ask the user to install Codex, Claude, Antigravity/AGY, or OpenAI adapters one by one"))
+        XCTAssertTrue(prompt.contains("The user's explicit install/fix/apply request is enough confirmation"))
         XCTAssertTrue(prompt.contains("events-inbox"))
         XCTAssertTrue(prompt.contains("Write a unique .tmp file first"))
         XCTAssertTrue(prompt.contains("ai_tool must be one of: codex, claude, antigravity, openai, unknown"))
@@ -451,6 +484,11 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(prompt.contains("task_type is a safe lowercase workflow slug, not a fixed enum"))
         XCTAssertTrue(prompt.contains("Use the dominant user-visible workflow category for the event"))
         XCTAssertTrue(prompt.contains("If your runtime, adapter, or workflow exposes a current step label"))
+        XCTAssertTrue(prompt.contains("git_commit"))
+        XCTAssertTrue(prompt.contains("commit_message"))
+        XCTAssertTrue(prompt.contains("pull_request"))
+        XCTAssertTrue(prompt.contains("review_response"))
+        XCTAssertTrue(prompt.contains("workflow_setup"))
         XCTAssertTrue(prompt.contains("stage is a safe lowercase workflow slug, not a fixed enum"))
         XCTAssertTrue(prompt.contains("Use debugging when the work is primarily diagnosis"))
         XCTAssertTrue(prompt.contains("Use code_generation when the work is primarily writing or changing implementation code"))
@@ -458,17 +496,22 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(prompt.contains("Only fill a source bucket when the runtime or adapter exposes that exact source count"))
         XCTAssertTrue(prompt.contains("unknown equal to total_tokens"))
         XCTAssertTrue(prompt.contains("Do not run a continuous polling watcher"))
-        XCTAssertTrue(prompt.contains("One-time adapter setup"))
         XCTAssertTrue(prompt.contains("spill-token-metering-setup.mjs --apply"))
         XCTAssertTrue(prompt.contains("--workflow-hook"))
-        XCTAssertTrue(prompt.contains("Do not install hooks silently"))
+        XCTAssertTrue(prompt.contains("Safe workflow label handoff"))
+        XCTAssertTrue(prompt.contains("SPILL_TOKEN_USAGE_TASK_TYPE"))
+        XCTAssertTrue(prompt.contains("--task-type SLUG"))
+        XCTAssertTrue(prompt.contains("--label codex --task-type code_review --stage verify"))
+        XCTAssertTrue(prompt.contains("short-lived safe label context"))
     }
 
     private static func safeEvent(
         aiTool: TokenUsageAITool = .codex,
         spanID: String = "span_local_01",
         inputTokens: Int = 100,
-        outputTokens: Int = 50
+        outputTokens: Int = 50,
+        taskType: TokenUsageTaskType = .analysis,
+        stage: TokenUsageStage = .plan
     ) -> TokenUsageEvent {
         let totalTokens = inputTokens + outputTokens
         let tokenBreakdown = inputTokens == 100 && outputTokens == 50
@@ -497,8 +540,8 @@ final class TokenUsageStoreTests: XCTestCase {
             runID: "run_local_01",
             spanID: spanID,
             aiTool: aiTool,
-            taskType: .analysis,
-            stage: .plan,
+            taskType: taskType,
+            stage: stage,
             model: "local-manual",
             inputTokens: inputTokens,
             outputTokens: outputTokens,

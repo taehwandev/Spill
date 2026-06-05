@@ -468,13 +468,24 @@ private extension TokenUsageTaskType {
             "prd_drafting": "PRD drafting",
             "architecture": "Architecture",
             "code_generation": "Code generation",
+            "ui_design": "UI design",
+            "prompt_design": "Prompt design",
             "refactoring": "Refactoring",
             "code_review": "Code review",
+            "review_response": "Review response",
             "test_generation": "Test generation",
             "testing": "Testing",
+            "build_verification": "Build verification",
             "debugging": "Debugging",
+            "bug_reproduction": "Bug reproduction",
             "documentation": "Documentation",
-            "release_notes": "Release notes"
+            "changelog": "Changelog",
+            "release_notes": "Release notes",
+            "release_packaging": "Release packaging",
+            "git_commit": "Git commit",
+            "commit_message": "Commit message",
+            "pull_request": "Pull request",
+            "workflow_setup": "Workflow setup"
         ][rawValue] ?? rawValue.tokenUsageTitle
     }
 }

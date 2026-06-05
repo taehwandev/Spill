@@ -200,6 +200,11 @@ Rules:
   user-level hook files for detected tools, but it must be explicit opt-in,
   support dry-run behavior, avoid overwriting unrelated hook entries, and back
   up existing config files before writing.
+- A user request to install, apply, fix, or verify Spill token metering counts
+  as opt-in for the one-step helper to install all detected supported adapters
+  and merge known user-level hook configs in one pass. The agent-facing prompt
+  must not make users copy or install Codex, Claude, Antigravity/AGY, and
+  OpenAI adapters separately.
 - Workflow hook installation is a separate user-selected action. The helper may
   write a selected `.agents/hooks.json` or equivalent workflow hook file only
   when the path is passed explicitly by the user or a trusted workflow setup.
@@ -207,6 +212,15 @@ Rules:
   labels to adapters through exact hook payload fields, flags, or environment
   variables. Adapters must not read prompts, commands, logs, diffs, source, or
   transcript text to recreate the workflow stage.
+- Static hooks that cannot receive dynamic payload fields or environment
+  variables may read a short-lived label context file written by an agent or
+  trusted workflow. That file may contain only `ai_tool`, `task_type`, `stage`,
+  `updated_at`, and `expires_at`; adapters must ignore expired,
+  tool-mismatched, or unsafe slugs.
+- Supported detailed labels should include common implementation and agent
+  workflow categories such as `code_review`, `review_response`, `git_commit`,
+  `commit_message`, `pull_request`, `workflow_setup`, `build_verification`,
+  and user-defined safe reusable slugs.
 - Prompt-driven agents must never inspect local logs, transcripts, shell
   history, repository files, or hidden state to reconstruct token usage.
 - A user-installed local importer is a separate runtime adapter, not an agent
