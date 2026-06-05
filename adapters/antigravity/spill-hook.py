@@ -90,7 +90,7 @@ def _label_file_value(*keys: str) -> str:
         return ""
 
     tool = data.get("ai_tool", "")
-    if tool not in ("", "unknown", "antigravity"):
+    if tool not in ("", "unknown", "antigravity", "agy"):
         return ""
 
     expires_at = data.get("expires_at", "")
@@ -130,6 +130,8 @@ def _payload_model(payload: dict) -> str:
     keys = ("model", "model_name", "modelName", "model_id", "modelId", "modelVersion")
     for container in (
         payload,
+        payload.get("llm_request", {}),
+        payload.get("llmRequest", {}),
         payload.get("usage", {}),
         payload.get("response", {}),
         payload.get("metadata", {}),
@@ -141,6 +143,41 @@ def _payload_model(payload: dict) -> str:
             if isinstance(value, str) and _MODEL_ID.match(value):
                 return value
     return "antigravity-unknown"
+
+
+def _non_negative_int(value) -> int:
+    try:
+        parsed = int(value)
+    except Exception:
+        return 0
+    return parsed if parsed > 0 else 0
+
+
+def _usage_metadata_total(payload: dict) -> int:
+    containers = (
+        payload,
+        payload.get("usage", {}),
+        payload.get("usageMetadata", {}),
+        payload.get("usage_metadata", {}),
+        payload.get("response", {}),
+        payload.get("response", {}).get("usageMetadata", {})
+        if isinstance(payload.get("response", {}), dict) else {},
+        payload.get("llm_response", {}),
+        payload.get("llm_response", {}).get("usageMetadata", {})
+        if isinstance(payload.get("llm_response", {}), dict) else {},
+        payload.get("llmResponse", {}),
+        payload.get("llmResponse", {}).get("usageMetadata", {})
+        if isinstance(payload.get("llmResponse", {}), dict) else {},
+    )
+    keys = ("total_tokens", "totalTokens", "totalTokenCount", "total_token_count")
+    for container in containers:
+        if not isinstance(container, dict):
+            continue
+        for key in keys:
+            total = _non_negative_int(container.get(key))
+            if total > 0:
+                return total
+    return 0
 
 
 def _consume_label_file() -> None:
@@ -160,16 +197,23 @@ def main() -> None:
 
     # Extract tokens from standard fields
     usage = payload.get("usage", {})
-    input_tokens = int(payload.get("input_tokens", usage.get("input_tokens", usage.get("prompt_tokens", 0))))
-    output_tokens = int(payload.get("output_tokens", usage.get("output_tokens", usage.get("completion_tokens", 0))))
+    input_tokens = _non_negative_int(payload.get("input_tokens", usage.get("input_tokens", usage.get("prompt_tokens", 0))))
+    output_tokens = _non_negative_int(payload.get("output_tokens", usage.get("output_tokens", usage.get("completion_tokens", 0))))
 
     # Try alternate fields in case they are structured differently
     if input_tokens == 0 and output_tokens == 0:
         tokens_obj = payload.get("tokens", {})
-        input_tokens = int(tokens_obj.get("input", tokens_obj.get("prompt", 0)))
-        output_tokens = int(tokens_obj.get("output", tokens_obj.get("completion", 0)))
+        input_tokens = _non_negative_int(tokens_obj.get("input", tokens_obj.get("prompt", 0)))
+        output_tokens = _non_negative_int(tokens_obj.get("output", tokens_obj.get("completion", 0)))
 
     total = input_tokens + output_tokens
+    total_only = False
+    if total == 0:
+        total = _usage_metadata_total(payload)
+        if total > 0:
+            input_tokens = total
+            output_tokens = 0
+            total_only = True
 
     if total == 0:
         return
@@ -214,8 +258,8 @@ def main() -> None:
             "history": 0,
             "repo_context": 0,
             "tool_output": 0,
-            "generated_output": output_tokens,
-            "unknown": input_tokens,
+            "generated_output": 0 if total_only else output_tokens,
+            "unknown": total if total_only else input_tokens,
         },
         "latency_ms": 0,
         "created_at": now,

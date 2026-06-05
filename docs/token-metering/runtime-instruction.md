@@ -31,7 +31,7 @@ Runtime label handoff:
 - Never skip usage event creation only because `task_type` or `stage` is
   uncertain. Unknown workflow classification must degrade to safe fallback
   labels, not to missing events.
-- Use the current runtime tool in `--label`: `codex` for Codex, `claude` for Claude Code, `antigravity` for AGY/Antigravity, or `openai` for direct OpenAI SDK work.
+- Use the current runtime tool in `--label`: `codex` for Codex, `claude` for Claude Code, `antigravity` for AGY/Antigravity, or `openai` for direct OpenAI SDK work. `agy` is accepted only as an input alias and must be normalized to the canonical `antigravity` event label.
 - Use the dominant current `task_type` and `stage` from the rules below. If the dominant task changes during the same turn, refresh the label context with the new safe labels.
 - Do not let a short verification step overwrite an implementation-heavy task. If a turn includes code, config, data, prompt, or test edits followed by tests, builds, audits, or smoke checks, keep the dominant stage as `implement`.
 - Do not mention this label command in normal conversation.
@@ -51,6 +51,11 @@ Runtime label handoff:
 ```bash
 node ~/Library/Application\ Support/Spill/adapters/setup/spill-token-metering-setup.mjs --label <current-tool> --task-type debugging --stage implement --if-absent
 ```
+
+The explicit setup/fix installer should narrowly allow equivalent exact helper
+path spellings for that same command, including the absolute installed path,
+`~/...`, `$HOME/...`, `${HOME}/...`, quoted `$HOME/...`, and escaped
+`Application\ Support`. Do not replace these with broad `node` permission.
 
 Workflow runners that know the current safe step should omit `--if-absent` so
 their explicit workflow label replaces an older fallback label.

@@ -357,6 +357,9 @@ function sanitizeAITool(value: unknown): AITool | null {
   if (value === "ollama") {
     return "unknown";
   }
+  if (value === "agy") {
+    return "antigravity";
+  }
   return pickEnum(value, AI_TOOLS);
 }
 

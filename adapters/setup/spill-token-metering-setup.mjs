@@ -339,15 +339,20 @@ function codexRuntimeRulesBlock() {
   const rules = [];
   const scripts = ["workflow.py", "agent-preflight.py", "agent-finish-check.py"];
   for (const script of scripts) {
+    const scriptPath = join(agentPlaybookRoot, "scripts", script);
+    for (const path of permissionPathVariants(scriptPath)) {
+      rules.push(codexPrefixRule({
+        pattern: ["python3", path],
+        justification: `Allow trusted AgentPlaybook ${script} for Spill workflow labels and evidence.`,
+      }));
+    }
+  }
+  for (const path of permissionPathVariants(setupHelperPath)) {
     rules.push(codexPrefixRule({
-      pattern: ["python3", join(agentPlaybookRoot, "scripts", script)],
-      justification: `Allow trusted AgentPlaybook ${script} for Spill workflow labels and evidence.`,
+      pattern: ["node", path, "--label", "codex"],
+      justification: "Allow Spill Codex label handoff without repeated approval prompts.",
     }));
   }
-  rules.push(codexPrefixRule({
-    pattern: ["node", setupHelperPath, "--label", "codex"],
-    justification: "Allow Spill Codex label handoff without repeated approval prompts.",
-  }));
   return [
     "# spill-token-metering:begin",
     "# Managed by Spill token metering setup. Keep narrow; do not replace with broad python3/node allow rules.",
@@ -356,15 +361,9 @@ function codexRuntimeRulesBlock() {
   ].join("\n");
 }
 
-function codexPrefixRule({ pattern, justification }) {
+function codexPrefixRule({ pattern }) {
   const encodedPattern = pattern.map((item) => JSON.stringify(item)).join(", ");
-  return [
-    "prefix_rule(",
-    `    pattern = [${encodedPattern}],`,
-    '    decision = "allow",',
-    `    justification = ${JSON.stringify(justification)},`,
-    ")",
-  ].join("\n");
+  return `prefix_rule(pattern=[${encodedPattern}], decision="allow")`;
 }
 
 async function configureAgentRuntimeSettings({ tool, target, permissionPrefix }) {
@@ -437,11 +436,16 @@ function addPermissionCommandVariants(commandForms, command) {
 }
 
 function permissionPathVariants(path) {
-  const variants = new Set([path, shellQuote(path), escapePermissionPath(path)]);
+  const variants = new Set([path, shellQuote(path), doubleQuote(path), escapePermissionPath(path)]);
   const homeRelative = homeRelativePath(path);
   if (homeRelative !== path) {
     variants.add(homeRelative);
     variants.add(escapePermissionPath(homeRelative));
+  }
+  for (const envPath of homeEnvironmentPathVariants(path)) {
+    variants.add(envPath);
+    variants.add(doubleQuote(envPath));
+    variants.add(escapePermissionPath(envPath));
   }
   return [...variants];
 }
@@ -716,8 +720,19 @@ function homeRelativePath(path) {
   return path;
 }
 
+function homeEnvironmentPathVariants(path) {
+  const home = homedir();
+  if (!path.startsWith(`${home}/`)) return [];
+  const suffix = path.slice(home.length + 1);
+  return [`$HOME/${suffix}`, `\${HOME}/${suffix}`];
+}
+
 function escapePermissionPath(path) {
   return path.replaceAll(" ", "\\ ");
+}
+
+function doubleQuote(value) {
+  return `"${value.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
 }
 
 function escapeRegExp(value) {
@@ -730,6 +745,9 @@ function plainObject(value) {
 
 function safeToolLabel(value) {
   const normalized = String(value ?? "").toLowerCase();
+  if (normalized === "agy") {
+    return "antigravity";
+  }
   if (["codex", "claude", "antigravity", "openai"].includes(normalized)) {
     return normalized;
   }

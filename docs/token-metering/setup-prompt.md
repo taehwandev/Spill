@@ -26,6 +26,21 @@ The installer must add narrow permission allowlist entries, when the runtime sup
 - `agent-finish-check.py`
 - `node ~/Library/Application\ Support/Spill/adapters/setup/spill-token-metering-setup.mjs --label <current-tool>`
 
+The trusted AgentPlaybook wrapper allowlist must include common safe path
+spellings for the same exact wrapper files: absolute path, `~/...`,
+`$HOME/...`, `${HOME}/...`, quoted `$HOME/...`, and escaped spaces where
+needed. Runtime allowlist formats that support suffix matching must allow
+trailing workflow arguments after the trusted wrapper path, such as `--project`,
+`--rules`, `--request-classified`, and repeated `--gate` evidence. These are
+still only narrow `python3 <trusted-wrapper>` entries, not broad `python3`
+permission.
+
+The Spill label handoff allowlist must include the same exact helper command
+for common safe path spellings: the absolute installed path, `~/...`,
+`$HOME/...`, `${HOME}/...`, quoted `$HOME/...`, and escaped
+`Application\ Support`. These are still only narrow `node <helper> --label
+<current-tool>` entries, not broad `node` permission.
+
 For Codex, these allowlist entries live in `~/.codex/rules/default.rules` as
 managed `prefix_rule` entries. For Claude Code and Antigravity/AGY, they live in
 their user-level permission settings files. Do not use broad `python3`, `node`,
@@ -109,6 +124,8 @@ node ~/Library/Application\ Support/Spill/adapters/setup/spill-token-metering-se
 
 Use the current runtime tool in `--label`: `codex`, `claude`, or
 `antigravity`.
+If a workflow or user-facing command says `agy`, treat it as an input alias for
+the canonical `antigravity` event label.
 Do not add `--if-absent` to workflow step labels. `--if-absent` is only for the
 agent's per-turn fallback label when no workflow label already exists.
 When wiring AgentPlaybook or another workflow runner, set `SPILL_AI_TOOL` and

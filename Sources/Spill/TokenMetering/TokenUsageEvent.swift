@@ -143,6 +143,10 @@ enum TokenUsageAITool: String, Codable, CaseIterable, Sendable {
             self = .unknown
             return
         }
+        if value == "agy" {
+            self = .antigravity
+            return
+        }
 
         guard let tool = Self(rawValue: value) else {
             throw DecodingError.dataCorruptedError(
