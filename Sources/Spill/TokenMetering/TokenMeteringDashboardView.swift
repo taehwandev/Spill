@@ -7,13 +7,7 @@ struct TokenMeteringDashboardView: View {
     @State private var isDiagnosticsExpanded = false
     @State private var hoveredFilterTitle: String? = nil
 
-    static var showsDevelopmentClearAction: Bool {
-        #if DEBUG
-        true
-        #else
-        false
-        #endif
-    }
+    static let showsClearAction = true
 
     var body: some View {
         VStack(spacing: 0) {
@@ -96,7 +90,7 @@ struct TokenMeteringDashboardView: View {
                     Label(copiedTarget == "prompt" ? "Copied" : "Copy Prompt", systemImage: copiedTarget == "prompt" ? "checkmark" : "doc.on.doc")
                 }
 
-                if Self.showsDevelopmentClearAction {
+                if Self.showsClearAction {
                     Button(role: .destructive) {
                         store.clearLocalEvents()
                     } label: {

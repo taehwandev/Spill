@@ -59,12 +59,8 @@ final class TokenUsageStoreTests: XCTestCase {
     }
 
     @MainActor
-    func testDashboardClearActionIsDevelopmentOnly() {
-        #if DEBUG
-        XCTAssertTrue(TokenMeteringDashboardView.showsDevelopmentClearAction)
-        #else
-        XCTAssertFalse(TokenMeteringDashboardView.showsDevelopmentClearAction)
-        #endif
+    func testDashboardClearActionIsVisible() {
+        XCTAssertTrue(TokenMeteringDashboardView.showsClearAction)
     }
 
     @MainActor
