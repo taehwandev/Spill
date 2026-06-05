@@ -207,7 +207,7 @@ struct TokenMeteringDashboardView: View {
     }
 
     private var detailPanel: some View {
-        railPanel(title: "Selected Session") {
+        railPanel(title: "Selected Run") {
             if let session = store.snapshot.sessions.first {
                 VStack(alignment: .leading, spacing: 11) {
                     VStack(alignment: .leading, spacing: 3) {
@@ -227,7 +227,7 @@ struct TokenMeteringDashboardView: View {
                 }
             } else {
                 emptyMessage(
-                    title: "No session selected",
+                    title: "No run selected",
                     detail: "Events will appear here after a local runtime or adapter records exact token counts."
                 )
             }
@@ -256,7 +256,7 @@ struct TokenMeteringDashboardView: View {
     }
 
     private var sessionsTable: some View {
-        dashboardPanel(title: "Sessions", subtitle: "Recent local runs and spans") {
+        dashboardPanel(title: "Runs", subtitle: "Opaque local run groups and spans") {
             if store.snapshot.sessions.isEmpty {
                 emptyMessage(
                     title: "No local token events yet",

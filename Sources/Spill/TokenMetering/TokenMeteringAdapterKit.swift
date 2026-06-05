@@ -87,15 +87,27 @@ enum TokenMeteringAdapterKit {
     static let codex = TokenMeteringAdapter(
         aiTool: .codex,
         title: "Codex",
-        subtitle: "Notification command — completion event",
-        scriptFileName: "spill-notify.py",
+        subtitle: "Stop hook — session token_count importer",
+        scriptFileName: "spill-importer.mjs",
         hookConfigTemplate: """
-        Pass as the Codex notification command flag:
-          codex --notification-command "python3 <script_path>"
-        Or set in ~/.codex/config.toml:
-          notification_command = "python3 <script_path>"
+        Add to ~/.codex/hooks.json:
+        {
+          "hooks": {
+            "Stop": [
+              {
+                "hooks": [
+                  {
+                    "type": "command",
+                    "command": "node <script_path> --since-hours 6",
+                    "timeout": 30
+                  }
+                ]
+              }
+            ]
+          }
+        }
         """,
-        hookConfigTarget: "~/.codex/config.toml"
+        hookConfigTarget: "~/.codex/hooks.json"
     )
 
     static let agy = TokenMeteringAdapter(

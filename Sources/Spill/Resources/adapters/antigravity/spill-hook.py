@@ -2,8 +2,9 @@
 """
 Spill token metering adapter for Antigravity (AGY).
 
-Reads the AGY PostInvocation or Stop hook payload from stdin, extracts token
-usage, and enqueues one JSON event file in the Spill local queue.
+Reads the AGY PostInvocation or Stop hook payload from stdin, extracts exact
+token usage from the hook payload, and enqueues one JSON event file in the
+Spill local queue.
 
 Install: configure AGY to call this script as a PostInvocation or Stop hook in ~/.gemini/config/hooks.json.
 """
@@ -18,10 +19,15 @@ import uuid
 INBOX_DIR = pathlib.Path.home() / "Library/Application Support/Spill/token-metering/events-inbox"
 _OPAQUE_ID = re.compile(r'^[A-Za-z0-9_-]{6,64}$')
 _MODEL_ID = re.compile(r'^[A-Za-z0-9_.:-]{2,80}$')
+_SAFE_SLUG = re.compile(r'^[a-z][a-z0-9_]{1,40}$')
 
 
 def _opaque(value: str, fallback: str) -> str:
     return value if _OPAQUE_ID.match(value) else fallback
+
+
+def _safe_slug(value: str, fallback: str) -> str:
+    return value if _SAFE_SLUG.match(value) else fallback
 
 
 def _enqueue_event(event: dict) -> None:
@@ -34,48 +40,6 @@ def _enqueue_event(event: dict) -> None:
         f.write(json.dumps(event, separators=(",", ":")))
     os.chmod(temporary_path, 0o600)
     os.replace(temporary_path, final_path)
-
-
-def determine_task_info(transcript_path: str) -> tuple[str, str]:
-    """
-    Parses the transcript file to determine the task_type and stage.
-    Returns (task_type, stage).
-    """
-    if not transcript_path or not pathlib.Path(transcript_path).is_file():
-        return "uncategorized", "summarize"
-
-    has_edits = False
-    has_tests = False
-    has_reads = False
-
-    try:
-        with open(transcript_path, "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    obj = json.loads(line)
-                    step_type = obj.get("type", "")
-
-                    if step_type in ("REPLACE_FILE_CONTENT", "WRITE_TO_FILE", "MULTI_REPLACE_FILE_CONTENT", "FILE_EDIT"):
-                        has_edits = True
-                    elif step_type in ("GREP_SEARCH", "LIST_DIRECTORY", "VIEW_FILE", "READ_FILE"):
-                        has_reads = True
-                    elif step_type == "RUN_COMMAND":
-                        has_tests = True
-                except Exception:
-                    pass
-    except Exception:
-        pass
-
-    if has_tests:
-        return "testing", "verify"
-    if has_edits:
-        return "code_generation", "implement"
-    if has_reads:
-        return "analysis", "plan"
-    return "uncategorized", "summarize"
 
 
 def main() -> None:
@@ -108,9 +72,8 @@ def main() -> None:
     span_id = "span-" + uuid.uuid4().hex[:12]
     now = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.000Z")
 
-    # Determine task type and stage by parsing the transcript
-    transcript_path = payload.get("transcript_path", payload.get("transcriptPath", ""))
-    task_type, stage = determine_task_info(transcript_path)
+    task_type = _safe_slug(str(payload.get("task_type", payload.get("taskType", ""))), "uncategorized")
+    stage = _safe_slug(str(payload.get("stage", "")), "summarize")
 
     event = {
         "schema_version": 1,

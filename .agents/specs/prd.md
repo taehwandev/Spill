@@ -126,6 +126,12 @@ Requirements:
 - Usage events use opaque ids such as `project_global` and never
   store project names, file paths, prompts, commands, terminal output, logs,
   diffs, source content, environment values, or secrets.
+- `run_id` is an opaque grouping key for a local run or turn. It is not a
+  human-readable session name.
+- If the dashboard exposes friendly session names, the name must come from a
+  user-controlled local alias or a configured safe label source. It must not be
+  derived from prompts, commands, file paths, repo names, transcript text,
+  branch names, ticket ids, user names, or private content.
 - Detailed workflow labels such as `analysis`, `prd_drafting`,
   `code_generation`, `code_review`, `ux_copy_review`, or other user-defined
   safe slugs are allowed only when an agent, runtime, workflow, or adapter has
@@ -156,6 +162,10 @@ Requirements:
   read only known numeric usage records, such as Codex `token_count` entries,
   and must not parse or store prompts, responses, commands, file paths, working
   directories, diffs, logs, source content, environment values, or secrets.
+- Adapters must not inspect transcripts, logs, command history, or source files
+  only to infer workflow labels. If a hook payload does not expose safe
+  `task_type` or `stage` slugs, the adapter should use `uncategorized` and the
+  latest safe default stage instead.
 - Codex metering should support an on-demand local session importer that reads
   recent `~/.codex/sessions/**/rollout-*.jsonl` files when invoked by a trusted
   hook or workflow, converts exact `event_msg/token_count` usage into safe Spill
@@ -171,6 +181,8 @@ Acceptance:
 - Safe event validation rejects content-like fields.
 - Local dashboard shows combined usage and lets users filter by safe AI tool
   labels.
+- Session rows are clearly treated as opaque local run groups unless a safe
+  local display-name option has been implemented.
 - Global setup instructions state that exact counts are required and estimates
   should not be sent.
 - UI copy must not imply that a prompt alone can measure token usage.

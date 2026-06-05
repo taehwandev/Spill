@@ -172,6 +172,20 @@ milestones:
         acceptance:
           - Reliable AI active usage detection is defined before adding a menu bar summary.
           - AI summary does not expose secret values if this later ships.
+      - id: M4-T5
+        title: Local token metering queue
+        state: partial
+        acceptance:
+          - Local token metering uses an app-owned queue directory instead of a required local server.
+          - Dashboard filters usage by safe AI tool, task, stage, source, and period labels.
+          - Runtime hooks and adapters do not infer workflow labels from private transcript text, commands, logs, or source files.
+      - id: M4-T6
+        title: Token session display names
+        state: next
+        acceptance:
+          - Session rows do not expose raw opaque ids as if they were human-readable names.
+          - Users can choose or assign a safe local display-name source for run groups.
+          - Session names are never inferred from prompts, file paths, repo names, branches, tickets, logs, diffs, or transcript text.
 
   - id: M5
     name: Actions

@@ -184,6 +184,13 @@ Rules:
 - The `ai_tool` label is additive and content-free. Missing labels from older
   local events decode as `unknown`; new hook-submitted events should include one
   of `codex`, `claude`, `antigravity`, `openai`, or `unknown`.
+- `run_id` is an opaque grouping key only. Dashboard copy must not imply that it
+  is a chat title, project name, or human-readable session name.
+- Human-readable session display names require a separate local alias or
+  configured safe label source. The alias must be local-only, user-controlled or
+  supplied as a reusable safe slug by a trusted hook, and must never be inferred
+  from prompts, commands, file paths, repo names, branch names, ticket ids,
+  transcript text, logs, source content, user names, or other private content.
 - Cloud sync must not be triggered by local events.
 - Global agent setup instructions must be silent and must not add metering
   status lines to normal assistant replies.
@@ -192,14 +199,19 @@ Rules:
 - Prompt-driven agents must never inspect local logs, transcripts, shell
   history, repository files, or hidden state to reconstruct token usage.
 - A user-installed local importer is a separate runtime adapter, not an agent
-  prompt behavior. Importers may read only known exact token-usage records from
-  supported local tool stores. For Codex, the importer runs on demand from a
-  trusted hook or workflow, reads recent `~/.codex/sessions/**/rollout-*.jsonl`
-  files, and parses only `event_msg/token_count` usage records plus safe opaque
+  prompt behavior. Importers may read only known exact token-usage records and
+  safe runtime metadata from supported local tool stores. If the only available
+  exact usage record lives in a local transcript-like file, an adapter may parse
+  only the numeric usage object and safe opaque runtime metadata from that file;
+  it must not inspect content, commands, paths, diffs, logs, or source text, and
+  must not infer `task_type`, `stage`, or display names from transcript steps or
+  message text. For Codex, the importer runs on demand from a trusted hook or
+  workflow, reads recent `~/.codex/sessions/**/rollout-*.jsonl` files, and
+  parses only `event_msg/token_count` usage records plus safe opaque
   session/model metadata. It must enqueue one event file per imported span and
-  must not parse or store prompts, assistant
-  responses, commands, file paths, working directories, diffs, terminal output,
-  source content, environment values, or secrets.
+  must not parse or store prompts, assistant responses, commands, file paths,
+  working directories, diffs, terminal output, source content, environment
+  values, or secrets.
 - Codex importer spans are deduplicated with opaque hashes and stored as
   `ai_tool = codex`, `artifact_id = artifact_codex`, `project_id =
   project_global`, and `local_only` sync events.
