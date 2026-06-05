@@ -5,6 +5,7 @@ import {
   sanitizeUsageEvent,
   type UsageEvent
 } from "../src/features/tokenMeteringDashboard/syncSafeUsage.ts";
+import { buildDashboardModel } from "../src/features/tokenMeteringDashboard/dashboardModel.ts";
 import { setupPrompt } from "../src/features/tokenMeteringDashboard/setupCopy.ts";
 
 const safeEvent: UsageEvent = {
@@ -120,11 +121,37 @@ test("sanitizeUsageEvent rejects invalid required token fields", () => {
   assert.equal(result.reason, "invalid_required_field");
 });
 
+test("dashboard hotspots hide unknown-only source breakdowns", () => {
+  const dashboard = buildDashboardModel([
+    {
+      ...safeEvent,
+      input_tokens: 100,
+      output_tokens: 40,
+      total_tokens: 140,
+      token_breakdown: {
+        system: 0,
+        user: 0,
+        history: 0,
+        repo_context: 0,
+        tool_output: 0,
+        generated_output: 0,
+        unknown: 140
+      }
+    }
+  ]);
+
+  assert.equal(dashboard.totalTokens, 140);
+  assert.equal(dashboard.hotspots.some((row) => row.id === "unknown"), false);
+  assert.equal(dashboard.hotspots.every((row) => row.tokens === 0), true);
+});
+
 test("setup prompt bootstraps the public token metering installer", () => {
   assert.match(setupPrompt, /MANDATORY ACTION: install or repair Spill token metering now/);
   assert.match(setupPrompt, /https:\/\/spill\.thdev\.app\/token-metering\/setup-prompt\.md/);
   assert.match(setupPrompt, /https:\/\/spill\.thdev\.app\/token-metering\/install\.sh/);
   assert.match(setupPrompt, /https:\/\/spill\.thdev\.app\/token-metering\/runtime-instruction\.md/);
+  assert.match(setupPrompt, /install and repair OpenAI\/Codex, Claude Code, and Antigravity\/AGY together/);
+  assert.match(setupPrompt, /Codex is the OpenAI agent runtime hook/);
   assert.match(setupPrompt, /Do not save only the runtime instruction and call the task done/);
 });
 

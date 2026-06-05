@@ -324,7 +324,6 @@ struct TokenUsageDashboardSnapshot: Equatable {
             result[.repoContext, default: 0] += event.tokenBreakdown.repoContext
             result[.toolOutput, default: 0] += event.tokenBreakdown.toolOutput
             result[.generatedOutput, default: 0] += event.tokenBreakdown.generatedOutput
-            result[.unknown, default: 0] += event.tokenBreakdown.unknown
         }
     }
 
@@ -417,7 +416,7 @@ private enum TokenUsageSource: Hashable {
         case .generatedOutput:
             return "Generated output"
         case .unknown:
-            return "Unclassified input"
+            return "Source unavailable"
         }
     }
 }

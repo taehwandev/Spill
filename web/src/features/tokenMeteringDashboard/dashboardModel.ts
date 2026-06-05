@@ -7,7 +7,7 @@ import {
   type TaskType,
   type TokenSource,
   type UsageEvent
-} from "./syncSafeUsage";
+} from "./syncSafeUsage.ts";
 
 export const taskTypeLabels = {
   uncategorized: "Uncategorized",
@@ -206,7 +206,7 @@ function buildHotspots(
   events: readonly UsageEvent[],
   totalTokens: number
 ): HotspotRow[] {
-  return TOKEN_SOURCES.map((source) => {
+  return TOKEN_SOURCES.filter((source) => source !== "unknown").map((source) => {
     const tokens = events.reduce(
       (sum, event) => sum + event.token_breakdown[source],
       0
