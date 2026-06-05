@@ -180,7 +180,7 @@ Rules:
   names, file names, branch names, ticket ids, user names, or private content.
 - The `ai_tool` label is additive and content-free. Missing labels from older
   local events decode as `unknown`; new hook-submitted events should include one
-  of `codex`, `claude`, `antigravity`, `ollama`, `openai`, or `unknown`.
+  of `codex`, `claude`, `antigravity`, `openai`, or `unknown`.
 - Cloud sync must not be triggered by local events.
 - Global agent setup instructions must be silent and must not add metering
   status lines to normal assistant replies.

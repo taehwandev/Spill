@@ -454,8 +454,6 @@ extension TokenUsageAITool {
             return "Claude"
         case .antigravity:
             return "Antigravity"
-        case .ollama:
-            return "Ollama"
         case .openAI:
             return "OpenAI"
         }

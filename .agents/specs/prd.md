@@ -136,8 +136,8 @@ Requirements:
 - Custom workflow labels must never encode task text, feature names, project
   names, file names, branch names, ticket ids, user names, or private content.
 - Usage events include a safe `ai_tool` enum label so users can compare combined
-  local usage with per-tool usage for Codex, Claude, Antigravity/AGY, Ollama,
-  OpenAI, and unknown tool sources without storing prompts, commands, file
+  local usage with per-tool usage for Codex, Claude, Antigravity/AGY,
+  direct OpenAI, and unknown tool sources without storing prompts, commands, file
   paths, repo names, logs, diffs, source content, environment values, or
   secrets.
 - The app should expose a global setup prompt in Preferences and on the web

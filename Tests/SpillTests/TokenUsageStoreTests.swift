@@ -204,6 +204,15 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertThrowsError(try TokenUsageSanitizer.sanitizeEventJSONData(try jsonData(object)))
     }
 
+    func testLegacyOllamaAIToolDecodesAsUnknown() throws {
+        var object = try decodedJSONObject(from: TokenUsageSanitizer.eventData(Self.safeEvent()))
+        object["ai_tool"] = "ollama"
+
+        let event = try TokenUsageSanitizer.sanitizeEventJSONData(try jsonData(object))
+
+        XCTAssertEqual(event.aiTool, .unknown)
+    }
+
     func testSanitizerAcceptsCustomWorkflowLabels() throws {
         var object = try decodedJSONObject(from: TokenUsageSanitizer.eventData(Self.safeEvent()))
         object["task_type"] = "ux_copy_review"
@@ -374,7 +383,8 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(prompt.contains("executable hook"))
         XCTAssertTrue(prompt.contains("events-inbox.jsonl"))
         XCTAssertTrue(prompt.contains("loopback HTTP bridge"))
-        XCTAssertTrue(prompt.contains("ai_tool must be one of: codex, claude, antigravity, ollama, openai, unknown"))
+        XCTAssertTrue(prompt.contains("ai_tool must be one of: codex, claude, antigravity, openai, unknown"))
+        XCTAssertFalse(prompt.contains("ollama"))
         XCTAssertTrue(prompt.contains("Never inspect local agent logs"))
         XCTAssertTrue(prompt.contains("silently skip event creation"))
         XCTAssertFalse(prompt.localizedCaseInsensitiveContains("do not create a detailed event"))

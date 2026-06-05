@@ -39,7 +39,6 @@ const aiTools = new Set([
   "codex",
   "claude",
   "antigravity",
-  "ollama",
   "openai",
 ]);
 

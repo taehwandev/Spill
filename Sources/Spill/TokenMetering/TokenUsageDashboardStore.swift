@@ -149,7 +149,7 @@ final class TokenUsageDashboardStore: ObservableObject {
             .codeReview,
             .testGeneration
         ]
-        let tools: [TokenUsageAITool] = [.codex, .claude, .antigravity, .ollama, .openAI]
+        let tools: [TokenUsageAITool] = [.codex, .claude, .antigravity, .openAI]
         let taskType = taskTypes[index % taskTypes.count]
         let aiTool = tools[index % tools.count]
         let inputTokens = 1_000 + index * 90

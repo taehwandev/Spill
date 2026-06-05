@@ -28,8 +28,8 @@ enum TokenMeteringGlobalSetup {
     - Use device_local when no opaque device id is exposed.
 
     AI tool labels:
-    - ai_tool must be one of: codex, claude, antigravity, ollama, openai, unknown.
-    - Use codex for Codex runtimes, claude for Claude runtimes, antigravity for AGY/Antigravity, ollama for Ollama-local usage, and openai for direct OpenAI API/SDK usage.
+    - ai_tool must be one of: codex, claude, antigravity, openai, unknown.
+    - Use codex for Codex runtimes, claude for Claude runtimes, antigravity for AGY/Antigravity, and openai for direct OpenAI API/SDK usage.
     - Use unknown when the runtime or adapter cannot safely identify the tool without inspecting prompts, commands, files, logs, or private state.
 
     Privacy boundary:

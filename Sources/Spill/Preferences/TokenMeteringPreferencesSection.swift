@@ -86,7 +86,7 @@ struct TokenMeteringPreferencesSection: View {
                     tint: .teal
                 )
 
-                Text("Codex, Claude, Antigravity, and Ollama adapters should write one exact usage event when their runtime exposes final token counts. Continuous polling is not required for normal metering.")
+                Text("Codex, Claude, Antigravity, and direct OpenAI adapters should write one exact usage event when their runtime exposes final token counts. Continuous polling is not required for normal metering.")
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
                     .lineSpacing(2)

@@ -117,8 +117,28 @@ enum TokenUsageAITool: String, Codable, CaseIterable, Sendable {
     case codex
     case claude
     case antigravity
-    case ollama
     case openAI = "openai"
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let value = try container.decode(String.self)
+        if value == "ollama" {
+            self = .unknown
+            return
+        }
+        guard let tool = Self(rawValue: value) else {
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Unsupported token usage ai_tool label."
+            )
+        }
+        self = tool
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
 }
 
 enum TokenUsageSyncMode: String, Codable, CaseIterable, Sendable {
