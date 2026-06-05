@@ -13,7 +13,6 @@ final class SpillSettingsTests: XCTestCase {
         XCTAssertEqual(settings.enabledStatusModules, [.cpu, .memory, .storage, .network])
         XCTAssertEqual(settings.enabledMenuBarStatusItems, [.cpu, .memory])
         XCTAssertFalse(settings.showsCPUCoreChart)
-        XCTAssertEqual(settings.menuBarStatusDisplayStyle, .labelAndPercent)
         XCTAssertEqual(settings.menuBarStatusLayoutStyle, .inline)
         XCTAssertEqual(settings.menuBarStatusPrecision, .tenths)
         XCTAssertEqual(settings.menuBarStatusHighlightThreshold, .seventy)
@@ -303,24 +302,21 @@ final class SpillSettingsTests: XCTestCase {
         XCTAssertEqual(SpillSettings(defaults: defaults).displayMode, .selectedItems)
     }
 
-    func testMenuBarStatusDisplayOptionsPersist() {
+    func testMenuBarStatusOptionsPersist() {
         let defaults = makeDefaults()
         let settings = SpillSettings(defaults: defaults)
 
-        settings.menuBarStatusDisplayStyle = .percentOnly
         settings.menuBarStatusLayoutStyle = .stacked
         settings.menuBarStatusPrecision = .tenths
         settings.menuBarStatusHighlightThreshold = .ninety
         settings.menuBarTriggerIconStyle = .spill
 
-        XCTAssertEqual(defaults.string(forKey: "menuBarStatusDisplayStyle"), "percentOnly")
         XCTAssertEqual(defaults.string(forKey: "menuBarStatusLayoutStyle"), "stacked")
         XCTAssertEqual(defaults.integer(forKey: "menuBarStatusPrecision"), 1)
         XCTAssertEqual(defaults.integer(forKey: "menuBarStatusHighlightThreshold"), 90)
         XCTAssertEqual(defaults.string(forKey: "menuBarTriggerIconStyle"), "spill")
 
         let reloadedSettings = SpillSettings(defaults: defaults)
-        XCTAssertEqual(reloadedSettings.menuBarStatusDisplayStyle, .percentOnly)
         XCTAssertEqual(reloadedSettings.menuBarStatusLayoutStyle, .stacked)
         XCTAssertEqual(reloadedSettings.menuBarStatusPrecision, .tenths)
         XCTAssertEqual(reloadedSettings.menuBarStatusHighlightThreshold, .ninety)
@@ -391,9 +387,8 @@ final class SpillSettingsTests: XCTestCase {
         XCTAssertTrue(reloadedSettings.showsCPUCoreChart)
     }
 
-    func testMenuBarStatusDisplayOptionsNormalizeUnknownValues() {
+    func testMenuBarStatusOptionsNormalizeUnknownValues() {
         let defaults = makeDefaults()
-        defaults.set("bad-style", forKey: "menuBarStatusDisplayStyle")
         defaults.set("bad-layout", forKey: "menuBarStatusLayoutStyle")
         defaults.set(9, forKey: "menuBarStatusPrecision")
         defaults.set(12, forKey: "menuBarStatusHighlightThreshold")
@@ -401,7 +396,6 @@ final class SpillSettingsTests: XCTestCase {
 
         let settings = SpillSettings(defaults: defaults)
 
-        XCTAssertEqual(settings.menuBarStatusDisplayStyle, .labelAndPercent)
         XCTAssertEqual(settings.menuBarStatusLayoutStyle, .inline)
         XCTAssertEqual(settings.menuBarStatusPrecision, .tenths)
         XCTAssertEqual(settings.menuBarStatusHighlightThreshold, .seventy)

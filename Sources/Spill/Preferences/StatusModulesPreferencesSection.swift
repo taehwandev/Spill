@@ -62,13 +62,6 @@ struct StatusModulesPreferencesSection: View {
             }
             .pickerStyle(.segmented)
 
-            Picker(t(.format), selection: $settings.menuBarStatusDisplayStyle) {
-                ForEach(MenuBarStatusDisplayStyle.allCases) { style in
-                    Text(style.title(appLanguage: settings.appLanguage)).tag(style)
-                }
-            }
-            .pickerStyle(.segmented)
-
             Picker(t(.decimals), selection: $settings.menuBarStatusPrecision) {
                 ForEach(MenuBarStatusPrecision.allCases) { precision in
                     Text(precision.title).tag(precision)
@@ -123,7 +116,7 @@ struct StatusModulesPreferencesSection: View {
             }
 
             if item == .ai {
-                return item.shortTitle
+                return menuBarPreviewText(label: item.shortTitle, value: "1.44M")
             }
 
             let value = settings.menuBarStatusPrecision.percentText(for: previewValues[item] ?? 0)
@@ -131,10 +124,14 @@ struct StatusModulesPreferencesSection: View {
                 return "\(stackedPreviewTitle(for: item)) \(value)"
             }
 
-            return settings.menuBarStatusDisplayStyle.text(label: item.shortTitle, value: value)
+            return menuBarPreviewText(label: item.shortTitle, value: value)
         }
 
         return parts.isEmpty ? t(.iconOnly) : parts.joined(separator: "  ")
+    }
+
+    private func menuBarPreviewText(label: String, value: String) -> String {
+        "\(label) \(value)"
     }
 
     private func stackedPreviewTitle(for item: SpillMenuBarStatusItem) -> String {

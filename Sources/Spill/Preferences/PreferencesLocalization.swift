@@ -81,11 +81,8 @@ enum PreferencesTextKey: String {
     case cpuCoreBars
     case clockAreaStatus
     case layout
-    case format
     case decimals
     case highlight
-    case labelAndPercent
-    case percentOnly
     case inline
     case stacked
     case iconOnly
@@ -309,11 +306,8 @@ enum PreferencesL10n {
             .cpuCoreBars: "CPU Core Bars",
             .clockAreaStatus: "Clock Area Status",
             .layout: "Layout",
-            .format: "Format",
             .decimals: "Decimals",
             .highlight: "Highlight",
-            .labelAndPercent: "Label + %",
-            .percentOnly: "% Only",
             .inline: "Inline",
             .stacked: "Stacked",
             .iconOnly: "Icon Only",
@@ -405,11 +399,8 @@ enum PreferencesL10n {
             .cpuCoreBars: "CPU 코어 바",
             .clockAreaStatus: "시계 영역 상태",
             .layout: "레이아웃",
-            .format: "형식",
             .decimals: "소수점",
             .highlight: "강조",
-            .labelAndPercent: "레이블 + %",
-            .percentOnly: "%만",
             .inline: "한 줄",
             .stacked: "쌓기",
             .iconOnly: "아이콘만",
@@ -501,11 +492,8 @@ enum PreferencesL10n {
             .cpuCoreBars: "CPU コアバー",
             .clockAreaStatus: "時計エリア状態",
             .layout: "レイアウト",
-            .format: "形式",
             .decimals: "小数",
             .highlight: "強調",
-            .labelAndPercent: "ラベル + %",
-            .percentOnly: "% のみ",
             .inline: "インライン",
             .stacked: "積み重ね",
             .iconOnly: "アイコンのみ",

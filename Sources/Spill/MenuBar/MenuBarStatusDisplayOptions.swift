@@ -1,36 +1,5 @@
 import Foundation
 
-enum MenuBarStatusDisplayStyle: String, CaseIterable, Identifiable, Sendable {
-    case labelAndPercent
-    case percentOnly
-
-    var id: String {
-        rawValue
-    }
-
-    var title: String {
-        title(appLanguage: .persisted())
-    }
-
-    func title(appLanguage: SpillAppLanguage) -> String {
-        switch self {
-        case .labelAndPercent:
-            return PreferencesL10n.text(.labelAndPercent, appLanguage: appLanguage)
-        case .percentOnly:
-            return PreferencesL10n.text(.percentOnly, appLanguage: appLanguage)
-        }
-    }
-
-    func text(label: String, value: String) -> String {
-        switch self {
-        case .labelAndPercent:
-            return "\(label) \(value)"
-        case .percentOnly:
-            return value
-        }
-    }
-}
-
 enum MenuBarStatusLayoutStyle: String, CaseIterable, Identifiable, Sendable {
     case inline
     case stacked
