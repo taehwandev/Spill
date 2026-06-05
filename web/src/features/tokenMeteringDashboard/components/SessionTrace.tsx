@@ -3,45 +3,56 @@ import {
   formatTokens,
   type SessionTraceRun
 } from "../dashboardModel";
+import { getTokenMeteringMessages, tokenMeteringLocaleName } from "../i18n";
 import { CollapsiblePanel } from "./CollapsiblePanel";
 
 export function SessionTrace({ runs }: { runs: SessionTraceRun[] }) {
+  const messages = getTokenMeteringMessages();
+
   return (
     <CollapsiblePanel
       className="widePanel"
-      description={`${runs.length} preview runs with opaque ids and token totals`}
+      description={messages.panels.sessionsDescription(runs.length)}
       id="sessions"
-      title="Sessions"
+      title={messages.panels.sessions}
     >
       <div className="traceList">
         {runs.length === 0 ? (
           <div className="emptyState">
-            Synced token rows will appear here.
+            {messages.panels.noSessions}
           </div>
         ) : (
           runs.map((run) => (
-            <article className="traceRun" key={run.runId}>
+            <article className="traceRun" key={run.workItemId}>
               <div className="traceRunHeader">
                 <div>
-                  <strong>{run.runId}</strong>
+                  <strong>{run.title}</strong>
                   <span>
-                    {formatTokens(run.totalTokens)} tokens / {formatLatency(run.latencyMs)}
+                    {messages.panels.tokenLatency(
+                      formatTokens(run.totalTokens),
+                      run.latencyMs === null
+                        ? messages.kpis.unavailable
+                        : formatLatency(run.latencyMs)
+                    )}
                   </span>
                 </div>
-                <span>{run.steps.length} spans</span>
+                <span>{messages.panels.spans(run.eventCount)}</span>
               </div>
               <ol>
-                {run.steps.map((step) => (
-                  <li key={step.spanId}>
+                {run.steps.map((step, index) => (
+                  <li key={`${run.workItemId}-${index}`}>
                     <span className="stepStage">{step.stage}</span>
                     <div>
                       <strong>{step.taskType}</strong>
                       <span>
-                        {step.spanId} / {step.model} / {formatTokens(step.totalTokens)} tokens
+                        {messages.panels.stepTokenDetail(
+                          step.model,
+                          formatTokens(step.totalTokens)
+                        )}
                       </span>
                     </div>
                     <time dateTime={step.createdAt}>
-                      {new Intl.DateTimeFormat("en-US", {
+                      {new Intl.DateTimeFormat(tokenMeteringLocaleName(), {
                         hour: "2-digit",
                         minute: "2-digit"
                       }).format(new Date(step.createdAt))}

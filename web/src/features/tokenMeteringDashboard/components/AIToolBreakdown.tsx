@@ -1,29 +1,29 @@
-import { formatTokens, type BreakdownRow } from "../dashboardModel";
+import { formatTokens, type AIToolBreakdownRow } from "../dashboardModel";
 import { getTokenMeteringMessages } from "../i18n";
 
-export function TaskBreakdown({
+export function AIToolBreakdown({
   rows,
   total
 }: {
-  rows: BreakdownRow[];
+  rows: AIToolBreakdownRow[];
   total: number;
 }) {
   const visibleRows = rows.filter((row) => row.tokens > 0);
   const messages = getTokenMeteringMessages();
 
   return (
-    <section className="panel glassCard taskPanel" aria-labelledby="task-breakdown-title">
+    <section className="panel glassCard taskPanel" aria-labelledby="ai-tool-breakdown-title">
       <div className="sectionHeader">
         <div>
-          <h2 id="task-breakdown-title">{messages.panels.taskTypeBreakdown}</h2>
-          <p>{messages.panels.previewTokens(formatTokens(total))}</p>
+          <h2 id="ai-tool-breakdown-title">{messages.panels.aiToolDistribution}</h2>
+          <p>{messages.panels.aiToolDistributionDescription}</p>
         </div>
-        <a href="#sessions">{messages.panels.viewDetails}</a>
+        <span className="panelMeta">{formatTokens(total)}</span>
       </div>
       <div className="barList">
         {visibleRows.length === 0 ? (
           <div className="emptyState">
-            {messages.panels.noTaskRows}
+            {messages.panels.noAIToolRows}
           </div>
         ) : (
           visibleRows.map((row, index) => (
@@ -48,20 +48,6 @@ export function TaskBreakdown({
             </div>
           ))
         )}
-      </div>
-
-      <div className="visualTiles" aria-hidden="true">
-        <div className="visualTile chartTile">
-          {visibleRows.slice(0, 6).map((row) => (
-            <span
-              key={row.id}
-              style={{ height: `${Math.max(18, row.percentage + 24)}%` }}
-            />
-          ))}
-        </div>
-        <div className="visualTile lineTile">
-          <span />
-        </div>
       </div>
     </section>
   );

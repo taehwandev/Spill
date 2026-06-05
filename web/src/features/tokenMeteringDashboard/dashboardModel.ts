@@ -1,77 +1,33 @@
 import {
-  FORBIDDEN_SYNC_FIELD_LABELS,
-  TASK_TYPES,
+  DASHBOARD_AI_TOOLS,
   TOKEN_SOURCES,
   hasOnlySyncSafeKeys,
-  type SyncMode,
-  type TaskType,
+  type AITool,
   type TokenSource,
   type UsageEvent
 } from "./syncSafeUsage.ts";
-
-export const taskTypeLabels = {
-  uncategorized: "Uncategorized",
-  analysis: "Analysis",
-  prd_drafting: "PRD drafting",
-  code_generation: "Code generation",
-  code_review: "Code review",
-  test_generation: "Test generation",
-  debugging: "Debugging",
-  documentation: "Documentation",
-  release_notes: "Release notes"
-} satisfies Record<TaskType, string>;
-
-export const tokenSourceLabels = {
-  system: "System",
-  user: "User",
-  history: "History",
-  repo_context: "Repo context",
-  tool_output: "Tool output",
-  generated_output: "Generated output",
-  unknown: "Source unavailable"
-} satisfies Record<TokenSource, string>;
-
-export const syncModeContent = {
-  local_only: {
-    label: "Local only",
-    status: "No cloud transfer",
-    summary: "Detailed categorization stays on this computer.",
-    cloudPayload: "Nothing is sent."
-  },
-  cloud_aggregate: {
-    label: "Cloud aggregate",
-    status: "Future opt-in",
-    summary: "Account sync would include totals, timestamps, models, and latency.",
-    cloudPayload: "Numeric aggregate fields only."
-  },
-  cloud_detailed: {
-    label: "Cloud detailed",
-    status: "Separate future opt-in",
-    summary:
-      "Detailed cloud charts would use numeric counts and enum labels only.",
-    cloudPayload: "Numeric counts plus enum labels."
-  }
-} satisfies Record<
-  SyncMode,
-  {
-    label: string;
-    status: string;
-    summary: string;
-    cloudPayload: string;
-  }
->;
+import {
+  getTokenMeteringMessages,
+  tokenMeteringLocaleName,
+  type TokenMeteringMessages
+} from "./i18n.ts";
 
 export type Kpi = {
+  id: "total" | "input" | "output" | "latency";
   label: string;
   value: string;
   detail: string;
 };
 
 export type BreakdownRow = {
-  id: TaskType;
+  id: string;
   label: string;
   tokens: number;
   percentage: number;
+};
+
+export type AIToolBreakdownRow = BreakdownRow & {
+  id: AITool;
 };
 
 export type HotspotRow = {
@@ -82,16 +38,17 @@ export type HotspotRow = {
 };
 
 export type SessionTraceRun = {
-  runId: string;
+  workItemId: string;
+  title: string;
   totalTokens: number;
-  latencyMs: number;
+  latencyMs: number | null;
+  eventCount: number;
   steps: {
-    spanId: string;
     taskType: string;
     stage: string;
     model: string;
     totalTokens: number;
-    latencyMs: number;
+    latencyMs: number | null;
     createdAt: string;
   }[];
 };
@@ -106,115 +63,158 @@ export type PrivacyAudit = {
 export type DashboardModel = {
   kpis: Kpi[];
   totalTokens: number;
+  aiToolBreakdown: AIToolBreakdownRow[];
   taskBreakdown: BreakdownRow[];
+  modelBreakdown: BreakdownRow[];
   hotspots: HotspotRow[];
   sessionTrace: SessionTraceRun[];
   privacyAudit: PrivacyAudit;
 };
 
-const demoPricingPerMillion = {
-  input: 2.5,
-  output: 10
-};
-
-export function buildDashboardModel(events: readonly UsageEvent[]): DashboardModel {
-  const totals = events.reduce(
+export function buildDashboardModel(
+  events: readonly UsageEvent[],
+  messages = getTokenMeteringMessages()
+): DashboardModel {
+  const localAgentEvents = events.filter(isDashboardAIToolEvent);
+  const totals = localAgentEvents.reduce(
     (acc, event) => {
       acc.input += event.input_tokens;
       acc.output += event.output_tokens;
       acc.total += event.total_tokens;
-      acc.latency += event.latency_ms;
+      if (event.latency_ms > 0) {
+        acc.latency += event.latency_ms;
+        acc.latencySamples += 1;
+      }
       return acc;
     },
-    { input: 0, output: 0, total: 0, latency: 0 }
+    { input: 0, output: 0, total: 0, latency: 0, latencySamples: 0 }
   );
 
   const averageLatency =
-    events.length > 0 ? Math.round(totals.latency / events.length) : 0;
-  const estimatedCost =
-    (totals.input / 1_000_000) * demoPricingPerMillion.input +
-    (totals.output / 1_000_000) * demoPricingPerMillion.output;
+    totals.latencySamples > 0 ? Math.round(totals.latency / totals.latencySamples) : null;
 
   return {
     kpis: [
       {
-        label: "Total tokens",
+        id: "total",
+        label: messages.kpis.totalTokens,
         value: formatTokens(totals.total),
-        detail: `${events.length} preview spans`
+        detail: messages.kpis.previewSpans(localAgentEvents.length)
       },
       {
-        label: "Input tokens",
+        id: "input",
+        label: messages.kpis.inputTokens,
         value: formatTokens(totals.input),
-        detail: `${percentOf(totals.input, totals.total)}% of total`
+        detail: messages.kpis.percentOfTotal(percentOf(totals.input, totals.total))
       },
       {
-        label: "Output tokens",
+        id: "output",
+        label: messages.kpis.outputTokens,
         value: formatTokens(totals.output),
-        detail: `${percentOf(totals.output, totals.total)}% of total`
+        detail: messages.kpis.percentOfTotal(percentOf(totals.output, totals.total))
       },
       {
-        label: "Estimated cost",
-        value: formatCurrency(estimatedCost),
-        detail: "Estimate only"
-      },
-      {
-        label: "Avg latency",
-        value: formatLatency(averageLatency),
-        detail: "Per run/span step"
+        id: "latency",
+        label: messages.kpis.avgLatency,
+        value: averageLatency === null ? messages.kpis.unavailable : formatLatency(averageLatency),
+        detail: averageLatency === null
+          ? messages.kpis.runtimeTimingUnavailable
+          : messages.kpis.perRunSpanStep
       }
     ],
     totalTokens: totals.total,
-    taskBreakdown: buildTaskBreakdown(events, totals.total),
-    hotspots: buildHotspots(events, totals.total),
-    sessionTrace: buildSessionTrace(events),
+    aiToolBreakdown: buildAIToolBreakdown(localAgentEvents, totals.total, messages),
+    taskBreakdown: buildTaskBreakdown(localAgentEvents, totals.total, messages),
+    modelBreakdown: buildModelBreakdown(localAgentEvents, totals.total, messages),
+    hotspots: buildHotspots(localAgentEvents, totals.total, messages),
+    sessionTrace: buildSessionTrace(localAgentEvents, messages),
     privacyAudit: {
-      eventsPrepared: events.length,
-      emittedFieldsSafe: events.every((event) => hasOnlySyncSafeKeys(event)),
-      allowedFieldCount: 16,
-      forbiddenLabels: FORBIDDEN_SYNC_FIELD_LABELS
+      eventsPrepared: localAgentEvents.length,
+      emittedFieldsSafe: localAgentEvents.every((event) => hasOnlySyncSafeKeys(event)),
+      allowedFieldCount: 17,
+      forbiddenLabels: messages.forbiddenFieldLabels
     }
   };
 }
 
 export function formatTokens(value: number): string {
-  return new Intl.NumberFormat("en-US").format(value);
+  return numberFormatter(tokenMeteringLocaleName()).format(value);
 }
 
 export function formatLatency(value: number): string {
-  return `${new Intl.NumberFormat("en-US").format(value)} ms`;
+  return `${numberFormatter(tokenMeteringLocaleName()).format(value)} ms`;
 }
 
 function buildTaskBreakdown(
   events: readonly UsageEvent[],
-  totalTokens: number
+  totalTokens: number,
+  messages: TokenMeteringMessages
 ): BreakdownRow[] {
-  return TASK_TYPES.map((taskType) => {
+  const totals = new Map<string, number>();
+  for (const event of events) {
+    totals.set(event.task_type, (totals.get(event.task_type) ?? 0) + event.total_tokens);
+  }
+
+  return Array.from(totals.entries())
+    .map(([taskType, tokens]) => ({
+      id: taskType,
+      label: messages.taskTypeLabels[taskType] ?? labelFromSlug(taskType),
+      tokens,
+      percentage: percentOf(tokens, totalTokens)
+    }))
+    .sort((left, right) => right.tokens - left.tokens || left.label.localeCompare(right.label));
+}
+
+function buildAIToolBreakdown(
+  events: readonly UsageEvent[],
+  totalTokens: number,
+  messages: TokenMeteringMessages
+): AIToolBreakdownRow[] {
+  return DASHBOARD_AI_TOOLS.map((aiTool) => {
     const tokens = events
-      .filter((event) => event.task_type === taskType)
+      .filter((event) => event.ai_tool === aiTool)
       .reduce((sum, event) => sum + event.total_tokens, 0);
 
     return {
-      id: taskType,
-      label: taskTypeLabels[taskType],
+      id: aiTool,
+      label: messages.aiToolLabels[aiTool],
       tokens,
       percentage: percentOf(tokens, totalTokens)
     };
   });
 }
 
+function isDashboardAIToolEvent(event: UsageEvent): boolean {
+  return (DASHBOARD_AI_TOOLS as readonly AITool[]).includes(event.ai_tool);
+}
+
+function buildModelBreakdown(
+  events: readonly UsageEvent[],
+  totalTokens: number,
+  messages: TokenMeteringMessages
+): BreakdownRow[] {
+  const totals = new Map<string, number>();
+  for (const event of events) {
+    const model = modelKey(event.model);
+    totals.set(model, (totals.get(model) ?? 0) + event.total_tokens);
+  }
+
+  return Array.from(totals.entries())
+    .map(([model, tokens]) => ({
+      id: model,
+      label: model === "model_unavailable" ? messages.kpis.modelUnavailable : model,
+      tokens,
+      percentage: percentOf(tokens, totalTokens)
+    }))
+    .sort((left, right) => right.tokens - left.tokens || left.label.localeCompare(right.label));
+}
+
 function buildHotspots(
   events: readonly UsageEvent[],
-  totalTokens: number
+  totalTokens: number,
+  messages: TokenMeteringMessages
 ): HotspotRow[] {
-  const knownTotal = TOKEN_SOURCES.filter((source) => source !== "unknown").reduce(
-    (sum, source) =>
-      sum + events.reduce((eventSum, event) => eventSum + event.token_breakdown[source], 0),
-    0
-  );
-  const sources =
-    knownTotal === 0 ? TOKEN_SOURCES.filter((source) => source !== "unknown") : TOKEN_SOURCES;
-
-  return sources.map((source) => {
+  return TOKEN_SOURCES.map((source) => {
     const tokens = events.reduce(
       (sum, event) => sum + event.token_breakdown[source],
       0
@@ -222,54 +222,116 @@ function buildHotspots(
 
     return {
       id: source,
-      label: tokenSourceLabels[source],
+      label: messages.tokenSourceLabels[source],
       tokens,
       percentage: percentOf(tokens, totalTokens)
     };
   }).sort((left, right) => right.tokens - left.tokens);
 }
 
-function buildSessionTrace(events: readonly UsageEvent[]): SessionTraceRun[] {
+function buildSessionTrace(
+  events: readonly UsageEvent[],
+  messages: TokenMeteringMessages
+): SessionTraceRun[] {
   const runs = new Map<string, UsageEvent[]>();
   for (const event of events) {
-    const current = runs.get(event.run_id) ?? [];
+    const current = runs.get(workItemId(event)) ?? [];
     current.push(event);
-    runs.set(event.run_id, current);
+    runs.set(workItemId(event), current);
   }
 
-  return Array.from(runs.entries()).map(([runId, runEvents]) => {
+  return Array.from(runs.entries()).map(([workItemId, runEvents]) => {
     const sortedEvents = [...runEvents].sort((left, right) =>
       left.created_at.localeCompare(right.created_at)
     );
+    const first = sortedEvents[0];
+    const latencySamples = sortedEvents
+      .map((event) => event.latency_ms)
+      .filter((latency) => latency > 0);
 
     return {
-      runId,
+      workItemId,
+      title: first ? workItemTitle(first, messages) : messages.panels.unknownWorkItem,
       totalTokens: sortedEvents.reduce(
         (sum, event) => sum + event.total_tokens,
         0
       ),
-      latencyMs: sortedEvents.reduce((sum, event) => sum + event.latency_ms, 0),
+      latencyMs: latencySamples.length > 0
+        ? latencySamples.reduce((sum, latency) => sum + latency, 0)
+        : null,
+      eventCount: sortedEvents.length,
       steps: sortedEvents.map((event) => ({
-        spanId: event.span_id,
-        taskType: taskTypeLabels[event.task_type],
-        stage: event.stage,
-        model: event.model,
+        taskType: messages.taskTypeLabels[event.task_type] ?? labelFromSlug(event.task_type),
+        stage: messages.usageStageLabels[event.stage] ?? labelFromSlug(event.stage),
+        model: modelLabel(event.model, messages),
         totalTokens: event.total_tokens,
-        latencyMs: event.latency_ms,
+        latencyMs: event.latency_ms > 0 ? event.latency_ms : null,
         createdAt: event.created_at
       }))
     };
-  });
+  }).sort((left, right) => right.totalTokens - left.totalTokens || left.title.localeCompare(right.title));
 }
 
 function percentOf(value: number, total: number): number {
   return total === 0 ? 0 : Math.round((value / total) * 100);
 }
 
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 2
-  }).format(value);
+function labelFromSlug(value: string): string {
+  return value
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function workItemId(event: UsageEvent): string {
+  return [
+    "work",
+    event.ai_tool,
+    event.task_type,
+    event.stage,
+    modelKey(event.model),
+    event.created_at.slice(0, 10)
+  ].map(safeIdPart).join("_");
+}
+
+function workItemTitle(event: UsageEvent, messages: TokenMeteringMessages): string {
+  return [
+    messages.aiToolLabels[event.ai_tool],
+    messages.taskTypeLabels[event.task_type] ?? labelFromSlug(event.task_type),
+    messages.usageStageLabels[event.stage] ?? labelFromSlug(event.stage)
+  ].join(" - ");
+}
+
+function modelKey(model: string): string {
+  const normalized = model.trim().toLowerCase();
+  if (
+    normalized.length === 0 ||
+    normalized === "unknown" ||
+    normalized === "unknown_model" ||
+    normalized === "model_unknown" ||
+    normalized === "unavailable"
+  ) {
+    return "model_unavailable";
+  }
+  return model.trim();
+}
+
+function modelLabel(model: string, messages: TokenMeteringMessages): string {
+  return modelKey(model) === "model_unavailable" ? messages.kpis.modelUnavailable : model;
+}
+
+function safeIdPart(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+}
+
+const numberFormatters = new Map<string, Intl.NumberFormat>();
+
+function numberFormatter(localeName: string): Intl.NumberFormat {
+  const cached = numberFormatters.get(localeName);
+  if (cached) return cached;
+
+  const formatter = new Intl.NumberFormat(localeName);
+  numberFormatters.set(localeName, formatter);
+  return formatter;
 }

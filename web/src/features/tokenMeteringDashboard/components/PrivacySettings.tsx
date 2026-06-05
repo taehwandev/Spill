@@ -1,4 +1,5 @@
 import type { DashboardModel } from "../dashboardModel";
+import { getTokenMeteringMessages } from "../i18n";
 import type { SyncMode } from "../syncSafeUsage";
 import { CollapsiblePanel } from "./CollapsiblePanel";
 
@@ -9,29 +10,40 @@ export function PrivacySettings({
   dashboard: DashboardModel;
   syncMode: SyncMode;
 }) {
+  const messages = getTokenMeteringMessages();
   const rows = [
     {
-      label: "Local-only mode",
-      state: syncMode === "local_only" ? "Active" : "Available",
-      detail: "Sends nothing. Full detail remains on this computer."
+      label: messages.privacyRows.localOnlyLabel,
+      state: syncMode === "local_only" ? messages.privacyRows.active : messages.privacyRows.available,
+      detail: messages.privacyRows.localOnlyDetail
     },
     {
-      label: "Cloud aggregate",
-      state: syncMode === "cloud_aggregate" ? "Demo selected" : "Future opt-in",
-      detail: "Would send totals, timestamps, model ids, and latency only."
+      label: messages.privacyRows.cloudAggregateLabel,
+      state: syncMode === "cloud_aggregate" ? messages.privacyRows.demoSelected : messages.privacyRows.futureOptIn,
+      detail: messages.privacyRows.cloudAggregateDetail
     },
     {
-      label: "Cloud detailed",
-      state: syncMode === "cloud_detailed" ? "Demo selected" : "Separate opt-in",
-      detail: "Would send numeric counts plus task and source enum labels."
+      label: messages.privacyRows.cloudDetailedLabel,
+      state: syncMode === "cloud_detailed" ? messages.privacyRows.demoSelected : messages.privacyRows.separateOptIn,
+      detail: messages.privacyRows.cloudDetailedDetail
+    },
+    {
+      label: messages.privacyRows.settingsSyncLabel,
+      state: messages.privacyRows.separateOptIn,
+      detail: messages.privacyRows.settingsSyncDetail
+    },
+    {
+      label: messages.privacyRows.selectedSettingsLabel,
+      state: messages.privacyRows.futureOptIn,
+      detail: messages.privacyRows.selectedSettingsDetail
     }
   ];
 
   return (
     <CollapsiblePanel
-      description="Local detail first, cloud sync only by explicit opt-in"
+      description={messages.panels.tokenOnlyContractDescription}
       id="settings"
-      title="Token-Only Contract"
+      title={messages.panels.tokenOnlyContract}
     >
       <div className="settingsList">
         {rows.map((row) => (
@@ -47,20 +59,22 @@ export function PrivacySettings({
 
       <div className="auditBlock">
         <div>
-          <strong>Sanitizer status</strong>
+          <strong>{messages.panels.sanitizerStatus}</strong>
           <p>
-            {dashboard.privacyAudit.eventsPrepared} sync-safe events prepared /
-            {dashboard.privacyAudit.allowedFieldCount} allowed fields emitted /
-            {dashboard.privacyAudit.emittedFieldsSafe ? " safe output" : " review needed"}
+            {messages.panels.sanitizerDetail(
+              dashboard.privacyAudit.eventsPrepared,
+              dashboard.privacyAudit.allowedFieldCount,
+              dashboard.privacyAudit.emittedFieldsSafe
+            )}
           </p>
         </div>
         <span className={dashboard.privacyAudit.emittedFieldsSafe ? "okBadge" : "warnBadge"}>
-          {dashboard.privacyAudit.emittedFieldsSafe ? "Allowlist pass" : "Check"}
+          {dashboard.privacyAudit.emittedFieldsSafe ? messages.panels.allowlistPass : messages.panels.check}
         </span>
       </div>
 
       <div className="forbiddenBlock">
-        <strong>Never included in cloud payloads</strong>
+        <strong>{messages.panels.neverIncluded}</strong>
         <div>
           {dashboard.privacyAudit.forbiddenLabels.map((label) => (
             <span key={label}>{label}</span>

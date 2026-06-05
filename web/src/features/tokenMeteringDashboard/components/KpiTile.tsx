@@ -2,7 +2,7 @@ import type { Kpi } from "../dashboardModel";
 
 export function KpiTile({ index, kpi }: { index: number; kpi: Kpi }) {
   const progressWidth =
-    kpi.label === "Input tokens" ? "71%" : kpi.label === "Output tokens" ? "29%" : null;
+    kpi.id === "input" ? "71%" : kpi.id === "output" ? "29%" : null;
 
   return (
     <article className={`metricTile metricTone${index + 1}`}>

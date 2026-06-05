@@ -1,4 +1,5 @@
 import { formatTokens, type DashboardModel } from "../dashboardModel";
+import { getTokenMeteringMessages } from "../i18n";
 import {
   installCommand,
   setupPrompt,
@@ -19,27 +20,29 @@ export function IntroPage({
   onCopySetup: () => void;
   onOpenDashboard: () => void;
 }) {
+  const messages = getTokenMeteringMessages();
+
   return (
     <>
-      <nav className="introNav" aria-label="Intro navigation">
+      <nav className="introNav" aria-label={messages.intro.navLabel}>
         <div className="introBrand">Spill</div>
         <div className="introLinks">
-          <a href="#features">Features</a>
-          <a href="#setup">Setup</a>
-          <a href="#about">About</a>
+          <a href="#features">{messages.nav.features}</a>
+          <a href="#setup">{messages.nav.setup}</a>
+          <a href="#about">{messages.nav.about}</a>
           <button className="downloadButton" type="button" onClick={onOpenDashboard}>
-            Download
+            {messages.nav.download}
           </button>
         </div>
       </nav>
 
       <main className="introMain">
-        <section className="previewColumn" aria-label="Dashboard preview">
-          <div className="previewLabel">Cloud dashboard preview</div>
+        <section className="previewColumn" aria-label={messages.intro.dashboardPreviewAria}>
+          <div className="previewLabel">{messages.intro.cloudDashboardPreview}</div>
           <div>
             <h1>
-              Intelligence,
-              <span>Metered.</span>
+              {messages.intro.heroLineOne}
+              <span>{messages.intro.heroLineTwo}</span>
             </h1>
           </div>
 
@@ -47,8 +50,8 @@ export function IntroPage({
             <article className="previewCard large">
               <div className="previewHeader">
                 <div>
-                  <p>Current token usage</p>
-                  <strong>{dashboard.kpis[0]?.value ?? "0"} tokens</strong>
+                  <p>{messages.intro.currentUsage}</p>
+                  <strong>{messages.intro.tokenTotal(dashboard.kpis[0]?.value ?? "0")}</strong>
                 </div>
                 <span className="monitorIcon">
                   <i />
@@ -59,22 +62,22 @@ export function IntroPage({
               <div className="dashboardSnapshot">
                 <div className="snapshotTop">
                   <strong>Spill</strong>
-                  <span>Token Metering</span>
+                  <span>{messages.intro.tokenMetering}</span>
                 </div>
                 <div className="snapshotNav">
-                  <span>Overview</span>
-                  <span>Hotspots</span>
-                  <span>Sessions</span>
-                  <span>Settings</span>
+                  <span>{messages.nav.overview}</span>
+                  <span>{messages.nav.hotspots}</span>
+                  <span>{messages.nav.sessions}</span>
+                  <span>{messages.nav.settings}</span>
                 </div>
                 <div className="snapshotStatus">
                   <span />
-                  Cloud preview data
+                  {messages.intro.cloudPreviewData}
                 </div>
                 <div className="snapshotCard">
-                  <p>Sync mode status</p>
-                  <strong>Cloud not connected</strong>
-                  <em>Local detail stays in the macOS app until sync is enabled.</em>
+                  <p>{messages.intro.syncModeStatus}</p>
+                  <strong>{messages.intro.cloudNotConnected}</strong>
+                  <em>{messages.intro.localDetailUntilSync}</em>
                   <div className="snapshotPills">
                     <span />
                     <span />
@@ -83,7 +86,7 @@ export function IntroPage({
                 </div>
                 <div className="snapshotKpis">
                   {dashboard.kpis.map((kpi) => (
-                    <span key={kpi.label}>
+                    <span key={kpi.id}>
                       <small>{kpi.label}</small>
                       <strong>{kpi.value}</strong>
                       <em>{kpi.detail}</em>
@@ -106,21 +109,21 @@ export function IntroPage({
 
             <div className="previewMiniGrid">
               <article className="previewCard">
-                <p>Cost estimate</p>
+                <p>{messages.intro.modelBreakdown}</p>
                 <div className="miniDashboard">
-                  {dashboard.taskBreakdown.slice(0, 6).map((row) => (
+                  {dashboard.modelBreakdown.slice(0, 6).map((row) => (
                     <span key={row.id}>
                       <i style={{ width: `${Math.max(16, row.percentage)}%` }} />
                     </span>
                   ))}
                 </div>
                 <div className="miniMetricRow">
-                  <strong>{dashboard.kpis[3]?.value ?? "$0.00"}</strong>
-                  <em>-12% MoM</em>
+                  <strong>{dashboard.modelBreakdown[0]?.label ?? "-"}</strong>
+                  <em>{formatTokens(dashboard.modelBreakdown[0]?.tokens ?? 0)}</em>
                 </div>
               </article>
               <article className="previewCard">
-                <p>Task breakdown</p>
+                <p>{messages.intro.taskBreakdown}</p>
                 <div className="miniDashboard split">
                   {dashboard.hotspots.slice(0, 5).map((row) => (
                     <span key={row.id}>
@@ -138,10 +141,9 @@ export function IntroPage({
 
         <section className="portalColumn" aria-label="Get started">
           <div className="portalIntro">
-            <h2>Spill it all.</h2>
+            <h2>{messages.intro.headline}</h2>
             <p>
-              Join the ecosystem where AI usage metering fluidly integrates
-              with your workflow. No content collection, just flow.
+              {messages.intro.body}
             </p>
           </div>
 
@@ -150,11 +152,11 @@ export function IntroPage({
               <svg aria-hidden="true" viewBox="0 0 24 24">
                 <path d="M12 .5C5.7.5.6 5.6.6 11.9c0 5 3.3 9.3 7.9 10.8.6.1.8-.2.8-.6v-2c-3.2.7-3.9-1.4-3.9-1.4-.5-1.3-1.3-1.7-1.3-1.7-1-.7.1-.7.1-.7 1.1.1 1.8 1.2 1.8 1.2 1 1.7 2.7 1.2 3.3.9.1-.7.4-1.2.7-1.5-2.6-.3-5.3-1.3-5.3-5.7 0-1.3.5-2.3 1.2-3.1-.1-.3-.5-1.5.1-3 0 0 1-.3 3.2 1.2.9-.3 1.9-.4 2.9-.4s2 .1 2.9.4c2.2-1.5 3.2-1.2 3.2-1.2.6 1.5.2 2.7.1 3 .8.8 1.2 1.8 1.2 3.1 0 4.4-2.7 5.4-5.3 5.7.4.4.8 1.1.8 2.2v3.2c0 .3.2.7.8.6 4.6-1.5 7.9-5.8 7.9-10.8C23.4 5.6 18.3.5 12 .5z" />
               </svg>
-              Continue with GitHub
+              {messages.intro.continueWithGitHub}
             </button>
             <div className="setupDivider">
               <span />
-              <p>Or set up manually</p>
+              <p>{messages.intro.manualSetupDivider}</p>
               <span />
             </div>
           </div>
@@ -164,23 +166,23 @@ export function IntroPage({
               copied={copiedTarget === "install"}
               command={installCommand}
               index="1"
-              label="Install Spill"
+              label={messages.intro.installSpill}
               onCopy={onCopyInstall}
             />
             <SetupStep
               copied={copiedTarget === "setup"}
               command={setupPrompt}
+              hideCommand
               index="2"
-              label="Token Metering Install Prompt"
-              multiline
+              label={messages.intro.tokenMeteringInstallPrompt}
               onCopy={onCopySetup}
             />
           </div>
 
           <p className="signinLine" id="about">
-            Already have an account?{" "}
+            {messages.intro.alreadyHaveAccount}{" "}
             <button type="button" onClick={onOpenDashboard}>
-              Sign In
+              {messages.intro.signIn}
             </button>
           </p>
         </section>
@@ -189,12 +191,12 @@ export function IntroPage({
       <footer className="introFooter">
         <strong>Spill</strong>
         <div>
-          <p>© 2024 Spill. All rights reserved. Don't hold it back, Just Spill it.</p>
-          <nav aria-label="Intro footer links">
-            <a href="#setup">Terms</a>
-            <a href="#setup">Privacy</a>
-            <a href="#setup">Twitter</a>
-            <a href="#setup">Instagram</a>
+          <p>{messages.intro.copyright}</p>
+          <nav aria-label={messages.intro.footerLabel}>
+            <a href="#setup">{messages.intro.terms}</a>
+            <a href="#setup">{messages.nav.privacy}</a>
+            <a href="#setup">{messages.intro.twitter}</a>
+            <a href="#setup">{messages.intro.instagram}</a>
           </nav>
         </div>
       </footer>

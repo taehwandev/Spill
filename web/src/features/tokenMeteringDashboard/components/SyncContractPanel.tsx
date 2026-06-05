@@ -1,4 +1,5 @@
-import { syncModeContent, type DashboardModel } from "../dashboardModel";
+import { type DashboardModel } from "../dashboardModel";
+import { getTokenMeteringMessages } from "../i18n";
 import { SYNC_MODES, type SyncMode } from "../syncSafeUsage";
 
 export function SyncContractPanel({
@@ -12,17 +13,20 @@ export function SyncContractPanel({
   setSyncMode: (mode: SyncMode) => void;
   syncMode: SyncMode;
 }) {
+  const messages = getTokenMeteringMessages();
+  const syncModeContent = messages.syncModeContent;
+
   return (
-    <aside aria-label="Sync contract" className="contractPanel open">
+    <aside aria-label={messages.syncContract.ariaLabel} className="contractPanel open">
       <div className="contractPanelInner">
         <div className="contractPanelHeader">
-          <h2>Sync Contract</h2>
-          <button aria-label="Close sync contract" onClick={onClose} type="button">
+          <h2>{messages.syncContract.title}</h2>
+          <button aria-label={messages.syncContract.closeAria} onClick={onClose} type="button">
             x
           </button>
         </div>
 
-        <div className="modePills" role="radiogroup" aria-label="Sync mode">
+        <div className="modePills" role="radiogroup" aria-label={messages.syncContract.syncModeAria}>
           {SYNC_MODES.map((mode) => (
             <button
               aria-checked={mode === syncMode}
@@ -42,31 +46,30 @@ export function SyncContractPanel({
           <div>
             <span>1</span>
             <div>
-              <strong>Sign in first</strong>
-              <p>Cloud dashboard rows require an authenticated account.</p>
+              <strong>{messages.syncContract.signInFirstTitle}</strong>
+              <p>{messages.syncContract.signInFirstBody}</p>
             </div>
           </div>
           <div>
             <span>2</span>
             <div>
-              <strong>Choose sync depth</strong>
-              <p>Aggregate and detailed modes are separate opt-in states.</p>
+              <strong>{messages.syncContract.chooseDepthTitle}</strong>
+              <p>{messages.syncContract.chooseDepthBody}</p>
             </div>
           </div>
           <div>
             <span>3</span>
             <div>
-              <strong>Allowlist payload</strong>
+              <strong>{messages.syncContract.allowlistTitle}</strong>
               <p>
-                {dashboard.privacyAudit.allowedFieldCount} safe fields are
-                eligible; content-like fields are rejected.
+                {messages.syncContract.allowlistBody(dashboard.privacyAudit.allowedFieldCount)}
               </p>
             </div>
           </div>
         </div>
 
         <button className="panelPrimary" onClick={onClose} type="button">
-          Close contract
+          {messages.syncContract.close}
         </button>
       </div>
     </aside>

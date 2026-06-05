@@ -1,9 +1,8 @@
 import { useState } from "react";
-import {
-  syncModeContent,
-  type DashboardModel
-} from "../dashboardModel";
+import { type DashboardModel } from "../dashboardModel";
+import { getTokenMeteringMessages } from "../i18n";
 import type { SyncMode } from "../syncSafeUsage";
+import { AIToolBreakdown } from "./AIToolBreakdown";
 import { KpiTile } from "./KpiTile";
 import { PrivacySettings } from "./PrivacySettings";
 import { SessionTrace } from "./SessionTrace";
@@ -23,26 +22,28 @@ export function DashboardPage({
   syncMode: SyncMode;
 }) {
   const [contractPanelOpen, setContractPanelOpen] = useState(false);
+  const messages = getTokenMeteringMessages();
+  const syncModeContent = messages.syncModeContent;
 
   return (
     <>
       <header className="dashboardHeader">
         <button className="dashboardBrand" onClick={onBack} type="button">
-          Spill Meter
+          {messages.dashboard.brand}
         </button>
-        <nav className="dashboardNav" aria-label="Dashboard sections">
+        <nav className="dashboardNav" aria-label={messages.dashboard.navLabel}>
           <a className="active" href="#overview">
-            Overview
+            {messages.nav.overview}
           </a>
-          <a href="#hotspots">Hotspots</a>
-          <a href="#sessions">Sessions</a>
-          <a href="#settings">Settings</a>
+          <a href="#hotspots">{messages.nav.hotspots}</a>
+          <a href="#sessions">{messages.nav.sessions}</a>
+          <a href="#settings">{messages.nav.settings}</a>
         </nav>
         <div className="dashboardHeaderActions">
           <button type="button" onClick={onBack}>
-            Intro
+            {messages.nav.intro}
           </button>
-          <div className="accountBadge" aria-label="Signed in demo account">
+          <div className="accountBadge" aria-label={messages.dashboard.accountLabel}>
             SP
           </div>
         </div>
@@ -55,7 +56,7 @@ export function DashboardPage({
               sync
             </div>
             <div>
-              <h1>Sync Mode Status</h1>
+              <h1>{messages.dashboard.syncModeStatus}</h1>
               <div className="liveStatus">
                 <span className="statusDot" aria-hidden="true" />
                 <p>{syncModeContent[syncMode].status}</p>
@@ -65,44 +66,43 @@ export function DashboardPage({
           </div>
           <div className="syncHeroActions">
             <button type="button" onClick={() => setContractPanelOpen(true)}>
-              View Configuration
+              {messages.dashboard.viewConfiguration}
             </button>
             <button
               className="primary"
               type="button"
               onClick={() => setContractPanelOpen(true)}
             >
-              Cloud Sync
+              {messages.dashboard.cloudSync}
             </button>
           </div>
         </section>
 
-        <section className="kpiGrid" aria-label="Token key metrics">
+        <section className="kpiGrid" aria-label={messages.dashboard.kpiAria}>
           {dashboard.kpis.map((kpi, index) => (
-            <KpiTile index={index} kpi={kpi} key={kpi.label} />
+            <KpiTile index={index} kpi={kpi} key={kpi.id} />
           ))}
         </section>
 
         <section className="cloudPreview glassCard" aria-labelledby="cloud-preview-title">
           <div className="cloudPreviewHeader">
             <div>
-              <p className="eyebrow">Cloud dashboard preview</p>
-              <h2 id="cloud-preview-title">Sign in will unlock hosted sync.</h2>
+              <p className="eyebrow">{messages.dashboard.cloudPreviewTitle}</p>
+              <h2 id="cloud-preview-title">{messages.dashboard.cloudPreviewHeading}</h2>
               <p>
-                Local token aggregation lives in the macOS app. This web surface
-                is the future account dashboard and currently shows safe preview
-                data only.
+                {messages.dashboard.cloudPreviewBody}
               </p>
             </div>
             <div className="cloudPreviewStatus">
               <strong>0</strong>
-              <span>cloud rows</span>
-              <em>Auth not connected</em>
+              <span>{messages.dashboard.cloudRows}</span>
+              <em>{messages.dashboard.authNotConnected}</em>
             </div>
           </div>
         </section>
 
         <div className="dashboardGrid">
+          <AIToolBreakdown rows={dashboard.aiToolBreakdown} total={dashboard.totalTokens} />
           <TaskBreakdown rows={dashboard.taskBreakdown} total={dashboard.totalTokens} />
           <SourceHotspots rows={dashboard.hotspots} />
           <SessionTrace runs={dashboard.sessionTrace} />
@@ -121,7 +121,7 @@ export function DashboardPage({
 
       <button
         aria-expanded={contractPanelOpen}
-        aria-label="Open sync contract"
+        aria-label={messages.dashboard.openSyncContract}
         className="contractFab"
         onClick={() => setContractPanelOpen(true)}
         type="button"
@@ -132,12 +132,12 @@ export function DashboardPage({
 
       <footer className="dashboardFooter">
         <div>
-          <strong>Spill Meter</strong>
-          <p>Token counts, safe categories, and explicit sync controls.</p>
+          <strong>{messages.dashboard.brand}</strong>
+          <p>{messages.dashboard.footerBody}</p>
         </div>
-        <nav aria-label="Footer links">
-          <a href="#settings">Privacy</a>
-          <a href="#overview">Overview</a>
+        <nav aria-label={messages.intro.footerLabel}>
+          <a href="#settings">{messages.nav.privacy}</a>
+          <a href="#overview">{messages.nav.overview}</a>
         </nav>
       </footer>
     </>

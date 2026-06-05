@@ -1,25 +1,15 @@
 export type SyncMode = "local_only" | "cloud_aggregate" | "cloud_detailed";
 
-export type TaskType =
-  | "uncategorized"
-  | "analysis"
-  | "prd_drafting"
-  | "code_generation"
-  | "code_review"
-  | "test_generation"
-  | "debugging"
-  | "documentation"
-  | "release_notes";
+export type AITool =
+  | "unknown"
+  | "codex"
+  | "claude"
+  | "antigravity"
+  | "openai";
 
-export type UsageStage =
-  | "monitor"
-  | "classify"
-  | "plan"
-  | "draft"
-  | "revise"
-  | "implement"
-  | "verify"
-  | "summarize";
+export type TaskType = string;
+
+export type UsageStage = string;
 
 export type TokenSource =
   | "system"
@@ -39,6 +29,7 @@ export type UsageEvent = {
   artifact_id: string;
   run_id: string;
   span_id: string;
+  ai_tool: AITool;
   task_type: TaskType;
   stage: UsageStage;
   model: string;
@@ -60,6 +51,7 @@ const SAFE_USAGE_EVENT_KEYS: ReadonlySet<string> = new Set<SafeUsageEventKey>([
   "artifact_id",
   "run_id",
   "span_id",
+  "ai_tool",
   "task_type",
   "stage",
   "model",
@@ -76,13 +68,41 @@ export const TASK_TYPES = [
   "uncategorized",
   "analysis",
   "prd_drafting",
+  "architecture",
   "code_generation",
+  "ui_design",
+  "prompt_design",
+  "refactoring",
   "code_review",
+  "review_response",
   "test_generation",
+  "testing",
+  "build_verification",
   "debugging",
+  "bug_reproduction",
   "documentation",
-  "release_notes"
-] as const satisfies readonly TaskType[];
+  "changelog",
+  "release_notes",
+  "release_packaging",
+  "git_commit",
+  "commit_message",
+  "pull_request",
+  "workflow_setup"
+] as const satisfies readonly string[];
+
+export const AI_TOOLS = [
+  "unknown",
+  "codex",
+  "claude",
+  "antigravity",
+  "openai"
+] as const satisfies readonly AITool[];
+
+export const DASHBOARD_AI_TOOLS = [
+  "codex",
+  "claude",
+  "antigravity"
+] as const satisfies readonly AITool[];
 
 export const USAGE_STAGES = [
   "monitor",
@@ -93,7 +113,7 @@ export const USAGE_STAGES = [
   "implement",
   "verify",
   "summarize"
-] as const satisfies readonly UsageStage[];
+] as const satisfies readonly string[];
 
 export const TOKEN_SOURCES = [
   "system",
@@ -201,8 +221,9 @@ export function sanitizeUsageEvent(raw: unknown): SanitizedUsageEventResult {
   const artifactId = sanitizeOpaqueId(raw.artifact_id);
   const runId = sanitizeOpaqueId(raw.run_id);
   const spanId = sanitizeOpaqueId(raw.span_id);
-  const taskType = pickEnum(raw.task_type, TASK_TYPES);
-  const stage = pickEnum(raw.stage, USAGE_STAGES);
+  const aiTool = sanitizeAITool(raw.ai_tool);
+  const taskType = sanitizeWorkflowSlug(raw.task_type);
+  const stage = sanitizeWorkflowSlug(raw.stage);
   const model = sanitizeModelId(raw.model);
   const inputTokens = sanitizeNonNegativeInteger(raw.input_tokens);
   const outputTokens = sanitizeNonNegativeInteger(raw.output_tokens);
@@ -219,6 +240,7 @@ export function sanitizeUsageEvent(raw: unknown): SanitizedUsageEventResult {
     artifactId === null ||
     runId === null ||
     spanId === null ||
+    aiTool === null ||
     taskType === null ||
     stage === null ||
     model === null ||
@@ -248,6 +270,7 @@ export function sanitizeUsageEvent(raw: unknown): SanitizedUsageEventResult {
       artifact_id: artifactId,
       run_id: runId,
       span_id: spanId,
+      ai_tool: aiTool,
       task_type: taskType,
       stage,
       model,
@@ -317,6 +340,24 @@ function sanitizeModelId(value: unknown): string | null {
 
   const trimmed = value.trim();
   return /^[A-Za-z0-9_.:-]{2,80}$/.test(trimmed) ? trimmed : null;
+}
+
+function sanitizeWorkflowSlug(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  return /^[a-z][a-z0-9_]{1,40}$/.test(value) ? value : null;
+}
+
+function sanitizeAITool(value: unknown): AITool | null {
+  if (value === undefined || value === null) {
+    return "unknown";
+  }
+  if (value === "ollama") {
+    return "unknown";
+  }
+  return pickEnum(value, AI_TOOLS);
 }
 
 function sanitizeNonNegativeInteger(value: unknown): number | null {

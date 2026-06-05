@@ -1,25 +1,29 @@
 import { formatTokens, type HotspotRow } from "../dashboardModel";
+import { getTokenMeteringMessages } from "../i18n";
 
 export function SourceHotspots({ rows }: { rows: HotspotRow[] }) {
+  const messages = getTokenMeteringMessages();
+  const visibleRows = rows.filter((row) => row.tokens > 0);
+
   return (
     <section className="panel glassCard hotspotPanel" id="hotspots" aria-labelledby="hotspots-title">
       <div className="sectionHeader">
         <div>
-          <h2 id="hotspots-title">Token-Source Hotspots</h2>
-          <p>Numeric source categories only</p>
+          <h2 id="hotspots-title">{messages.panels.sourceHotspots}</h2>
+          <p>{messages.panels.sourceHotspotsDescription}</p>
         </div>
       </div>
       <div className="tableWrap">
         <table>
           <thead>
             <tr>
-              <th scope="col">Source</th>
-              <th scope="col">Tokens</th>
-              <th scope="col">Share</th>
+              <th scope="col">{messages.panels.source}</th>
+              <th scope="col">{messages.panels.tokens}</th>
+              <th scope="col">{messages.panels.share}</th>
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
+            {visibleRows.map((row) => (
               <tr key={row.id}>
                 <td>{row.label}</td>
                 <td>{formatTokens(row.tokens)}</td>
@@ -32,10 +36,9 @@ export function SourceHotspots({ rows }: { rows: HotspotRow[] }) {
         </table>
       </div>
       <div className="optimizationTip">
-        <strong>Optimization Tip</strong>
+        <strong>{messages.panels.optimizationTip}</strong>
         <p>
-          Source category totals are high. Tune category rules before
-          enabling any cloud aggregate view.
+          {messages.panels.optimizationTipBody}
         </p>
       </div>
     </section>

@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { getTokenMeteringMessages } from "../i18n";
 
 export function CollapsiblePanel({
   children,
@@ -15,6 +16,8 @@ export function CollapsiblePanel({
   id: string;
   title: string;
 }) {
+  const messages = getTokenMeteringMessages();
+
   return (
     <details
       className={`panel glassCard collapsiblePanel ${className}`}
@@ -27,7 +30,7 @@ export function CollapsiblePanel({
           <p>{description}</p>
         </div>
         <span className="collapseHint" aria-hidden="true">
-          Toggle
+          {messages.panels.toggle}
         </span>
       </summary>
       <div className="collapsibleBody">{children}</div>

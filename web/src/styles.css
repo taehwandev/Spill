@@ -630,6 +630,18 @@ a:focus-visible {
   line-height: 1.45;
 }
 
+.commandBlock.copyOnly {
+  min-height: auto;
+  padding: 18px 20px;
+}
+
+.commandBlock.copyOnly p {
+  margin: 0;
+  color: rgb(244 248 247 / 78%);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
 .commandBlock.multiline {
   align-items: start;
   min-height: 254px;
@@ -1160,6 +1172,13 @@ a:focus-visible {
   color: var(--accent);
   font-weight: 800;
   text-decoration: none;
+  white-space: nowrap;
+}
+
+.panelMeta {
+  color: var(--text-muted);
+  font-weight: 900;
+  letter-spacing: 0.04em;
   white-space: nowrap;
 }
 
