@@ -123,6 +123,7 @@ struct TokenMeteringDashboardView: View {
             .pickerStyle(.segmented)
             .labelsHidden()
             .frame(width: 240)
+            .focusEffectDisabled()
 
             HStack(spacing: 8) {
                 Button {
@@ -596,6 +597,7 @@ struct TokenMeteringDashboardView: View {
             }
         }
         .buttonStyle(.plain)
+        .focusEffectDisabled()
         .onHover { hovering in
             withAnimation(.easeOut(duration: 0.15)) {
                 hoveredFilterTitle = hovering ? title : nil

@@ -246,6 +246,7 @@ struct PreferencesView: View {
             }
         }
         .buttonStyle(.plain)
+        .focusEffectDisabled()
         .onHover { hovering in
             withAnimation(.easeOut(duration: 0.15)) {
                 hoveredTab = hovering ? tag : nil
