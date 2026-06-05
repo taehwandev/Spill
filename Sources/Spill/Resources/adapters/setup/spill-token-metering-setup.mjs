@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { access, chmod, copyFile, mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { access, chmod, copyFile, mkdir, readFile, rename, stat, writeFile, symlink, unlink } from "node:fs/promises";
 import { constants } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -204,8 +204,66 @@ async function removeClaudeBaselineLabelHook(target) {
 }
 
 async function configureAntigravity(scriptPath) {
-  const target = join(homedir(), ".gemini", "config", "hooks.json");
-  await mergeAgyHookFile(target, scriptPath, "antigravity");
+  let finalScriptPath = scriptPath;
+  const hasSpace = scriptPath.includes(" ");
+
+  if (hasSpace) {
+    const symlinkTarget = join(homedir(), ".gemini", "spill-hook.py");
+    if (apply) {
+      try {
+        if (await exists(symlinkTarget)) {
+          await unlink(symlinkTarget);
+        }
+        await symlink(scriptPath, symlinkTarget);
+        finalScriptPath = symlinkTarget;
+        results.push({ tool: "antigravity", action: "symlink_created", path: symlinkTarget });
+      } catch (err) {
+        try {
+          await copyFile(scriptPath, symlinkTarget);
+          await chmod(symlinkTarget, 0o755);
+          finalScriptPath = symlinkTarget;
+          results.push({ tool: "antigravity", action: "fallback_copied", path: symlinkTarget });
+        } catch (copyErr) {
+          results.push({ tool: "antigravity", action: "symlink_failed", reason: `${err.message} / ${copyErr.message}` });
+        }
+      }
+    } else {
+      finalScriptPath = symlinkTarget;
+      results.push({ tool: "antigravity", action: "would_create_symlink", path: symlinkTarget });
+    }
+  }
+
+  // Write to both paths for robustness across client versions and verification logic
+  const targets = [
+    join(homedir(), ".gemini", "config", "hooks.json"),
+    join(homedir(), ".gemini", "hooks.json")
+  ];
+  for (const target of targets) {
+    await mergeAgyHookFile(target, finalScriptPath, "antigravity");
+  }
+
+  // Automatically add command permission to ~/.gemini/config/config.json
+  if (apply) {
+    const configFile = join(homedir(), ".gemini", "config", "config.json");
+    try {
+      if (await exists(configFile)) {
+        const config = await readJSONObject(configFile);
+        if (plainObject(config.permissions) && Array.isArray(config.permissions.allow)) {
+          const command = `python3 ${shellQuote(finalScriptPath)}`;
+          const perm = `command(${command})`;
+          if (!config.permissions.allow.includes(perm)) {
+            config.permissions.allow.push(perm);
+            await writeJSONObject(configFile, config);
+            results.push({ tool: "antigravity", action: "permission_added", path: configFile });
+          }
+        }
+      }
+    } catch (err) {
+      results.push({ tool: "antigravity", action: "permission_failed", reason: err.message });
+    }
+  } else {
+    results.push({ tool: "antigravity", action: "would_add_permission", path: join(homedir(), ".gemini", "config", "config.json") });
+  }
 }
 
 async function mergeStopHookFile(target, command, timeout, tool, match) {
@@ -373,7 +431,10 @@ async function configureAgentRuntimeSettings({ tool, target, permissionPrefix })
       )
     : [];
   const existing = new Set(allow);
-  for (const entry of agentRuntimePermissionEntries(tool, permissionPrefix)) {
+  for (const entry of [
+    ...agentRuntimePermissionEntries(tool, permissionPrefix),
+    ...macosPlatformPermissionEntries(permissionPrefix),
+  ]) {
     if (!existing.has(entry)) {
       allow.push(entry);
       existing.add(entry);
@@ -396,16 +457,36 @@ function agentRuntimePermissionEntries(tool, permissionPrefix) {
 
   // Add the spill-hook.py script itself
   const hookScriptPath = join(installRoot, tool === "claude" ? "claude-code" : tool, "spill-hook.py");
-  for (const path of permissionPathVariants(hookScriptPath)) {
-    addPermissionCommandVariants(commandForms, `python3 ${path}`);
-    addPermissionCommandVariants(commandForms, `SPILL_AI_TOOL=${tool} python3 ${path}`);
-    addPermissionCommandVariants(commandForms, `SPILL_TOKEN_USAGE_AI_TOOL=${tool} python3 ${path}`);
+  const paths = [hookScriptPath];
+  if (tool === "antigravity") {
+    paths.push(join(homedir(), ".gemini", "spill-hook.py"));
+  }
+
+  for (const hookPath of paths) {
+    for (const path of permissionPathVariants(hookPath)) {
+      addPermissionCommandVariants(commandForms, `python3 ${path}`);
+      addPermissionCommandVariants(commandForms, `SPILL_AI_TOOL=${tool} python3 ${path}`);
+      addPermissionCommandVariants(commandForms, `SPILL_TOKEN_USAGE_AI_TOOL=${tool} python3 ${path}`);
+    }
   }
 
   for (const command of commandForms) {
     entries.push(`${permissionPrefix}(${command})`);
   }
   return entries;
+}
+
+// Commands that are genuinely read-only but absent from Claude Code's built-in
+// auto-allow list because it was written for Linux (md5sum, sha256sum) while
+// macOS ships different names (md5, shasum). Without these entries every agent
+// session on macOS prompts for permission on routine hash / version checks.
+function macosPlatformPermissionEntries(permissionPrefix) {
+  const missing = [
+    "md5 *",       // macOS equivalent of md5sum — always read-only
+    "shasum *",    // macOS equivalent of sha256sum/sha1sum — always read-only
+    "sw_vers *",   // macOS version query — always read-only
+  ];
+  return missing.map((cmd) => `${permissionPrefix}(${cmd})`);
 }
 
 function isStaleAgentRuntimePermissionEntry(entry, permissionPrefix) {
