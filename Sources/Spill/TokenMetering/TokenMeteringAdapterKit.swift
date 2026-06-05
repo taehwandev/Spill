@@ -244,10 +244,6 @@ enum TokenMeteringSetupInstaller {
         publicSetupCommand
     }
 
-    static func workflowSetupCommand(installedAt scriptURL: URL = defaultInstallURL()) -> String {
-        #"/bin/bash -c "$(curl -fsSL https://spill.thdev.app/token-metering/install.sh)" -- --workflow-hook /path/to/.agents/hooks.json"#
-    }
-
     private static func shellQuote(_ value: String) -> String {
         "'\(value.replacingOccurrences(of: "'", with: "'\\''"))'"
     }

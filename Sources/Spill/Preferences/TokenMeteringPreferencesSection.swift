@@ -65,17 +65,6 @@ struct TokenMeteringPreferencesSection: View {
                 .buttonStyle(.bordered)
                 .font(.system(size: 10, weight: .semibold))
 
-                Button {
-                    copyToClipboard(TokenMeteringGlobalSetup.workflowPrompt, target: "workflow_prompt")
-                } label: {
-                    Label(
-                        copiedTarget == "workflow_prompt" ? "Copied" : "Copy Workflow Mapping Prompt",
-                        systemImage: copiedTarget == "workflow_prompt" ? "checkmark" : "point.3.connected.trianglepath.dotted"
-                    )
-                }
-                .buttonStyle(.bordered)
-                .font(.system(size: 10, weight: .semibold))
-
                 Text(TokenMeteringSetupInstaller.setupCommand())
                     .font(.system(size: 9, weight: .medium, design: .monospaced))
                     .foregroundStyle(.secondary)
@@ -139,25 +128,6 @@ struct TokenMeteringPreferencesSection: View {
                                 Label(
                                     copiedTarget == "setup_command" ? "Copied" : "Copy One-Step Command",
                                     systemImage: copiedTarget == "setup_command" ? "checkmark" : "terminal"
-                                )
-                            }
-
-                            Button {
-                                let setupURL = setupInstalledPath ?? TokenMeteringSetupInstaller.defaultInstallURL()
-                                copyToClipboard(TokenMeteringSetupInstaller.workflowSetupCommand(installedAt: setupURL), target: "workflow_command")
-                            } label: {
-                                Label(
-                                    copiedTarget == "workflow_command" ? "Copied" : "Copy Workflow Command",
-                                    systemImage: copiedTarget == "workflow_command" ? "checkmark" : "point.3.connected.trianglepath.dotted"
-                                )
-                            }
-
-                            Button {
-                                copyToClipboard(TokenMeteringGlobalSetup.workflowPrompt, target: "workflow_prompt_advanced")
-                            } label: {
-                                Label(
-                                    copiedTarget == "workflow_prompt_advanced" ? "Copied" : "Copy Workflow Prompt",
-                                    systemImage: copiedTarget == "workflow_prompt_advanced" ? "checkmark" : "doc.on.doc"
                                 )
                             }
                         }

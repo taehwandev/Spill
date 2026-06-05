@@ -2,7 +2,6 @@ import { formatTokens, type DashboardModel } from "../dashboardModel";
 import {
   installCommand,
   setupPrompt,
-  workflowSetupPrompt,
   type CopiedTarget
 } from "../setupCopy";
 import { SetupStep } from "./SetupStep";
@@ -12,14 +11,12 @@ export function IntroPage({
   dashboard,
   onCopyInstall,
   onCopySetup,
-  onCopyWorkflow,
   onOpenDashboard
 }: {
   copiedTarget: CopiedTarget;
   dashboard: DashboardModel;
   onCopyInstall: () => void;
   onCopySetup: () => void;
-  onCopyWorkflow: () => void;
   onOpenDashboard: () => void;
 }) {
   return (
@@ -177,14 +174,6 @@ export function IntroPage({
               label="Token Metering Install Prompt"
               multiline
               onCopy={onCopySetup}
-            />
-            <SetupStep
-              copied={copiedTarget === "workflow"}
-              command={workflowSetupPrompt}
-              index="3"
-              label="Workflow Mapping Prompt"
-              multiline
-              onCopy={onCopyWorkflow}
             />
           </div>
 

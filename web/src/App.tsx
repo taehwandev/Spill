@@ -9,7 +9,6 @@ import {
 import {
   installCommand,
   setupPrompt,
-  workflowSetupPrompt,
   type CopiedTarget
 } from "./features/tokenMeteringDashboard/setupCopy";
 import type { SyncMode } from "./features/tokenMeteringDashboard/syncSafeUsage";
@@ -41,7 +40,6 @@ export function App() {
           dashboard={previewDashboard}
           onCopyInstall={() => copyText(installCommand, "install")}
           onCopySetup={() => copyText(setupPrompt, "setup")}
-          onCopyWorkflow={() => copyText(workflowSetupPrompt, "workflow")}
           onOpenDashboard={() => setViewMode("dashboard")}
         />
       ) : (
