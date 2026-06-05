@@ -94,6 +94,10 @@ labels such as `code_review/verify`, `review_response/implement`,
 Workflow-provided labels must win: agent per-turn fallback labels must use
 `--if-absent`, while workflow step labels must omit `--if-absent` so they can
 replace older fallback labels.
+This is a two-layer design, not a choice between modes: keep the agent fallback
+layer active and add workflow labels on top when the user chooses workflow-aware
+labels. The setup helper must preserve existing UserPromptSubmit or workflow
+label hooks; never remove a workflow label hook to force agent-only fallback.
 Agents should always attempt the per-turn fallback label with `--if-absent`
 after request classification, even when workflow integration exists. The helper
 will skip the fallback when an active workflow label is already present, and
@@ -114,6 +118,7 @@ If the answer is no, do not modify workflow files; installed hooks must still
 record usage when exact counts are available, and per-turn labels must still
 come from the runtime instruction.
 If the answer is yes, discover candidate workflow integration points yourself.
+Do not remove existing workflow label hooks during discovery, install, or repair.
 
 Workflow integration rules:
 
@@ -127,6 +132,8 @@ Workflow integration rules:
 - If both a script and a hook/config file are present, wire labels in the script
   first. The hook/config file should only receive the adapter hook or fallback
   integration that the script cannot provide.
+- Preserve unrelated hooks and existing workflow label hooks. Merge new Spill
+  integration with the existing workflow instead of replacing it.
 - If one safe candidate is found, summarize the file you intend to edit and ask
   for approval before changing it.
 - If multiple candidates are found, ask the user which workflow should receive

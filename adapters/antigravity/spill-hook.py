@@ -401,8 +401,6 @@ def _read_stdin_nonblocking() -> str:
 def main() -> None:
     try:
         raw_payload = _read_stdin_nonblocking()
-        with open("/tmp/spill-hook-raw.log", "a") as f:
-            f.write(raw_payload + "\n")
     except Exception:
         pass
 

@@ -34,7 +34,7 @@ enum TokenMeteringGlobalSetup {
     After the installer succeeds, fetch and apply the current runtime instruction as a global agent instruction:
     https://spill.thdev.app/token-metering/runtime-instruction.md
 
-    The runtime instruction must make every user-visible AI task write a safe per-turn label context when the setup helper exists. Workflow integration is only for better labels; it must not be required for recording usage. If no workflow exists, agents still classify the current task with safe reusable labels such as code_review/verify, review_response/implement, code_generation/implement, testing/verify, or uncategorized/summarize. Workflow-provided labels must win: agent per-turn fallback labels must use --if-absent, while workflow step labels must omit --if-absent so they can replace older fallback labels. Agents should always attempt the per-turn fallback label with --if-absent after request classification, even when workflow integration exists. The helper will skip the fallback when an active workflow label is already present, and will write the fallback when the workflow did not label that task.
+    The runtime instruction must make every user-visible AI task write a safe per-turn label context when the setup helper exists. Workflow integration is only for better labels; it must not be required for recording usage. If no workflow exists, agents still classify the current task with safe reusable labels such as code_review/verify, review_response/implement, code_generation/implement, testing/verify, or uncategorized/summarize. Workflow-provided labels must win: agent per-turn fallback labels must use --if-absent, while workflow step labels must omit --if-absent so they can replace older fallback labels. This is a two-layer design, not a choice between modes: keep the agent fallback layer active and add workflow labels on top when the user chooses workflow-aware labels. The setup helper must preserve existing UserPromptSubmit or workflow label hooks; never remove a workflow label hook to force agent-only fallback. Agents should always attempt the per-turn fallback label with --if-absent after request classification, even when workflow integration exists. The helper will skip the fallback when an active workflow label is already present, and will write the fallback when the workflow did not label that task.
     Do not configure agents or workflows to send conversation titles, work item titles, local aliases, task text, or display names. Usage events carry only safe reusable labels; Spill generates default work item names locally from ai_tool, task_type, stage, model id, and timestamp buckets.
 
     Then ask only whether the user wants workflow-aware labels connected:
@@ -43,11 +43,13 @@ enum TokenMeteringGlobalSetup {
     Do not ask for a hook path in that first question.
     If the answer is no, do not modify workflow files; installed hooks must still record usage when exact counts are available, and per-turn labels must still come from the runtime instruction.
     If the answer is yes, discover candidate workflow integration points yourself.
+    Do not remove existing workflow label hooks during discovery, install, or repair.
 
     Workflow integration rules:
     - Prefer script-based workflow entry points first, such as a local workflow runner script, task pipeline script, or clearly named agent workflow script.
     - Use hook/config files only after script candidates are absent, or as a runtime hook receiver alongside the script when the tool requires it.
     - If both a script and a hook/config file are present, wire labels in the script first. The hook/config file should only receive the adapter hook or fallback integration that the script cannot provide.
+    - Preserve unrelated hooks and existing workflow label hooks. Merge new Spill integration with the existing workflow instead of replacing it.
     - If one safe candidate is found, summarize the file you intend to edit and ask for approval before changing it.
     - If multiple candidates are found, ask the user which workflow should receive Spill labels.
     - If no candidate is found, ask how their workflow is invoked or where its config lives.

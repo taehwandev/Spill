@@ -169,38 +169,6 @@ async function configureClaude(scriptPath) {
   const target = join(homedir(), ".claude", "settings.json");
   const stopCommand = `SPILL_AI_TOOL=claude python3 ${shellQuote(scriptPath)}`;
   await mergeStopHookFile(target, stopCommand, 5, "claude", /Spill\/adapters\/claude-code\/spill-hook\.py|claude-code\/spill-hook\.py/);
-  await removeClaudeBaselineLabelHook(target);
-}
-
-async function removeClaudeBaselineLabelHook(target) {
-  const match = /workflow\.py.*route.*triage.*--request-classified/;
-
-  if (!apply) {
-    results.push({ tool: "claude", action: "would_cleanup_baseline_label", path: target });
-    return;
-  }
-
-  const config = await readJSONObject(target);
-  const hooks = plainObject(config.hooks) ? config.hooks : {};
-  const groups = Array.isArray(hooks.UserPromptSubmit) ? hooks.UserPromptSubmit : [];
-  const cleaned = [];
-  for (const group of groups) {
-    if (!plainObject(group) || !Array.isArray(group.hooks)) {
-      cleaned.push(group);
-      continue;
-    }
-    const remaining = group.hooks.filter(
-      (hook) => !plainObject(hook) || typeof hook.command !== "string" || !match.test(hook.command)
-    );
-    if (remaining.length > 0) {
-      cleaned.push({ ...group, hooks: remaining });
-    }
-  }
-
-  hooks.UserPromptSubmit = cleaned;
-  config.hooks = hooks;
-  await writeJSONObject(target, config);
-  results.push({ tool: "claude", action: "cleaned_baseline_label", path: target });
 }
 
 async function configureAntigravity(scriptPath) {

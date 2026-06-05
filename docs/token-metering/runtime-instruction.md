@@ -39,6 +39,11 @@ Runtime label handoff:
 - Workflow-provided labels win. Per-turn fallback labels must call the setup
   helper with `--if-absent` so they do not overwrite an active same-tool label
   that a workflow runner already wrote for the current step.
+- Treat fallback labels and workflow labels as two active layers, not as a
+  choice between modes. Keep the agent per-turn fallback enabled even after a
+  workflow integration is connected.
+- Do not remove, disable, or overwrite existing workflow-provided label hooks
+  when installing or repairing the per-turn fallback layer.
 - Always attempt the per-turn fallback label with `--if-absent` after request
   classification, even when a workflow integration exists. The helper will skip
   the fallback when an active workflow label is already present, and will write
