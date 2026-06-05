@@ -433,6 +433,10 @@ final class MenuBarStatusContentViewTests: XCTestCase {
             title = "Caffeine"
             shortTitle = "CAF"
             symbolName = "cup.and.saucer"
+        case .ai:
+            title = "AI"
+            shortTitle = "AI"
+            symbolName = "sparkles"
         case .sleepGuard:
             title = "Sleep Guard"
             shortTitle = "Sleep"

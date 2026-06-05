@@ -112,13 +112,13 @@ export function buildDashboardModel(
         id: "input",
         label: messages.kpis.inputTokens,
         value: formatTokens(totals.input, localeName),
-        detail: messages.kpis.percentOfTotal(percentOf(totals.input, totals.total))
+        detail: messages.kpis.percentOfTotal(formatPercentage(percentOf(totals.input, totals.total), localeName))
       },
       {
         id: "output",
         label: messages.kpis.outputTokens,
         value: formatTokens(totals.output, localeName),
-        detail: messages.kpis.percentOfTotal(percentOf(totals.output, totals.total))
+        detail: messages.kpis.percentOfTotal(formatPercentage(percentOf(totals.output, totals.total), localeName))
       },
       {
         id: "latency",
@@ -145,7 +145,28 @@ export function buildDashboardModel(
 }
 
 export function formatTokens(value: number, localeName = tokenMeteringLocaleName()): string {
-  return numberFormatter(localeName).format(value);
+  const absoluteValue = Math.abs(value);
+  const units = [
+    { threshold: 1_000_000_000_000, divisor: 1_000_000_000_000, suffix: "T" },
+    { threshold: 1_000_000_000, divisor: 1_000_000_000, suffix: "B" },
+    { threshold: 1_000_000, divisor: 1_000_000, suffix: "M" },
+    { threshold: 10_000, divisor: 1_000, suffix: "K" }
+  ];
+  const unit = units.find((candidate) => absoluteValue >= candidate.threshold);
+
+  if (!unit) {
+    return numberFormatter(localeName).format(value);
+  }
+
+  return `${compactNumberFormatter(localeName).format(value / unit.divisor)}${unit.suffix}`;
+}
+
+export function formatPercentage(value: number, localeName = tokenMeteringLocaleName()): string {
+  if (value > 0 && value < 0.1) {
+    return "<0.1%";
+  }
+
+  return `${percentageNumberFormatter(localeName).format(value)}%`;
 }
 
 export function formatLatency(value: number, localeName = tokenMeteringLocaleName()): string {
@@ -297,7 +318,7 @@ function buildSessionTrace(
 }
 
 function percentOf(value: number, total: number): number {
-  return total === 0 ? 0 : Math.round((value / total) * 100);
+  return total === 0 ? 0 : (value / total) * 100;
 }
 
 function labelFromSlug(value: string): string {
@@ -368,6 +389,8 @@ function localDayBucket(value: string, localeName: string, timeZone?: string): s
 }
 
 const numberFormatters = new Map<string, Intl.NumberFormat>();
+const compactNumberFormatters = new Map<string, Intl.NumberFormat>();
+const percentageNumberFormatters = new Map<string, Intl.NumberFormat>();
 
 function numberFormatter(localeName: string): Intl.NumberFormat {
   const cached = numberFormatters.get(localeName);
@@ -375,5 +398,28 @@ function numberFormatter(localeName: string): Intl.NumberFormat {
 
   const formatter = new Intl.NumberFormat(localeName);
   numberFormatters.set(localeName, formatter);
+  return formatter;
+}
+
+function compactNumberFormatter(localeName: string): Intl.NumberFormat {
+  const cached = compactNumberFormatters.get(localeName);
+  if (cached) return cached;
+
+  const formatter = new Intl.NumberFormat(localeName, {
+    maximumFractionDigits: 2
+  });
+  compactNumberFormatters.set(localeName, formatter);
+  return formatter;
+}
+
+function percentageNumberFormatter(localeName: string): Intl.NumberFormat {
+  const cached = percentageNumberFormatters.get(localeName);
+  if (cached) return cached;
+
+  const formatter = new Intl.NumberFormat(localeName, {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1
+  });
+  percentageNumberFormatters.set(localeName, formatter);
   return formatter;
 }

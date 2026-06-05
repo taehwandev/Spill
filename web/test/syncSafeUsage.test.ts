@@ -7,7 +7,9 @@ import {
 } from "../src/features/tokenMeteringDashboard/syncSafeUsage.ts";
 import {
   buildDashboardModel,
-  formatLocalTimestamp
+  formatLocalTimestamp,
+  formatPercentage,
+  formatTokens
 } from "../src/features/tokenMeteringDashboard/dashboardModel.ts";
 import {
   detectTokenMeteringLocale,
@@ -217,6 +219,16 @@ test("dashboard normalizes agy ai_tool alias to antigravity", () => {
     "antigravity"
   ]);
   assert.deepEqual(dashboard.aiToolBreakdown.map((row) => row.tokens), [0, 0, 80]);
+});
+
+test("dashboard formats compact token totals and one-decimal percentages", () => {
+  assert.equal(formatTokens(9_999, "en-US"), "9,999");
+  assert.equal(formatTokens(10_000, "en-US"), "10K");
+  assert.equal(formatTokens(1_439_865, "en-US"), "1.44M");
+  assert.equal(formatTokens(282_196_651, "en-US"), "282.2M");
+  assert.equal(formatPercentage(0, "en-US"), "0.0%");
+  assert.equal(formatPercentage(0.04, "en-US"), "<0.1%");
+  assert.equal(formatPercentage(1.234, "en-US"), "1.2%");
 });
 
 test("dashboard hotspots show unknown when mixed with known source breakdowns", () => {

@@ -86,7 +86,7 @@ struct StatusModulesPreferencesSection: View {
     }
 
     private var clockAreaItems: [SpillMenuBarStatusItem] {
-        [.cpu, .memory, .caffeine]
+        [.cpu, .memory, .caffeine, .ai]
     }
 
     private func sectionHeader(title: String, symbolName: String, trailing: String) -> some View {
@@ -120,6 +120,10 @@ struct StatusModulesPreferencesSection: View {
         let parts = enabledItems.compactMap { item -> String? in
             if item == .caffeine {
                 return nil
+            }
+
+            if item == .ai {
+                return item.shortTitle
             }
 
             let value = settings.menuBarStatusPrecision.percentText(for: previewValues[item] ?? 0)

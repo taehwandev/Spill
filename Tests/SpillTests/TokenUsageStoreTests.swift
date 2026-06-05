@@ -1039,9 +1039,9 @@ final class TokenUsageStoreTests: XCTestCase {
         let tokensSnapshot = TokenUsageDashboardSnapshot(events: events, displayMode: .tokens)
         XCTAssertEqual(tokensSnapshot.displayMode, .tokens)
         XCTAssertEqual(tokensSnapshot.totalTokens, 150_000)
-        XCTAssertEqual(tokensSnapshot.kpis.first(where: { $0.id == "total" })?.value, "150,000")
-        XCTAssertEqual(tokensSnapshot.toolRows.first?.value, "150,000")
-        XCTAssertEqual(tokensSnapshot.sessions.first?.value, "150,000")
+        XCTAssertEqual(tokensSnapshot.kpis.first(where: { $0.id == "total" })?.value, "150K")
+        XCTAssertEqual(tokensSnapshot.toolRows.first?.value, "150K")
+        XCTAssertEqual(tokensSnapshot.sessions.first?.value, "150K")
 
         // 3. Percentage Mode
         let percentageSnapshot = TokenUsageDashboardSnapshot(events: events, displayMode: .percentage)
@@ -1052,6 +1052,16 @@ final class TokenUsageStoreTests: XCTestCase {
 
         let emptyPercentageSnapshot = TokenUsageDashboardSnapshot(events: [], displayMode: .percentage)
         XCTAssertEqual(emptyPercentageSnapshot.kpis.first(where: { $0.id == "total" })?.value, "0.0%")
+    }
+
+    func testDashboardTokenFormattingCompactsLargeValuesAndKeepsSmallValues() {
+        XCTAssertEqual(TokenUsageDashboardSnapshot.formatTokens(9_999), "9,999")
+        XCTAssertEqual(TokenUsageDashboardSnapshot.formatTokens(10_000), "10K")
+        XCTAssertEqual(TokenUsageDashboardSnapshot.formatTokens(1_439_865), "1.44M")
+        XCTAssertEqual(TokenUsageDashboardSnapshot.formatTokens(282_196_651), "282.2M")
+        XCTAssertEqual(TokenUsageDashboardSnapshot.formatPercentage(0), "0.0%")
+        XCTAssertEqual(TokenUsageDashboardSnapshot.formatPercentage(0.04), "<0.1%")
+        XCTAssertEqual(TokenUsageDashboardSnapshot.formatPercentage(1.234), "1.2%")
     }
 
     func testDashboardSessionRowsSortByLatestThenTokensNotLocalizedDetail() {

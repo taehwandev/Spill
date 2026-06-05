@@ -138,7 +138,7 @@ final class MenuBarStatusContentView: NSView {
         switch segment.kind {
         case .cpu, .memory:
             return true
-        case .caffeine, .sleepGuard, .trigger:
+        case .ai, .caffeine, .sleepGuard, .trigger:
             return false
         }
     }
@@ -151,7 +151,7 @@ final class MenuBarStatusContentView: NSView {
         switch segment.kind {
         case .cpu, .memory:
             return true
-        case .caffeine, .sleepGuard, .trigger:
+        case .ai, .caffeine, .sleepGuard, .trigger:
             return false
         }
     }
@@ -221,7 +221,7 @@ final class MenuBarStatusContentView: NSView {
             return "RAM"
         case .cpu:
             return "CPU"
-        case .caffeine, .sleepGuard, .trigger:
+        case .ai, .caffeine, .sleepGuard, .trigger:
             return segment.shortTitle
         }
     }

@@ -6,6 +6,7 @@ struct MenuBarStatusSegment: Equatable {
         case cpu
         case memory
         case caffeine
+        case ai
         case sleepGuard
     }
 
@@ -177,7 +178,23 @@ struct MenuBarStatusSummary: Equatable {
                 tooltip: details(title: item.title, value: memory.value, subtitle: memory.subtitle),
                 segment: segment
             )
-        case .caffeine, .gpu, .network, .ai:
+        case .ai:
+            let segment = MenuBarStatusSegment(
+                kind: .ai,
+                title: item.title,
+                shortTitle: item.shortTitle,
+                value: "",
+                displayText: "",
+                usageRatio: 0,
+                state: .normal,
+                symbolName: item.symbolName
+            )
+            return MenuBarStatusEntry(
+                title: item.shortTitle,
+                tooltip: AppL10n.text(.openLocalTokenDashboard),
+                segment: segment
+            )
+        case .caffeine, .gpu, .network:
             return nil
         }
     }

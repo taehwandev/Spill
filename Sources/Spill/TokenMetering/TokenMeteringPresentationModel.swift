@@ -303,7 +303,22 @@ struct TokenUsageDashboardSnapshot: Equatable {
     static let empty = TokenUsageDashboardSnapshot(events: [])
 
     static func formatTokens(_ value: Int) -> String {
-        NumberFormatter.tokenUsage.string(from: NSNumber(value: value)) ?? "\(value)"
+        let absoluteValue = Swift.abs(Double(value))
+        let units: [(threshold: Double, divisor: Double, suffix: String)] = [
+            (1_000_000_000_000, 1_000_000_000_000, "T"),
+            (1_000_000_000, 1_000_000_000, "B"),
+            (1_000_000, 1_000_000, "M"),
+            (10_000, 1_000, "K")
+        ]
+
+        guard let unit = units.first(where: { absoluteValue >= $0.threshold }) else {
+            return NumberFormatter.tokenUsageFull.string(from: NSNumber(value: value)) ?? "\(value)"
+        }
+
+        let scaledValue = Double(value) / unit.divisor
+        let formattedValue = NumberFormatter.tokenUsageCompact.string(from: NSNumber(value: scaledValue))
+            ?? String(format: "%.2f", scaledValue)
+        return "\(formattedValue)\(unit.suffix)"
     }
 
     private static func filterEvents(
@@ -364,12 +379,16 @@ struct TokenUsageDashboardSnapshot: Equatable {
     }
 
     static func formatPercentage(_ value: Double) -> String {
+        if value > 0, value < 0.1 {
+            return "<0.1%"
+        }
+
         let formatter = NumberFormatter()
-        formatter.numberStyle = .percent
-        formatter.multiplier = 1
+        formatter.numberStyle = .decimal
         formatter.minimumFractionDigits = 1
         formatter.maximumFractionDigits = 1
-        return formatter.string(from: NSNumber(value: value)) ?? String(format: "%.1f%%", value)
+        let number = formatter.string(from: NSNumber(value: value)) ?? String(format: "%.1f", value)
+        return "\(number)%"
     }
 
     private static func rows<Key: Hashable>(
@@ -608,12 +627,8 @@ struct TokenUsageDashboardSnapshot: Equatable {
     }
 
     private static func percentageDetail(value: Int, total: Int, language: TokenMeteringLanguage) -> String {
-        guard total > 0 else {
-            return TokenMeteringL10n.text(.zeroPercentOfTotal, language: language)
-        }
-
-        let percent = Int((Double(value) / Double(total) * 100).rounded())
-        return TokenMeteringL10n.percentOfTotal(percent, language: language)
+        let percent = total > 0 ? (Double(value) / Double(total) * 100.0) : 0.0
+        return TokenMeteringL10n.percentStringOfTotal(Self.formatPercentage(percent), language: language)
     }
 }
 
@@ -763,10 +778,18 @@ private extension TokenUsageStage {
 }
 
 private extension NumberFormatter {
-    static let tokenUsage: NumberFormatter = {
+    static let tokenUsageFull: NumberFormatter = {
         let formatter = NumberFormatter()
         formatter.numberStyle = .decimal
         formatter.maximumFractionDigits = 0
+        return formatter
+    }()
+
+    static let tokenUsageCompact: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.minimumFractionDigits = 0
+        formatter.maximumFractionDigits = 2
         return formatter
     }()
 }

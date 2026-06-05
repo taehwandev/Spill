@@ -445,18 +445,22 @@ final class StatusItemController: NSObject {
         let event = NSApp.currentEvent
         let shouldShowMenu = event?.type == .rightMouseUp || event?.modifierFlags.contains(.control) == true
 
+        let clickedSegment = clickedSegmentKind(sender: sender, event: event)
+
         if shouldShowMenu {
             showMenu(for: sender, event: event)
-        } else if isCaffeineSegmentClick(sender: sender, event: event) {
+        } else if clickedSegment == .caffeine {
             toggleCaffeineFromStatusItem()
+        } else if clickedSegment == .ai {
+            tokenDashboardAction()
         } else {
             toggleAction()
         }
     }
 
-    private func isCaffeineSegmentClick(sender: NSStatusBarButton, event: NSEvent?) -> Bool {
+    private func clickedSegmentKind(sender: NSStatusBarButton, event: NSEvent?) -> MenuBarStatusSegment.Kind? {
         guard let event else {
-            return false
+            return nil
         }
 
         let point = sender.convert(event.locationInWindow, from: nil)
@@ -464,7 +468,7 @@ final class StatusItemController: NSObject {
             at: point,
             in: currentSegments,
             layoutStyle: currentLayoutStyle
-        ) == .caffeine
+        )
     }
 
     private func toggleCaffeineFromStatusItem() {

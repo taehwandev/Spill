@@ -137,7 +137,7 @@ type TokenMeteringMessages = {
     runtimeTimingUnavailable: string;
     modelUnavailable: string;
     previewSpans: (count: number) => string;
-    percentOfTotal: (percent: number) => string;
+    percentOfTotal: (percent: string) => string;
     perRunSpanStep: string;
   };
   privacyRows: {
