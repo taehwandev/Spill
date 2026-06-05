@@ -341,63 +341,26 @@ def _consume_label_file() -> None:
 
 def main() -> None:
     try:
-        with open("/tmp/spill-hook-debug.log", "a") as debug_file:
-            debug_file.write(f"\n--- {datetime.datetime.now().isoformat()} ---\n")
-    except Exception:
-        pass
-
-    try:
         raw_payload = sys.stdin.read()
-        try:
-            with open("/tmp/spill-hook-debug.log", "a") as debug_file:
-                debug_file.write(f"Raw Input: {raw_payload}\n")
-        except Exception:
-            pass
-    except Exception as e:
+    except Exception:
         _write_diagnostic("stdin_unavailable")
-        try:
-            with open("/tmp/spill-hook-debug.log", "a") as debug_file:
-                debug_file.write(f"Stdin error: {str(e)}\n")
-        except Exception:
-            pass
         return
 
     if not raw_payload.strip():
         _write_diagnostic("empty_stdin")
-        try:
-            with open("/tmp/spill-hook-debug.log", "a") as debug_file:
-                debug_file.write("Empty stdin\n")
-        except Exception:
-            pass
         return
 
     try:
         payload = json.loads(raw_payload)
-    except Exception as e:
+    except Exception:
         _write_diagnostic("invalid_json")
-        try:
-            with open("/tmp/spill-hook-debug.log", "a") as debug_file:
-                debug_file.write(f"JSON parse error: {str(e)}\n")
-        except Exception:
-            pass
         return
 
     if not isinstance(payload, dict):
         _write_diagnostic("non_object_payload")
-        try:
-            with open("/tmp/spill-hook-debug.log", "a") as debug_file:
-                debug_file.write("Payload is not a dict\n")
-        except Exception:
-            pass
         return
 
     input_tokens, output_tokens, total, total_only = _payload_token_counts(payload)
-
-    try:
-        with open("/tmp/spill-hook-debug.log", "a") as debug_file:
-            debug_file.write(f"Tokens found: input={input_tokens}, output={output_tokens}, total={total}, total_only={total_only}\n")
-    except Exception:
-        pass
 
     if total == 0:
         _write_diagnostic("missing_exact_token_usage", payload)
@@ -452,11 +415,6 @@ def main() -> None:
     }
 
     _enqueue_event(event)
-    try:
-        with open("/tmp/spill-hook-debug.log", "a") as debug_file:
-            debug_file.write(f"Enqueuing event: {json.dumps(event)}\n")
-    except Exception:
-        pass
     _consume_label_file()
 
 
