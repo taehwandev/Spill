@@ -196,6 +196,17 @@ Rules:
   status lines to normal assistant replies.
 - Global agent setup instructions are not a runtime hook. They cannot expose
   token counts by themselves, and the app must not imply otherwise.
+- A one-step setup helper may install bundled adapter scripts and merge known
+  user-level hook files for detected tools, but it must be explicit opt-in,
+  support dry-run behavior, avoid overwriting unrelated hook entries, and back
+  up existing config files before writing.
+- Workflow hook installation is a separate user-selected action. The helper may
+  write a selected `.agents/hooks.json` or equivalent workflow hook file only
+  when the path is passed explicitly by the user or a trusted workflow setup.
+- Existing workflow scripts that expose safe reusable labels should pass those
+  labels to adapters through exact hook payload fields, flags, or environment
+  variables. Adapters must not read prompts, commands, logs, diffs, source, or
+  transcript text to recreate the workflow stage.
 - Prompt-driven agents must never inspect local logs, transcripts, shell
   history, repository files, or hidden state to reconstruct token usage.
 - A user-installed local importer is a separate runtime adapter, not an agent

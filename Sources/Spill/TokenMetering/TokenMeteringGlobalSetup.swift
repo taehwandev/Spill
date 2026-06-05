@@ -106,6 +106,15 @@ enum TokenMeteringGlobalSetup {
     - Spill imports complete .json files into the app-owned local store and ignores partial .tmp files.
     - Do not run a continuous polling watcher just for Spill metering. Use runtime hooks or final exact usage spans when available.
 
+    One-time adapter setup:
+    - If the user explicitly asks to install or fix Spill token metering hooks, prefer the local setup helper when it exists:
+      node ~/Library/Application Support/Spill/adapters/setup/spill-token-metering-setup.mjs --apply
+    - Ask before modifying user-level or workflow hook config files. Do not install hooks silently.
+    - The setup helper detects Codex, Claude, Antigravity, and OpenAI adapter support, installs matching adapter scripts, and merges known hook configs.
+    - If the user chooses a workflow hook file, pass it explicitly:
+      node ~/Library/Application Support/Spill/adapters/setup/spill-token-metering-setup.mjs --apply --workflow-hook /path/to/.agents/hooks.json
+    - If a trusted workflow already exposes safe reusable task_type or stage labels, prefer passing those labels through the runtime hook or adapter instead of inferring them from prompts, commands, logs, files, or transcripts.
+
     The JSON event must contain only these keys:
     schema_version, device_id, project_id, artifact_id, run_id, span_id, ai_tool, task_type, stage, model, input_tokens, output_tokens, total_tokens, token_breakdown, latency_ms, created_at, sync_mode.
 

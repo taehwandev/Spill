@@ -458,6 +458,10 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(prompt.contains("Only fill a source bucket when the runtime or adapter exposes that exact source count"))
         XCTAssertTrue(prompt.contains("unknown equal to total_tokens"))
         XCTAssertTrue(prompt.contains("Do not run a continuous polling watcher"))
+        XCTAssertTrue(prompt.contains("One-time adapter setup"))
+        XCTAssertTrue(prompt.contains("spill-token-metering-setup.mjs --apply"))
+        XCTAssertTrue(prompt.contains("--workflow-hook"))
+        XCTAssertTrue(prompt.contains("Do not install hooks silently"))
     }
 
     private static func safeEvent(

@@ -5,6 +5,8 @@ struct TokenMeteringPreferencesSection: View {
     @ObservedObject var settings: SpillSettings
     let openDashboardAction: () -> Void
     @State private var copiedTarget: String?
+    @State private var setupInstalledPath: URL?
+    @State private var setupInstallResult: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -67,6 +69,69 @@ struct TokenMeteringPreferencesSection: View {
                     .foregroundStyle(.secondary)
                     .lineSpacing(2)
                     .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(10)
+            .background(tokenMeteringOptionBackground)
+
+            VStack(alignment: .leading, spacing: 9) {
+                TokenMeteringOptionHeader(
+                    title: "One-step setup",
+                    state: "Recommended",
+                    systemImage: "wand.and.stars",
+                    tint: .teal
+                )
+
+                Text("Install the setup tool once, then run a single command to detect Codex, Claude, Antigravity, and OpenAI support. Hook config files are changed only when the copied command is run with --apply.")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .lineSpacing(2)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                let setupURL = setupInstalledPath ?? TokenMeteringSetupInstaller.defaultInstallURL()
+                HStack(spacing: 6) {
+                    Button {
+                        installSetupTool()
+                    } label: {
+                        Label(
+                            copiedTarget == "setup_install" ? "Installed" : "Install Setup Tool",
+                            systemImage: copiedTarget == "setup_install" ? "checkmark" : "arrow.down.circle"
+                        )
+                    }
+
+                    Button {
+                        copyToClipboard(TokenMeteringSetupInstaller.setupCommand(installedAt: setupURL), target: "setup_command")
+                    } label: {
+                        Label(
+                            copiedTarget == "setup_command" ? "Copied" : "Copy Setup Command",
+                            systemImage: copiedTarget == "setup_command" ? "checkmark" : "terminal"
+                        )
+                    }
+
+                    Button {
+                        copyToClipboard(TokenMeteringSetupInstaller.workflowSetupCommand(installedAt: setupURL), target: "workflow_command")
+                    } label: {
+                        Label(
+                            copiedTarget == "workflow_command" ? "Copied" : "Workflow Command",
+                            systemImage: copiedTarget == "workflow_command" ? "checkmark" : "point.3.connected.trianglepath.dotted"
+                        )
+                    }
+                }
+                .buttonStyle(.bordered)
+                .font(.system(size: 10, weight: .semibold))
+
+                Text(setupURL.path)
+                    .font(.system(size: 9, weight: .medium, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .textSelection(.enabled)
+
+                if let setupInstallResult {
+                    Text(setupInstallResult)
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(setupInstallResult.hasPrefix("Installed") ? .green : .red)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             .padding(10)
             .background(tokenMeteringOptionBackground)
@@ -145,6 +210,21 @@ struct TokenMeteringPreferencesSection: View {
             Text("The web dashboard is the future signed-in cloud surface. Local review happens here in the app.")
                 .font(.system(size: 10, weight: .medium))
                 .foregroundStyle(.secondary)
+        }
+    }
+
+    private func installSetupTool() {
+        let destination = TokenMeteringSetupInstaller.defaultInstallURL()
+        do {
+            try TokenMeteringSetupInstaller.install(to: destination)
+            setupInstalledPath = destination
+            setupInstallResult = "Installed setup tool and adapter scripts."
+            copiedTarget = "setup_install"
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                if copiedTarget == "setup_install" { copiedTarget = nil }
+            }
+        } catch {
+            setupInstallResult = "Install failed: \(error.localizedDescription)"
         }
     }
 

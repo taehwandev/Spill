@@ -163,6 +163,64 @@ enum TokenMeteringAdapterKit {
     }
 }
 
+enum TokenMeteringSetupInstaller {
+    static let scriptFileName = "spill-token-metering-setup.mjs"
+
+    static var scriptURL: URL? {
+        Bundle.main.url(
+            forResource: "spill-token-metering-setup",
+            withExtension: "mjs",
+            subdirectory: "adapters/setup"
+        )
+    }
+
+    static func defaultInstallURL() -> URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
+            .first ?? URL(fileURLWithPath: NSTemporaryDirectory())
+        return base
+            .appendingPathComponent("Spill", isDirectory: true)
+            .appendingPathComponent("adapters", isDirectory: true)
+            .appendingPathComponent("setup", isDirectory: true)
+            .appendingPathComponent(scriptFileName)
+    }
+
+    static func install(to destination: URL = defaultInstallURL()) throws {
+        guard let url = scriptURL else {
+            throw TokenMeteringAdapterInstallError.scriptNotFound
+        }
+
+        for adapter in TokenMeteringAdapterKit.all {
+            try adapter.install(to: TokenMeteringAdapterKit.defaultInstallURL(for: adapter))
+        }
+
+        try FileManager.default.createDirectory(
+            at: destination.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        if FileManager.default.fileExists(atPath: destination.path) {
+            try FileManager.default.removeItem(at: destination)
+        }
+        try FileManager.default.copyItem(at: url, to: destination)
+
+        var attrs = try FileManager.default.attributesOfItem(atPath: destination.path)
+        let perms = (attrs[.posixPermissions] as? Int ?? 0o644) | 0o111
+        attrs[.posixPermissions] = perms
+        try FileManager.default.setAttributes(attrs, ofItemAtPath: destination.path)
+    }
+
+    static func setupCommand(installedAt scriptURL: URL = defaultInstallURL()) -> String {
+        "node \(shellQuote(scriptURL.path)) --apply"
+    }
+
+    static func workflowSetupCommand(installedAt scriptURL: URL = defaultInstallURL()) -> String {
+        "node \(shellQuote(scriptURL.path)) --apply --workflow-hook /path/to/.agents/hooks.json"
+    }
+
+    private static func shellQuote(_ value: String) -> String {
+        "'\(value.replacingOccurrences(of: "'", with: "'\\''"))'"
+    }
+}
+
 extension TokenUsageAITool {
     var adapterTitle: String {
         TokenMeteringAdapterKit.all.first { $0.aiTool == self }?.title ?? rawValue

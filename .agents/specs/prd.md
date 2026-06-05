@@ -162,6 +162,16 @@ Requirements:
   read only known numeric usage records, such as Codex `token_count` entries,
   and must not parse or store prompts, responses, commands, file paths, working
   directories, diffs, logs, source content, environment values, or secrets.
+- Spill should provide a one-step local setup helper that installs detected
+  Codex, Claude, Antigravity/AGY, and direct OpenAI adapter scripts and merges
+  known user-level hook config files only after explicit user action.
+- Workflow-level hook setup must be opt-in and target a user-selected hook file
+  such as `.agents/hooks.json`; setup must not silently write project workflow
+  config files.
+- When a trusted workflow script already exposes safe reusable `task_type` or
+  `stage` labels, adapters should accept those labels through hook payload,
+  command flags, or environment variables instead of inferring labels from
+  prompts, commands, logs, source files, or transcripts.
 - Adapters must not inspect transcripts, logs, command history, or source files
   only to infer workflow labels. If a hook payload does not expose safe
   `task_type` or `stage` slugs, the adapter should use `uncategorized` and the
@@ -186,6 +196,8 @@ Acceptance:
 - Global setup instructions state that exact counts are required and estimates
   should not be sent.
 - UI copy must not imply that a prompt alone can measure token usage.
+- Local setup UI offers a one-step installer path before exposing per-adapter
+  script and hook snippets.
 - Codex usage can be verified with a real `codex exec` run: the Codex session
   importer must store the same exact input/output/reasoning totals that Codex
   reports for the completed turn, without requiring a synthetic usage event.
