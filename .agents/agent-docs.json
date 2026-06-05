@@ -1,0 +1,51 @@
+{
+  "version": 2,
+  "name": "Spill Agent Docs With AgentPlaybook Workflow",
+  "requiredDocs": [
+    "AGENTS.md",
+    "CLAUDE.md",
+    "GEMINI.md",
+    ".agents/README.md",
+    ".agents/specs/prd.md",
+    ".agents/specs/ard.md",
+    ".agents/design/stitch.md",
+    ".agents/tasks/roadmap.yml",
+    ".agents/templates/00-intake.md",
+    ".agents/templates/01-prd.md",
+    ".agents/templates/02-ard.md",
+    ".agents/templates/03-task-breakdown.yml",
+    ".agents/templates/04-agent-briefs.md",
+    ".agents/templates/05-verification.md",
+    ".agents/templates/06-closeout.md",
+    ".agents/scripts/workflow.py",
+    "scripts/verify-runtime-smoke.sh",
+    "VIBEGUARD.md"
+  ],
+  "requiredAgentPlaybookDocs": [
+    "AGENTS.md",
+    "index.md",
+    "workflows/agent-task-lifecycle.md",
+    "workflows/request-triage.md",
+    "workflows/ambiguity-gate.md",
+    "workflows/product-architecture-delivery.md",
+    "workflows/feature-implementation.md",
+    "workflows/development-cycle.md",
+    "workflows/multi-agent-collaboration.md",
+    "workflows/multi-perspective-review.md",
+    "workflows/release-readiness.md",
+    "workflows/documentation-update.md"
+  ],
+  "hardRules": [
+    "No giant NSStatusItem spacers",
+    "No private APIs in MVP",
+    "One visible menu bar trigger",
+    "Every feature unit must pass a necessity check before implementation",
+    "Agents must classify unknowns through the shared AgentPlaybook ambiguity gate before PRD authoring",
+    "Agents must ask the maintainer when blocker unknowns remain unresolved",
+    "Every non-trivial feature must pass PRD and ARD gates before implementation",
+    "App startup, lifecycle, packaging, and status item changes must run runtime smoke verification",
+    "Parallel code-edit tasks must have disjoint write scopes",
+    "Feature run files must not contain unresolved template placeholders",
+    "Repository docs, task artifacts, comments, and scripts must be written in English"
+  ]
+}

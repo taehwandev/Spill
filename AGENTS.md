@@ -1,8 +1,9 @@
 # Agent Entry Point
 
 Repo-local Spill instructions remain the source of truth for product direction,
-paths, commands, release policy, and macOS-specific constraints. Shared agent
-behavior comes from the local AgentPlaybook checkout.
+paths, commands, release policy, and macOS-specific constraints. Agent workflow
+guidance comes from the local AgentPlaybook checkout; do not keep repo-local
+workflow overlays when a shared AgentPlaybook card covers the same behavior.
 
 Shared AgentPlaybook library:
 
@@ -17,9 +18,10 @@ Shared AgentPlaybook library:
 `~/Documents/KeyFlowVault/agent` may be a symlink to the same AgentPlaybook
 checkout.
 
-Use repo-local Spill instructions first. Use AgentPlaybook only to load the
-smallest relevant common, workflow, platform, or review cards for the task. Do
-not copy shared playbook content into this repo when a pointer is enough.
+Use repo-local Spill instructions for product and command details. Use
+AgentPlaybook for common, workflow, platform, and review cards. Load the
+smallest relevant shared cards and link to them instead of copying shared
+workflow guidance into this repo.
 
 Routing and executable evidence:
 
@@ -38,9 +40,13 @@ Routing and executable evidence:
 Before PRD, ARD, task breakdown, or implementation work:
 
 1. Read `.agents/README.md`.
-2. Follow `.agents/workflows/implementation.md`.
-3. Apply `.agents/workflows/ambiguity-gate.md`.
-4. For safety-sensitive work, follow `VIBEGUARD.md`.
+2. Read `.agents/specs/prd.md` and `.agents/specs/ard.md`.
+3. Follow the relevant AgentPlaybook workflow cards, starting from
+   `${AGENTPLAYBOOK_HOME:-$HOME/Documents/KeyFlowVault/AgentPlaybook}/workflows/agent-task-lifecycle.md`.
+4. Apply the shared AgentPlaybook ambiguity gate before PRD, ARD, task
+   breakdown, implementation planning, or code work when scope or intent is
+   unclear.
+5. For safety-sensitive work, follow `VIBEGUARD.md`.
 
 VibeGuard gate:
 

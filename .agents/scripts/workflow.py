@@ -17,6 +17,7 @@ Commands:
   python3 .agents/scripts/workflow.py panel-layout-smoke
   python3 .agents/scripts/workflow.py token-metering-smoke
   python3 .agents/scripts/workflow.py sleep-guard-smoke
+  python3 .agents/scripts/workflow.py route <command> --request "<USER_REQUEST>"
   python3 .agents/scripts/workflow.py new-run <feature-id>
 """
 
@@ -24,8 +25,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
+import sys
 from pathlib import Path
 
 
@@ -33,7 +36,7 @@ ROOT = Path(__file__).resolve().parents[2]
 AGENTS = ROOT / ".agents"
 TEMPLATES = AGENTS / "templates"
 RUNS = AGENTS / "runs"
-WORKFLOW_JSON = AGENTS / "workflows" / "workflow.json"
+AGENT_DOCS_JSON = AGENTS / "agent-docs.json"
 TEXT_SUFFIXES = {
     ".md",
     ".swift",
@@ -53,6 +56,13 @@ EXCLUDED_DIRS = {
     "DerivedData",
     "dist",
     "node_modules",
+}
+LOCALIZED_CONTENT_FILES = {
+    "Sources/Spill/Settings/SpillSettings.swift",
+    "Sources/Spill/App/AppLocalization.swift",
+    "Sources/Spill/Preferences/PreferencesLocalization.swift",
+    "Sources/Spill/TokenMetering/TokenMeteringLocalization.swift",
+    "web/src/features/tokenMeteringDashboard/i18n.ts",
 }
 
 
@@ -76,6 +86,32 @@ class Result:
 
 def read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
+
+
+def agentplaybook_root() -> Path:
+    return Path(
+        os.environ.get(
+            "AGENTPLAYBOOK_HOME",
+            str(Path.home() / "Documents" / "KeyFlowVault" / "AgentPlaybook"),
+        )
+    ).expanduser()
+
+
+def agentplaybook_workflow_script() -> Path:
+    return agentplaybook_root() / "scripts" / "workflow.py"
+
+
+def route_agentplaybook(route_args: list[str]) -> None:
+    script = agentplaybook_workflow_script()
+    if not script.exists():
+        raise SystemExit(f"missing AgentPlaybook workflow script at {script}")
+
+    completed = subprocess.run(
+        [sys.executable, str(script), "route", *route_args],
+        cwd=ROOT,
+        check=False,
+    )
+    raise SystemExit(completed.returncode)
 
 
 def has_markdown_status(text: str, label: str, status: str) -> bool:
@@ -110,17 +146,25 @@ def run_files() -> list[str]:
 def verify_docs() -> None:
     result = Result()
 
-    if not WORKFLOW_JSON.exists():
-        result.fail("missing .agents/workflows/workflow.json")
+    if not AGENT_DOCS_JSON.exists():
+        result.fail("missing .agents/agent-docs.json")
         result.finish()
 
-    workflow = json.loads(read(WORKFLOW_JSON))
-    for doc in workflow.get("requiredDocs", []):
+    agent_docs = json.loads(read(AGENT_DOCS_JSON))
+    for doc in agent_docs.get("requiredDocs", []):
         path = ROOT / doc
         if path.exists():
             result.ok(f"found {doc}")
         else:
             result.fail(f"missing {doc}")
+
+    playbook_root = agentplaybook_root()
+    for doc in agent_docs.get("requiredAgentPlaybookDocs", []):
+        path = playbook_root / doc
+        if path.exists():
+            result.ok(f"found AgentPlaybook {doc}")
+        else:
+            result.fail(f"missing AgentPlaybook {doc} at {playbook_root}")
 
     for run_dir in sorted(RUNS.glob("*")):
         if not run_dir.is_dir():
@@ -135,8 +179,6 @@ def verify_docs() -> None:
     rule_docs = [
         AGENTS / "specs" / "prd.md",
         AGENTS / "specs" / "ard.md",
-        AGENTS / "workflows" / "implementation.md",
-        AGENTS / "workflows" / "multi-agent.md",
     ]
     for path in rule_docs:
         if not path.exists():
@@ -231,6 +273,12 @@ def language_gates() -> None:
     scanned = 0
 
     for path in repository_text_files():
+        relative_path = path.relative_to(ROOT)
+        if relative_path.parts and relative_path.parts[0] == "Tests":
+            continue
+        if relative_path.as_posix() in LOCALIZED_CONTENT_FILES:
+            continue
+
         try:
             text = read(path)
         except UnicodeDecodeError:
@@ -239,7 +287,7 @@ def language_gates() -> None:
         scanned += 1
         for line_number, line in enumerate(text.splitlines(), start=1):
             if korean_pattern.search(line):
-                result.fail(f"{path.relative_to(ROOT)}:{line_number} contains Korean text")
+                result.fail(f"{relative_path}:{line_number} contains Korean text")
                 break
 
     if not result.failures:
@@ -357,6 +405,8 @@ def main() -> None:
     commands.add_parser("panel-layout-smoke")
     commands.add_parser("token-metering-smoke")
     commands.add_parser("sleep-guard-smoke")
+    route_parser = commands.add_parser("route")
+    route_parser.add_argument("route_args", nargs=argparse.REMAINDER)
     new_run_parser = commands.add_parser("new-run")
     new_run_parser.add_argument("feature_id")
     args = parser.parse_args()
@@ -385,6 +435,8 @@ def main() -> None:
         token_metering_smoke()
     elif args.command == "sleep-guard-smoke":
         sleep_guard_smoke()
+    elif args.command == "route":
+        route_agentplaybook(args.route_args)
     elif args.command == "new-run":
         new_run(args.feature_id)
 

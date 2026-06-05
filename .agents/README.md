@@ -1,6 +1,7 @@
 # Spill Agent Docs
 
-This folder is the working source of truth for agent-driven implementation.
+This folder is the Spill-specific source of truth for product direction,
+repository commands, verification, and local constraints.
 
 Repo-local Spill docs define product direction, paths, commands, release policy,
 and macOS-specific constraints. Platform-neutral agent behavior lives in the
@@ -9,19 +10,34 @@ shared AgentPlaybook checkout at
 elsewhere, set `AGENTPLAYBOOK_HOME` to that root.
 
 Use AgentPlaybook `index.md` to load only the smallest relevant common,
-workflow, platform, or review cards. Keep only Spill-specific policy here.
+workflow, platform, or review cards. This repo does not keep local workflow
+overlays; keep only Spill-specific policy, commands, specs, and verification
+helpers here.
 
 ## Documents
 
 - `specs/prd.md`: Product requirements and scope.
 - `specs/ard.md`: Architecture requirements, decisions, constraints, and module boundaries.
-- `workflows/implementation.md`: How agents should plan, implement, verify, and ship work.
-- `workflows/ambiguity-gate.md`: Spill-specific ambiguity overlay on the shared AgentPlaybook gate.
-- `workflows/persona-review.md`: Spill-specific review overlay on the shared AgentPlaybook review workflow.
-- `workflows/release.md`: Release request contract, versioning, tagging, packaging, publication, and closeout steps.
-- `checklists/release.md`: Quick release gate that points back to the full release workflow.
+- `checklists/release.md`: Spill-specific release checklist used with AgentPlaybook release readiness.
 - `tasks/roadmap.yml`: Structured implementation milestones and acceptance checks.
 - `design/stitch.md`: Stitch project and screen references for UI-scoped work.
+- `templates/`: Feature-run artifact templates.
+- `scripts/`: Repo-local verification and smoke-check entry points.
+
+## Shared Workflow Source
+
+Use the shared AgentPlaybook workflow cards directly:
+
+- `${AGENTPLAYBOOK_HOME:-$HOME/Documents/KeyFlowVault/AgentPlaybook}/workflows/agent-task-lifecycle.md`
+- `${AGENTPLAYBOOK_HOME:-$HOME/Documents/KeyFlowVault/AgentPlaybook}/workflows/request-triage.md`
+- `${AGENTPLAYBOOK_HOME:-$HOME/Documents/KeyFlowVault/AgentPlaybook}/workflows/ambiguity-gate.md`
+- `${AGENTPLAYBOOK_HOME:-$HOME/Documents/KeyFlowVault/AgentPlaybook}/workflows/product-architecture-delivery.md`
+- `${AGENTPLAYBOOK_HOME:-$HOME/Documents/KeyFlowVault/AgentPlaybook}/workflows/feature-implementation.md`
+- `${AGENTPLAYBOOK_HOME:-$HOME/Documents/KeyFlowVault/AgentPlaybook}/workflows/development-cycle.md`
+- `${AGENTPLAYBOOK_HOME:-$HOME/Documents/KeyFlowVault/AgentPlaybook}/workflows/multi-agent-collaboration.md`
+- `${AGENTPLAYBOOK_HOME:-$HOME/Documents/KeyFlowVault/AgentPlaybook}/workflows/multi-perspective-review.md`
+- `${AGENTPLAYBOOK_HOME:-$HOME/Documents/KeyFlowVault/AgentPlaybook}/workflows/release-readiness.md`
+- `${AGENTPLAYBOOK_HOME:-$HOME/Documents/KeyFlowVault/AgentPlaybook}/workflows/documentation-update.md`
 
 ## Current Product Direction
 
@@ -45,16 +61,24 @@ The app should not:
 ## Agent Rules
 
 1. Read `specs/prd.md` and `specs/ard.md` before changing product behavior.
-2. Follow `workflows/implementation.md` for execution order and verification.
+2. Follow AgentPlaybook workflow cards for execution order and verification.
 3. Keep changes small and milestone-oriented.
 4. Prefer public macOS APIs. Accessibility is allowed when explicitly scoped.
 5. When a behavior is best-effort, show that clearly in UI and docs.
-6. Before writing a feature PRD, complete the intake necessity check and the Spill ambiguity overlay.
+6. Before writing a feature PRD, complete the intake necessity check and the shared AgentPlaybook ambiguity gate.
 7. Follow AgentPlaybook for general agent discipline, editing safety, reviews, and verification policy.
 8. Write repository docs, task artifacts, comments, and scripts in English.
 9. For UI-scoped work, inspect the Stitch source in `design/stitch.md` before implementing SwiftUI changes.
 
-## Workflow Commands
+## Shared Workflow Commands
+
+Resolve AgentPlaybook routes through the local helper:
+
+```bash
+python3 .agents/scripts/workflow.py route review --request "<USER_REQUEST>"
+```
+
+## Repo Verification Commands
 
 Create a feature run:
 
@@ -113,5 +137,8 @@ python3 .agents/scripts/workflow.py status-click-smoke
 Release from the current repository state:
 
 ```bash
-sed -n '1,260p' .agents/workflows/release.md
+sed -n '1,220p' "${AGENTPLAYBOOK_HOME:-$HOME/Documents/KeyFlowVault/AgentPlaybook}/workflows/release-readiness.md"
 ```
+
+Use `README.md` distribution notes, `VIBEGUARD.md`, and
+`checklists/release.md` for Spill-specific release constraints.

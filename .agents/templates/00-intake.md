@@ -28,7 +28,7 @@ Reason:
 
 ## Ambiguity Gate
 
-Use `.agents/workflows/ambiguity-gate.md` before PRD authoring.
+Use `${AGENTPLAYBOOK_HOME:-$HOME/Documents/KeyFlowVault/AgentPlaybook}/workflows/ambiguity-gate.md` before PRD authoring.
 
 Clarity: `clear | needs-clarification`
 

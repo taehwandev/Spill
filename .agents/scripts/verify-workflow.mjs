@@ -1,10 +1,14 @@
 #!/usr/bin/env node
 
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
 const root = process.cwd();
-const workflowPath = path.join(root, ".agents/workflows/workflow.json");
+const agentDocsPath = path.join(root, ".agents/agent-docs.json");
+const agentPlaybookRoot =
+  process.env.AGENTPLAYBOOK_HOME ??
+  path.join(os.homedir(), "Documents/KeyFlowVault/AgentPlaybook");
 
 function fail(message) {
   console.error(`FAIL: ${message}`);
@@ -19,18 +23,31 @@ function exists(relativePath) {
   return fs.existsSync(path.join(root, relativePath));
 }
 
-if (!fs.existsSync(workflowPath)) {
-  fail("Missing .agents/workflows/workflow.json");
+if (!fs.existsSync(agentDocsPath)) {
+  fail("Missing .agents/agent-docs.json");
   process.exit();
 }
 
-const workflow = JSON.parse(fs.readFileSync(workflowPath, "utf8"));
+const agentDocs = JSON.parse(fs.readFileSync(agentDocsPath, "utf8"));
 
-for (const doc of workflow.requiredDocs ?? []) {
+for (const doc of agentDocs.requiredDocs ?? []) {
   if (exists(doc)) {
     ok(`found ${doc}`);
   } else {
     fail(`missing ${doc}`);
+  }
+}
+
+if (!fs.existsSync(agentPlaybookRoot)) {
+  ok(`AgentPlaybook not installed at ${agentPlaybookRoot}; skipping shared docs check`);
+} else {
+  for (const doc of agentDocs.requiredAgentPlaybookDocs ?? []) {
+    const fullPath = path.join(agentPlaybookRoot, doc);
+    if (fs.existsSync(fullPath)) {
+      ok(`found AgentPlaybook ${doc}`);
+    } else {
+      fail(`missing AgentPlaybook ${doc} at ${agentPlaybookRoot}`);
+    }
   }
 }
 
@@ -63,9 +80,7 @@ if (fs.existsSync(runsDir)) {
 
 const hardRuleFiles = [
   ".agents/specs/prd.md",
-  ".agents/specs/ard.md",
-  ".agents/workflows/multi-agent.md",
-  ".agents/workflows/implementation.md"
+  ".agents/specs/ard.md"
 ];
 
 for (const file of hardRuleFiles) {

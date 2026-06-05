@@ -1,7 +1,7 @@
 # Release Checklist
 
-Use `.agents/workflows/release.md` as the full release procedure. This checklist
-is the quick gate before closeout.
+Use AgentPlaybook `workflows/release-readiness.md` as the shared release
+procedure. This checklist is the Spill-specific quick gate before closeout.
 
 ## Scope
 
