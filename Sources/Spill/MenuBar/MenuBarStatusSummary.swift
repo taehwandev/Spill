@@ -99,7 +99,7 @@ struct MenuBarStatusSummary: Equatable {
         enabledItems: Set<SpillMenuBarStatusItem>,
         cpu: SystemCPUStatus,
         memory: SystemMemoryStatus,
-        displayStyle: MenuBarStatusDisplayStyle = .labelAndPercent,
+        aiTokenCount: Int = 0,
         precision: MenuBarStatusPrecision = .tenths,
         highlightThreshold: MenuBarStatusHighlightThreshold = .seventy
     ) -> MenuBarStatusSummary {
@@ -111,7 +111,7 @@ struct MenuBarStatusSummary: Equatable {
                 for: $0,
                 cpu: cpu,
                 memory: memory,
-                displayStyle: displayStyle,
+                aiTokenCount: aiTokenCount,
                 precision: precision,
                 highlightThreshold: highlightThreshold
             )
@@ -131,14 +131,14 @@ struct MenuBarStatusSummary: Equatable {
         for item: SpillMenuBarStatusItem,
         cpu: SystemCPUStatus,
         memory: SystemMemoryStatus,
-        displayStyle: MenuBarStatusDisplayStyle,
+        aiTokenCount: Int,
         precision: MenuBarStatusPrecision,
         highlightThreshold: MenuBarStatusHighlightThreshold
     ) -> MenuBarStatusEntry? {
         switch item {
         case .cpu:
             let value = compactCPUValue(cpu, precision: precision)
-            let displayText = displayStyle.text(label: item.shortTitle, value: value)
+            let displayText = displayText(label: item.shortTitle, value: value)
             let usageRatio = normalizedRatio(cpu.usageRatio, state: cpu.state)
             let segment = MenuBarStatusSegment(
                 kind: .cpu,
@@ -157,7 +157,7 @@ struct MenuBarStatusSummary: Equatable {
             )
         case .memory:
             let value = compactMemoryValue(memory, precision: precision)
-            let displayText = displayStyle.text(label: item.shortTitle, value: value)
+            let displayText = displayText(label: item.shortTitle, value: value)
             let usageRatio = normalizedRatio(memory.usageRatio, state: memory.state)
             let segment = MenuBarStatusSegment(
                 kind: .memory,
@@ -179,24 +179,33 @@ struct MenuBarStatusSummary: Equatable {
                 segment: segment
             )
         case .ai:
+            let value = TokenUsageDashboardSnapshot.formatTokens(aiTokenCount)
+            let displayText = displayText(label: item.shortTitle, value: value)
             let segment = MenuBarStatusSegment(
                 kind: .ai,
                 title: item.title,
                 shortTitle: item.shortTitle,
-                value: "",
-                displayText: "",
+                value: value,
+                displayText: displayText,
                 usageRatio: 0,
                 state: .normal,
                 symbolName: item.symbolName
             )
             return MenuBarStatusEntry(
-                title: item.shortTitle,
-                tooltip: AppL10n.text(.openLocalTokenDashboard),
+                title: displayText,
+                tooltip: [
+                    AppL10n.tokenMeteringAccessibility(tokenCount: value),
+                    AppL10n.text(.openLocalTokenDashboard)
+                ].joined(separator: " - "),
                 segment: segment
             )
         case .caffeine, .gpu, .network:
             return nil
         }
+    }
+
+    private static func displayText(label: String, value: String) -> String {
+        "\(label) \(value)"
     }
 
     private static func compactCPUValue(

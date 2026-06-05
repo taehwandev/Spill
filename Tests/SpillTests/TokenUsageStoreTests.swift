@@ -72,6 +72,47 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(claudeSnapshot.sessions.map(\.title), ["Claude - Analysis - Plan"])
     }
 
+    func testDashboardSnapshotFiltersTodayUsingLocalCalendar() throws {
+        let timeZone = try XCTUnwrap(TimeZone(identifier: "Asia/Seoul"))
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let now = try Self.date("2026-06-05T12:00:00.000Z")
+
+        let previousLocalDay = Self.safeEvent(
+            spanID: "span_previous_local_day",
+            inputTokens: 900,
+            outputTokens: 100,
+            createdAt: "2026-06-04T14:59:00.000Z"
+        )
+        let today = Self.safeEvent(
+            spanID: "span_today",
+            inputTokens: 100,
+            outputTokens: 50,
+            createdAt: "2026-06-04T15:01:00.000Z"
+        )
+        let future = Self.safeEvent(
+            spanID: "span_future",
+            inputTokens: 400,
+            outputTokens: 100,
+            createdAt: "2026-06-05T12:01:00.000Z"
+        )
+
+        let snapshot = TokenUsageDashboardSnapshot(
+            events: [previousLocalDay, today, future],
+            selectedPeriod: .today,
+            now: now,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(snapshot.eventCount, 1)
+        XCTAssertEqual(snapshot.totalTokens, 150)
+        XCTAssertEqual(snapshot.sessions.map(\.id), ["work_codex_analysis_plan_local_manual_2026_06_05"])
+        XCTAssertEqual(
+            snapshot.periodFilters.first { $0.period == .today }?.detail,
+            "150"
+        )
+    }
+
     func testDashboardSnapshotShowsOnlySupportedAgentTools() {
         let codex = Self.safeEvent(aiTool: .codex, spanID: "span_codex_01")
         let unknown = Self.safeEvent(
@@ -1167,8 +1208,9 @@ final class TokenUsageStoreTests: XCTestCase {
         stage: TokenUsageStage = .plan,
         model: String = "local-manual",
         latencyMS: Int = 20,
-        createdAt: String = "2026-06-05T00:00:00.000Z"
+        createdAt: String? = nil
     ) -> TokenUsageEvent {
+        let resolvedCreatedAt = createdAt ?? ISO8601DateFormatter.tokenUsage.string(from: Date())
         let totalTokens = inputTokens + outputTokens
         let tokenBreakdown: TokenUsageBreakdown
         if let generatedOutput {
@@ -1217,7 +1259,7 @@ final class TokenUsageStoreTests: XCTestCase {
             totalTokens: totalTokens,
             tokenBreakdown: tokenBreakdown,
             latencyMS: latencyMS,
-            createdAt: createdAt,
+            createdAt: resolvedCreatedAt,
             syncMode: .localOnly
         )
     }

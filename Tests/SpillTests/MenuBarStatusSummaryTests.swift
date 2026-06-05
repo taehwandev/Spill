@@ -18,20 +18,22 @@ final class MenuBarStatusSummaryTests: XCTestCase {
                     wiredBytes: gib(2),
                     compressedBytes: gib(1)
                 )
-            )
+            ),
+            aiTokenCount: 1_439_865
         )
 
-        XCTAssertEqual(summary.title, "CPU 20.0%  MEM 56.2%  AI")
+        XCTAssertEqual(summary.title, "CPU 20.0%  MEM 56.2%  AI 1.44M")
         XCTAssertEqual(summary.segments.count, 3)
         XCTAssertEqual(summary.segments.map(\.kind), [.cpu, .memory, .ai])
-        XCTAssertEqual(summary.segments.map(\.value), ["20.0%", "56.2%", ""])
-        XCTAssertEqual(summary.segments.map(\.displayText), ["CPU 20.0%", "MEM 56.2%", ""])
+        XCTAssertEqual(summary.segments.map(\.value), ["20.0%", "56.2%", "1.44M"])
+        XCTAssertEqual(summary.segments.map(\.displayText), ["CPU 20.0%", "MEM 56.2%", "AI 1.44M"])
         XCTAssertEqual(summary.segments.map(\.symbolName), ["cpu", "memorychip", "sparkles"])
         XCTAssertEqual(summary.segments[0].usageRatio, 0.2, accuracy: 0.0001)
         XCTAssertEqual(summary.segments[1].usageRatio, 0.5625, accuracy: 0.0001)
         XCTAssertTrue(summary.tooltip.contains("CPU 20.0%"))
         XCTAssertTrue(summary.tooltip.contains("Memory 56.2%"))
         XCTAssertFalse(summary.tooltip.contains("GPU 1/1"))
+        XCTAssertTrue(summary.tooltip.contains("Token Metering, 1.44M local tokens"))
         XCTAssertTrue(summary.tooltip.contains("Open Local Token Dashboard"))
         XCTAssertFalse(summary.tooltip.contains("secret"))
     }
@@ -48,7 +50,7 @@ final class MenuBarStatusSummaryTests: XCTestCase {
         XCTAssertEqual(summary.segments, [])
     }
 
-    func testSummarySupportsPercentOnlyAndTenthsFormatting() {
+    func testSummarySupportsTenthsFormatting() {
         let summary = MenuBarStatusSummary.make(
             enabledItems: [.memory, .cpu],
             cpu: SystemCPUProvider.status(
@@ -65,12 +67,11 @@ final class MenuBarStatusSummaryTests: XCTestCase {
                     compressedBytes: gib(1)
                 )
             ),
-            displayStyle: .percentOnly,
             precision: .tenths
         )
 
-        XCTAssertEqual(summary.title, "20.0%  56.2%")
-        XCTAssertEqual(summary.segments.map(\.displayText), ["20.0%", "56.2%"])
+        XCTAssertEqual(summary.title, "CPU 20.0%  MEM 56.2%")
+        XCTAssertEqual(summary.segments.map(\.displayText), ["CPU 20.0%", "MEM 56.2%"])
         XCTAssertEqual(summary.segments.map(\.value), ["20.0%", "56.2%"])
     }
 

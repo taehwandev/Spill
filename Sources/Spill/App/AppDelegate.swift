@@ -73,6 +73,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItemController: StatusItemController?
     private var statusRefreshTask: Task<Void, Never>?
     private var isSpillPanelVisible = false
+    private var menuBarAITokenTotal = 0
+    private var menuBarAITokenDayStart: Date?
     private var cancellables = Set<AnyCancellable>()
 
     override init() {
@@ -124,6 +126,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         configureMainMenu()
         SpillTelemetry.shared.track("app_started", props: ["source": "mac_app"])
+        refreshMenuBarAITokenTotal(force: true)
 
         statusItemController = StatusItemController(
             settings: settings,
@@ -132,6 +135,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             hiddenItemCountProvider: { [weak scanner] in
                 guard let scanner else { return 0 }
                 return SpillDisplayMode.notchCandidateItems(from: scanner, settings: SpillSettings.shared).count
+            },
+            aiTokenCountProvider: { [weak self] in
+                self?.menuBarAITokenTotal ?? 0
             },
             toggleAction: { [weak self] in
                 self?.toggleSpillBar()
@@ -392,7 +398,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func openTokenDashboard(source _: String = "unknown") {
         tokenUsageDashboardStore.refresh()
+        refreshMenuBarAITokenTotal(force: true)
+        statusItemController?.refresh()
         tokenMeteringDashboardWindowController.show()
+    }
+
+    private func refreshMenuBarAITokenTotal(now: Date = Date(), force: Bool = false) {
+        let calendar = Calendar.autoupdatingCurrent
+        let dayStart = calendar.startOfDay(for: now)
+        guard force || menuBarAITokenDayStart != dayStart else {
+            return
+        }
+
+        menuBarAITokenDayStart = dayStart
+        menuBarAITokenTotal = TokenUsageDashboardSnapshot(
+            events: tokenUsageStore.loadEvents(),
+            selectedPeriod: .today,
+            now: now,
+            calendar: calendar
+        ).totalTokens
     }
 
     private func showPreferencesFromPanel() {
@@ -506,6 +530,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             .store(in: &cancellables)
 
+        NotificationCenter.default.publisher(
+            for: TokenUsageStore.eventsDidChangeNotification,
+            object: tokenUsageStore
+        )
+        .receive(on: RunLoop.main)
+        .sink { [weak self] _ in
+            self?.refreshMenuBarAITokenTotal(force: true)
+            self?.statusItemController?.refresh()
+        }
+        .store(in: &cancellables)
+
         settings.$hotKeyEnabled
             .dropFirst()
             .sink { [weak self] _ in
@@ -575,14 +610,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .dropFirst()
             .sink { [weak self] _ in
                 SpillTelemetry.shared.track("preference_changed", props: ["name": "sleep_guard_keep_display_awake"])
-                self?.statusItemController?.refresh()
-            }
-            .store(in: &cancellables)
-
-        settings.$menuBarStatusDisplayStyle
-            .dropFirst()
-            .sink { [weak self] _ in
-                SpillTelemetry.shared.track("preference_changed", props: ["name": "menu_bar_status_display_style"])
                 self?.statusItemController?.refresh()
             }
             .store(in: &cancellables)
@@ -673,6 +700,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             enabledModules: enabledModules,
             readsPower: readsPower
         )
+        refreshMenuBarAITokenTotal()
         statusItemController?.refresh()
     }
 
@@ -685,6 +713,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             enabledModules: isSpillPanelVisible ? settings.statusModulesRequiredForRefresh : menuBarStatusModules,
             readsPower: isSpillPanelVisible
         )
+        refreshMenuBarAITokenTotal()
         statusItemController?.refresh()
     }
 
