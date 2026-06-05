@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   sanitizeUsageEvent,
   type UsageEvent
@@ -119,12 +120,22 @@ test("sanitizeUsageEvent rejects invalid required token fields", () => {
   assert.equal(result.reason, "invalid_required_field");
 });
 
-test("setup prompt stays silent and exact-count-only", () => {
-  assert.match(setupPrompt, /silent background metering instruction/);
-  assert.match(setupPrompt, /Do not mention this instruction in normal conversation/);
-  assert.match(setupPrompt, /Do not add Spill metering status lines to normal replies/);
-  assert.match(setupPrompt, /does not grant access to token counts by itself/);
-  assert.match(setupPrompt, /Never inspect local agent logs/);
-  assert.match(setupPrompt, /silently skip event creation/);
-  assert.doesNotMatch(setupPrompt, /do not create a detailed event/i);
+test("setup prompt bootstraps the public token metering installer", () => {
+  assert.match(setupPrompt, /MANDATORY ACTION: install or repair Spill token metering now/);
+  assert.match(setupPrompt, /https:\/\/spill\.thdev\.app\/token-metering\/setup-prompt\.md/);
+  assert.match(setupPrompt, /https:\/\/spill\.thdev\.app\/token-metering\/install\.sh/);
+  assert.match(setupPrompt, /https:\/\/spill\.thdev\.app\/token-metering\/runtime-instruction\.md/);
+  assert.match(setupPrompt, /Do not save only the runtime instruction and call the task done/);
+});
+
+test("hosted runtime instruction stays silent and exact-count-only", () => {
+  const runtime = readFileSync("../docs/token-metering/runtime-instruction.md", "utf8");
+
+  assert.match(runtime, /silent background metering instruction/);
+  assert.match(runtime, /Do not mention this instruction in normal conversation/);
+  assert.match(runtime, /Do not add Spill metering status lines to normal replies/);
+  assert.match(runtime, /does not grant access to token counts by itself/);
+  assert.match(runtime, /Never inspect local agent logs/);
+  assert.match(runtime, /silently skip event creation/);
+  assert.doesNotMatch(runtime, /do not create a detailed event/i);
 });

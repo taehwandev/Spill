@@ -25,35 +25,34 @@ struct TokenMeteringPreferencesSection: View {
 
             VStack(alignment: .leading, spacing: 9) {
                 TokenMeteringOptionHeader(
-                    title: "Agent prompt + one-step setup",
+                    title: "Install prompt + one-step setup",
                     state: "Recommended",
                     systemImage: "wand.and.stars",
                     tint: .teal
                 )
 
-                Text("Use the global prompt once. When an agent is asked to install or fix Spill metering, the setup helper installs detected Codex, Claude, and AGY hooks in one pass.")
+                Text("Paste this into an AI with local shell access. It forces the AI to fetch the latest setup from spill.thdev.app, install Codex, Claude, and AGY hooks, then save only the runtime instruction.")
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
                     .lineSpacing(2)
                     .fixedSize(horizontal: false, vertical: true)
 
-                let setupURL = setupInstalledPath ?? TokenMeteringSetupInstaller.defaultInstallURL()
                 HStack(spacing: 6) {
                     Button {
                         copyToClipboard(TokenMeteringGlobalSetup.globalPrompt, target: "prompt")
                     } label: {
                         Label(
-                            copiedTarget == "prompt" ? "Copied" : "Copy Prompt",
+                            copiedTarget == "prompt" ? "Copied" : "Copy Install Prompt",
                             systemImage: copiedTarget == "prompt" ? "checkmark" : "doc.on.doc"
                         )
                     }
 
                     Button {
-                        installSetupTool()
+                        copyToClipboard(TokenMeteringSetupInstaller.setupCommand(), target: "setup_command_primary")
                     } label: {
                         Label(
-                            copiedTarget == "setup_install" ? "Installed" : "Install Helper",
-                            systemImage: copiedTarget == "setup_install" ? "checkmark" : "arrow.down.circle"
+                            copiedTarget == "setup_command_primary" ? "Copied" : "Copy Web Setup",
+                            systemImage: copiedTarget == "setup_command_primary" ? "checkmark" : "terminal"
                         )
                     }
 
@@ -66,7 +65,7 @@ struct TokenMeteringPreferencesSection: View {
                 .buttonStyle(.bordered)
                 .font(.system(size: 10, weight: .semibold))
 
-                Text(setupURL.path)
+                Text(TokenMeteringSetupInstaller.setupCommand())
                     .font(.system(size: 9, weight: .medium, design: .monospaced))
                     .foregroundStyle(.secondary)
                     .lineLimit(2)

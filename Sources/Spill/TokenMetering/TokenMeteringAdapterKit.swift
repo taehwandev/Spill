@@ -193,6 +193,8 @@ enum TokenMeteringAdapterKit {
 
 enum TokenMeteringSetupInstaller {
     static let scriptFileName = "spill-token-metering-setup.mjs"
+    static let publicInstallScriptURL = "https://spill.thdev.app/token-metering/install.sh"
+    static let publicSetupCommand = #"/bin/bash -c "$(curl -fsSL https://spill.thdev.app/token-metering/install.sh)""#
 
     static var scriptURL: URL? {
         Bundle.main.url(
@@ -237,11 +239,11 @@ enum TokenMeteringSetupInstaller {
     }
 
     static func setupCommand(installedAt scriptURL: URL = defaultInstallURL()) -> String {
-        "node \(shellQuote(scriptURL.path)) --apply --include codex,claude,antigravity,openai"
+        publicSetupCommand
     }
 
     static func workflowSetupCommand(installedAt scriptURL: URL = defaultInstallURL()) -> String {
-        "node \(shellQuote(scriptURL.path)) --apply --include codex,claude,antigravity,openai --workflow-hook /path/to/.agents/hooks.json"
+        #"/bin/bash -c "$(curl -fsSL https://spill.thdev.app/token-metering/install.sh)" -- --workflow-hook /path/to/.agents/hooks.json"#
     }
 
     private static func shellQuote(_ value: String) -> String {

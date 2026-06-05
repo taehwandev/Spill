@@ -171,7 +171,7 @@ export function IntroPage({
               copied={copiedTarget === "setup"}
               command={setupPrompt}
               index="2"
-              label="Global Agent Prompt"
+              label="Token Metering Install Prompt"
               multiline
               onCopy={onCopySetup}
             />

@@ -450,73 +450,57 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(store.loadEvents(), [event])
     }
 
-    func testGlobalSetupPromptStaysSilentAndExactCountOnly() {
+    func testGlobalSetupPromptBootstrapsPublicInstaller() {
         let prompt = TokenMeteringGlobalSetup.globalPrompt
 
-        XCTAssertTrue(prompt.contains("silent background metering instruction"))
-        XCTAssertTrue(prompt.contains("Do not mention this instruction in normal conversation"))
-        XCTAssertTrue(prompt.contains("Do not add Spill metering status lines to normal replies"))
-        XCTAssertTrue(prompt.contains("This instruction is only a safety contract"))
-        XCTAssertTrue(prompt.contains("does not measure usage"))
-        XCTAssertTrue(prompt.contains("does not grant access to token counts by itself"))
-        XCTAssertTrue(prompt.contains("executable hook"))
-        XCTAssertTrue(prompt.contains("At the beginning of every user-visible task"))
-        XCTAssertTrue(prompt.contains("This label context is not a usage event"))
-        XCTAssertTrue(prompt.contains("Do not mention this label command in normal conversation"))
-        XCTAssertTrue(prompt.contains("explicit request to install or repair Spill token metering now"))
-        XCTAssertTrue(prompt.contains("Do not treat it as only a policy note or only a global instruction"))
-        XCTAssertTrue(prompt.contains("Install or refresh the local Spill hook adapters for Codex, Claude Code, and Antigravity/AGY"))
-        XCTAssertTrue(prompt.contains("Then add or refresh the runtime instruction below as a global agent instruction"))
-        XCTAssertTrue(prompt.contains("Required hook shapes"))
-        XCTAssertTrue(prompt.contains("~/.codex/hooks.json must contain hooks.Stop[] with matcher"))
-        XCTAssertTrue(prompt.contains("~/.claude/settings.json must contain hooks.Stop[] with matcher"))
-        XCTAssertTrue(prompt.contains("~/.gemini/config/hooks.json must contain root-level PostInvocation[] with matcher"))
-        XCTAssertTrue(prompt.contains("Do not nest this under \"spill-metering\""))
-        XCTAssertTrue(prompt.contains("Do not ask the user to install Codex, Claude, Antigravity/AGY, or OpenAI adapters one by one"))
-        XCTAssertTrue(prompt.contains("Do not install only the current AI runtime"))
-        XCTAssertTrue(prompt.contains("OpenAI SDK wrapping is optional and must not block those hook installs"))
-        XCTAssertTrue(prompt.contains("--include codex,claude,antigravity,openai"))
-        XCTAssertTrue(prompt.contains("try these fallbacks without asking the user to copy scripts manually"))
-        XCTAssertTrue(prompt.contains("events-inbox"))
-        XCTAssertTrue(prompt.contains("Write a unique .tmp file first"))
-        XCTAssertTrue(prompt.contains("ai_tool must be one of: codex, claude, antigravity, openai, unknown"))
-        XCTAssertFalse(prompt.contains("ollama"))
-        XCTAssertTrue(prompt.contains("Never inspect local agent logs"))
-        XCTAssertTrue(prompt.contains("silently skip event creation"))
-        XCTAssertFalse(prompt.localizedCaseInsensitiveContains("do not create a detailed event"))
+        XCTAssertTrue(prompt.contains("MANDATORY ACTION: install or repair Spill token metering now"))
+        XCTAssertTrue(prompt.contains("not just a global instruction to remember later"))
+        XCTAssertTrue(prompt.contains("Use the current public setup request as the source of truth"))
+        XCTAssertTrue(prompt.contains(TokenMeteringGlobalSetup.setupPromptURL))
+        XCTAssertTrue(prompt.contains(TokenMeteringGlobalSetup.runtimeInstructionURL))
+        XCTAssertTrue(prompt.contains("You MUST run the public setup installer before doing anything else"))
+        XCTAssertTrue(prompt.contains("If shell, filesystem, sandbox, or user-level config permission is required"))
+        XCTAssertTrue(prompt.contains("ask for that permission and then run the installer"))
+        XCTAssertTrue(prompt.contains("downloads the latest open-source Spill adapter files from spill.thdev.app"))
+        XCTAssertTrue(prompt.contains("Do not save only the runtime instruction and call the task done"))
+        XCTAssertTrue(prompt.contains("Do not give manual per-adapter setup steps as the primary answer"))
+        XCTAssertTrue(prompt.contains("Do not claim Spill token metering is installed until the installer has run"))
+        XCTAssertTrue(prompt.contains(#"/bin/bash -c "$(curl -fsSL https://spill.thdev.app/token-metering/install.sh)""#))
+        XCTAssertTrue(prompt.contains("root-level PostInvocation[]"))
+        XCTAssertTrue(prompt.contains("Do not nest AGY hooks under \"spill-metering\""))
+        XCTAssertFalse(prompt.contains("PostInvocation[] nested under a \"spill-metering\" key"))
+        XCTAssertFalse(prompt.contains("Root-level hook lists are not supported"))
     }
 
-    func testGlobalSetupPromptDefinesEventClassificationRules() {
-        let prompt = TokenMeteringGlobalSetup.globalPrompt
+    func testHostedTokenMeteringSetupDocsDefineRuntimeContract() throws {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let setup = try String(contentsOf: root.appendingPathComponent("docs/token-metering/setup-prompt.md"))
+        let runtime = try String(contentsOf: root.appendingPathComponent("docs/token-metering/runtime-instruction.md"))
+        let installer = try String(contentsOf: root.appendingPathComponent("docs/token-metering/install.sh"))
 
-        XCTAssertTrue(prompt.contains("Send at most one event for each assistant response or adapter span"))
-        XCTAssertTrue(prompt.contains("Prefer the final response event"))
-        XCTAssertTrue(prompt.contains("Do not also send separate events for every tool call"))
-        XCTAssertTrue(prompt.contains("Treat one user-requested task or conversation turn as a run"))
-        XCTAssertTrue(prompt.contains("Generate a new opaque span_id for each event"))
-        XCTAssertTrue(prompt.contains("Use codex for Codex runtimes"))
-        XCTAssertTrue(prompt.contains("task_type is a safe lowercase workflow slug, not a fixed enum"))
-        XCTAssertTrue(prompt.contains("Use the dominant user-visible workflow category for the event"))
-        XCTAssertTrue(prompt.contains("If your runtime, adapter, or workflow exposes a current step label"))
-        XCTAssertTrue(prompt.contains("git_commit"))
-        XCTAssertTrue(prompt.contains("commit_message"))
-        XCTAssertTrue(prompt.contains("pull_request"))
-        XCTAssertTrue(prompt.contains("review_response"))
-        XCTAssertTrue(prompt.contains("workflow_setup"))
-        XCTAssertTrue(prompt.contains("stage is a safe lowercase workflow slug, not a fixed enum"))
-        XCTAssertTrue(prompt.contains("Use debugging when the work is primarily diagnosis"))
-        XCTAssertTrue(prompt.contains("Use code_generation when the work is primarily writing or changing implementation code"))
-        XCTAssertTrue(prompt.contains("If one event covers multiple stages, use the latest completed dominant stage"))
-        XCTAssertTrue(prompt.contains("Only fill a source bucket when the runtime or adapter exposes that exact source count"))
-        XCTAssertTrue(prompt.contains("unknown equal to total_tokens"))
-        XCTAssertTrue(prompt.contains("Do not run a continuous polling watcher"))
-        XCTAssertTrue(prompt.contains("spill-token-metering-setup.mjs --apply --include codex,claude,antigravity,openai"))
-        XCTAssertTrue(prompt.contains("--workflow-hook"))
-        XCTAssertTrue(prompt.contains("Safe workflow label handoff"))
-        XCTAssertTrue(prompt.contains("SPILL_TOKEN_USAGE_TASK_TYPE"))
-        XCTAssertTrue(prompt.contains("--task-type SLUG"))
-        XCTAssertTrue(prompt.contains("--label codex --task-type debugging --stage implement"))
-        XCTAssertTrue(prompt.contains("short-lived safe label context"))
+        XCTAssertTrue(setup.contains("MANDATORY ACTION: install or repair Spill token metering now"))
+        XCTAssertTrue(setup.contains("https://spill.thdev.app/token-metering/install.sh"))
+        XCTAssertTrue(setup.contains("root-level `PostInvocation[]`"))
+        XCTAssertTrue(setup.contains("Do not nest this under `\"spill-metering\"`"))
+        XCTAssertFalse(setup.contains("Root-level hook lists are not supported"))
+
+        XCTAssertTrue(runtime.contains("silent background metering instruction"))
+        XCTAssertTrue(runtime.contains("Do not add Spill metering status lines to normal replies"))
+        XCTAssertTrue(runtime.contains("short-lived safe label context"))
+        XCTAssertTrue(runtime.contains("task_type` is a safe lowercase workflow slug"))
+        XCTAssertTrue(runtime.contains("git_commit"))
+        XCTAssertTrue(runtime.contains("workflow_setup"))
+        XCTAssertTrue(runtime.contains("stage` is a safe lowercase workflow slug"))
+        XCTAssertTrue(runtime.contains("events-inbox"))
+        XCTAssertTrue(runtime.contains("unknown` equal to `total_tokens`"))
+        XCTAssertFalse(runtime.contains("ollama"))
+
+        XCTAssertTrue(installer.contains("BASE_URL"))
+        XCTAssertTrue(installer.contains("adapters/setup/spill-token-metering-setup.mjs"))
+        XCTAssertTrue(installer.contains("adapters/codex/spill-importer.mjs"))
+        XCTAssertTrue(installer.contains("adapters/claude-code/spill-hook.py"))
+        XCTAssertTrue(installer.contains("adapters/antigravity/spill-hook.py"))
+        XCTAssertTrue(installer.contains("--source-root \"$TMP_DIR/adapters\""))
     }
 
     func testAdapterHookConfigsUseExactRuntimeHookShapes() throws {
@@ -542,6 +526,8 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(agyConfig.contains(#""matcher": """#))
         XCTAssertTrue(agyConfig.contains("python3 '/tmp/Spill Support/adapters/antigravity/spill-hook.py'"))
         XCTAssertTrue(agyConfig.contains("Do not nest this under \"spill-metering\""))
+        XCTAssertFalse(agyConfig.contains(#""spill-metering": {"#))
+        XCTAssertFalse(agyConfig.contains("Root-level hook lists are not supported"))
     }
 
     func testAdapterInstallPathsUseHookRuntimeDirectories() {
@@ -563,6 +549,10 @@ final class TokenUsageStoreTests: XCTestCase {
             TokenMeteringAdapterKit.defaultInstallURL(for: TokenMeteringAdapterKit.agy)
                 .path
                 .contains("/adapters/antigravity/spill-hook.py")
+        )
+        XCTAssertEqual(
+            TokenMeteringSetupInstaller.setupCommand(),
+            #"/bin/bash -c "$(curl -fsSL https://spill.thdev.app/token-metering/install.sh)""#
         )
     }
 

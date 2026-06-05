@@ -6,7 +6,10 @@ on:
       - main
     paths:
       - "docs/**"
+      - "Sources/Spill/Resources/adapters/**"
       - "scripts/prepare-docs.sh"
+      - "scripts/spill-token-metering-setup.mjs"
+      - "scripts/spill-codex-session-importer.mjs"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 
