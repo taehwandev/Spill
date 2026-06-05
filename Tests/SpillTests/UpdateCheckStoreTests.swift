@@ -338,7 +338,7 @@ final class UpdateCheckStoreTests: XCTestCase {
         store.checkForUpdatesIfNeeded(source: "panel_open")
         try await waitForUpToDateUpdate(in: store)
 
-        XCTAssertTrue(store.showsDashboardUpdateStatus)
+        XCTAssertFalse(store.showsDashboardUpdateStatus)
     }
 
     func testDashboardFailedStateCanRetryInsideCachedInterval() async throws {

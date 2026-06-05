@@ -80,9 +80,9 @@ final class UpdateCheckStore: ObservableObject {
 
     var showsDashboardUpdateStatus: Bool {
         switch state {
-        case .checking, .upToDate, .available, .unsupported:
+        case .available, .unsupported:
             return true
-        case .idle, .failed:
+        case .idle, .checking, .upToDate, .failed:
             return false
         }
     }
