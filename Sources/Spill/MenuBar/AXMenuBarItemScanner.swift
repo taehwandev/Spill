@@ -40,7 +40,7 @@ struct MenuBarScanRefreshPolicy: Sendable {
 @MainActor
 final class AXMenuBarItemScanner: ObservableObject {
     @Published private(set) var items: [MenuBarItemSnapshot] = []
-    @Published private(set) var scanMessage: String = "Not scanned yet."
+    @Published private(set) var scanMessage: String = AppL10n.text(.notScannedYet)
     @Published private(set) var lastScannedAt: Date?
     @Published private(set) var isScanning = false
 
@@ -81,7 +81,7 @@ final class AXMenuBarItemScanner: ObservableObject {
         items = []
         elementsByID = [:]
         lastScannedAt = nil
-        scanMessage = "Accessibility is not trusted for this Spill build. Recheck after granting it, or remove and re-add this app in Privacy settings."
+        scanMessage = AppL10n.text(.accessibilityNotTrusted)
     }
 
     @discardableResult
@@ -109,7 +109,7 @@ final class AXMenuBarItemScanner: ObservableObject {
             if force {
                 pendingRefresh = true
                 pendingRefreshReason = reason
-                scanMessage = "Refresh queued while the current scan finishes."
+                scanMessage = AppL10n.text(.refreshQueued)
             }
             return false
         }
@@ -118,7 +118,9 @@ final class AXMenuBarItemScanner: ObservableObject {
         let notchGeometry = MenuBarNotchGeometry(screen: NSScreen.main)
 
         isScanning = true
-        scanMessage = lastScannedAt == nil ? "Scanning menu bar items..." : "Refreshing menu bar items..."
+        scanMessage = lastScannedAt == nil
+            ? AppL10n.text(.scanningMenuBarItems)
+            : AppL10n.text(.refreshingMenuBarItems)
 
         let workerTask = Task.detached(priority: .utility) {
             AXMenuBarScanWorker(notchGeometry: notchGeometry).scan(applications: applications)
@@ -142,18 +144,18 @@ final class AXMenuBarItemScanner: ObservableObject {
     @discardableResult
     func pressItem(withID id: MenuBarItemSnapshot.ID) -> Bool {
         guard let reference = elementsByID[id] else {
-            scanMessage = "The selected menu bar item is no longer available."
+            scanMessage = AppL10n.text(.selectedItemUnavailable)
             requestRefreshAfterFailedPress()
             return false
         }
 
         let result = reader.performPress(on: reference.element)
         if result == .success {
-            scanMessage = "Performed primary action for the selected menu bar item."
+            scanMessage = AppL10n.text(.performedPrimaryAction)
             return true
         }
 
-        scanMessage = "Could not press the selected menu bar item. AX returned \(result.rawValue)."
+        scanMessage = AppL10n.pressFailed(result: Int(result.rawValue))
         requestRefreshAfterFailedPress()
         return false
     }
@@ -201,14 +203,29 @@ final class AXMenuBarItemScanner: ObservableObject {
         didChangeItems: Bool
     ) -> String {
         let notchCount = items.filter(\.isNotchCandidate).count
-        let suffix = hadPreviousScan && !didChangeItems ? " Cached result unchanged." : ""
+        let suffix = hadPreviousScan && !didChangeItems ? AppL10n.text(.cachedResultUnchanged) : ""
 
         if items.isEmpty {
-            return "No menu bar items found. Scanned \(stats.candidateCount) apps, \(stats.menuBarRootCount) menu bar roots (\(stats.extrasRootCount) extras, \(stats.fallbackRootCount) fallback), \(stats.representableElementCount) candidate elements.\(suffix)"
+            return AppL10n.noMenuBarItemsFound(
+                candidateCount: stats.candidateCount,
+                menuBarRootCount: stats.menuBarRootCount,
+                extrasRootCount: stats.extrasRootCount,
+                fallbackRootCount: stats.fallbackRootCount,
+                representableElementCount: stats.representableElementCount,
+                suffix: suffix
+            )
         } else if notchCount == 0 {
-            return "Detected \(items.count) menu bar item(s). Scanned \(stats.menuBarRootCount) menu bar roots; no notch overlap candidate found.\(suffix)"
+            return AppL10n.detectedNoNotch(
+                itemCount: items.count,
+                menuBarRootCount: stats.menuBarRootCount,
+                suffix: suffix
+            )
         } else {
-            return "Detected \(items.count) menu bar item(s), \(notchCount) near the notch estimate.\(suffix)"
+            return AppL10n.detectedNearNotch(
+                itemCount: items.count,
+                notchCount: notchCount,
+                suffix: suffix
+            )
         }
     }
 

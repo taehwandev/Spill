@@ -5,10 +5,14 @@ struct DetectionPreferencesSection: View {
     @ObservedObject var scanner: AXMenuBarItemScanner
     @Binding var accessibilityTrusted: Bool
 
+    private func t(_ key: PreferencesTextKey) -> String {
+        PreferencesL10n.text(key)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 10) {
-                Label("Detected Items", systemImage: "menubar.rectangle")
+                Label(t(.detectedItems), systemImage: "menubar.rectangle")
                 Spacer()
                 Text("\(scanner.items.count)")
                     .font(.callout.monospacedDigit())
@@ -18,23 +22,23 @@ struct DetectionPreferencesSection: View {
                     scanner.refresh()
                     accessibilityTrusted = AccessibilityPermission.isTrusted
                 } label: {
-                    Label(scanner.isScanning ? "Scanning" : "Refresh", systemImage: "arrow.clockwise")
+                    Label(scanner.isScanning ? t(.scanning) : TokenMeteringL10n.text(.refresh), systemImage: "arrow.clockwise")
                 }
                 .disabled(!accessibilityTrusted || scanner.isScanning)
             }
 
-            Picker("Panel items", selection: $settings.displayMode) {
+            Picker(t(.panelItems), selection: $settings.displayMode) {
                 ForEach(SpillDisplayMode.allCases) { mode in
                     Text(mode.title).tag(mode)
                 }
             }
             .pickerStyle(.segmented)
 
-            Toggle("Auto refresh", isOn: $settings.autoRefreshEnabled)
+            Toggle(t(.autoRefresh), isOn: $settings.autoRefreshEnabled)
 
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
-                    Text("Refresh interval")
+                    Text(t(.refreshInterval))
                     Spacer()
                     Text("\(Int(settings.refreshInterval))s")
                         .font(.callout.monospacedDigit())

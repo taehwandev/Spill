@@ -44,13 +44,13 @@ enum UpdateCheckError: LocalizedError, Equatable, Sendable {
     var errorDescription: String? {
         switch self {
         case .invalidHTTPStatus(let statusCode):
-            return "Update manifest request failed with HTTP \(statusCode)."
+            return AppL10n.updateHTTPFailed(statusCode: statusCode)
         case .invalidLatestVersion(let version):
-            return "Update manifest has an invalid latest version: \(version)."
+            return AppL10n.invalidLatestVersion(version)
         case .invalidMinimumMacOS(let version):
-            return "Update manifest has an invalid macOS version: \(version)."
+            return AppL10n.invalidMacOSVersion(version)
         case .decodingFailed(let message):
-            return "Update manifest could not be decoded: \(message)"
+            return AppL10n.updateDecodingFailed(message)
         }
     }
 }
@@ -163,7 +163,7 @@ struct UpdateChecker: Sendable {
             guard let asset = preferredDownloadAssetNames.compactMap({ name in
                 release.assets.first { $0.name == name }
             }).first else {
-                throw UpdateCheckError.decodingFailed("Latest GitHub release does not include a Spill macOS download asset.")
+                throw UpdateCheckError.decodingFailed(AppL10n.text(.missingMacOSDownloadAsset))
             }
 
             return UpdateManifest(

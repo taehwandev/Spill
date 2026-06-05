@@ -111,13 +111,18 @@ struct SpillBarView: View {
             Spacer(minLength: 6)
 
             if updateStore.canOpenUpdate && updateStore.usesInAppUpdater {
-                updateBannerButton(symbolName: "arrow.down.circle.fill", title: "Update now") {
+                updateBannerButton(
+                    symbolName: "arrow.down.circle.fill",
+                    title: AppL10n.text(.updateNow, appLanguage: settings.appLanguage)
+                ) {
                     updateStore.openUpdate(source: "panel_update_banner")
                 }
             } else if updateStore.canOpenUpdate {
                 updateBannerButton(
                     symbolName: didCopyUpdateInstallCommand ? "checkmark" : "doc.on.doc",
-                    title: didCopyUpdateInstallCommand ? "Copied" : "Copy install command"
+                    title: didCopyUpdateInstallCommand
+                        ? AppL10n.text(.copied, appLanguage: settings.appLanguage)
+                        : AppL10n.text(.copyInstallCommand, appLanguage: settings.appLanguage)
                 ) {
                     copyUpdateInstallCommand()
                 }
@@ -139,15 +144,15 @@ struct SpillBarView: View {
     private var updateBannerTitle: String {
         switch updateStore.state {
         case .checking:
-            return "Checking Updates"
+            return AppL10n.text(.updateCheckingTitle, appLanguage: settings.appLanguage)
         case .upToDate:
-            return "Up to Date"
+            return AppL10n.text(.updateUpToDateTitle, appLanguage: settings.appLanguage)
         case .available(let update):
-            return "Update \(update.latestVersion)"
+            return AppL10n.updateAvailableTitle(version: update.latestVersion, appLanguage: settings.appLanguage)
         case .unsupported:
-            return "Update Requires macOS"
+            return AppL10n.text(.updateRequiresMacOSTitle, appLanguage: settings.appLanguage)
         case .idle, .failed:
-            return "Update"
+            return AppL10n.text(.updateTitle, appLanguage: settings.appLanguage)
         }
     }
 
@@ -171,19 +176,23 @@ struct SpillBarView: View {
     private var updateBannerSubtitle: String {
         switch updateStore.state {
         case .checking:
-            return "Looking for the latest release"
+            return AppL10n.text(.lookingForLatestRelease, appLanguage: settings.appLanguage)
         case .upToDate(_, let latestVersion):
-            return "Spill \(latestVersion) is current"
+            return AppL10n.spillVersionCurrent(version: latestVersion, appLanguage: settings.appLanguage)
         case .available where updateStore.usesInAppUpdater:
-            return "In-app update ready"
+            return AppL10n.text(.inAppUpdateReady, appLanguage: settings.appLanguage)
         case .available:
             return updateStore.availableUpdate?.usesInstallerPackage == true
-                ? "Signed installer package"
-                : "Manual installer"
+                ? AppL10n.text(.signedInstallerPackage, appLanguage: settings.appLanguage)
+                : AppL10n.text(.manualInstaller, appLanguage: settings.appLanguage)
         case .unsupported(let update, let currentMacOS):
-            return "Version \(update.latestVersion) needs macOS \(update.minimumMacOS ?? "newer than \(currentMacOS)")"
+            return AppL10n.versionNeedsMacOS(
+                version: update.latestVersion,
+                requirement: update.minimumMacOS ?? PreferencesL10n.newerThanVersion(currentMacOS),
+                appLanguage: settings.appLanguage
+            )
         case .idle, .failed:
-            return "Update status"
+            return AppL10n.text(.updateTitle, appLanguage: settings.appLanguage)
         }
     }
 
@@ -202,8 +211,8 @@ struct SpillBarView: View {
 
     private var updateOpenButtonTitle: String {
         updateStore.availableUpdate?.usesInstallerPackage == true
-            ? "Open Installer"
-            : "Download DMG"
+            ? PreferencesL10n.text(.openInstaller, appLanguage: settings.appLanguage)
+            : PreferencesL10n.text(.downloadDMG, appLanguage: settings.appLanguage)
     }
 
     private var updateOpenButtonSymbolName: String {
@@ -254,8 +263,8 @@ struct SpillBarView: View {
             Spacer(minLength: 8)
 
             statusDot
-            headerCommand(symbolName: "gearshape.fill", title: "Settings", action: settingsAction)
-            headerCommand(symbolName: "xmark", title: "Close", action: dismissAction)
+            headerCommand(symbolName: "gearshape.fill", title: AppL10n.text(.settings, appLanguage: settings.appLanguage), action: settingsAction)
+            headerCommand(symbolName: "xmark", title: AppL10n.text(.close, appLanguage: settings.appLanguage), action: dismissAction)
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Spill")
@@ -300,7 +309,7 @@ struct SpillBarView: View {
 
     private var statusSection: some View {
         VStack(spacing: 6) {
-            sectionHeader("STATUS", symbolName: "waveform.path.ecg")
+            sectionHeader(AppL10n.text(.status), symbolName: "waveform.path.ecg")
 
             VStack(spacing: 7) {
                 ForEach(panelState.visibleStatusModules) { module in
@@ -312,7 +321,8 @@ struct SpillBarView: View {
 
     private func statusMetricRow(for module: SpillStatusModule) -> some View {
         let status = statusStore.meterSnapshot(for: module)
-        let helpText = statusHelpText(title: module.title, value: status.value, subtitle: status.subtitle)
+        let title = AppL10n.statusModuleTitle(module, appLanguage: settings.appLanguage)
+        let helpText = statusHelpText(title: title, value: status.value, subtitle: status.subtitle)
 
         return Button {
             panelStore.send(.setStatusDetailTarget(.system(module)))
@@ -322,7 +332,7 @@ struct SpillBarView: View {
 
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {
-                        Text(module.title)
+                        Text(title)
                             .font(.system(size: 11.5, weight: .semibold))
 
                         Text(status.value)
@@ -426,11 +436,11 @@ struct SpillBarView: View {
 
                 VStack(alignment: .leading, spacing: 5) {
                     HStack(spacing: 6) {
-                        Text("Token Metering")
+                        Text(AppL10n.text(.tokenMetering, appLanguage: settings.appLanguage))
                             .font(.system(size: 11.5, weight: .semibold))
                             .lineLimit(1)
 
-                        Text("Local")
+                        Text(AppL10n.text(.local, appLanguage: settings.appLanguage))
                             .font(.system(size: 8.5, weight: .bold))
                             .padding(.horizontal, 5)
                             .frame(height: 17)
@@ -443,7 +453,7 @@ struct SpillBarView: View {
                             .font(.system(size: 18, weight: .bold, design: .rounded))
                             .monospacedDigit()
 
-                        Text("tokens")
+                        Text(AppL10n.text(.tokens, appLanguage: settings.appLanguage))
                             .font(.system(size: 9.5, weight: .semibold, design: .rounded))
                             .foregroundStyle(.secondary)
                     }
@@ -457,7 +467,7 @@ struct SpillBarView: View {
 
                 Spacer(minLength: 8)
 
-                Label("Details", systemImage: "chevron.right")
+                Label(AppL10n.text(.details, appLanguage: settings.appLanguage), systemImage: "chevron.right")
                     .labelStyle(.iconOnly)
                     .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(.secondary)
@@ -476,8 +486,13 @@ struct SpillBarView: View {
         .onAppear {
             tokenUsageDashboardStore.refresh()
         }
-        .help("Open local token metering details")
-        .accessibilityLabel("Token Metering, \(snapshot.totalTokens) local tokens")
+        .help(AppL10n.text(.openLocalTokenMeteringDetails, appLanguage: settings.appLanguage))
+        .accessibilityLabel(
+            AppL10n.tokenMeteringAccessibility(
+                tokenCount: TokenUsageDashboardSnapshot.formatTokens(snapshot.totalTokens),
+                appLanguage: settings.appLanguage
+            )
+        )
     }
 
     private func tokenMeteringSubtitle(
@@ -486,12 +501,14 @@ struct SpillBarView: View {
         eventCount: Int
     ) -> String {
         guard eventCount > 0 else {
-            return "Open to copy global setup prompt"
+            return AppL10n.text(.openSetupPrompt, appLanguage: settings.appLanguage)
         }
 
-        let task = topTask.map { "\($0.title) \($0.value)" } ?? "No task split"
-        let source = topSource.map { "\($0.title) \($0.value)" } ?? "No source split"
-        return "\(eventCount) events / \(task) / \(source)"
+        let task = topTask.map { "\($0.title) \($0.value)" }
+            ?? AppL10n.text(.noTaskSplit, appLanguage: settings.appLanguage)
+        let source = topSource.map { "\($0.title) \($0.value)" }
+            ?? AppL10n.text(.noSourceSplit, appLanguage: settings.appLanguage)
+        return AppL10n.eventsSummary(eventCount: eventCount, task: task, source: source, appLanguage: settings.appLanguage)
     }
 
     private var aiToolColumns: [GridItem] {
@@ -539,7 +556,12 @@ struct SpillBarView: View {
                 CloudServiceStatusDashboardView(store: cloudServiceStatusStore)
             }
             .help(serviceStatusHelpText)
-            .accessibilityLabel("Service status \(serviceStatusButtonTitle)")
+            .accessibilityLabel(
+                AppL10n.serviceStatusAccessibility(
+                    status: serviceStatusButtonTitle,
+                    appLanguage: settings.appLanguage
+                )
+            )
 
             Image(systemName: "sparkles")
                 .font(.system(size: 10.5, weight: .bold))
@@ -549,11 +571,11 @@ struct SpillBarView: View {
 
     private var serviceStatusButtonTitle: String {
         if cloudServiceStatusStore.isLoading {
-            return "Checking"
+            return AppL10n.text(.checking, appLanguage: settings.appLanguage)
         }
 
         guard let aggregateHealth = aggregateServiceHealth else {
-            return "Server Status"
+            return AppL10n.text(.serverStatus, appLanguage: settings.appLanguage)
         }
 
         return aggregateHealth.serverStatusHeaderTitle
@@ -561,15 +583,22 @@ struct SpillBarView: View {
 
     private var serviceStatusHelpText: String {
         guard let snapshot = cloudServiceStatusStore.snapshot else {
-            return "Click to fetch official service status details."
+            return AppL10n.text(.fetchOfficialServiceStatus, appLanguage: settings.appLanguage)
         }
 
         let aggregateHealth = CloudServiceStatusPresentation.aggregateHealth(for: snapshot.items)
         let issueCount = serviceStatusIssueItems.count
         let statusText = issueCount == 0
-            ? "Server status \(aggregateHealth.title.lowercased())"
-            : "Server status \(aggregateHealth.title.lowercased()) with \(issueCount) issue\(issueCount == 1 ? "" : "s")"
-        return "\(statusText). Last checked \(fullServiceCheckTime(snapshot.fetchedAt)). Click for per-service details."
+            ? String(
+                format: AppL10n.text(.serverStatusNoIssues, appLanguage: settings.appLanguage),
+                aggregateHealth.serverStatusHeaderTitle.lowercased()
+            )
+            : AppL10n.serverStatusWithIssues(
+                status: aggregateHealth.serverStatusHeaderTitle.lowercased(),
+                issueCount: issueCount,
+                appLanguage: settings.appLanguage
+            )
+        return "\(statusText). \(AppL10n.lastChecked(fullServiceCheckTime(snapshot.fetchedAt), age: relativeServiceAge(from: snapshot.fetchedAt), appLanguage: settings.appLanguage)) \(AppL10n.text(.clickForPerServiceDetails, appLanguage: settings.appLanguage))"
     }
 
     private var serviceStatusSymbolName: String {
@@ -647,6 +676,20 @@ struct SpillBarView: View {
         }
 
         return formatter.string(from: date)
+    }
+
+    private func relativeServiceAge(from date: Date) -> String {
+        let elapsed = max(0, Date().timeIntervalSince(date))
+        if elapsed < 60 {
+            return AppL10n.text(.justNow, appLanguage: settings.appLanguage)
+        }
+
+        let minutes = Int(elapsed / 60)
+        if minutes < 60 {
+            return AppL10n.minutesAgo(minutes, appLanguage: settings.appLanguage)
+        }
+
+        return AppL10n.hoursAgo(max(1, minutes / 60), appLanguage: settings.appLanguage)
     }
 
     private func detailButton(
@@ -777,7 +820,7 @@ struct SpillBarView: View {
                         .font(.system(size: 10, weight: .bold, design: .rounded))
                         .monospacedDigit()
                         .foregroundStyle(Color.primary)
-                    Text("tokens")
+                    Text(AppL10n.text(.tokens, appLanguage: settings.appLanguage))
                         .font(.system(size: 7.5, weight: .semibold, design: .rounded))
                         .foregroundStyle(.secondary)
                 }
@@ -925,7 +968,7 @@ struct SpillBarView: View {
     private func aiLocalStatusBadge(_ status: LocalAIToolStatus) -> some View {
         let tint = status.state.panelTint
         let isRunning = status.state == .active
-        let value = isRunning ? status.value : "Local"
+        let value = isRunning ? status.value : AppL10n.text(.local, appLanguage: settings.appLanguage)
 
         return HStack(spacing: 4) {
             Circle()
@@ -949,7 +992,9 @@ struct SpillBarView: View {
 
     private func aiServerPendingBadge() -> some View {
         let tint = cloudServiceStatusStore.isLoading ? Color.blue : Color.secondary
-        let value = cloudServiceStatusStore.isLoading ? "Checking" : "Server"
+        let value = cloudServiceStatusStore.isLoading
+            ? AppL10n.text(.checking, appLanguage: settings.appLanguage)
+            : AppL10n.text(.server, appLanguage: settings.appLanguage)
 
         return HStack(spacing: 4) {
             Image(systemName: cloudServiceStatusStore.isLoading ? "arrow.triangle.2.circlepath" : "cloud.fill")
@@ -963,7 +1008,7 @@ struct SpillBarView: View {
         .frame(height: 18)
         .foregroundStyle(tint)
         .background(tint.opacity(0.10), in: Capsule())
-        .help("Server status will appear after the next official status check.")
+        .help(AppL10n.text(.serverStatusPendingHelp, appLanguage: settings.appLanguage))
     }
 
     private func aiServerStatusBadge(_ item: CloudServiceStatusItem) -> some View {
@@ -979,7 +1024,7 @@ struct SpillBarView: View {
         .frame(height: 18)
         .foregroundStyle(item.health.serverStatusTint)
         .background(item.health.serverStatusTint.opacity(0.13), in: Capsule())
-        .help("\(item.title) server \(item.health.title): \(item.detail)")
+        .help("\(item.title) \(AppL10n.text(.server, appLanguage: settings.appLanguage)) \(item.health.serverStatusHeaderTitle): \(item.detail)")
     }
 
     private func statusIconBadge(symbolName: String, tint: Color) -> some View {
@@ -999,15 +1044,43 @@ struct SpillBarView: View {
 
         switch module {
         case .cpu:
-            return rows.filter { ["User", "System", "Idle"].contains($0.label) }
+            return rows.filter {
+                [
+                    AppL10n.text(.user, appLanguage: settings.appLanguage),
+                    AppL10n.text(.system, appLanguage: settings.appLanguage),
+                    AppL10n.text(.idleLabel, appLanguage: settings.appLanguage)
+                ].contains($0.label)
+            }
         case .memory:
-            return rows.filter { ["Used", "Wired", "Compressed"].contains($0.label) }
+            return rows.filter {
+                [
+                    AppL10n.text(.used, appLanguage: settings.appLanguage),
+                    AppL10n.text(.wired, appLanguage: settings.appLanguage),
+                    AppL10n.text(.compressed, appLanguage: settings.appLanguage)
+                ].contains($0.label)
+            }
         case .storage:
-            return rows.filter { ["Used", "Available", "Total"].contains($0.label) }
+            return rows.filter {
+                [
+                    AppL10n.text(.used, appLanguage: settings.appLanguage),
+                    AppL10n.text(.available, appLanguage: settings.appLanguage),
+                    AppL10n.text(.total, appLanguage: settings.appLanguage)
+                ].contains($0.label)
+            }
         case .gpu:
-            return rows.filter { ["Available", "Budget"].contains($0.label) }
+            return rows.filter {
+                [
+                    AppL10n.text(.available, appLanguage: settings.appLanguage),
+                    AppL10n.text(.budget, appLanguage: settings.appLanguage)
+                ].contains($0.label)
+            }
         case .network:
-            return rows.filter { ["Receive", "Upload"].contains($0.label) }
+            return rows.filter {
+                [
+                    AppL10n.text(.receive, appLanguage: settings.appLanguage),
+                    AppL10n.text(.upload, appLanguage: settings.appLanguage)
+                ].contains($0.label)
+            }
         }
     }
 
@@ -1077,7 +1150,7 @@ struct SpillBarView: View {
         switch target {
         case let .system(module):
             SpillStatusDetailPopover(
-                title: module.title,
+                title: AppL10n.statusModuleTitle(module, appLanguage: settings.appLanguage),
                 symbolName: module.symbolName,
                 tint: statusStore.state(for: module).panelTint,
                 rows: statusStore.detailRows(for: module),
@@ -1147,7 +1220,7 @@ struct SpillBarView: View {
 
     private func subtitleText(_ subtitle: String?) -> String {
         guard let subtitle, !subtitle.isEmpty else {
-            return "No detail"
+            return AppL10n.text(.noDetail, appLanguage: settings.appLanguage)
         }
 
         return subtitle
@@ -1172,7 +1245,7 @@ struct SpillBarView: View {
     }
 
     private var emptyStateTitle: String {
-        "No Notch Candidates"
+        AppL10n.text(.noNotchCandidates, appLanguage: settings.appLanguage)
     }
 
     private var actionSections: some View {
@@ -1184,10 +1257,10 @@ struct SpillBarView: View {
 
     private var windowActionsSection: some View {
         VStack(alignment: .leading, spacing: 5) {
-            sectionHeader("WINDOWS", symbolName: "macwindow")
+            sectionHeader(AppL10n.text(.windows, appLanguage: settings.appLanguage), symbolName: "macwindow")
 
             if windowActionStore.actions.isEmpty {
-                inlineState(symbolName: "macwindow", title: "No Focused Window")
+                inlineState(symbolName: "macwindow", title: AppL10n.text(.noFocusedWindow, appLanguage: settings.appLanguage))
                     .frame(height: 50)
             } else {
                 windowActionGrid
@@ -1197,11 +1270,11 @@ struct SpillBarView: View {
 
     private var menuBarActionsSection: some View {
         VStack(alignment: .leading, spacing: 5) {
-            sectionHeader("MENU BAR", symbolName: "menubar.rectangle")
+            sectionHeader(AppL10n.text(.menuBar, appLanguage: settings.appLanguage), symbolName: "menubar.rectangle")
 
             Group {
                 if panelState.readiness == .permissionRequired {
-                    inlineState(symbolName: "lock.fill", title: "Accessibility Required")
+                    inlineState(symbolName: "lock.fill", title: AppL10n.text(.accessibilityRequired, appLanguage: settings.appLanguage))
                         .frame(height: 48)
                 } else if panelState.readiness == .scanning && panelState.displayItems.isEmpty {
                     scanningState
@@ -1220,7 +1293,7 @@ struct SpillBarView: View {
         HStack(alignment: .top, spacing: 20) {
             // Left Column: Directional / Sizing Positions
             VStack(alignment: .center, spacing: 6) {
-                Text("POSITIONS")
+                Text(AppL10n.text(.positions, appLanguage: settings.appLanguage))
                     .font(.system(size: 9, weight: .bold))
                     .foregroundStyle(.secondary.opacity(0.8))
                     .padding(.leading, 1)
@@ -1236,7 +1309,11 @@ struct SpillBarView: View {
                         HStack(spacing: 6) {
                             ForEach(positions[rowIndex], id: \.self) { kind in
                                 if let action = action(for: kind) {
-                                    WindowActionButton(action: action, shortcutKey: shortcutKey(for: action)) {
+                                    WindowActionButton(
+                                        action: action,
+                                        shortcutKey: shortcutKey(for: action),
+                                        appLanguage: settings.appLanguage
+                                    ) {
                                         performWindowAction(action)
                                     }
                                     .help(windowHelpText(for: action))
@@ -1250,7 +1327,7 @@ struct SpillBarView: View {
 
             // Right Column: State & Utilities
             VStack(alignment: .center, spacing: 6) {
-                Text("UTILITIES")
+                Text(AppL10n.text(.utilities, appLanguage: settings.appLanguage))
                     .font(.system(size: 9, weight: .bold))
                     .foregroundStyle(.secondary.opacity(0.8))
                     .padding(.leading, 1)
@@ -1265,7 +1342,11 @@ struct SpillBarView: View {
                         HStack(spacing: 6) {
                             ForEach(utilities[rowIndex], id: \.self) { kind in
                                 if let action = action(for: kind) {
-                                    WindowActionButton(action: action, shortcutKey: shortcutKey(for: action)) {
+                                    WindowActionButton(
+                                        action: action,
+                                        shortcutKey: shortcutKey(for: action),
+                                        appLanguage: settings.appLanguage
+                                    ) {
                                         performWindowAction(action)
                                     }
                                     .help(windowHelpText(for: action))
@@ -1296,6 +1377,7 @@ struct SpillBarView: View {
                 SpillActionButton(
                     action: item.action,
                     isPinned: item.isPinned,
+                    appLanguage: settings.appLanguage,
                     togglePinned: { panelStore.send(.togglePinned(item.sourceItem)) },
                     perform: { perform(item) }
                 )
@@ -1334,7 +1416,7 @@ struct SpillBarView: View {
                 .controlSize(.small)
                 .scaleEffect(0.68)
 
-            Text("Scanning")
+            Text(AppL10n.text(.scanning, appLanguage: settings.appLanguage))
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
@@ -1386,7 +1468,7 @@ struct SpillBarView: View {
         var text = statusHelpText(title: status.title, value: status.value, subtitle: status.subtitle)
 
         if let serviceStatus {
-            text += " - Server \(serviceStatus.health.title)"
+            text += " - \(AppL10n.text(.server, appLanguage: settings.appLanguage)) \(serviceStatus.health.serverStatusHeaderTitle)"
         }
 
         return text
@@ -1400,7 +1482,7 @@ struct SpillBarView: View {
         }
 
         if item.sourceItem.isNotchCandidate {
-            parts.append("near notch estimate")
+            parts.append(AppL10n.text(.nearNotchEstimate, appLanguage: settings.appLanguage))
         }
 
         if let disabledReason = item.action.state.disabledReason {

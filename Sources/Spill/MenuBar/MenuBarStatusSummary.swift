@@ -116,7 +116,7 @@ struct MenuBarStatusSummary: Equatable {
             )
         }
         guard !entries.isEmpty else {
-            return MenuBarStatusSummary(title: "", tooltip: "Show Spill Bar", segments: [])
+            return MenuBarStatusSummary(title: "", tooltip: AppL10n.text(.showSpillPanel), segments: [])
         }
 
         return MenuBarStatusSummary(

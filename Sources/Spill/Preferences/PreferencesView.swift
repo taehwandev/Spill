@@ -84,6 +84,10 @@ struct PreferencesView: View {
     @State private var selectedTab: String = "general"
     @State private var hoveredTab: String? = nil
 
+    private func t(_ key: PreferencesTextKey) -> String {
+        PreferencesL10n.text(key, appLanguage: settings.appLanguage)
+    }
+
     var body: some View {
         HStack(spacing: 0) {
             // Left Sidebar
@@ -108,11 +112,11 @@ struct PreferencesView: View {
 
                 // Navigation List
                 VStack(spacing: 4) {
-                    sidebarItem(title: "General", imageName: "gearshape.fill", tag: "general")
-                    sidebarItem(title: "Menu Bar", imageName: "menubar.rectangle", tag: "menubar")
-                    sidebarItem(title: "Token Metering", imageName: "chart.bar.xaxis", tag: "tokens")
-                    sidebarItem(title: "Window Management", imageName: "macwindow", tag: "windows")
-                    sidebarItem(title: "Status & Caffeine", imageName: "cup.and.saucer.fill", tag: "status_caffeine")
+                    sidebarItem(title: t(.general), imageName: "gearshape.fill", tag: "general")
+                    sidebarItem(title: t(.menuBar), imageName: "menubar.rectangle", tag: "menubar")
+                    sidebarItem(title: t(.tokenMetering), imageName: "chart.bar.xaxis", tag: "tokens")
+                    sidebarItem(title: t(.windowManagement), imageName: "macwindow", tag: "windows")
+                    sidebarItem(title: t(.statusAndCaffeine), imageName: "cup.and.saucer.fill", tag: "status_caffeine")
                 }
                 .padding(.horizontal, 8)
 
@@ -137,7 +141,7 @@ struct PreferencesView: View {
                                 Image(systemName: "arrow.clockwise")
                                     .font(.system(size: 10, weight: .semibold))
                             }
-                            Text(updateStore.isChecking ? "Checking..." : "Check for Updates")
+                            Text(updateStore.isChecking ? t(.checkingForUpdates) : t(.checkForUpdates))
                                 .font(.system(size: 11, weight: .semibold))
                         }
                         .frame(maxWidth: .infinity)
@@ -251,11 +255,11 @@ struct PreferencesView: View {
 
     private func tabTitle(for tab: String) -> String {
         switch tab {
-        case "general": return "General"
-        case "menubar": return "Menu Bar & Notch"
-        case "tokens": return "Token Metering"
-        case "windows": return "Window Management"
-        case "status_caffeine": return "Status & Caffeine"
+        case "general": return t(.general)
+        case "menubar": return t(.menuBarAndNotch)
+        case "tokens": return t(.tokenMetering)
+        case "windows": return t(.windowManagement)
+        case "status_caffeine": return t(.statusAndCaffeine)
         default: return ""
         }
     }
@@ -282,14 +286,14 @@ struct PreferencesView: View {
 
     private var generalTab: some View {
         VStack(alignment: .leading, spacing: 16) {
-            PreferenceCard(title: "Launch Settings", symbolName: "play.circle.fill", iconColor: .blue) {
+            PreferenceCard(title: t(.launchSettings), symbolName: "play.circle.fill", iconColor: .blue) {
                 VStack(alignment: .leading, spacing: 10) {
-                    Toggle("Launch at Login", isOn: launchAtLoginBinding)
+                    Toggle(t(.launchAtLogin), isOn: launchAtLoginBinding)
                         .disabled(!LoginItemController.isAvailable)
                         .font(.system(size: 12, weight: .medium))
 
                     if !LoginItemController.isAvailable {
-                        Text("Launch at Login is available after packaging Spill as a .app bundle.")
+                        Text(t(.launchAtLoginUnavailable))
                             .font(.system(size: 10))
                             .foregroundStyle(.secondary)
                     }
@@ -302,7 +306,30 @@ struct PreferencesView: View {
                 }
             }
 
-            PreferenceCard(title: "Permissions & Diagnostics", symbolName: "lock.shield.fill", iconColor: .green) {
+            PreferenceCard(title: t(.languageSettings), symbolName: "globe", iconColor: .purple) {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text(t(.appLanguage))
+                            .font(.system(size: 12, weight: .medium))
+
+                        Spacer()
+
+                        Picker("", selection: $settings.appLanguage) {
+                            ForEach(SpillAppLanguage.allCases) { language in
+                                Text(language.title).tag(language)
+                            }
+                        }
+                        .labelsHidden()
+                        .frame(width: 150)
+                    }
+
+                    Text(PreferencesL10n.languageDetail(settings.appLanguage, appLanguage: settings.appLanguage))
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            PreferenceCard(title: t(.permissionsAndDiagnostics), symbolName: "lock.shield.fill", iconColor: .green) {
                 AccessibilityPreferencesSection(
                     scanner: scanner,
                     accessibilityTrusted: $accessibilityTrusted,
@@ -310,7 +337,7 @@ struct PreferencesView: View {
                 )
             }
 
-            PreferenceCard(title: "Updates", symbolName: "arrow.down.circle.fill", iconColor: .orange) {
+            PreferenceCard(title: t(.updates), symbolName: "arrow.down.circle.fill", iconColor: .orange) {
                 UpdatePreferencesSection(store: updateStore)
             }
 
@@ -323,9 +350,9 @@ struct PreferencesView: View {
 
     private var menuBarTab: some View {
         VStack(alignment: .leading, spacing: 16) {
-            PreferenceCard(title: "Menu Bar Icon & Animation", symbolName: "paintpalette.fill", iconColor: .pink) {
+            PreferenceCard(title: t(.menuBarIconAnimation), symbolName: "paintpalette.fill", iconColor: .pink) {
                 VStack(alignment: .leading, spacing: 14) {
-                    Toggle("Use spill animation", isOn: $settings.useSpillAnimation)
+                    Toggle(t(.useSpillAnimation), isOn: $settings.useSpillAnimation)
                         .font(.system(size: 12, weight: .medium))
 
                     Divider()
@@ -333,7 +360,7 @@ struct PreferencesView: View {
 
                     VStack(alignment: .leading, spacing: 6) {
                         HStack {
-                            Text("Menu bar trigger icon")
+                            Text(t(.menuBarTriggerIcon))
                                 .font(.system(size: 11, weight: .bold))
                             Spacer()
                             Text(settings.menuBarTriggerIconStyle.title)
@@ -342,7 +369,7 @@ struct PreferencesView: View {
                         }
 
                         if MenuBarTriggerIconStyle.selectableCases.count > 1 {
-                            Picker("Menu bar trigger icon", selection: $settings.menuBarTriggerIconStyle) {
+                            Picker(t(.menuBarTriggerIcon), selection: $settings.menuBarTriggerIconStyle) {
                                 ForEach(MenuBarTriggerIconStyle.selectableCases) { style in
                                     Text(style.title).tag(style)
                                 }
@@ -368,7 +395,7 @@ struct PreferencesView: View {
 
                     VStack(alignment: .leading, spacing: 6) {
                         HStack {
-                            Text("Menu bar icon spacing")
+                            Text(t(.menuBarIconSpacing))
                                 .font(.system(size: 11, weight: .bold))
                             Spacer()
                             Text("\(Int(settings.iconSpacing)) px")
@@ -381,7 +408,7 @@ struct PreferencesView: View {
                 }
             }
 
-            PreferenceCard(title: "Advanced Notch Scan", symbolName: "menubar.rectangle", iconColor: .secondary) {
+            PreferenceCard(title: t(.advancedNotchScan), symbolName: "menubar.rectangle", iconColor: .secondary) {
                 advancedDetectionSection
             }
         }
@@ -389,7 +416,7 @@ struct PreferencesView: View {
 
     private var tokensTab: some View {
         VStack(alignment: .leading, spacing: 16) {
-            PreferenceCard(title: "Token Metering", symbolName: "chart.bar.xaxis", iconColor: .teal) {
+            PreferenceCard(title: t(.tokenMetering), symbolName: "chart.bar.xaxis", iconColor: .teal) {
                 TokenMeteringPreferencesSection(
                     settings: settings,
                     openDashboardAction: openTokenDashboardAction
@@ -400,9 +427,9 @@ struct PreferencesView: View {
 
     private var windowsTab: some View {
         VStack(alignment: .leading, spacing: 16) {
-            PreferenceCard(title: "Global Shortcut", symbolName: "keyboard", iconColor: .indigo) {
+            PreferenceCard(title: t(.globalShortcut), symbolName: "keyboard", iconColor: .indigo) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Toggle("Keyboard shortcut", isOn: $settings.hotKeyEnabled)
+                    Toggle(t(.keyboardShortcut), isOn: $settings.hotKeyEnabled)
                         .font(.system(size: 12, weight: .medium))
 
                     if settings.hotKeyEnabled {
@@ -414,7 +441,7 @@ struct PreferencesView: View {
                 }
             }
 
-            PreferenceCard(title: "Window Snap Shortcuts", symbolName: "macwindow", iconColor: .blue) {
+            PreferenceCard(title: t(.windowSnapShortcuts), symbolName: "macwindow", iconColor: .blue) {
                 VStack(alignment: .leading, spacing: 8) {
                     ForEach(WindowActionKind.panelOrder, id: \.self) { kind in
                         HStack(spacing: 10) {
@@ -443,11 +470,11 @@ struct PreferencesView: View {
 
     private var statusCaffeineTab: some View {
         VStack(alignment: .leading, spacing: 16) {
-            PreferenceCard(title: "Status Modules", symbolName: "waveform.path.ecg", iconColor: .purple) {
+            PreferenceCard(title: t(.statusModules), symbolName: "waveform.path.ecg", iconColor: .purple) {
                 StatusModulesPreferencesSection(settings: settings)
             }
 
-            PreferenceCard(title: "Caffeine Settings", symbolName: "cup.and.saucer.fill", iconColor: .orange) {
+            PreferenceCard(title: t(.caffeineSettings), symbolName: "cup.and.saucer.fill", iconColor: .orange) {
                 PowerPreferencesSection(settings: settings)
             }
         }
@@ -455,7 +482,7 @@ struct PreferencesView: View {
 
     private var advancedDetectionSection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Best-effort menu bar scanning is an advanced pinning and diagnostics tool. It is not required for normal panel use.")
+            Text(t(.advancedNotchScanDetail))
                 .font(.footnote)
                 .foregroundStyle(.secondary)
 
@@ -513,7 +540,7 @@ struct PreferencesView: View {
                     HStack(spacing: 4) {
                         Image(systemName: "hand.thumbsup.fill")
                             .font(.system(size: 9))
-                        Text("Feedback & Contribution")
+                        Text(t(.feedbackContribution))
                     }
                     .font(.system(size: 10, weight: .bold))
                     .foregroundStyle(.secondary)
@@ -530,7 +557,7 @@ struct PreferencesView: View {
                     HStack(spacing: 4) {
                         Image(systemName: "arrow.up.forward.app.fill")
                             .font(.system(size: 9))
-                        Text("GitHub Open Source")
+                        Text(t(.githubOpenSource))
                     }
                     .font(.system(size: 10, weight: .bold))
                     .foregroundStyle(.secondary)
@@ -538,7 +565,7 @@ struct PreferencesView: View {
                 .buttonStyle(.plain)
             }
 
-            Text("Spill is proudly open-source under the MIT license.")
+            Text(t(.openSourceLicense))
                 .font(.system(size: 9))
                 .foregroundStyle(.secondary.opacity(0.7))
         }
@@ -565,7 +592,7 @@ private struct MenuBarTriggerIconPreview: View {
             let usageRatio = previewUsageRatio(for: style, phase: phase)
 
             HStack(spacing: 10) {
-                Text("Preview")
+                Text(PreferencesL10n.text(.preview))
                     .font(.footnote.weight(.medium))
                     .foregroundStyle(.secondary)
 

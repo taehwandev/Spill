@@ -51,7 +51,7 @@ struct SpillStatusDetailPopover: View {
                 Divider()
 
                 Toggle(isOn: showsInMenuBar) {
-                    Label("Show in menu bar", systemImage: "menubar.rectangle")
+                    Label(AppL10n.text(.showInMenuBar), systemImage: "menubar.rectangle")
                         .font(.system(size: 11, weight: .medium))
                 }
                 .toggleStyle(.switch)

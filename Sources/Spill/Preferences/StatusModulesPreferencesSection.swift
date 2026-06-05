@@ -3,6 +3,10 @@ import SwiftUI
 struct StatusModulesPreferencesSection: View {
     @ObservedObject var settings: SpillSettings
 
+    private func t(_ key: PreferencesTextKey) -> String {
+        PreferencesL10n.text(key, appLanguage: settings.appLanguage)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             panelStatusSection
@@ -14,16 +18,16 @@ struct StatusModulesPreferencesSection: View {
     private var panelStatusSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             sectionHeader(
-                title: "Panel Status",
+                title: t(.panelStatus),
                 symbolName: "waveform.path.ecg",
-                trailing: settings.showsCPUCoreChart ? "Core Bars" : "Aggregate"
+                trailing: settings.showsCPUCoreChart ? t(.coreBars) : t(.aggregate)
             )
 
             HStack {
-                Label("CPU Core Bars", systemImage: "cpu")
+                Label(t(.cpuCoreBars), systemImage: "cpu")
                     .font(.callout)
                 Spacer()
-                Toggle("CPU Core Bars", isOn: $settings.showsCPUCoreChart)
+                Toggle(t(.cpuCoreBars), isOn: $settings.showsCPUCoreChart)
                     .labelsHidden()
                     .toggleStyle(.switch)
             }
@@ -33,7 +37,7 @@ struct StatusModulesPreferencesSection: View {
     private var menuBarGlanceSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             sectionHeader(
-                title: "Clock Area Status",
+                title: t(.clockAreaStatus),
                 symbolName: "menubar.rectangle",
                 trailing: menuBarPreviewText
             )
@@ -41,38 +45,38 @@ struct StatusModulesPreferencesSection: View {
             VStack(spacing: 8) {
                 ForEach(clockAreaItems) { item in
                     HStack {
-                        Label(item.title, systemImage: item.symbolName)
+                        Label(menuBarStatusTitle(for: item), systemImage: item.symbolName)
                             .font(.callout)
                         Spacer()
-                        Toggle(item.title, isOn: menuBarStatusBinding(for: item))
+                        Toggle(menuBarStatusTitle(for: item), isOn: menuBarStatusBinding(for: item))
                             .labelsHidden()
                             .toggleStyle(.switch)
                     }
                 }
             }
 
-            Picker("Layout", selection: $settings.menuBarStatusLayoutStyle) {
+            Picker(t(.layout), selection: $settings.menuBarStatusLayoutStyle) {
                 ForEach(MenuBarStatusLayoutStyle.allCases) { layout in
-                    Text(layout.title).tag(layout)
+                    Text(layout.title(appLanguage: settings.appLanguage)).tag(layout)
                 }
             }
             .pickerStyle(.segmented)
 
-            Picker("Format", selection: $settings.menuBarStatusDisplayStyle) {
+            Picker(t(.format), selection: $settings.menuBarStatusDisplayStyle) {
                 ForEach(MenuBarStatusDisplayStyle.allCases) { style in
-                    Text(style.title).tag(style)
+                    Text(style.title(appLanguage: settings.appLanguage)).tag(style)
                 }
             }
             .pickerStyle(.segmented)
 
-            Picker("Decimals", selection: $settings.menuBarStatusPrecision) {
+            Picker(t(.decimals), selection: $settings.menuBarStatusPrecision) {
                 ForEach(MenuBarStatusPrecision.allCases) { precision in
                     Text(precision.title).tag(precision)
                 }
             }
             .pickerStyle(.segmented)
 
-            Picker("Highlight", selection: $settings.menuBarStatusHighlightThreshold) {
+            Picker(t(.highlight), selection: $settings.menuBarStatusHighlightThreshold) {
                 ForEach(MenuBarStatusHighlightThreshold.allCases) { threshold in
                     Text(threshold.title).tag(threshold)
                 }
@@ -126,10 +130,27 @@ struct StatusModulesPreferencesSection: View {
             return settings.menuBarStatusDisplayStyle.text(label: item.shortTitle, value: value)
         }
 
-        return parts.isEmpty ? "Icon Only" : parts.joined(separator: "  ")
+        return parts.isEmpty ? t(.iconOnly) : parts.joined(separator: "  ")
     }
 
     private func stackedPreviewTitle(for item: SpillMenuBarStatusItem) -> String {
         item == .memory ? "RAM" : item.shortTitle
+    }
+
+    private func menuBarStatusTitle(for item: SpillMenuBarStatusItem) -> String {
+        switch item {
+        case .cpu:
+            return "CPU"
+        case .memory:
+            return AppL10n.statusModuleTitle(.memory, appLanguage: settings.appLanguage)
+        case .caffeine:
+            return AppL10n.text(.caffeine, appLanguage: settings.appLanguage)
+        case .gpu:
+            return "GPU"
+        case .network:
+            return AppL10n.statusModuleTitle(.network, appLanguage: settings.appLanguage)
+        case .ai:
+            return "AI"
+        }
     }
 }

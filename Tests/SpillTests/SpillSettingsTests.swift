@@ -8,6 +8,7 @@ final class SpillSettingsTests: XCTestCase {
         let defaults = makeDefaults()
         let settings = SpillSettings(defaults: defaults)
 
+        XCTAssertEqual(settings.appLanguage, .automatic)
         XCTAssertEqual(settings.statusModuleOrder, [.cpu, .memory, .storage, .network])
         XCTAssertEqual(settings.enabledStatusModules, [.cpu, .memory, .storage, .network])
         XCTAssertEqual(settings.enabledMenuBarStatusItems, [.cpu, .memory])
@@ -37,12 +38,25 @@ final class SpillSettingsTests: XCTestCase {
         XCTAssertEqual(settings.shortcutKey(for: .restore), .deleteKey)
         XCTAssertEqual(settings.shortcutKey(for: .topHalf).shortcutLabel, "⌃⌥↑")
         XCTAssertEqual(settings.shortcutKey(for: .bottomHalf).shortcutLabel, "⌃⌥↓")
+        XCTAssertFalse(settings.tokenMeteringPromptAllowsLocalDisplayNames)
         XCTAssertEqual(settings.shortcutKey(for: .restore).shortcutLabel, "⌃⌥⌫")
         XCTAssertEqual(
             settings.shortcutKey(for: .previousDisplay).shortcutLabel(with: .display),
             "⌃⌥⌘←"
         )
         XCTAssertEqual(settings.shortcutKey(for: .bottomLeft).pickerTitle, "Off")
+    }
+
+    func testTokenMeteringPromptDisplayNameOptionPersists() {
+        let defaults = makeDefaults()
+        let settings = SpillSettings(defaults: defaults)
+
+        XCTAssertFalse(settings.tokenMeteringPromptAllowsLocalDisplayNames)
+
+        settings.tokenMeteringPromptAllowsLocalDisplayNames = true
+
+        let reloadedSettings = SpillSettings(defaults: defaults)
+        XCTAssertTrue(reloadedSettings.tokenMeteringPromptAllowsLocalDisplayNames)
     }
 
     func testPowerFooterDefaultsToVisibleAndSleepGuardDisplayAwakeDefaultsOn() {
@@ -310,6 +324,58 @@ final class SpillSettingsTests: XCTestCase {
         XCTAssertEqual(reloadedSettings.menuBarStatusPrecision, .tenths)
         XCTAssertEqual(reloadedSettings.menuBarStatusHighlightThreshold, .ninety)
         XCTAssertEqual(reloadedSettings.menuBarTriggerIconStyle, .spill)
+    }
+
+    func testAppLanguagePersistsAndNormalizesUnknownValues() {
+        let defaults = makeDefaults()
+        let settings = SpillSettings(defaults: defaults)
+
+        settings.appLanguage = .korean
+
+        XCTAssertEqual(defaults.string(forKey: SpillAppLanguage.defaultsKey), "korean")
+        XCTAssertEqual(SpillSettings(defaults: defaults).appLanguage, .korean)
+
+        defaults.set("bad-language", forKey: SpillAppLanguage.defaultsKey)
+
+        XCTAssertEqual(SpillSettings(defaults: defaults).appLanguage, .automatic)
+    }
+
+    func testPreferencesLocalizationCoversSupportedLanguages() {
+        XCTAssertEqual(
+            PreferencesL10n.text(.preferencesWindowTitle, appLanguage: .english),
+            "Spill Preferences"
+        )
+        XCTAssertEqual(PreferencesL10n.text(.general, appLanguage: .korean), "일반")
+        XCTAssertEqual(PreferencesL10n.text(.menuBarAndNotch, appLanguage: .japanese), "メニューバーとノッチ")
+        XCTAssertEqual(
+            PreferencesL10n.languageDetail(.automatic, appLanguage: .korean),
+            "macOS 언어를 따릅니다"
+        )
+        XCTAssertEqual(
+            PreferencesL10n.itemCount(3, appLanguage: .japanese),
+            "3件"
+        )
+        XCTAssertEqual(
+            PreferencesL10n.upToDate(version: "1.2.3", appLanguage: .korean),
+            "Spill은 최신 상태입니다 (1.2.3)."
+        )
+        XCTAssertEqual(PreferencesL10n.text(.inline, appLanguage: .korean), "한 줄")
+        XCTAssertEqual(PreferencesL10n.text(.iconOnly, appLanguage: .japanese), "アイコンのみ")
+    }
+
+    func testAppLocalizationCoversNativeShellAndPanelText() {
+        XCTAssertEqual(AppL10n.text(.showSpillPanel, appLanguage: .english), "Show Spill Panel")
+        XCTAssertEqual(AppL10n.text(.showSpillPanel, appLanguage: .korean), "Spill 패널 보기")
+        XCTAssertEqual(AppL10n.text(.statusDetails, appLanguage: .japanese), "状態詳細")
+        XCTAssertEqual(AppL10n.sleepDurationTitle(.fifteenMinutes, appLanguage: .korean), "15분")
+        XCTAssertEqual(AppL10n.statusModuleTitle(.memory, appLanguage: .japanese), "メモリ")
+        XCTAssertEqual(
+            AppL10n.eventsSummary(eventCount: 2, task: "코드 작성 10", source: "출력 5", appLanguage: .korean),
+            "이벤트 2개 / 코드 작성 10 / 출력 5"
+        )
+        XCTAssertEqual(AppL10n.text(.scanningMenuBarItems, appLanguage: .korean), "메뉴 막대 항목 스캔 중...")
+        XCTAssertEqual(AppL10n.windowActionTitle(.restore, appLanguage: .japanese), "復元")
+        XCTAssertEqual(AppL10n.pinned("Raycast", appLanguage: .korean), "Raycast 고정됨")
     }
 
     func testCPUCoreChartSettingPersists() {

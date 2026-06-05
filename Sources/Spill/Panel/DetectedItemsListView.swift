@@ -7,7 +7,7 @@ struct DetectedItemsListView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Label("Items", systemImage: "list.bullet.rectangle")
+                Label(AppL10n.text(.items, appLanguage: settings.appLanguage), systemImage: "list.bullet.rectangle")
                     .foregroundStyle(.secondary)
 
                 Spacer()
@@ -20,14 +20,14 @@ struct DetectedItemsListView: View {
                     Button {
                         settings.clearSelectedItems()
                     } label: {
-                        Label("Clear", systemImage: "xmark.circle")
+                        Label(AppL10n.text(.clear, appLanguage: settings.appLanguage), systemImage: "xmark.circle")
                     }
                     .font(.caption)
                 }
             }
 
             if items.isEmpty {
-                Text("No items detected.")
+                Text(AppL10n.text(.noItemsDetected, appLanguage: settings.appLanguage))
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -63,14 +63,22 @@ struct DetectedItemsListView: View {
 
     private var selectionSummary: String {
         if activeHiddenCount > 0 {
-            return "\(activeSelectedCount) selected, \(activeHiddenCount) hidden"
+            return AppL10n.selectedHiddenSummary(
+                selected: activeSelectedCount,
+                hidden: activeHiddenCount,
+                appLanguage: settings.appLanguage
+            )
         }
 
         if staleSelectedCount > 0 {
-            return "\(activeSelectedCount) active, \(staleSelectedCount) saved"
+            return AppL10n.activeSavedSummary(
+                active: activeSelectedCount,
+                saved: staleSelectedCount,
+                appLanguage: settings.appLanguage
+            )
         }
 
-        return "\(activeSelectedCount) selected"
+        return AppL10n.selectedSummary(activeSelectedCount, appLanguage: settings.appLanguage)
     }
 }
 
@@ -130,7 +138,7 @@ private struct DetectedItemRow: View {
             if item.isNotchCandidate {
                 Image(systemName: "camera.viewfinder")
                     .foregroundStyle(Color.accentColor)
-                    .help("Near notch estimate")
+                    .help(AppL10n.text(.nearNotchEstimate, appLanguage: settings.appLanguage))
             }
         }
         .padding(.horizontal, 8)
@@ -174,7 +182,9 @@ private struct DetectedItemRow: View {
     }
 
     private var pinHelpText: String {
-        isSelected ? "Unpin from Spill" : "Pin in Spill"
+        isSelected
+            ? AppL10n.text(.unpinFromSpill, appLanguage: settings.appLanguage)
+            : AppL10n.text(.pinInSpill, appLanguage: settings.appLanguage)
     }
 
     private var visibilityIconName: String {
@@ -186,6 +196,8 @@ private struct DetectedItemRow: View {
     }
 
     private var visibilityHelpText: String {
-        isHidden ? "Show in Spill" : "Hide in Spill"
+        isHidden
+            ? AppL10n.text(.showInSpill, appLanguage: settings.appLanguage)
+            : AppL10n.text(.hideInSpill, appLanguage: settings.appLanguage)
     }
 }

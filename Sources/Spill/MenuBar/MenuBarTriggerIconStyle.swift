@@ -24,14 +24,14 @@ enum MenuBarTriggerIconStyle: String, CaseIterable, Identifiable, Sendable {
     var title: String {
         switch self {
         case .spill:
-            return "Drop"
+            return AppL10n.text(.triggerDrop)
         }
     }
 
     var subtitle: String {
         switch self {
         case .spill:
-            return "Uses the compact droplet symbol."
+            return AppL10n.text(.triggerDropSubtitle)
         }
     }
 

@@ -68,30 +68,30 @@ enum SpillPanelState: Equatable {
     var accessibilityLabel: String {
         switch self {
         case .permissionRequired:
-            return "Accessibility required"
+            return AppL10n.text(.accessibilityRequired)
         case .scanning:
-            return "Scanning"
+            return AppL10n.text(.scanning)
         case .empty:
-            return "No actions ready"
+            return AppL10n.text(.noActionsReady)
         case .ready:
-            return "Ready"
+            return AppL10n.text(.ready)
         }
     }
 
     func subtitle(count: Int, pinnedCount: Int) -> String {
         switch self {
         case .permissionRequired:
-            return "Permission needed"
+            return AppL10n.text(.permissionNeeded)
         case .scanning:
-            return "Refreshing actions"
+            return AppL10n.text(.refreshingActions)
         case .empty:
-            return pinnedCount > 0 ? "\(pinnedCount) pinned" : "No actions ready"
+            return pinnedCount > 0 ? AppL10n.pinnedCount(pinnedCount) : AppL10n.text(.noActionsReady)
         case .ready:
             if pinnedCount > 0 {
-                return "\(pinnedCount) pinned, \(count) ready"
+                return "\(AppL10n.pinnedCount(pinnedCount)), \(AppL10n.actionsReady(count))"
             }
 
-            return "\(count) action\(count == 1 ? "" : "s") ready"
+            return AppL10n.actionsReady(count)
         }
     }
 }

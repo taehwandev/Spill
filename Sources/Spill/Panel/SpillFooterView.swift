@@ -17,15 +17,15 @@ struct SpillFooterView: View {
         HStack(spacing: 8) {
             footerBadge(
                 symbolName: isAccessibilityTrusted ? "checkmark.shield.fill" : "exclamationmark.shield.fill",
-                title: "AX",
-                value: isAccessibilityTrusted ? "OK" : "Need",
+                title: AppL10n.text(.ax),
+                value: isAccessibilityTrusted ? AppL10n.text(.ok) : AppL10n.text(.need),
                 style: .accessibility(isTrusted: isAccessibilityTrusted)
             )
 
             footerBadge(
                 symbolName: isScanning ? "arrow.triangle.2.circlepath" : "bolt.horizontal.fill",
-                title: "Scan",
-                value: isScanning ? "On" : "Idle",
+                title: AppL10n.text(.scan),
+                value: isScanning ? AppL10n.text(.on) : AppL10n.text(.idle),
                 style: .scan(isScanning: isScanning)
             )
 
@@ -38,7 +38,7 @@ struct SpillFooterView: View {
             if showsCountBadge {
                 footerBadge(
                     symbolName: "square.grid.2x2.fill",
-                    title: "Items",
+                    title: AppL10n.text(.items),
                     value: "\(itemCount)",
                     style: .count
                 )
@@ -48,7 +48,7 @@ struct SpillFooterView: View {
 
             footerBadge(
                 symbolName: "clock.fill",
-                title: "Time",
+                title: AppL10n.text(.time),
                 value: shortTime,
                 style: .time
             )
@@ -104,7 +104,7 @@ struct SpillFooterView: View {
             }
             .menuStyle(.borderlessButton)
             .frame(width: 14, height: 22)
-            .accessibilityLabel("Choose Caffeine Duration")
+            .accessibilityLabel(AppL10n.text(.chooseCaffeineDuration))
         }
         .frame(minWidth: 66, minHeight: 22, maxHeight: 22, alignment: .leading)
         .fixedSize(horizontal: true, vertical: false)
@@ -133,7 +133,7 @@ struct SpillFooterView: View {
     }
 
     private var sleepGuardFooterValue: String {
-        sleepGuard.isActive ? sleepGuard.remainingLabel : "Off"
+        sleepGuard.isActive ? sleepGuard.remainingLabel : AppL10n.text(.off)
     }
 
     @ViewBuilder
@@ -142,12 +142,12 @@ struct SpillFooterView: View {
             Button(role: .destructive) {
                 stopSleepGuard(source: "panel_footer_menu")
             } label: {
-                Text("Stop Caffeine")
+                Text(AppL10n.text(.stopCaffeine))
             }
 
             Divider()
         } else {
-            Button("Start \(sleepGuardDefaultDuration.menuTitle)") {
+            Button(String(format: AppL10n.text(.startDuration), AppL10n.sleepDurationTitle(sleepGuardDefaultDuration))) {
                 startSleepGuard(
                     duration: sleepGuardDefaultDuration,
                     updatesDefaultDuration: false,
@@ -159,7 +159,7 @@ struct SpillFooterView: View {
         }
 
         ForEach(SleepGuardDuration.availableDurations(allowsIndefinite: allowsIndefiniteDuration)) { duration in
-            Button(duration.menuTitle) {
+            Button(AppL10n.sleepDurationTitle(duration)) {
                 startSleepGuard(
                     duration: duration,
                     updatesDefaultDuration: true,
@@ -179,7 +179,7 @@ struct SpillFooterView: View {
     private func powerFooter(status: SystemPowerStatus) -> some View {
         footerBadge(
             symbolName: status.symbolName,
-            title: "Power",
+            title: AppL10n.text(.power),
             value: status.value,
             style: .power(state: status.state)
         )
@@ -217,7 +217,7 @@ struct SpillFooterView: View {
             "sleep_guard_started",
             props: [
                 "source": source,
-                "duration": duration.menuTitle,
+                "duration": duration.rawValue.description,
                 "keep_display_awake": keepsDisplayAwake ? "true" : "false",
                 "result": didStart ? "success" : "failed"
             ]
@@ -235,26 +235,26 @@ struct SpillFooterView: View {
 
     private var caffeineHelpText: String {
         if let errorMessage = sleepGuard.errorMessage {
-            return "Caffeine - \(errorMessage)"
+            return "\(AppL10n.text(.caffeine)) - \(errorMessage)"
         }
 
         guard sleepGuard.isActive else {
-            return "Caffeine Off"
+            return AppL10n.text(.caffeineOff)
         }
 
         if sleepGuard.activeDuration?.isIndefinite == true {
             return sleepGuard.keepsDisplayAwake
-                ? "Caffeine - on until stopped"
-                : "Caffeine - on until stopped - display may sleep"
+                ? AppL10n.text(.caffeineUntilStopped)
+                : AppL10n.text(.caffeineUntilStoppedDisplayMaySleep)
         }
 
         return sleepGuard.keepsDisplayAwake
-            ? "Caffeine - \(sleepGuard.remainingLabel) remaining"
-            : "Caffeine - \(sleepGuard.remainingLabel) remaining - display may sleep"
+            ? String(format: AppL10n.text(.caffeineRemainingHelp), sleepGuard.remainingLabel)
+            : String(format: AppL10n.text(.caffeineRemainingDisplayMaySleepHelp), sleepGuard.remainingLabel)
     }
 
     private func powerHelpText(for status: SystemPowerStatus) -> String {
-        var parts = ["Power", status.value]
+        var parts = [AppL10n.text(.power), status.value]
 
         if let subtitle = status.subtitle, !subtitle.isEmpty {
             parts.append(subtitle)

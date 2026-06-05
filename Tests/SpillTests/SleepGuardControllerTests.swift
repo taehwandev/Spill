@@ -137,7 +137,7 @@ final class SleepGuardControllerTests: XCTestCase {
         XCTAssertEqual(fakeManager.createdSystemAssertions, [100])
         XCTAssertEqual(fakeManager.createdDisplayAssertions, [])
         XCTAssertEqual(fakeManager.releasedAssertions, [100])
-        XCTAssertEqual(controller.errorMessage, "Could not keep the display awake.")
+        XCTAssertEqual(controller.errorMessage, AppL10n.text(.couldNotKeepDisplayAwake))
     }
 
     func testSystemAssertionFailureLeavesControllerOff() {
@@ -150,7 +150,7 @@ final class SleepGuardControllerTests: XCTestCase {
         XCTAssertFalse(controller.isActive)
         XCTAssertEqual(fakeManager.createdSystemAssertions, [])
         XCTAssertEqual(fakeManager.releasedAssertions, [])
-        XCTAssertEqual(controller.errorMessage, "Could not start Caffeine.")
+        XCTAssertEqual(controller.errorMessage, AppL10n.text(.couldNotStartCaffeine))
     }
 }
 

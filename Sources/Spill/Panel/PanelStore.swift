@@ -266,7 +266,9 @@ final class PanelStore: ObservableObject {
             actionFeedback: .replace(SpillActionFeedback(
                 result: .success,
                 title: item.displayTitle,
-                overrideMessage: isPinned ? "Unpinned \(item.displayTitle)" : "Pinned \(item.displayTitle)"
+                overrideMessage: isPinned
+                    ? AppL10n.unpinned(item.displayTitle, appLanguage: settings.appLanguage)
+                    : AppL10n.pinned(item.displayTitle, appLanguage: settings.appLanguage)
             )),
             pendingDismiss: .replace(false)
         )

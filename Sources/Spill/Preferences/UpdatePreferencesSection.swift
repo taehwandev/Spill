@@ -4,10 +4,14 @@ struct UpdatePreferencesSection: View {
     @ObservedObject var store: UpdateCheckStore
     @State private var didCopyInstallCommand = false
 
+    private func t(_ key: PreferencesTextKey) -> String {
+        PreferencesL10n.text(key)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 10) {
-                Label("Current version", systemImage: "number")
+                Label(t(.currentVersion), systemImage: "number")
                     .font(.body.weight(.medium))
 
                 Spacer()
@@ -31,7 +35,7 @@ struct UpdatePreferencesSection: View {
                         copyInstallCommand()
                     } label: {
                         Label(
-                            didCopyInstallCommand ? "Copied" : "Copy Install Command",
+                            didCopyInstallCommand ? t(.copied) : t(.copyInstallCommand),
                             systemImage: didCopyInstallCommand ? "checkmark.circle.fill" : "terminal.fill"
                         )
                     }
@@ -48,7 +52,7 @@ struct UpdatePreferencesSection: View {
                     Button {
                         store.openReleaseNotes(source: "preferences")
                     } label: {
-                        Label("Notes", systemImage: "doc.text")
+                        Label(t(.notes), systemImage: "doc.text")
                     }
                 }
             }
@@ -83,7 +87,7 @@ struct UpdatePreferencesSection: View {
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.blue)
 
-                Text("Terminal install command")
+                Text(t(.terminalInstallCommand))
                     .font(.footnote.weight(.semibold))
             }
 
@@ -106,11 +110,11 @@ struct UpdatePreferencesSection: View {
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         case .checking:
-            Label("Checking for updates...", systemImage: "arrow.triangle.2.circlepath")
+            Label(t(.checkingForUpdates), systemImage: "arrow.triangle.2.circlepath")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         case .upToDate(_, let latestVersion):
-            Label("Spill is up to date (\(latestVersion)).", systemImage: "checkmark.circle.fill")
+            Label(PreferencesL10n.upToDate(version: latestVersion), systemImage: "checkmark.circle.fill")
                 .font(.footnote)
                 .foregroundStyle(.green)
         case .available(let update):
@@ -118,7 +122,13 @@ struct UpdatePreferencesSection: View {
                 .font(.footnote)
                 .foregroundStyle(.blue)
         case .unsupported(let update, let currentMacOS):
-            Label("Version \(update.latestVersion) requires macOS \(update.minimumMacOS ?? "newer than \(currentMacOS)").", systemImage: "exclamationmark.triangle.fill")
+            Label(
+                PreferencesL10n.unsupportedVersion(
+                    version: update.latestVersion,
+                    requirement: update.minimumMacOS ?? PreferencesL10n.newerThanVersion(currentMacOS)
+                ),
+                systemImage: "exclamationmark.triangle.fill"
+            )
                 .font(.footnote)
                 .foregroundStyle(.orange)
         case .failed(_, let message):
@@ -134,28 +144,28 @@ struct UpdatePreferencesSection: View {
 
     private var idleStatusMessage: String {
         if store.usesInAppUpdater {
-            return "Dashboard checks once per day. Use Check for Updates here to start the in-app updater."
+            return t(.dashboardChecksInApp)
         }
 
-        return "Dashboard checks once per day. Manual checks use the latest GitHub release metadata."
+        return t(.dashboardChecksGitHub)
     }
 
     private var checkButtonTitle: String {
         if store.isChecking {
-            return "Checking"
+            return t(.checking)
         }
 
         if store.canOpenUpdate && store.usesInAppUpdater {
-            return "Update Now"
+            return t(.updateNow)
         }
 
-        return "Check for Updates"
+        return t(.checkForUpdates)
     }
 
     private var openUpdateTitle: String {
         store.availableUpdate?.usesInstallerPackage == true
-            ? "Open Installer"
-            : "Download DMG"
+            ? t(.openInstaller)
+            : t(.downloadDMG)
     }
 
     private var openUpdateSymbolName: String {
@@ -166,14 +176,14 @@ struct UpdatePreferencesSection: View {
 
     private func availableUpdateMessage(for update: AvailableUpdate) -> String {
         if store.usesInAppUpdater {
-            return "Version \(update.latestVersion) is available. Update inside the app."
+            return PreferencesL10n.availableUpdateMessage(version: update.latestVersion, key: .updateInsideApp)
         }
 
         if update.usesInstallerPackage {
-            return "Version \(update.latestVersion) is available. Open the signed installer package to update."
+            return PreferencesL10n.availableUpdateMessage(version: update.latestVersion, key: .updateWithInstaller)
         }
 
-        return "Version \(update.latestVersion) is available. Copy the terminal command or download the DMG."
+        return PreferencesL10n.availableUpdateMessage(version: update.latestVersion, key: .updateWithCommandOrDMG)
     }
 
     private func availableUpdateSymbolName(for update: AvailableUpdate) -> String {

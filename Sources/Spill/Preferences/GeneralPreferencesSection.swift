@@ -7,16 +7,20 @@ struct GeneralPreferencesSection: View {
     @Binding var loginItemError: String?
     @State private var showsWindowShortcuts = false
 
+    private func t(_ key: PreferencesTextKey) -> String {
+        PreferencesL10n.text(key, appLanguage: settings.appLanguage)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             // Launch at Login - at the absolute top!
             VStack(alignment: .leading, spacing: 4) {
-                Toggle("Launch at Login", isOn: launchAtLoginBinding)
+                Toggle(t(.launchAtLogin), isOn: launchAtLoginBinding)
                     .disabled(!LoginItemController.isAvailable)
                     .font(.body.weight(.medium))
 
                 if !LoginItemController.isAvailable {
-                    Text("Launch at Login is available after packaging Spill as a .app bundle.")
+                    Text(t(.launchAtLoginUnavailable))
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -31,18 +35,23 @@ struct GeneralPreferencesSection: View {
             Divider()
                 .background(Color.primary.opacity(0.04))
 
+            languageSection
+
+            Divider()
+                .background(Color.primary.opacity(0.04))
+
             UpdatePreferencesSection(store: updateStore)
 
             Divider()
                 .background(Color.primary.opacity(0.04))
 
             // Main Animation & Global Shortcut Toggles
-            Toggle("Use spill animation", isOn: $settings.useSpillAnimation)
+            Toggle(t(.useSpillAnimation), isOn: $settings.useSpillAnimation)
 
             triggerIconSection
 
             VStack(alignment: .leading, spacing: 4) {
-                Toggle("Keyboard shortcut", isOn: $settings.hotKeyEnabled)
+                Toggle(t(.keyboardShortcut), isOn: $settings.hotKeyEnabled)
 
                 if settings.hotKeyEnabled {
                     Text("\(WindowActionShortcutModifier.standard.title) + Space")
@@ -58,7 +67,7 @@ struct GeneralPreferencesSection: View {
             // Menu Bar Layout Customization
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
-                    Label("Menu bar icon spacing", systemImage: "camera.viewfinder")
+                    Label(t(.menuBarIconSpacing), systemImage: "camera.viewfinder")
                         .font(.body.weight(.medium))
                     Spacer()
                     Text("\(Int(settings.iconSpacing)) px")
@@ -77,9 +86,32 @@ struct GeneralPreferencesSection: View {
                 windowShortcutsSection
                     .padding(.top, 8)
             } label: {
-                Label("Window Snap Shortcuts", systemImage: "macwindow")
+                Label(t(.windowSnapShortcuts), systemImage: "macwindow")
                     .font(.body.weight(.medium))
             }
+        }
+    }
+
+    private var languageSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline) {
+                Label(t(.language), systemImage: "globe")
+                    .font(.body.weight(.medium))
+
+                Spacer()
+
+                Picker(t(.language), selection: $settings.appLanguage) {
+                    ForEach(SpillAppLanguage.allCases) { language in
+                        Text(language.title).tag(language)
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 168)
+            }
+
+            Text(PreferencesL10n.languageDetail(settings.appLanguage, appLanguage: settings.appLanguage))
+                .font(.footnote)
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -111,7 +143,7 @@ struct GeneralPreferencesSection: View {
     private var triggerIconSection: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Label("Menu bar trigger icon", systemImage: "menubar.rectangle")
+                Label(t(.menuBarTriggerIcon), systemImage: "menubar.rectangle")
                     .font(.body.weight(.medium))
                 Spacer()
                 Text(settings.menuBarTriggerIconStyle.title)
@@ -120,7 +152,7 @@ struct GeneralPreferencesSection: View {
             }
 
             if MenuBarTriggerIconStyle.selectableCases.count > 1 {
-                Picker("Menu bar trigger icon", selection: $settings.menuBarTriggerIconStyle) {
+                Picker(t(.menuBarTriggerIcon), selection: $settings.menuBarTriggerIconStyle) {
                     ForEach(MenuBarTriggerIconStyle.selectableCases) { style in
                         Text(style.title).tag(style)
                     }
@@ -177,7 +209,7 @@ private struct MenuBarTriggerIconPreview: View {
             let usageRatio = previewUsageRatio(for: style, phase: phase)
 
             HStack(spacing: 10) {
-                Text("Preview")
+                Text(PreferencesL10n.text(.preview))
                     .font(.footnote.weight(.medium))
                     .foregroundStyle(.secondary)
 

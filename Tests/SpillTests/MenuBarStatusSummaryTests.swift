@@ -44,7 +44,7 @@ final class MenuBarStatusSummaryTests: XCTestCase {
         )
 
         XCTAssertEqual(summary.title, "")
-        XCTAssertEqual(summary.tooltip, "Show Spill Bar")
+        XCTAssertEqual(summary.tooltip, "Show Spill Panel")
         XCTAssertEqual(summary.segments, [])
     }
 

@@ -14,6 +14,7 @@ struct SpillDisplayedActionItem: Equatable, Identifiable {
 struct WindowActionButton: View {
     let action: SpillAction
     let shortcutKey: WindowActionShortcutKey
+    let appLanguage: SpillAppLanguage
     let perform: () -> Void
 
     @State private var isHovered = false
@@ -56,31 +57,31 @@ struct WindowActionButton: View {
     private var labelText: String {
         switch action.kind {
         case .window(.leftHalf):
-            return "Left"
+            return AppL10n.windowActionTitle(.leftHalf, appLanguage: appLanguage)
         case .window(.rightHalf):
-            return "Right"
+            return AppL10n.windowActionTitle(.rightHalf, appLanguage: appLanguage)
         case .window(.topHalf):
-            return "Top"
+            return AppL10n.windowActionTitle(.topHalf, appLanguage: appLanguage)
         case .window(.bottomHalf):
-            return "Bottom"
+            return AppL10n.windowActionTitle(.bottomHalf, appLanguage: appLanguage)
         case .window(.center):
-            return "Center"
+            return AppL10n.windowActionTitle(.center, appLanguage: appLanguage)
         case .window(.maximize):
-            return "Max"
+            return AppL10n.windowActionTitle(.maximize, appLanguage: appLanguage)
         case .window(.topLeft):
-            return "Top L"
+            return AppL10n.windowActionTitle(.topLeft, appLanguage: appLanguage)
         case .window(.topRight):
-            return "Top R"
+            return AppL10n.windowActionTitle(.topRight, appLanguage: appLanguage)
         case .window(.bottomLeft):
-            return "Bot L"
+            return AppL10n.windowActionTitle(.bottomLeft, appLanguage: appLanguage)
         case .window(.bottomRight):
-            return "Bot R"
+            return AppL10n.windowActionTitle(.bottomRight, appLanguage: appLanguage)
         case .window(.previousDisplay):
-            return "Disp L"
+            return AppL10n.windowActionTitle(.previousDisplay, appLanguage: appLanguage)
         case .window(.nextDisplay):
-            return "Disp R"
+            return AppL10n.windowActionTitle(.nextDisplay, appLanguage: appLanguage)
         case .window(.restore):
-            return "Restore"
+            return AppL10n.windowActionTitle(.restore, appLanguage: appLanguage)
         case .menuBarItem, .app, .command:
             return action.title
         }
@@ -107,6 +108,7 @@ struct WindowActionButton: View {
 struct SpillActionButton: View {
     let action: SpillAction
     let isPinned: Bool
+    let appLanguage: SpillAppLanguage
     let togglePinned: () -> Void
     let perform: () -> Void
 
@@ -150,7 +152,10 @@ struct SpillActionButton: View {
                     }
             }
             .buttonStyle(.plain)
-            .help(isPinned ? "Unpin" : "Pin")
+            .help(isPinned
+                ? AppL10n.text(.unpin, appLanguage: appLanguage)
+                : AppL10n.text(.pin, appLanguage: appLanguage)
+            )
         }
         .frame(width: 48, height: 48)
     }
@@ -217,13 +222,13 @@ struct SpillActionFeedback: Equatable {
 
         switch result {
         case .success:
-            return "Opened \(title)"
+            return AppL10n.opened(title)
         case .unavailable:
-            return "\(title) unavailable"
+            return AppL10n.unavailable(title)
         case let .permissionRequired(permission):
-            return "\(permission) permission required"
+            return AppL10n.permissionRequired(permission)
         case .unsupported:
-            return "\(title) unsupported"
+            return AppL10n.unsupported(title)
         case let .failed(message):
             return message
         }

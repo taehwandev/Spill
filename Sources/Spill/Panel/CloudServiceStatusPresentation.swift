@@ -40,30 +40,30 @@ extension CloudServiceHealth {
     var serverStatusHeaderTitle: String {
         switch self {
         case .operational:
-            return "Operational"
+            return AppL10n.text(.operational)
         case .degraded:
-            return "Degraded"
+            return AppL10n.text(.degraded)
         case .outage:
-            return "Outage"
+            return AppL10n.text(.outage)
         case .maintenance:
-            return "Maintenance"
+            return AppL10n.text(.maintenance)
         case .unknown:
-            return "Unknown"
+            return AppL10n.text(.unknown)
         }
     }
 
     var serverStatusBadgeTitle: String {
         switch self {
         case .operational:
-            return "Server OK"
+            return AppL10n.text(.serverOK)
         case .degraded:
-            return "Degraded"
+            return AppL10n.text(.degraded)
         case .outage:
-            return "Outage"
+            return AppL10n.text(.outage)
         case .maintenance:
-            return "Maint"
+            return AppL10n.text(.maint)
         case .unknown:
-            return "Unknown"
+            return AppL10n.text(.unknown)
         }
     }
 

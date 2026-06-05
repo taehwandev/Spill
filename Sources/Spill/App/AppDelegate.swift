@@ -628,6 +628,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             .store(in: &cancellables)
 
+        settings.$appLanguage
+            .dropFirst()
+            .sink { [weak self] _ in
+                SpillTelemetry.shared.track("preference_changed", props: ["name": "app_language"])
+                self?.configureMainMenu()
+                self?.statusItemController?.refresh()
+            }
+            .store(in: &cancellables)
     }
 
     private func configureStatusRefreshLoop() {
@@ -692,14 +700,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let appMenu = NSMenu(title: "Spill")
         appMenuItem.submenu = appMenu
-        appMenu.addItem(mainMenuItem(title: "Show Spill Panel", action: #selector(showSpillPanelFromMainMenu), keyEquivalent: ""))
-        appMenu.addItem(mainMenuItem(title: "Open Local Token Dashboard", action: #selector(openTokenDashboardFromMainMenu), keyEquivalent: ""))
-        appMenu.addItem(mainMenuItem(title: "Refresh Menu Bar Items", action: #selector(refreshMenuBarItemsFromMainMenu), keyEquivalent: "r"))
+        appMenu.addItem(mainMenuItem(title: AppL10n.text(.showSpillPanel, appLanguage: settings.appLanguage), action: #selector(showSpillPanelFromMainMenu), keyEquivalent: ""))
+        appMenu.addItem(mainMenuItem(title: AppL10n.text(.openLocalTokenDashboard, appLanguage: settings.appLanguage), action: #selector(openTokenDashboardFromMainMenu), keyEquivalent: ""))
+        appMenu.addItem(mainMenuItem(title: AppL10n.text(.refreshMenuBarItems, appLanguage: settings.appLanguage), action: #selector(refreshMenuBarItemsFromMainMenu), keyEquivalent: "r"))
         appMenu.addItem(.separator())
-        appMenu.addItem(mainMenuItem(title: "Check for Updates...", action: #selector(checkForUpdatesFromMainMenu), keyEquivalent: ""))
-        appMenu.addItem(mainMenuItem(title: "Preferences...", action: #selector(showPreferencesFromMainMenu), keyEquivalent: ","))
+        appMenu.addItem(mainMenuItem(title: AppL10n.text(.checkForUpdates, appLanguage: settings.appLanguage), action: #selector(checkForUpdatesFromMainMenu), keyEquivalent: ""))
+        appMenu.addItem(mainMenuItem(title: AppL10n.text(.preferences, appLanguage: settings.appLanguage), action: #selector(showPreferencesFromMainMenu), keyEquivalent: ","))
         appMenu.addItem(.separator())
-        appMenu.addItem(mainMenuItem(title: "Quit Spill", action: #selector(quitFromMainMenu), keyEquivalent: ""))
+        appMenu.addItem(mainMenuItem(title: AppL10n.text(.quitSpill, appLanguage: settings.appLanguage), action: #selector(quitFromMainMenu), keyEquivalent: ""))
         NSApp.mainMenu = mainMenu
     }
 

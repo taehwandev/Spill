@@ -9,11 +9,15 @@ enum MenuBarStatusDisplayStyle: String, CaseIterable, Identifiable, Sendable {
     }
 
     var title: String {
+        title(appLanguage: .persisted())
+    }
+
+    func title(appLanguage: SpillAppLanguage) -> String {
         switch self {
         case .labelAndPercent:
-            return "Label + %"
+            return PreferencesL10n.text(.labelAndPercent, appLanguage: appLanguage)
         case .percentOnly:
-            return "% Only"
+            return PreferencesL10n.text(.percentOnly, appLanguage: appLanguage)
         }
     }
 
@@ -36,11 +40,15 @@ enum MenuBarStatusLayoutStyle: String, CaseIterable, Identifiable, Sendable {
     }
 
     var title: String {
+        title(appLanguage: .persisted())
+    }
+
+    func title(appLanguage: SpillAppLanguage) -> String {
         switch self {
         case .inline:
-            return "Inline"
+            return PreferencesL10n.text(.inline, appLanguage: appLanguage)
         case .stacked:
-            return "Stacked"
+            return PreferencesL10n.text(.stacked, appLanguage: appLanguage)
         }
     }
 }

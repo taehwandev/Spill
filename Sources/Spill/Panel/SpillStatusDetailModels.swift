@@ -17,22 +17,22 @@ struct SpillStatusDetailRow: Identifiable, Equatable {
 enum SpillStatusDetailRows {
     static func rows(for status: SystemCPUStatus) -> [SpillStatusDetailRow] {
         var rows = [
-            SpillStatusDetailRow(label: "Usage", value: status.value),
-            SpillStatusDetailRow(label: "Available", value: percentText(status.availableRatio)),
-            SpillStatusDetailRow(label: "User", value: percentText(status.userRatio)),
-            SpillStatusDetailRow(label: "System", value: percentText(status.systemRatio)),
-            SpillStatusDetailRow(label: "Nice", value: percentText(status.niceRatio)),
-            SpillStatusDetailRow(label: "Idle", value: percentText(status.idleRatio))
+            SpillStatusDetailRow(label: AppL10n.text(.usage), value: status.value),
+            SpillStatusDetailRow(label: AppL10n.text(.available), value: percentText(status.availableRatio)),
+            SpillStatusDetailRow(label: AppL10n.text(.user), value: percentText(status.userRatio)),
+            SpillStatusDetailRow(label: AppL10n.text(.system), value: percentText(status.systemRatio)),
+            SpillStatusDetailRow(label: AppL10n.text(.nice), value: percentText(status.niceRatio)),
+            SpillStatusDetailRow(label: AppL10n.text(.idleLabel), value: percentText(status.idleRatio))
         ]
 
         if status.coreCount > 0 {
-            rows.append(SpillStatusDetailRow(label: "Cores", value: "\(status.coreCount)"))
-            rows.append(SpillStatusDetailRow(label: "Peak Core", value: percentText(status.peakCoreUsageRatio)))
+            rows.append(SpillStatusDetailRow(label: AppL10n.text(.cores), value: "\(status.coreCount)"))
+            rows.append(SpillStatusDetailRow(label: AppL10n.text(.peakCore), value: percentText(status.peakCoreUsageRatio)))
         }
 
         rows.append(contentsOf: [
-            SpillStatusDetailRow(label: "Sample", value: "\(status.activeTicks) / \(status.totalTicks) active ticks"),
-            SpillStatusDetailRow(label: "State", value: status.state.detailTitle)
+            SpillStatusDetailRow(label: AppL10n.text(.sample), value: "\(status.activeTicks) / \(status.totalTicks) active ticks"),
+            SpillStatusDetailRow(label: AppL10n.text(.state), value: status.state.detailTitle)
         ])
 
         return rows
@@ -40,25 +40,25 @@ enum SpillStatusDetailRows {
 
     static func rows(for status: SystemMemoryStatus) -> [SpillStatusDetailRow] {
         [
-            SpillStatusDetailRow(label: "Usage", value: status.value),
-            SpillStatusDetailRow(label: "Used", value: SystemMemoryProvider.formatBytes(status.usedBytes)),
-            SpillStatusDetailRow(label: "Available", value: SystemMemoryProvider.formatBytes(status.availableBytes)),
-            SpillStatusDetailRow(label: "Free", value: SystemMemoryProvider.formatBytes(status.freeBytes)),
-            SpillStatusDetailRow(label: "Active", value: SystemMemoryProvider.formatBytes(status.activeBytes)),
-            SpillStatusDetailRow(label: "Inactive", value: SystemMemoryProvider.formatBytes(status.inactiveBytes)),
-            SpillStatusDetailRow(label: "Wired", value: SystemMemoryProvider.formatBytes(status.wiredBytes)),
-            SpillStatusDetailRow(label: "Compressed", value: SystemMemoryProvider.formatBytes(status.compressedBytes)),
-            SpillStatusDetailRow(label: "Total", value: SystemMemoryProvider.formatBytes(status.totalBytes))
+            SpillStatusDetailRow(label: AppL10n.text(.usage), value: status.value),
+            SpillStatusDetailRow(label: AppL10n.text(.used), value: SystemMemoryProvider.formatBytes(status.usedBytes)),
+            SpillStatusDetailRow(label: AppL10n.text(.available), value: SystemMemoryProvider.formatBytes(status.availableBytes)),
+            SpillStatusDetailRow(label: AppL10n.text(.free), value: SystemMemoryProvider.formatBytes(status.freeBytes)),
+            SpillStatusDetailRow(label: AppL10n.text(.active), value: SystemMemoryProvider.formatBytes(status.activeBytes)),
+            SpillStatusDetailRow(label: AppL10n.text(.inactive), value: SystemMemoryProvider.formatBytes(status.inactiveBytes)),
+            SpillStatusDetailRow(label: AppL10n.text(.wired), value: SystemMemoryProvider.formatBytes(status.wiredBytes)),
+            SpillStatusDetailRow(label: AppL10n.text(.compressed), value: SystemMemoryProvider.formatBytes(status.compressedBytes)),
+            SpillStatusDetailRow(label: AppL10n.text(.total), value: SystemMemoryProvider.formatBytes(status.totalBytes))
         ]
     }
 
     static func rows(for status: SystemStorageStatus) -> [SpillStatusDetailRow] {
         [
-            SpillStatusDetailRow(label: "Usage", value: status.value),
-            SpillStatusDetailRow(label: "Used", value: SystemMemoryProvider.formatBytes(status.usedBytes)),
-            SpillStatusDetailRow(label: "Available", value: SystemMemoryProvider.formatBytes(status.availableBytes)),
-            SpillStatusDetailRow(label: "Total", value: SystemMemoryProvider.formatBytes(status.totalBytes)),
-            SpillStatusDetailRow(label: "State", value: status.state.detailTitle)
+            SpillStatusDetailRow(label: AppL10n.text(.usage), value: status.value),
+            SpillStatusDetailRow(label: AppL10n.text(.used), value: SystemMemoryProvider.formatBytes(status.usedBytes)),
+            SpillStatusDetailRow(label: AppL10n.text(.available), value: SystemMemoryProvider.formatBytes(status.availableBytes)),
+            SpillStatusDetailRow(label: AppL10n.text(.total), value: SystemMemoryProvider.formatBytes(status.totalBytes)),
+            SpillStatusDetailRow(label: AppL10n.text(.state), value: status.state.detailTitle)
         ]
     }
 
@@ -67,19 +67,19 @@ enum SpillStatusDetailRows {
         let lowPowerCount = status.devices.filter(\.isLowPower).count
         let headlessCount = status.devices.filter(\.isHeadless).count
         var rows = [
-            SpillStatusDetailRow(label: "Available", value: "\(status.availableDeviceCount) / \(status.totalDeviceCount)"),
-            SpillStatusDetailRow(label: "Budget", value: status.totalRecommendedMaxWorkingSetBytes > 0 ? SystemMemoryProvider.formatBytes(status.totalRecommendedMaxWorkingSetBytes) : "N/A"),
-            SpillStatusDetailRow(label: "Unified", value: "\(unifiedCount)"),
-            SpillStatusDetailRow(label: "Low Power", value: "\(lowPowerCount)"),
-            SpillStatusDetailRow(label: "Headless", value: "\(headlessCount)")
+            SpillStatusDetailRow(label: AppL10n.text(.available), value: "\(status.availableDeviceCount) / \(status.totalDeviceCount)"),
+            SpillStatusDetailRow(label: AppL10n.text(.budget), value: status.totalRecommendedMaxWorkingSetBytes > 0 ? SystemMemoryProvider.formatBytes(status.totalRecommendedMaxWorkingSetBytes) : "N/A"),
+            SpillStatusDetailRow(label: AppL10n.text(.unified), value: "\(unifiedCount)"),
+            SpillStatusDetailRow(label: AppL10n.text(.lowPower), value: "\(lowPowerCount)"),
+            SpillStatusDetailRow(label: AppL10n.text(.headless), value: "\(headlessCount)")
         ]
 
         rows.append(contentsOf: status.devices.prefix(3).map { device in
             let traits = [
-                device.hasUnifiedMemory ? "Unified" : nil,
-                device.isLowPower ? "Low Power" : nil,
-                device.isRemovable ? "Removable" : nil,
-                device.isHeadless ? "Headless" : nil
+                device.hasUnifiedMemory ? AppL10n.text(.unified) : nil,
+                device.isLowPower ? AppL10n.text(.lowPower) : nil,
+                device.isRemovable ? AppL10n.text(.removable) : nil,
+                device.isHeadless ? AppL10n.text(.headless) : nil
             ].compactMap { $0 }
             let suffix = traits.isEmpty ? "" : " - \(traits.joined(separator: ", "))"
             return SpillStatusDetailRow(
@@ -93,43 +93,43 @@ enum SpillStatusDetailRows {
 
     static func rows(for status: SystemNetworkStatus) -> [SpillStatusDetailRow] {
         [
-            SpillStatusDetailRow(label: "Receive", value: SystemNetworkProvider.formatRate(status.receivedBytesPerSecond)),
-            SpillStatusDetailRow(label: "Upload", value: SystemNetworkProvider.formatRate(status.sentBytesPerSecond)),
-            SpillStatusDetailRow(label: "Total", value: SystemNetworkProvider.formatRate(status.totalBytesPerSecond)),
-            SpillStatusDetailRow(label: "Interfaces", value: "\(status.activeInterfaceCount)"),
-            SpillStatusDetailRow(label: "Sample", value: status.sampleInterval > 0 ? String(format: "%.1fs", status.sampleInterval) : "Sampling"),
-            SpillStatusDetailRow(label: "Received Total", value: SystemNetworkProvider.formatBytes(status.totalReceivedBytes)),
-            SpillStatusDetailRow(label: "Uploaded Total", value: SystemNetworkProvider.formatBytes(status.totalSentBytes))
+            SpillStatusDetailRow(label: AppL10n.text(.receive), value: SystemNetworkProvider.formatRate(status.receivedBytesPerSecond)),
+            SpillStatusDetailRow(label: AppL10n.text(.upload), value: SystemNetworkProvider.formatRate(status.sentBytesPerSecond)),
+            SpillStatusDetailRow(label: AppL10n.text(.total), value: SystemNetworkProvider.formatRate(status.totalBytesPerSecond)),
+            SpillStatusDetailRow(label: AppL10n.text(.interfaces), value: "\(status.activeInterfaceCount)"),
+            SpillStatusDetailRow(label: AppL10n.text(.sample), value: status.sampleInterval > 0 ? String(format: "%.1fs", status.sampleInterval) : AppL10n.text(.scanning)),
+            SpillStatusDetailRow(label: AppL10n.text(.receivedTotal), value: SystemNetworkProvider.formatBytes(status.totalReceivedBytes)),
+            SpillStatusDetailRow(label: AppL10n.text(.uploadedTotal), value: SystemNetworkProvider.formatBytes(status.totalSentBytes))
         ]
     }
 
     static func rows(for status: LocalAIToolStatus) -> [SpillStatusDetailRow] {
         var rows = [
-            SpillStatusDetailRow(label: "Status", value: status.value),
-            SpillStatusDetailRow(label: "Detail", value: status.subtitle ?? "N/A")
+            SpillStatusDetailRow(label: AppL10n.text(.status), value: status.value),
+            SpillStatusDetailRow(label: AppL10n.text(.detail), value: status.subtitle ?? "N/A")
         ]
 
         if let recommendation = status.actionRecommendation {
-            rows.append(SpillStatusDetailRow(label: "Next", value: recommendation.title))
+            rows.append(SpillStatusDetailRow(label: AppL10n.text(.next), value: recommendation.title))
         }
 
         if let model = status.metadata.model, !model.isEmpty {
-            rows.append(SpillStatusDetailRow(label: "Model", value: model))
+            rows.append(SpillStatusDetailRow(label: AppL10n.text(.model), value: model))
         }
 
         if let version = status.metadata.version, !version.isEmpty {
-            rows.append(SpillStatusDetailRow(label: "Version", value: version))
+            rows.append(SpillStatusDetailRow(label: AppL10n.text(.version), value: version))
         }
 
         if let source = status.metadata.source, !source.isEmpty {
-            rows.append(SpillStatusDetailRow(label: "Source", value: source))
+            rows.append(SpillStatusDetailRow(label: AppL10n.text(.source), value: source))
         }
 
         return rows
     }
 
     private static func boolText(_ value: Bool) -> String {
-        value ? "Yes" : "No"
+        value ? AppL10n.text(.yes) : AppL10n.text(.no)
     }
 
     private static func percentText(_ ratio: Double) -> String {
@@ -141,15 +141,15 @@ extension SpillStatusState {
     var detailTitle: String {
         switch self {
         case .normal:
-            return "Normal"
+            return AppL10n.text(.normal)
         case .active:
-            return "Active"
+            return AppL10n.text(.active)
         case .warning:
-            return "Warning"
+            return AppL10n.text(.warning)
         case .unavailable:
-            return "Unavailable"
+            return AppL10n.text(.unavailable)
         case .refreshing:
-            return "Refreshing"
+            return AppL10n.text(.refreshingActions)
         }
     }
 }

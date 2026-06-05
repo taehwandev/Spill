@@ -36,7 +36,7 @@ struct CloudServiceStatusDashboardView: View {
     private var header: some View {
         HStack(alignment: .top, spacing: 8) {
             VStack(alignment: .leading, spacing: 2) {
-                Label("Status Details", systemImage: "cloud.fill")
+                Label(AppL10n.text(.statusDetails), systemImage: "cloud.fill")
                     .font(.system(size: 13, weight: .semibold))
 
                 Text(headerSubtitle)
@@ -57,20 +57,20 @@ struct CloudServiceStatusDashboardView: View {
             }
             .buttonStyle(.plain)
             .disabled(store.isLoading)
-            .help("Refresh. Option-click forces a new check.")
+            .help(AppL10n.text(.refreshForceHelp))
         }
     }
 
     private var headerSubtitle: String {
         if store.isLoading {
-            return "Checking official sources"
+            return AppL10n.text(.checkingOfficialSources)
         }
 
         guard let snapshot = store.snapshot else {
-            return "Fetched when this opens"
+            return AppL10n.text(.fetchedWhenOpen)
         }
 
-        return "\(snapshot.items.count) services from official sources"
+        return AppL10n.servicesFromOfficialSources(snapshot.items.count)
     }
 
     private var items: [CloudServiceStatusItem] {
@@ -78,8 +78,8 @@ struct CloudServiceStatusDashboardView: View {
             CloudServiceStatusItem(
                 kind: kind,
                 health: .unknown,
-                detail: "Open dashboard to fetch official status",
-                source: "Not fetched"
+                detail: AppL10n.text(.openDashboardToFetchStatus),
+                source: AppL10n.text(.notFetched)
             )
         }
     }
@@ -104,7 +104,7 @@ struct CloudServiceStatusDashboardView: View {
 
                     Spacer(minLength: 6)
 
-                    Text(item.health.title)
+                    Text(item.health.serverStatusHeaderTitle)
                         .font(.system(size: 10, weight: .bold, design: .rounded))
                         .foregroundStyle(item.health.serverStatusTint)
                         .lineLimit(1)
@@ -124,10 +124,10 @@ struct CloudServiceStatusDashboardView: View {
 
     private var footerText: String {
         guard let snapshot = store.snapshot else {
-            return "Official status is fetched only when this dashboard opens."
+            return AppL10n.text(.officialStatusFetchedOnOpen)
         }
 
-        return "Last checked \(formattedCheckTime(snapshot.fetchedAt)) (\(relativeAge(from: snapshot.fetchedAt)))."
+        return AppL10n.lastChecked(formattedCheckTime(snapshot.fetchedAt), age: relativeAge(from: snapshot.fetchedAt))
     }
 
     private func formattedCheckTime(_ date: Date) -> String {
@@ -148,14 +148,14 @@ struct CloudServiceStatusDashboardView: View {
         let elapsed = max(0, Date().timeIntervalSince(date))
 
         if elapsed < 60 {
-            return "just now"
+            return AppL10n.text(.justNow)
         }
 
         let minutes = Int(elapsed / 60)
         if minutes < 60 {
-            return "\(minutes)m ago"
+            return AppL10n.minutesAgo(minutes)
         }
 
-        return "\(max(1, minutes / 60))h ago"
+        return AppL10n.hoursAgo(max(1, minutes / 60))
     }
 }

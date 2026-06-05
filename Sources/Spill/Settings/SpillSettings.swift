@@ -1,9 +1,76 @@
 import Foundation
 import SwiftUI
 
+enum SpillAppLanguage: String, CaseIterable, Identifiable {
+    case automatic
+    case english
+    case korean
+    case japanese
+
+    static let defaultsKey = "appLanguage"
+
+    var id: String {
+        rawValue
+    }
+
+    var title: String {
+        switch self {
+        case .automatic:
+            return "Automatic"
+        case .english:
+            return "English"
+        case .korean:
+            return "한국어"
+        case .japanese:
+            return "日本語"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .automatic:
+            return "Follow macOS language"
+        case .english:
+            return "Use English"
+        case .korean:
+            return "한국어 사용"
+        case .japanese:
+            return "日本語を使用"
+        }
+    }
+
+    var languageCode: String? {
+        switch self {
+        case .automatic:
+            return nil
+        case .english:
+            return "en"
+        case .korean:
+            return "ko"
+        case .japanese:
+            return "ja"
+        }
+    }
+
+    static func normalized(rawValue: String?) -> Self {
+        guard let rawValue, let language = Self(rawValue: rawValue) else {
+            return .automatic
+        }
+        return language
+    }
+
+    static func persisted(defaults: UserDefaults = .standard) -> Self {
+        normalized(rawValue: defaults.string(forKey: defaultsKey))
+    }
+}
+
 @MainActor
 final class SpillSettings: ObservableObject {
     static let shared = SpillSettings()
+
+    @Published var appLanguage: SpillAppLanguage {
+        didSet { defaults.set(appLanguage.rawValue, forKey: Keys.appLanguage) }
+    }
 
     @Published var iconSpacing: Double {
         didSet {
@@ -142,10 +209,15 @@ final class SpillSettings: ObservableObject {
         didSet { defaults.set(tokenUsageBridgeEnabled, forKey: Keys.tokenUsageBridgeEnabled) }
     }
 
+    @Published var tokenMeteringPromptAllowsLocalDisplayNames: Bool {
+        didSet { defaults.set(tokenMeteringPromptAllowsLocalDisplayNames, forKey: Keys.tokenMeteringPromptAllowsLocalDisplayNames) }
+    }
+
     private let defaults: UserDefaults
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+        appLanguage = SpillAppLanguage.normalized(rawValue: defaults.string(forKey: Keys.appLanguage))
         iconSpacing = Self.normalizedIconSpacing(defaults.object(forKey: Keys.iconSpacing) as? Double)
         showCountBadge = defaults.object(forKey: Keys.showCountBadge) as? Bool ?? true
         showPowerFooter = defaults.object(forKey: Keys.showPowerFooter) as? Bool ?? true
@@ -225,6 +297,7 @@ final class SpillSettings: ObservableObject {
         )
         launchAtLogin = LoginItemController.isEnabled
         tokenUsageBridgeEnabled = defaults.object(forKey: Keys.tokenUsageBridgeEnabled) as? Bool ?? false
+        tokenMeteringPromptAllowsLocalDisplayNames = defaults.object(forKey: Keys.tokenMeteringPromptAllowsLocalDisplayNames) as? Bool ?? false
     }
 
     func selectionState(for item: MenuBarItemSnapshot) -> MenuBarItemSelectionState {
@@ -479,6 +552,7 @@ private struct WindowActionShortcutRegistrationKey: Hashable {
 }
 
 private enum Keys {
+    static let appLanguage = SpillAppLanguage.defaultsKey
     static let iconSpacing = "iconSpacing"
     static let showCountBadge = "showCountBadge"
     static let showPowerFooter = "showPowerFooter"
@@ -507,4 +581,5 @@ private enum Keys {
     static let windowActionShortcutKeys = "windowActionShortcutKeys"
     static let launchAtLogin = "launchAtLogin"
     static let tokenUsageBridgeEnabled = "tokenUsageBridgeEnabled"
+    static let tokenMeteringPromptAllowsLocalDisplayNames = "tokenMeteringPromptAllowsLocalDisplayNames"
 }

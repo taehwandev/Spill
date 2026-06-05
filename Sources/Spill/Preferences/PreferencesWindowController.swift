@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 
 @MainActor
@@ -13,6 +14,7 @@ final class PreferencesWindowController {
     private let showPanelAction: () -> Void
     private let openTokenDashboardAction: () -> Void
     private var window: NSWindow?
+    private var languageObservation: AnyCancellable?
 
     init(
         settings: SpillSettings,
@@ -30,6 +32,7 @@ final class PreferencesWindowController {
 
     func show() {
         let window = ensureWindow()
+        window.title = PreferencesL10n.text(.preferencesWindowTitle, appLanguage: settings.appLanguage)
         constrainToVisibleScreen(window)
         NSApp.activate()
         window.makeKeyAndOrderFront(nil)
@@ -56,7 +59,7 @@ final class PreferencesWindowController {
             defer: false
         )
 
-        window.title = "Spill Preferences"
+        window.title = PreferencesL10n.text(.preferencesWindowTitle, appLanguage: settings.appLanguage)
         window.titlebarAppearsTransparent = true
         window.isReleasedWhenClosed = false
         window.minSize = minimumSize
@@ -64,6 +67,9 @@ final class PreferencesWindowController {
         window.setFrameAutosaveName(autosaveName)
         window.contentView = NSHostingView(rootView: contentView)
         self.window = window
+        languageObservation = settings.$appLanguage.sink { [weak self] appLanguage in
+            self?.window?.title = PreferencesL10n.text(.preferencesWindowTitle, appLanguage: appLanguage)
+        }
         return window
     }
 

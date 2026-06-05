@@ -5,11 +5,15 @@ struct AccessibilityPreferencesSection: View {
     @Binding var accessibilityTrusted: Bool
     let showPanelAction: () -> Void
 
+    private func t(_ key: PreferencesTextKey) -> String {
+        PreferencesL10n.text(key)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
                 Label(
-                    accessibilityTrusted ? "Accessibility Active" : "Accessibility Needed",
+                    accessibilityTrusted ? t(.accessibilityActive) : t(.accessibilityNeeded),
                     systemImage: accessibilityTrusted ? "checkmark.shield.fill" : "exclamationmark.shield.fill"
                 )
                 .font(.body.weight(.medium))
@@ -18,12 +22,12 @@ struct AccessibilityPreferencesSection: View {
                 Spacer()
 
                 statePill(
-                    title: accessibilityTrusted ? "ON" : "OFF",
+                    title: accessibilityTrusted ? t(.on) : t(.off),
                     tint: accessibilityTrusted ? .green : .orange
                 )
 
                 statePill(
-                    title: "\(scanner.items.count) items",
+                    title: PreferencesL10n.itemCount(scanner.items.count),
                     tint: .secondary
                 )
             }
@@ -33,24 +37,24 @@ struct AccessibilityPreferencesSection: View {
                     Button {
                         showPanelAction()
                     } label: {
-                        Label("Open Panel", systemImage: "rectangle.on.rectangle")
+                        Label(t(.openPanel), systemImage: "rectangle.on.rectangle")
                     }
                     .buttonStyle(.borderedProminent)
 
                     Button {
                         refreshScanner()
                     } label: {
-                        Label(scanner.isScanning ? "Scanning" : "Refresh Scanner", systemImage: "arrow.clockwise")
+                        Label(scanner.isScanning ? t(.scanning) : t(.refreshScanner), systemImage: "arrow.clockwise")
                     }
                     .disabled(scanner.isScanning)
                 }
             } else {
-                Text("Spill needs Accessibility permission to discover and activate menu bar items owned by other apps.")
+                Text(t(.accessibilityPermissionDetail))
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Text("After granting permission in System Settings, relaunch Spill if it still shows as inactive.")
+                Text(t(.accessibilityPermissionRelaunch))
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -59,7 +63,7 @@ struct AccessibilityPreferencesSection: View {
                     Button {
                         requestPermission()
                     } label: {
-                        Label("Request Access", systemImage: "hand.raised.fill")
+                        Label(t(.requestAccess), systemImage: "hand.raised.fill")
                     }
                     .buttonStyle(.borderedProminent)
 
@@ -70,13 +74,13 @@ struct AccessibilityPreferencesSection: View {
                         )
                         AccessibilityPermission.openSystemSettings()
                     } label: {
-                        Label("System Settings", systemImage: "gearshape.fill")
+                        Label(t(.systemSettings), systemImage: "gearshape.fill")
                     }
 
                     Button {
                         refreshPermissionState()
                     } label: {
-                        Label("Recheck", systemImage: "arrow.clockwise")
+                        Label(t(.recheck), systemImage: "arrow.clockwise")
                     }
 
                     Button {
@@ -86,7 +90,7 @@ struct AccessibilityPreferencesSection: View {
                         )
                         AppRelauncher.relaunch()
                     } label: {
-                        Label("Relaunch", systemImage: "arrow.triangle.2.circlepath")
+                        Label(t(.relaunch), systemImage: "arrow.triangle.2.circlepath")
                     }
                 }
             }
@@ -96,16 +100,16 @@ struct AccessibilityPreferencesSection: View {
 
             DisclosureGroup {
                 VStack(alignment: .leading, spacing: 5) {
-                    diagnosticRow("Bundle ID", PermissionDiagnostics.bundleIdentifier)
-                    diagnosticRow("Bundle", PermissionDiagnostics.bundlePath)
-                    diagnosticRow("Executable", PermissionDiagnostics.executablePath)
-                    diagnosticRow("PID", PermissionDiagnostics.processIdentifier)
-                    diagnosticRow("App bundle launch", PermissionDiagnostics.isAppBundle)
-                    diagnosticRow("AX trusted", accessibilityTrusted ? "true" : "false")
+                    diagnosticRow(t(.bundleID), PermissionDiagnostics.bundleIdentifier)
+                    diagnosticRow(t(.bundle), PermissionDiagnostics.bundlePath)
+                    diagnosticRow(t(.executable), PermissionDiagnostics.executablePath)
+                    diagnosticRow(t(.pid), PermissionDiagnostics.processIdentifier)
+                    diagnosticRow(t(.appBundleLaunch), PermissionDiagnostics.isAppBundle)
+                    diagnosticRow(t(.axTrusted), accessibilityTrusted ? "true" : "false")
                 }
                 .padding(.top, 4)
             } label: {
-                Label("Permission Diagnostics", systemImage: "stethoscope")
+                Label(t(.permissionDiagnostics), systemImage: "stethoscope")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }

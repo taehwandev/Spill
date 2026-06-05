@@ -356,10 +356,13 @@ final class StatusItemController: NSObject {
             parts.append(statusTooltip)
         }
 
-        parts.append(isSpillBarVisible ? "Hide Spill Bar" : "Show Spill Bar")
+        parts.append(isSpillBarVisible
+            ? AppL10n.text(.hideSpillPanel, appLanguage: settings.appLanguage)
+            : AppL10n.text(.showSpillPanel, appLanguage: settings.appLanguage)
+        )
 
         if hiddenCount > 0 {
-            parts.append("\(hiddenCount) menu bar item(s)")
+            parts.append(AppL10n.itemCount(hiddenCount, appLanguage: settings.appLanguage))
         }
 
         return parts.joined(separator: "\n")
@@ -411,22 +414,23 @@ final class StatusItemController: NSObject {
         var parts: [String] = []
 
         if settings.menuBarTriggerIconStyle.usesPerformanceEffect {
-            parts.append("Trigger load: \(performanceEffect.tooltipText)")
+            parts.append("\(AppL10n.text(.triggerLoad, appLanguage: settings.appLanguage)): \(performanceEffect.tooltipText)")
         }
 
         if sleepGuardSegment != nil {
             if !sleepGuard.isActive {
-                parts.append("Caffeine chip: click to start for \(settings.sleepGuardDefaultDuration.menuTitle)")
+                let duration = AppL10n.sleepDurationTitle(settings.sleepGuardDefaultDuration, appLanguage: settings.appLanguage)
+                parts.append("\(AppL10n.text(.caffeineChipStart, appLanguage: settings.appLanguage)) \(duration)")
             } else if sleepGuard.activeDuration?.isIndefinite == true {
                 let detail = sleepGuard.keepsDisplayAwake
-                    ? "on until stopped"
-                    : "on until stopped, display may sleep"
-                parts.append("Caffeine chip: \(detail) - click to stop")
+                    ? AppL10n.text(.caffeineOnUntilStopped, appLanguage: settings.appLanguage)
+                    : AppL10n.text(.caffeineOnUntilStoppedDisplayMaySleep, appLanguage: settings.appLanguage)
+                parts.append("\(AppL10n.text(.caffeine, appLanguage: settings.appLanguage)): \(detail) - \(AppL10n.text(.caffeineChipStop, appLanguage: settings.appLanguage))")
             } else {
                 let detail = sleepGuard.keepsDisplayAwake
-                    ? "\(sleepGuard.remainingLabel) remaining"
-                    : "\(sleepGuard.remainingLabel) remaining, display may sleep"
-                parts.append("Caffeine chip: \(detail) - click to stop")
+                    ? String(format: AppL10n.text(.caffeineRemaining, appLanguage: settings.appLanguage), sleepGuard.remainingLabel)
+                    : String(format: AppL10n.text(.caffeineRemainingDisplayMaySleep, appLanguage: settings.appLanguage), sleepGuard.remainingLabel)
+                parts.append("\(AppL10n.text(.caffeine, appLanguage: settings.appLanguage)): \(detail) - \(AppL10n.text(.caffeineChipStop, appLanguage: settings.appLanguage))")
             }
         }
 
@@ -497,19 +501,21 @@ final class StatusItemController: NSObject {
 
     private func showMenu(for button: NSStatusBarButton, event: NSEvent?) {
         let menu = NSMenu()
-        let toggleTitle = isSpillBarVisible ? "Hide Spill Bar" : "Show Spill Bar"
+        let toggleTitle = isSpillBarVisible
+            ? AppL10n.text(.hideSpillPanel, appLanguage: settings.appLanguage)
+            : AppL10n.text(.showSpillPanel, appLanguage: settings.appLanguage)
 
         menu.addItem(menuItem(title: toggleTitle, action: #selector(toggleFromMenu), keyEquivalent: ""))
-        menu.addItem(disabledMenuItem(title: "Shortcut: \(WindowActionShortcutModifier.standard.title) + Space"))
+        menu.addItem(disabledMenuItem(title: "\(AppL10n.text(.shortcut, appLanguage: settings.appLanguage)): \(WindowActionShortcutModifier.standard.title) + Space"))
         menu.addItem(.separator())
-        menu.addItem(disabledMenuItem(title: "Token Metering: Local app dashboard"))
-        menu.addItem(menuItem(title: "Open Local Token Dashboard", action: #selector(openTokenDashboardFromMenu), keyEquivalent: ""))
+        menu.addItem(disabledMenuItem(title: AppL10n.text(.tokenMeteringLocalDashboard, appLanguage: settings.appLanguage)))
+        menu.addItem(menuItem(title: AppL10n.text(.openLocalTokenDashboard, appLanguage: settings.appLanguage), action: #selector(openTokenDashboardFromMenu), keyEquivalent: ""))
         menu.addItem(.separator())
-        menu.addItem(menuItem(title: "Refresh Menu Bar Items", action: #selector(refreshFromMenu), keyEquivalent: "r"))
-        menu.addItem(menuItem(title: "Check for Updates...", action: #selector(checkForUpdatesFromMenu), keyEquivalent: ""))
-        menu.addItem(menuItem(title: "Preferences...", action: #selector(showPreferencesFromMenu), keyEquivalent: ","))
+        menu.addItem(menuItem(title: AppL10n.text(.refreshMenuBarItems, appLanguage: settings.appLanguage), action: #selector(refreshFromMenu), keyEquivalent: "r"))
+        menu.addItem(menuItem(title: AppL10n.text(.checkForUpdates, appLanguage: settings.appLanguage), action: #selector(checkForUpdatesFromMenu), keyEquivalent: ""))
+        menu.addItem(menuItem(title: AppL10n.text(.preferences, appLanguage: settings.appLanguage), action: #selector(showPreferencesFromMenu), keyEquivalent: ","))
         menu.addItem(.separator())
-        menu.addItem(menuItem(title: "Quit Spill", action: #selector(quitFromMenu), keyEquivalent: ""))
+        menu.addItem(menuItem(title: AppL10n.text(.quitSpill, appLanguage: settings.appLanguage), action: #selector(quitFromMenu), keyEquivalent: ""))
 
         if let event {
             NSMenu.popUpContextMenu(menu, with: event, for: button)
@@ -544,7 +550,7 @@ enum SleepGuardMenuBarSegmentFactory {
 
         return MenuBarStatusSegment(
             kind: .caffeine,
-            title: "Caffeine",
+            title: AppL10n.text(.caffeine),
             shortTitle: "CAF",
             value: displayText,
             displayText: displayText,

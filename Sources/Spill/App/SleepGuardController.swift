@@ -149,7 +149,7 @@ final class SleepGuardController: ObservableObject {
 
         let reason = "Spill Caffeine"
         guard let systemID = assertionManager.createSystemAssertion(reason: reason) else {
-            errorMessage = "Could not start Caffeine."
+            errorMessage = AppL10n.text(.couldNotStartCaffeine)
             return false
         }
 
@@ -157,7 +157,7 @@ final class SleepGuardController: ObservableObject {
         if keepDisplayAwake {
             guard let createdDisplayID = assertionManager.createDisplayAssertion(reason: reason) else {
                 assertionManager.releaseAssertion(systemID)
-                errorMessage = "Could not keep the display awake."
+                errorMessage = AppL10n.text(.couldNotKeepDisplayAwake)
                 return false
             }
 
