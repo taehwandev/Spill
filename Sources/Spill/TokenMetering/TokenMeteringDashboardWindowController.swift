@@ -2,33 +2,20 @@ import AppKit
 import SwiftUI
 
 @MainActor
-final class PreferencesWindowController {
-    private let autosaveName = NSWindow.FrameAutosaveName("SpillPreferences")
-    private let preferredSize = NSSize(width: 520, height: 640)
-    private let minimumSize = NSSize(width: 460, height: 320)
+final class TokenMeteringDashboardWindowController {
+    private let autosaveName = NSWindow.FrameAutosaveName("SpillTokenMeteringDashboard")
+    private let preferredSize = NSSize(width: 860, height: 680)
+    private let minimumSize = NSSize(width: 720, height: 520)
     private let screenPadding: CGFloat = 32
-    private let settings: SpillSettings
-    private let scanner: AXMenuBarItemScanner
-    private let updateStore: UpdateCheckStore
-    private let showPanelAction: () -> Void
-    private let openTokenDashboardAction: () -> Void
+    private let store: TokenUsageDashboardStore
     private var window: NSWindow?
 
-    init(
-        settings: SpillSettings,
-        scanner: AXMenuBarItemScanner,
-        updateStore: UpdateCheckStore,
-        showPanelAction: @escaping () -> Void,
-        openTokenDashboardAction: @escaping () -> Void
-    ) {
-        self.settings = settings
-        self.scanner = scanner
-        self.updateStore = updateStore
-        self.showPanelAction = showPanelAction
-        self.openTokenDashboardAction = openTokenDashboardAction
+    init(store: TokenUsageDashboardStore) {
+        self.store = store
     }
 
     func show() {
+        store.refresh()
         let window = ensureWindow()
         constrainToVisibleScreen(window)
         NSApp.activate()
@@ -42,13 +29,7 @@ final class PreferencesWindowController {
             return window
         }
 
-        let contentView = PreferencesView(
-            settings: settings,
-            scanner: scanner,
-            updateStore: updateStore,
-            showPanelAction: showPanelAction,
-            openTokenDashboardAction: openTokenDashboardAction
-        )
+        let contentView = TokenMeteringDashboardView(store: store)
         let window = NSWindow(
             contentRect: defaultWindowFrame,
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
@@ -56,7 +37,7 @@ final class PreferencesWindowController {
             defer: false
         )
 
-        window.title = "Spill Preferences"
+        window.title = "Spill Local Token Dashboard"
         window.titlebarAppearsTransparent = true
         window.isReleasedWhenClosed = false
         window.minSize = minimumSize

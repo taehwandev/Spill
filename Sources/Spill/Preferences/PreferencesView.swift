@@ -70,6 +70,7 @@ struct PreferencesView: View {
     @ObservedObject var scanner: AXMenuBarItemScanner
     @ObservedObject var updateStore: UpdateCheckStore
     let showPanelAction: () -> Void
+    let openTokenDashboardAction: () -> Void
     @State private var accessibilityTrusted = AccessibilityPermission.isTrusted
     @State private var loginItemError: String?
     @State private var showsAdvancedDetection = false
@@ -103,17 +104,25 @@ struct PreferencesView: View {
                     )
                 }
 
-                // Section 2: Status Modules
+                // Section 2: Token Metering
+                PreferenceCard(title: "Token Metering", symbolName: "chart.bar.xaxis", iconColor: .teal) {
+                    TokenMeteringPreferencesSection(
+                        settings: settings,
+                        openDashboardAction: openTokenDashboardAction
+                    )
+                }
+
+                // Section 3: Status Modules
                 PreferenceCard(title: "Status Modules", symbolName: "waveform.path.ecg", iconColor: .purple) {
                     StatusModulesPreferencesSection(settings: settings)
                 }
 
-                // Section 3: Caffeine Options
+                // Section 4: Caffeine Options
                 PreferenceCard(title: "Caffeine Settings", symbolName: "cup.and.saucer.fill", iconColor: .orange) {
                     PowerPreferencesSection(settings: settings)
                 }
 
-                // Section 4: System Permissions & Diagnostics
+                // Section 5: System Permissions & Diagnostics
                 PreferenceCard(title: "Permissions & Diagnostics", symbolName: "lock.shield.fill", iconColor: .green) {
                     AccessibilityPreferencesSection(
                         scanner: scanner,
@@ -121,12 +130,6 @@ struct PreferencesView: View {
                         showPanelAction: showPanelAction
                     )
                 }
-
-                Divider()
-                    .background(Color.primary.opacity(0.04))
-
-                // Section 5: Agent Cat Promo Card
-                AgentCatCard()
 
                 Divider()
                     .background(Color.primary.opacity(0.04))
@@ -249,105 +252,6 @@ struct PreferencesView: View {
         )
         if let url = URL(string: "https://github.com/taehwandev/Spill") {
             NSWorkspace.shared.open(url)
-        }
-    }
-}
-
-struct AgentCatCard: View {
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 12) {
-                AsyncImage(url: URL(string: "https://agentcat.app/assets/app-icon.png")) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                            .shadow(color: Color.black.opacity(0.15), radius: 2, x: 0, y: 1)
-                    default:
-                        ZStack {
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(Color(red: 29/255, green: 26/255, blue: 22/255))
-                            Image(systemName: "cat.fill")
-                                .font(.system(size: 14))
-                                .foregroundStyle(.white)
-                        }
-                    }
-                }
-                .frame(width: 32, height: 32)
-
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Agent Cat for Local AI Work")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(.primary)
-
-                    Text("https://agentcat.app")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(.orange)
-                }
-            }
-
-            Text("A companion app for visualizing local AI agent activity across Codex, Claude Code, Antigravity CLI, and other development tools.")
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
-                .lineSpacing(3)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Button {
-                SpillTelemetry.shared.track(
-                    "agentcat_link_clicked",
-                    props: ["source": "preferences"]
-                )
-                if let url = URL(string: "https://agentcat.app/") {
-                    NSWorkspace.shared.open(url)
-                }
-            } label: {
-                HStack(spacing: 6) {
-                    Text("Visit AgentCat")
-                    Image(systemName: "arrow.up.right")
-                        .font(.system(size: 10, weight: .bold))
-                }
-                .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .background(
-                    LinearGradient(
-                        colors: [Color.orange, Color.orange.opacity(0.85)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    in: RoundedRectangle(cornerRadius: 8, style: .continuous)
-                )
-                .shadow(color: Color.orange.opacity(0.2), radius: 2, x: 0, y: 1)
-            }
-            .buttonStyle(.plain)
-            .padding(.top, 4)
-        }
-        .padding(16)
-        .background(
-            ZStack {
-                VisualEffectView(material: .hudWindow, blendingMode: .withinWindow)
-
-                LinearGradient(
-                    colors: [Color.orange.opacity(0.04), Color.purple.opacity(0.03)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            }
-        )
-        .cornerRadius(14)
-        .overlay {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(
-                    LinearGradient(
-                        colors: [Color.orange.opacity(0.25), Color.purple.opacity(0.1)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    lineWidth: 1
-                )
         }
     }
 }

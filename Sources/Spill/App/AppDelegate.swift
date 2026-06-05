@@ -11,6 +11,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let statusStore = SystemStatusStore(cpuInitialSampleIntervalNanoseconds: 250_000_000)
     private let aiStatusStore = AIStatusStore()
     private let cloudServiceStatusStore = CloudServiceStatusStore()
+    private let tokenUsageStore: TokenUsageStore
+    private let tokenUsageBridgePort: UInt16
     private let windowActionStore = WindowActionStore()
     private let sparkleUpdateController: SparkleUpdateController
     private let updateCheckStore: UpdateCheckStore
@@ -22,6 +24,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     )
     private lazy var scanCoordinator = MenuBarScanCoordinator(scanner: scanner, settings: settings)
+    private lazy var tokenUsageBridgeServer = TokenUsageBridgeServer(
+        store: tokenUsageStore,
+        port: tokenUsageBridgePort
+    )
+    private lazy var tokenUsageDashboardStore = TokenUsageDashboardStore(usageStore: tokenUsageStore)
+    private lazy var tokenMeteringDashboardWindowController = TokenMeteringDashboardWindowController(
+        store: tokenUsageDashboardStore
+    )
     private lazy var hotKeyController = HotKeyController(
         registrations: makeHotKeyRegistrations()
     )
@@ -32,6 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusStore: statusStore,
         aiStatusStore: aiStatusStore,
         cloudServiceStatusStore: cloudServiceStatusStore,
+        tokenUsageDashboardStore: tokenUsageDashboardStore,
         windowActionStore: windowActionStore,
         updateStore: updateCheckStore,
         sleepGuard: sleepGuard,
@@ -42,6 +53,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         },
         settingsAction: { [weak self] in
             self?.showPreferencesFromPanel()
+        },
+        tokenMeteringDetailAction: { [weak self] in
+            self?.openTokenDashboard(source: "panel_ai_section")
         }
     )
     private lazy var preferencesWindowController = PreferencesWindowController(
@@ -50,6 +64,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         updateStore: updateCheckStore,
         showPanelAction: { [weak self] in
             self?.showSpillBar(source: "preferences")
+        },
+        openTokenDashboardAction: { [weak self] in
+            self?.openTokenDashboard(source: "preferences")
         }
     )
     private var statusItemController: StatusItemController?
@@ -58,6 +75,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var cancellables = Set<AnyCancellable>()
 
     override init() {
+        tokenUsageStore = Self.makeTokenUsageStore()
+        tokenUsageBridgePort = Self.makeTokenUsageBridgePort()
+
         let sparkleUpdateController = SparkleUpdateController()
         self.sparkleUpdateController = sparkleUpdateController
         updateCheckStore = UpdateCheckStore(
@@ -69,6 +89,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         )
         super.init()
+    }
+
+    private static func makeTokenUsageStore() -> TokenUsageStore {
+        let environment = ProcessInfo.processInfo.environment
+        guard environment["SPILL_SMOKE_TEST"] == "1",
+              let eventsFile = environment["SPILL_TOKEN_USAGE_EVENTS_FILE"],
+              !eventsFile.isEmpty
+        else {
+            return TokenUsageStore.live()
+        }
+
+        let inboxURL = environment["SPILL_TOKEN_USAGE_INBOX_FILE"]
+            .flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0) }
+        return TokenUsageStore(
+            fileURL: URL(fileURLWithPath: eventsFile),
+            inboxURL: inboxURL
+        )
+    }
+
+    private static func makeTokenUsageBridgePort() -> UInt16 {
+        let environment = ProcessInfo.processInfo.environment
+        guard environment["SPILL_SMOKE_TEST"] == "1",
+              let rawPort = environment["SPILL_TOKEN_USAGE_BRIDGE_PORT"],
+              let port = UInt16(rawPort)
+        else {
+            return TokenUsageBridgeServer.defaultPort
+        }
+
+        return port
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -92,6 +141,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             preferencesAction: { [weak self] in
                 self?.showPreferences(source: "status_menu")
             },
+            tokenDashboardAction: { [weak self] in
+                self?.openTokenDashboard(source: "status_menu")
+            },
             updateAction: { [weak self] in
                 self?.checkForUpdates(source: "status_menu")
             },
@@ -101,6 +153,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         observeStateChanges()
+        configureTokenUsageBridge()
         configureStatusRefreshLoop()
 
         if isSmokeTest {
@@ -260,6 +313,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         hotKeyController.stop()
         scanCoordinator.stop()
+        tokenUsageBridgeServer.stop()
         statusRefreshTask?.cancel()
         sleepGuard.stop()
         spillPanelController.hide(animated: false)
@@ -277,6 +331,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func showSpillBar(source: String = "unknown") {
+        tokenUsageDashboardStore.refresh()
         spillPanelController.show(anchorFrame: statusItemController?.buttonScreenFrame)
         statusItemController?.refresh(isSpillBarVisible: spillPanelController.isVisible)
 
@@ -305,9 +360,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    private var isTokenUsageBridgeEnabled: Bool {
+        guard ProcessInfo.processInfo.environment["SPILL_TOKEN_USAGE_BRIDGE_DISABLED"] != "1" else {
+            return false
+        }
+
+        return isSmokeTest || settings.tokenUsageBridgeEnabled
+    }
+
+    private func configureTokenUsageBridge() {
+        guard isTokenUsageBridgeEnabled else {
+            tokenUsageBridgeServer.stop()
+            return
+        }
+
+        do {
+            try tokenUsageBridgeServer.start()
+        } catch {
+            // The native app dashboard reads the app-owned store directly.
+            return
+        }
+    }
+
     private func showPreferences(source: String = "unknown") {
         SpillTelemetry.shared.track("settings_opened", props: ["source": source])
         preferencesWindowController.show()
+    }
+
+    private func openTokenDashboard(source _: String = "unknown") {
+        tokenUsageDashboardStore.refresh()
+        tokenMeteringDashboardWindowController.show()
     }
 
     private func showPreferencesFromPanel() {
@@ -434,6 +516,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .sink { [weak self] _ in
                 SpillTelemetry.shared.track("preference_changed", props: ["name": "window_action_shortcuts"])
                 self?.configureHotKey()
+            }
+            .store(in: &cancellables)
+
+        settings.$tokenUsageBridgeEnabled
+            .dropFirst()
+            .sink { [weak self] _ in
+                SpillTelemetry.shared.track("preference_changed", props: ["name": "token_usage_bridge_enabled"])
+                self?.configureTokenUsageBridge()
             }
             .store(in: &cancellables)
 
@@ -608,6 +698,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let appMenu = NSMenu(title: "Spill")
         appMenuItem.submenu = appMenu
         appMenu.addItem(mainMenuItem(title: "Show Spill Panel", action: #selector(showSpillPanelFromMainMenu), keyEquivalent: ""))
+        appMenu.addItem(mainMenuItem(title: "Open Local Token Dashboard", action: #selector(openTokenDashboardFromMainMenu), keyEquivalent: ""))
         appMenu.addItem(mainMenuItem(title: "Refresh Menu Bar Items", action: #selector(refreshMenuBarItemsFromMainMenu), keyEquivalent: "r"))
         appMenu.addItem(.separator())
         appMenu.addItem(mainMenuItem(title: "Check for Updates...", action: #selector(checkForUpdatesFromMainMenu), keyEquivalent: ""))
@@ -633,6 +724,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func showPreferencesFromMainMenu() {
         showPreferences(source: "main_menu")
+    }
+
+    @objc private func openTokenDashboardFromMainMenu() {
+        openTokenDashboard(source: "main_menu")
     }
 
     @objc private func checkForUpdatesFromMainMenu() {

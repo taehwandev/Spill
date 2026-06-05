@@ -14,10 +14,12 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
     private let statusStore: SystemStatusStore
     private let aiStatusStore: AIStatusStore
     private let cloudServiceStatusStore: CloudServiceStatusStore
+    private let tokenUsageDashboardStore: TokenUsageDashboardStore
     private let windowActionStore: WindowActionStore
     private let updateStore: UpdateCheckStore
     private let visibilityChanged: (Bool) -> Void
     private let settingsAction: () -> Void
+    private let tokenMeteringDetailAction: () -> Void
     private var panel: NSPanel?
     private var anchorFrame: NSRect?
     private var isPresented = false
@@ -35,11 +37,13 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
         statusStore: SystemStatusStore = SystemStatusStore(),
         aiStatusStore: AIStatusStore = AIStatusStore(),
         cloudServiceStatusStore: CloudServiceStatusStore = CloudServiceStatusStore(),
+        tokenUsageDashboardStore: TokenUsageDashboardStore,
         windowActionStore: WindowActionStore = WindowActionStore(),
         updateStore: UpdateCheckStore = UpdateCheckStore(),
         sleepGuard: SleepGuardController,
         visibilityChanged: @escaping (Bool) -> Void = { _ in },
-        settingsAction: @escaping () -> Void = {}
+        settingsAction: @escaping () -> Void = {},
+        tokenMeteringDetailAction: @escaping () -> Void = {}
     ) {
         self.settings = settings
         self.scanner = scanner
@@ -47,11 +51,13 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
         self.statusStore = statusStore
         self.aiStatusStore = aiStatusStore
         self.cloudServiceStatusStore = cloudServiceStatusStore
+        self.tokenUsageDashboardStore = tokenUsageDashboardStore
         self.windowActionStore = windowActionStore
         self.updateStore = updateStore
         self.sleepGuard = sleepGuard
         self.visibilityChanged = visibilityChanged
         self.settingsAction = settingsAction
+        self.tokenMeteringDetailAction = tokenMeteringDetailAction
         super.init()
         observeLayoutChanges()
     }
@@ -226,6 +232,7 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
                 statusStore: statusStore,
                 aiStatusStore: aiStatusStore,
                 cloudServiceStatusStore: cloudServiceStatusStore,
+                tokenUsageDashboardStore: tokenUsageDashboardStore,
                 windowActionStore: windowActionStore,
                 sleepGuard: sleepGuard,
                 updateStore: updateStore
@@ -233,6 +240,8 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
                 self?.hide(animated: true)
             } settingsAction: { [weak self] in
                 self?.settingsAction()
+            } tokenMeteringDetailAction: { [weak self] in
+                self?.tokenMeteringDetailAction()
             }
         )
         hostingView.translatesAutoresizingMaskIntoConstraints = false
@@ -271,6 +280,7 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
         return SpillPanelContentSizer.preferredSize(
             statusModuleCount: state.visibleStatusModules.count,
             aiStatusCount: aiStatusStore.statuses.count,
+            showsTokenMetering: true,
             windowActionCount: windowActionStore.actions.count,
             menuBarActionCount: menuBarActionCount,
             iconSpacing: CGFloat(settings.iconSpacing),
@@ -381,6 +391,7 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
         let readsPower = true
         aiStatusStore.refreshInBackground()
         cloudServiceStatusStore.refreshIfNeeded()
+        tokenUsageDashboardStore.refresh()
         windowActionStore.refresh()
         Task { @MainActor [statusStore] in
             await statusStore.refresh(enabledModules: enabledModules, readsPower: readsPower)

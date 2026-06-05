@@ -14,6 +14,7 @@ final class StatusItemController: NSObject {
     private let toggleAction: () -> Void
     private let refreshAction: () -> Void
     private let preferencesAction: () -> Void
+    private let tokenDashboardAction: () -> Void
     private let updateAction: () -> Void
     private let quitAction: () -> Void
     private let triggerItem: NSStatusItem
@@ -30,6 +31,7 @@ final class StatusItemController: NSObject {
         toggleAction: @escaping () -> Void,
         refreshAction: @escaping () -> Void,
         preferencesAction: @escaping () -> Void,
+        tokenDashboardAction: @escaping () -> Void,
         updateAction: @escaping () -> Void,
         quitAction: @escaping () -> Void
     ) {
@@ -40,6 +42,7 @@ final class StatusItemController: NSObject {
         self.toggleAction = toggleAction
         self.refreshAction = refreshAction
         self.preferencesAction = preferencesAction
+        self.tokenDashboardAction = tokenDashboardAction
         self.updateAction = updateAction
         self.quitAction = quitAction
 
@@ -476,6 +479,10 @@ final class StatusItemController: NSObject {
         preferencesAction()
     }
 
+    @objc private func openTokenDashboardFromMenu() {
+        tokenDashboardAction()
+    }
+
     @objc private func refreshFromMenu() {
         refreshAction()
     }
@@ -494,6 +501,10 @@ final class StatusItemController: NSObject {
 
         menu.addItem(menuItem(title: toggleTitle, action: #selector(toggleFromMenu), keyEquivalent: ""))
         menu.addItem(disabledMenuItem(title: "Shortcut: \(WindowActionShortcutModifier.standard.title) + Space"))
+        menu.addItem(.separator())
+        menu.addItem(disabledMenuItem(title: "Token Metering: Local app dashboard"))
+        menu.addItem(menuItem(title: "Open Local Token Dashboard", action: #selector(openTokenDashboardFromMenu), keyEquivalent: ""))
+        menu.addItem(.separator())
         menu.addItem(menuItem(title: "Refresh Menu Bar Items", action: #selector(refreshFromMenu), keyEquivalent: "r"))
         menu.addItem(menuItem(title: "Check for Updates...", action: #selector(checkForUpdatesFromMenu), keyEquivalent: ""))
         menu.addItem(menuItem(title: "Preferences...", action: #selector(showPreferencesFromMenu), keyEquivalent: ","))

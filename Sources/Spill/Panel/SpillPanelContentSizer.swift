@@ -10,6 +10,8 @@ enum SpillPanelContentSizer {
     private static let statusSectionSpacing: CGFloat = 6
     private static let sectionContentSpacing: CGFloat = 5
     private static let aiSectionSpacing: CGFloat = 7
+    private static let tokenMeteringHeight: CGFloat = 82
+    private static let tokenMeteringSpacing: CGFloat = 7
     private static let statusRowHeight: CGFloat = 64
     private static let statusRowSpacing: CGFloat = 7
     private static let aiCardHeight: CGFloat = 54
@@ -27,6 +29,7 @@ enum SpillPanelContentSizer {
     static func preferredSize(
         statusModuleCount: Int,
         aiStatusCount: Int,
+        showsTokenMetering: Bool = false,
         windowActionCount: Int,
         menuBarActionCount: Int,
         iconSpacing: CGFloat,
@@ -36,7 +39,7 @@ enum SpillPanelContentSizer {
         let width = preferredWidth(visibleFrame: visibleFrame)
         let contentWidth = max(0, width - horizontalPadding)
         let showsStatusSection = statusModuleCount > 0
-        let showsAISection = aiStatusCount > 0
+        let showsAISection = aiStatusCount > 0 || showsTokenMetering
         let dividerCount = 2 + (showsStatusSection ? 1 : 0) + (showsAISection ? 1 : 0)
         let topLevelChildCount = 5
             + (showsUpdateBanner ? 1 : 0)
@@ -50,7 +53,7 @@ enum SpillPanelContentSizer {
             + topLevelGapHeight
             + dividerTotalHeight
             + statusSectionHeight(moduleCount: statusModuleCount)
-            + aiSectionHeight(statusCount: aiStatusCount)
+            + aiSectionHeight(statusCount: aiStatusCount, showsTokenMetering: showsTokenMetering)
             + actionSectionsHeight(
                 windowActionCount: windowActionCount,
                 menuBarActionCount: menuBarActionCount,
@@ -92,15 +95,19 @@ enum SpillPanelContentSizer {
             + rowsHeight(count: moduleCount, itemHeight: statusRowHeight, spacing: statusRowSpacing)
     }
 
-    private static func aiSectionHeight(statusCount: Int) -> CGFloat {
-        guard statusCount > 0 else {
+    private static func aiSectionHeight(statusCount: Int, showsTokenMetering: Bool) -> CGFloat {
+        guard statusCount > 0 || showsTokenMetering else {
             return 0
         }
 
         let rowCount = Int(ceil(Double(statusCount) / Double(aiCardColumnCount)))
+        let toolHeight = rowsHeight(count: rowCount, itemHeight: aiCardHeight, spacing: aiCardRowSpacing)
+        let contentSpacing = statusCount > 0 && showsTokenMetering ? tokenMeteringSpacing : 0
         return sectionHeaderHeight
             + aiSectionSpacing
-            + rowsHeight(count: rowCount, itemHeight: aiCardHeight, spacing: aiCardRowSpacing)
+            + (showsTokenMetering ? tokenMeteringHeight : 0)
+            + contentSpacing
+            + toolHeight
     }
 
     private static func actionSectionsHeight(
