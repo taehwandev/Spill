@@ -174,6 +174,8 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(preferencesView.contains(".focusEffectDisabled()"))
         XCTAssertTrue(dashboardStore.contains("@Published private(set) var unfilteredSnapshot"))
         XCTAssertFalse(dashboardStore.contains("var unfilteredSnapshot: TokenUsageDashboardSnapshot {"))
+        XCTAssertTrue(dashboardView.contains("TokenMeteringLiveUpdateDot"))
+        XCTAssertTrue(dashboardView.contains(".contentTransition(.numericText())"))
     }
 
     @MainActor
@@ -207,6 +209,52 @@ final class TokenUsageStoreTests: XCTestCase {
         dashboardStore.setSelectedTool(.claude)
         XCTAssertEqual(dashboardStore.snapshot.eventCount, 1)
         XCTAssertEqual(dashboardStore.unfilteredSnapshot.eventCount, 2)
+    }
+
+    @MainActor
+    func testDashboardStoreMarksLiveUpdatesOnlyWhenEventDataChanges() throws {
+        let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
+        let dashboardStore = TokenUsageDashboardStore(usageStore: usageStore)
+        let createdAt = ISO8601DateFormatter.tokenUsage.string(from: Date())
+
+        XCTAssertEqual(dashboardStore.liveUpdateMarker, .empty)
+
+        try usageStore.appendEvent(Self.safeEvent(
+            spanID: "span_live_codex",
+            inputTokens: 20,
+            outputTokens: 10,
+            generatedOutput: 10,
+            taskType: .codeGeneration,
+            stage: .implement,
+            model: "gpt-live",
+            latencyMS: 44,
+            createdAt: createdAt
+        ))
+        dashboardStore.refresh()
+
+        let sequence = dashboardStore.liveUpdateMarker.sequence
+        XCTAssertGreaterThan(sequence, 0)
+        XCTAssertTrue(dashboardStore.isLiveUpdated("kpi:total"))
+        XCTAssertTrue(dashboardStore.isLiveUpdated("kpi:input"))
+        XCTAssertTrue(dashboardStore.isLiveUpdated("kpi:output"))
+        XCTAssertTrue(dashboardStore.isLiveUpdated("kpi:latency"))
+        XCTAssertTrue(dashboardStore.isLiveUpdated("tool:codex"))
+        XCTAssertTrue(dashboardStore.isLiveUpdated("filter:tool:codex"))
+        XCTAssertTrue(dashboardStore.isLiveUpdated("filter:tool:all"))
+        XCTAssertTrue(dashboardStore.isLiveUpdated("task:code_generation"))
+        XCTAssertTrue(dashboardStore.isLiveUpdated("stage:implement"))
+        XCTAssertTrue(dashboardStore.isLiveUpdated("model:gpt-live"))
+        XCTAssertTrue(dashboardStore.isLiveUpdated("source:generated_output"))
+        XCTAssertTrue(dashboardStore.isLiveUpdated("source:unknown"))
+
+        let sessionID = try XCTUnwrap(dashboardStore.snapshot.sessions.first?.id)
+        XCTAssertTrue(dashboardStore.isLiveUpdated("session:\(sessionID)"))
+
+        dashboardStore.setDisplayMode(.percentage)
+        XCTAssertEqual(dashboardStore.liveUpdateMarker.sequence, sequence)
+
+        dashboardStore.refresh()
+        XCTAssertEqual(dashboardStore.liveUpdateMarker.sequence, sequence)
     }
 
     @MainActor
@@ -678,6 +726,7 @@ final class TokenUsageStoreTests: XCTestCase {
         let installer = try String(contentsOf: root.appendingPathComponent("docs/token-metering/install.sh"))
         let helper = try String(contentsOf: root.appendingPathComponent("adapters/setup/spill-token-metering-setup.mjs"))
         let agyHook = try String(contentsOf: root.appendingPathComponent("adapters/antigravity/spill-hook.py"))
+        let bundledAgyHook = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Resources/adapters/antigravity/spill-hook.py"))
 
         XCTAssertTrue(setup.contains("MANDATORY ACTION: install or repair Spill token metering now"))
         XCTAssertTrue(setup.contains("https://spill.thdev.app/token-metering/install.sh"))
@@ -726,6 +775,9 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(setup.contains("hook payload exposes exact token usage fields"))
         XCTAssertTrue(setup.contains("normalized `spill_token_usage` object"))
         XCTAssertTrue(setup.contains("local-only safe diagnostic"))
+        XCTAssertTrue(setup.contains("antigravity-latest.json"))
+        XCTAssertTrue(setup.contains("observed_safe_shape"))
+        XCTAssertTrue(setup.contains("Low-information diagnostics such as `empty_stdin` must not overwrite"))
         XCTAssertFalse(setup.contains("root-level `PostInvocation[]`"))
         XCTAssertFalse(setup.contains("Do not nest this under `\"spill-metering\"`"))
 
@@ -764,8 +816,8 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(runtime.contains("stage` is a safe lowercase workflow slug"))
         XCTAssertTrue(runtime.contains("Do not let a short verification step overwrite an implementation-heavy task"))
         XCTAssertTrue(runtime.contains("use the stage that consumed the dominant work"))
-        XCTAssertTrue(runtime.contains("repeated identical hook payloads dedupe locally"))
-        XCTAssertTrue(runtime.contains("prefer deduping the repeated payload over inflating totals"))
+        XCTAssertTrue(runtime.contains("generate a fresh opaque `span_id`"))
+        XCTAssertTrue(runtime.contains("Do not collapse two distinct real turns"))
         XCTAssertTrue(runtime.contains("events-inbox"))
         XCTAssertTrue(runtime.contains("Never send, derive, or store conversation titles"))
         XCTAssertTrue(runtime.contains("Spill generates default work item display names locally"))
@@ -820,7 +872,90 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(agyHook.contains("runtime_payload_mismatch"))
         XCTAssertTrue(agyHook.contains("missing_exact_token_usage"))
         XCTAssertTrue(agyHook.contains("spill_token_usage"))
+        XCTAssertTrue(agyHook.contains("DIAGNOSTIC_FILE_NAME"))
+        XCTAssertTrue(agyHook.contains(#""input""#))
+        XCTAssertTrue(agyHook.contains(#""output""#))
+        XCTAssertFalse(agyHook.contains("def _usage_metadata_total"))
         XCTAssertTrue(agyHook.contains("No payload values"))
+        XCTAssertEqual(agyHook, bundledAgyHook)
+    }
+
+    func testAntigravityHookAcceptsTokensInputOutputPayload() throws {
+        let inboxURL = temporaryInboxURL()
+        let diagnosticsURL = temporaryDiagnosticsURL()
+
+        try runAntigravityHook(
+            payload: [
+                "session_id": "agySession01",
+                "model": "gemini-2.5-pro",
+                "tokens": [
+                    "input": 100,
+                    "output": 50
+                ],
+                "task_type": "code_generation",
+                "stage": "implement"
+            ],
+            inboxURL: inboxURL,
+            diagnosticsURL: diagnosticsURL
+        )
+
+        let events = try antigravityEventObjects(in: inboxURL)
+        XCTAssertEqual(events.count, 1)
+        XCTAssertEqual(events.first?["input_tokens"] as? Int, 100)
+        XCTAssertEqual(events.first?["output_tokens"] as? Int, 50)
+        XCTAssertEqual(events.first?["total_tokens"] as? Int, 150)
+        XCTAssertEqual(events.first?["ai_tool"] as? String, "antigravity")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: diagnosticsURL.appendingPathComponent("antigravity-latest.json").path))
+    }
+
+    func testAntigravityHookPreservesMissingUsageDiagnosticOverEmptyStdin() throws {
+        let inboxURL = temporaryInboxURL()
+        let diagnosticsURL = temporaryDiagnosticsURL()
+        let diagnosticURL = diagnosticsURL.appendingPathComponent("antigravity-latest.json")
+
+        try runAntigravityHook(
+            payload: [
+                "session_id": "agySession02",
+                "model": "gemini-2.5-pro",
+                "usage": [
+                    "requests": 1
+                ]
+            ],
+            inboxURL: inboxURL,
+            diagnosticsURL: diagnosticsURL
+        )
+
+        var diagnostic = try decodedJSONObject(from: Data(contentsOf: diagnosticURL))
+        XCTAssertEqual(diagnostic["reason"] as? String, "missing_exact_token_usage")
+        let shape = try XCTUnwrap(diagnostic["observed_safe_shape"] as? [String: Any])
+        XCTAssertEqual(shape["payload_object"] as? Bool, true)
+        XCTAssertEqual(shape["has_exact_input_output"] as? Bool, false)
+
+        try runAntigravityHook(rawInput: "\n", inboxURL: inboxURL, diagnosticsURL: diagnosticsURL)
+
+        diagnostic = try decodedJSONObject(from: Data(contentsOf: diagnosticURL))
+        XCTAssertEqual(diagnostic["reason"] as? String, "missing_exact_token_usage")
+    }
+
+    func testAntigravityTotalOnlyPayloadsDoNotCollideOnSameTokenCount() throws {
+        let inboxURL = temporaryInboxURL()
+        let diagnosticsURL = temporaryDiagnosticsURL()
+        let payload: [String: Any] = [
+            "session_id": "agySession03",
+            "model": "gemini-2.5-pro",
+            "usageMetadata": [
+                "totalTokenCount": 500
+            ]
+        ]
+
+        try runAntigravityHook(payload: payload, inboxURL: inboxURL, diagnosticsURL: diagnosticsURL)
+        try runAntigravityHook(payload: payload, inboxURL: inboxURL, diagnosticsURL: diagnosticsURL)
+
+        let events = try antigravityEventObjects(in: inboxURL)
+        XCTAssertEqual(events.count, 2)
+        XCTAssertEqual(Set(events.compactMap { $0["span_id"] as? String }).count, 2)
+        XCTAssertEqual(events.map { $0["input_tokens"] as? Int }, [500, 500])
+        XCTAssertEqual(events.map { $0["output_tokens"] as? Int }, [0, 0])
     }
 
     func testAdapterHookConfigsUseExactRuntimeHookShapes() throws {
@@ -1107,6 +1242,71 @@ final class TokenUsageStoreTests: XCTestCase {
         URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent(UUID().uuidString)
             .appendingPathComponent("events-inbox", isDirectory: true)
+    }
+
+    private func temporaryDiagnosticsURL() -> URL {
+        URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathComponent("diagnostics", isDirectory: true)
+    }
+
+    private func runAntigravityHook(
+        payload: [String: Any],
+        inboxURL: URL,
+        diagnosticsURL: URL
+    ) throws {
+        let data = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
+        let input = try XCTUnwrap(String(data: data, encoding: .utf8))
+        try runAntigravityHook(rawInput: input, inboxURL: inboxURL, diagnosticsURL: diagnosticsURL)
+    }
+
+    private func runAntigravityHook(
+        rawInput: String,
+        inboxURL: URL,
+        diagnosticsURL: URL
+    ) throws {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let hookURL = root.appendingPathComponent("adapters/antigravity/spill-hook.py")
+        let labelURL = diagnosticsURL
+            .deletingLastPathComponent()
+            .appendingPathComponent("label-context", isDirectory: true)
+            .appendingPathComponent("antigravity.json")
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = ["python3", hookURL.path]
+        var environment = ProcessInfo.processInfo.environment
+        environment["SPILL_TOKEN_USAGE_INBOX_DIR"] = inboxURL.path
+        environment["SPILL_TOKEN_USAGE_DIAGNOSTICS_DIR"] = diagnosticsURL.path
+        environment["SPILL_TOKEN_USAGE_LABEL_FILE"] = labelURL.path
+        environment["PYTHONPYCACHEPREFIX"] = "/tmp/spill-pycache"
+        process.environment = environment
+
+        let inputPipe = Pipe()
+        let errorPipe = Pipe()
+        process.standardInput = inputPipe
+        process.standardError = errorPipe
+
+        try process.run()
+        inputPipe.fileHandleForWriting.write(Data(rawInput.utf8))
+        try inputPipe.fileHandleForWriting.close()
+        process.waitUntilExit()
+
+        let stderr = String(data: errorPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        XCTAssertEqual(process.terminationStatus, 0, stderr)
+    }
+
+    private func antigravityEventObjects(in inboxURL: URL) throws -> [[String: Any]] {
+        guard FileManager.default.fileExists(atPath: inboxURL.path) else {
+            return []
+        }
+        let files = try FileManager.default.contentsOfDirectory(
+            at: inboxURL,
+            includingPropertiesForKeys: nil
+        )
+            .filter { $0.pathExtension == "json" }
+            .sorted { $0.lastPathComponent < $1.lastPathComponent }
+        return try files.map { try decodedJSONObject(from: Data(contentsOf: $0)) }
     }
 
     private func jsonData(_ object: Any) throws -> Data {

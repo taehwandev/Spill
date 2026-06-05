@@ -61,6 +61,24 @@ invent usage. It should leave a local-only safe diagnostic under Spill's
 token-metering diagnostics directory and skip the usage event until the runtime
 or workflow provides exact counts.
 
+AGY diagnostic files must use this fixed local-only protocol:
+
+- Write `~/Library/Application Support/Spill/token-metering/diagnostics/antigravity-latest.json`.
+- Write a `.tmp` file in the same diagnostics directory first, close it, then
+  atomically rename it to `antigravity-latest.json`.
+- The JSON object must contain only safe diagnostic metadata keys such as
+  `schema_version`, `ai_tool`, `kind`, `reason`, `created_at`,
+  `expected_input_contracts`, `observed_safe_shape`, and `privacy`.
+- `observed_safe_shape` must contain booleans only, for example whether the
+  payload was an object, whether exact input/output token fields were present,
+  whether only total tokens were present, whether a model hint was present, and
+  whether an opaque run hint was present.
+- Never store raw payload values, prompts, responses, commands, file paths, logs,
+  diffs, source content, environment values, or secrets in diagnostics.
+- Low-information diagnostics such as `empty_stdin` must not overwrite a more
+  useful `missing_exact_token_usage` diagnostic that records the safe observed
+  shape of an AGY runtime payload.
+
 After the setup installer succeeds, fetch the current runtime instruction and apply it as a global agent instruction:
 
 ```text

@@ -87,8 +87,16 @@ Privacy boundary:
 - Do not estimate token counts.
 - If exact runtime usage metadata is unavailable, silently skip event creation.
 - If sending an event would require exposing prompts, commands, file paths, logs, diffs, source, secrets, or arbitrary content, silently skip event creation.
-- Prefer an exact opaque runtime span id or cumulative usage cursor when the runtime exposes one. If it does not, adapters must use a stable content-free span id derived only from opaque run/tool/model ids, safe labels, and exact numeric token counts so repeated identical hook payloads dedupe locally.
-- If two distinct real turns in the same opaque run expose no distinct runtime span/cursor and have identical numeric token counts and safe labels, they are indistinguishable inside the privacy boundary. In that case, prefer deduping the repeated payload over inflating totals.
+- Prefer an exact opaque runtime span id, invocation id, event id, turn id,
+  request id, or cumulative usage cursor when the runtime exposes one.
+- If a runtime exposes only total tokens and no distinct safe span hint,
+  generate a fresh opaque `span_id` for that recorded usage event. Do not derive
+  the span id from prompts, responses, commands, file paths, logs, diffs, source
+  content, environment values, secrets, or arbitrary payload text.
+- Duplicate prevention should come from runtime-provided span/cursor ids or the
+  app store's event identity checks. Do not collapse two distinct real turns
+  merely because they have the same opaque run id, model id, and total token
+  count.
 
 Task labels:
 

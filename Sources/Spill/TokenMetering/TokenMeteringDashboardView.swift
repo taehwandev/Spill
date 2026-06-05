@@ -182,7 +182,8 @@ struct TokenMeteringDashboardView: View {
                             railFilterButton(
                                 title: filter.title,
                                 detail: filter.detail,
-                                isSelected: filter.isSelected
+                                isSelected: filter.isSelected,
+                                liveUpdateID: "filter:tool:\(filter.id)"
                             ) {
                                 store.setSelectedTool(filter.tool)
                             }
@@ -192,9 +193,9 @@ struct TokenMeteringDashboardView: View {
 
                 railPanel(title: t(.workflowFocus)) {
                     VStack(spacing: 8) {
-                        compactSummaryRows(store.snapshot.taskRows.prefix(3), emptyText: t(.noTaskSplit))
+                        compactSummaryRows(store.snapshot.taskRows.prefix(3), emptyText: t(.noTaskSplit), idPrefix: "task")
                         Divider().opacity(0.35)
-                        compactSummaryRows(store.snapshot.stageRows.prefix(3), emptyText: t(.noStageSplit))
+                        compactSummaryRows(store.snapshot.stageRows.prefix(3), emptyText: t(.noStageSplit), idPrefix: "stage")
                     }
                 }
 
@@ -214,16 +215,24 @@ struct TokenMeteringDashboardView: View {
     private var kpiStrip: some View {
         HStack(spacing: 12) {
             ForEach(store.snapshot.kpis) { kpi in
+                let liveUpdateID = "kpi:\(kpi.id)"
+                let isLiveUpdated = store.isLiveUpdated(liveUpdateID)
                 VStack(alignment: .leading, spacing: 7) {
-                    Text(kpi.title.uppercased())
-                        .font(.system(size: 9, weight: .black))
-                        .tracking(1.0)
-                        .foregroundStyle(.secondary)
+                    HStack(spacing: 6) {
+                        Text(kpi.title.uppercased())
+                            .font(.system(size: 9, weight: .black))
+                            .tracking(1.0)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                        TokenMeteringLiveUpdateDot(isActive: isLiveUpdated, marker: store.liveUpdateMarker)
+                    }
                     Text(kpi.value)
                         .font(.system(size: 21, weight: .bold))
                         .foregroundStyle(kpi.id == "total" ? .teal : .primary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.72)
+                        .contentTransition(.numericText())
+                        .animation(.snappy(duration: 0.35), value: kpi.value)
                     Text(kpi.detail)
                         .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(.secondary)
@@ -240,6 +249,7 @@ struct TokenMeteringDashboardView: View {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .stroke(Color.primary.opacity(0.07), lineWidth: 0.5)
                 }
+                .modifier(TokenMeteringLiveUpdateEffect(isActive: isLiveUpdated, marker: store.liveUpdateMarker, cornerRadius: 12))
             }
         }
     }
@@ -253,7 +263,7 @@ struct TokenMeteringDashboardView: View {
                     infoTitle: t(.aiToolInfoTitle),
                     infoDetail: t(.aiToolInfoDetail)
                 ) {
-                    barRows(store.snapshot.toolRows, emptyText: t(.noAIToolData))
+                    barRows(store.snapshot.toolRows, emptyText: t(.noAIToolData), idPrefix: "tool")
                 }
 
                 dashboardPanel(
@@ -262,7 +272,7 @@ struct TokenMeteringDashboardView: View {
                     infoTitle: t(.workflowInfoTitle),
                     infoDetail: t(.workflowInfoDetail)
                 ) {
-                    barRows(store.snapshot.taskRows, emptyText: t(.noWorkflowData))
+                    barRows(store.snapshot.taskRows, emptyText: t(.noWorkflowData), idPrefix: "task")
                 }
             }
 
@@ -273,7 +283,7 @@ struct TokenMeteringDashboardView: View {
                     infoTitle: t(.stageInfoTitle),
                     infoDetail: t(.stageInfoDetail)
                 ) {
-                    barRows(store.snapshot.stageRows, emptyText: t(.noStageData))
+                    barRows(store.snapshot.stageRows, emptyText: t(.noStageData), idPrefix: "stage")
                 }
 
                 dashboardPanel(
@@ -282,7 +292,7 @@ struct TokenMeteringDashboardView: View {
                     infoTitle: t(.sourceInfoTitle),
                     infoDetail: t(.sourceInfoDetail)
                 ) {
-                    barRows(store.snapshot.sourceRows, emptyText: t(.noSourceBreakdown))
+                    barRows(store.snapshot.sourceRows, emptyText: t(.noSourceBreakdown), idPrefix: "source")
                 }
             }
         }
@@ -319,8 +329,8 @@ struct TokenMeteringDashboardView: View {
                     }
 
                     HStack {
-                        metricPill(title: t(.total), value: session.value)
-                        metricPill(title: t(.events), value: "\(session.eventCount)")
+                        metricPill(title: t(.total), value: session.value, liveUpdateID: "session:\(session.id)")
+                        metricPill(title: t(.events), value: "\(session.eventCount)", liveUpdateID: "session:\(session.id)")
                     }
                 }
             } else {
@@ -339,7 +349,7 @@ struct TokenMeteringDashboardView: View {
             infoDetail: t(.modelInfoDetail)
         ) {
             VStack(spacing: 8) {
-                compactSummaryRows(store.snapshot.modelRows.prefix(5), emptyText: t(.noModelData))
+                compactSummaryRows(store.snapshot.modelRows.prefix(5), emptyText: t(.noModelData), idPrefix: "model")
             }
         }
     }
@@ -351,7 +361,7 @@ struct TokenMeteringDashboardView: View {
             infoDetail: t(.sourceInfoDetail)
         ) {
             VStack(spacing: 8) {
-                compactSummaryRows(store.snapshot.sourceRows.prefix(5), emptyText: t(.noSourceBuckets))
+                compactSummaryRows(store.snapshot.sourceRows.prefix(5), emptyText: t(.noSourceBuckets), idPrefix: "source")
             }
         }
     }
@@ -397,13 +407,18 @@ struct TokenMeteringDashboardView: View {
 
                     ForEach(store.snapshot.sessions.prefix(8)) { session in
                         let isSelected = store.snapshot.selectedSession?.id == session.id
+                        let liveUpdateID = "session:\(session.id)"
+                        let isLiveUpdated = store.isLiveUpdated(liveUpdateID)
                         Button {
                             store.selectSession(session.id)
                         } label: {
                             HStack(spacing: 12) {
-                                Text(session.title)
-                                    .font(.system(size: 11, weight: .bold))
-                                    .lineLimit(1)
+                                HStack(spacing: 6) {
+                                    TokenMeteringLiveUpdateDot(isActive: isLiveUpdated, marker: store.liveUpdateMarker)
+                                    Text(session.title)
+                                        .font(.system(size: 11, weight: .bold))
+                                        .lineLimit(1)
+                                }
                                 Text(session.detail)
                                     .font(.system(size: 10, weight: .medium))
                                     .foregroundStyle(isSelected ? .white.opacity(0.82) : .secondary)
@@ -412,6 +427,8 @@ struct TokenMeteringDashboardView: View {
                                 Text(session.value)
                                     .font(.system(size: 11, weight: .bold, design: .monospaced))
                                     .frame(width: 96, alignment: .trailing)
+                                    .contentTransition(.numericText())
+                                    .animation(.snappy(duration: 0.35), value: session.value)
                             }
                             .padding(.horizontal, 12)
                             .padding(.vertical, 10)
@@ -424,6 +441,7 @@ struct TokenMeteringDashboardView: View {
                                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                                     .stroke(isSelected ? Color.teal.opacity(0.35) : Color.primary.opacity(0.04), lineWidth: 0.5)
                             }
+                            .modifier(TokenMeteringLiveUpdateEffect(isActive: isLiveUpdated && !isSelected, marker: store.liveUpdateMarker, cornerRadius: 8))
                         }
                         .buttonStyle(.plain)
                         .padding(.top, 6)
@@ -555,9 +573,11 @@ struct TokenMeteringDashboardView: View {
         title: String,
         detail: String,
         isSelected: Bool,
+        liveUpdateID: String? = nil,
         action: @escaping () -> Void
     ) -> some View {
         let isHovered = hoveredFilterTitle == title
+        let isLiveUpdated = liveUpdateID.map { store.isLiveUpdated($0) } ?? false
         return Button(action: action) {
             HStack(spacing: 9) {
                 Circle()
@@ -572,9 +592,16 @@ struct TokenMeteringDashboardView: View {
                         .font(.system(size: 8.5, weight: .semibold, design: .monospaced))
                         .foregroundStyle(isSelected ? .white.opacity(0.8) : .secondary)
                         .lineLimit(1)
+                        .contentTransition(.numericText())
+                        .animation(.snappy(duration: 0.35), value: detail)
                 }
 
                 Spacer(minLength: 0)
+                TokenMeteringLiveUpdateDot(
+                    isActive: isLiveUpdated,
+                    marker: store.liveUpdateMarker,
+                    tint: isSelected ? .white : .teal
+                )
             }
             .padding(.horizontal, 10)
             .frame(height: 38)
@@ -595,6 +622,7 @@ struct TokenMeteringDashboardView: View {
                         .fill(isHovered ? Color.primary.opacity(0.06) : Color.primary.opacity(0.03))
                 }
             }
+            .modifier(TokenMeteringLiveUpdateEffect(isActive: isLiveUpdated && !isSelected, marker: store.liveUpdateMarker, cornerRadius: 8))
         }
         .buttonStyle(.plain)
         .focusEffectDisabled()
@@ -636,21 +664,28 @@ struct TokenMeteringDashboardView: View {
         }
     }
 
-    private func barRows(_ rows: [TokenUsageDashboardBarRow], emptyText: String) -> some View {
+    private func barRows(_ rows: [TokenUsageDashboardBarRow], emptyText: String, idPrefix: String) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             if rows.isEmpty {
                 emptyMessage(title: emptyText, detail: t(.waitingForEvents))
             } else {
                 ForEach(rows.prefix(6)) { row in
+                    let liveUpdateID = "\(idPrefix):\(row.id)"
+                    let isLiveUpdated = store.isLiveUpdated(liveUpdateID)
                     VStack(alignment: .leading, spacing: 6) {
                         HStack {
-                            Text(row.title)
-                                .font(.system(size: 11, weight: .semibold))
-                                .lineLimit(1)
+                            HStack(spacing: 6) {
+                                TokenMeteringLiveUpdateDot(isActive: isLiveUpdated, marker: store.liveUpdateMarker)
+                                Text(row.title)
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .lineLimit(1)
+                            }
                             Spacer()
                             Text(row.value)
                                 .font(.system(size: 10, weight: .bold, design: .monospaced))
                                 .foregroundStyle(.secondary)
+                                .contentTransition(.numericText())
+                                .animation(.snappy(duration: 0.35), value: row.value)
                         }
 
                         GeometryReader { geometry in
@@ -660,10 +695,13 @@ struct TokenMeteringDashboardView: View {
                                 Capsule(style: .continuous)
                                     .fill(Color.teal)
                                     .frame(width: max(6, geometry.size.width * row.ratio))
+                                    .animation(.snappy(duration: 0.35), value: row.ratio)
                             }
                         }
                         .frame(height: 7)
                     }
+                    .padding(.vertical, 2)
+                    .modifier(TokenMeteringLiveUpdateEffect(isActive: isLiveUpdated, marker: store.liveUpdateMarker, cornerRadius: 7))
                 }
             }
         }
@@ -671,7 +709,8 @@ struct TokenMeteringDashboardView: View {
 
     private func compactSummaryRows<T: Collection>(
         _ rows: T,
-        emptyText: String
+        emptyText: String,
+        idPrefix: String? = nil
     ) -> some View where T.Element == TokenUsageDashboardBarRow {
         let rowsArray = Array(rows)
 
@@ -682,30 +721,44 @@ struct TokenMeteringDashboardView: View {
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(rowsArray) { row in
+                    let liveUpdateID = idPrefix.map { "\($0):\(row.id)" }
+                    let isLiveUpdated = liveUpdateID.map { store.isLiveUpdated($0) } ?? false
                     HStack(spacing: 8) {
-                        Text(row.title)
-                            .font(.system(size: 10, weight: .semibold))
-                            .lineLimit(1)
+                        HStack(spacing: 5) {
+                            TokenMeteringLiveUpdateDot(isActive: isLiveUpdated, marker: store.liveUpdateMarker)
+                            Text(row.title)
+                                .font(.system(size: 10, weight: .semibold))
+                                .lineLimit(1)
+                        }
                         Spacer(minLength: 4)
                         Text(row.value)
                             .font(.system(size: 9, weight: .bold, design: .monospaced))
                             .foregroundStyle(.secondary)
+                            .contentTransition(.numericText())
+                            .animation(.snappy(duration: 0.35), value: row.value)
                     }
+                    .modifier(TokenMeteringLiveUpdateEffect(isActive: isLiveUpdated, marker: store.liveUpdateMarker, cornerRadius: 7))
                 }
             }
         }
     }
 
-    private func metricPill(title: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(title.uppercased())
-                .font(.system(size: 8, weight: .black))
-                .tracking(0.8)
-                .foregroundStyle(.secondary)
+    private func metricPill(title: String, value: String, liveUpdateID: String? = nil) -> some View {
+        let isLiveUpdated = liveUpdateID.map { store.isLiveUpdated($0) } ?? false
+        return VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 5) {
+                Text(title.uppercased())
+                    .font(.system(size: 8, weight: .black))
+                    .tracking(0.8)
+                    .foregroundStyle(.secondary)
+                TokenMeteringLiveUpdateDot(isActive: isLiveUpdated, marker: store.liveUpdateMarker)
+            }
             Text(value)
                 .font(.system(size: 12, weight: .bold, design: .monospaced))
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
+                .contentTransition(.numericText())
+                .animation(.snappy(duration: 0.35), value: value)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(10)
@@ -714,6 +767,7 @@ struct TokenMeteringDashboardView: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(Color.primary.opacity(0.04), lineWidth: 0.5)
         }
+        .modifier(TokenMeteringLiveUpdateEffect(isActive: isLiveUpdated, marker: store.liveUpdateMarker, cornerRadius: 8))
     }
 
     private func tableHeader(_ title: String) -> some View {
@@ -804,6 +858,101 @@ private struct TokenMeteringInfoButton: View {
             }
             .padding(14)
             .frame(width: 260, alignment: .leading)
+        }
+    }
+}
+
+private struct TokenMeteringLiveUpdateDot: View {
+    let isActive: Bool
+    let marker: TokenUsageLiveUpdateMarker
+    var tint: Color = .teal
+
+    @State private var isPulsing = false
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(tint.opacity(0.24))
+                .scaleEffect(isPulsing ? 2.25 : 0.8)
+                .opacity(isActive ? (isPulsing ? 0.0 : 0.55) : 0.0)
+            Circle()
+                .fill(tint)
+                .scaleEffect(isActive && isPulsing ? 1.28 : 0.82)
+                .opacity(isActive ? 1.0 : 0.0)
+        }
+        .frame(width: 7, height: 7)
+        .animation(.easeOut(duration: 0.42), value: isPulsing)
+        .animation(.easeOut(duration: 0.14), value: isActive)
+        .onAppear {
+            triggerPulse()
+        }
+        .onChange(of: marker.sequence) { _, _ in
+            triggerPulse()
+        }
+    }
+
+    private func triggerPulse() {
+        guard isActive else {
+            isPulsing = false
+            return
+        }
+
+        isPulsing = false
+        DispatchQueue.main.async {
+            guard isActive else {
+                return
+            }
+            isPulsing = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.42) {
+                isPulsing = false
+            }
+        }
+    }
+}
+
+private struct TokenMeteringLiveUpdateEffect: ViewModifier {
+    let isActive: Bool
+    let marker: TokenUsageLiveUpdateMarker
+    let cornerRadius: CGFloat
+
+    @State private var isFlashing = false
+
+    func body(content: Content) -> some View {
+        content
+            .background {
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(Color.teal.opacity(isActive && isFlashing ? 0.10 : 0.0))
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .stroke(Color.teal.opacity(isActive && isFlashing ? 0.34 : 0.0), lineWidth: 0.8)
+            }
+            .scaleEffect(isActive && isFlashing ? 1.006 : 1.0)
+            .animation(.easeOut(duration: 0.34), value: isFlashing)
+            .animation(.easeOut(duration: 0.14), value: isActive)
+            .onAppear {
+                triggerFlash()
+            }
+            .onChange(of: marker.sequence) { _, _ in
+                triggerFlash()
+            }
+    }
+
+    private func triggerFlash() {
+        guard isActive else {
+            isFlashing = false
+            return
+        }
+
+        isFlashing = false
+        DispatchQueue.main.async {
+            guard isActive else {
+                return
+            }
+            isFlashing = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.34) {
+                isFlashing = false
+            }
         }
     }
 }

@@ -327,6 +327,142 @@ final class TokenUsageDashboardStore: ObservableObject {
         return ids
     }
 
+    private static func appendChangedRows(
+        to ids: inout Set<String>,
+        previous: [TokenUsageDashboardKPI],
+        next: [TokenUsageDashboardKPI],
+        prefix: String
+    ) {
+        let previousByID = Dictionary(uniqueKeysWithValues: previous.map { ($0.id, $0) })
+        for row in next where previousByID[row.id] != row {
+            ids.insert("\(prefix):\(row.id)")
+        }
+    }
+
+    private static func appendChangedRows(
+        to ids: inout Set<String>,
+        previous: [TokenUsageDashboardBarRow],
+        next: [TokenUsageDashboardBarRow],
+        prefix: String
+    ) {
+        let previousByID = Dictionary(uniqueKeysWithValues: previous.map { ($0.id, $0) })
+        for row in next where previousByID[row.id] != row {
+            ids.insert("\(prefix):\(row.id)")
+        }
+    }
+
+    private static func appendChangedRows(
+        to ids: inout Set<String>,
+        previous: [TokenUsageDashboardSessionRow],
+        next: [TokenUsageDashboardSessionRow],
+        prefix: String
+    ) {
+        let previousByID = Dictionary(uniqueKeysWithValues: previous.map { ($0.id, $0) })
+        for row in next where previousByID[row.id] != row {
+            ids.insert("\(prefix):\(row.id)")
+        }
+    }
+
+    private static func appendChangedTotals(
+        to ids: inout Set<String>,
+        previous: [String: Int],
+        next: [String: Int],
+        prefixes: [String]
+    ) {
+        for key in Set(previous.keys).union(next.keys) {
+            let previousValue = previous[key, default: 0]
+            let nextValue = next[key, default: 0]
+            guard nextValue > 0, previousValue != nextValue else {
+                continue
+            }
+            for prefix in prefixes {
+                ids.insert("\(prefix):\(key)")
+            }
+        }
+    }
+
+    private static func dashboardEvents(
+        _ events: [TokenUsageEvent],
+        selectedTool: TokenUsageAITool?,
+        selectedPeriod: TokenUsageDashboardPeriod,
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) -> [TokenUsageEvent] {
+        events.filter { event in
+            guard event.aiTool.isDashboardTool else {
+                return false
+            }
+            if let selectedTool, event.aiTool != selectedTool {
+                return false
+            }
+            guard let cutoffDate = cutoffDate(for: selectedPeriod, now: now, calendar: calendar) else {
+                return true
+            }
+            guard let createdAt = ISO8601DateFormatter.tokenUsage.date(from: event.createdAt) else {
+                return false
+            }
+            return createdAt >= cutoffDate && createdAt <= now
+        }
+    }
+
+    private static func cutoffDate(
+        for period: TokenUsageDashboardPeriod,
+        now: Date,
+        calendar: Calendar
+    ) -> Date? {
+        switch period {
+        case .today:
+            return calendar.startOfDay(for: now)
+        case .sevenDays:
+            return calendar.date(byAdding: .day, value: -7, to: now)
+        case .thirtyDays:
+            return calendar.date(byAdding: .day, value: -30, to: now)
+        case .all:
+            return nil
+        }
+    }
+
+    private static func tokenTotals(
+        _ events: [TokenUsageEvent],
+        by key: (TokenUsageEvent) -> String
+    ) -> [String: Int] {
+        Dictionary(grouping: events, by: key)
+            .mapValues { groupedEvents in
+                groupedEvents.reduce(0) { $0 + $1.totalTokens }
+            }
+    }
+
+    private static func sourceTotals(_ events: [TokenUsageEvent]) -> [String: Int] {
+        var totals: [String: Int] = [:]
+        for event in events {
+            totals["system", default: 0] += event.tokenBreakdown.system
+            totals["user", default: 0] += event.tokenBreakdown.user
+            totals["history", default: 0] += event.tokenBreakdown.history
+            totals["repo_context", default: 0] += event.tokenBreakdown.repoContext
+            totals["tool_output", default: 0] += event.tokenBreakdown.toolOutput
+            totals["generated_output", default: 0] += event.tokenBreakdown.generatedOutput
+            totals["unknown", default: 0] += event.tokenBreakdown.unknown
+        }
+        return totals
+    }
+
+    private static func averageLatency(_ events: [TokenUsageEvent]) -> Int? {
+        let samples = events.map(\.latencyMS).filter { $0 > 0 }
+        guard !samples.isEmpty else {
+            return nil
+        }
+        return samples.reduce(0, +) / samples.count
+    }
+
+    private static func modelKey(_ model: String) -> String {
+        let trimmed = model.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lowered = trimmed.lowercased()
+        if trimmed.isEmpty || lowered == "unknown" || lowered == "unknown_model" || lowered == "model_unknown" || lowered == "unavailable" {
+            return "model_unavailable"
+        }
+        return trimmed
+    }
+
     private static func makeLocalTestEvent(index: Int) -> TokenUsageEvent {
         let taskTypes: [TokenUsageTaskType] = [
             .analysis,
@@ -374,5 +510,16 @@ final class TokenUsageDashboardStore: ObservableObject {
             createdAt: ISO8601DateFormatter.tokenUsage.string(from: Date()),
             syncMode: .localOnly
         )
+    }
+}
+
+struct TokenUsageLiveUpdateMarker: Equatable {
+    let ids: Set<String>
+    let sequence: Int
+
+    static let empty = TokenUsageLiveUpdateMarker(ids: [], sequence: 0)
+
+    func contains(_ id: String) -> Bool {
+        ids.contains(id)
     }
 }

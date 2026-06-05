@@ -358,6 +358,9 @@ test("setup prompt bootstraps the public token metering installer", () => {
   assert.match(setupPrompt, /--label <current-tool>/);
   assert.match(setupPrompt, /agy, treat it as an input alias for the canonical antigravity event label/);
   assert.match(setupPrompt, /Never let Claude Code or Antigravity\/AGY workflow routing fall back to codex/);
+  assert.match(setupPrompt, /antigravity-latest\.json/);
+  assert.match(setupPrompt, /observed_safe_shape/);
+  assert.match(setupPrompt, /empty_stdin` must not overwrite/);
   assert.doesNotMatch(setupPrompt, /workflow-setup-prompt\.md/);
   assert.match(setupPrompt, /Do not save only the runtime instruction and call the task done/);
 });
@@ -385,8 +388,8 @@ test("hosted runtime instruction stays silent and exact-count-only", () => {
   assert.match(runtime, /Use `review_response`/);
   assert.match(runtime, /Do not let a short verification step overwrite an implementation-heavy task/);
   assert.match(runtime, /stage that consumed the dominant work/);
-  assert.match(runtime, /repeated identical hook payloads dedupe locally/);
-  assert.match(runtime, /prefer deduping the repeated payload over inflating totals/);
+  assert.match(runtime, /generate a fresh opaque `span_id`/);
+  assert.match(runtime, /Do not collapse two distinct real turns/);
   assert.match(runtime, /Never send, derive, or store conversation titles/);
   assert.match(runtime, /Spill generates default work item display names locally/);
   assert.match(runtime, /Never inspect local agent logs/);
