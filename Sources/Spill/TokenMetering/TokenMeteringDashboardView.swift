@@ -5,6 +5,7 @@ struct TokenMeteringDashboardView: View {
     @ObservedObject var store: TokenUsageDashboardStore
     @State private var copiedTarget: String?
     @State private var isDiagnosticsExpanded = false
+    @State private var hoveredFilterTitle: String? = nil
 
     var body: some View {
         VStack(spacing: 0) {
@@ -33,7 +34,7 @@ struct TokenMeteringDashboardView: View {
             .padding(.horizontal, 18)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
-        .background(VisualEffectView(material: .sidebar, blendingMode: .withinWindow))
+        .background(VisualEffectView(material: .windowBackground, blendingMode: .withinWindow))
         .frame(minWidth: 1060, minHeight: 640)
         .onAppear {
             store.refresh()
@@ -44,13 +45,20 @@ struct TokenMeteringDashboardView: View {
         HStack(spacing: 14) {
             ZStack {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(Color.teal.opacity(0.15))
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.teal, Color.teal.opacity(0.75)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .shadow(color: Color.teal.opacity(0.3), radius: 4, x: 0, y: 2)
 
                 Image(systemName: "chart.bar.xaxis")
-                    .font(.system(size: 18, weight: .bold))
-                    .foregroundStyle(.teal)
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(.white)
             }
-            .frame(width: 38, height: 38)
+            .frame(width: 36, height: 36)
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 8) {
@@ -166,7 +174,15 @@ struct TokenMeteringDashboardView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(14)
-                .background(dashboardCardBackground)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(.ultraThinMaterial)
+                        .shadow(color: Color.black.opacity(0.03), radius: 6, x: 0, y: 3)
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(Color.primary.opacity(0.07), lineWidth: 0.5)
+                }
             }
         }
     }
@@ -290,7 +306,11 @@ struct TokenMeteringDashboardView: View {
                         }
                         .padding(.horizontal, 12)
                         .padding(.vertical, 10)
-                        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 8))
+                        .background(Color.primary.opacity(0.025), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .stroke(Color.primary.opacity(0.04), lineWidth: 0.5)
+                        }
                         .padding(.top, 6)
                     }
                 }
@@ -335,7 +355,15 @@ struct TokenMeteringDashboardView: View {
                 .font(.system(size: 11, weight: .semibold))
         }
         .padding(14)
-        .background(dashboardCardBackground)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .shadow(color: Color.black.opacity(0.03), radius: 6, x: 0, y: 3)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Color.primary.opacity(0.07), lineWidth: 0.5)
+        }
     }
 
     private func dashboardPanel<Content: View>(
@@ -356,7 +384,15 @@ struct TokenMeteringDashboardView: View {
         }
         .frame(maxWidth: .infinity, minHeight: 260, alignment: .topLeading)
         .padding(16)
-        .background(dashboardCardBackground)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .shadow(color: Color.black.opacity(0.03), radius: 6, x: 0, y: 3)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Color.primary.opacity(0.07), lineWidth: 0.5)
+        }
     }
 
     private func railPanel<Content: View>(
@@ -373,7 +409,15 @@ struct TokenMeteringDashboardView: View {
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .padding(14)
-        .background(dashboardCardBackground)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .shadow(color: Color.black.opacity(0.03), radius: 6, x: 0, y: 3)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Color.primary.opacity(0.07), lineWidth: 0.5)
+        }
     }
 
     private func railFilterButton(
@@ -382,45 +426,68 @@ struct TokenMeteringDashboardView: View {
         isSelected: Bool,
         action: @escaping () -> Void
     ) -> some View {
-        Button(action: action) {
+        let isHovered = hoveredFilterTitle == title
+        return Button(action: action) {
             HStack(spacing: 9) {
                 Circle()
-                    .fill(isSelected ? Color.teal : Color.primary.opacity(0.12))
-                    .frame(width: 8, height: 8)
+                    .fill(isSelected ? .white : (isHovered ? Color.teal : Color.primary.opacity(0.12)))
+                    .frame(width: 6, height: 6)
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 1) {
                     Text(title)
-                        .font(.system(size: 11, weight: .bold))
+                        .font(.system(size: 11, weight: isSelected ? .bold : .medium))
                         .lineLimit(1)
                     Text(detail)
-                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(isSelected ? .white.opacity(0.82) : .secondary)
+                        .font(.system(size: 8.5, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(isSelected ? .white.opacity(0.8) : .secondary)
                         .lineLimit(1)
                 }
 
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 10)
-            .frame(height: 42)
+            .frame(height: 38)
             .foregroundStyle(isSelected ? .white : .primary)
-            .background(
-                isSelected ? Color.teal : Color.primary.opacity(0.045),
-                in: RoundedRectangle(cornerRadius: 9, style: .continuous)
-            )
+            .background {
+                if isSelected {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [Color.teal, Color.teal.opacity(0.82)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .shadow(color: Color.teal.opacity(0.25), radius: 4, x: 0, y: 1.5)
+                } else {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(isHovered ? Color.primary.opacity(0.06) : Color.primary.opacity(0.03))
+                }
+            }
         }
         .buttonStyle(.plain)
+        .onHover { hovering in
+            withAnimation(.easeOut(duration: 0.15)) {
+                hoveredFilterTitle = hovering ? title : nil
+            }
+        }
     }
 
     private func receiverTile(title: String, state: String, systemImage: String, tint: Color) -> some View {
-        HStack(spacing: 9) {
-            Image(systemName: systemImage)
-                .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(tint)
-                .frame(width: 18)
+        HStack(spacing: 10) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(tint.opacity(0.12))
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
+                Image(systemName: systemImage)
                     .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(tint)
+            }
+            .frame(width: 22, height: 22)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(.system(size: 11, weight: .semibold))
                 Text(state)
                     .font(.system(size: 9, weight: .semibold))
                     .foregroundStyle(.secondary)
@@ -428,8 +495,13 @@ struct TokenMeteringDashboardView: View {
 
             Spacer(minLength: 0)
         }
-        .padding(10)
-        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.primary.opacity(0.04), lineWidth: 0.5)
+        }
     }
 
     private func barRows(_ rows: [TokenUsageDashboardBarRow], emptyText: String) -> some View {
@@ -505,7 +577,11 @@ struct TokenMeteringDashboardView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(10)
-        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.primary.opacity(0.04), lineWidth: 0.5)
+        }
     }
 
     private func tableHeader(_ title: String) -> some View {

@@ -4,8 +4,8 @@ import SwiftUI
 @MainActor
 final class PreferencesWindowController {
     private let autosaveName = NSWindow.FrameAutosaveName("SpillPreferences")
-    private let preferredSize = NSSize(width: 520, height: 640)
-    private let minimumSize = NSSize(width: 460, height: 320)
+    private let preferredSize = NSSize(width: 720, height: 560)
+    private let minimumSize = NSSize(width: 640, height: 480)
     private let screenPadding: CGFloat = 32
     private let settings: SpillSettings
     private let scanner: AXMenuBarItemScanner

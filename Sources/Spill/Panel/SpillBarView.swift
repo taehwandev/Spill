@@ -743,37 +743,61 @@ struct SpillBarView: View {
         let isActive = status.state == .active
         let isUnavailable = status.state == .unavailable
 
-        return HStack(alignment: .top, spacing: 8) {
-            aiToolIconBadge(symbolName: status.symbolName, tint: tint)
+        return VStack(alignment: .leading, spacing: 5) {
+            HStack(alignment: .center, spacing: 6) {
+                aiToolIconBadge(symbolName: status.symbolName, tint: tint)
 
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 6) {
+                VStack(alignment: .leading, spacing: 1) {
                     Text(status.title)
                         .font(.system(size: 10.5, weight: .bold))
                         .lineLimit(1)
-                        .minimumScaleFactor(0.78)
                         .foregroundStyle(isUnavailable ? .secondary : .primary)
 
-                    Spacer(minLength: 4)
-
-                    aiStatusBadge(for: status, serviceStatus: serviceStatus)
-                }
-
-                HStack(spacing: 5) {
                     Text(subtitleText(status.subtitle))
-                        .font(.system(size: 10, weight: .semibold, design: .rounded))
+                        .font(.system(size: 8.5, weight: .bold, design: .rounded))
                         .lineLimit(1)
-                        .minimumScaleFactor(0.76)
-                        .monospacedDigit()
-                        .foregroundStyle(isActive ? tint.opacity(0.86) : .secondary)
-
-                    Spacer(minLength: 4)
+                        .foregroundStyle(.secondary)
                 }
+
+                Spacer(minLength: 4)
+
+                aiStatusBadge(for: status, serviceStatus: serviceStatus)
+            }
+
+            Divider()
+                .opacity(0.4)
+
+            HStack(alignment: .center, spacing: 4) {
+                Image(systemName: "chart.bar.xaxis")
+                    .font(.system(size: 8))
+                    .foregroundStyle(.secondary)
+
+                HStack(alignment: .firstTextBaseline, spacing: 1) {
+                    Text(toolTokenValue(for: status.kind))
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(Color.primary)
+                    Text("tokens")
+                        .font(.system(size: 7.5, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer(minLength: 4)
+
+                let ratio = toolTokenRatio(for: status.kind)
+                let percentage = Int((ratio * 100).rounded())
+                Text("\(percentage)%")
+                    .font(.system(size: 8.5, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(.teal)
+                    .padding(.horizontal, 4)
+                    .frame(height: 14)
+                    .background(.teal.opacity(0.12), in: RoundedRectangle(cornerRadius: 3, style: .continuous))
             }
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 7)
-        .frame(height: 54)
+        .frame(height: 72)
         .frame(maxWidth: .infinity)
         .background(
             isActive ? tint.opacity(0.06) : Color.primary.opacity(0.03),
@@ -783,6 +807,92 @@ struct SpillBarView: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(isActive ? tint.opacity(0.12) : Color.primary.opacity(0.04), lineWidth: 0.5)
         }
+    }
+
+    private func toolTokenValue(for kind: LocalAIToolKind) -> String {
+        let snapshot = tokenUsageDashboardStore.snapshot
+        let rawValue: String
+        switch kind {
+        case .codex:
+            rawValue = TokenUsageAITool.codex.rawValue
+        case .claude:
+            rawValue = TokenUsageAITool.claude.rawValue
+        case .antigravity:
+            rawValue = TokenUsageAITool.antigravity.rawValue
+        case .openAI:
+            rawValue = TokenUsageAITool.openAI.rawValue
+        case .ollama:
+            rawValue = "ollama"
+        }
+
+        if let row = snapshot.toolRows.first(where: { $0.id == rawValue }) {
+            return row.value
+        }
+        return "0"
+    }
+
+    private func toolTokenRatio(for kind: LocalAIToolKind) -> Double {
+        let snapshot = tokenUsageDashboardStore.snapshot
+        let rawValue: String
+        switch kind {
+        case .codex:
+            rawValue = TokenUsageAITool.codex.rawValue
+        case .claude:
+            rawValue = TokenUsageAITool.claude.rawValue
+        case .antigravity:
+            rawValue = TokenUsageAITool.antigravity.rawValue
+        case .openAI:
+            rawValue = TokenUsageAITool.openAI.rawValue
+        case .ollama:
+            rawValue = "ollama"
+        }
+
+        if let row = snapshot.toolRows.first(where: { $0.id == rawValue }) {
+            return row.ratio
+        }
+        return 0.0
+    }
+
+    private func tokenPercentageBadge(for kind: LocalAIToolKind) -> some View {
+        let snapshot = tokenUsageDashboardStore.snapshot
+        let rawValue: String
+        switch kind {
+        case .codex:
+            rawValue = TokenUsageAITool.codex.rawValue
+        case .claude:
+            rawValue = TokenUsageAITool.claude.rawValue
+        case .antigravity:
+            rawValue = TokenUsageAITool.antigravity.rawValue
+        case .openAI:
+            rawValue = TokenUsageAITool.openAI.rawValue
+        case .ollama:
+            rawValue = "ollama"
+        }
+
+        let ratio: Double
+        if let row = snapshot.toolRows.first(where: { $0.id == rawValue }) {
+            ratio = row.ratio
+        } else {
+            ratio = 0
+        }
+
+        let percentage = Int((ratio * 100).rounded())
+        let tint = Color.teal
+
+        return HStack(spacing: 4) {
+            Text("\(percentage)%")
+                .font(.system(size: 9.5, weight: .bold, design: .rounded))
+                .lineLimit(1)
+                .monospacedDigit()
+        }
+        .padding(.horizontal, 6)
+        .frame(height: 18)
+        .fixedSize(horizontal: true, vertical: false)
+        .foregroundStyle(tint)
+        .background(
+            tint.opacity(0.12),
+            in: Capsule()
+        )
     }
 
     private func aiToolIconBadge(symbolName: String, tint: Color) -> some View {

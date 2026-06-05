@@ -39,10 +39,17 @@ struct PreferenceCard<Content: View>: View {
             HStack(spacing: 8) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(iconColor)
+                        .fill(
+                            LinearGradient(
+                                colors: [iconColor, iconColor.opacity(0.78)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .shadow(color: iconColor.opacity(0.3), radius: 3, x: 0, y: 1.5)
 
                     Image(systemName: symbolName)
-                        .font(.system(size: 11, weight: .bold))
+                        .font(.system(size: 10.5, weight: .bold))
                         .foregroundStyle(.white)
                 }
                 .frame(width: 22, height: 22)
@@ -51,16 +58,17 @@ struct PreferenceCard<Content: View>: View {
                     .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(.primary)
             }
-            .padding(.bottom, 4)
+            .padding(.bottom, 2)
 
             content
         }
-        .padding(14)
-        .background(Color(NSColor.controlBackgroundColor).opacity(0.35))
+        .padding(16)
+        .background(.ultraThinMaterial)
         .cornerRadius(12)
+        .shadow(color: Color.black.opacity(0.03), radius: 6, x: 0, y: 3)
         .overlay {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(Color.primary.opacity(0.06), lineWidth: 1)
+                .stroke(Color.primary.opacity(0.07), lineWidth: 0.5)
         }
     }
 }
@@ -73,81 +81,116 @@ struct PreferencesView: View {
     let openTokenDashboardAction: () -> Void
     @State private var accessibilityTrusted = AccessibilityPermission.isTrusted
     @State private var loginItemError: String?
-    @State private var showsAdvancedDetection = false
+    @State private var selectedTab: String = "general"
+    @State private var hoveredTab: String? = nil
 
     var body: some View {
-        ScrollView(.vertical, showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 20) {
+        HStack(spacing: 0) {
+            // Left Sidebar
+            VStack(alignment: .leading, spacing: 0) {
                 // Header Brand Section
-                HStack(spacing: 12) {
+                HStack(spacing: 10) {
                     SpillBrandIconView()
-                        .frame(width: 34, height: 34)
+                        .frame(width: 32, height: 32)
 
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: 1) {
                         Text("Spill")
-                            .font(.system(size: 16, weight: .bold))
-                        Text("Menu bar overflow, under the notch.")
-                            .font(.system(size: 11, weight: .medium))
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(.primary)
+                        Text("v\(updateStore.currentVersion)")
+                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
                             .foregroundStyle(.secondary)
                     }
                 }
+                .padding(.horizontal, 16)
+                .padding(.top, 20)
+                .padding(.bottom, 16)
 
-                Divider()
-                    .background(Color.primary.opacity(0.04))
-
-                // Section 1: General Settings (Launch at Login, Animations, Shortcuts)
-                PreferenceCard(title: "General & Launch", symbolName: "gearshape.fill", iconColor: .blue) {
-                    GeneralPreferencesSection(
-                        settings: settings,
-                        updateStore: updateStore,
-                        loginItemError: $loginItemError
-                    )
+                // Navigation List
+                VStack(spacing: 4) {
+                    sidebarItem(title: "General", imageName: "gearshape.fill", tag: "general")
+                    sidebarItem(title: "Menu Bar", imageName: "menubar.rectangle", tag: "menubar")
+                    sidebarItem(title: "Token Metering", imageName: "chart.bar.xaxis", tag: "tokens")
+                    sidebarItem(title: "Window Management", imageName: "macwindow", tag: "windows")
+                    sidebarItem(title: "Status & Caffeine", imageName: "cup.and.saucer.fill", tag: "status_caffeine")
                 }
+                .padding(.horizontal, 8)
 
-                // Section 2: Token Metering
-                PreferenceCard(title: "Token Metering", symbolName: "chart.bar.xaxis", iconColor: .teal) {
-                    TokenMeteringPreferencesSection(
-                        settings: settings,
-                        openDashboardAction: openTokenDashboardAction
-                    )
+                Spacer()
+
+                // Bottom Check for Updates
+                VStack(spacing: 8) {
+                    Divider()
+                        .background(Color.primary.opacity(0.06))
+                        .padding(.horizontal, 12)
+
+                    Button {
+                        updateStore.checkForUpdates(source: "preferences_sidebar")
+                    } label: {
+                        HStack(spacing: 6) {
+                            if updateStore.isChecking {
+                                ProgressView()
+                                    .controlSize(.small)
+                                    .scaleEffect(0.7)
+                                    .frame(width: 12, height: 12)
+                            } else {
+                                Image(systemName: "arrow.clockwise")
+                                    .font(.system(size: 10, weight: .semibold))
+                            }
+                            Text(updateStore.isChecking ? "Checking..." : "Check for Updates")
+                                .font(.system(size: 11, weight: .semibold))
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.regular)
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 16)
                 }
-
-                // Section 3: Status Modules
-                PreferenceCard(title: "Status Modules", symbolName: "waveform.path.ecg", iconColor: .purple) {
-                    StatusModulesPreferencesSection(settings: settings)
-                }
-
-                // Section 4: Caffeine Options
-                PreferenceCard(title: "Caffeine Settings", symbolName: "cup.and.saucer.fill", iconColor: .orange) {
-                    PowerPreferencesSection(settings: settings)
-                }
-
-                // Section 5: System Permissions & Diagnostics
-                PreferenceCard(title: "Permissions & Diagnostics", symbolName: "lock.shield.fill", iconColor: .green) {
-                    AccessibilityPreferencesSection(
-                        scanner: scanner,
-                        accessibilityTrusted: $accessibilityTrusted,
-                        showPanelAction: showPanelAction
-                    )
-                }
-
-                Divider()
-                    .background(Color.primary.opacity(0.04))
-
-                // Section 6: Advanced Detection
-                advancedDetectionSection
-
-                Divider()
-                    .background(Color.primary.opacity(0.04))
-
-                // Section 7: Open Source Footer
-                openSourceFooter
             }
-            .padding(20)
-            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .frame(width: 170)
+            .background(
+                LinearGradient(
+                    colors: [
+                        Color.primary.opacity(0.005),
+                        Color.primary.opacity(0.02)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+
+            Divider()
+                .background(Color.primary.opacity(0.08))
+
+            // Right Detail Panel
+            VStack(alignment: .leading, spacing: 0) {
+                // Top Tab Title
+                HStack {
+                    Text(tabTitle(for: selectedTab))
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(.primary)
+                    Spacer()
+                }
+                .padding(.horizontal, 24)
+                .padding(.top, 20)
+                .padding(.bottom, 14)
+
+                // Scrollable Content
+                ScrollView(.vertical, showsIndicators: false) {
+                    detailContent(for: selectedTab)
+                        .padding(.horizontal, 24)
+                        .padding(.bottom, 24)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(
+                VisualEffectView(material: .windowBackground, blendingMode: .withinWindow)
+            )
         }
         .background(VisualEffectView(material: .sidebar, blendingMode: .withinWindow)) // Frosted Glass Window Base
-        .frame(minWidth: 500, minHeight: 560)
+        .frame(width: 720, height: 560)
         .onAppear {
             refreshPermissionState()
         }
@@ -156,31 +199,308 @@ struct PreferencesView: View {
         }
     }
 
-    private func refreshPermissionState() {
-        accessibilityTrusted = AccessibilityPermission.isTrusted
+    private func sidebarItem(title: String, imageName: String, tag: String) -> some View {
+        let isSelected = selectedTab == tag
+        let isHovered = hoveredTab == tag
+
+        return Button {
+            withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
+                selectedTab = tag
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: imageName)
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundStyle(isSelected ? .white : (isHovered ? .primary : .secondary))
+                    .frame(width: 16, height: 16)
+                    .scaleEffect(isHovered && !isSelected ? 1.08 : 1.0)
+
+                Text(title)
+                    .font(.system(size: 12, weight: isSelected ? .semibold : .medium))
+                    .foregroundStyle(isSelected ? .white : (isHovered ? .primary : .primary.opacity(0.85)))
+
+                Spacer()
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .contentShape(Rectangle())
+            .background {
+                if isSelected {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [Color.accentColor, Color.accentColor.opacity(0.82)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .shadow(color: Color.accentColor.opacity(0.24), radius: 4, x: 0, y: 1.5)
+                } else {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(isHovered ? Color.primary.opacity(0.06) : Color.clear)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            withAnimation(.easeOut(duration: 0.15)) {
+                hoveredTab = hovering ? tag : nil
+            }
+        }
+    }
+
+    private func tabTitle(for tab: String) -> String {
+        switch tab {
+        case "general": return "General"
+        case "menubar": return "Menu Bar & Notch"
+        case "tokens": return "Token Metering"
+        case "windows": return "Window Management"
+        case "status_caffeine": return "Status & Caffeine"
+        default: return ""
+        }
+    }
+
+    @ViewBuilder
+    private func detailContent(for tab: String) -> some View {
+        switch tab {
+        case "general":
+            generalTab
+        case "menubar":
+            menuBarTab
+        case "tokens":
+            tokensTab
+        case "windows":
+            windowsTab
+        case "status_caffeine":
+            statusCaffeineTab
+        default:
+            EmptyView()
+        }
+    }
+
+    // MARK: - Tab Views
+
+    private var generalTab: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            PreferenceCard(title: "Launch Settings", symbolName: "play.circle.fill", iconColor: .blue) {
+                VStack(alignment: .leading, spacing: 10) {
+                    Toggle("Launch at Login", isOn: launchAtLoginBinding)
+                        .disabled(!LoginItemController.isAvailable)
+                        .font(.system(size: 12, weight: .medium))
+
+                    if !LoginItemController.isAvailable {
+                        Text("Launch at Login is available after packaging Spill as a .app bundle.")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                    }
+
+                    if let loginItemError {
+                       Text(loginItemError)
+                           .font(.system(size: 10))
+                           .foregroundStyle(.red)
+                    }
+                }
+            }
+
+            PreferenceCard(title: "Permissions & Diagnostics", symbolName: "lock.shield.fill", iconColor: .green) {
+                AccessibilityPreferencesSection(
+                    scanner: scanner,
+                    accessibilityTrusted: $accessibilityTrusted,
+                    showPanelAction: showPanelAction
+                )
+            }
+
+            PreferenceCard(title: "Updates", symbolName: "arrow.down.circle.fill", iconColor: .orange) {
+                UpdatePreferencesSection(store: updateStore)
+            }
+
+            Divider()
+                .background(Color.primary.opacity(0.04))
+
+            openSourceFooter
+        }
+    }
+
+    private var menuBarTab: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            PreferenceCard(title: "Menu Bar Icon & Animation", symbolName: "paintpalette.fill", iconColor: .pink) {
+                VStack(alignment: .leading, spacing: 14) {
+                    Toggle("Use spill animation", isOn: $settings.useSpillAnimation)
+                        .font(.system(size: 12, weight: .medium))
+
+                    Divider()
+                        .background(Color.primary.opacity(0.04))
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Text("Menu bar trigger icon")
+                                .font(.system(size: 11, weight: .bold))
+                            Spacer()
+                            Text(settings.menuBarTriggerIconStyle.title)
+                                .font(.system(size: 10))
+                                .foregroundStyle(.secondary)
+                        }
+
+                        if MenuBarTriggerIconStyle.selectableCases.count > 1 {
+                            Picker("Menu bar trigger icon", selection: $settings.menuBarTriggerIconStyle) {
+                                ForEach(MenuBarTriggerIconStyle.selectableCases) { style in
+                                    Text(style.title).tag(style)
+                                }
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.segmented)
+                        }
+
+                        MenuBarTriggerIconPreview(
+                            style: settings.menuBarTriggerIconStyle,
+                            isAnimated: settings.useSpillAnimation
+                        )
+
+                        Text(settings.menuBarTriggerIconStyle.subtitle)
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                            .lineSpacing(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    Divider()
+                        .background(Color.primary.opacity(0.04))
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Text("Menu bar icon spacing")
+                                .font(.system(size: 11, weight: .bold))
+                            Spacer()
+                            Text("\(Int(settings.iconSpacing)) px")
+                                .font(.system(size: 11).monospacedDigit())
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Slider(value: $settings.iconSpacing, in: 2...16, step: 1)
+                    }
+                }
+            }
+
+            PreferenceCard(title: "Advanced Notch Scan", symbolName: "menubar.rectangle", iconColor: .secondary) {
+                advancedDetectionSection
+            }
+        }
+    }
+
+    private var tokensTab: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            PreferenceCard(title: "Token Metering", symbolName: "chart.bar.xaxis", iconColor: .teal) {
+                TokenMeteringPreferencesSection(
+                    settings: settings,
+                    openDashboardAction: openTokenDashboardAction
+                )
+            }
+        }
+    }
+
+    private var windowsTab: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            PreferenceCard(title: "Global Shortcut", symbolName: "keyboard", iconColor: .indigo) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Toggle("Keyboard shortcut", isOn: $settings.hotKeyEnabled)
+                        .font(.system(size: 12, weight: .medium))
+
+                    if settings.hotKeyEnabled {
+                        Text("\(WindowActionShortcutModifier.standard.title) + Space")
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .padding(.leading, 20)
+                    }
+                }
+            }
+
+            PreferenceCard(title: "Window Snap Shortcuts", symbolName: "macwindow", iconColor: .blue) {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(WindowActionKind.panelOrder, id: \.self) { kind in
+                        HStack(spacing: 10) {
+                            Label(kind.title, systemImage: kind.symbolName)
+                                .font(.system(size: 11))
+
+                            Spacer()
+
+                            Text(kind.shortcutModifier.glyph)
+                                .font(.system(size: 11, design: .monospaced))
+                                .foregroundStyle(.secondary)
+
+                            Picker("", selection: shortcutBinding(for: kind)) {
+                                ForEach(WindowActionShortcutKey.allCases) { key in
+                                    Text(key.pickerTitle).tag(key)
+                                }
+                            }
+                            .labelsHidden()
+                            .frame(width: 74)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var statusCaffeineTab: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            PreferenceCard(title: "Status Modules", symbolName: "waveform.path.ecg", iconColor: .purple) {
+                StatusModulesPreferencesSection(settings: settings)
+            }
+
+            PreferenceCard(title: "Caffeine Settings", symbolName: "cup.and.saucer.fill", iconColor: .orange) {
+                PowerPreferencesSection(settings: settings)
+            }
+        }
     }
 
     private var advancedDetectionSection: some View {
-        DisclosureGroup(isExpanded: advancedDetectionBinding) {
-            VStack(alignment: .leading, spacing: 14) {
-                Text("Best-effort menu bar scanning is an advanced pinning and diagnostics tool. It is not required for normal panel use.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Best-effort menu bar scanning is an advanced pinning and diagnostics tool. It is not required for normal panel use.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
 
-                DetectionPreferencesSection(
-                    settings: settings,
-                    scanner: scanner,
-                    accessibilityTrusted: $accessibilityTrusted
-                )
+            DetectionPreferencesSection(
+                settings: settings,
+                scanner: scanner,
+                accessibilityTrusted: $accessibilityTrusted
+            )
 
-                DetectedItemsListView(items: scanner.items, settings: settings)
+            DetectedItemsListView(items: scanner.items, settings: settings)
+        }
+    }
+
+    // MARK: - Bindings & Helpers
+
+    private func shortcutBinding(for kind: WindowActionKind) -> Binding<WindowActionShortcutKey> {
+        Binding {
+            settings.shortcutKey(for: kind)
+        } set: { key in
+            settings.setWindowActionShortcut(key, for: kind)
+        }
+    }
+
+    private var launchAtLoginBinding: Binding<Bool> {
+        Binding {
+            settings.launchAtLogin
+        } set: { enabled in
+            do {
+                try LoginItemController.setEnabled(enabled)
+                settings.launchAtLogin = LoginItemController.isEnabled
+                loginItemError = nil
+            } catch {
+                settings.launchAtLogin = LoginItemController.isEnabled
+                loginItemError = error.localizedDescription
             }
-            .padding(.top, 8)
-        } label: {
-            Label("Advanced Menu Bar Scan", systemImage: "menubar.rectangle")
-                .font(.system(size: 9.5, weight: .bold))
-                .tracking(1.2)
-                .foregroundStyle(.secondary.opacity(0.7))
+        }
+    }
+
+    private func openSourceLink(source: String) {
+        SpillTelemetry.shared.track(
+            "open_source_link_clicked",
+            props: ["source": "preferences_\(source)"]
+        )
+        if let url = URL(string: "https://github.com/taehwandev/Spill") {
+            NSWorkspace.shared.open(url)
         }
     }
 
@@ -226,32 +546,82 @@ struct PreferencesView: View {
         .padding(.top, 8)
     }
 
-    private var advancedDetectionBinding: Binding<Bool> {
-        Binding {
-            showsAdvancedDetection
-        } set: { isExpanded in
-            guard showsAdvancedDetection != isExpanded else {
-                return
-            }
+    private func refreshPermissionState() {
+        accessibilityTrusted = AccessibilityPermission.isTrusted
+    }
+}
 
-            showsAdvancedDetection = isExpanded
-            SpillTelemetry.shared.track(
-                "settings_section_toggled",
-                props: [
-                    "section": "advanced_menu_scan",
-                    "state": isExpanded ? "open" : "closed"
-                ]
-            )
+// MARK: - Redefined Trigger Preview for split view self-containment
+@MainActor
+private struct MenuBarTriggerIconPreview: View {
+    private static let appliedTriggerIconSize: CGFloat = 18
+
+    let style: MenuBarTriggerIconStyle
+    let isAnimated: Bool
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 12.0, paused: !isAnimated || !style.animates)) { context in
+            let phase = isAnimated ? phase(for: context.date) : 0.18
+            let usageRatio = previewUsageRatio(for: style, phase: phase)
+
+            HStack(spacing: 10) {
+                Text("Preview")
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(.secondary)
+
+                HStack(spacing: 6) {
+                    triggerImage(style: style, phase: phase, usageRatio: usageRatio)
+                        .frame(width: Self.appliedTriggerIconSize, height: Self.appliedTriggerIconSize)
+
+                    Text("12:45")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 9)
+                .padding(.vertical, 5)
+                .background(.regularMaterial, in: Capsule())
+                .overlay(
+                    Capsule()
+                        .stroke(Color.primary.opacity(0.10), lineWidth: 1)
+                )
+
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity)
         }
     }
 
-    private func openSourceLink(source: String) {
-        SpillTelemetry.shared.track(
-            "open_source_link_clicked",
-            props: ["source": "preferences_\(source)"]
-        )
-        if let url = URL(string: "https://github.com/taehwandev/Spill") {
-            NSWorkspace.shared.open(url)
+    private func triggerImage(style: MenuBarTriggerIconStyle, phase: CGFloat, usageRatio: Double) -> some View {
+        Group {
+            if let image = MenuBarTriggerIconRenderer.image(
+                style: style,
+                tintColor: .controlAccentColor,
+                usageRatio: usageRatio,
+                phase: phase,
+                size: Self.appliedTriggerIconSize
+            ) {
+                Image(nsImage: image)
+                    .resizable()
+                    .interpolation(.high)
+                    .antialiased(true)
+            } else {
+                Image(systemName: style.symbolName(isActive: false))
+                    .font(.system(size: 16, weight: .semibold))
+            }
         }
+        .foregroundStyle(Color.accentColor)
+    }
+
+    private func phase(for date: Date) -> CGFloat {
+        CGFloat(date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1))
+    }
+
+    private func previewUsageRatio(for style: MenuBarTriggerIconStyle, phase: CGFloat) -> Double {
+        guard style.usesPerformanceEffect else {
+            return 0.35
+        }
+
+        let wave = (sin(Double(phase) * .pi * 2) + 1) / 2
+        return 0.35 + wave * 0.45
     }
 }
