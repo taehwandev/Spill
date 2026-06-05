@@ -23,4 +23,5 @@ https://spill.thdev.app/token-metering/runtime-instruction.md
 
 Do not save only the runtime instruction and call the task done.
 Do not give manual per-adapter setup steps as the primary answer.
-Do not claim Spill token metering is installed until the installer has run and Codex, Claude Code, and Antigravity/AGY hooks have been verified.`;
+Do not claim Spill token metering is installed until the installer has run and Codex, Claude Code, and Antigravity/AGY hooks have been verified.
+For Antigravity/AGY, ~/.gemini/config/hooks.json must contain a "spill-metering" JSONHookSpec with PostInvocation[]; do not use a root-level PostInvocation array.`;

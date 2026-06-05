@@ -466,10 +466,10 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(prompt.contains("Do not give manual per-adapter setup steps as the primary answer"))
         XCTAssertTrue(prompt.contains("Do not claim Spill token metering is installed until the installer has run"))
         XCTAssertTrue(prompt.contains(#"/bin/bash -c "$(curl -fsSL https://spill.thdev.app/token-metering/install.sh)""#))
-        XCTAssertTrue(prompt.contains("root-level PostInvocation[]"))
-        XCTAssertTrue(prompt.contains("Do not nest AGY hooks under \"spill-metering\""))
-        XCTAssertFalse(prompt.contains("PostInvocation[] nested under a \"spill-metering\" key"))
-        XCTAssertFalse(prompt.contains("Root-level hook lists are not supported"))
+        XCTAssertTrue(prompt.contains(#""spill-metering" JSONHookSpec containing PostInvocation[]"#))
+        XCTAssertTrue(prompt.contains("Do not use a root-level PostInvocation array"))
+        XCTAssertFalse(prompt.contains("Do not nest AGY hooks under \"spill-metering\""))
+        XCTAssertFalse(prompt.contains("root-level PostInvocation[] with matcher"))
     }
 
     func testHostedTokenMeteringSetupDocsDefineRuntimeContract() throws {
@@ -480,9 +480,10 @@ final class TokenUsageStoreTests: XCTestCase {
 
         XCTAssertTrue(setup.contains("MANDATORY ACTION: install or repair Spill token metering now"))
         XCTAssertTrue(setup.contains("https://spill.thdev.app/token-metering/install.sh"))
-        XCTAssertTrue(setup.contains("root-level `PostInvocation[]`"))
-        XCTAssertTrue(setup.contains("Do not nest this under `\"spill-metering\"`"))
-        XCTAssertFalse(setup.contains("Root-level hook lists are not supported"))
+        XCTAssertTrue(setup.contains(#"`~/.gemini/config/hooks.json` contains a `"spill-metering"` JSONHookSpec"#))
+        XCTAssertTrue(setup.contains("Do not write `PostInvocation` as a root-level array"))
+        XCTAssertFalse(setup.contains("root-level `PostInvocation[]`"))
+        XCTAssertFalse(setup.contains("Do not nest this under `\"spill-metering\"`"))
 
         XCTAssertTrue(runtime.contains("silent background metering instruction"))
         XCTAssertTrue(runtime.contains("Do not add Spill metering status lines to normal replies"))
@@ -521,13 +522,13 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(codexConfig.contains(#""timeout": 30"#))
 
         let agyConfig = try XCTUnwrap(TokenMeteringAdapterKit.agy.hookConfig(installedAt: agyPath))
-        XCTAssertTrue(agyConfig.contains("root-level PostInvocation"))
+        XCTAssertTrue(agyConfig.contains(#"named "spill-metering" hook spec"#))
+        XCTAssertTrue(agyConfig.contains(#""spill-metering": {"#))
         XCTAssertTrue(agyConfig.contains(#""PostInvocation": ["#))
         XCTAssertTrue(agyConfig.contains(#""matcher": """#))
         XCTAssertTrue(agyConfig.contains("python3 '/tmp/Spill Support/adapters/antigravity/spill-hook.py'"))
-        XCTAssertTrue(agyConfig.contains("Do not nest this under \"spill-metering\""))
-        XCTAssertFalse(agyConfig.contains(#""spill-metering": {"#))
-        XCTAssertFalse(agyConfig.contains("Root-level hook lists are not supported"))
+        XCTAssertTrue(agyConfig.contains("root-level PostInvocation arrays are rejected"))
+        XCTAssertFalse(agyConfig.contains("Do not nest this under \"spill-metering\""))
     }
 
     func testAdapterInstallPathsUseHookRuntimeDirectories() {

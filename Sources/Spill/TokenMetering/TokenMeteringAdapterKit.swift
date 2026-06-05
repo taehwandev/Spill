@@ -144,25 +144,27 @@ enum TokenMeteringAdapterKit {
         subtitle: "PostInvocation hook — token usage reporter",
         scriptFileName: "spill-hook.py",
         hookConfigTemplate: """
-        Add root-level PostInvocation to ~/.gemini/config/hooks.json.
-        Do not nest this under "spill-metering"; nested AGY hook blocks are ignored.
+        Add a named "spill-metering" hook spec to ~/.gemini/config/hooks.json.
+        AGY parses each root key as a JSONHookSpec name, so root-level PostInvocation arrays are rejected.
 
         {
-          "PostInvocation": [
-            {
-              "matcher": "",
-              "hooks": [
-                {
-                  "type": "command",
-                  "command": "python3 '<script_path>'",
-                  "timeout": 5
-                }
-              ]
-            }
-          ]
+          "spill-metering": {
+            "PostInvocation": [
+              {
+                "matcher": "",
+                "hooks": [
+                  {
+                    "type": "command",
+                    "command": "python3 '<script_path>'",
+                    "timeout": 5
+                  }
+                ]
+              }
+            ]
+          }
         }
         """,
-        hookConfigTarget: "~/.gemini/config/hooks.json → PostInvocation"
+        hookConfigTarget: "~/.gemini/config/hooks.json → spill-metering.PostInvocation"
     )
 
     static let openai = TokenMeteringAdapter(

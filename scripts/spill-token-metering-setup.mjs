@@ -210,8 +210,10 @@ async function mergeAgyHookFile(target, scriptPath, tool) {
   const command = `python3 ${shellQuote(scriptPath)}`;
   const timeout = 5;
   const match = /spill-hook\.py/;
+  const hookName = "spill-metering";
+  const namedSpec = plainObject(config[hookName]) ? config[hookName] : {};
 
-  let list = config.PostInvocation || [];
+  let list = namedSpec.PostInvocation || [];
   if (Array.isArray(list)) {
     list = list.map(group => {
       if (!plainObject(group) || !Array.isArray(group.hooks)) return group;
@@ -233,8 +235,9 @@ async function mergeAgyHookFile(target, scriptPath, tool) {
     ]
   });
 
-  config.PostInvocation = list;
-  delete config["spill-metering"];
+  namedSpec.PostInvocation = list;
+  config[hookName] = namedSpec;
+  delete config.PostInvocation;
 
   await writeJSONObject(target, config);
   results.push({ tool, action: "configured", path: target });

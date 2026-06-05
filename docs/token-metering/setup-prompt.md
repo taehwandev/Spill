@@ -18,7 +18,7 @@ Required hook shapes after install:
 
 - Codex: `~/.codex/hooks.json` contains `hooks.Stop[]` with `matcher: ""` and a command that runs the Spill Codex importer.
 - Claude Code: `~/.claude/settings.json` contains `hooks.Stop[]` with `matcher: ""` and a command that runs the Spill Claude hook. The matcher field is required.
-- Antigravity/AGY: `~/.gemini/config/hooks.json` contains root-level `PostInvocation[]` with `matcher: ""` and a command that runs the Spill AGY hook. Do not nest this under `"spill-metering"`.
+- Antigravity/AGY: `~/.gemini/config/hooks.json` contains a `"spill-metering"` JSONHookSpec with `PostInvocation[]`, `matcher: ""`, and a command that runs the Spill AGY hook. Do not write `PostInvocation` as a root-level array.
 
 If a workflow hook path is supplied, pass it through the public installer:
 

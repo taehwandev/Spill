@@ -27,7 +27,7 @@ enum TokenMeteringGlobalSetup {
     Do not claim Spill token metering is installed until the installer has run and these hook shapes have been verified:
     - Codex: ~/.codex/hooks.json has hooks.Stop[] with matcher: "" and a Spill Codex importer command.
     - Claude Code: ~/.claude/settings.json has hooks.Stop[] with matcher: "" and a Spill Claude hook command.
-    - Antigravity/AGY: ~/.gemini/config/hooks.json has root-level PostInvocation[] with matcher: "" and a Spill AGY hook command. Do not nest AGY hooks under "spill-metering".
+    - Antigravity/AGY: ~/.gemini/config/hooks.json has a "spill-metering" JSONHookSpec containing PostInvocation[] with matcher: "" and a Spill AGY hook command. Do not use a root-level PostInvocation array.
 
     If a workflow hook path is supplied, pass it to the public installer:
       /bin/bash -c "$(curl -fsSL https://spill.thdev.app/token-metering/install.sh)" -- --workflow-hook /path/to/.agents/hooks.json

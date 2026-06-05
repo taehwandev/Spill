@@ -1,14 +1,16 @@
 {
-  "PostInvocation": [
-    {
-      "matcher": "",
-      "hooks": [
-        {
-          "type": "command",
-          "command": "python3 \"$HOME/Library/Application Support/Spill/adapters/antigravity/spill-hook.py\"",
-          "timeout": 5
-        }
-      ]
-    }
-  ]
+  "spill-metering": {
+    "PostInvocation": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$HOME/Library/Application Support/Spill/adapters/antigravity/spill-hook.py\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
 }
