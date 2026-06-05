@@ -29,7 +29,7 @@ enum TokenMeteringGlobalSetup {
     The installer must install and repair Codex, Claude Code, and Antigravity/AGY together, regardless of which AI tool is currently handling this request.
     Codex is the OpenAI-backed agent runtime hook. Direct OpenAI SDK metering is optional and not part of the default agent dashboard.
     The installer must also configure supported runtime defaults: Claude Code uses SPILL_AI_TOOL=claude, Antigravity/AGY uses SPILL_AI_TOOL=antigravity, and Codex uses the codex tool label by default.
-    The installer must narrowly allow trusted AgentPlaybook workflow.py, agent-preflight.py, agent-finish-check.py, and Spill label handoff commands when the runtime supports permission allowlists. For Codex, write managed prefix_rule entries to ~/.codex/rules/default.rules. For Claude Code and Antigravity/AGY, write the same narrow commands to their user-level permission settings files. Do not use broad python3, node, or shell-wide allow rules. Do not make the user approve those same trusted commands over and over after this explicit install request.
+    The installer must narrowly allow Spill label handoff commands when the runtime supports permission allowlists. For Codex, write managed prefix_rule entries to ~/.codex/rules/default.rules. For Claude Code and Antigravity/AGY, write the same narrow commands to their user-level permission settings files. Do not use broad python3, node, or shell-wide allow rules. Do not make the user approve the same trusted Spill label command over and over after this explicit install request. Workflow runner permissions are separate from the default Spill metering install.
 
     After the installer succeeds, fetch and apply the current runtime instruction as a global agent instruction:
     https://spill.thdev.app/token-metering/runtime-instruction.md
@@ -56,7 +56,7 @@ enum TokenMeteringGlobalSetup {
       node ~/Library/Application\\ Support/Spill/adapters/setup/spill-token-metering-setup.mjs --label <current-tool> --task-type code_generation --stage implement
 
     Do not add --if-absent to workflow step labels. --if-absent is only for the agent's per-turn fallback label when no workflow label already exists.
-    Use the current runtime tool in --label. When invoking AgentPlaybook or another workflow runner, set SPILL_AI_TOOL and SPILL_TOKEN_USAGE_AI_TOOL to the current runtime, or rely on the runtime-level env installed by the setup helper. Never let Claude Code or Antigravity/AGY workflow routing fall back to codex.
+    Use the current runtime tool in --label. When invoking a workflow runner, set SPILL_AI_TOOL and SPILL_TOKEN_USAGE_AI_TOOL to the current runtime, or rely on the runtime-level env installed by the setup helper. Never let Claude Code or Antigravity/AGY workflow routing fall back to codex. Workflow runner permissions are separate from the default Spill metering install.
 
     For script workflows, add the label command before the script invokes the AI tool. If the script already has safe reusable step names, map those directly. For simple hook/config workflows without a script, wire the safest available step start hook; if it cannot run per step before the AI tool starts, treat it as receiver-only and do not claim detailed workflow labels are configured.
 
@@ -84,9 +84,9 @@ enum TokenMeteringGlobalSetup {
     Do not give manual per-adapter setup steps as the primary answer.
     Do not claim Spill token metering is installed until these conditions are satisfied:
     - The installer has run and these hook shapes have been verified:
-    - Codex: ~/.codex/hooks.json has hooks.Stop[] with matcher: "" and a Spill Codex importer command. ~/.codex/rules/default.rules has managed Spill prefix_rule entries for trusted AgentPlaybook wrappers plus Spill Codex label handoff.
-    - Claude Code: ~/.claude/settings.json has hooks.Stop[] with matcher: "", a Spill Claude hook command, SPILL_AI_TOOL=claude, and narrow allowlist entries for trusted AgentPlaybook wrappers plus Spill label handoff.
-    - Antigravity/AGY: ~/.gemini/config/hooks.json has a "spill-metering" JSONHookSpec containing PostInvocation[] with matcher: "" and a Spill AGY hook command. ~/.gemini/antigravity-cli/settings.json has SPILL_AI_TOOL=antigravity and narrow allowlist entries for trusted AgentPlaybook wrappers plus Spill label handoff. Do not use a root-level PostInvocation array.
+    - Codex: ~/.codex/hooks.json has hooks.Stop[] with matcher: "" and a Spill Codex importer command. ~/.codex/rules/default.rules has managed Spill prefix_rule entries for Spill Codex label handoff.
+    - Claude Code: ~/.claude/settings.json has hooks.Stop[] with matcher: "", a Spill Claude hook command, SPILL_AI_TOOL=claude, and narrow allowlist entries for Spill label handoff.
+    - Antigravity/AGY: ~/.gemini/config/hooks.json has a "spill-metering" JSONHookSpec containing PostInvocation[] with matcher: "" and a Spill AGY hook command. ~/.gemini/antigravity-cli/settings.json has SPILL_AI_TOOL=antigravity and narrow allowlist entries for Spill label handoff. Do not use a root-level PostInvocation array.
     - If workflow labels were requested, every workflow edit was approved by the user.
     - If workflow labels were requested, script-based workflows were checked first and used when present.
     - If workflow labels were requested, at least one workflow step can write a safe label context before the AI tool starts.

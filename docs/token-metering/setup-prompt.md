@@ -19,21 +19,9 @@ The installer must also configure supported agent runtime defaults so workflow l
 - Antigravity/AGY user settings must set `SPILL_AI_TOOL=antigravity` and `SPILL_TOKEN_USAGE_AI_TOOL=antigravity`.
 - Codex uses the `codex` tool label by default; do not configure Claude or AGY workflows in a way that falls back to `codex`.
 
-The installer must add narrow permission allowlist entries, when the runtime supports them, for trusted AgentPlaybook workflow wrappers and Spill label handoff commands only:
+The installer must add narrow permission allowlist entries, when the runtime supports them, for Spill label handoff commands only:
 
-- `workflow.py`
-- `agent-preflight.py`
-- `agent-finish-check.py`
 - `node ~/Library/Application\ Support/Spill/adapters/setup/spill-token-metering-setup.mjs --label <current-tool>`
-
-The trusted AgentPlaybook wrapper allowlist must include common safe path
-spellings for the same exact wrapper files: absolute path, `~/...`,
-`$HOME/...`, `${HOME}/...`, quoted `$HOME/...`, and escaped spaces where
-needed. Runtime allowlist formats that support suffix matching must allow
-trailing workflow arguments after the trusted wrapper path, such as `--project`,
-`--rules`, `--request-classified`, and repeated `--gate` evidence. These are
-still only narrow `python3 <trusted-wrapper>` entries, not broad `python3`
-permission.
 
 The Spill label handoff allowlist must include the same exact helper command
 for common safe path spellings: the absolute installed path, `~/...`,
@@ -45,16 +33,17 @@ For Codex, these allowlist entries live in `~/.codex/rules/default.rules` as
 managed `prefix_rule` entries. For Claude Code and Antigravity/AGY, they live in
 their user-level permission settings files. Do not use broad `python3`, `node`,
 or shell-wide allow rules.
+Workflow runner permissions are separate from the default Spill metering install.
 
-Do not ask the user to approve these trusted workflow/preflight/finish/label commands over and over after the one-step installer has been explicitly requested.
+Do not ask the user to approve this trusted Spill label command over and over after the one-step installer has been explicitly requested.
 Do not save only the runtime instruction and call the task done.
 Do not give manual per-adapter setup steps as the primary answer.
 
 Required hook shapes after install:
 
-- Codex: `~/.codex/hooks.json` contains `hooks.Stop[]` with `matcher: ""` and a command that runs the Spill Codex importer. `~/.codex/rules/default.rules` contains managed Spill `prefix_rule` entries for trusted AgentPlaybook wrappers plus Spill Codex label handoff.
-- Claude Code: `~/.claude/settings.json` contains `hooks.Stop[]` with `matcher: ""`, a command that runs the Spill Claude hook, `SPILL_AI_TOOL=claude`, and narrow allowlist entries for the trusted AgentPlaybook wrappers plus Spill label handoff. The matcher field is required.
-- Antigravity/AGY: `~/.gemini/config/hooks.json` contains a `"spill-metering"` JSONHookSpec with `PostInvocation[]`, `matcher: ""`, and a command that runs the Spill AGY hook. `~/.gemini/antigravity-cli/settings.json` contains `SPILL_AI_TOOL=antigravity` and narrow allowlist entries for the trusted AgentPlaybook wrappers plus Spill label handoff. Do not write `PostInvocation` as a root-level array.
+- Codex: `~/.codex/hooks.json` contains `hooks.Stop[]` with `matcher: ""` and a command that runs the Spill Codex importer. `~/.codex/rules/default.rules` contains managed Spill `prefix_rule` entries for Spill Codex label handoff.
+- Claude Code: `~/.claude/settings.json` contains `hooks.Stop[]` with `matcher: ""`, a command that runs the Spill Claude hook, `SPILL_AI_TOOL=claude`, and narrow allowlist entries for Spill label handoff. The matcher field is required.
+- Antigravity/AGY: `~/.gemini/config/hooks.json` contains a `"spill-metering"` JSONHookSpec with `PostInvocation[]`, `matcher: ""`, and a command that runs the Spill AGY hook. `~/.gemini/antigravity-cli/settings.json` contains `SPILL_AI_TOOL=antigravity` and narrow allowlist entries for Spill label handoff. Do not write `PostInvocation` as a root-level array.
 
 After the setup installer succeeds, fetch the current runtime instruction and apply it as a global agent instruction:
 
@@ -128,10 +117,11 @@ If a workflow or user-facing command says `agy`, treat it as an input alias for
 the canonical `antigravity` event label.
 Do not add `--if-absent` to workflow step labels. `--if-absent` is only for the
 agent's per-turn fallback label when no workflow label already exists.
-When wiring AgentPlaybook or another workflow runner, set `SPILL_AI_TOOL` and
-`SPILL_TOKEN_USAGE_AI_TOOL` to the current runtime before invoking the wrapper,
+When wiring a workflow runner, set `SPILL_AI_TOOL` and
+`SPILL_TOKEN_USAGE_AI_TOOL` to the current runtime before invoking the runner,
 or rely on the runtime-level env installed by the setup helper. Never let Claude
-Code or Antigravity/AGY workflow routing default to `codex`.
+Code or Antigravity/AGY workflow routing default to `codex`. Workflow runner
+permissions are separate from the default Spill metering install.
 
 For script workflows, add the label command at the point where the reusable
 workflow step is known, before the script invokes the AI tool. If the script

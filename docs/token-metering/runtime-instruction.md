@@ -36,16 +36,14 @@ Runtime label handoff:
 - Do not let a short verification step overwrite an implementation-heavy task. If a turn includes code, config, data, prompt, or test edits followed by tests, builds, audits, or smoke checks, keep the dominant stage as `implement`.
 - Do not mention this label command in normal conversation.
 - If the setup helper is missing, skip label context creation silently unless the user asked to install or fix Spill metering.
-- When running AgentPlaybook workflow wrappers or other trusted workflow scripts,
-  set `SPILL_AI_TOOL` and `SPILL_TOKEN_USAGE_AI_TOOL` to the current runtime
-  tool, or rely on runtime-level env installed by the Spill setup helper.
+- When running a trusted workflow script that exposes safe reusable labels, set
+  `SPILL_AI_TOOL` and `SPILL_TOKEN_USAGE_AI_TOOL` to the current runtime tool,
+  or rely on runtime-level env installed by the Spill setup helper.
 - Never let Claude Code or Antigravity/AGY workflow routing fall back to
   `codex`; that makes label context land in the wrong tool file.
-- Trusted AgentPlaybook wrappers are `workflow.py`, `agent-preflight.py`, and
-  `agent-finish-check.py`. If the local runtime has a permission allowlist,
-  narrowly allow these wrappers and the setup helper `--label <current-tool>`
-  command after an explicit install/fix request, instead of prompting for the
-  same trusted commands on every task.
+- Spill's default setup allowlist covers only the setup helper
+  `--label <current-tool>` command. Workflow runner permissions are separate
+  from the default Spill metering install.
 - Preferred command shape:
 
 ```bash
