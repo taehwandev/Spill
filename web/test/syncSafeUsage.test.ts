@@ -6,7 +6,10 @@ import {
   type UsageEvent
 } from "../src/features/tokenMeteringDashboard/syncSafeUsage.ts";
 import { buildDashboardModel } from "../src/features/tokenMeteringDashboard/dashboardModel.ts";
-import { setupPrompt } from "../src/features/tokenMeteringDashboard/setupCopy.ts";
+import {
+  setupPrompt,
+  workflowSetupPrompt
+} from "../src/features/tokenMeteringDashboard/setupCopy.ts";
 
 const safeEvent: UsageEvent = {
   schema_version: 1,
@@ -174,9 +177,19 @@ test("setup prompt bootstraps the public token metering installer", () => {
   assert.match(setupPrompt, /https:\/\/spill\.thdev\.app\/token-metering\/setup-prompt\.md/);
   assert.match(setupPrompt, /https:\/\/spill\.thdev\.app\/token-metering\/install\.sh/);
   assert.match(setupPrompt, /https:\/\/spill\.thdev\.app\/token-metering\/runtime-instruction\.md/);
+  assert.match(setupPrompt, /https:\/\/spill\.thdev\.app\/token-metering\/workflow-setup-prompt\.md/);
   assert.match(setupPrompt, /install and repair OpenAI\/Codex, Claude Code, and Antigravity\/AGY together/);
   assert.match(setupPrompt, /Codex is the OpenAI agent runtime hook/);
   assert.match(setupPrompt, /Do not save only the runtime instruction and call the task done/);
+});
+
+test("workflow setup prompt asks for workflow mapping before edits", () => {
+  assert.match(workflowSetupPrompt, /Workflow Setup Bootstrap/);
+  assert.match(workflowSetupPrompt, /Ask the user whether they use a workflow runner or hook file/);
+  assert.match(workflowSetupPrompt, /ask before editing/);
+  assert.match(workflowSetupPrompt, /write-code\/edit\/implement\/patch -> code_generation\/implement/);
+  assert.match(workflowSetupPrompt, /test\/build\/audit\/smoke -> testing\/verify/);
+  assert.match(workflowSetupPrompt, /Never encode project names/);
 });
 
 test("hosted runtime instruction stays silent and exact-count-only", () => {

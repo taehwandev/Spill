@@ -482,6 +482,7 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(prompt.contains("Use the current public setup request as the source of truth"))
         XCTAssertTrue(prompt.contains(TokenMeteringGlobalSetup.setupPromptURL))
         XCTAssertTrue(prompt.contains(TokenMeteringGlobalSetup.runtimeInstructionURL))
+        XCTAssertTrue(prompt.contains(TokenMeteringGlobalSetup.workflowSetupPromptURL))
         XCTAssertTrue(prompt.contains("You MUST run the public setup installer before doing anything else"))
         XCTAssertTrue(prompt.contains("If shell, filesystem, sandbox, or user-level config permission is required"))
         XCTAssertTrue(prompt.contains("ask for that permission and then run the installer"))
@@ -494,18 +495,28 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(prompt.contains("Do not use a root-level PostInvocation array"))
         XCTAssertFalse(prompt.contains("Do not nest AGY hooks under \"spill-metering\""))
         XCTAssertFalse(prompt.contains("root-level PostInvocation[] with matcher"))
+
+        let workflowPrompt = TokenMeteringGlobalSetup.workflowPrompt
+        XCTAssertTrue(workflowPrompt.contains("Workflow Setup Bootstrap"))
+        XCTAssertTrue(workflowPrompt.contains(TokenMeteringGlobalSetup.workflowSetupPromptURL))
+        XCTAssertTrue(workflowPrompt.contains("ask before editing"))
+        XCTAssertTrue(workflowPrompt.contains("write-code/edit/implement/patch -> code_generation/implement"))
+        XCTAssertTrue(workflowPrompt.contains("test/build/audit/smoke -> testing/verify"))
+        XCTAssertTrue(workflowPrompt.contains("Never encode project names"))
     }
 
     func testHostedTokenMeteringSetupDocsDefineRuntimeContract() throws {
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let setup = try String(contentsOf: root.appendingPathComponent("docs/token-metering/setup-prompt.md"))
         let runtime = try String(contentsOf: root.appendingPathComponent("docs/token-metering/runtime-instruction.md"))
+        let workflow = try String(contentsOf: root.appendingPathComponent("docs/token-metering/workflow-setup-prompt.md"))
         let installer = try String(contentsOf: root.appendingPathComponent("docs/token-metering/install.sh"))
 
         XCTAssertTrue(setup.contains("MANDATORY ACTION: install or repair Spill token metering now"))
         XCTAssertTrue(setup.contains("https://spill.thdev.app/token-metering/install.sh"))
         XCTAssertTrue(setup.contains("install and repair OpenAI/Codex, Claude Code, and Antigravity/AGY together"))
         XCTAssertTrue(setup.contains("Codex is the OpenAI agent runtime hook"))
+        XCTAssertTrue(setup.contains("https://spill.thdev.app/token-metering/workflow-setup-prompt.md"))
         XCTAssertTrue(setup.contains(#"`~/.gemini/config/hooks.json` contains a `"spill-metering"` JSONHookSpec"#))
         XCTAssertTrue(setup.contains("Do not write `PostInvocation` as a root-level array"))
         XCTAssertFalse(setup.contains("root-level `PostInvocation[]`"))
@@ -533,6 +544,14 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(installer.contains("adapters/antigravity/spill-hook.py"))
         XCTAssertTrue(installer.contains("--include codex,claude,antigravity,openai"))
         XCTAssertTrue(installer.contains("--source-root \"$TMP_DIR/adapters\""))
+
+        XCTAssertTrue(workflow.contains("Do you use a workflow runner or hook file"))
+        XCTAssertTrue(workflow.contains("write-code, edit, implement, patch"))
+        XCTAssertTrue(workflow.contains("code_generation"))
+        XCTAssertTrue(workflow.contains("testing"))
+        XCTAssertTrue(workflow.contains("git_commit"))
+        XCTAssertTrue(workflow.contains("Never encode project names"))
+        XCTAssertTrue(workflow.contains("Do not claim workflow-aware metering is configured"))
     }
 
     func testAdapterHookConfigsUseExactRuntimeHookShapes() throws {

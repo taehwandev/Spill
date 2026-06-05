@@ -34,4 +34,11 @@ After the setup installer succeeds, fetch the current runtime instruction and ap
 https://spill.thdev.app/token-metering/runtime-instruction.md
 ```
 
+Then ask whether the user uses a workflow runner or hook file. If they do, use
+the workflow-aware setup request as the source of truth:
+
+```text
+https://spill.thdev.app/token-metering/workflow-setup-prompt.md
+```
+
 Do not claim Spill token metering is installed until the setup installer has run and the hook shapes have been verified.
