@@ -49,6 +49,24 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(claudeSnapshot.sessions.map(\.runID), ["run_local_01"])
     }
 
+    func testDashboardSourceRowsHideUnknownOnlyBreakdown() {
+        let snapshot = TokenUsageDashboardSnapshot(events: [
+            Self.safeEvent(inputTokens: 22, outputTokens: 11)
+        ])
+
+        XCTAssertEqual(snapshot.totalTokens, 33)
+        XCTAssertTrue(snapshot.sourceRows.isEmpty)
+    }
+
+    @MainActor
+    func testDashboardClearActionIsDevelopmentOnly() {
+        #if DEBUG
+        XCTAssertTrue(TokenMeteringDashboardView.showsDevelopmentClearAction)
+        #else
+        XCTAssertFalse(TokenMeteringDashboardView.showsDevelopmentClearAction)
+        #endif
+    }
+
     @MainActor
     func testDashboardStoreAddsAndClearsLocalTestEvents() {
         let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
@@ -480,6 +498,8 @@ final class TokenUsageStoreTests: XCTestCase {
 
         XCTAssertTrue(setup.contains("MANDATORY ACTION: install or repair Spill token metering now"))
         XCTAssertTrue(setup.contains("https://spill.thdev.app/token-metering/install.sh"))
+        XCTAssertTrue(setup.contains("install and repair OpenAI/Codex, Claude Code, and Antigravity/AGY together"))
+        XCTAssertTrue(setup.contains("Codex is the OpenAI agent runtime hook"))
         XCTAssertTrue(setup.contains(#"`~/.gemini/config/hooks.json` contains a `"spill-metering"` JSONHookSpec"#))
         XCTAssertTrue(setup.contains("Do not write `PostInvocation` as a root-level array"))
         XCTAssertFalse(setup.contains("root-level `PostInvocation[]`"))
@@ -501,6 +521,7 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(installer.contains("adapters/codex/spill-importer.mjs"))
         XCTAssertTrue(installer.contains("adapters/claude-code/spill-hook.py"))
         XCTAssertTrue(installer.contains("adapters/antigravity/spill-hook.py"))
+        XCTAssertTrue(installer.contains("--include codex,claude,antigravity,openai"))
         XCTAssertTrue(installer.contains("--source-root \"$TMP_DIR/adapters\""))
     }
 

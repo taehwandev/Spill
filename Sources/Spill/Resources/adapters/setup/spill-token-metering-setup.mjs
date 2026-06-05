@@ -12,7 +12,9 @@ const apply = args.apply === true;
 const force = args.force === true;
 const json = args.json === true;
 const installRoot = expandHome(args.installDir ?? join(homedir(), "Library/Application Support/Spill/adapters"));
-const include = new Set((args.include ?? "codex,claude,antigravity,openai").split(",").map((item) => item.trim()).filter(Boolean));
+const defaultHookAdapters = "codex,claude,antigravity,openai";
+const alwaysInstallAdapters = new Set(defaultHookAdapters.split(","));
+const include = new Set((args.include ?? defaultHookAdapters).split(",").map((item) => item.trim()).filter(Boolean));
 const workflowHook = args.workflowHook ? expandHome(args.workflowHook) : null;
 
 if (args.label) {
@@ -76,7 +78,7 @@ const results = [];
 await installSetupHelper();
 for (const adapter of Object.values(adapters)) {
   if (!include.has(adapter.id)) continue;
-  const detected = force || await adapter.detect();
+  const detected = force || alwaysInstallAdapters.has(adapter.id) || await adapter.detect();
   if (!detected) {
     results.push({ tool: adapter.id, action: "skip", reason: "not_detected" });
     continue;
@@ -102,7 +104,7 @@ if (json) {
     process.stdout.write(`${result.action}: ${result.tool}${suffix}\n`);
   }
   if (!apply) {
-    process.stdout.write("dry-run: pass --apply to copy all detected adapters and merge known user-level hook config files in one pass.\n");
+    process.stdout.write("dry-run: pass --apply to install OpenAI/Codex, Claude Code, and Antigravity/AGY metering in one pass.\n");
   }
 }
 
@@ -402,8 +404,8 @@ function printHelp() {
   process.stdout.write(`Usage: spill-token-metering-setup.mjs [options]
 
 Options:
-  --apply                 Copy all detected adapters and merge known user-level hook config files in one pass.
-  --force                 Install included adapters even when the tool is not detected.
+  --apply                 Copy adapters and merge known user-level hook config files in one pass.
+  --force                 Install every included adapter even when it is not a default hook adapter or detected.
   --include LIST          Comma list: codex,claude,antigravity,openai.
   --workflow-hook PATH    Also add the Antigravity/AGY workflow hook to this selected hooks.json.
   --source-root PATH      Adapter source root. Default: repo or bundled adapters directory.
@@ -415,9 +417,10 @@ Options:
   --ttl-minutes MINUTES   Runtime label expiry. Default: 30.
   --json                  Print JSON summary.
 
-Default mode is a dry-run. A normal --apply run detects Codex, Claude,
-Antigravity/AGY, and OpenAI support, then installs only the detected adapters.
-It does not require users to copy or install each adapter separately.
+Default mode is a dry-run. A normal --apply run installs OpenAI/Codex,
+Claude Code, and Antigravity/AGY metering together, even if the current
+agent is only one of those tools. Codex is the OpenAI agent runtime hook;
+the OpenAI SDK adapter is installed for direct OpenAI API/SDK usage.
 The helper also installs or refreshes itself at the default setup command path.
 The installer never reads prompts, transcripts, commands, logs, diffs, source
 files, environment values, or secrets.

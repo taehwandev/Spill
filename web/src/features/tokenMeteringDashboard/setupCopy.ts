@@ -18,10 +18,12 @@ You MUST run the public setup installer before doing anything else:
   ${tokenMeteringInstallCommand}
 
 If shell, filesystem, sandbox, or user-level config permission is required, ask for that permission and then run the installer.
+The installer must install and repair OpenAI/Codex, Claude Code, and Antigravity/AGY together, regardless of which AI tool is currently handling this request.
+Codex is the OpenAI agent runtime hook; the OpenAI SDK adapter is also installed for direct OpenAI API/SDK usage.
 After the installer succeeds, fetch and apply the current runtime instruction as a global agent instruction:
 https://spill.thdev.app/token-metering/runtime-instruction.md
 
 Do not save only the runtime instruction and call the task done.
 Do not give manual per-adapter setup steps as the primary answer.
-Do not claim Spill token metering is installed until the installer has run and Codex, Claude Code, and Antigravity/AGY hooks have been verified.
+Do not claim Spill token metering is installed until the installer has run and OpenAI/Codex, Claude Code, and Antigravity/AGY setup has been verified.
 For Antigravity/AGY, ~/.gemini/config/hooks.json must contain a "spill-metering" JSONHookSpec with PostInvocation[]; do not use a root-level PostInvocation array.`;
