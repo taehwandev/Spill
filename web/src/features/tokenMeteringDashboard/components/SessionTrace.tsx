@@ -1,4 +1,5 @@
 import {
+  formatLocalTimestamp,
   formatLatency,
   formatTokens,
   type SessionTraceRun
@@ -52,10 +53,7 @@ export function SessionTrace({ runs }: { runs: SessionTraceRun[] }) {
                       </span>
                     </div>
                     <time dateTime={step.createdAt}>
-                      {new Intl.DateTimeFormat(tokenMeteringLocaleName(), {
-                        hour: "2-digit",
-                        minute: "2-digit"
-                      }).format(new Date(step.createdAt))}
+                      {formatLocalTimestamp(step.createdAt, tokenMeteringLocaleName())}
                     </time>
                   </li>
                 ))}

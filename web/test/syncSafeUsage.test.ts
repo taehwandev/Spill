@@ -5,7 +5,10 @@ import {
   sanitizeUsageEvent,
   type UsageEvent
 } from "../src/features/tokenMeteringDashboard/syncSafeUsage.ts";
-import { buildDashboardModel } from "../src/features/tokenMeteringDashboard/dashboardModel.ts";
+import {
+  buildDashboardModel,
+  formatLocalTimestamp
+} from "../src/features/tokenMeteringDashboard/dashboardModel.ts";
 import {
   detectTokenMeteringLocale,
   tokenMeteringMessages
@@ -277,6 +280,26 @@ test("dashboard work items hide raw run and span ids", () => {
   assert.equal(workItem?.title, "Codex - Analysis - Plan");
   assert.doesNotMatch(workItem?.workItemId ?? "", /run_meter_001|span_001_plan/);
   assert.equal(Object.hasOwn(workItem?.steps[0] ?? {}, "spanId"), false);
+});
+
+test("dashboard work item dates use the selected local timezone", () => {
+  const dashboard = buildDashboardModel([
+    {
+      ...safeEvent,
+      created_at: "2026-06-04T23:30:00.000Z"
+    }
+  ], tokenMeteringMessages.ko, {
+    localeName: "ko-KR",
+    timeZone: "Asia/Seoul"
+  });
+
+  const workItem = dashboard.sessionTrace[0];
+  assert.match(workItem?.workItemId ?? "", /2026_06_05$/);
+  const formatted = formatLocalTimestamp("2026-06-04T23:30:00.000Z", "ko-KR", "Asia/Seoul");
+  assert.match(formatted, /2026/);
+  assert.match(formatted, /6/);
+  assert.match(formatted, /5/);
+  assert.match(formatted, /8:30|08:30/);
 });
 
 test("dashboard marks missing runtime latency as unavailable", () => {

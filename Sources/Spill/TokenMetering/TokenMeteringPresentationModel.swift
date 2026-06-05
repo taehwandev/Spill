@@ -125,7 +125,9 @@ struct TokenUsageDashboardSnapshot: Equatable {
         displayMode: TokenUsageDisplayMode = .tokens,
         language: TokenMeteringLanguage = .current(),
         now: Date = Date(),
-        calendar: Calendar = .current
+        calendar: Calendar = .autoupdatingCurrent,
+        locale: Locale = .autoupdatingCurrent,
+        timeZone: TimeZone = .autoupdatingCurrent
     ) {
         self.displayMode = displayMode
         let dashboardEvents = events.filter { $0.aiTool.isDashboardTool }
@@ -285,7 +287,10 @@ struct TokenUsageDashboardSnapshot: Equatable {
             events: visibleEvents,
             displayMode: displayMode,
             totalTokens: totalTokens,
-            language: language
+            language: language,
+            calendar: calendar,
+            locale: locale,
+            timeZone: timeZone
         )
         sessions = sessionRows
         selectedSession = sessionRows.first { $0.id == selectedSessionID } ?? sessionRows.first
@@ -462,13 +467,26 @@ struct TokenUsageDashboardSnapshot: Equatable {
         events: [TokenUsageEvent],
         displayMode: TokenUsageDisplayMode,
         totalTokens: Int,
-        language: TokenMeteringLanguage
+        language: TokenMeteringLanguage,
+        calendar: Calendar,
+        locale: Locale,
+        timeZone: TimeZone
     ) -> [TokenUsageDashboardSessionRow] {
-        Dictionary(grouping: events, by: workItemKey(for:))
+        Dictionary(grouping: events) { event in
+            workItemKey(for: event, calendar: calendar)
+        }
             .map { key, groupedEvents in
                 let totalT = groupedEvents.reduce(0) { $0 + $1.totalTokens }
                 let latency = groupedEvents.reduce(0) { $0 + $1.latencyMS }
-                let latest = groupedEvents.map(\.createdAt).max() ?? "unknown"
+                let latestDate = groupedEvents
+                    .compactMap { ISO8601DateFormatter.tokenUsage.date(from: $0.createdAt) }
+                    .max()
+                let latestRaw = latestDate.map { ISO8601DateFormatter.tokenUsage.string(from: $0) }
+                    ?? groupedEvents.map(\.createdAt).max()
+                    ?? "unknown"
+                let latestDisplay = latestDate.map {
+                    Self.formatLocalTimestamp($0, locale: locale, timeZone: timeZone)
+                } ?? latestRaw
                 let runIDs = Set(groupedEvents.map(\.runID))
 
                 let valueStr: String
@@ -489,12 +507,12 @@ struct TokenUsageDashboardSnapshot: Equatable {
                         detail: TokenMeteringL10n.spansDetail(
                             spanCount: groupedEvents.count,
                             latencyMS: latency > 0 ? latency : nil,
-                            latest: latest,
+                            latest: latestDisplay,
                             language: language
                         ),
                         eventCount: groupedEvents.count
                     ),
-                    latest: latest,
+                    latest: latestRaw,
                     totalTokens: totalT,
                     spanCount: groupedEvents.count,
                     runCount: runIDs.count
@@ -518,14 +536,49 @@ struct TokenUsageDashboardSnapshot: Equatable {
             .map(\.row)
     }
 
-    private static func workItemKey(for event: TokenUsageEvent) -> TokenUsageDashboardWorkItemKey {
+    private static func workItemKey(
+        for event: TokenUsageEvent,
+        calendar: Calendar
+    ) -> TokenUsageDashboardWorkItemKey {
         TokenUsageDashboardWorkItemKey(
             aiTool: event.aiTool,
             taskType: event.taskType,
             stage: event.stage,
             modelKey: modelKey(event.model),
-            dayBucket: String(event.createdAt.prefix(10))
+            dayBucket: localDayBucket(for: event.createdAt, calendar: calendar)
         )
+    }
+
+    private static func formatLocalTimestamp(
+        _ date: Date,
+        locale: Locale,
+        timeZone: TimeZone
+    ) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = locale
+        formatter.timeZone = timeZone
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
+    }
+
+    private static func localDayBucket(
+        for createdAt: String,
+        calendar: Calendar
+    ) -> String {
+        guard let date = ISO8601DateFormatter.tokenUsage.date(from: createdAt) else {
+            return String(createdAt.prefix(10))
+        }
+
+        let components = calendar.dateComponents([.year, .month, .day], from: date)
+        guard let year = components.year,
+              let month = components.month,
+              let day = components.day
+        else {
+            return String(createdAt.prefix(10))
+        }
+
+        return String(format: "%04d-%02d-%02d", year, month, day)
     }
 
     private static func workItemTitle(

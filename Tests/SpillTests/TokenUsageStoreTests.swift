@@ -1122,6 +1122,30 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(selected.selectedSession?.title, "Codex - Analysis - Plan")
     }
 
+    func testDashboardSnapshotUsesLocalLocaleAndTimeZoneForEventTimes() throws {
+        let timeZone = try XCTUnwrap(TimeZone(identifier: "Asia/Seoul"))
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+
+        let event = Self.safeEvent(
+            createdAt: "2026-06-04T23:30:00.000Z"
+        )
+        let snapshot = TokenUsageDashboardSnapshot(
+            events: [event],
+            language: .korean,
+            now: try Self.date("2026-06-05T01:00:00.000Z"),
+            calendar: calendar,
+            locale: Locale(identifier: "ko_KR"),
+            timeZone: timeZone
+        )
+
+        let session = try XCTUnwrap(snapshot.sessions.first)
+        XCTAssertTrue(session.id.contains("2026_06_05"))
+        XCTAssertFalse(session.detail.contains("2026-06-04T23:30"))
+        XCTAssertTrue(session.detail.contains("2026"))
+        XCTAssertTrue(session.detail.contains("8:30"))
+    }
+
     private static func safeEvent(
         aiTool: TokenUsageAITool = .codex,
         runID: String = "run_local_01",

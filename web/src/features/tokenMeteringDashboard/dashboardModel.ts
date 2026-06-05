@@ -71,10 +71,17 @@ export type DashboardModel = {
   privacyAudit: PrivacyAudit;
 };
 
+type DashboardModelOptions = {
+  localeName?: string;
+  timeZone?: string;
+};
+
 export function buildDashboardModel(
   events: readonly UsageEvent[],
-  messages = getTokenMeteringMessages()
+  messages = getTokenMeteringMessages(),
+  options: DashboardModelOptions = {}
 ): DashboardModel {
+  const localeName = options.localeName ?? messages.localeName;
   const localAgentEvents = events.filter(isDashboardAIToolEvent);
   const totals = localAgentEvents.reduce(
     (acc, event) => {
@@ -98,25 +105,25 @@ export function buildDashboardModel(
       {
         id: "total",
         label: messages.kpis.totalTokens,
-        value: formatTokens(totals.total),
+        value: formatTokens(totals.total, localeName),
         detail: messages.kpis.previewSpans(localAgentEvents.length)
       },
       {
         id: "input",
         label: messages.kpis.inputTokens,
-        value: formatTokens(totals.input),
+        value: formatTokens(totals.input, localeName),
         detail: messages.kpis.percentOfTotal(percentOf(totals.input, totals.total))
       },
       {
         id: "output",
         label: messages.kpis.outputTokens,
-        value: formatTokens(totals.output),
+        value: formatTokens(totals.output, localeName),
         detail: messages.kpis.percentOfTotal(percentOf(totals.output, totals.total))
       },
       {
         id: "latency",
         label: messages.kpis.avgLatency,
-        value: averageLatency === null ? messages.kpis.unavailable : formatLatency(averageLatency),
+        value: averageLatency === null ? messages.kpis.unavailable : formatLatency(averageLatency, localeName),
         detail: averageLatency === null
           ? messages.kpis.runtimeTimingUnavailable
           : messages.kpis.perRunSpanStep
@@ -127,7 +134,7 @@ export function buildDashboardModel(
     taskBreakdown: buildTaskBreakdown(localAgentEvents, totals.total, messages),
     modelBreakdown: buildModelBreakdown(localAgentEvents, totals.total, messages),
     hotspots: buildHotspots(localAgentEvents, totals.total, messages),
-    sessionTrace: buildSessionTrace(localAgentEvents, messages),
+    sessionTrace: buildSessionTrace(localAgentEvents, messages, localeName, options.timeZone),
     privacyAudit: {
       eventsPrepared: localAgentEvents.length,
       emittedFieldsSafe: localAgentEvents.every((event) => hasOnlySyncSafeKeys(event)),
@@ -137,12 +144,27 @@ export function buildDashboardModel(
   };
 }
 
-export function formatTokens(value: number): string {
-  return numberFormatter(tokenMeteringLocaleName()).format(value);
+export function formatTokens(value: number, localeName = tokenMeteringLocaleName()): string {
+  return numberFormatter(localeName).format(value);
 }
 
-export function formatLatency(value: number): string {
-  return `${numberFormatter(tokenMeteringLocaleName()).format(value)} ms`;
+export function formatLatency(value: number, localeName = tokenMeteringLocaleName()): string {
+  return `${numberFormatter(localeName).format(value)} ms`;
+}
+
+export function formatLocalTimestamp(
+  value: string,
+  localeName = tokenMeteringLocaleName(),
+  timeZone?: string
+): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+
+  return new Intl.DateTimeFormat(localeName, {
+    dateStyle: "medium",
+    timeStyle: "short",
+    ...(timeZone ? { timeZone } : {})
+  }).format(date);
 }
 
 function buildTaskBreakdown(
@@ -231,13 +253,15 @@ function buildHotspots(
 
 function buildSessionTrace(
   events: readonly UsageEvent[],
-  messages: TokenMeteringMessages
+  messages: TokenMeteringMessages,
+  localeName: string,
+  timeZone?: string
 ): SessionTraceRun[] {
   const runs = new Map<string, UsageEvent[]>();
   for (const event of events) {
-    const current = runs.get(workItemId(event)) ?? [];
+    const current = runs.get(workItemId(event, localeName, timeZone)) ?? [];
     current.push(event);
-    runs.set(workItemId(event), current);
+    runs.set(workItemId(event, localeName, timeZone), current);
   }
 
   return Array.from(runs.entries()).map(([workItemId, runEvents]) => {
@@ -284,14 +308,14 @@ function labelFromSlug(value: string): string {
     .join(" ");
 }
 
-function workItemId(event: UsageEvent): string {
+function workItemId(event: UsageEvent, localeName: string, timeZone?: string): string {
   return [
     "work",
     event.ai_tool,
     event.task_type,
     event.stage,
     modelKey(event.model),
-    event.created_at.slice(0, 10)
+    localDayBucket(event.created_at, localeName, timeZone)
   ].map(safeIdPart).join("_");
 }
 
@@ -323,6 +347,24 @@ function modelLabel(model: string, messages: TokenMeteringMessages): string {
 
 function safeIdPart(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+}
+
+function localDayBucket(value: string, localeName: string, timeZone?: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value.slice(0, 10);
+
+  const parts = new Intl.DateTimeFormat(localeName, {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    ...(timeZone ? { timeZone } : {})
+  }).formatToParts(date);
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+
+  if (!year || !month || !day) return value.slice(0, 10);
+  return `${year}-${month}-${day}`;
 }
 
 const numberFormatters = new Map<string, Intl.NumberFormat>();
