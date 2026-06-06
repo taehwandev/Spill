@@ -29,9 +29,12 @@ Runtime input normalization:
   never store payload values, prompts, responses, commands, file paths, logs,
   diffs, source content, environment values, or secrets.
 - AGY empty stdin is a normal no-event hook call when a lifecycle or tool step
-  completes without token usage. Record it only as `antigravity-last-empty.json`;
-  do not treat it as a failed metering state.
-- AGY payload mismatches must be isolated in `antigravity-last-mismatch.json`.
+  completes without token usage. Any structured AGY payload without exact token
+  numbers is also a normal no-event lifecycle, tool, or model-adjacent hook
+  payload. Record both only as `antigravity-last-empty.json`; do not treat them
+  as failed metering states.
+- AGY payload mismatches must be reserved for malformed input such as invalid
+  JSON or non-object payloads and isolated in `antigravity-last-mismatch.json`.
   Successful AGY usage events must update `antigravity-last-success.json` and
   clear stale mismatch diagnostics.
 - Claude Code uses a different Stop-hook contract: stdin should contain a safe

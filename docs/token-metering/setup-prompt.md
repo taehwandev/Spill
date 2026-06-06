@@ -57,19 +57,23 @@ For Antigravity/AGY specifically, verify both things separately:
   normalized `spill_token_usage` object.
 
 If AGY runs the hook but does not expose exact token fields, the adapter must not
-invent usage. AGY may invoke `PostInvocation` for lifecycle or tool steps that
-consume no model tokens and therefore pass empty stdin. Treat empty stdin as a
-normal no-event hook call, not as a metering failure. Leave local-only safe
-diagnostics under Spill's token-metering diagnostics directory and skip the
-usage event until the runtime or workflow provides exact counts.
+invent usage. AGY may invoke `PostInvocation` for lifecycle, tool, or
+model-adjacent steps that pass empty stdin or a structured payload without exact
+token numbers. Treat those shapes as normal no-event hook calls, not as metering
+failures, even when the payload contains model or session hints. Leave
+local-only safe diagnostics under Spill's token-metering diagnostics directory
+and skip the usage event until the runtime or workflow provides exact counts.
 
 AGY diagnostic files must use this fixed local-only protocol:
 
 - Write `~/Library/Application Support/Spill/token-metering/diagnostics/antigravity-last-empty.json`
-  for empty stdin hook calls. Use `kind: "empty_stdin_hook_call"` and
-  `reason: "empty_stdin"`.
+  for empty stdin hook calls and structured no-usage lifecycle/tool/model-adjacent
+  payloads. Use `kind: "empty_stdin_hook_call"` with `reason: "empty_stdin"` for
+  empty stdin, and `kind: "no_usage_hook_call"` with
+  `reason: "no_token_usage_payload"` for structured payloads that do not expose
+  exact token numbers.
 - Write `~/Library/Application Support/Spill/token-metering/diagnostics/antigravity-last-mismatch.json`
-  for payloads that exist but do not match a supported exact-count shape.
+  only for malformed hook input such as invalid JSON or non-object payloads.
 - Write `~/Library/Application Support/Spill/token-metering/diagnostics/antigravity-last-success.json`
   after a valid usage event is enqueued.
 - Write a `.tmp` file in the same diagnostics directory first, close it, then
@@ -86,7 +90,7 @@ AGY diagnostic files must use this fixed local-only protocol:
 - Never store raw payload values, prompts, responses, commands, file paths, logs,
   diffs, transcript content, source content, environment values, or secrets in
   diagnostics.
-- Empty stdin diagnostics must never overwrite mismatch or success diagnostics.
+- Empty/no-usage diagnostics must never overwrite mismatch or success diagnostics.
   On success, clear stale mismatch diagnostics and the legacy
   `antigravity-latest.json` diagnostic if present.
 

@@ -220,7 +220,7 @@ def _safe_payload_shape(payload: dict = None) -> dict:
         or _has_any_int_field(containers, _OUTPUT_TOKEN_KEYS)
         or _has_tokens_alias_input_output(payload),
         "has_total_only": _has_any_int_field(containers, _TOTAL_TOKEN_KEYS),
-        "has_model_hint": _payload_model(payload) != "antigravity-unknown",
+        "has_model_hint": bool(_payload_model_hint(payload)),
         "has_opaque_run_hint": any(isinstance(payload.get(key), str) for key in ("session_id", "conversationId")),
     }
 
@@ -230,7 +230,7 @@ def _stable_span_id(*parts: str) -> str:
     return "span-" + hashlib.sha256(source.encode("utf-8")).hexdigest()[:12]
 
 
-def _payload_model(payload: dict) -> str:
+def _payload_model_hint(payload: dict) -> str:
     keys = ("model", "model_name", "modelName", "model_id", "modelId", "modelVersion")
     for container in (
         payload,
@@ -250,6 +250,14 @@ def _payload_model(payload: dict) -> str:
             value = container.get(key)
             if isinstance(value, str) and _MODEL_ID.match(value):
                 return value
+    return ""
+
+
+def _payload_model(payload: dict) -> str:
+    payload_hint = _payload_model_hint(payload)
+    if payload_hint:
+        return payload_hint
+
     # Check AGY environment variable
     env_model = os.environ.get("ANTIGRAVITY_MODEL", "")
     if env_model and _MODEL_ID.match(env_model):
@@ -478,7 +486,13 @@ def main() -> None:
     input_tokens, output_tokens, total, total_only = _payload_token_counts(payload)
 
     if total <= 0:
-        _write_diagnostic_file(MISMATCH_DIAGNOSTIC_FILE_NAME, "runtime_payload_mismatch", "missing_exact_token_usage", payload)
+        _write_diagnostic_file(
+            EMPTY_DIAGNOSTIC_FILE_NAME,
+            "no_usage_hook_call",
+            "no_token_usage_payload",
+            payload,
+            meaning="AGY invoked the hook with a structured payload that did not expose exact token usage. This can be a normal lifecycle, tool, or model-adjacent hook call.",
+        )
         return
 
     model = _payload_model(payload)
