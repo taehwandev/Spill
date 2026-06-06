@@ -382,7 +382,7 @@ final class TokenUsageStoreTests: XCTestCase {
 
         XCTAssertTrue(collector.contains("private func importQueuedEventsWhileProcessRuns(_ process: Process)"))
         XCTAssertTrue(collector.contains("while process.isRunning"))
-        XCTAssertTrue(collector.contains("store.importQueuedEvents()"))
+        XCTAssertTrue(collector.contains("store.importQueuedEventsWithoutLoading()"))
         XCTAssertTrue(collector.contains("Thread.sleep(forTimeInterval: importerDrainInterval)"))
         XCTAssertTrue(collector.contains("process.terminate()"))
         XCTAssertTrue(collector.contains("importerMaximumRuntime"))
@@ -402,13 +402,16 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(appDelegate.contains("tokenUsageEventsDidChangeFromDistributedNotification"))
         XCTAssertTrue(appDelegate.contains("private var shouldRefreshMenuBarAITokenTotal"))
         XCTAssertTrue(appDelegate.contains("settings.enabledMenuBarStatusItems.contains(.ai)"))
-        XCTAssertTrue(appDelegate.contains("events: tokenUsageStore.importQueuedEvents()"))
+        XCTAssertTrue(appDelegate.contains("tokenUsageStore.totalTokens("))
+        XCTAssertTrue(appDelegate.contains("startingAt: dayStart"))
         XCTAssertTrue(appDelegate.contains("menuBarTokenCollectionInterval"))
         XCTAssertTrue(appDelegate.contains("requestMenuBarTokenUsageCollectionIfNeeded()"))
         XCTAssertTrue(appDelegate.contains("requestTokenUsageCollection(reason: \"menu_bar_status\")"))
         XCTAssertFalse(appDelegate.contains("guard force || menuBarAITokenDayStart != dayStart else"))
         XCTAssertTrue(dashboardStore.contains("distributedEventsDidChangeObserver"))
         XCTAssertTrue(dashboardStore.contains("TokenUsageStore.distributedEventsDidChangeNotification"))
+        XCTAssertTrue(dashboardStore.contains("private var scheduledRefreshTask"))
+        XCTAssertTrue(dashboardStore.contains("private func scheduleRefresh"))
     }
 
     func testTokenDashboardHelperProcessContracts() throws {
@@ -711,7 +714,7 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(dashboardStore.snapshot.eventCount, 0)
 
         try usageStore.appendEvent(Self.safeEvent())
-        try await Task.sleep(nanoseconds: 50_000_000)
+        try await Task.sleep(nanoseconds: 350_000_000)
 
         XCTAssertEqual(dashboardStore.snapshot.eventCount, 1)
         XCTAssertEqual(dashboardStore.snapshot.totalTokens, 150)
@@ -1026,6 +1029,48 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(indexNames.contains("idx_token_usage_events_stage_created_at"))
         XCTAssertTrue(indexNames.contains("idx_token_usage_events_model_created_at"))
         XCTAssertTrue(indexNames.contains("idx_token_usage_events_run_id"))
+    }
+
+    func testStoreReadsPeriodTotalWithoutLoadingEvents() throws {
+        let store = TokenUsageStore(fileURL: temporaryEventsURL())
+        let start = try Self.date("2026-06-05T15:00:00.000Z")
+        let end = try Self.date("2026-06-06T15:00:00.000Z")
+        try store.appendEvent(Self.safeEvent(
+            spanID: "span_before_period",
+            inputTokens: 9_000,
+            outputTokens: 1_000,
+            createdAt: "2026-06-05T14:59:59.000Z"
+        ))
+        try store.appendEvent(Self.safeEvent(
+            aiTool: .codex,
+            spanID: "span_today_codex",
+            inputTokens: 100,
+            outputTokens: 50,
+            createdAt: "2026-06-05T15:00:00.000Z"
+        ))
+        try store.appendEvent(Self.safeEvent(
+            aiTool: .claude,
+            spanID: "span_today_claude",
+            inputTokens: 200,
+            outputTokens: 80,
+            createdAt: "2026-06-06T14:59:59.000Z"
+        ))
+        try store.appendEvent(Self.safeEvent(
+            aiTool: .openAI,
+            spanID: "span_today_openai",
+            inputTokens: 700,
+            outputTokens: 200,
+            createdAt: "2026-06-06T01:00:00.000Z"
+        ))
+
+        XCTAssertEqual(
+            store.totalTokens(startingAt: start, endingBefore: end),
+            430
+        )
+        XCTAssertEqual(
+            store.totalTokens(startingAt: start, endingBefore: end, dashboardToolsOnly: false),
+            1_330
+        )
     }
 
     func testStoreBackfillsDashboardBreakdownColumnsForExistingSQLiteRows() throws {

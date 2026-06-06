@@ -55,6 +55,7 @@ final class TokenUsageDashboardStore: ObservableObject {
     private var distributedEventsDidChangeObserver: NSObjectProtocol?
     private var hasRebuiltSnapshot = false
     private var clearLiveUpdateTask: Task<Void, Never>?
+    private var scheduledRefreshTask: Task<Void, Never>?
 
     init(usageStore: TokenUsageStore) {
         self.usageStore = usageStore
@@ -64,7 +65,7 @@ final class TokenUsageDashboardStore: ObservableObject {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
-                self?.refresh()
+                self?.scheduleRefresh()
             }
         }
         distributedEventsDidChangeObserver = DistributedNotificationCenter.default().addObserver(
@@ -73,7 +74,7 @@ final class TokenUsageDashboardStore: ObservableObject {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
-                self?.refresh()
+                self?.scheduleRefresh()
             }
         }
         refresh()
@@ -87,15 +88,33 @@ final class TokenUsageDashboardStore: ObservableObject {
             DistributedNotificationCenter.default().removeObserver(distributedEventsDidChangeObserver)
         }
         clearLiveUpdateTask?.cancel()
+        scheduledRefreshTask?.cancel()
     }
 
     func refresh(trackLiveUpdates: Bool = true) {
+        scheduledRefreshTask?.cancel()
+        scheduledRefreshTask = nil
         let previousEvents = events
         events = usageStore.loadEvents()
         rebuildSnapshot(
             trackLiveUpdates: trackLiveUpdates && hasRebuiltSnapshot,
             previousEvents: previousEvents
         )
+    }
+
+    private func scheduleRefresh(trackLiveUpdates: Bool = true) {
+        scheduledRefreshTask?.cancel()
+        scheduledRefreshTask = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(nanoseconds: 250_000_000)
+            } catch {
+                return
+            }
+            guard !Task.isCancelled else {
+                return
+            }
+            self?.refresh(trackLiveUpdates: trackLiveUpdates)
+        }
     }
 
     func rebuildSnapshot(
@@ -132,20 +151,22 @@ final class TokenUsageDashboardStore: ObservableObject {
         )
         selectedSessionID = filteredSnapshot.selectedSession?.id
         snapshot = filteredSnapshot
-        unfilteredSnapshot = TokenUsageDashboardSnapshot(
-            events: events,
-            selectedTool: nil,
-            selectedPeriod: selectedPeriod,
-            selectedCalendarDayID: selectedCalendarDayID,
-            selectedSessionID: nil,
-            displayMode: displayMode,
-            language: language,
-            localAliases: SpillSettings.shared.tokenUsageLocalAliases,
-            showAdvancedTools: SpillSettings.shared.tokenUsageShowAdvancedTools,
-            now: now,
-            calendarMonthStart: displayCalendarMonth,
-            calendar: calendar
-        )
+        unfilteredSnapshot = selectedTool == nil
+            ? filteredSnapshot
+            : TokenUsageDashboardSnapshot(
+                events: events,
+                selectedTool: nil,
+                selectedPeriod: selectedPeriod,
+                selectedCalendarDayID: selectedCalendarDayID,
+                selectedSessionID: nil,
+                displayMode: displayMode,
+                language: language,
+                localAliases: SpillSettings.shared.tokenUsageLocalAliases,
+                showAdvancedTools: SpillSettings.shared.tokenUsageShowAdvancedTools,
+                now: now,
+                calendarMonthStart: displayCalendarMonth,
+                calendar: calendar
+            )
         lastError = nil
         if trackLiveUpdates, let previousEvents {
             publishLiveUpdates(

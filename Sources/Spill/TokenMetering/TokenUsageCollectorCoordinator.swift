@@ -61,9 +61,9 @@ final class TokenUsageCollectorCoordinator: TokenUsageExternalCollecting, @unche
         while true {
             // Import inbox events first so the dashboard shows existing data
             // immediately, without waiting for the Codex importer to finish.
-            store.importQueuedEvents()
+            store.importQueuedEventsWithoutLoading()
             runCodexImporterIfAvailable()
-            store.importQueuedEvents()
+            store.importQueuedEventsWithoutLoading()
 
             let shouldRunAgain = lock.withLock {
                 if hasPendingRequest {
@@ -112,7 +112,7 @@ final class TokenUsageCollectorCoordinator: TokenUsageExternalCollecting, @unche
         let startedAt = Date()
 
         while process.isRunning {
-            store.importQueuedEvents()
+            store.importQueuedEventsWithoutLoading()
 
             if Date().timeIntervalSince(startedAt) > importerMaximumRuntime {
                 process.terminate()
@@ -123,7 +123,7 @@ final class TokenUsageCollectorCoordinator: TokenUsageExternalCollecting, @unche
         }
 
         process.waitUntilExit()
-        store.importQueuedEvents()
+        store.importQueuedEventsWithoutLoading()
     }
 
     static func nodeExecutableURL(

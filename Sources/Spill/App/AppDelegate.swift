@@ -4,7 +4,7 @@ import Combine
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private static let statusRefreshDelayNanoseconds: UInt64 = 1_000_000_000
-    private static let menuBarTokenCollectionInterval: TimeInterval = 5
+    private static let menuBarTokenCollectionInterval: TimeInterval = 60
 
     private let settings = SpillSettings.shared
     private let scanner = AXMenuBarItemScanner()
@@ -472,13 +472,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         menuBarAITokenDayStart = dayStart
-        let snapshot = TokenUsageDashboardSnapshot(
-            events: tokenUsageStore.importQueuedEvents(),
-            selectedPeriod: .today,
-            now: now,
-            calendar: calendar
+        let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? now
+        menuBarAITokenTotal = tokenUsageStore.totalTokens(
+            startingAt: dayStart,
+            endingBefore: dayEnd
         )
-        menuBarAITokenTotal = snapshot.totalTokens
     }
 
     private func requestMenuBarTokenUsageCollectionIfNeeded(now: Date = Date()) {

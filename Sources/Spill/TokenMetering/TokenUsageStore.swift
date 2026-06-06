@@ -11,6 +11,7 @@ final class TokenUsageStore: @unchecked Sendable {
     private let databaseURL: URL
     private let inboxURL: URL?
     private let lock = NSLock()
+    private var didPrepareDatabaseSchema = false
 
     init(
         fileURL: URL = TokenUsageStore.defaultEventsURL(),
@@ -42,7 +43,7 @@ final class TokenUsageStore: @unchecked Sendable {
     @discardableResult
     func importQueuedEvents() -> [TokenUsageEvent] {
         let result = lock.withLock {
-            importQueuedEventsWithoutLock()
+            importQueuedEventsWithoutLock(loadEvents: true)
         }
 
         if result.didImportQueuedEvents {
@@ -50,6 +51,42 @@ final class TokenUsageStore: @unchecked Sendable {
         }
 
         return result.events
+    }
+
+    @discardableResult
+    func importQueuedEventsWithoutLoading() -> Bool {
+        let didImportQueuedEvents = lock.withLock {
+            importQueuedEventsWithoutLock(loadEvents: false).didImportQueuedEvents
+        }
+
+        if didImportQueuedEvents {
+            postEventsDidChange()
+        }
+
+        return didImportQueuedEvents
+    }
+
+    func totalTokens(
+        startingAt startDate: Date,
+        endingBefore endDate: Date,
+        dashboardToolsOnly: Bool = true
+    ) -> Int {
+        lock.withLock {
+            let database: OpaquePointer
+            do {
+                database = try openDatabase()
+            } catch {
+                return 0
+            }
+            defer { sqlite3_close(database) }
+
+            return loadTotalTokens(
+                startingAt: startDate,
+                endingBefore: endDate,
+                dashboardToolsOnly: dashboardToolsOnly,
+                database: database
+            )
+        }
     }
 
     @discardableResult
@@ -168,7 +205,7 @@ final class TokenUsageStore: @unchecked Sendable {
         return loadDatabaseEvents(database: database)
     }
 
-    private func importQueuedEventsWithoutLock() -> StoreLoadResult {
+    private func importQueuedEventsWithoutLock(loadEvents: Bool) -> StoreLoadResult {
         let database: OpaquePointer
         do {
             database = try openDatabase()
@@ -192,7 +229,7 @@ final class TokenUsageStore: @unchecked Sendable {
         }
 
         return StoreLoadResult(
-            events: loadDatabaseEvents(database: database),
+            events: loadEvents ? loadDatabaseEvents(database: database) : [],
             didImportQueuedEvents: didImportQueuedEvents
         )
     }
@@ -306,66 +343,10 @@ final class TokenUsageStore: @unchecked Sendable {
             try execute("PRAGMA journal_mode = WAL", database: database)
             try execute("PRAGMA synchronous = NORMAL", database: database)
             try execute("PRAGMA busy_timeout = 5000", database: database)
-            try execute(
-                """
-                CREATE TABLE IF NOT EXISTS token_usage_events (
-                    span_id TEXT PRIMARY KEY NOT NULL,
-                    run_id TEXT,
-                    created_at TEXT NOT NULL,
-                    ai_tool TEXT NOT NULL,
-                    task_type TEXT,
-                    stage TEXT,
-                    model TEXT,
-                    total_tokens INTEGER NOT NULL,
-                    payload_json BLOB NOT NULL
-                )
-                """,
-                database: database
-            )
-            try ensureDashboardColumns(database: database)
-            try backfillDashboardColumns(database: database)
-            try execute(
-                """
-                CREATE INDEX IF NOT EXISTS idx_token_usage_events_created_at
-                ON token_usage_events(created_at)
-                """,
-                database: database
-            )
-            try execute(
-                """
-                CREATE INDEX IF NOT EXISTS idx_token_usage_events_tool_created_at
-                ON token_usage_events(ai_tool, created_at)
-                """,
-                database: database
-            )
-            try execute(
-                """
-                CREATE INDEX IF NOT EXISTS idx_token_usage_events_task_type_created_at
-                ON token_usage_events(task_type, created_at)
-                """,
-                database: database
-            )
-            try execute(
-                """
-                CREATE INDEX IF NOT EXISTS idx_token_usage_events_stage_created_at
-                ON token_usage_events(stage, created_at)
-                """,
-                database: database
-            )
-            try execute(
-                """
-                CREATE INDEX IF NOT EXISTS idx_token_usage_events_model_created_at
-                ON token_usage_events(model, created_at)
-                """,
-                database: database
-            )
-            try execute(
-                """
-                CREATE INDEX IF NOT EXISTS idx_token_usage_events_run_id
-                ON token_usage_events(run_id)
-                """,
-                database: database
-            )
+            if !didPrepareDatabaseSchema {
+                try prepareDatabaseSchema(database: database)
+                didPrepareDatabaseSchema = true
+            }
             return database
         } catch {
             sqlite3_close(database)
@@ -377,6 +358,69 @@ final class TokenUsageStore: @unchecked Sendable {
         guard sqlite3_exec(database, sql, nil, nil, nil) == SQLITE_OK else {
             throw TokenUsageStoreError.databaseWriteFailed
         }
+    }
+
+    private func prepareDatabaseSchema(database: OpaquePointer) throws {
+        try execute(
+            """
+            CREATE TABLE IF NOT EXISTS token_usage_events (
+                span_id TEXT PRIMARY KEY NOT NULL,
+                run_id TEXT,
+                created_at TEXT NOT NULL,
+                ai_tool TEXT NOT NULL,
+                task_type TEXT,
+                stage TEXT,
+                model TEXT,
+                total_tokens INTEGER NOT NULL,
+                payload_json BLOB NOT NULL
+            )
+            """,
+            database: database
+        )
+        try ensureDashboardColumns(database: database)
+        try backfillDashboardColumns(database: database)
+        try execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_token_usage_events_created_at
+            ON token_usage_events(created_at)
+            """,
+            database: database
+        )
+        try execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_token_usage_events_tool_created_at
+            ON token_usage_events(ai_tool, created_at)
+            """,
+            database: database
+        )
+        try execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_token_usage_events_task_type_created_at
+            ON token_usage_events(task_type, created_at)
+            """,
+            database: database
+        )
+        try execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_token_usage_events_stage_created_at
+            ON token_usage_events(stage, created_at)
+            """,
+            database: database
+        )
+        try execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_token_usage_events_model_created_at
+            ON token_usage_events(model, created_at)
+            """,
+            database: database
+        )
+        try execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_token_usage_events_run_id
+            ON token_usage_events(run_id)
+            """,
+            database: database
+        )
     }
 
     private func ensureDashboardColumns(database: OpaquePointer) throws {
@@ -592,6 +636,41 @@ final class TokenUsageStore: @unchecked Sendable {
             }
         }
         return events
+    }
+
+    private func loadTotalTokens(
+        startingAt startDate: Date,
+        endingBefore endDate: Date,
+        dashboardToolsOnly: Bool,
+        database: OpaquePointer
+    ) -> Int {
+        var sql = """
+        SELECT COALESCE(SUM(total_tokens), 0)
+        FROM token_usage_events
+        WHERE created_at >= ? AND created_at < ?
+        """
+        if dashboardToolsOnly {
+            sql += " AND ai_tool IN ('codex', 'claude', 'antigravity')"
+        }
+
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
+              let statement
+        else {
+            return 0
+        }
+        defer { sqlite3_finalize(statement) }
+
+        let startValue = ISO8601DateFormatter.tokenUsage.string(from: startDate)
+        let endValue = ISO8601DateFormatter.tokenUsage.string(from: endDate)
+        sqlite3_bind_text(statement, 1, startValue, -1, SQLITE_TRANSIENT)
+        sqlite3_bind_text(statement, 2, endValue, -1, SQLITE_TRANSIENT)
+
+        guard sqlite3_step(statement) == SQLITE_ROW else {
+            return 0
+        }
+
+        return Int(sqlite3_column_int64(statement, 0))
     }
 
     private func removeLegacyEventsFileWithoutLock() throws {

@@ -39,7 +39,7 @@ final class TokenUsageInboxMonitor: @unchecked Sendable {
                 queue: queue
             )
             nextSource.setEventHandler { [weak store] in
-                store?.importQueuedEvents()
+                store?.importQueuedEventsWithoutLoading()
             }
             nextSource.setCancelHandler {
                 Darwin.close(descriptor)
@@ -50,7 +50,7 @@ final class TokenUsageInboxMonitor: @unchecked Sendable {
             nextSource.resume()
         }
 
-        store.importQueuedEvents()
+        store.importQueuedEventsWithoutLoading()
     }
 
     func stop() {
