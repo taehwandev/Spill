@@ -302,9 +302,9 @@ final class TokenUsageStoreTests: XCTestCase {
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let dashboardView = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardView.swift"))
 
-        XCTAssertTrue(dashboardView.contains("detailPanel(for: selectedSession)"))
+        XCTAssertTrue(dashboardView.contains("detailPanel(for: selectedSession, snapshot: store.snapshot)"))
         XCTAssertTrue(dashboardView.contains("store.selectSession(session.id)"))
-        XCTAssertTrue(dashboardView.contains("store.snapshotForWorkItem(session.id)"))
+        XCTAssertFalse(dashboardView.contains("store.snapshotForWorkItem(session.id)"))
         XCTAssertTrue(dashboardView.contains("title: t(.aiTool)"))
         XCTAssertTrue(dashboardView.contains("title: t(.modelBreakdown)"))
         XCTAssertTrue(dashboardView.contains("title: t(.workflowBreakdown)"))

@@ -165,11 +165,13 @@ struct TokenUsageDashboardSnapshot: Equatable {
         timeZone: TimeZone = .autoupdatingCurrent
     ) {
         self.displayMode = displayMode
-        let dashboardEvents = events.filter { event in
+        let dashboardEvents = events.compactMap { event -> TokenUsageDashboardParsedEvent? in
             if showAdvancedTools {
-                return true
+                return TokenUsageDashboardParsedEvent(event: event, calendar: calendar)
             } else {
                 return event.aiTool.isDashboardTool
+                    ? TokenUsageDashboardParsedEvent(event: event, calendar: calendar)
+                    : nil
             }
         }
         let selectedDayID = selectedCalendarDayID.flatMap { Self.date(forDayID: $0, calendar: calendar) == nil ? nil : $0 }
@@ -181,25 +183,25 @@ struct TokenUsageDashboardSnapshot: Equatable {
         todayCalendarDayTitle = Self.formatCalendarDayTitle(now, locale: locale, timeZone: timeZone)
 
         codexLastUpdated = dashboardEvents
-            .filter { $0.aiTool == .codex }
-            .compactMap { ISO8601DateFormatter.parseTokenUsageDate(from: $0.createdAt) }
+            .filter { $0.event.aiTool == .codex }
+            .compactMap(\.createdAt)
             .max()
         claudeLastUpdated = dashboardEvents
-            .filter { $0.aiTool == .claude }
-            .compactMap { ISO8601DateFormatter.parseTokenUsageDate(from: $0.createdAt) }
+            .filter { $0.event.aiTool == .claude }
+            .compactMap(\.createdAt)
             .max()
         antigravityLastUpdated = dashboardEvents
-            .filter { $0.aiTool == .antigravity }
-            .compactMap { ISO8601DateFormatter.parseTokenUsageDate(from: $0.createdAt) }
+            .filter { $0.event.aiTool == .antigravity }
+            .compactMap(\.createdAt)
             .max()
         overallLastUpdated = dashboardEvents
-            .compactMap { ISO8601DateFormatter.parseTokenUsageDate(from: $0.createdAt) }
+            .compactMap(\.createdAt)
             .max()
 
         let selectedDashboardTool = selectedTool.flatMap { tool in
             tool.isDashboardTool ? tool : nil
         }
-        let periodEvents = Self.filterEvents(
+        let periodEvents = Self.filteredParsedEvents(
             dashboardEvents,
             selectedPeriod: selectedPeriod,
             selectedCalendarDayID: selectedDayID,
@@ -207,12 +209,12 @@ struct TokenUsageDashboardSnapshot: Equatable {
             calendar: calendar
         )
         let visibleEvents = selectedDashboardTool.map { tool in
-            periodEvents.filter { $0.aiTool == tool }
+            periodEvents.filter { $0.event.aiTool == tool }
         } ?? periodEvents
         let sessionRows = Self.sessionRows(
             events: visibleEvents,
             displayMode: displayMode,
-            totalTokens: visibleEvents.reduce(0) { $0 + $1.totalTokens },
+            totalTokens: visibleEvents.reduce(0) { $0 + $1.event.totalTokens },
             language: language,
             localAliases: localAliases,
             calendar: calendar,
@@ -225,23 +227,23 @@ struct TokenUsageDashboardSnapshot: Equatable {
         }
         let focusedEvents = selectedSessionRow.map { session in
             visibleEvents.filter {
-                Self.workItemID(for: $0, calendar: calendar) == session.id
+                Self.workItemID(for: $0) == session.id
             }
         } ?? visibleEvents
 
         eventCount = focusedEvents.count
-        let capturedTotalTokens = focusedEvents.reduce(0) { $0 + $1.totalTokens }
+        let capturedTotalTokens = focusedEvents.reduce(0) { $0 + $1.event.totalTokens }
         totalTokens = capturedTotalTokens
         let visibleCapturedToolTokens = Self.toolTotals(events: focusedEvents)
 
         periodFilters = TokenUsageDashboardPeriod.allCases.map { period in
-            let periodCapturedEvents = Self.filterEvents(
+            let periodCapturedEvents = Self.filteredParsedEvents(
                 dashboardEvents,
                 selectedPeriod: period,
                 now: now,
                 calendar: calendar
             )
-            let capturedPeriodTotal = periodCapturedEvents.reduce(0) { $0 + $1.totalTokens }
+            let capturedPeriodTotal = periodCapturedEvents.reduce(0) { $0 + $1.event.totalTokens }
             return TokenUsageDashboardPeriodFilter(
                 period: period,
                 title: period.title(language: language),
@@ -259,8 +261,8 @@ struct TokenUsageDashboardSnapshot: Equatable {
             language: language
         )
 
-        let inputTokens = focusedEvents.reduce(0) { $0 + $1.inputTokens }
-        let outputTokens = focusedEvents.reduce(0) { $0 + $1.outputTokens }
+        let inputTokens = focusedEvents.reduce(0) { $0 + $1.event.inputTokens }
+        let outputTokens = focusedEvents.reduce(0) { $0 + $1.event.outputTokens }
 
         switch displayMode {
         case .tokens:
@@ -318,8 +320,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
             label: { $0.dashboardLabel(language: language) }
         )
 
-        let modelTokens = Dictionary(grouping: focusedEvents, by: { Self.modelKey($0.model) })
-            .mapValues { $0.reduce(0) { $0 + $1.totalTokens } }
+        let modelTokens = Self.tokenTotals(events: focusedEvents) { Self.modelKey($0.event.model) }
         modelRows = Self.rows(
             tokenValues: modelTokens,
             totalTokens: totalTokens,
@@ -328,8 +329,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
             label: { Self.modelLabel($0, language: language) }
         )
 
-        let taskTokens = Dictionary(grouping: focusedEvents, by: \.taskType)
-            .mapValues { $0.reduce(0) { $0 + $1.totalTokens } }
+        let taskTokens = Self.tokenTotals(events: focusedEvents) { $0.event.taskType }
         taskRows = Self.rows(
             tokenValues: taskTokens,
             totalTokens: totalTokens,
@@ -338,8 +338,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
             label: { $0.dashboardLabel(language: language) }
         )
 
-        let stageTokens = Dictionary(grouping: focusedEvents, by: \.stage)
-            .mapValues { $0.reduce(0) { $0 + $1.totalTokens } }
+        let stageTokens = Self.tokenTotals(events: focusedEvents) { $0.event.stage }
         stageRows = Self.rows(
             tokenValues: stageTokens,
             totalTokens: totalTokens,
@@ -365,32 +364,32 @@ struct TokenUsageDashboardSnapshot: Equatable {
             comparisonTotalTokens = nil
         } else {
             let toolFilteredEvents = selectedDashboardTool
-                .map { tool in dashboardEvents.filter { $0.aiTool == tool } } ?? dashboardEvents
+                .map { tool in dashboardEvents.filter { $0.event.aiTool == tool } } ?? dashboardEvents
             switch selectedPeriod {
             case .today:
                 let todayStart = calendar.startOfDay(for: now)
                 let yesterdayStart = calendar.date(byAdding: .day, value: -1, to: todayStart) ?? todayStart
                 let compEvents = toolFilteredEvents.filter { event in
-                    guard let date = ISO8601DateFormatter.parseTokenUsageDate(from: event.createdAt) else { return false }
+                    guard let date = event.createdAt else { return false }
                     return date >= yesterdayStart && date < todayStart
                 }
-                comparisonTotalTokens = compEvents.isEmpty ? nil : compEvents.reduce(0) { $0 + $1.totalTokens }
+                comparisonTotalTokens = compEvents.isEmpty ? nil : compEvents.reduce(0) { $0 + $1.event.totalTokens }
             case .sevenDays:
                 let sevenDaysAgo = calendar.date(byAdding: .day, value: -7, to: now) ?? now
                 let fourteenDaysAgo = calendar.date(byAdding: .day, value: -7, to: sevenDaysAgo) ?? now
                 let compEvents = toolFilteredEvents.filter { event in
-                    guard let date = ISO8601DateFormatter.parseTokenUsageDate(from: event.createdAt) else { return false }
+                    guard let date = event.createdAt else { return false }
                     return date >= fourteenDaysAgo && date < sevenDaysAgo
                 }
-                comparisonTotalTokens = compEvents.isEmpty ? nil : compEvents.reduce(0) { $0 + $1.totalTokens }
+                comparisonTotalTokens = compEvents.isEmpty ? nil : compEvents.reduce(0) { $0 + $1.event.totalTokens }
             case .thirtyDays:
                 let thirtyDaysAgo = calendar.date(byAdding: .day, value: -30, to: now) ?? now
                 let sixtyDaysAgo = calendar.date(byAdding: .day, value: -30, to: thirtyDaysAgo) ?? now
                 let compEvents = toolFilteredEvents.filter { event in
-                    guard let date = ISO8601DateFormatter.parseTokenUsageDate(from: event.createdAt) else { return false }
+                    guard let date = event.createdAt else { return false }
                     return date >= sixtyDaysAgo && date < thirtyDaysAgo
                 }
-                comparisonTotalTokens = compEvents.isEmpty ? nil : compEvents.reduce(0) { $0 + $1.totalTokens }
+                comparisonTotalTokens = compEvents.isEmpty ? nil : compEvents.reduce(0) { $0 + $1.event.totalTokens }
             case .all:
                 comparisonTotalTokens = nil
             }
@@ -512,16 +511,36 @@ struct TokenUsageDashboardSnapshot: Equatable {
         } ?? events
     }
 
+    private static func filteredParsedEvents(
+        _ events: [TokenUsageDashboardParsedEvent],
+        selectedPeriod: TokenUsageDashboardPeriod,
+        selectedCalendarDayID: String? = nil,
+        now: Date,
+        calendar: Calendar
+    ) -> [TokenUsageDashboardParsedEvent] {
+        if let selectedCalendarDayID {
+            return events.filter { $0.dayBucket == selectedCalendarDayID }
+        }
+
+        guard let cutoff = cutoffDate(for: selectedPeriod, now: now, calendar: calendar) else {
+            return events
+        }
+
+        return events.filter { event in
+            guard let createdAt = event.createdAt else {
+                return false
+            }
+            return createdAt >= cutoff && createdAt <= now
+        }
+    }
+
     static func formatPercentage(_ value: Double) -> String {
         if value > 0, value < 0.1 {
             return "<0.1%"
         }
 
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        formatter.minimumFractionDigits = 1
-        formatter.maximumFractionDigits = 1
-        let number = formatter.string(from: NSNumber(value: value)) ?? String(format: "%.1f", value)
+        let number = NumberFormatter.tokenUsagePercentage.string(from: NSNumber(value: value))
+            ?? String(format: "%.1f", value)
         return "\(number)%"
     }
 
@@ -566,11 +585,19 @@ struct TokenUsageDashboardSnapshot: Equatable {
             }
     }
 
-    private static func toolTotals(events: [TokenUsageEvent]) -> [TokenUsageAITool: Int] {
-        Dictionary(grouping: events, by: \.aiTool)
-            .mapValues { groupedEvents in
-                groupedEvents.reduce(0) { $0 + $1.totalTokens }
-            }
+    private static func tokenTotals<Key: Hashable>(
+        events: [TokenUsageDashboardParsedEvent],
+        by key: (TokenUsageDashboardParsedEvent) -> Key
+    ) -> [Key: Int] {
+        var totals: [Key: Int] = [:]
+        for event in events {
+            totals[key(event), default: 0] += event.event.totalTokens
+        }
+        return totals
+    }
+
+    private static func toolTotals(events: [TokenUsageDashboardParsedEvent]) -> [TokenUsageAITool: Int] {
+        tokenTotals(events: events) { $0.event.aiTool }
     }
 
     private static func toolFilters(
@@ -606,9 +633,10 @@ struct TokenUsageDashboardSnapshot: Equatable {
         return [allFilter] + toolFilters
     }
 
-    private static func sourceTotals(events: [TokenUsageEvent]) -> [TokenUsageSource: Int] {
+    private static func sourceTotals(events: [TokenUsageDashboardParsedEvent]) -> [TokenUsageSource: Int] {
         var totals: [TokenUsageSource: Int] = [:]
-        for event in events {
+        for parsedEvent in events {
+            let event = parsedEvent.event
             totals[.system, default: 0] += event.tokenBreakdown.system
             totals[.user, default: 0] += event.tokenBreakdown.user
             totals[.history, default: 0] += event.tokenBreakdown.history
@@ -621,7 +649,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
     }
 
     private static func sessionRows(
-        events: [TokenUsageEvent],
+        events: [TokenUsageDashboardParsedEvent],
         displayMode: TokenUsageDisplayMode,
         totalTokens: Int,
         language: TokenMeteringLanguage,
@@ -632,21 +660,21 @@ struct TokenUsageDashboardSnapshot: Equatable {
         timeZone: TimeZone
     ) -> [TokenUsageDashboardSessionRow] {
         Dictionary(grouping: events) { event in
-            workItemKey(for: event, calendar: calendar)
+            workItemKey(for: event)
         }
             .map { key, groupedEvents in
-                let totalT = groupedEvents.reduce(0) { $0 + $1.totalTokens }
-                let latency = groupedEvents.reduce(0) { $0 + $1.latencyMS }
+                let totalT = groupedEvents.reduce(0) { $0 + $1.event.totalTokens }
+                let latency = groupedEvents.reduce(0) { $0 + $1.event.latencyMS }
                 let latestDate = groupedEvents
-                    .compactMap { ISO8601DateFormatter.parseTokenUsageDate(from: $0.createdAt) }
+                    .compactMap(\.createdAt)
                     .max()
                 let latestRaw = latestDate.map { ISO8601DateFormatter.tokenUsage.string(from: $0) }
-                    ?? groupedEvents.map(\.createdAt).max()
+                    ?? groupedEvents.map(\.event.createdAt).max()
                     ?? "unknown"
                 let latestDisplay = latestDate.map {
                     Self.formatLocalTimestamp($0, now: now, calendar: calendar, locale: locale, timeZone: timeZone)
                 } ?? latestRaw
-                let runIDs = Set(groupedEvents.map(\.runID))
+                let runIDs = Set(groupedEvents.map(\.event.runID))
 
                 let valueStr: String
                 switch displayMode {
@@ -713,6 +741,22 @@ struct TokenUsageDashboardSnapshot: Equatable {
         workItemKey(for: event, calendar: calendar).id
     }
 
+    private static func workItemKey(
+        for event: TokenUsageDashboardParsedEvent
+    ) -> TokenUsageDashboardWorkItemKey {
+        TokenUsageDashboardWorkItemKey(
+            taskType: event.event.taskType,
+            stage: event.event.stage,
+            dayBucket: event.dayBucket
+        )
+    }
+
+    private static func workItemID(
+        for event: TokenUsageDashboardParsedEvent
+    ) -> String {
+        workItemKey(for: event).id
+    }
+
     private static func formatLocalTimestamp(
         _ date: Date,
         now: Date,
@@ -746,15 +790,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
             return String(createdAt.prefix(10))
         }
 
-        let components = calendar.dateComponents([.year, .month, .day], from: date)
-        guard let year = components.year,
-              let month = components.month,
-              let day = components.day
-        else {
-            return String(createdAt.prefix(10))
-        }
-
-        return String(format: "%04d-%02d-%02d", year, month, day)
+        return dayID(for: date, calendar: calendar)
     }
 
     static func dayID(for date: Date, calendar: Calendar) -> String {
@@ -809,7 +845,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
     }
 
     private static func calendarDays(
-        events: [TokenUsageEvent],
+        events: [TokenUsageDashboardParsedEvent],
         monthStart: Date,
         selectedCalendarDayID: String?,
         todayCalendarDayID: String,
@@ -822,23 +858,28 @@ struct TokenUsageDashboardSnapshot: Equatable {
         }
 
         let eventsByDay = Dictionary(grouping: events) { event in
-            localDayBucket(for: event.createdAt, calendar: calendar)
+            event.dayBucket
         }
         let maxTokens = max(1, eventsByDay.values.map { groupedEvents in
-            groupedEvents.reduce(0) { $0 + $1.totalTokens }
+            groupedEvents.reduce(0) { $0 + $1.event.totalTokens }
         }.max() ?? 0)
 
         let dayFormatter = DateFormatter()
         dayFormatter.locale = locale
         dayFormatter.timeZone = timeZone
         dayFormatter.dateFormat = "d"
+        let calendarDayTitleFormatter = DateFormatter()
+        calendarDayTitleFormatter.locale = locale
+        calendarDayTitleFormatter.timeZone = timeZone
+        calendarDayTitleFormatter.setLocalizedDateFormatFromTemplate("MMM d")
 
         var days: [TokenUsageDashboardCalendarDay] = []
         let firstWeekday = calendar.component(.weekday, from: monthStart)
         let leadingPlaceholderCount = (firstWeekday - calendar.firstWeekday + 7) % 7
+        let monthID = dayID(for: monthStart, calendar: calendar)
         for index in 0..<leadingPlaceholderCount {
             days.append(TokenUsageDashboardCalendarDay(
-                id: "placeholder-leading-\(localDayBucket(for: ISO8601DateFormatter.tokenUsage.string(from: monthStart), calendar: calendar))-\(index)",
+                id: "placeholder-leading-\(monthID)-\(index)",
                 day: 0,
                 title: "",
                 detail: "",
@@ -853,14 +894,11 @@ struct TokenUsageDashboardSnapshot: Equatable {
 
         var cursor = calendar.startOfDay(for: monthStart)
         while cursor < displayEnd {
-            let dayBucket = localDayBucket(
-                for: ISO8601DateFormatter.tokenUsage.string(from: cursor),
-                calendar: calendar
-            )
+            let dayBucket = dayID(for: cursor, calendar: calendar)
             let groupedEvents = eventsByDay[dayBucket, default: []]
-            let tokens = groupedEvents.reduce(0) { $0 + $1.totalTokens }
+            let tokens = groupedEvents.reduce(0) { $0 + $1.event.totalTokens }
             let day = calendar.component(.day, from: cursor)
-            let calendarDayTitle = formatCalendarDayTitle(cursor, locale: locale, timeZone: timeZone)
+            let calendarDayTitle = calendarDayTitleFormatter.string(from: cursor)
             days.append(TokenUsageDashboardCalendarDay(
                 id: dayBucket,
                 day: day,
@@ -882,7 +920,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
         let trailingPlaceholderCount = (7 - (days.count % 7)) % 7
         for index in 0..<trailingPlaceholderCount {
             days.append(TokenUsageDashboardCalendarDay(
-                id: "placeholder-trailing-\(localDayBucket(for: ISO8601DateFormatter.tokenUsage.string(from: monthStart), calendar: calendar))-\(index)",
+                id: "placeholder-trailing-\(monthID)-\(index)",
                 day: 0,
                 title: "",
                 detail: "",
@@ -915,6 +953,24 @@ struct TokenUsageDashboardSnapshot: Equatable {
         return proposed
     }
 
+    private static func normalizedCalendarMonthStart(
+        events: [TokenUsageDashboardParsedEvent],
+        now: Date,
+        proposedMonthStart: Date?,
+        calendar: Calendar
+    ) -> Date {
+        let currentMonth = monthStart(for: now, calendar: calendar)
+        let firstDataMonth = firstDataMonthStart(events: events, now: now, calendar: calendar)
+        let proposed = proposedMonthStart.map { monthStart(for: $0, calendar: calendar) } ?? currentMonth
+        if calendar.compare(proposed, to: firstDataMonth, toGranularity: .month) == .orderedAscending {
+            return firstDataMonth
+        }
+        if calendar.compare(proposed, to: currentMonth, toGranularity: .month) == .orderedDescending {
+            return currentMonth
+        }
+        return proposed
+    }
+
     static func monthStart(for date: Date, calendar: Calendar) -> Date {
         calendar.date(from: calendar.dateComponents([.year, .month], from: date))
             ?? calendar.startOfDay(for: date)
@@ -927,6 +983,18 @@ struct TokenUsageDashboardSnapshot: Equatable {
     ) -> Date {
         events
             .compactMap { ISO8601DateFormatter.parseTokenUsageDate(from: $0.createdAt) }
+            .min()
+            .map { monthStart(for: $0, calendar: calendar) }
+            ?? monthStart(for: now, calendar: calendar)
+    }
+
+    private static func firstDataMonthStart(
+        events: [TokenUsageDashboardParsedEvent],
+        now: Date,
+        calendar: Calendar
+    ) -> Date {
+        events
+            .compactMap(\.createdAt)
             .min()
             .map { monthStart(for: $0, calendar: calendar) }
             ?? monthStart(for: now, calendar: calendar)
@@ -1000,6 +1068,21 @@ private struct TokenUsageDashboardWorkItemKey: Hashable {
         return scalars.joined()
             .split(separator: "_")
             .joined(separator: "_")
+    }
+}
+
+private struct TokenUsageDashboardParsedEvent {
+    let event: TokenUsageEvent
+    let createdAt: Date?
+    let dayBucket: String
+
+    init(event: TokenUsageEvent, calendar: Calendar) {
+        self.event = event
+        let parsedDate = ISO8601DateFormatter.parseTokenUsageDate(from: event.createdAt)
+        self.createdAt = parsedDate
+        self.dayBucket = parsedDate.map {
+            TokenUsageDashboardSnapshot.dayID(for: $0, calendar: calendar)
+        } ?? String(event.createdAt.prefix(10))
     }
 }
 
@@ -1131,6 +1214,14 @@ private extension NumberFormatter {
         formatter.numberStyle = .decimal
         formatter.minimumFractionDigits = 0
         formatter.maximumFractionDigits = 2
+        return formatter
+    }()
+
+    static let tokenUsagePercentage: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.minimumFractionDigits = 1
+        formatter.maximumFractionDigits = 1
         return formatter
     }()
 }

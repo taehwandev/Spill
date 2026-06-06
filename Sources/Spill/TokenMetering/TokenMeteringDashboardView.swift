@@ -78,7 +78,7 @@ struct TokenMeteringDashboardView: View {
                 }
 
                 if let selectedSession = store.snapshot.selectedSession {
-                    detailPanel(for: selectedSession)
+                    detailPanel(for: selectedSession, snapshot: store.snapshot)
                         .frame(width: 320)
                 } else {
                     rightRail
@@ -870,8 +870,10 @@ struct TokenMeteringDashboardView: View {
         store.snapshot.selectedCalendarDayTitle ?? t(.pickDate)
     }
 
-    private func detailPanel(for session: TokenUsageDashboardSessionRow) -> some View {
-        let detailSnapshot = store.snapshotForWorkItem(session.id)
+    private func detailPanel(
+        for session: TokenUsageDashboardSessionRow,
+        snapshot detailSnapshot: TokenUsageDashboardSnapshot
+    ) -> some View {
         let detailSession = detailSnapshot.selectedSession ?? session
         let kpisByID = Dictionary(uniqueKeysWithValues: detailSnapshot.kpis.map { ($0.id, $0) })
         let sourceRows = detailSnapshot.sourceRows

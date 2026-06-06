@@ -768,6 +768,7 @@ struct SpillBarView: View {
         let tint = status.state.panelTint
         let isActive = status.state == .active
         let isUnavailable = status.state == .unavailable
+        let tokenUsage = toolTokenUsage(for: status.kind)
 
         return VStack(alignment: .leading, spacing: 5) {
             HStack(alignment: .center, spacing: 6) {
@@ -799,7 +800,7 @@ struct SpillBarView: View {
                     .foregroundStyle(.secondary)
 
                 HStack(alignment: .firstTextBaseline, spacing: 1) {
-                    Text(toolTokenValue(for: status.kind))
+                    Text(tokenUsage.value)
                         .font(.system(size: 10, weight: .bold, design: .rounded))
                         .monospacedDigit()
                         .foregroundStyle(Color.primary)
@@ -810,8 +811,7 @@ struct SpillBarView: View {
 
                 Spacer(minLength: 4)
 
-                let ratio = toolTokenRatio(for: status.kind)
-                let percentage = Int((ratio * 100).rounded())
+                let percentage = Int((tokenUsage.ratio * 100).rounded())
                 Text("\(percentage)%")
                     .font(.system(size: 8.5, weight: .bold, design: .rounded))
                     .monospacedDigit()
@@ -835,90 +835,29 @@ struct SpillBarView: View {
         }
     }
 
-    private func toolTokenValue(for kind: LocalAIToolKind) -> String {
+    private func toolTokenUsage(for kind: LocalAIToolKind) -> (value: String, ratio: Double) {
         let snapshot = tokenUsageDashboardStore.unfilteredSnapshot
-        let rawValue: String
-        switch kind {
-        case .codex:
-            rawValue = TokenUsageAITool.codex.rawValue
-        case .claude:
-            rawValue = TokenUsageAITool.claude.rawValue
-        case .antigravity:
-            rawValue = TokenUsageAITool.antigravity.rawValue
-        case .openAI:
-            rawValue = TokenUsageAITool.openAI.rawValue
-        case .ollama:
-            rawValue = "ollama"
-        }
+        let rawValue = tokenUsageRawValue(for: kind)
 
         if let row = snapshot.toolRows.first(where: { $0.id == rawValue }) {
-            return row.value
+            return (row.value, row.ratio)
         }
-        return "0"
+        return ("0", 0.0)
     }
 
-    private func toolTokenRatio(for kind: LocalAIToolKind) -> Double {
-        let snapshot = tokenUsageDashboardStore.unfilteredSnapshot
-        let rawValue: String
+    private func tokenUsageRawValue(for kind: LocalAIToolKind) -> String {
         switch kind {
         case .codex:
-            rawValue = TokenUsageAITool.codex.rawValue
+            return TokenUsageAITool.codex.rawValue
         case .claude:
-            rawValue = TokenUsageAITool.claude.rawValue
+            return TokenUsageAITool.claude.rawValue
         case .antigravity:
-            rawValue = TokenUsageAITool.antigravity.rawValue
+            return TokenUsageAITool.antigravity.rawValue
         case .openAI:
-            rawValue = TokenUsageAITool.openAI.rawValue
+            return TokenUsageAITool.openAI.rawValue
         case .ollama:
-            rawValue = "ollama"
+            return "ollama"
         }
-
-        if let row = snapshot.toolRows.first(where: { $0.id == rawValue }) {
-            return row.ratio
-        }
-        return 0.0
-    }
-
-    private func tokenPercentageBadge(for kind: LocalAIToolKind) -> some View {
-        let snapshot = tokenUsageDashboardStore.unfilteredSnapshot
-        let rawValue: String
-        switch kind {
-        case .codex:
-            rawValue = TokenUsageAITool.codex.rawValue
-        case .claude:
-            rawValue = TokenUsageAITool.claude.rawValue
-        case .antigravity:
-            rawValue = TokenUsageAITool.antigravity.rawValue
-        case .openAI:
-            rawValue = TokenUsageAITool.openAI.rawValue
-        case .ollama:
-            rawValue = "ollama"
-        }
-
-        let ratio: Double
-        if let row = snapshot.toolRows.first(where: { $0.id == rawValue }) {
-            ratio = row.ratio
-        } else {
-            ratio = 0
-        }
-
-        let percentage = Int((ratio * 100).rounded())
-        let tint = Color.teal
-
-        return HStack(spacing: 4) {
-            Text("\(percentage)%")
-                .font(.system(size: 9.5, weight: .bold, design: .rounded))
-                .lineLimit(1)
-                .monospacedDigit()
-        }
-        .padding(.horizontal, 6)
-        .frame(height: 18)
-        .fixedSize(horizontal: true, vertical: false)
-        .foregroundStyle(tint)
-        .background(
-            tint.opacity(0.12),
-            in: Capsule()
-        )
     }
 
     private func aiToolIconBadge(symbolName: String, tint: Color) -> some View {
