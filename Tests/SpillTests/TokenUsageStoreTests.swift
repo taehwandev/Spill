@@ -1073,6 +1073,42 @@ final class TokenUsageStoreTests: XCTestCase {
         )
     }
 
+    func testStoreReadsPeriodTotalWithOffsetTimestamps() throws {
+        let store = TokenUsageStore(fileURL: temporaryEventsURL())
+        let start = try Self.date("2026-06-06T00:00:00.000Z")
+        let end = try Self.date("2026-06-07T00:00:00.000Z")
+        try store.appendEvent(Self.safeEvent(
+            spanID: "span_offset_previous_day_inside",
+            inputTokens: 100,
+            outputTokens: 50,
+            createdAt: "2026-06-05T23:30:00.000-05:00"
+        ))
+        try store.appendEvent(Self.safeEvent(
+            aiTool: .claude,
+            spanID: "span_offset_next_day_inside",
+            inputTokens: 200,
+            outputTokens: 80,
+            createdAt: "2026-06-07T00:30:00.000+01:00"
+        ))
+        try store.appendEvent(Self.safeEvent(
+            spanID: "span_offset_raw_day_outside_before",
+            inputTokens: 9_000,
+            outputTokens: 1_000,
+            createdAt: "2026-06-06T00:30:00.000+01:00"
+        ))
+        try store.appendEvent(Self.safeEvent(
+            spanID: "span_offset_raw_day_outside_after",
+            inputTokens: 8_000,
+            outputTokens: 2_000,
+            createdAt: "2026-06-06T23:30:00.000-02:00"
+        ))
+
+        XCTAssertEqual(
+            store.totalTokens(startingAt: start, endingBefore: end),
+            430
+        )
+    }
+
     func testStoreBackfillsDashboardBreakdownColumnsForExistingSQLiteRows() throws {
         let store = TokenUsageStore(fileURL: temporaryEventsURL())
         let databaseURL = store.eventsDatabaseURL
@@ -1084,7 +1120,8 @@ final class TokenUsageStoreTests: XCTestCase {
             outputTokens: 70,
             taskType: .debugging,
             stage: .implement,
-            model: "gemini-legacy"
+            model: "gemini-legacy",
+            createdAt: "2026-06-05T23:30:00.000-05:00"
         )
 
         try FileManager.default.createDirectory(
@@ -1124,6 +1161,16 @@ final class TokenUsageStoreTests: XCTestCase {
             "implement",
             "gemini-legacy"
         ]])
+        let dateRows = try sqliteRows(
+            databaseURL: databaseURL,
+            sql: """
+            SELECT created_at
+            FROM token_usage_events
+            WHERE span_id = 'span_legacy_sqlite'
+            """,
+            columnCount: 1
+        )
+        XCTAssertEqual(dateRows, [["2026-06-06T04:30:00.000Z"]])
     }
 
     func testStoreDrainsQueuedInboxEventsAndDeduplicates() throws {

@@ -379,6 +379,7 @@ final class TokenUsageStore: @unchecked Sendable {
         )
         try ensureDashboardColumns(database: database)
         try backfillDashboardColumns(database: database)
+        try normalizeStoredCreatedAtValues(database: database)
         try execute(
             """
             CREATE INDEX IF NOT EXISTS idx_token_usage_events_created_at
@@ -503,6 +504,87 @@ final class TokenUsageStore: @unchecked Sendable {
         }
     }
 
+    private func normalizeStoredCreatedAtValues(database: OpaquePointer) throws {
+        var updates = [(spanID: String, createdAt: String)]()
+        do {
+            let sql = """
+            SELECT span_id, created_at
+            FROM token_usage_events
+            WHERE created_at NOT GLOB '????-??-??T??:??:??.???Z'
+            """
+            var statement: OpaquePointer?
+            guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
+                  let statement
+            else {
+                throw TokenUsageStoreError.databaseWriteFailed
+            }
+            defer { sqlite3_finalize(statement) }
+
+            while sqlite3_step(statement) == SQLITE_ROW {
+                guard let spanIDText = sqlite3_column_text(statement, 0),
+                      let createdAtText = sqlite3_column_text(statement, 1)
+                else {
+                    continue
+                }
+
+                let spanID = String(cString: spanIDText)
+                let createdAt = String(cString: createdAtText)
+                guard let normalizedCreatedAt = Self.normalizedCreatedAt(createdAt),
+                      normalizedCreatedAt != createdAt
+                else {
+                    continue
+                }
+
+                updates.append((spanID: spanID, createdAt: normalizedCreatedAt))
+            }
+        }
+
+        guard !updates.isEmpty else {
+            return
+        }
+
+        try execute("BEGIN IMMEDIATE TRANSACTION", database: database)
+        do {
+            for update in updates {
+                try updateCreatedAt(
+                    spanID: update.spanID,
+                    createdAt: update.createdAt,
+                    database: database
+                )
+            }
+            try execute("COMMIT", database: database)
+        } catch {
+            try? execute("ROLLBACK", database: database)
+            throw error
+        }
+    }
+
+    private func updateCreatedAt(
+        spanID: String,
+        createdAt: String,
+        database: OpaquePointer
+    ) throws {
+        let sql = """
+        UPDATE token_usage_events
+        SET created_at = ?
+        WHERE span_id = ?
+        """
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
+              let statement
+        else {
+            throw TokenUsageStoreError.databaseWriteFailed
+        }
+        defer { sqlite3_finalize(statement) }
+
+        sqlite3_bind_text(statement, 1, createdAt, -1, SQLITE_TRANSIENT)
+        sqlite3_bind_text(statement, 2, spanID, -1, SQLITE_TRANSIENT)
+
+        guard sqlite3_step(statement) == SQLITE_DONE else {
+            throw TokenUsageStoreError.databaseWriteFailed
+        }
+    }
+
     private func updateDashboardColumns(for event: TokenUsageEvent, database: OpaquePointer) throws {
         let sql = """
         UPDATE token_usage_events
@@ -594,7 +676,13 @@ final class TokenUsageStore: @unchecked Sendable {
         let payload = try TokenUsageSanitizer.eventData(event)
         sqlite3_bind_text(statement, 1, event.spanID, -1, SQLITE_TRANSIENT)
         sqlite3_bind_text(statement, 2, event.runID, -1, SQLITE_TRANSIENT)
-        sqlite3_bind_text(statement, 3, event.createdAt, -1, SQLITE_TRANSIENT)
+        sqlite3_bind_text(
+            statement,
+            3,
+            Self.normalizedCreatedAt(event.createdAt) ?? event.createdAt,
+            -1,
+            SQLITE_TRANSIENT
+        )
         sqlite3_bind_text(statement, 4, event.aiTool.rawValue, -1, SQLITE_TRANSIENT)
         sqlite3_bind_text(statement, 5, event.taskType.rawValue, -1, SQLITE_TRANSIENT)
         sqlite3_bind_text(statement, 6, event.stage.rawValue, -1, SQLITE_TRANSIENT)
@@ -671,6 +759,14 @@ final class TokenUsageStore: @unchecked Sendable {
         }
 
         return Int(sqlite3_column_int64(statement, 0))
+    }
+
+    private static func normalizedCreatedAt(_ createdAt: String) -> String? {
+        guard let date = ISO8601DateFormatter.parseTokenUsageDate(from: createdAt) else {
+            return nil
+        }
+
+        return ISO8601DateFormatter.tokenUsage.string(from: date)
     }
 
     private func removeLegacyEventsFileWithoutLock() throws {
