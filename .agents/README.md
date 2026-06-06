@@ -18,6 +18,7 @@ helpers here.
 
 - `specs/prd.md`: Product requirements and scope.
 - `specs/ard.md`: Architecture requirements, decisions, constraints, and module boundaries.
+- `build-and-run.md`: Agent-facing app build, restart, packaging, adapter resource, and token metering hook verification guide.
 - `checklists/release.md`: Spill-specific release checklist used with AgentPlaybook release readiness.
 - `tasks/roadmap.yml`: Structured implementation milestones and acceptance checks.
 - `design/stitch.md`: Stitch project and screen references for UI-scoped work.

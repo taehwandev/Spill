@@ -75,6 +75,10 @@ open .build/Spill.app
 
 The bundled app declares `LSUIElement` and also runs without a Dock icon. If the app appears to do nothing after launch, check the menu bar for the Spill trigger.
 
+Agent-facing details for local app builds, app restarts, release packaging, and
+token-metering adapter resource propagation live in
+[.agents/build-and-run.md](.agents/build-and-run.md).
+
 During development, avoid rebuilding the `.app` while testing Accessibility permission. macOS can treat a newly rebuilt local app as a new permission target.
 
 ### Screen Time and App Limits

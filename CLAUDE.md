@@ -2,6 +2,30 @@
 
 Follow `AGENTS.md`.
 
+## Mandatory: Build And Adapter Changes
+
+Before answering or changing anything related to app builds, app restarts,
+release packaging, token-metering adapters, or runtime hook installation, read
+`.agents/build-and-run.md`.
+
+Key rules from that guide:
+
+- `swift build` only compiles the Swift package. It does not create or refresh
+  `.build/Spill.app`.
+- Use `./scripts/build-app.sh` for the local bundled app, then restart the
+  running `.build/Spill.app/Contents/MacOS/Spill` process before claiming UI or
+  bundled resource changes are visible.
+- Rebuilding the app does not update installed runtime hook scripts under
+  `~/Library/Application Support/Spill/adapters`. If Codex, Claude Code, or
+  Antigravity/AGY hook behavior changed, verify the source/resource copies and
+  reinstall or repair the local adapters before claiming the runtime is using
+  the new hook.
+- Antigravity/AGY is stored as the canonical `antigravity` tool label. `agy` is
+  only an alias.
+- Empty AGY stdin can be a normal no-event lifecycle/tool hook call. Do not
+  treat it as usage failure unless diagnostics and stored events also show no
+  real model usage was recorded.
+
 ## Mandatory: Route Before Every Task
 
 **Every task — including direct questions, single-step edits, and reviews —
