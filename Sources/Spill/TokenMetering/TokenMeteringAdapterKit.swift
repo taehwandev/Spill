@@ -146,6 +146,7 @@ enum TokenMeteringAdapterKit {
         hookConfigTemplate: """
         Add a named "spill-metering" hook spec to ~/.gemini/config/hooks.json.
         AGY parses each root key as a JSONHookSpec name, so root-level PostInvocation arrays are rejected.
+        If the installed script path contains spaces, the setup helper may put ~/.gemini/spill-hook.py in this config as a compatibility symlink or fresh copy to the installed hook.
 
         {
           "spill-metering": {

@@ -498,7 +498,13 @@ private enum TokenMeteringAdapterConnectionDiagnostics {
             return false
         }
 
-        return hookCommands(in: postInvocation).contains { commandMatches($0, scriptURL: scriptURL) }
+        return hookCommands(in: postInvocation).contains {
+            commandMatches(
+                $0,
+                scriptURL: scriptURL,
+                compatibilityURLs: [homeURL(".gemini/spill-hook.py")]
+            )
+        }
     }
 
     private static func hookCommands(in value: Any) -> [String] {
@@ -514,8 +520,37 @@ private enum TokenMeteringAdapterConnectionDiagnostics {
         return []
     }
 
-    private static func commandMatches(_ command: String, scriptURL: URL) -> Bool {
-        command.contains(scriptURL.path)
+    private static func commandMatches(
+        _ command: String,
+        scriptURL: URL,
+        compatibilityURLs: [URL] = []
+    ) -> Bool {
+        ([scriptURL] + compatibilityURLs).contains { candidateURL in
+            command.contains(candidateURL.path)
+                && scriptReferenceMatches(candidateURL, expectedURL: scriptURL)
+        }
+    }
+
+    private static func scriptReferenceMatches(_ candidateURL: URL, expectedURL: URL) -> Bool {
+        if candidateURL.path == expectedURL.path {
+            return true
+        }
+
+        let fileManager = FileManager.default
+        guard fileManager.fileExists(atPath: candidateURL.path),
+              fileManager.fileExists(atPath: expectedURL.path)
+        else {
+            return false
+        }
+
+        if candidateURL.resolvingSymlinksInPath().path == expectedURL.resolvingSymlinksInPath().path {
+            return true
+        }
+
+        return fileManager.contentsEqual(
+            atPath: candidateURL.path,
+            andPath: expectedURL.path
+        )
     }
 
     private static func readJSONObject(_ url: URL) -> Any? {
