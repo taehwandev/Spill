@@ -148,6 +148,80 @@ struct TokenUsageDashboardSnapshot: Equatable {
     let overallLastUpdatedString: String?
     let comparisonTotalTokens: Int?
 
+    static func buildPair(
+        events: [TokenUsageEvent],
+        selectedTool: TokenUsageAITool?,
+        selectedPeriod: TokenUsageDashboardPeriod,
+        selectedCalendarDayID: String?,
+        selectedSessionID: String?,
+        displayMode: TokenUsageDisplayMode,
+        language: TokenMeteringLanguage,
+        localAliases: [String: String],
+        showAdvancedTools: Bool,
+        now: Date,
+        proposedCalendarMonthStart: Date?,
+        calendar: Calendar,
+        locale: Locale = .autoupdatingCurrent,
+        timeZone: TimeZone = .autoupdatingCurrent
+    ) -> TokenUsageDashboardSnapshotPair {
+        let context = TokenUsageDashboardSnapshotBuildContext(
+            events: events,
+            showAdvancedTools: showAdvancedTools,
+            calendar: calendar
+        )
+        let selectedDayMonth = selectedCalendarDayID
+            .flatMap { date(forDayID: $0, calendar: calendar) }
+            .map { monthStart(for: $0, calendar: calendar) }
+        let displayCalendarMonth = normalizedCalendarMonthStart(
+            events: context.dashboardEvents,
+            now: now,
+            proposedMonthStart: proposedCalendarMonthStart ?? selectedDayMonth,
+            calendar: calendar
+        )
+        let filtered = TokenUsageDashboardSnapshot(
+            context: context,
+            selectedTool: selectedTool,
+            selectedPeriod: selectedPeriod,
+            selectedCalendarDayID: selectedCalendarDayID,
+            selectedSessionID: selectedSessionID,
+            displayMode: displayMode,
+            language: language,
+            localAliases: localAliases,
+            showAdvancedTools: showAdvancedTools,
+            now: now,
+            calendarMonthStart: displayCalendarMonth,
+            resolvedCalendarMonthStart: displayCalendarMonth,
+            calendar: calendar,
+            locale: locale,
+            timeZone: timeZone
+        )
+        let unfiltered = selectedTool == nil
+            ? filtered
+            : TokenUsageDashboardSnapshot(
+                context: context,
+                selectedTool: nil,
+                selectedPeriod: selectedPeriod,
+                selectedCalendarDayID: selectedCalendarDayID,
+                selectedSessionID: nil,
+                displayMode: displayMode,
+                language: language,
+                localAliases: localAliases,
+                showAdvancedTools: showAdvancedTools,
+                now: now,
+                calendarMonthStart: displayCalendarMonth,
+                resolvedCalendarMonthStart: displayCalendarMonth,
+                calendar: calendar,
+                locale: locale,
+                timeZone: timeZone
+            )
+
+        return TokenUsageDashboardSnapshotPair(
+            filtered: filtered,
+            unfiltered: unfiltered,
+            calendarMonthStart: displayCalendarMonth
+        )
+    }
+
     init(
         events: [TokenUsageEvent],
         selectedTool: TokenUsageAITool? = nil,
@@ -164,16 +238,47 @@ struct TokenUsageDashboardSnapshot: Equatable {
         locale: Locale = .autoupdatingCurrent,
         timeZone: TimeZone = .autoupdatingCurrent
     ) {
+        self.init(
+            context: TokenUsageDashboardSnapshotBuildContext(
+                events: events,
+                showAdvancedTools: showAdvancedTools,
+                calendar: calendar
+            ),
+            selectedTool: selectedTool,
+            selectedPeriod: selectedPeriod,
+            selectedCalendarDayID: selectedCalendarDayID,
+            selectedSessionID: selectedSessionID,
+            displayMode: displayMode,
+            language: language,
+            localAliases: localAliases,
+            showAdvancedTools: showAdvancedTools,
+            now: now,
+            calendarMonthStart: calendarMonthStart,
+            calendar: calendar,
+            locale: locale,
+            timeZone: timeZone
+        )
+    }
+
+    private init(
+        context: TokenUsageDashboardSnapshotBuildContext,
+        selectedTool: TokenUsageAITool? = nil,
+        selectedPeriod: TokenUsageDashboardPeriod = .all,
+        selectedCalendarDayID: String? = nil,
+        selectedSessionID: String? = nil,
+        displayMode: TokenUsageDisplayMode = .tokens,
+        language: TokenMeteringLanguage = .current(),
+        localAliases: [String: String] = [:],
+        showAdvancedTools: Bool = false,
+        now: Date = Date(),
+        calendarMonthStart: Date? = nil,
+        resolvedCalendarMonthStart: Date? = nil,
+        calendar: Calendar = .autoupdatingCurrent,
+        locale: Locale = .autoupdatingCurrent,
+        timeZone: TimeZone = .autoupdatingCurrent
+    ) {
         self.displayMode = displayMode
-        let dashboardEvents = events.compactMap { event -> TokenUsageDashboardParsedEvent? in
-            if showAdvancedTools {
-                return TokenUsageDashboardParsedEvent(event: event, calendar: calendar)
-            } else {
-                return event.aiTool.isDashboardTool
-                    ? TokenUsageDashboardParsedEvent(event: event, calendar: calendar)
-                    : nil
-            }
-        }
+        let dashboardEvents = context.dashboardEvents
         let selectedDayID = selectedCalendarDayID.flatMap { Self.date(forDayID: $0, calendar: calendar) == nil ? nil : $0 }
         self.selectedCalendarDayID = selectedDayID
         selectedCalendarDayTitle = selectedDayID.flatMap {
@@ -398,7 +503,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
         let selectedDayMonth = selectedDayID
             .flatMap { Self.date(forDayID: $0, calendar: calendar) }
             .map { Self.monthStart(for: $0, calendar: calendar) }
-        let calendarMonth = Self.normalizedCalendarMonthStart(
+        let calendarMonth = resolvedCalendarMonthStart ?? Self.normalizedCalendarMonthStart(
             events: dashboardEvents,
             now: now,
             proposedMonthStart: calendarMonthStart ?? selectedDayMonth,
@@ -1083,6 +1188,32 @@ private struct TokenUsageDashboardParsedEvent {
         self.dayBucket = parsedDate.map {
             TokenUsageDashboardSnapshot.dayID(for: $0, calendar: calendar)
         } ?? String(event.createdAt.prefix(10))
+    }
+}
+
+struct TokenUsageDashboardSnapshotPair {
+    let filtered: TokenUsageDashboardSnapshot
+    let unfiltered: TokenUsageDashboardSnapshot
+    let calendarMonthStart: Date
+}
+
+private struct TokenUsageDashboardSnapshotBuildContext {
+    let dashboardEvents: [TokenUsageDashboardParsedEvent]
+
+    init(
+        events: [TokenUsageEvent],
+        showAdvancedTools: Bool,
+        calendar: Calendar
+    ) {
+        dashboardEvents = events.compactMap { event -> TokenUsageDashboardParsedEvent? in
+            if showAdvancedTools {
+                return TokenUsageDashboardParsedEvent(event: event, calendar: calendar)
+            }
+
+            return event.aiTool.isDashboardTool
+                ? TokenUsageDashboardParsedEvent(event: event, calendar: calendar)
+                : nil
+        }
     }
 }
 

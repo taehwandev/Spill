@@ -124,18 +124,9 @@ final class TokenUsageDashboardStore: ObservableObject {
         let now = Date()
         var calendar = Calendar.autoupdatingCurrent
         calendar.firstWeekday = 1
-        let displayCalendarMonth = TokenUsageDashboardSnapshot.normalizedCalendarMonthStart(
-            events: events.filter { $0.aiTool.isDashboardTool },
-            now: now,
-            proposedMonthStart: calendarMonthStart ?? selectedCalendarDayID.flatMap {
-                TokenUsageDashboardSnapshot.date(forDayID: $0, calendar: calendar)
-            },
-            calendar: calendar
-        )
-        calendarMonthStart = displayCalendarMonth
         let previousSnapshot = snapshot
         let previousUnfilteredSnapshot = unfilteredSnapshot
-        let filteredSnapshot = TokenUsageDashboardSnapshot(
+        let snapshotPair = TokenUsageDashboardSnapshot.buildPair(
             events: events,
             selectedTool: selectedTool,
             selectedPeriod: selectedPeriod,
@@ -146,27 +137,14 @@ final class TokenUsageDashboardStore: ObservableObject {
             localAliases: SpillSettings.shared.tokenUsageLocalAliases,
             showAdvancedTools: SpillSettings.shared.tokenUsageShowAdvancedTools,
             now: now,
-            calendarMonthStart: displayCalendarMonth,
+            proposedCalendarMonthStart: calendarMonthStart,
             calendar: calendar
         )
+        calendarMonthStart = snapshotPair.calendarMonthStart
+        let filteredSnapshot = snapshotPair.filtered
         selectedSessionID = filteredSnapshot.selectedSession?.id
         snapshot = filteredSnapshot
-        unfilteredSnapshot = selectedTool == nil
-            ? filteredSnapshot
-            : TokenUsageDashboardSnapshot(
-                events: events,
-                selectedTool: nil,
-                selectedPeriod: selectedPeriod,
-                selectedCalendarDayID: selectedCalendarDayID,
-                selectedSessionID: nil,
-                displayMode: displayMode,
-                language: language,
-                localAliases: SpillSettings.shared.tokenUsageLocalAliases,
-                showAdvancedTools: SpillSettings.shared.tokenUsageShowAdvancedTools,
-                now: now,
-                calendarMonthStart: displayCalendarMonth,
-                calendar: calendar
-            )
+        unfilteredSnapshot = snapshotPair.unfiltered
         lastError = nil
         if trackLiveUpdates, let previousEvents {
             publishLiveUpdates(
