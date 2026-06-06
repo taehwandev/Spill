@@ -258,12 +258,54 @@ final class TokenUsageStoreTests: XCTestCase {
     func testOpeningTokenDashboardDismissesPanelBeforeShowingWindow() throws {
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let appDelegate = try String(contentsOf: root.appendingPathComponent("Sources/Spill/App/AppDelegate.swift"))
+        let dashboardView = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardView.swift"))
+        let collector = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenUsageCollectorCoordinator.swift"))
 
         XCTAssertTrue(appDelegate.contains("let wasPanelVisible = spillPanelController.isVisible"))
         XCTAssertTrue(appDelegate.contains("spillPanelController.hide(animated: false)"))
         XCTAssertTrue(appDelegate.contains("Task { @MainActor [weak self] in"))
         XCTAssertTrue(appDelegate.contains("self?.presentTokenDashboardWindow()"))
         XCTAssertTrue(appDelegate.contains("tokenMeteringDashboardWindowController.show()"))
+        XCTAssertTrue(appDelegate.contains("TokenUsageCollectorCoordinator("))
+        XCTAssertTrue(appDelegate.contains("requestTokenUsageCollection(reason: \"panel_open\")"))
+        XCTAssertTrue(appDelegate.contains("requestTokenUsageCollection(reason: \"dashboard_refresh\")"))
+        XCTAssertTrue(appDelegate.contains("requestTokenUsageCollection(reason: \"manual_refresh\")"))
+        XCTAssertTrue(appDelegate.contains("SPILL_SMOKE_ENABLE_TOKEN_COLLECTORS"))
+        XCTAssertTrue(dashboardView.contains("private let refreshAction: () -> Void"))
+        XCTAssertTrue(dashboardView.contains("refreshAction()"))
+        XCTAssertTrue(collector.contains("TokenMeteringAdapterKit.defaultInstallURL(for: TokenMeteringAdapterKit.codex)"))
+        XCTAssertTrue(collector.contains("runCodexImporterIfAvailable()"))
+        XCTAssertFalse(collector.contains("TokenMeteringAdapterKit.claudeCode"))
+        XCTAssertFalse(collector.contains("TokenMeteringAdapterKit.agy"))
+    }
+
+    func testTokenUsageCollectorResolvesNodeWithoutRelyingOnGUIPath() {
+        let explicit = TokenUsageCollectorCoordinator.nodeExecutableURL(
+            environment: [
+                "SPILL_TOKEN_USAGE_NODE": "/custom/bin/node",
+                "NODE_BINARY": "/ignored/node",
+            ],
+            isExecutableFile: { $0 == "/custom/bin/node" }
+        )
+        XCTAssertEqual(explicit?.path, "/custom/bin/node")
+
+        let nodeBinary = TokenUsageCollectorCoordinator.nodeExecutableURL(
+            environment: ["NODE_BINARY": "/configured/node"],
+            isExecutableFile: { $0 == "/configured/node" }
+        )
+        XCTAssertEqual(nodeBinary?.path, "/configured/node")
+
+        let homebrew = TokenUsageCollectorCoordinator.nodeExecutableURL(
+            environment: [:],
+            isExecutableFile: { $0 == "/opt/homebrew/bin/node" }
+        )
+        XCTAssertEqual(homebrew?.path, "/opt/homebrew/bin/node")
+
+        let missing = TokenUsageCollectorCoordinator.nodeExecutableURL(
+            environment: [:],
+            isExecutableFile: { _ in false }
+        )
+        XCTAssertNil(missing)
     }
 
     @MainActor
@@ -350,6 +392,32 @@ final class TokenUsageStoreTests: XCTestCase {
         dashboardStore.setSelectedTool(.claude)
         XCTAssertEqual(dashboardStore.snapshot.eventCount, 1)
         XCTAssertEqual(dashboardStore.unfilteredSnapshot.eventCount, 2)
+    }
+
+    @MainActor
+    func testDashboardRefreshDoesNotDrainInbox() throws {
+        let inboxURL = temporaryInboxURL()
+        let usageStore = TokenUsageStore(fileURL: temporaryEventsURL(), inboxURL: inboxURL)
+        let dashboardStore = dashboardStore(usageStore: usageStore)
+        let event = Self.safeEvent(aiTool: .claude, spanID: "span_dashboard_inbox")
+        let queuedURL = inboxURL.appendingPathComponent("001.json")
+
+        try FileManager.default.createDirectory(
+            at: inboxURL,
+            withIntermediateDirectories: true
+        )
+        try TokenUsageSanitizer.eventData(event).write(to: queuedURL)
+
+        dashboardStore.refresh()
+
+        XCTAssertEqual(dashboardStore.snapshot.eventCount, 0)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: queuedURL.path))
+
+        usageStore.importQueuedEvents()
+        dashboardStore.refresh()
+
+        XCTAssertEqual(dashboardStore.snapshot.eventCount, 1)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: queuedURL.path))
     }
 
     @MainActor
@@ -672,7 +740,10 @@ final class TokenUsageStoreTests: XCTestCase {
         let data = try TokenUsageSanitizer.jsonEncoder.encode([event, duplicate, secondEvent])
         try data.write(to: eventsURL)
 
-        let events = store.loadEvents()
+        XCTAssertEqual(store.loadEvents(), [])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: eventsURL.path))
+
+        let events = store.importQueuedEvents()
 
         XCTAssertEqual(events.map(\.spanID), ["span_local_01", "span_legacy_second"])
         XCTAssertTrue(FileManager.default.fileExists(atPath: store.eventsDatabaseURL.path))
@@ -800,7 +871,12 @@ final class TokenUsageStoreTests: XCTestCase {
         try TokenUsageSanitizer.eventData(inboxEvent).write(to: inboxEventURL)
         try Data("{not-json".utf8).write(to: invalidURL)
 
-        let events = store.loadEvents()
+        XCTAssertEqual(store.loadEvents().map(\.spanID), ["span_local_01"])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: duplicateURL.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: inboxEventURL.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: invalidURL.path))
+
+        let events = store.importQueuedEvents()
 
         XCTAssertEqual(events.map(\.spanID), ["span_local_01", "span_inbox_01"])
         XCTAssertEqual(events.map(\.aiTool), [.codex, .claude])
@@ -832,7 +908,18 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(queuedFiles.filter { $0.pathExtension == "json" }.count, 1)
         XCTAssertEqual(queuedFiles.filter { $0.pathExtension == "tmp" }.count, 0)
 
-        XCTAssertEqual(store.loadEvents(), [event])
+        XCTAssertEqual(store.loadEvents(), [])
+        XCTAssertEqual(
+            try FileManager.default.contentsOfDirectory(
+                at: inboxURL,
+                includingPropertiesForKeys: nil
+            )
+            .filter { $0.pathExtension == "json" }
+            .count,
+            1
+        )
+
+        XCTAssertEqual(store.importQueuedEvents(), [event])
         XCTAssertEqual(
             try FileManager.default.contentsOfDirectory(
                 at: inboxURL,
@@ -860,7 +947,8 @@ final class TokenUsageStoreTests: XCTestCase {
         )
         try Data("\(line)\n{not-json\n".utf8).write(to: legacyURL)
 
-        XCTAssertEqual(store.loadEvents(), [event])
+        XCTAssertEqual(store.loadEvents(), [])
+        XCTAssertEqual(store.importQueuedEvents(), [event])
         XCTAssertFalse(FileManager.default.fileExists(atPath: legacyURL.path))
         XCTAssertEqual(store.loadEvents(), [event])
     }
@@ -999,6 +1087,9 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(prompt.contains("If workflow labels were requested, script-based workflows were checked first"))
         XCTAssertTrue(prompt.contains(#"/bin/bash -c "$(curl -fsSL https://spill.thdev.app/token-metering/install.sh)""#))
         XCTAssertTrue(prompt.contains(#""spill-metering" JSONHookSpec containing PostInvocation[]"#))
+        XCTAssertTrue(prompt.contains("~/.gemini/spill-hook.py"))
+        XCTAssertTrue(prompt.contains("compatibility symlink or fresh copy"))
+        XCTAssertTrue(prompt.contains("matches, the canonical installed hook"))
         XCTAssertTrue(prompt.contains("Do not use a root-level PostInvocation array"))
         XCTAssertFalse(prompt.contains("workflow-setup-prompt.md"))
         XCTAssertFalse(prompt.contains("Do not nest AGY hooks under \"spill-metering\""))
@@ -1028,6 +1119,7 @@ final class TokenUsageStoreTests: XCTestCase {
         let helper = try String(contentsOf: root.appendingPathComponent("adapters/setup/spill-token-metering-setup.mjs"))
         let agyHook = try String(contentsOf: root.appendingPathComponent("adapters/antigravity/spill-hook.py"))
         let bundledAgyHook = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Resources/adapters/antigravity/spill-hook.py"))
+        let preferencesSection = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Preferences/TokenMeteringPreferencesSection.swift"))
 
         XCTAssertTrue(setup.contains("MANDATORY ACTION: install or repair Spill token metering now"))
         XCTAssertTrue(setup.contains("https://spill.thdev.app/token-metering/install.sh"))
@@ -1068,6 +1160,9 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(setup.contains("code_generation"))
         XCTAssertTrue(setup.contains("git_commit"))
         XCTAssertTrue(setup.contains("commit_message"))
+        XCTAssertTrue(setup.contains("canonical installed hook lives at `~/Library/Application Support/Spill/adapters/antigravity/spill-hook.py`"))
+        XCTAssertTrue(setup.contains("`python3 '~/.gemini/spill-hook.py'`"))
+        XCTAssertTrue(setup.contains("compatibility file resolves to, or matches, the canonical installed hook"))
         XCTAssertTrue(setup.contains("--label <current-tool>"))
         XCTAssertTrue(setup.contains("Never let Claude"))
         XCTAssertTrue(setup.contains("Never encode project names"))
@@ -1153,11 +1248,15 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(helper.contains(#""claude""#))
         XCTAssertTrue(helper.contains(#""antigravity""#))
         XCTAssertTrue(helper.contains(#".claude", "settings.json"#))
+        XCTAssertTrue(helper.contains(#".gemini", "spill-hook.py"#))
         XCTAssertTrue(helper.contains(#".gemini", "antigravity-cli", "settings.json"#))
         XCTAssertFalse(helper.contains("Allow trusted AgentPlaybook"))
         XCTAssertTrue(helper.contains("permissionPathVariants"))
         XCTAssertTrue(helper.contains("homeEnvironmentPathVariants"))
         XCTAssertTrue(helper.contains("doubleQuote(path)"))
+        XCTAssertTrue(preferencesSection.contains(#"compatibilityURLs: [homeURL(".gemini/spill-hook.py")]"#))
+        XCTAssertTrue(preferencesSection.contains("resolvingSymlinksInPath()"))
+        XCTAssertTrue(preferencesSection.contains("contentsEqual("))
         XCTAssertTrue(helper.contains("$HOME/${suffix}"))
         XCTAssertTrue(helper.contains(#"\${HOME}/${suffix}"#))
         XCTAssertTrue(helper.contains(#"normalized === "agy""#))
@@ -1186,6 +1285,10 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(agyHook.contains(#""input""#))
         XCTAssertTrue(agyHook.contains(#""output""#))
         XCTAssertFalse(agyHook.contains("def _usage_metadata_total"))
+        XCTAssertFalse(agyHook.contains("agentcat"))
+        XCTAssertFalse(agyHook.contains("telemetry.log"))
+        XCTAssertFalse(agyHook.contains("/tmp/spill-hook-debug.log"))
+        XCTAssertFalse(agyHook.contains("Raw stdin"))
         XCTAssertTrue(agyHook.contains("No payload values"))
         XCTAssertEqual(agyHook, bundledAgyHook)
     }
@@ -1292,6 +1395,8 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(agyConfig.contains(#""matcher": """#))
         XCTAssertTrue(agyConfig.contains("python3 '/tmp/Spill Support/adapters/antigravity/spill-hook.py'"))
         XCTAssertTrue(agyConfig.contains("root-level PostInvocation arrays are rejected"))
+        XCTAssertTrue(agyConfig.contains("~/.gemini/spill-hook.py"))
+        XCTAssertTrue(agyConfig.contains("compatibility symlink or fresh copy"))
         XCTAssertFalse(agyConfig.contains("Do not nest this under \"spill-metering\""))
     }
 

@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_EXEC="$ROOT_DIR/.build/Spill.app/Contents/MacOS/Spill"
 LOG_FILE="${TMPDIR:-/tmp}/spill-token-metering-smoke.log"
 EVENTS_FILE="$(mktemp "${TMPDIR:-/tmp}/spill-token-metering-events.XXXXXX.json")"
+EVENTS_DB="${EVENTS_FILE%.json}.sqlite3"
 INBOX_DIR="$(mktemp -d "${TMPDIR:-/tmp}/spill-token-metering-inbox.XXXXXX")"
 ADAPTER_TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/spill-token-metering-adapters.XXXXXX")"
 PID=""
@@ -15,14 +16,14 @@ cleanup() {
         wait "$PID" 2>/dev/null || true
     fi
 
-    rm -f "$EVENTS_FILE"
+    rm -f "$EVENTS_FILE" "$EVENTS_DB" "$EVENTS_DB-shm" "$EVENTS_DB-wal"
     rm -rf "$INBOX_DIR" "$ADAPTER_TMP_DIR"
 }
 trap cleanup EXIT
 
 "$ROOT_DIR/scripts/build-app.sh"
 
-rm -f "$LOG_FILE" "$EVENTS_FILE"
+rm -f "$LOG_FILE" "$EVENTS_FILE" "$EVENTS_DB" "$EVENTS_DB-shm" "$EVENTS_DB-wal"
 
 HOOK_TIMESTAMP="$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")"
 HOOK_COMPACT_TIMESTAMP="${HOOK_TIMESTAMP//[-:.]/}"
@@ -395,6 +396,8 @@ SPILL_SMOKE_OPEN_PANEL=1 \
 SPILL_SMOKE_TEST_EXIT_AFTER=1.2 \
 SPILL_TOKEN_USAGE_EVENTS_FILE="$EVENTS_FILE" \
 SPILL_TOKEN_USAGE_INBOX_DIR="$INBOX_DIR" \
+SPILL_CODEX_IMPORT_STATE="$ADAPTER_TMP_DIR/app-codex-state.json" \
+CODEX_HOME="$CODEX_HOME_DIR" \
 SPILL_TOKEN_USAGE_BRIDGE_DISABLED=1 \
 "$APP_EXEC" >"$LOG_FILE" 2>&1 &
 PID="$!"
@@ -417,7 +420,7 @@ if ! wait "$PID"; then
 fi
 PID=""
 
-EVENTS_JSON_DATA=$(sqlite3 "${EVENTS_FILE%.json}.sqlite3" "SELECT json_group_array(json(payload_json)) FROM token_usage_events")
+EVENTS_JSON_DATA=$(sqlite3 "$EVENTS_DB" "SELECT json_group_array(json(payload_json)) FROM token_usage_events")
 
 HOOK_SPAN_ID="$HOOK_SPAN_ID" EVENTS_JSON_DATA="$EVENTS_JSON_DATA" INBOX_DIR="$INBOX_DIR" node --input-type=module <<'NODE'
 import { readdir } from 'node:fs/promises';
