@@ -14,7 +14,7 @@ struct TokenMeteringDashboardView: View {
     @State private var isDiagnosticsExpanded = false
     @State private var hoveredFilterTitle: String? = nil
     @State private var pendingClearRequest: TokenUsageClearRequest?
-    @State private var presentedWorkItemID: String?
+    @State private var aliasText = ""
     private let refreshAction: () -> Void
     private let titleDidChange: () -> Void
 
@@ -54,6 +54,7 @@ struct TokenMeteringDashboardView: View {
 
                 ScrollView(.vertical, showsIndicators: true) {
                     VStack(alignment: .leading, spacing: 16) {
+                        activeWindowHeader
                         kpiStrip
                         analyticsGrid
                         sessionsTable
@@ -62,8 +63,13 @@ struct TokenMeteringDashboardView: View {
                     .frame(maxWidth: .infinity, alignment: .topLeading)
                 }
 
-                rightRail
-                    .frame(width: 286)
+                if let selectedSession = store.snapshot.selectedSession {
+                    detailPanel(for: selectedSession)
+                        .frame(width: 320)
+                } else {
+                    rightRail
+                        .frame(width: 286)
+                }
             }
             .padding(.horizontal, 18)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -78,6 +84,13 @@ struct TokenMeteringDashboardView: View {
         .onChange(of: settings.appLanguage) { _, _ in
             titleDidChange()
             store.setLanguage(currentLanguage)
+        }
+        .onChange(of: store.selectedSessionID) { _, newID in
+            if let newID {
+                aliasText = settings.tokenUsageLocalAliases[newID] ?? ""
+            } else {
+                aliasText = ""
+            }
         }
         .alert(
             t(.deleteTokenDataTitle),
@@ -234,6 +247,20 @@ struct TokenMeteringDashboardView: View {
                                 store.setSelectedTool(filter.tool)
                             }
                         }
+
+                        Divider().opacity(0.35)
+
+                        Toggle(isOn: Binding(
+                            get: { settings.tokenUsageShowAdvancedTools },
+                            set: { store.setAdvancedToolsEnabled($0) }
+                        )) {
+                            Text(currentLanguage == .korean ? "고급 툴 표시" : (currentLanguage == .japanese ? "詳細ツールを表示" : "Show Advanced Tools"))
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(.secondary)
+                        }
+                        .toggleStyle(.checkbox)
+                        .padding(.top, 4)
+                        .focusEffectDisabled()
                     }
                 }
 
@@ -252,7 +279,7 @@ struct TokenMeteringDashboardView: View {
                     }
                 }
 
-                diagnostics
+                diagnosticsPanel
             }
             .padding(.vertical, 18)
         }
@@ -458,8 +485,8 @@ struct TokenMeteringDashboardView: View {
 
     private var sessionsTable: some View {
         dashboardPanel(
-            title: t(.runs),
-            subtitle: t(.runsSubtitle),
+            title: currentLanguage == .korean ? "작업 단위" : "Work Items",
+            subtitle: currentLanguage == .korean ? "사용 툴, 작업 종류, 날짜별 그룹화된 세션" : "Sessions grouped by tool, task type, and date",
             infoTitle: t(.runsInfoTitle),
             infoDetail: t(.runsInfoDetail)
         ) {
@@ -471,7 +498,7 @@ struct TokenMeteringDashboardView: View {
             } else {
                 VStack(spacing: 0) {
                     HStack(spacing: 12) {
-                        tableHeader(t(.run))
+                        tableHeader(currentLanguage == .korean ? "작업 항목" : "Work Item")
                         tableHeader(t(.events))
                             .frame(width: 150, alignment: .leading)
                         tableHeader(t(.tokens))
@@ -481,12 +508,15 @@ struct TokenMeteringDashboardView: View {
                     .padding(.bottom, 8)
 
                     ForEach(store.snapshot.sessions.prefix(8)) { session in
-                        let isSelected = presentedWorkItemID == session.id
+                        let isSelected = store.selectedSessionID == session.id
                         let liveUpdateID = "session:\(session.id)"
                         let isLiveUpdated = store.isLiveUpdated(liveUpdateID)
                         Button {
-                            store.clearWorkItemSelection()
-                            presentedWorkItemID = session.id
+                            if isSelected {
+                                store.clearWorkItemSelection()
+                            } else {
+                                store.selectSession(session.id)
+                            }
                         } label: {
                             HStack(spacing: 12) {
                                 HStack(spacing: 6) {
@@ -521,26 +551,11 @@ struct TokenMeteringDashboardView: View {
                         }
                         .buttonStyle(.plain)
                         .padding(.top, 6)
-                        .popover(
-                            isPresented: Binding(
-                                get: {
-                                    presentedWorkItemID == session.id
-                                },
-                                set: { isPresented in
-                                    if !isPresented, presentedWorkItemID == session.id {
-                                        presentedWorkItemID = nil
-                                    }
-                                }
-                            ),
-                            arrowEdge: .trailing
-                        ) {
-                            workItemPopover(session)
-                        }
                         .contextMenu {
                             Button(role: .destructive) {
                                 requestClear(.workItem(session.id))
-                                if presentedWorkItemID == session.id {
-                                    presentedWorkItemID = nil
+                                if store.selectedSessionID == session.id {
+                                    store.clearWorkItemSelection()
                                 }
                             } label: {
                                 Label(t(.clearSelectedWorkItem), systemImage: "trash")
@@ -552,21 +567,69 @@ struct TokenMeteringDashboardView: View {
         }
     }
 
-    private func workItemPopover(_ session: TokenUsageDashboardSessionRow) -> some View {
+    private var activeAccumulationWindowText: String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale.current
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+
+        let now = Date()
+        let calendar = Calendar.current
+
+        switch store.selectedPeriod {
+        case .today:
+            return formatter.string(from: now)
+        case .sevenDays:
+            if let startDate = calendar.date(byAdding: .day, value: -7, to: now) {
+                return "\(formatter.string(from: startDate)) – \(formatter.string(from: now))"
+            }
+            return "Last 7 Days"
+        case .thirtyDays:
+            if let startDate = calendar.date(byAdding: .day, value: -30, to: now) {
+                return "\(formatter.string(from: startDate)) – \(formatter.string(from: now))"
+            }
+            return "Last 30 Days"
+        case .all:
+            return currentLanguage == .korean ? "전체 기간 누적" : "All Accumulated History"
+        }
+    }
+
+    private var activeWindowHeader: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "calendar")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(.teal)
+            Text(currentLanguage == .korean
+                ? "집계 윈도우: \(activeAccumulationWindowText)"
+                : "Active window: \(activeAccumulationWindowText)"
+            )
+            .font(.system(size: 11, weight: .bold))
+            .foregroundStyle(.secondary)
+            Spacer()
+        }
+        .padding(.horizontal, 4)
+    }
+
+    private func detailPanel(for session: TokenUsageDashboardSessionRow) -> some View {
         let detailSnapshot = store.snapshotForWorkItem(session.id)
         let detailSession = detailSnapshot.selectedSession ?? session
         let kpisByID = Dictionary(uniqueKeysWithValues: detailSnapshot.kpis.map { ($0.id, $0) })
+        let sourceRows = detailSnapshot.sourceRows
+        let hasDetailedSources = sourceRows.contains { row in
+            row.id != "unknown" && row.ratio > 0
+        }
+        let isRuntimeTotalOnly = !hasDetailedSources && detailSnapshot.totalTokens > 0
 
         return ScrollView(.vertical, showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 13) {
+            VStack(alignment: .leading, spacing: 14) {
                 HStack(alignment: .top, spacing: 8) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(t(.selectedRun).uppercased())
+                        Text(currentLanguage == .korean ? "선택된 작업" : "SELECTED WORK ITEM")
                             .font(.system(size: 9, weight: .black))
                             .tracking(1.0)
                             .foregroundStyle(.secondary)
                         Text(detailSession.title)
-                            .font(.system(size: 13, weight: .bold))
+                            .font(.system(size: 14, weight: .bold))
                             .lineLimit(2)
                         Text(detailSession.detail)
                             .font(.system(size: 10, weight: .medium))
@@ -577,13 +640,59 @@ struct TokenMeteringDashboardView: View {
                     Spacer(minLength: 8)
 
                     Button {
-                        presentedWorkItemID = nil
+                        store.clearWorkItemSelection()
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.system(size: 14, weight: .semibold))
                             .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.plain)
+                }
+
+                Divider()
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(currentLanguage == .korean ? "로컬 별칭" : "Local Alias")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(.secondary)
+
+                    HStack(spacing: 8) {
+                        TextField(
+                            currentLanguage == .korean ? "예: 기능 개발, 버그 수정" : "e.g., Feature Dev, Bug Fix",
+                            text: $aliasText
+                        )
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(size: 11))
+                        .onSubmit {
+                            store.updateAlias(for: session.id, alias: aliasText)
+                        }
+
+                        Button(currentLanguage == .korean ? "적용" : "Apply") {
+                            store.updateAlias(for: session.id, alias: aliasText)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.teal)
+                        .font(.system(size: 10, weight: .bold))
+
+                        if !aliasText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            Button(currentLanguage == .korean ? "삭제" : "Clear") {
+                                aliasText = ""
+                                store.updateAlias(for: session.id, alias: "")
+                            }
+                            .buttonStyle(.bordered)
+                            .font(.system(size: 10, weight: .medium))
+                        }
+                    }
+
+                    Text(currentLanguage == .korean ? "기기에만 저장되며 원본 토큰 데이터는 변경되지 않습니다." : "Saved locally on this device; raw token data remains unchanged.")
+                        .font(.system(size: 8.5, weight: .medium))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(10)
+                .background(Color.primary.opacity(0.02), in: RoundedRectangle(cornerRadius: 8))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(Color.primary.opacity(0.04), lineWidth: 0.5)
                 }
 
                 VStack(spacing: 8) {
@@ -609,6 +718,13 @@ struct TokenMeteringDashboardView: View {
                             value: kpisByID["output"]?.value ?? "-"
                         )
                     }
+
+                    let rawLatency = kpisByID["latency"]?.value ?? ""
+                    let isLatencyUnavailable = rawLatency.contains("ms") == false
+                    metricPill(
+                        title: t(.avgLatency),
+                        value: isLatencyUnavailable ? (currentLanguage == .korean ? "측정 불가" : "Unavailable") : rawLatency
+                    )
                 }
 
                 workItemPopoverSection(
@@ -617,36 +733,95 @@ struct TokenMeteringDashboardView: View {
                     emptyText: t(.noAIToolData),
                     idPrefix: "tool"
                 )
+
                 workItemPopoverSection(
                     title: t(.modelBreakdown),
                     rows: detailSnapshot.modelRows.prefix(4),
                     emptyText: t(.noModelData),
                     idPrefix: "model"
                 )
+
                 workItemPopoverSection(
                     title: t(.workflowBreakdown),
                     rows: detailSnapshot.taskRows.prefix(4),
                     emptyText: t(.noWorkflowData),
                     idPrefix: "task"
                 )
+
                 workItemPopoverSection(
                     title: t(.stageBreakdown),
                     rows: detailSnapshot.stageRows.prefix(4),
                     emptyText: t(.noStageData),
                     idPrefix: "stage"
                 )
-                workItemPopoverSection(
-                    title: t(.sourceBreakdown),
-                    rows: detailSnapshot.sourceRows.prefix(4),
-                    emptyText: t(.noSourceBreakdown),
-                    idPrefix: "source"
-                )
 
+                VStack(alignment: .leading, spacing: 7) {
+                    HStack(spacing: 6) {
+                        Text(t(.sourceBreakdown).uppercased())
+                            .font(.system(size: 8.5, weight: .black))
+                            .tracking(0.9)
+                            .foregroundStyle(.secondary)
+
+                        Spacer()
+
+                        if isRuntimeTotalOnly {
+                            HStack(spacing: 4) {
+                                Text(currentLanguage == .korean ? "토탈만 제공됨" : "Runtime Total Only")
+                                    .font(.system(size: 8, weight: .bold))
+                                    .foregroundStyle(.orange)
+                                    .padding(.horizontal, 5)
+                                    .padding(.vertical, 1.5)
+                                    .background(Color.orange.opacity(0.12), in: Capsule())
+
+                                TokenMeteringInfoButton(
+                                    title: currentLanguage == .korean ? "누적 토큰만 기록됨" : "Cumulative Tokens Only",
+                                    detail: currentLanguage == .korean
+                                        ? "이 AI 어댑터 런타임은 상세 분석을 지원하지 않아 합산만 기록되었습니다."
+                                        : "This AI adapter runtime does not expose system/user/history breakdown; only aggregate totals were recorded."
+                                )
+                            }
+                        }
+                    }
+
+                    compactSummaryRows(detailSnapshot.sourceRows.prefix(4), emptyText: t(.noSourceBreakdown), idPrefix: "source")
+                }
+                .padding(10)
+                .background(Color.primary.opacity(0.025), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(Color.primary.opacity(0.04), lineWidth: 0.5)
+                }
+
+                DisclosureGroup {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Session ID: \(session.id)")
+                        Text("Run ID: \(session.runID)")
+                    }
+                    .font(.system(size: 9, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 4)
+                } label: {
+                    Text(currentLanguage == .korean ? "개발자 진단 코드" : "Diagnostics Codes")
+                        .font(.system(size: 10, weight: .semibold))
+                }
+                .padding(10)
+                .background(Color.primary.opacity(0.02), in: RoundedRectangle(cornerRadius: 8))
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(t(.privacyBoundary))
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(.secondary)
+                    Text(t(.privacyBoundaryDetail))
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(10)
+                .background(Color.primary.opacity(0.02), in: RoundedRectangle(cornerRadius: 8))
             }
-            .padding(14)
+            .padding(.vertical, 18)
         }
-        .frame(width: 380, alignment: .leading)
-        .frame(maxHeight: 560, alignment: .topLeading)
+        .frame(maxHeight: .infinity, alignment: .topLeading)
     }
 
     private func workItemPopoverSection<T: Collection>(
@@ -670,8 +845,8 @@ struct TokenMeteringDashboardView: View {
         }
     }
 
-    private var diagnostics: some View {
-        DisclosureGroup(isExpanded: $isDiagnosticsExpanded) {
+    private var diagnosticsPanel: some View {
+        railPanel(title: t(.diagnostics)) {
             VStack(alignment: .leading, spacing: 8) {
                 Text(t(.diagnosticsDetail))
                     .font(.system(size: 10, weight: .medium))
@@ -683,8 +858,14 @@ struct TokenMeteringDashboardView: View {
                         await store.runLocalQueueSelfTest()
                     }
                 } label: {
-                    Label(store.isRunningSelfTest ? t(.writing) : t(.queueTest), systemImage: store.isRunningSelfTest ? "hourglass" : "tray.and.arrow.down")
+                    HStack {
+                        Image(systemName: store.isRunningSelfTest ? "hourglass" : "tray.and.arrow.down")
+                        Text(store.isRunningSelfTest ? t(.writing) : t(.queueTest))
+                    }
+                    .frame(maxWidth: .infinity)
                 }
+                .buttonStyle(.borderedProminent)
+                .tint(.teal)
                 .disabled(store.isRunningSelfTest)
 
                 if let selfTestMessage = store.selfTestMessage {
@@ -701,20 +882,6 @@ struct TokenMeteringDashboardView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            .padding(.top, 8)
-        } label: {
-            Label(t(.diagnostics), systemImage: "stethoscope")
-                .font(.system(size: 11, weight: .semibold))
-        }
-        .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(.ultraThinMaterial)
-                .shadow(color: Color.black.opacity(0.03), radius: 6, x: 0, y: 3)
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(Color.primary.opacity(0.07), lineWidth: 0.5)
         }
     }
 

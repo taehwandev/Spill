@@ -148,6 +148,8 @@ struct TokenUsageDashboardSnapshot: Equatable {
         selectedSessionID: String? = nil,
         displayMode: TokenUsageDisplayMode = .tokens,
         language: TokenMeteringLanguage = .current(),
+        localAliases: [String: String] = [:],
+        showAdvancedTools: Bool = false,
         now: Date = Date(),
         calendarMonthStart: Date? = nil,
         calendar: Calendar = .autoupdatingCurrent,
@@ -155,7 +157,13 @@ struct TokenUsageDashboardSnapshot: Equatable {
         timeZone: TimeZone = .autoupdatingCurrent
     ) {
         self.displayMode = displayMode
-        let dashboardEvents = events.filter { $0.aiTool.isDashboardTool }
+        let dashboardEvents = events.filter { event in
+            if showAdvancedTools {
+                return true
+            } else {
+                return event.aiTool.isDashboardTool
+            }
+        }
 
         codexLastUpdated = dashboardEvents
             .filter { $0.aiTool == .codex }
@@ -190,6 +198,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
             displayMode: displayMode,
             totalTokens: visibleEvents.reduce(0) { $0 + $1.totalTokens },
             language: language,
+            localAliases: localAliases,
             calendar: calendar,
             locale: locale,
             timeZone: timeZone
@@ -229,6 +238,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
             selectedTool: selectedDashboardTool,
             totals: allToolTotals,
             totalEvents: periodEvents.count,
+            showAdvancedTools: showAdvancedTools,
             language: language
         )
 
@@ -521,6 +531,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
         selectedTool: TokenUsageAITool?,
         totals: [TokenUsageAITool: Int],
         totalEvents: Int,
+        showAdvancedTools: Bool,
         language: TokenMeteringLanguage
     ) -> [TokenUsageDashboardToolFilter] {
         let allTotal = totals.values.reduce(0, +)
@@ -534,7 +545,10 @@ struct TokenUsageDashboardSnapshot: Equatable {
             ),
             isSelected: selectedTool == nil
         )
-        let toolFilters = TokenUsageAITool.dashboardTools.map { tool in
+        let toolsToShow: [TokenUsageAITool] = showAdvancedTools
+            ? TokenUsageAITool.allCases
+            : TokenUsageAITool.dashboardTools
+        let toolFilters = toolsToShow.map { tool in
             TokenUsageDashboardToolFilter(
                 tool: tool,
                 title: tool.dashboardLabel(language: language),
@@ -565,6 +579,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
         displayMode: TokenUsageDisplayMode,
         totalTokens: Int,
         language: TokenMeteringLanguage,
+        localAliases: [String: String],
         calendar: Calendar,
         locale: Locale,
         timeZone: TimeZone
@@ -599,7 +614,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
                     row: TokenUsageDashboardSessionRow(
                         id: key.id,
                         runID: key.id,
-                        title: Self.workItemTitle(key: key, language: language),
+                        title: localAliases[key.id] ?? Self.workItemTitle(key: key, language: language),
                         value: valueStr,
                         detail: TokenMeteringL10n.spansDetail(
                             spanCount: groupedEvents.count,

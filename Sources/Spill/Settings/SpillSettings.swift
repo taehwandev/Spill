@@ -209,6 +209,14 @@ final class SpillSettings: ObservableObject {
         didSet { defaults.set(tokenMeteringPromptAllowsLocalDisplayNames, forKey: Keys.tokenMeteringPromptAllowsLocalDisplayNames) }
     }
 
+    @Published var tokenUsageLocalAliases: [String: String] {
+        didSet { defaults.set(tokenUsageLocalAliases, forKey: Keys.tokenUsageLocalAliases) }
+    }
+
+    @Published var tokenUsageShowAdvancedTools: Bool {
+        didSet { defaults.set(tokenUsageShowAdvancedTools, forKey: Keys.tokenUsageShowAdvancedTools) }
+    }
+
     private let defaults: UserDefaults
 
     init(defaults: UserDefaults = .standard) {
@@ -291,6 +299,8 @@ final class SpillSettings: ObservableObject {
         launchAtLogin = LoginItemController.isEnabled
         tokenUsageBridgeEnabled = defaults.object(forKey: Keys.tokenUsageBridgeEnabled) as? Bool ?? false
         tokenMeteringPromptAllowsLocalDisplayNames = defaults.object(forKey: Keys.tokenMeteringPromptAllowsLocalDisplayNames) as? Bool ?? false
+        tokenUsageLocalAliases = defaults.dictionary(forKey: Keys.tokenUsageLocalAliases) as? [String: String] ?? [:]
+        tokenUsageShowAdvancedTools = defaults.object(forKey: Keys.tokenUsageShowAdvancedTools) as? Bool ?? false
     }
 
     func selectionState(for item: MenuBarItemSnapshot) -> MenuBarItemSelectionState {
@@ -574,4 +584,6 @@ private enum Keys {
     static let launchAtLogin = "launchAtLogin"
     static let tokenUsageBridgeEnabled = "tokenUsageBridgeEnabled"
     static let tokenMeteringPromptAllowsLocalDisplayNames = "tokenMeteringPromptAllowsLocalDisplayNames"
+    static let tokenUsageLocalAliases = "tokenUsageLocalAliases"
+    static let tokenUsageShowAdvancedTools = "tokenUsageShowAdvancedTools"
 }

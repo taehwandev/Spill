@@ -107,6 +107,8 @@ final class TokenUsageDashboardStore: ObservableObject {
             selectedSessionID: selectedSessionID,
             displayMode: displayMode,
             language: language,
+            localAliases: SpillSettings.shared.tokenUsageLocalAliases,
+            showAdvancedTools: SpillSettings.shared.tokenUsageShowAdvancedTools,
             now: now,
             calendarMonthStart: displayCalendarMonth,
             calendar: calendar
@@ -120,6 +122,8 @@ final class TokenUsageDashboardStore: ObservableObject {
             selectedSessionID: nil,
             displayMode: displayMode,
             language: language,
+            localAliases: SpillSettings.shared.tokenUsageLocalAliases,
+            showAdvancedTools: SpillSettings.shared.tokenUsageShowAdvancedTools,
             now: now,
             calendarMonthStart: displayCalendarMonth,
             calendar: calendar
@@ -158,6 +162,23 @@ final class TokenUsageDashboardStore: ObservableObject {
         rebuildSnapshot()
     }
 
+    func updateAlias(for workItemID: String, alias: String) {
+        var updated = SpillSettings.shared.tokenUsageLocalAliases
+        let trimmed = alias.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            updated.removeValue(forKey: workItemID)
+        } else {
+            updated[workItemID] = trimmed
+        }
+        SpillSettings.shared.tokenUsageLocalAliases = updated
+        rebuildSnapshot()
+    }
+
+    func setAdvancedToolsEnabled(_ enabled: Bool) {
+        SpillSettings.shared.tokenUsageShowAdvancedTools = enabled
+        rebuildSnapshot()
+    }
+
     func snapshotForWorkItem(_ sessionID: String) -> TokenUsageDashboardSnapshot {
         let now = Date()
         var calendar = Calendar.autoupdatingCurrent
@@ -175,6 +196,8 @@ final class TokenUsageDashboardStore: ObservableObject {
             selectedSessionID: sessionID,
             displayMode: displayMode,
             language: language,
+            localAliases: SpillSettings.shared.tokenUsageLocalAliases,
+            showAdvancedTools: SpillSettings.shared.tokenUsageShowAdvancedTools,
             now: now,
             calendarMonthStart: displayCalendarMonth,
             calendar: calendar
