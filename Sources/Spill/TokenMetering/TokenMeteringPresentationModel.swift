@@ -140,6 +140,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
     let claudeLastUpdatedString: String?
     let antigravityLastUpdatedString: String?
     let overallLastUpdatedString: String?
+    let comparisonTotalTokens: Int?
 
     init(
         events: [TokenUsageEvent],
@@ -362,6 +363,43 @@ struct TokenUsageDashboardSnapshot: Equatable {
 
         sessions = sessionRows
         selectedSession = selectedSessionRow
+
+        // Comparison period tokens (nil when a work item is selected or period is .all)
+        if selectedSessionRow != nil {
+            comparisonTotalTokens = nil
+        } else {
+            let toolFilteredEvents = selectedDashboardTool
+                .map { tool in dashboardEvents.filter { $0.aiTool == tool } } ?? dashboardEvents
+            switch selectedPeriod {
+            case .today:
+                let todayStart = calendar.startOfDay(for: now)
+                let yesterdayStart = calendar.date(byAdding: .day, value: -1, to: todayStart) ?? todayStart
+                let compEvents = toolFilteredEvents.filter { event in
+                    guard let date = ISO8601DateFormatter.parseTokenUsageDate(from: event.createdAt) else { return false }
+                    return date >= yesterdayStart && date < todayStart
+                }
+                comparisonTotalTokens = compEvents.isEmpty ? nil : compEvents.reduce(0) { $0 + $1.totalTokens }
+            case .sevenDays:
+                let sevenDaysAgo = calendar.date(byAdding: .day, value: -7, to: now) ?? now
+                let fourteenDaysAgo = calendar.date(byAdding: .day, value: -7, to: sevenDaysAgo) ?? now
+                let compEvents = toolFilteredEvents.filter { event in
+                    guard let date = ISO8601DateFormatter.parseTokenUsageDate(from: event.createdAt) else { return false }
+                    return date >= fourteenDaysAgo && date < sevenDaysAgo
+                }
+                comparisonTotalTokens = compEvents.isEmpty ? nil : compEvents.reduce(0) { $0 + $1.totalTokens }
+            case .thirtyDays:
+                let thirtyDaysAgo = calendar.date(byAdding: .day, value: -30, to: now) ?? now
+                let sixtyDaysAgo = calendar.date(byAdding: .day, value: -30, to: thirtyDaysAgo) ?? now
+                let compEvents = toolFilteredEvents.filter { event in
+                    guard let date = ISO8601DateFormatter.parseTokenUsageDate(from: event.createdAt) else { return false }
+                    return date >= sixtyDaysAgo && date < thirtyDaysAgo
+                }
+                comparisonTotalTokens = compEvents.isEmpty ? nil : compEvents.reduce(0) { $0 + $1.totalTokens }
+            case .all:
+                comparisonTotalTokens = nil
+            }
+        }
+
         let calendarMonth = Self.normalizedCalendarMonthStart(
             events: dashboardEvents,
             now: now,

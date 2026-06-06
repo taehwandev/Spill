@@ -54,7 +54,6 @@ struct TokenMeteringDashboardView: View {
 
                 ScrollView(.vertical, showsIndicators: true) {
                     VStack(alignment: .leading, spacing: 16) {
-                        activeWindowHeader
                         kpiStrip
                         analyticsGrid
                         sessionsTable
@@ -248,19 +247,6 @@ struct TokenMeteringDashboardView: View {
                             }
                         }
 
-                        Divider().opacity(0.35)
-
-                        Toggle(isOn: Binding(
-                            get: { settings.tokenUsageShowAdvancedTools },
-                            set: { store.setAdvancedToolsEnabled($0) }
-                        )) {
-                            Text(currentLanguage == .korean ? "고급 툴 표시" : (currentLanguage == .japanese ? "詳細ツールを表示" : "Show Advanced Tools"))
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundStyle(.secondary)
-                        }
-                        .toggleStyle(.checkbox)
-                        .padding(.top, 4)
-                        .focusEffectDisabled()
                     }
                 }
 
@@ -360,6 +346,23 @@ struct TokenMeteringDashboardView: View {
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                         TokenMeteringLiveUpdateDot(isActive: isLiveUpdated, marker: store.liveUpdateMarker)
+                        Spacer(minLength: 0)
+                        if kpi.id == "total",
+                           let comparison = store.snapshot.comparisonTotalTokens,
+                           comparison > 0 {
+                            let delta = store.snapshot.totalTokens - comparison
+                            let pct = Double(delta) / Double(comparison) * 100
+                            HStack(spacing: 2) {
+                                Image(systemName: delta >= 0 ? "arrow.up.right" : "arrow.down.right")
+                                    .font(.system(size: 7, weight: .black))
+                                Text(String(format: "%.0f%%", abs(pct)))
+                                    .font(.system(size: 8, weight: .black))
+                            }
+                            .foregroundStyle(delta >= 0 ? Color.green : Color.red)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 2)
+                            .background((delta >= 0 ? Color.green : Color.red).opacity(0.1), in: Capsule())
+                        }
                     }
                     Text(kpi.value)
                         .font(.system(size: 21, weight: .bold))
@@ -368,10 +371,19 @@ struct TokenMeteringDashboardView: View {
                         .minimumScaleFactor(0.72)
                         .contentTransition(.numericText())
                         .animation(.snappy(duration: 0.35), value: kpi.value)
-                    Text(kpi.detail)
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                    HStack(spacing: 4) {
+                        Text(kpi.detail)
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                        if kpi.id == "total",
+                           let comparison = store.snapshot.comparisonTotalTokens {
+                            Text("· \(comparisonPeriodLabel): \(TokenUsageDashboardSnapshot.formatTokens(comparison))")
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(.secondary.opacity(0.6))
+                                .lineLimit(1)
+                        }
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(14)
@@ -389,6 +401,19 @@ struct TokenMeteringDashboardView: View {
         }
     }
 
+    private var comparisonPeriodLabel: String {
+        switch store.selectedPeriod {
+        case .today:
+            return currentLanguage == .korean ? "어제" : "yesterday"
+        case .sevenDays:
+            return currentLanguage == .korean ? "전주" : "prev week"
+        case .thirtyDays:
+            return currentLanguage == .korean ? "전달" : "prev month"
+        case .all:
+            return ""
+        }
+    }
+
     private var analyticsGrid: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top, spacing: 14) {
@@ -398,7 +423,7 @@ struct TokenMeteringDashboardView: View {
                     infoTitle: t(.aiToolInfoTitle),
                     infoDetail: t(.aiToolInfoDetail)
                 ) {
-                    barRows(store.snapshot.toolRows, emptyText: t(.noAIToolData), idPrefix: "tool")
+                    barRows(store.snapshot.toolRows, emptyText: t(.noAIToolData), idPrefix: "tool", tint: .teal)
                 }
 
                 dashboardPanel(
@@ -407,7 +432,7 @@ struct TokenMeteringDashboardView: View {
                     infoTitle: t(.workflowInfoTitle),
                     infoDetail: t(.workflowInfoDetail)
                 ) {
-                    barRows(store.snapshot.taskRows, emptyText: t(.noWorkflowData), idPrefix: "task")
+                    barRows(store.snapshot.taskRows, emptyText: t(.noWorkflowData), idPrefix: "task", tint: .blue)
                 }
             }
 
@@ -418,7 +443,7 @@ struct TokenMeteringDashboardView: View {
                     infoTitle: t(.stageInfoTitle),
                     infoDetail: t(.stageInfoDetail)
                 ) {
-                    barRows(store.snapshot.stageRows, emptyText: t(.noStageData), idPrefix: "stage")
+                    barRows(store.snapshot.stageRows, emptyText: t(.noStageData), idPrefix: "stage", tint: .purple)
                 }
 
                 dashboardPanel(
@@ -427,7 +452,7 @@ struct TokenMeteringDashboardView: View {
                     infoTitle: t(.sourceInfoTitle),
                     infoDetail: t(.sourceInfoDetail)
                 ) {
-                    barRows(store.snapshot.sourceRows, emptyText: t(.noSourceBreakdown), idPrefix: "source")
+                    barRows(store.snapshot.sourceRows, emptyText: t(.noSourceBreakdown), idPrefix: "source", tint: .orange)
                 }
             }
         }
@@ -1079,15 +1104,15 @@ struct TokenMeteringDashboardView: View {
         }
     }
 
-    private func barRows(_ rows: [TokenUsageDashboardBarRow], emptyText: String, idPrefix: String) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+    private func barRows(_ rows: [TokenUsageDashboardBarRow], emptyText: String, idPrefix: String, tint: Color = .teal) -> some View {
+        VStack(alignment: .leading, spacing: 11) {
             if rows.isEmpty {
                 emptyMessage(title: emptyText, detail: t(.waitingForEvents))
             } else {
                 ForEach(rows.prefix(6)) { row in
                     let liveUpdateID = "\(idPrefix):\(row.id)"
                     let isLiveUpdated = store.isLiveUpdated(liveUpdateID)
-                    VStack(alignment: .leading, spacing: 6) {
+                    VStack(alignment: .leading, spacing: 5) {
                         HStack {
                             HStack(spacing: 6) {
                                 TokenMeteringLiveUpdateDot(isActive: isLiveUpdated, marker: store.liveUpdateMarker)
@@ -1105,15 +1130,21 @@ struct TokenMeteringDashboardView: View {
 
                         GeometryReader { geometry in
                             ZStack(alignment: .leading) {
-                                Capsule(style: .continuous)
-                                    .fill(Color.primary.opacity(0.07))
-                                Capsule(style: .continuous)
-                                    .fill(Color.teal)
-                                    .frame(width: max(6, geometry.size.width * row.ratio))
+                                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                    .fill(Color.primary.opacity(0.06))
+                                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                    .fill(
+                                        LinearGradient(
+                                            colors: [tint, tint.opacity(0.65)],
+                                            startPoint: .leading,
+                                            endPoint: .trailing
+                                        )
+                                    )
+                                    .frame(width: max(8, geometry.size.width * row.ratio))
                                     .animation(.snappy(duration: 0.35), value: row.ratio)
                             }
                         }
-                        .frame(height: 7)
+                        .frame(height: 9)
                     }
                     .padding(.vertical, 2)
                     .modifier(TokenMeteringLiveUpdateEffect(isActive: isLiveUpdated, marker: store.liveUpdateMarker, cornerRadius: 7))
