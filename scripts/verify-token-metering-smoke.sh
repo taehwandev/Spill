@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_EXEC="$ROOT_DIR/.build/Spill.app/Contents/MacOS/Spill"
 LOG_FILE="${TMPDIR:-/tmp}/spill-token-metering-smoke.log"
-EVENTS_FILE="$(mktemp "${TMPDIR:-/tmp}/spill-token-metering-events.XXXXXX")"
+EVENTS_FILE="$(mktemp "${TMPDIR:-/tmp}/spill-token-metering-events.XXXXXX.json")"
 INBOX_DIR="$(mktemp -d "${TMPDIR:-/tmp}/spill-token-metering-inbox.XXXXXX")"
 ADAPTER_TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/spill-token-metering-adapters.XXXXXX")"
 PID=""
@@ -141,6 +141,7 @@ await writeFile(process.env.CLAUDE_PAYLOAD, JSON.stringify({
 }));
 NODE
 
+SPILL_TOKEN_USAGE_SESSION_STATE_DIR="$ADAPTER_TMP_DIR/session-state-initial" \
 SPILL_TOKEN_USAGE_INBOX_DIR="$INBOX_DIR" \
 SPILL_TOKEN_USAGE_TASK_TYPE="git_commit" \
 SPILL_TOKEN_USAGE_STAGE="summarize" \
@@ -148,7 +149,8 @@ python3 "$ROOT_DIR/Sources/Spill/Resources/adapters/claude-code/spill-hook.py" <
 
 CLAUDE_DUP_INBOX="$ADAPTER_TMP_DIR/claude-duplicate-inbox"
 mkdir -p "$CLAUDE_DUP_INBOX"
-for _ in 1 2; do
+for i in 1 2; do
+    SPILL_TOKEN_USAGE_SESSION_STATE_DIR="$ADAPTER_TMP_DIR/session-state-dup-$i" \
     SPILL_TOKEN_USAGE_INBOX_DIR="$CLAUDE_DUP_INBOX" \
     SPILL_TOKEN_USAGE_TASK_TYPE="git_commit" \
     SPILL_TOKEN_USAGE_STAGE="summarize" \
@@ -415,10 +417,12 @@ if ! wait "$PID"; then
 fi
 PID=""
 
-HOOK_SPAN_ID="$HOOK_SPAN_ID" EVENTS_FILE="$EVENTS_FILE" INBOX_DIR="$INBOX_DIR" node --input-type=module <<'NODE'
-import { readFile, readdir } from 'node:fs/promises';
+EVENTS_JSON_DATA=$(sqlite3 "${EVENTS_FILE%.json}.sqlite3" "SELECT json_group_array(json(payload_json)) FROM token_usage_events")
 
-const events = JSON.parse(await readFile(process.env.EVENTS_FILE, "utf8"));
+HOOK_SPAN_ID="$HOOK_SPAN_ID" EVENTS_JSON_DATA="$EVENTS_JSON_DATA" INBOX_DIR="$INBOX_DIR" node --input-type=module <<'NODE'
+import { readdir } from 'node:fs/promises';
+
+const events = JSON.parse(process.env.EVENTS_JSON_DATA);
 if (!Array.isArray(events) || events.length !== 4) {
   throw new Error(`expected four stored events, found ${Array.isArray(events) ? events.length : "non-array"}`);
 }
