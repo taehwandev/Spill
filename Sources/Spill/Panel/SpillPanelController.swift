@@ -132,7 +132,11 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
         }
     }
 
-    func show(anchorFrame: NSRect? = nil, dismissOnOutsideInteraction: Bool = true) {
+    func show(
+        anchorFrame: NSRect? = nil,
+        dismissOnOutsideInteraction: Bool = true,
+        tokenUsageAlreadyRefreshed: Bool = false
+    ) {
         if let anchorFrame {
             self.anchorFrame = anchorFrame
         }
@@ -147,7 +151,7 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
         panel.setFrame(settings.useSpillAnimation ? startFrame : finalFrame, display: false)
         panel.alphaValue = settings.useSpillAnimation ? 0 : 1
         panel.orderFrontRegardless()
-        schedulePanelDataRefresh()
+        schedulePanelDataRefresh(refreshTokenUsage: !tokenUsageAlreadyRefreshed)
         if dismissOnOutsideInteraction {
             dismissController.start(panel: panel) { [weak self] in
                 self?.hide(animated: true)
@@ -386,19 +390,21 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
             .store(in: &cancellables)
     }
 
-    private func refreshStatusStore() {
+    private func refreshStatusStore(refreshTokenUsage: Bool = true) {
         let enabledModules = settings.statusModulesRequiredForRefresh
         let readsPower = true
         aiStatusStore.refreshInBackground()
         cloudServiceStatusStore.refreshIfNeeded()
-        tokenUsageDashboardStore.refresh()
+        if refreshTokenUsage {
+            tokenUsageDashboardStore.refresh()
+        }
         windowActionStore.refresh()
         Task { @MainActor [statusStore] in
             await statusStore.refresh(enabledModules: enabledModules, readsPower: readsPower)
         }
     }
 
-    private func schedulePanelDataRefresh() {
+    private func schedulePanelDataRefresh(refreshTokenUsage: Bool = true) {
         panelRefreshTask?.cancel()
         panelRefreshTask = Task { @MainActor [weak self] in
             await Task.yield()
@@ -406,7 +412,7 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
                 return
             }
 
-            refreshStatusStore()
+            refreshStatusStore(refreshTokenUsage: refreshTokenUsage)
         }
     }
 

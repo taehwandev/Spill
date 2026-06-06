@@ -370,7 +370,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func showSpillBar(source: String = "unknown") {
         requestTokenUsageCollection(reason: "panel_open")
         tokenUsageDashboardStore.refresh()
-        spillPanelController.show(anchorFrame: statusItemController?.buttonScreenFrame)
+        spillPanelController.show(
+            anchorFrame: statusItemController?.buttonScreenFrame,
+            tokenUsageAlreadyRefreshed: true
+        )
         statusItemController?.refresh(isSpillBarVisible: spillPanelController.isVisible)
 
         if spillPanelController.isVisible {
