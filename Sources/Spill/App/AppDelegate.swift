@@ -449,7 +449,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func presentTokenDashboardWindow() {
-        tokenUsageDashboardStore.refresh()
         refreshMenuBarAITokenTotal(force: true)
         statusItemController?.refresh()
         tokenMeteringDashboardWindowController.show()
