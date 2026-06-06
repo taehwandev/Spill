@@ -4,6 +4,7 @@ import Combine
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private static let statusRefreshDelayNanoseconds: UInt64 = 1_000_000_000
+    private static let menuBarTokenCollectionInterval: TimeInterval = 5
 
     private let settings = SpillSettings.shared
     private let scanner = AXMenuBarItemScanner()
@@ -89,6 +90,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var isSpillPanelVisible = false
     private var menuBarAITokenTotal = 0
     private var menuBarAITokenDayStart: Date?
+    private var lastMenuBarTokenCollectionAt: Date?
     private var cancellables = Set<AnyCancellable>()
 
     override init() {
@@ -479,6 +481,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBarAITokenTotal = snapshot.totalTokens
     }
 
+    private func requestMenuBarTokenUsageCollectionIfNeeded(now: Date = Date()) {
+        guard shouldRefreshMenuBarAITokenTotal else {
+            return
+        }
+
+        if let lastMenuBarTokenCollectionAt,
+           now.timeIntervalSince(lastMenuBarTokenCollectionAt) < Self.menuBarTokenCollectionInterval {
+            return
+        }
+
+        lastMenuBarTokenCollectionAt = now
+        requestTokenUsageCollection(reason: "menu_bar_status")
+    }
+
     private var shouldRefreshMenuBarAITokenTotal: Bool {
         isSpillPanelVisible || settings.enabledMenuBarStatusItems.contains(.ai)
     }
@@ -789,6 +805,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             enabledModules: enabledModules,
             readsPower: readsPower
         )
+        requestMenuBarTokenUsageCollectionIfNeeded()
         refreshMenuBarAITokenTotal()
         statusItemController?.refresh()
     }
@@ -802,6 +819,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             enabledModules: isSpillPanelVisible ? settings.statusModulesRequiredForRefresh : menuBarStatusModules,
             readsPower: isSpillPanelVisible
         )
+        requestMenuBarTokenUsageCollectionIfNeeded()
         refreshMenuBarAITokenTotal()
         statusItemController?.refresh()
     }
