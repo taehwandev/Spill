@@ -177,6 +177,10 @@ Runtime hook input contracts differ by tool:
 - Antigravity/AGY PostInvocation hooks may run with empty stdin for lifecycle or
   tool steps that used no model tokens. Empty stdin is a normal no-event hook
   call, not a failed usage event.
+- Antigravity/AGY adapters also accept exact usage through explicit
+  `--payload-json` / `--usage-json` arguments and fixed allowlisted environment
+  usage fields when a runtime exposes them. Do not add arbitrary file-path or
+  environment scraping to recover usage.
 
 Never estimate token usage. If exact runtime usage is not available, write no
 usage event. Use local-only diagnostics for support state.

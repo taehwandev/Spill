@@ -202,8 +202,9 @@ concurrent agent hooks.
 
 Rules:
 
-- Local receivers store only numeric token counts, timestamps, model ids,
-  opaque ids, safe enum labels such as `ai_tool`, and `local_only` sync mode.
+- Local receivers store only numeric token counts, timestamps, model ids, and
+  opaque ids plus safe enum labels such as `ai_tool`. Sync behavior is an
+  app-owned policy applied after import, not a value selected by agent hooks.
 - Local queue writers must never append to a shared events file. They must write
   a unique `.tmp` file, close it, then rename it to `.json` in the same
   directory so Spill never imports partial writes.
@@ -249,6 +250,12 @@ Rules:
   that exist but lack supported exact-count fields go to
   `antigravity-last-mismatch.json`; successful usage goes to
   `antigravity-last-success.json` and clears stale mismatch diagnostics.
+- Antigravity/AGY exact token counts may arrive through stdin, an explicit
+  `--payload-json` / `--usage-json` argument, or fixed allowlisted environment
+  variables such as `SPILL_TOKEN_USAGE_PAYLOAD`, `ANTIGRAVITY_INPUT_TOKENS`, and
+  `ANTIGRAVITY_OUTPUT_TOKENS`. The adapter may read only those allowlisted usage
+  keys and must store only safe shape booleans plus usage numbers, never raw
+  environment values.
 - Claude Code Stop hooks use a separate contract. The expected stdin payload is
   a safe object with `transcript_path`; the adapter may read exact numeric usage
   from that transcript but must not store transcript paths or transcript
@@ -303,8 +310,9 @@ Rules:
   working directories, diffs, terminal output, source content, environment
   values, or secrets.
 - Codex importer spans are deduplicated with opaque hashes and stored as
-  `ai_tool = codex`, `artifact_id = artifact_codex`, `project_id =
-  project_global`, and `local_only` sync events.
+  `ai_tool = codex`, `artifact_id = artifact_codex`, and `project_id =
+  project_global` local events. Spill settings decide whether and how local
+  aggregates sync later.
 - The local app always reads the app-owned local store. UI must not imply that
   metering starts only after pressing a local check button.
 - A local dashboard self-test may enqueue one synthetic `local_only` event

@@ -24,6 +24,13 @@ Runtime input normalization:
   `data`, `event`, `response`, `metadata`, or workflow objects. Search nested
   object shapes for supported numeric token keys, but extract only token counts,
   safe labels, safe model ids, and opaque ids.
+- Antigravity/AGY may expose exact usage through stdin, an explicit
+  `--payload-json` / `--usage-json` argument, or fixed allowlisted runtime
+  environment fields. Accept only known usage keys such as
+  `SPILL_TOKEN_USAGE_PAYLOAD`, `ANTIGRAVITY_INPUT_TOKENS`,
+  `ANTIGRAVITY_OUTPUT_TOKENS`, `AGY_INPUT_TOKENS`, and
+  `GEMINI_OUTPUT_TOKENS`. Never inspect arbitrary environment values or file
+  paths to recover usage.
 - Do not assume a hook event has token usage merely because the hook runs.
   Antigravity/AGY `PostInvocation` hooks can execute for tool steps or model
   steps that do not expose exact token fields to the hook payload.
@@ -109,7 +116,8 @@ Privacy boundary:
 - Never send, derive, or store conversation titles, work item titles, local aliases, task text, or display names from prompts, commands, transcripts, logs, files, or responses. Spill generates default work item display names locally from safe `ai_tool`, `task_type`, `stage`, model id, and timestamp buckets. Any user alias is local-only app metadata and is not part of the usage event payload.
 - Never inspect local agent logs, transcripts, shell history, repository files, or hidden state to reconstruct token usage.
 - Use opaque ids only. For global project-wide use, use `project_global` and `artifact_global`.
-- Use `local_only` sync mode unless the user explicitly enables cloud sync in Spill.
+- Do not choose local or cloud sync from the adapter. Spill applies its own
+  sync policy from app settings after importing the local event.
 - Do not estimate token counts.
 - If exact runtime usage metadata is unavailable, silently skip event creation.
 - If sending an event would require exposing prompts, commands, file paths, logs, diffs, source, secrets, or arbitrary content, silently skip event creation.
@@ -192,7 +200,7 @@ Local receiver:
 
 The JSON event must contain only these keys:
 
-`schema_version`, `device_id`, `project_id`, `artifact_id`, `run_id`, `span_id`, `ai_tool`, `task_type`, `stage`, `model`, `input_tokens`, `output_tokens`, `total_tokens`, `token_breakdown`, `latency_ms`, `created_at`, `sync_mode`.
+`schema_version`, `device_id`, `project_id`, `artifact_id`, `run_id`, `span_id`, `ai_tool`, `task_type`, `stage`, `model`, `input_tokens`, `output_tokens`, `total_tokens`, `token_breakdown`, `latency_ms`, `created_at`.
 
 `token_breakdown` must contain only:
 
