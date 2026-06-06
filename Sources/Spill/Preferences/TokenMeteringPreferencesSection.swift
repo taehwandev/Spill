@@ -6,10 +6,6 @@ struct TokenMeteringPreferencesSection: View {
     let tokenUsageStore: TokenUsageStore
     let openDashboardAction: () -> Void
     @State private var copiedTarget: String?
-    @State private var setupInstalledPath: URL?
-    @State private var setupInstallResult: String?
-    @State private var setupInstallSucceeded = false
-    @State private var advancedVisible = false
     @State private var adapterStatuses: [String: TokenMeteringAdapterConnectionStatus] = [:]
     @State private var localDataPreview = TokenUsageClearPreview(scopeTitle: "", eventCount: 0, totalTokens: 0)
     @State private var pendingClearAllPreview: TokenUsageClearPreview?
@@ -50,6 +46,29 @@ struct TokenMeteringPreferencesSection: View {
                     .foregroundStyle(.secondary)
                     .lineSpacing(2)
                     .fixedSize(horizontal: false, vertical: true)
+
+                VStack(alignment: .leading, spacing: 7) {
+                    TokenMeteringSetupGuidanceRow(
+                        systemImage: "globe",
+                        title: t(.setupGlobalInstructionTitle),
+                        detail: t(.setupGlobalInstructionDetail),
+                        tint: .teal
+                    )
+
+                    TokenMeteringSetupGuidanceRow(
+                        systemImage: "point.3.connected.trianglepath.dotted",
+                        title: t(.setupWorkflowLabelsTitle),
+                        detail: t(.setupWorkflowLabelsDetail),
+                        tint: .blue
+                    )
+
+                    TokenMeteringSetupGuidanceRow(
+                        systemImage: "scope",
+                        title: t(.setupApplyWhereTitle),
+                        detail: t(.setupApplyWhereDetail),
+                        tint: .purple
+                    )
+                }
 
                 HStack(spacing: 6) {
                     Button {
@@ -123,13 +142,6 @@ struct TokenMeteringPreferencesSection: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                if let setupInstallResult {
-                    Text(setupInstallResult)
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(setupInstallSucceeded ? .green : .red)
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
             }
             .padding(10)
             .background(tokenMeteringOptionBackground)
@@ -146,73 +158,9 @@ struct TokenMeteringPreferencesSection: View {
 
             localDataManagementSection
 
-            DisclosureGroup(isExpanded: $advancedVisible) {
-                VStack(alignment: .leading, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 9) {
-                        TokenMeteringOptionHeader(
-                            title: t(.localEventQueue),
-                            state: t(.defaultState),
-                            systemImage: "tray.and.arrow.down",
-                            tint: .green
-                        )
+            localEventQueueSection
 
-                        HStack(spacing: 8) {
-                            Text(TokenUsageStore.defaultInboxURL().path)
-                                .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                                .foregroundStyle(.secondary)
-                                .lineLimit(2)
-                                .textSelection(.enabled)
-
-                            Spacer(minLength: 8)
-
-                            Button {
-                                copyToClipboard(TokenUsageStore.defaultInboxURL().path, target: "inbox")
-                            } label: {
-                                Label(
-                                    copiedTarget == "inbox" ? t(.copied) : t(.copyPath),
-                                    systemImage: copiedTarget == "inbox" ? "checkmark" : "doc.on.doc"
-                                )
-                            }
-                            .font(.system(size: 10, weight: .semibold))
-                        }
-                    }
-                    .padding(10)
-                    .background(tokenMeteringOptionBackground)
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(t(.advancedInstallCommands))
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(.secondary)
-
-                        HStack(spacing: 6) {
-                            Button {
-                                let setupURL = setupInstalledPath ?? TokenMeteringSetupInstaller.defaultInstallURL()
-                                copyToClipboard(TokenMeteringSetupInstaller.setupCommand(installedAt: setupURL), target: "setup_command")
-                            } label: {
-                                Label(
-                                    copiedTarget == "setup_command" ? t(.copied) : t(.copyOneStepCommand),
-                                    systemImage: copiedTarget == "setup_command" ? "checkmark" : "terminal"
-                                )
-                            }
-                        }
-                        .buttonStyle(.bordered)
-                        .font(.system(size: 10, weight: .semibold))
-                    }
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(t(.neverCollectedOrUploaded))
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(.secondary)
-
-                        FlowingTokenMeteringLabels(labels: TokenMeteringPreferencesModel.forbiddenContentLabels)
-                    }
-                }
-                .padding(.top, 8)
-            } label: {
-                Label(t(.advancedDetails), systemImage: "slider.horizontal.3")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.secondary)
-            }
+            privacyBoundarySection
         }
         .onAppear {
             refreshAdapterStatuses()
@@ -249,22 +197,52 @@ struct TokenMeteringPreferencesSection: View {
         }
     }
 
-    private func installSetupTool() {
-        let destination = TokenMeteringSetupInstaller.defaultInstallURL()
-        do {
-            try TokenMeteringSetupInstaller.install(to: destination)
-            setupInstalledPath = destination
-            setupInstallResult = t(.setupInstalled)
-            setupInstallSucceeded = true
-            refreshAdapterStatuses()
-            copiedTarget = "setup_install"
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                if copiedTarget == "setup_install" { copiedTarget = nil }
+    private var localEventQueueSection: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            TokenMeteringOptionHeader(
+                title: t(.localEventQueue),
+                state: t(.defaultState),
+                systemImage: "tray.and.arrow.down",
+                tint: .green
+            )
+
+            HStack(spacing: 8) {
+                Text(TokenUsageStore.defaultInboxURL().path)
+                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .textSelection(.enabled)
+
+                Spacer(minLength: 8)
+
+                Button {
+                    copyToClipboard(TokenUsageStore.defaultInboxURL().path, target: "inbox")
+                } label: {
+                    Label(
+                        copiedTarget == "inbox" ? t(.copied) : t(.copyPath),
+                        systemImage: copiedTarget == "inbox" ? "checkmark" : "doc.on.doc"
+                    )
+                }
+                .font(.system(size: 10, weight: .semibold))
             }
-        } catch {
-            setupInstallResult = TokenMeteringL10n.installFailed(error.localizedDescription, language: currentLanguage)
-            setupInstallSucceeded = false
         }
+        .padding(10)
+        .background(tokenMeteringOptionBackground)
+    }
+
+    private var privacyBoundarySection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            TokenMeteringOptionHeader(
+                title: t(.neverCollectedOrUploaded),
+                state: t(.localOnly),
+                systemImage: "lock.shield.fill",
+                tint: .indigo
+            )
+
+            FlowingTokenMeteringLabels(labels: TokenMeteringPreferencesModel.forbiddenContentLabels)
+        }
+        .padding(10)
+        .background(tokenMeteringOptionBackground)
     }
 
     private var tokenMeteringOptionBackground: some View {
@@ -591,6 +569,36 @@ private struct TokenMeteringOptionHeader: View {
                     Capsule(style: .continuous)
                         .fill(tint.opacity(0.12))
                 )
+        }
+    }
+}
+
+private struct TokenMeteringSetupGuidanceRow: View {
+    let systemImage: String
+    let title: String
+    let detail: String
+    let tint: Color
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 9) {
+            Image(systemName: systemImage)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(tint)
+                .frame(width: 16, height: 16)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(.primary)
+
+                Text(detail)
+                    .font(.system(size: 9))
+                    .foregroundStyle(.secondary)
+                    .lineSpacing(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 0)
         }
     }
 }

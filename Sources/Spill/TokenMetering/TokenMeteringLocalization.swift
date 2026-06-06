@@ -150,6 +150,12 @@ enum TokenMeteringTextKey: String {
     case installPromptTitle
     case recommended
     case installPromptDetail
+    case setupGlobalInstructionTitle
+    case setupGlobalInstructionDetail
+    case setupWorkflowLabelsTitle
+    case setupWorkflowLabelsDetail
+    case setupApplyWhereTitle
+    case setupApplyWhereDetail
     case promptDisplayNamesTitle
     case promptDisplayNamesDisabled
     case promptDisplayNamesEnabled
@@ -160,18 +166,13 @@ enum TokenMeteringTextKey: String {
     case dashboard
     case localEventQueue
     case copyPath
-    case advancedInstallCommands
-    case copyOneStepCommand
     case adapterScripts
     case neverCollectedOrUploaded
-    case advancedDetails
     case copyScript
     case install
     case installed
     case copy
     case hookConfig
-    case installFailed
-    case setupInstalled
     case agentConnectionStatus
     case adapterSetupRequired
     case adapterHookMissing
@@ -319,10 +320,6 @@ enum TokenMeteringL10n {
 
     static func adapterInstalled(_ path: String, language: TokenMeteringLanguage = .current()) -> String {
         "\(text(.installed, language: language)): \(path)"
-    }
-
-    static func installFailed(_ error: String, language: TokenMeteringLanguage = .current()) -> String {
-        "\(text(.installFailed, language: language)): \(error)"
     }
 
     static func forbiddenContentLabels(language: TokenMeteringLanguage = .current()) -> [String] {
@@ -479,29 +476,30 @@ enum TokenMeteringL10n {
             .preferencesSubtitle: "Spill stores safe token counts on this Mac. Login, cloud sync, and server transfer are not active in this app slice.",
             .installPromptTitle: "Install prompt + one-step setup",
             .recommended: "Recommended",
-            .installPromptDetail: "Paste this into an AI with local shell access. It forces the AI to fetch the latest setup from spill.thdev.app, install Codex, Claude, and AGY hooks, then save only the runtime instruction.",
+            .installPromptDetail: "Paste this into one AI agent that can run local shell commands. The setup installs or repairs Codex, Claude Code, and Antigravity/AGY together, then saves the runtime instruction globally.",
+            .setupGlobalInstructionTitle: "Apply it globally first",
+            .setupGlobalInstructionDetail: "Use the copied prompt in the agent's global or user-level instruction area. It is not project-specific; every repo on this Mac can report into the same local Spill meter.",
+            .setupWorkflowLabelsTitle: "Workflow labels are more accurate",
+            .setupWorkflowLabelsDetail: "The base hooks record exact token counts. If you also connect a trusted workflow, its steps can set task_type and stage before the AI runs, so review, coding, tests, commits, docs, and setup are separated more reliably.",
+            .setupApplyWhereTitle: "Where to connect it",
+            .setupApplyWhereDetail: "Start with the global prompt. When the installer asks about workflow-aware labels, choose yes only if you use a workflow runner or agent lifecycle script; the agent should discover and ask before editing that workflow.",
             .promptDisplayNamesTitle: "Allow local display names in copied prompt",
             .promptDisplayNamesDisabled: "Strict",
             .promptDisplayNamesEnabled: "Enabled",
             .promptDisplayNamesDetail: "Off keeps copied prompts token-only. On adds an opt-in block that permits user-provided or trusted workflow display aliases only; commands and prompt content remain forbidden.",
             .promptDisplayNamesReapplyWarning: "Copy and reapply the install prompt now. Existing agent instructions will not change until the new prompt is applied, and local display names may be visible to the agent.",
             .copyInstallPrompt: "Copy Install Prompt",
-            .copyWebSetup: "Copy Web Setup",
+            .copyWebSetup: "Copy Install Command",
             .dashboard: "Dashboard",
             .localEventQueue: "Local event queue",
             .copyPath: "Copy Path",
-            .advancedInstallCommands: "Advanced install commands",
-            .copyOneStepCommand: "Copy One-Step Command",
             .adapterScripts: "Adapter scripts",
             .neverCollectedOrUploaded: "Never collected or uploaded",
-            .advancedDetails: "Advanced details",
             .copyScript: "Copy Script",
             .install: "Install",
             .installed: "Installed",
             .copy: "Copy",
             .hookConfig: "Hook config",
-            .installFailed: "Install failed",
-            .setupInstalled: "Installed setup tool and adapter scripts.",
             .agentConnectionStatus: "Agent Connection Status",
             .adapterSetupRequired: "Setup required for local tracking",
             .adapterHookMissing: "Adapter script installed, hook not connected",
@@ -635,29 +633,30 @@ enum TokenMeteringL10n {
             .preferencesSubtitle: "Spill은 이 Mac에 안전한 토큰 수만 저장합니다. 이 앱 슬라이스에서는 로그인, 클라우드 동기화, 서버 전송이 활성화되지 않습니다.",
             .installPromptTitle: "설치 프롬프트 + 원스텝 설정",
             .recommended: "권장",
-            .installPromptDetail: "로컬 shell 접근 권한이 있는 AI에 붙여넣으세요. AI가 spill.thdev.app에서 최신 설정을 가져오고 Codex, Claude, AGY hook을 설치한 뒤 런타임 지침만 저장하게 합니다.",
+            .installPromptDetail: "로컬 shell 명령을 실행할 수 있는 AI 에이전트 하나에 붙여넣으세요. 설정은 Codex, Claude Code, Antigravity/AGY를 함께 설치하거나 복구한 뒤 런타임 지침을 전역으로 저장합니다.",
+            .setupGlobalInstructionTitle: "먼저 전역 지침에 적용",
+            .setupGlobalInstructionDetail: "복사한 프롬프트는 에이전트의 global 또는 user-level instruction 영역에 넣는 용도입니다. 프로젝트별 설정이 아니며, 이 Mac의 모든 repo가 같은 로컬 Spill meter로 기록될 수 있습니다.",
+            .setupWorkflowLabelsTitle: "워크플로우 라벨이 더 정확합니다",
+            .setupWorkflowLabelsDetail: "기본 hook은 정확한 토큰 수를 기록합니다. 신뢰된 워크플로우도 연결하면 AI가 실행되기 전에 단계가 task_type과 stage를 써주므로 리뷰, 코드 작성, 테스트, 커밋, 문서, 설정 작업이 더 안정적으로 분리됩니다.",
+            .setupApplyWhereTitle: "어디에 연결해야 하나요",
+            .setupApplyWhereDetail: "먼저 전역 프롬프트를 적용하세요. 설치 중 workflow-aware labels를 물으면 워크플로우 러너나 agent lifecycle 스크립트를 쓰는 경우에만 yes를 선택하세요. 에이전트는 후보를 직접 찾고 수정 전 확인해야 합니다.",
             .promptDisplayNamesTitle: "복사한 프롬프트에서 로컬 표시명 허용",
             .promptDisplayNamesDisabled: "엄격",
             .promptDisplayNamesEnabled: "켜짐",
             .promptDisplayNamesDetail: "꺼두면 복사된 프롬프트가 토큰 전용 정책을 유지합니다. 켜면 사용자가 지정했거나 신뢰된 워크플로우 표시 별칭만 허용하는 opt-in 블록을 추가합니다. 명령어와 프롬프트 내용은 계속 금지됩니다.",
             .promptDisplayNamesReapplyWarning: "지금 설치 프롬프트를 복사해서 다시 적용해야 합니다. 새 프롬프트를 적용하기 전까지 기존 에이전트 지침은 바뀌지 않으며, 로컬 표시명이 에이전트에 보일 수 있습니다.",
             .copyInstallPrompt: "설치 프롬프트 복사",
-            .copyWebSetup: "웹 설정 복사",
+            .copyWebSetup: "설치 명령 복사",
             .dashboard: "대시보드",
             .localEventQueue: "로컬 이벤트 큐",
             .copyPath: "경로 복사",
-            .advancedInstallCommands: "고급 설치 명령",
-            .copyOneStepCommand: "원스텝 명령 복사",
             .adapterScripts: "어댑터 스크립트",
             .neverCollectedOrUploaded: "수집하거나 업로드하지 않음",
-            .advancedDetails: "고급 세부 정보",
             .copyScript: "스크립트 복사",
             .install: "설치",
             .installed: "설치됨",
             .copy: "복사",
             .hookConfig: "Hook 설정",
-            .installFailed: "설치 실패",
-            .setupInstalled: "설정 도구와 어댑터 스크립트를 설치했습니다.",
             .agentConnectionStatus: "에이전트 연결 상태",
             .adapterSetupRequired: "로컬 추적 설정 필요",
             .adapterHookMissing: "어댑터 스크립트 설치됨, hook 연결 필요",
@@ -791,29 +790,30 @@ enum TokenMeteringL10n {
             .preferencesSubtitle: "Spill はこの Mac に安全なトークン数のみを保存します。このアプリ範囲ではログイン、クラウド同期、サーバー転送は有効ではありません。",
             .installPromptTitle: "インストールプロンプト + ワンステップ設定",
             .recommended: "推奨",
-            .installPromptDetail: "ローカル shell へアクセスできる AI に貼り付けてください。AI が spill.thdev.app から最新設定を取得し、Codex、Claude、AGY hook をインストールして、ランタイム指示だけを保存します。",
+            .installPromptDetail: "ローカル shell コマンドを実行できる AI エージェント 1 つに貼り付けてください。Codex、Claude Code、Antigravity/AGY をまとめてインストールまたは修復し、ランタイム指示をグローバルに保存します。",
+            .setupGlobalInstructionTitle: "まずグローバル指示へ適用",
+            .setupGlobalInstructionDetail: "コピーしたプロンプトはエージェントの global または user-level instruction に入れます。プロジェクト専用ではなく、この Mac の各 repo から同じローカル Spill メーターへ記録できます。",
+            .setupWorkflowLabelsTitle: "ワークフローラベルの方が正確",
+            .setupWorkflowLabelsDetail: "基本 hook は正確なトークン数を記録します。信頼済みワークフローも接続すると、AI 実行前に task_type と stage を設定でき、レビュー、実装、テスト、コミット、ドキュメント、設定作業をより確実に分離できます。",
+            .setupApplyWhereTitle: "接続先",
+            .setupApplyWhereDetail: "まずグローバルプロンプトを適用してください。インストール中に workflow-aware labels を聞かれたら、ワークフロー runner や agent lifecycle script を使う場合だけ yes を選びます。エージェントは候補を探し、編集前に確認する必要があります。",
             .promptDisplayNamesTitle: "コピーしたプロンプトでローカル表示名を許可",
             .promptDisplayNamesDisabled: "厳格",
             .promptDisplayNamesEnabled: "有効",
             .promptDisplayNamesDetail: "オフではコピーしたプロンプトをトークン専用ポリシーのままにします。オンでは、ユーザー指定または信頼済みワークフローの表示エイリアスだけを許可する opt-in ブロックを追加します。コマンドとプロンプト内容は引き続き禁止です。",
             .promptDisplayNamesReapplyWarning: "今すぐインストールプロンプトをコピーして再適用してください。新しいプロンプトを適用するまで既存のエージェント指示は変わらず、ローカル表示名がエージェントに見える場合があります。",
             .copyInstallPrompt: "インストールプロンプトをコピー",
-            .copyWebSetup: "Web 設定をコピー",
+            .copyWebSetup: "インストールコマンドをコピー",
             .dashboard: "ダッシュボード",
             .localEventQueue: "ローカルイベントキュー",
             .copyPath: "パスをコピー",
-            .advancedInstallCommands: "高度なインストールコマンド",
-            .copyOneStepCommand: "ワンステップコマンドをコピー",
             .adapterScripts: "アダプタースクリプト",
             .neverCollectedOrUploaded: "収集・アップロードしないもの",
-            .advancedDetails: "詳細",
             .copyScript: "スクリプトをコピー",
             .install: "インストール",
             .installed: "インストール済み",
             .copy: "コピー",
             .hookConfig: "Hook 設定",
-            .installFailed: "インストール失敗",
-            .setupInstalled: "設定ツールとアダプタースクリプトをインストールしました。",
             .agentConnectionStatus: "エージェント接続状態",
             .adapterSetupRequired: "ローカル追跡の設定が必要",
             .adapterHookMissing: "アダプタースクリプトはインストール済み、hook 接続が必要",
