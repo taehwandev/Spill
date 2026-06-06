@@ -32,6 +32,8 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(TokenMeteringL10n.text(.dashboardTitle, language: .japanese), "ローカルトークン計測")
         XCTAssertEqual(TokenMeteringL10n.text(.displayModeShare, language: .korean), "비중 %")
         XCTAssertEqual(TokenMeteringL10n.text(.agentConnectionStatus, language: .korean), "에이전트 연결 상태")
+        XCTAssertEqual(TokenMeteringL10n.text(.setupWorkflowLabelsTitle, language: .english), "Workflow labels are more accurate")
+        XCTAssertEqual(TokenMeteringL10n.text(.copyWebSetup, language: .korean), "설치 명령 복사")
         XCTAssertEqual(TokenMeteringL10n.text(.adapterSetupRequired, language: .japanese), "ローカル追跡の設定が必要")
         XCTAssertEqual(TokenMeteringL10n.adapterInstalled("spill-hook.py", language: .english), "Installed: spill-hook.py")
         XCTAssertEqual(TokenMeteringL10n.hookConfigTarget("~/.claude/settings.json", language: .korean), "Hook 설정 -> ~/.claude/settings.json")
@@ -219,23 +221,32 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(preferencesSection.contains("try tokenUsageStore.clearEvents()"))
     }
 
+    func testPreferencesSetupGuidanceIsAlwaysVisible() throws {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let preferencesSection = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Preferences/TokenMeteringPreferencesSection.swift"))
+
+        XCTAssertTrue(preferencesSection.contains("TokenMeteringSetupGuidanceRow"))
+        XCTAssertTrue(preferencesSection.contains("t(.setupGlobalInstructionTitle)"))
+        XCTAssertTrue(preferencesSection.contains("t(.setupWorkflowLabelsTitle)"))
+        XCTAssertTrue(preferencesSection.contains("t(.setupApplyWhereTitle)"))
+        XCTAssertTrue(preferencesSection.contains("localEventQueueSection"))
+        XCTAssertTrue(preferencesSection.contains("privacyBoundarySection"))
+        XCTAssertFalse(preferencesSection.contains("DisclosureGroup"))
+        XCTAssertFalse(preferencesSection.contains("advancedVisible"))
+    }
+
     func testDashboardShowsSelectedWorkItemInPopover() throws {
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let dashboardView = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardView.swift"))
 
-        XCTAssertTrue(dashboardView.contains("@State private var presentedWorkItemID"))
-        XCTAssertTrue(dashboardView.contains("presentedWorkItemID = session.id"))
-        XCTAssertTrue(dashboardView.contains(".popover("))
-        XCTAssertTrue(dashboardView.contains("workItemPopover(session)"))
+        XCTAssertTrue(dashboardView.contains("detailPanel(for: selectedSession)"))
+        XCTAssertTrue(dashboardView.contains("store.selectSession(session.id)"))
         XCTAssertTrue(dashboardView.contains("store.snapshotForWorkItem(session.id)"))
-        XCTAssertFalse(dashboardView.contains("store.selectSession(session.id)"))
         XCTAssertTrue(dashboardView.contains("title: t(.aiTool)"))
         XCTAssertTrue(dashboardView.contains("title: t(.modelBreakdown)"))
         XCTAssertTrue(dashboardView.contains("title: t(.workflowBreakdown)"))
         XCTAssertTrue(dashboardView.contains("title: t(.stageBreakdown)"))
         XCTAssertTrue(dashboardView.contains("title: t(.sourceBreakdown)"))
-        XCTAssertFalse(dashboardView.contains("private var detailPanel"))
-        XCTAssertFalse(dashboardView.contains("detailPanel\n"))
     }
 
     func testDashboardViewKeepsAgentFilterRailAndSuppressesDefaultFocusBoxes() throws {
@@ -1054,7 +1065,8 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(prompt.contains("Spill label handoff commands"))
         XCTAssertTrue(prompt.contains("Workflow runner permissions are separate"))
         XCTAssertTrue(prompt.contains("runtime-specific exact-count input shapes"))
-        XCTAssertTrue(prompt.contains("AGY empty stdin is a normal no-event lifecycle/tool hook call"))
+        XCTAssertTrue(prompt.contains("AGY empty stdin and AGY structured lifecycle/tool/model-adjacent payloads"))
+        XCTAssertTrue(prompt.contains("even when they include model or session hints"))
         XCTAssertTrue(prompt.contains("antigravity-last-empty.json"))
         XCTAssertTrue(prompt.contains("antigravity-last-mismatch.json"))
         XCTAssertTrue(prompt.contains("antigravity-last-success.json"))
@@ -1187,7 +1199,10 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(setup.contains("shared runtime hook input schema"))
         XCTAssertTrue(setup.contains("hook payload exposes exact token usage fields"))
         XCTAssertTrue(setup.contains("normalized `spill_token_usage` object"))
-        XCTAssertTrue(setup.contains("diagnostics under Spill's token-metering diagnostics directory"))
+        XCTAssertTrue(setup.contains("local-only safe diagnostics under Spill's token-metering diagnostics directory"))
+        XCTAssertTrue(setup.contains("model-adjacent"))
+        XCTAssertTrue(setup.contains("even when the payload contains model or session hints"))
+        XCTAssertTrue(setup.contains("no_token_usage_payload"))
         XCTAssertTrue(setup.contains("antigravity-last-empty.json"))
         XCTAssertTrue(setup.contains("antigravity-last-mismatch.json"))
         XCTAssertTrue(setup.contains("antigravity-last-success.json"))
@@ -1195,7 +1210,7 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(setup.contains("claude-last-mismatch.json"))
         XCTAssertTrue(setup.contains("claude-last-success.json"))
         XCTAssertTrue(setup.contains("observed_safe_shape"))
-        XCTAssertTrue(setup.contains("Empty stdin diagnostics must never overwrite"))
+        XCTAssertTrue(setup.contains("Empty/no-usage diagnostics must never overwrite"))
         XCTAssertTrue(setup.contains("Claude Code diagnostic files must use the same local-only separation"))
         XCTAssertFalse(setup.contains("root-level `PostInvocation[]`"))
         XCTAssertFalse(setup.contains("Do not nest this under `\"spill-metering\"`"))
@@ -1208,6 +1223,8 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(runtime.contains("Antigravity/AGY `PostInvocation` hooks can execute"))
         XCTAssertTrue(runtime.contains("write a local-only diagnostic"))
         XCTAssertTrue(runtime.contains("AGY empty stdin is a normal no-event hook call"))
+        XCTAssertTrue(runtime.contains("Any structured AGY payload without exact token"))
+        XCTAssertTrue(runtime.contains("invalid\n  JSON or non-object payloads"))
         XCTAssertTrue(runtime.contains("antigravity-last-success.json"))
         XCTAssertTrue(runtime.contains("Claude Code uses a different Stop-hook contract"))
         XCTAssertTrue(runtime.contains("claude-last-mismatch.json"))
@@ -1302,7 +1319,7 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(agyHook.contains("totalTokenCount"))
         XCTAssertTrue(agyHook.contains("SPILL_TOKEN_USAGE_DIAGNOSTICS_DIR"))
         XCTAssertTrue(agyHook.contains("runtime_payload_mismatch"))
-        XCTAssertTrue(agyHook.contains("missing_exact_token_usage"))
+        XCTAssertTrue(agyHook.contains("no_usage_hook_call"))
         XCTAssertTrue(agyHook.contains("spill_token_usage"))
         XCTAssertTrue(agyHook.contains("EMPTY_DIAGNOSTIC_FILE_NAME"))
         XCTAssertTrue(agyHook.contains("MISMATCH_DIAGNOSTIC_FILE_NAME"))
@@ -1387,17 +1404,44 @@ final class TokenUsageStoreTests: XCTestCase {
             diagnosticsURL: diagnosticsURL
         )
 
-        let mismatch = try decodedJSONObject(from: Data(contentsOf: mismatchURL))
-        XCTAssertEqual(mismatch["kind"] as? String, "runtime_payload_mismatch")
-        XCTAssertEqual(mismatch["reason"] as? String, "missing_exact_token_usage")
-        let shape = try XCTUnwrap(mismatch["observed_safe_shape"] as? [String: Any])
+        empty = try decodedJSONObject(from: Data(contentsOf: emptyURL))
+        XCTAssertEqual(empty["kind"] as? String, "no_usage_hook_call")
+        XCTAssertEqual(empty["reason"] as? String, "no_token_usage_payload")
+        let shape = try XCTUnwrap(empty["observed_safe_shape"] as? [String: Any])
         XCTAssertEqual(shape["payload_object"] as? Bool, true)
         XCTAssertEqual(shape["has_exact_input_output"] as? Bool, false)
+        XCTAssertEqual(shape["has_model_hint"] as? Bool, true)
+        XCTAssertEqual(shape["has_opaque_run_hint"] as? Bool, true)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: mismatchURL.path))
+
+        try runAntigravityHook(rawInput: "not-json", inboxURL: inboxURL, diagnosticsURL: diagnosticsURL)
+
+        let mismatch = try decodedJSONObject(from: Data(contentsOf: mismatchURL))
+        XCTAssertEqual(mismatch["kind"] as? String, "runtime_payload_mismatch")
+        XCTAssertEqual(mismatch["reason"] as? String, "invalid_json")
 
         try runAntigravityHook(rawInput: "\n", inboxURL: inboxURL, diagnosticsURL: diagnosticsURL)
 
         empty = try decodedJSONObject(from: Data(contentsOf: emptyURL))
         XCTAssertEqual(empty["reason"] as? String, "empty_stdin")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: mismatchURL.path))
+
+        try runAntigravityHook(
+            payload: [
+                "hook_event": "post_invocation",
+                "phase": "tool"
+            ],
+            inboxURL: inboxURL,
+            diagnosticsURL: diagnosticsURL
+        )
+
+        empty = try decodedJSONObject(from: Data(contentsOf: emptyURL))
+        XCTAssertEqual(empty["kind"] as? String, "no_usage_hook_call")
+        XCTAssertEqual(empty["reason"] as? String, "no_token_usage_payload")
+        let lifecycleShape = try XCTUnwrap(empty["observed_safe_shape"] as? [String: Any])
+        XCTAssertEqual(lifecycleShape["payload_object"] as? Bool, true)
+        XCTAssertEqual(lifecycleShape["has_model_hint"] as? Bool, false)
+        XCTAssertEqual(lifecycleShape["has_opaque_run_hint"] as? Bool, false)
         XCTAssertTrue(FileManager.default.fileExists(atPath: mismatchURL.path))
 
         try runAntigravityHook(
