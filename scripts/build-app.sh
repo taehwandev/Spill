@@ -15,7 +15,14 @@ CONTENTS_DIR="$APP_DIR/Contents"
 MACOS_DIR="$CONTENTS_DIR/MacOS"
 RESOURCES_DIR="$CONTENTS_DIR/Resources"
 FRAMEWORKS_DIR="$CONTENTS_DIR/Frameworks"
+HELPER_APP_NAME="Spill Token Dashboard.app"
+HELPER_APP_DIR="$CONTENTS_DIR/Applications/$HELPER_APP_NAME"
+HELPER_CONTENTS_DIR="$HELPER_APP_DIR/Contents"
+HELPER_MACOS_DIR="$HELPER_CONTENTS_DIR/MacOS"
+HELPER_RESOURCES_DIR="$HELPER_CONTENTS_DIR/Resources"
+HELPER_FRAMEWORKS_DIR="$HELPER_CONTENTS_DIR/Frameworks"
 BUNDLE_ID="${SPILL_BUNDLE_ID:-dev.spill.Spill}"
+HELPER_BUNDLE_ID="${BUNDLE_ID}.TokenDashboard"
 DEFAULT_VERSION="$(date -u +%G.%V.1)"
 VERSION="${SPILL_VERSION:-$DEFAULT_VERSION}"
 BUILD_NUMBER="${SPILL_BUILD:-${VERSION##*.}}"
@@ -33,13 +40,36 @@ if [[ "${SPILL_DISABLE_SPARKLE:-0}" == "1" ]]; then
 fi
 
 sign_sparkle_framework() {
-    local sparkle_version_dir="$FRAMEWORKS_DIR/Sparkle.framework/Versions/B"
+    local frameworks_dir="$1"
+    local sparkle_version_dir="$frameworks_dir/Sparkle.framework/Versions/B"
 
     codesign --force --options runtime --sign "$SIGN_IDENTITY" "$sparkle_version_dir/Autoupdate"
     codesign --force --deep --options runtime --sign "$SIGN_IDENTITY" "$sparkle_version_dir/Updater.app"
     codesign --force --deep --options runtime --sign "$SIGN_IDENTITY" "$sparkle_version_dir/XPCServices/Downloader.xpc"
     codesign --force --deep --options runtime --sign "$SIGN_IDENTITY" "$sparkle_version_dir/XPCServices/Installer.xpc"
-    codesign --force --options runtime --sign "$SIGN_IDENTITY" "$FRAMEWORKS_DIR/Sparkle.framework"
+    codesign --force --options runtime --sign "$SIGN_IDENTITY" "$frameworks_dir/Sparkle.framework"
+}
+
+sign_app_bundle() {
+    local app_dir="$1"
+    local bundle_id="$2"
+
+    if [[ "$SIGN_IDENTITY" == "-" ]]; then
+        codesign \
+            --force \
+            --options runtime \
+            --sign "$SIGN_IDENTITY" \
+            --entitlements "$ENTITLEMENTS_PATH" \
+            --requirements "=designated => identifier \"$bundle_id\"" \
+            "$app_dir"
+    else
+        codesign \
+            --force \
+            --options runtime \
+            --sign "$SIGN_IDENTITY" \
+            --requirements "=designated => identifier \"$bundle_id\"" \
+            "$app_dir"
+    fi
 }
 
 if [[ -n "$APTABASE_APP_KEY" ]]; then
@@ -146,23 +176,51 @@ $SPARKLE_INFO_PLIST_ENTRY
 </plist>
 PLIST
 
-sign_sparkle_framework
+mkdir -p "$HELPER_MACOS_DIR" "$HELPER_RESOURCES_DIR" "$HELPER_FRAMEWORKS_DIR"
+cp "$MACOS_DIR/Spill" "$HELPER_MACOS_DIR/Spill"
+ditto "$RESOURCES_DIR/adapters" "$HELPER_RESOURCES_DIR/adapters"
+ditto "$FRAMEWORKS_DIR/Sparkle.framework" "$HELPER_FRAMEWORKS_DIR/Sparkle.framework"
+ditto "$RESOURCES_DIR/AppIcon.icns" "$HELPER_RESOURCES_DIR/AppIcon.icns"
 
-if [[ "$SIGN_IDENTITY" == "-" ]]; then
-    codesign \
-        --force \
-        --options runtime \
-        --sign "$SIGN_IDENTITY" \
-        --entitlements "$ENTITLEMENTS_PATH" \
-        --requirements "=designated => identifier \"$BUNDLE_ID\"" \
-        "$APP_DIR"
-else
-    codesign \
-        --force \
-        --options runtime \
-        --sign "$SIGN_IDENTITY" \
-        --requirements "=designated => identifier \"$BUNDLE_ID\"" \
-        "$APP_DIR"
-fi
+cat > "$HELPER_CONTENTS_DIR/Info.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleExecutable</key>
+    <string>Spill</string>
+    <key>CFBundleIdentifier</key>
+    <string>$HELPER_BUNDLE_ID</string>
+    <key>CFBundleName</key>
+    <string>Spill Token Dashboard</string>
+    <key>CFBundleDisplayName</key>
+    <string>Spill Token Dashboard</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
+    <key>CFBundleIconName</key>
+    <string>AppIcon</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>$VERSION</string>
+    <key>CFBundleVersion</key>
+    <string>$BUILD_NUMBER</string>
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.utilities</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>14.0</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSHumanReadableCopyright</key>
+    <string>Copyright 2026 Spill contributors</string>
+$SPARKLE_INFO_PLIST_ENTRY
+</dict>
+</plist>
+PLIST
+
+sign_sparkle_framework "$FRAMEWORKS_DIR"
+sign_sparkle_framework "$HELPER_FRAMEWORKS_DIR"
+sign_app_bundle "$HELPER_APP_DIR" "$HELPER_BUNDLE_ID"
+sign_app_bundle "$APP_DIR" "$BUNDLE_ID"
 
 echo "Built $APP_DIR"

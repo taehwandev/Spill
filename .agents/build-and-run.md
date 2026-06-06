@@ -36,6 +36,16 @@ open .build/Spill.app
 Do not report that an app or adapter change is visible until the correct app
 copy has been rebuilt and relaunched.
 
+The detailed token dashboard is bundled as a separate nested helper app:
+
+```text
+.build/Spill.app/Contents/Applications/Spill Token Dashboard.app
+```
+
+When testing dashboard process behavior, verify that helper bundle exists after
+`./scripts/build-app.sh`. Launching the dashboard from the main app should open
+that helper, not turn the main menu bar app into a regular foreground app.
+
 ## Command Boundaries
 
 | Command | What it proves | What it does not do |
@@ -49,7 +59,8 @@ copy has been rebuilt and relaunched.
 `./scripts/build-app.sh` is the local app bundle source of truth. It runs
 `swift build -c release`, creates `.build/Spill.app`, copies the executable,
 copies adapter resources into the app bundle, embeds Sparkle, writes
-`Info.plist`, generates the icon, and signs the app.
+`Info.plist`, generates the icon, creates the nested `Spill Token Dashboard.app`
+helper, and signs the helper before signing the main app.
 
 ## Menu Bar App Behavior
 
@@ -64,6 +75,10 @@ If `open .build/Spill.app` appears to do nothing:
 3. Confirm the process path is `.build/Spill.app/Contents/MacOS/Spill`, not
    `/Applications/Spill.app/Contents/MacOS/Spill`.
 4. Use the repo smoke scripts when manual menu bar observation is unreliable.
+
+The nested dashboard helper is a normal foreground app. It should appear in
+Command-Tab/Alt-Tab app switchers. Command-Q from the helper should close only
+the helper process; the main menu bar Spill process should keep running.
 
 ## Restart Loop After Source Changes
 

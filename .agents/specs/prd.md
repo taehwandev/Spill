@@ -240,6 +240,14 @@ Requirements:
 - The local dashboard should provide a manual self-test that writes one small
   synthetic token-only event through the local queue, but it must be presented
   as diagnostics rather than the normal startup path.
+- The native local token dashboard should run as a separate helper app/process
+  from the menu bar control tray when launched from the panel, status menu, or
+  Preferences. The helper should appear in normal app switching, including
+  Command-Tab/Alt-Tab style switchers, and Command-Q in that helper must quit
+  only the dashboard helper process, not the main Spill menu bar app.
+- If the helper app is missing in a development build, the main app may fall
+  back to the in-process dashboard window, but release app bundles should include
+  the helper and use the separate-process path by default.
 
 Dashboard UX requirements:
 

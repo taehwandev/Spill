@@ -2,24 +2,34 @@ import AppKit
 import SwiftUI
 
 @MainActor
-final class TokenMeteringDashboardWindowController {
+final class TokenMeteringDashboardWindowController: NSObject, NSWindowDelegate {
     private let autosaveName = NSWindow.FrameAutosaveName("SpillTokenMeteringDashboard")
     private let preferredSize = NSSize(width: 860, height: 680)
     private let minimumSize = NSSize(width: 720, height: 520)
     private let screenPadding: CGFloat = 32
     private let store: TokenUsageDashboardStore
+    private let cloudServiceStatusStore: CloudServiceStatusStore
     private let settings: SpillSettings
     private let refreshAction: () -> Void
+    private let settingsAction: () -> Void
+    private let closeAction: () -> Void
     private var window: NSWindow?
 
     init(
         store: TokenUsageDashboardStore,
+        cloudServiceStatusStore: CloudServiceStatusStore = CloudServiceStatusStore(),
         settings: SpillSettings = .shared,
-        refreshAction: @escaping () -> Void = {}
+        refreshAction: @escaping () -> Void = {},
+        settingsAction: @escaping () -> Void = {},
+        closeAction: @escaping () -> Void = {}
     ) {
         self.store = store
+        self.cloudServiceStatusStore = cloudServiceStatusStore
         self.settings = settings
         self.refreshAction = refreshAction
+        self.settingsAction = settingsAction
+        self.closeAction = closeAction
+        super.init()
     }
 
     func show() {
@@ -41,8 +51,10 @@ final class TokenMeteringDashboardWindowController {
 
         let contentView = TokenMeteringDashboardView(
             store: store,
+            cloudServiceStatusStore: cloudServiceStatusStore,
             settings: settings,
             refreshAction: refreshAction,
+            settingsAction: settingsAction,
             titleDidChange: { [weak self] in
                 self?.updateWindowTitle()
             }
@@ -61,8 +73,13 @@ final class TokenMeteringDashboardWindowController {
         window.collectionBehavior = [.moveToActiveSpace]
         window.setFrameAutosaveName(autosaveName)
         window.contentView = NSHostingView(rootView: contentView)
+        window.delegate = self
         self.window = window
         return window
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        closeAction()
     }
 
     private func updateWindowTitle(_ window: NSWindow? = nil) {

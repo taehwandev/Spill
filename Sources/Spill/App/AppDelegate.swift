@@ -32,13 +32,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var tokenUsageCollectorCoordinator = TokenUsageCollectorCoordinator(
         store: tokenUsageStore
     )
+    private lazy var tokenMeteringDashboardLauncher = TokenMeteringDashboardLauncher()
     private lazy var tokenUsageDashboardStore = TokenUsageDashboardStore(
         usageStore: tokenUsageStore
     )
     private lazy var tokenMeteringDashboardWindowController = TokenMeteringDashboardWindowController(
         store: tokenUsageDashboardStore,
+        cloudServiceStatusStore: cloudServiceStatusStore,
         refreshAction: { [weak self] in
             self?.requestTokenUsageCollection(reason: "dashboard_refresh")
+        },
+        settingsAction: { [weak self] in
+            self?.showPreferences(source: "token_dashboard", selectedTab: TokenMeteringDashboardProcess.tokenMeteringPreferencesTab)
         }
     )
     private lazy var hotKeyController = HotKeyController(
@@ -169,6 +174,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         observeStateChanges()
+        observeDashboardPreferenceRequests()
         tokenUsageInboxMonitor.start()
         requestTokenUsageCollection(reason: "app_launch")
         configureTokenUsageBridge()
@@ -333,6 +339,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         scanCoordinator.stop()
         tokenUsageInboxMonitor.stop()
         tokenUsageBridgeServer.stop()
+        DistributedNotificationCenter.default().removeObserver(
+            self,
+            name: TokenMeteringDashboardProcess.openPreferencesNotification,
+            object: nil
+        )
         statusRefreshTask?.cancel()
         sleepGuard.stop()
         spillPanelController.hide(animated: false)
@@ -403,9 +414,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func showPreferences(source: String = "unknown") {
+    private func showPreferences(source: String = "unknown", selectedTab: String? = nil) {
         SpillTelemetry.shared.track("settings_opened", props: ["source": source])
-        preferencesWindowController.show()
+        preferencesWindowController.show(selectedTab: selectedTab)
     }
 
     private func openTokenDashboard(source: String = "unknown") {
@@ -417,10 +428,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         if wasPanelVisible {
             Task { @MainActor [weak self] in
-                self?.presentTokenDashboardWindow()
+                self?.openTokenDashboardProcessOrFallback()
             }
         } else {
-            presentTokenDashboardWindow()
+            openTokenDashboardProcessOrFallback()
+        }
+    }
+
+    private func openTokenDashboardProcessOrFallback() {
+        tokenMeteringDashboardLauncher.open { [weak self] in
+            self?.presentTokenDashboardWindow()
         }
     }
 
@@ -701,6 +718,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.statusItemController?.refresh()
             }
             .store(in: &cancellables)
+    }
+
+    private func observeDashboardPreferenceRequests() {
+        DistributedNotificationCenter.default().addObserver(
+            self,
+            selector: #selector(showPreferencesFromDashboardRequest(_:)),
+            name: TokenMeteringDashboardProcess.openPreferencesNotification,
+            object: nil
+        )
+    }
+
+    @objc private func showPreferencesFromDashboardRequest(_ notification: Notification) {
+        let selectedTab = notification.userInfo?[TokenMeteringDashboardProcess.preferencesTabUserInfoKey] as? String
+        showPreferences(source: "token_dashboard", selectedTab: selectedTab)
     }
 
     private func configureStatusRefreshLoop() {

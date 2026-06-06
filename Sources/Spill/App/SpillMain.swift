@@ -2,16 +2,23 @@ import AppKit
 
 @main
 enum SpillMain {
-    @MainActor private static var appDelegate: AppDelegate?
+    @MainActor private static var appDelegate: (NSObject & NSApplicationDelegate)?
 
     @MainActor
     static func main() {
         let application = NSApplication.shared
-        let delegate = AppDelegate()
+        let delegate: NSObject & NSApplicationDelegate
+
+        if TokenMeteringDashboardProcess.isDashboardProcess {
+            delegate = TokenMeteringDashboardAppDelegate()
+            application.setActivationPolicy(.regular)
+        } else {
+            delegate = AppDelegate()
+            application.setActivationPolicy(.accessory)
+        }
 
         appDelegate = delegate
         application.delegate = delegate
-        application.setActivationPolicy(.accessory)
         application.run()
     }
 }

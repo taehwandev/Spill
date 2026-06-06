@@ -144,6 +144,44 @@ Constraints:
 - Detail actions must not start cloud sync, auth, network upload, or content
   collection.
 
+### ARD-005C: Local Token Dashboard Uses A Separate Helper App
+
+Decision:
+
+The detailed Local Token Dashboard launches as a separate bundled helper app
+from the main menu bar utility. The main Spill app remains an `LSUIElement`
+accessory process with one status item. The dashboard helper uses regular app
+activation so it can appear in Command-Tab/Alt-Tab style app switching and own
+normal window commands such as Command-Q.
+
+Rationale:
+
+The compact tray and the detailed dashboard have different lifecycle and focus
+expectations. Keeping the detailed dashboard in a separate process avoids
+turning the menu bar app into a regular foreground app, prevents Command-Q in
+the dashboard from terminating the tray, and lets users switch back to the
+dashboard like a normal app window.
+
+Rules:
+
+- The helper app reuses the same executable code path but enters a
+  dashboard-only delegate when launched from the helper bundle or explicit
+  dashboard mode.
+- The helper delegate owns only token metering dashboard state, local store
+  reads, and dashboard refresh/collector requests. It must not create a status
+  item, global hotkey, menu bar scanner, sleep guard, update UI, token bridge
+  server, or compact panel.
+- Main app entry points for the dashboard, including panel, status menu,
+  Preferences, and main menu actions, route through one launcher command.
+- The launcher should activate an existing helper instance when available and
+  fall back to the old in-process dashboard only when the helper bundle is
+  unavailable or launch fails.
+- Closing or Command-Q from the dashboard helper terminates only the helper
+  process. The main Spill menu bar process continues running.
+- The local store remains app-owned and token-only. The helper must not add
+  cloud sync, auth, prompt logging, transcript inspection, or broad filesystem
+  access.
+
 ### ARD-005B: Local Token Metering Uses App-Owned Local Receivers
 
 Decision:
