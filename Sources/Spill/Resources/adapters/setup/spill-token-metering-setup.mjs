@@ -199,7 +199,8 @@ async function configureAntigravity(scriptPath) {
   // Write to both paths for robustness across client versions and verification logic
   const targets = [
     join(homedir(), ".gemini", "config", "hooks.json"),
-    join(homedir(), ".gemini", "hooks.json")
+    join(homedir(), ".gemini", "hooks.json"),
+    join(homedir(), ".gemini", "antigravity-cli", "hooks.json")
   ];
   for (const target of targets) {
     await mergeAgyHookFile(target, finalScriptPath, "antigravity");
@@ -807,5 +808,8 @@ function safeTTLMinutes(value) {
 }
 
 function shellQuote(value) {
-  return `'${value.replaceAll("'", "'\\''")}'`;
+  if (value.includes(" ") || value.includes("'") || value.includes('"') || value.includes("$") || value.includes("\\")) {
+    return `'${value.replaceAll("'", "'\\''")}'`;
+  }
+  return value;
 }

@@ -5,6 +5,10 @@ import { constants } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
+import { exec } from "node:child_process";
+import { promisify } from "node:util";
+
+const execPromise = promisify(exec);
 
 const STAMP = new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
 const args = parseArgs(process.argv.slice(2));
@@ -17,15 +21,6 @@ const defaultHookAdapters = "codex,claude,antigravity";
 const alwaysInstallAdapters = new Set(defaultHookAdapters.split(","));
 const include = new Set((args.include ?? defaultHookAdapters).split(",").map((item) => item.trim()).filter(Boolean));
 const workflowHook = args.workflowHook ? expandHome(args.workflowHook) : null;
-const implementationDominantTaskTypes = new Set([
-  "code_generation",
-  "debugging",
-  "refactoring",
-  "test_generation",
-  "ui_design",
-  "prompt_design",
-  "workflow_setup",
-]);
 
 if (args.label) {
   const label = await writeRuntimeLabel({
@@ -169,38 +164,6 @@ async function configureClaude(scriptPath) {
   const target = join(homedir(), ".claude", "settings.json");
   const stopCommand = `SPILL_AI_TOOL=claude python3 ${shellQuote(scriptPath)}`;
   await mergeStopHookFile(target, stopCommand, 5, "claude", /Spill\/adapters\/claude-code\/spill-hook\.py|claude-code\/spill-hook\.py/);
-  await removeClaudeBaselineLabelHook(target);
-}
-
-async function removeClaudeBaselineLabelHook(target) {
-  const match = /workflow\.py.*route.*triage.*--request-classified/;
-
-  if (!apply) {
-    results.push({ tool: "claude", action: "would_cleanup_baseline_label", path: target });
-    return;
-  }
-
-  const config = await readJSONObject(target);
-  const hooks = plainObject(config.hooks) ? config.hooks : {};
-  const groups = Array.isArray(hooks.UserPromptSubmit) ? hooks.UserPromptSubmit : [];
-  const cleaned = [];
-  for (const group of groups) {
-    if (!plainObject(group) || !Array.isArray(group.hooks)) {
-      cleaned.push(group);
-      continue;
-    }
-    const remaining = group.hooks.filter(
-      (hook) => !plainObject(hook) || typeof hook.command !== "string" || !match.test(hook.command)
-    );
-    if (remaining.length > 0) {
-      cleaned.push({ ...group, hooks: remaining });
-    }
-  }
-
-  hooks.UserPromptSubmit = cleaned;
-  config.hooks = hooks;
-  await writeJSONObject(target, config);
-  results.push({ tool: "claude", action: "cleaned_baseline_label", path: target });
 }
 
 async function configureAntigravity(scriptPath) {
@@ -236,7 +199,8 @@ async function configureAntigravity(scriptPath) {
   // Write to both paths for robustness across client versions and verification logic
   const targets = [
     join(homedir(), ".gemini", "config", "hooks.json"),
-    join(homedir(), ".gemini", "hooks.json")
+    join(homedir(), ".gemini", "hooks.json"),
+    join(homedir(), ".gemini", "antigravity-cli", "hooks.json")
   ];
   for (const target of targets) {
     await mergeAgyHookFile(target, finalScriptPath, "antigravity");
@@ -450,6 +414,15 @@ async function configureAgentRuntimeSettings({ tool, target, permissionPrefix })
 
   await writeJSONObject(target, config);
   results.push({ tool, action: "configured_agent_runtime", path: target });
+
+  if (apply && tool === "antigravity" && process.platform === "darwin") {
+    try {
+      await execPromise("launchctl kickstart -k gui/$(id -u)/com.trappist.agentcatd");
+      results.push({ tool: "antigravity", action: "daemon_restarted" });
+    } catch (err) {
+      results.push({ tool: "antigravity", action: "daemon_restart_failed", reason: err.message });
+    }
+  }
 }
 
 function agentRuntimePermissionEntries(tool, permissionPrefix) {
@@ -563,7 +536,7 @@ async function writeManagedTextBlock({ path, begin, end, block }) {
 async function writeRuntimeLabel({ tool, taskType, stage, labelFile, ttlMinutes, ifAbsent }) {
   const safeTool = safeToolLabel(tool);
   const safeTaskType = safeWorkflowSlug(taskType, "task_type");
-  const safeStage = dominantStageForTask(safeTaskType, safeWorkflowSlug(stage, "stage"));
+  const safeStage = safeWorkflowSlug(stage, "stage");
   const ttl = safeTTLMinutes(ttlMinutes);
   const now = new Date();
   const expiresAt = new Date(now.getTime() + ttl * 60 * 1000);
@@ -628,13 +601,6 @@ async function readActiveRuntimeLabel(path, expectedTool, now) {
   } catch {
     return null;
   }
-}
-
-function dominantStageForTask(taskType, stage) {
-  if (stage === "verify" && implementationDominantTaskTypes.has(taskType)) {
-    return "implement";
-  }
-  return stage;
 }
 
 async function resolveSourceRoot(option) {

@@ -226,21 +226,21 @@ node "$ROOT_DIR/scripts/spill-token-metering-setup.mjs" \
     --ttl-minutes 5 \
     --json >/dev/null
 
-NORMALIZED_LABEL_FILE="$ADAPTER_TMP_DIR/codex-normalized-label.json"
+PRESERVED_LABEL_FILE="$ADAPTER_TMP_DIR/codex-preserved-label.json"
 node "$ROOT_DIR/scripts/spill-token-metering-setup.mjs" \
     --label codex \
     --task-type code_generation \
     --stage verify \
-    --label-file "$NORMALIZED_LABEL_FILE" \
+    --label-file "$PRESERVED_LABEL_FILE" \
     --ttl-minutes 5 \
     --json >/dev/null
 
-NORMALIZED_LABEL_FILE="$NORMALIZED_LABEL_FILE" node --input-type=module <<'NODE'
+PRESERVED_LABEL_FILE="$PRESERVED_LABEL_FILE" node --input-type=module <<'NODE'
 import { readFile } from 'node:fs/promises';
 
-const label = JSON.parse(await readFile(process.env.NORMALIZED_LABEL_FILE, "utf8"));
-if (label.task_type !== "code_generation" || label.stage !== "implement") {
-  throw new Error(`expected code_generation/implement label, found ${label.task_type}/${label.stage}`);
+const label = JSON.parse(await readFile(process.env.PRESERVED_LABEL_FILE, "utf8"));
+if (label.task_type !== "code_generation" || label.stage !== "verify") {
+  throw new Error(`expected code_generation/verify label, found ${label.task_type}/${label.stage}`);
 }
 NODE
 
