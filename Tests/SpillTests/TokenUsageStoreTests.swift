@@ -48,6 +48,7 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(snapshot.eventCount, 1)
         XCTAssertEqual(snapshot.totalTokens, 150)
         XCTAssertEqual(snapshot.kpis.first?.value, "150")
+        XCTAssertEqual(snapshot.kpis.map(\.id), ["total", "input", "output"])
         XCTAssertEqual(snapshot.toolRows.map(\.title), ["Codex"])
         XCTAssertEqual(snapshot.modelRows.map(\.title), ["local-manual"])
         XCTAssertEqual(snapshot.taskRows.map(\.title), [TokenMeteringL10n.taskLabel("analysis")])
@@ -182,14 +183,14 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(snapshot.sourceRows.contains { $0.title == TokenMeteringL10n.text(.sourceUnavailable) && $0.value == "33" })
     }
 
-    func testDashboardSnapshotMarksMissingLatencyAsUnavailable() {
+    func testDashboardSnapshotOmitsLatencyKPIAndMissingLatencyCopy() {
         let snapshot = TokenUsageDashboardSnapshot(events: [
             Self.safeEvent(latencyMS: 0)
         ])
 
-        XCTAssertEqual(snapshot.kpis.first(where: { $0.id == "latency" })?.value, TokenMeteringL10n.text(.latencyUnavailable))
-        XCTAssertEqual(snapshot.kpis.first(where: { $0.id == "latency" })?.detail, TokenMeteringL10n.text(.runtimeTimingUnavailable))
-        XCTAssertTrue(snapshot.sessions.first?.detail.contains(TokenMeteringL10n.text(.latencyUnavailable)) == true)
+        XCTAssertFalse(snapshot.kpis.contains { $0.id == "latency" })
+        XCTAssertFalse(snapshot.sessions.first?.detail.contains(TokenMeteringL10n.text(.latencyUnavailable)) == true)
+        XCTAssertTrue(snapshot.sessions.first?.detail.contains("events") == true)
     }
 
     func testDashboardSourceRowsShowUnknownWhenMixedWithKnownBreakdown() {
@@ -216,6 +217,12 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(dashboardView.contains(".contextMenu"))
         XCTAssertTrue(dashboardView.contains("requestClear(.workItem(session.id))"))
         XCTAssertFalse(dashboardView.contains("requestClear(.workItem(detailSession.id))"))
+        XCTAssertTrue(dashboardView.contains("settingsAction()"))
+        XCTAssertTrue(dashboardView.contains("Label(AppL10n.text(.settings"))
+        XCTAssertFalse(dashboardView.contains("TokenMeteringGlobalSetup.prompt("))
+        XCTAssertFalse(dashboardView.contains("diagnosticsPanel"))
+        XCTAssertFalse(dashboardView.contains("runLocalQueueSelfTest()"))
+        XCTAssertFalse(dashboardView.contains("t(.avgLatency)"))
         XCTAssertTrue(preferencesSection.contains("localDataManagementSection"))
         XCTAssertTrue(preferencesSection.contains("Label(t(.clearAllLocalData), systemImage: \"trash\")"))
         XCTAssertTrue(preferencesSection.contains("try tokenUsageStore.clearEvents()"))
@@ -249,19 +256,31 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(dashboardView.contains("title: t(.sourceBreakdown)"))
     }
 
-    func testDashboardViewKeepsAgentFilterRailAndSuppressesDefaultFocusBoxes() throws {
+    func testDashboardViewUsesTopToolTabsAndOptionalCalendarPicker() throws {
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let dashboardView = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardView.swift"))
         let preferencesView = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Preferences/PreferencesView.swift"))
         let dashboardStore = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenUsageDashboardStore.swift"))
 
-        XCTAssertTrue(dashboardView.contains("railPanel(title: t(.aiTool))"))
+        XCTAssertFalse(dashboardView.contains("private var leftRail"))
+        XCTAssertFalse(dashboardView.contains("railPanel(title: t(.aiTool))"))
+        XCTAssertFalse(dashboardView.contains("railPanel(title: t(.workflowFocus))"))
+        XCTAssertTrue(dashboardView.contains("topFilterBar"))
+        XCTAssertTrue(dashboardView.contains("topToolTab(filter)"))
         XCTAssertTrue(dashboardView.contains("store.setSelectedTool(filter.tool)"))
+        XCTAssertTrue(dashboardView.contains("calendarPickerPanel"))
+        XCTAssertTrue(dashboardView.contains(".popover(isPresented: $isCalendarPickerPresented"))
+        XCTAssertTrue(dashboardView.contains("store.clearSelectedCalendarDay()"))
+        XCTAssertTrue(dashboardView.contains("receiverPanel"))
         XCTAssertTrue(dashboardView.contains(".focusEffectDisabled()"))
+        XCTAssertTrue(dashboardView.contains("private struct TokenMeteringInfoButton"))
+        XCTAssertTrue(dashboardView.contains(".focusable(false)"))
+        XCTAssertTrue(dashboardView.contains(".accessibilityLabel(title)"))
         XCTAssertTrue(preferencesView.contains("private func sidebarItem"))
         XCTAssertTrue(preferencesView.contains(".focusEffectDisabled()"))
         XCTAssertTrue(dashboardStore.contains("@Published private(set) var unfilteredSnapshot"))
         XCTAssertFalse(dashboardStore.contains("var unfilteredSnapshot: TokenUsageDashboardSnapshot {"))
+        XCTAssertTrue(dashboardStore.contains("func clearSelectedCalendarDay()"))
         XCTAssertTrue(dashboardView.contains("TokenMeteringLiveUpdateDot"))
         XCTAssertTrue(dashboardView.contains(".contentTransition(.numericText())"))
     }
@@ -270,24 +289,122 @@ final class TokenUsageStoreTests: XCTestCase {
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let appDelegate = try String(contentsOf: root.appendingPathComponent("Sources/Spill/App/AppDelegate.swift"))
         let dashboardView = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardView.swift"))
+        let dashboardProcess = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardProcess.swift"))
         let collector = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenUsageCollectorCoordinator.swift"))
 
         XCTAssertTrue(appDelegate.contains("let wasPanelVisible = spillPanelController.isVisible"))
         XCTAssertTrue(appDelegate.contains("spillPanelController.hide(animated: false)"))
         XCTAssertTrue(appDelegate.contains("Task { @MainActor [weak self] in"))
+        XCTAssertTrue(appDelegate.contains("self?.openTokenDashboardProcessOrFallback()"))
+        XCTAssertTrue(appDelegate.contains("tokenMeteringDashboardLauncher.open"))
         XCTAssertTrue(appDelegate.contains("self?.presentTokenDashboardWindow()"))
         XCTAssertTrue(appDelegate.contains("tokenMeteringDashboardWindowController.show()"))
         XCTAssertTrue(appDelegate.contains("TokenUsageCollectorCoordinator("))
         XCTAssertTrue(appDelegate.contains("requestTokenUsageCollection(reason: \"panel_open\")"))
         XCTAssertTrue(appDelegate.contains("requestTokenUsageCollection(reason: \"dashboard_refresh\")"))
         XCTAssertTrue(appDelegate.contains("requestTokenUsageCollection(reason: \"manual_refresh\")"))
+        XCTAssertTrue(appDelegate.contains("selectedTab: TokenMeteringDashboardProcess.tokenMeteringPreferencesTab"))
+        XCTAssertTrue(appDelegate.contains("observeDashboardPreferenceRequests()"))
+        XCTAssertTrue(appDelegate.contains("showPreferencesFromDashboardRequest"))
+        XCTAssertTrue(dashboardProcess.contains("openPreferencesNotification"))
+        XCTAssertTrue(dashboardProcess.contains("postOpenPreferencesRequest"))
         XCTAssertTrue(appDelegate.contains("SPILL_SMOKE_ENABLE_TOKEN_COLLECTORS"))
         XCTAssertTrue(dashboardView.contains("private let refreshAction: () -> Void"))
+        XCTAssertTrue(dashboardView.contains("private let settingsAction: () -> Void"))
+        XCTAssertTrue(dashboardView.contains("settingsAction: @escaping () -> Void = {}"))
         XCTAssertTrue(dashboardView.contains("refreshAction()"))
         XCTAssertTrue(collector.contains("TokenMeteringAdapterKit.defaultInstallURL(for: TokenMeteringAdapterKit.codex)"))
         XCTAssertTrue(collector.contains("runCodexImporterIfAvailable()"))
+        XCTAssertTrue(collector.contains("importQueuedEventsWhileProcessRuns(process)"))
         XCTAssertFalse(collector.contains("TokenMeteringAdapterKit.claudeCode"))
         XCTAssertFalse(collector.contains("TokenMeteringAdapterKit.agy"))
+    }
+
+    func testCodexImporterStreamsInboxWhileImporterRuns() throws {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let collector = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenUsageCollectorCoordinator.swift"))
+
+        XCTAssertTrue(collector.contains("private func importQueuedEventsWhileProcessRuns(_ process: Process)"))
+        XCTAssertTrue(collector.contains("while process.isRunning"))
+        XCTAssertTrue(collector.contains("store.importQueuedEvents()"))
+        XCTAssertTrue(collector.contains("Thread.sleep(forTimeInterval: importerDrainInterval)"))
+        XCTAssertTrue(collector.contains("process.terminate()"))
+        XCTAssertTrue(collector.contains("importerMaximumRuntime"))
+        XCTAssertTrue(collector.contains("process.standardOutput = FileHandle.nullDevice"))
+        XCTAssertTrue(collector.contains("process.standardError = FileHandle.nullDevice"))
+    }
+
+    func testTokenDashboardHelperProcessContracts() throws {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let main = try String(contentsOf: root.appendingPathComponent("Sources/Spill/App/SpillMain.swift"))
+        let appDelegate = try String(contentsOf: root.appendingPathComponent("Sources/Spill/App/AppDelegate.swift"))
+        let process = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardProcess.swift"))
+        let launcher = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardLauncher.swift"))
+        let helperDelegate = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardAppDelegate.swift"))
+        let windowController = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardWindowController.swift"))
+        let buildScript = try String(contentsOf: root.appendingPathComponent("scripts/build-app.sh"))
+        let smokeScript = try String(contentsOf: root.appendingPathComponent("scripts/verify-runtime-smoke.sh"))
+
+        XCTAssertTrue(main.contains("TokenMeteringDashboardProcess.isDashboardProcess"))
+        XCTAssertTrue(main.contains("TokenMeteringDashboardAppDelegate()"))
+        XCTAssertTrue(main.contains("application.setActivationPolicy(.regular)"))
+        XCTAssertTrue(main.contains("application.setActivationPolicy(.accessory)"))
+        XCTAssertTrue(process.contains(#"static let helperBundleName = "Spill Token Dashboard.app""#))
+        XCTAssertTrue(process.contains(#"static let helperBundleIdentifierSuffix = ".TokenDashboard""#))
+        XCTAssertTrue(launcher.contains("NSWorkspace.OpenConfiguration"))
+        XCTAssertTrue(launcher.contains("workspace.openApplication(at: helperURL"))
+        XCTAssertTrue(appDelegate.contains("private lazy var tokenMeteringDashboardLauncher"))
+        XCTAssertTrue(appDelegate.contains("tokenMeteringDashboardLauncher.open"))
+
+        XCTAssertTrue(helperDelegate.contains("applicationShouldTerminateAfterLastWindowClosed"))
+        XCTAssertTrue(helperDelegate.contains("SPILL_TOKEN_DASHBOARD_SMOKE_READY"))
+        XCTAssertTrue(helperDelegate.contains("SPILL_TOKEN_DASHBOARD_SMOKE_EXIT"))
+        XCTAssertTrue(helperDelegate.contains("openMainAppTokenMeteringSettings"))
+        XCTAssertTrue(helperDelegate.contains("TokenMeteringDashboardProcess.postOpenPreferencesRequest()"))
+        XCTAssertFalse(helperDelegate.contains("StatusItemController("))
+        XCTAssertFalse(helperDelegate.contains("AXMenuBarItemScanner("))
+        XCTAssertFalse(helperDelegate.contains("HotKeyController("))
+        XCTAssertFalse(helperDelegate.contains("TokenUsageBridgeServer("))
+        XCTAssertFalse(helperDelegate.contains("SpillPanelController("))
+        XCTAssertTrue(windowController.contains("closeAction"))
+        XCTAssertTrue(windowController.contains("settingsAction"))
+        XCTAssertTrue(windowController.contains("window.delegate = self"))
+        XCTAssertTrue(windowController.contains("windowWillClose"))
+
+        XCTAssertTrue(buildScript.contains(#"HELPER_APP_NAME="Spill Token Dashboard.app""#))
+        XCTAssertTrue(buildScript.contains(#"HELPER_BUNDLE_ID="${BUNDLE_ID}.TokenDashboard""#))
+        XCTAssertTrue(buildScript.contains(#"sign_app_bundle "$HELPER_APP_DIR" "$HELPER_BUNDLE_ID""#))
+        XCTAssertTrue(smokeScript.contains("SPILL_TOKEN_DASHBOARD_STANDALONE=1"))
+        XCTAssertTrue(smokeScript.contains("SPILL_TOKEN_DASHBOARD_SMOKE_READY"))
+        XCTAssertTrue(smokeScript.contains("SPILL_TOKEN_DASHBOARD_SMOKE_EXIT"))
+    }
+
+    func testTokenDashboardHelperURLResolution() {
+        let mainBundleURL = URL(fileURLWithPath: "/tmp/Spill.app")
+        let expectedPath = "/tmp/Spill.app/Contents/Applications/Spill Token Dashboard.app"
+        let resolved = TokenMeteringDashboardProcess.helperAppURL(
+            mainBundleURL: mainBundleURL,
+            fileExists: { $0 == expectedPath }
+        )
+
+        XCTAssertEqual(resolved?.path, expectedPath)
+        XCTAssertEqual(
+            TokenMeteringDashboardProcess.mainAppURLForDashboardHelper(
+                helperBundleURL: URL(fileURLWithPath: expectedPath),
+                fileExists: { $0 == mainBundleURL.path }
+            )?.path,
+            mainBundleURL.path
+        )
+        XCTAssertNil(TokenMeteringDashboardProcess.helperAppURL(
+            mainBundleURL: mainBundleURL,
+            fileExists: { _ in false }
+        ))
+        XCTAssertNil(TokenMeteringDashboardProcess.mainAppURLForDashboardHelper(
+            helperBundleURL: mainBundleURL,
+            fileExists: { _ in true }
+        ))
+        XCTAssertTrue(TokenMeteringDashboardProcess.isDashboardBundleIdentifier("dev.spill.Spill.TokenDashboard"))
+        XCTAssertFalse(TokenMeteringDashboardProcess.isDashboardBundleIdentifier("dev.spill.Spill"))
     }
 
     func testTokenUsageCollectorResolvesNodeWithoutRelyingOnGUIPath() {
@@ -488,7 +605,7 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(dashboardStore.isLiveUpdated("kpi:total"))
         XCTAssertTrue(dashboardStore.isLiveUpdated("kpi:input"))
         XCTAssertTrue(dashboardStore.isLiveUpdated("kpi:output"))
-        XCTAssertTrue(dashboardStore.isLiveUpdated("kpi:latency"))
+        XCTAssertFalse(dashboardStore.isLiveUpdated("kpi:latency"))
         XCTAssertTrue(dashboardStore.isLiveUpdated("tool:codex"))
         XCTAssertTrue(dashboardStore.isLiveUpdated("filter:tool:codex"))
         XCTAssertTrue(dashboardStore.isLiveUpdated("filter:tool:all"))
@@ -1065,7 +1182,10 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(prompt.contains("Spill label handoff commands"))
         XCTAssertTrue(prompt.contains("Workflow runner permissions are separate"))
         XCTAssertTrue(prompt.contains("runtime-specific exact-count input shapes"))
-        XCTAssertTrue(prompt.contains("AGY empty stdin and AGY structured lifecycle/tool/model-adjacent payloads"))
+        XCTAssertTrue(prompt.contains("nested runtime envelopes"))
+        XCTAssertTrue(prompt.contains("empty tokens objects"))
+        XCTAssertTrue(prompt.contains("zero-valued token fields"))
+        XCTAssertTrue(prompt.contains("structured lifecycle/tool/model-adjacent payloads"))
         XCTAssertTrue(prompt.contains("even when they include model or session hints"))
         XCTAssertTrue(prompt.contains("antigravity-last-empty.json"))
         XCTAssertTrue(prompt.contains("antigravity-last-mismatch.json"))
@@ -1140,6 +1260,7 @@ final class TokenUsageStoreTests: XCTestCase {
         let runtime = try String(contentsOf: root.appendingPathComponent("docs/token-metering/runtime-instruction.md"))
         let installer = try String(contentsOf: root.appendingPathComponent("docs/token-metering/install.sh"))
         let helper = try String(contentsOf: root.appendingPathComponent("adapters/setup/spill-token-metering-setup.mjs"))
+        let codexImporter = try String(contentsOf: root.appendingPathComponent("adapters/codex/spill-importer.mjs"))
         let agyHook = try String(contentsOf: root.appendingPathComponent("adapters/antigravity/spill-hook.py"))
         let bundledAgyHook = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Resources/adapters/antigravity/spill-hook.py"))
         let claudeHook = try String(contentsOf: root.appendingPathComponent("adapters/claude-code/spill-hook.py"))
@@ -1199,6 +1320,8 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(setup.contains("shared runtime hook input schema"))
         XCTAssertTrue(setup.contains("hook payload exposes exact token usage fields"))
         XCTAssertTrue(setup.contains("normalized `spill_token_usage` object"))
+        XCTAssertTrue(setup.contains("AGY may wrap those exact token fields in runtime-specific envelopes"))
+        XCTAssertTrue(setup.contains("empty `tokens` object"))
         XCTAssertTrue(setup.contains("local-only safe diagnostics under Spill's token-metering diagnostics directory"))
         XCTAssertTrue(setup.contains("model-adjacent"))
         XCTAssertTrue(setup.contains("even when the payload contains model or session hints"))
@@ -1220,6 +1343,8 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(runtime.contains("Runtime input normalization"))
         XCTAssertTrue(runtime.contains("strict contract is the Spill output event schema"))
         XCTAssertTrue(runtime.contains("Runtime hook input formats are allowed to differ by tool"))
+        XCTAssertTrue(runtime.contains("Antigravity/AGY may wrap exact usage data in nested runtime envelopes"))
+        XCTAssertTrue(runtime.contains("empty `tokens` object"))
         XCTAssertTrue(runtime.contains("Antigravity/AGY `PostInvocation` hooks can execute"))
         XCTAssertTrue(runtime.contains("write a local-only diagnostic"))
         XCTAssertTrue(runtime.contains("AGY empty stdin is a normal no-event hook call"))
@@ -1310,6 +1435,14 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(helper.contains("--if-absent"))
         XCTAssertTrue(helper.contains("readActiveRuntimeLabel"))
         XCTAssertTrue(helper.contains(#""label_exists""#))
+        XCTAssertFalse(helper.contains("dominantStageForTask"))
+        XCTAssertFalse(helper.contains("implementationDominantTaskTypes"))
+
+        XCTAssertTrue(codexImporter.contains("labelForTimestamp(runtimeLabel, latest.timestamp)"))
+        XCTAssertTrue(codexImporter.contains("timestamp < label.updatedAt"))
+        XCTAssertTrue(codexImporter.contains("timestamp > label.expiresAt"))
+        XCTAssertTrue(codexImporter.contains("usedRuntimeLabel"))
+        XCTAssertTrue(codexImporter.contains("taskType: taskTypeOverride ?? eventLabel.taskType ?? fallbackLabel.taskType"))
 
         XCTAssertTrue(agyHook.contains("model_name"))
         XCTAssertTrue(agyHook.contains("modelId"))
@@ -1376,6 +1509,77 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(success["total_tokens"] as? Int, 150)
         XCTAssertNil(success["run_id"])
         XCTAssertNil(success["span_id"])
+    }
+
+    func testAntigravityHookExtractsNestedTokenPayloads() throws {
+        let inboxURL = temporaryInboxURL()
+        let diagnosticsURL = temporaryDiagnosticsURL()
+
+        try runAntigravityHook(
+            payload: [
+                "hook_event": "PostInvocation",
+                "data": [
+                    "conversationId": "agyNested01",
+                    "response": [
+                        "modelVersion": "gemini-3.5-flash-medium",
+                        "usageMetadata": [
+                            "promptTokenCount": 120,
+                            "candidatesTokenCount": 30
+                        ]
+                    ]
+                ],
+                "workflow": [
+                    "tokens": [
+                        "input": 1,
+                        "output": 1
+                    ]
+                ],
+                "task_type": "debugging",
+                "stage": "implement"
+            ],
+            inboxURL: inboxURL,
+            diagnosticsURL: diagnosticsURL
+        )
+
+        let events = try antigravityEventObjects(in: inboxURL)
+        XCTAssertEqual(events.count, 1)
+        XCTAssertEqual(events.first?["input_tokens"] as? Int, 120)
+        XCTAssertEqual(events.first?["output_tokens"] as? Int, 30)
+        XCTAssertEqual(events.first?["total_tokens"] as? Int, 150)
+        XCTAssertEqual(events.first?["run_id"] as? String, "agyNested01")
+        XCTAssertEqual(events.first?["model"] as? String, "gemini-3.5-flash-medium")
+        XCTAssertEqual(events.first?["task_type"] as? String, "debugging")
+        XCTAssertEqual(events.first?["stage"] as? String, "implement")
+    }
+
+    func testAntigravityHookTreatsEmptyTokenContainersAsNoUsage() throws {
+        let inboxURL = temporaryInboxURL()
+        let diagnosticsURL = temporaryDiagnosticsURL()
+        let emptyURL = diagnosticsURL.appendingPathComponent("antigravity-last-empty.json")
+
+        try runAntigravityHook(
+            payload: [
+                "data": [
+                    "conversationId": "agyEmptyTokens01",
+                    "response": [
+                        "modelVersion": "gemini-3.5-flash-medium",
+                        "tokens": [:]
+                    ]
+                ]
+            ],
+            inboxURL: inboxURL,
+            diagnosticsURL: diagnosticsURL
+        )
+
+        XCTAssertEqual(try antigravityEventObjects(in: inboxURL).count, 0)
+        let empty = try decodedJSONObject(from: Data(contentsOf: emptyURL))
+        XCTAssertEqual(empty["kind"] as? String, "no_usage_hook_call")
+        XCTAssertEqual(empty["reason"] as? String, "no_token_usage_payload")
+        let shape = try XCTUnwrap(empty["observed_safe_shape"] as? [String: Any])
+        XCTAssertEqual(shape["payload_object"] as? Bool, true)
+        XCTAssertEqual(shape["has_exact_input_output"] as? Bool, false)
+        XCTAssertEqual(shape["has_model_hint"] as? Bool, true)
+        XCTAssertEqual(shape["has_opaque_run_hint"] as? Bool, true)
     }
 
     func testAntigravityHookSeparatesEmptyMismatchAndSuccessDiagnostics() throws {
@@ -1821,13 +2025,41 @@ final class TokenUsageStoreTests: XCTestCase {
 
         XCTAssertEqual(snapshot.calendarWeekdayTitles.prefix(2), ["일", "월"])
         XCTAssertEqual(snapshot.calendarMonthTitle, "2026년 6월")
+        XCTAssertEqual(snapshot.todayCalendarDayID, "2026-06-05")
+        XCTAssertFalse(snapshot.todayCalendarDayTitle.isEmpty)
         XCTAssertFalse(snapshot.canNavigateNextCalendarMonth)
         XCTAssertFalse(snapshot.canNavigatePreviousCalendarMonth)
         XCTAssertEqual(snapshot.calendarDays.first?.isPlaceholder, true)
         XCTAssertEqual(snapshot.calendarDays.first { !$0.isPlaceholder }?.id, "2026-06-01")
         XCTAssertTrue(snapshot.calendarDays.contains { $0.id == "2026-06-01" && $0.hasEvents })
-        XCTAssertTrue(snapshot.calendarDays.contains { $0.id == "2026-06-05" && $0.hasEvents })
+        XCTAssertTrue(snapshot.calendarDays.contains { $0.id == "2026-06-05" && $0.hasEvents && $0.isToday })
         XCTAssertFalse(snapshot.calendarDays.contains { $0.id.hasPrefix("2026-05") && !$0.isPlaceholder })
+    }
+
+    func testDashboardSnapshotFiltersSelectedCalendarDay() throws {
+        let timeZone = try XCTUnwrap(TimeZone(identifier: "Asia/Seoul"))
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        calendar.firstWeekday = 1
+        let snapshot = TokenUsageDashboardSnapshot(
+            events: [
+                Self.safeEvent(spanID: "span_june_fifth", inputTokens: 100, outputTokens: 50, createdAt: "2026-06-04T15:05:00.000Z"),
+                Self.safeEvent(spanID: "span_june_sixth", inputTokens: 400, outputTokens: 100, createdAt: "2026-06-05T15:05:00.000Z")
+            ],
+            selectedCalendarDayID: "2026-06-05",
+            now: try Self.date("2026-06-20T01:00:00.000Z"),
+            calendar: calendar,
+            locale: Locale(identifier: "en_US"),
+            timeZone: timeZone
+        )
+
+        XCTAssertEqual(snapshot.selectedCalendarDayID, "2026-06-05")
+        XCTAssertEqual(snapshot.eventCount, 1)
+        XCTAssertEqual(snapshot.totalTokens, 150)
+        XCTAssertFalse(snapshot.periodFilters.contains { $0.isSelected })
+        XCTAssertTrue(snapshot.calendarDays.contains { $0.id == "2026-06-05" && $0.isSelected })
+        XCTAssertTrue(snapshot.calendarDays.contains { $0.id == "2026-06-06" && !$0.isSelected })
+        XCTAssertNil(snapshot.comparisonTotalTokens)
     }
 
     func testDashboardSnapshotClampsCalendarToFirstDataMonth() throws {

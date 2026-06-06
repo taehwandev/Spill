@@ -9,24 +9,29 @@ private struct TokenUsageClearRequest: Identifiable {
 
 struct TokenMeteringDashboardView: View {
     @ObservedObject var store: TokenUsageDashboardStore
+    @ObservedObject var cloudServiceStatusStore: CloudServiceStatusStore
     @ObservedObject private var settings: SpillSettings
-    @State private var copiedTarget: String?
-    @State private var isDiagnosticsExpanded = false
-    @State private var hoveredFilterTitle: String? = nil
+    @State private var isCalendarPickerPresented = false
+    @State private var isServiceStatusPresented = false
     @State private var pendingClearRequest: TokenUsageClearRequest?
     @State private var aliasText = ""
     private let refreshAction: () -> Void
+    private let settingsAction: () -> Void
     private let titleDidChange: () -> Void
 
     init(
         store: TokenUsageDashboardStore,
+        cloudServiceStatusStore: CloudServiceStatusStore = CloudServiceStatusStore(),
         settings: SpillSettings = .shared,
         refreshAction: @escaping () -> Void = {},
+        settingsAction: @escaping () -> Void = {},
         titleDidChange: @escaping () -> Void = {}
     ) {
         self.store = store
+        self.cloudServiceStatusStore = cloudServiceStatusStore
         _settings = ObservedObject(wrappedValue: settings)
         self.refreshAction = refreshAction
+        self.settingsAction = settingsAction
         self.titleDidChange = titleDidChange
     }
 
@@ -41,6 +46,14 @@ struct TokenMeteringDashboardView: View {
         TokenMeteringLanguage.current(appLanguage: settings.appLanguage)
     }
 
+    private var selectedControlAccent: Color {
+        Color(red: 0.18, green: 0.48, blue: 0.50)
+    }
+
+    private var selectedControlAccentHighlight: Color {
+        Color(red: 0.25, green: 0.58, blue: 0.59)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             topHeader
@@ -48,10 +61,12 @@ struct TokenMeteringDashboardView: View {
             Divider()
                 .background(Color.primary.opacity(0.05))
 
-            HStack(alignment: .top, spacing: 16) {
-                leftRail
-                    .frame(width: 224)
+            topFilterBar
 
+            Divider()
+                .background(Color.primary.opacity(0.05))
+
+            HStack(alignment: .top, spacing: 16) {
                 ScrollView(.vertical, showsIndicators: true) {
                     VStack(alignment: .leading, spacing: 16) {
                         kpiStrip
@@ -79,6 +94,7 @@ struct TokenMeteringDashboardView: View {
             titleDidChange()
             store.setLanguage(currentLanguage)
             store.refresh()
+            cloudServiceStatusStore.refreshIfNeeded()
         }
         .onChange(of: settings.appLanguage) { _, _ in
             titleDidChange()
@@ -168,10 +184,16 @@ struct TokenMeteringDashboardView: View {
 
             Spacer(minLength: 16)
 
-            TokenMeteringInfoButton(
-                title: t(.displayModeInfoTitle),
-                detail: t(.displayModeInfoDetail)
-            )
+            HStack(spacing: 8) {
+                TokenMeteringInfoButton(
+                    title: t(.displayModeInfoTitle),
+                    detail: t(.displayModeInfoDetail)
+                )
+
+                serviceStatusButton
+                    .frame(width: 116)
+            }
+            .frame(height: 30)
 
             Picker("", selection: Binding(
                 get: { store.displayMode },
@@ -190,19 +212,15 @@ struct TokenMeteringDashboardView: View {
                 Button {
                     refreshAction()
                     store.refresh()
+                    cloudServiceStatusStore.refreshIfNeeded(force: true)
                 } label: {
                     Label(t(.refresh), systemImage: "arrow.clockwise")
                 }
 
                 Button {
-                    copyToClipboard(
-                        TokenMeteringGlobalSetup.prompt(
-                            allowsLocalDisplayNames: settings.tokenMeteringPromptAllowsLocalDisplayNames
-                        ),
-                        target: "prompt"
-                    )
+                    settingsAction()
                 } label: {
-                    Label(copiedTarget == "prompt" ? t(.copied) : t(.copyPrompt), systemImage: copiedTarget == "prompt" ? "checkmark" : "doc.on.doc")
+                    Label(AppL10n.text(.settings, appLanguage: settings.appLanguage), systemImage: "gearshape")
                 }
 
             }
@@ -213,120 +231,314 @@ struct TokenMeteringDashboardView: View {
         .padding(.vertical, 14)
     }
 
-    private var leftRail: some View {
-        ScrollView(.vertical, showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 14) {
-                railPanel(title: t(.period)) {
-                    VStack(spacing: 7) {
-                        ForEach(store.snapshot.periodFilters) { filter in
-                            railFilterButton(
-                                title: filter.title,
-                                detail: filter.detail,
-                                isSelected: filter.isSelected
-                            ) {
-                                store.setSelectedPeriod(filter.period)
-                            }
-                        }
-                    }
+    private var topFilterBar: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Text(t(.aiTool).uppercased())
+                    .font(.system(size: 9, weight: .black))
+                    .tracking(1.0)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 78, alignment: .leading)
+
+                ForEach(store.snapshot.toolFilters) { filter in
+                    topToolTab(filter)
                 }
-
-                recentMonthPanel
-
-                railPanel(title: t(.aiTool)) {
-                    VStack(spacing: 7) {
-                        ForEach(store.snapshot.toolFilters) { filter in
-                            let toolLastUpdated = lastUpdatedString(for: filter.tool)
-                            railFilterButton(
-                                title: filter.title,
-                                detail: filter.detail,
-                                lastUpdated: toolLastUpdated,
-                                isSelected: filter.isSelected,
-                                liveUpdateID: "filter:tool:\(filter.id)"
-                            ) {
-                                store.setSelectedTool(filter.tool)
-                            }
-                        }
-
-                    }
-                }
-
-                railPanel(title: t(.workflowFocus)) {
-                    VStack(spacing: 8) {
-                        compactSummaryRows(store.snapshot.taskRows.prefix(3), emptyText: t(.noTaskSplit), idPrefix: "task")
-                        Divider().opacity(0.35)
-                        compactSummaryRows(store.snapshot.stageRows.prefix(3), emptyText: t(.noStageSplit), idPrefix: "stage")
-                    }
-                }
-
-                railPanel(title: t(.receivers)) {
-                    VStack(spacing: 8) {
-                        receiverTile(title: t(.localQueue), state: t(.defaultState), systemImage: "tray.and.arrow.down", tint: .green)
-                        receiverTile(title: t(.adapters), state: t(.onDemand), systemImage: "bolt.horizontal", tint: .teal)
-                    }
-                }
-
-                diagnosticsPanel
             }
-            .padding(.vertical, 18)
+
+            HStack(spacing: 8) {
+                activeWindowHeader
+
+                Spacer(minLength: 8)
+
+                ForEach(store.snapshot.periodFilters) { filter in
+                    periodPill(filter)
+                }
+
+                HStack(spacing: 6) {
+                    Button {
+                        isCalendarPickerPresented.toggle()
+                    } label: {
+                        Label(datePickerTitle, systemImage: "calendar")
+                            .lineLimit(1)
+                    }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(store.snapshot.selectedCalendarDayID == nil ? Color.primary : Color.white)
+                    .padding(.horizontal, 10)
+                    .frame(height: 30)
+                    .background(
+                        store.snapshot.selectedCalendarDayID == nil
+                            ? Color.primary.opacity(0.045)
+                            : selectedControlAccent,
+                        in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    )
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .stroke(Color.primary.opacity(0.06), lineWidth: 0.5)
+                    }
+                    .focusEffectDisabled()
+                    .popover(isPresented: $isCalendarPickerPresented, arrowEdge: .bottom) {
+                        calendarPickerPanel
+                            .padding(14)
+                            .frame(width: 264)
+                    }
+
+                    if store.snapshot.selectedCalendarDayID != nil {
+                        Button {
+                            store.clearSelectedCalendarDay()
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 9, weight: .black))
+                                .frame(width: 22, height: 22)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.secondary)
+                        .background(Color.primary.opacity(0.045), in: Circle())
+                        .help(t(.clearSelection))
+                        .focusEffectDisabled()
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 12)
+    }
+
+    private var serviceStatusButton: some View {
+        Button {
+            isServiceStatusPresented = true
+        } label: {
+            HStack(spacing: 5) {
+                Circle()
+                    .fill(serviceStatusTint)
+                    .frame(width: 5, height: 5)
+
+                Image(systemName: serviceStatusSymbolName)
+                    .font(.system(size: 9, weight: .bold))
+
+                Text(serviceStatusButtonTitle)
+                    .font(.system(size: 10, weight: .bold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
+            }
+            .padding(.horizontal, 9)
+            .frame(height: 26)
+            .foregroundStyle(serviceStatusTint)
+            .background(serviceStatusTint.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(serviceStatusTint.opacity(0.13), lineWidth: 0.5)
+            }
+        }
+        .buttonStyle(.plain)
+        .focusEffectDisabled()
+        .popover(isPresented: $isServiceStatusPresented, arrowEdge: .top) {
+            CloudServiceStatusDashboardView(store: cloudServiceStatusStore)
+        }
+        .help(serviceStatusHelpText)
+        .accessibilityLabel(
+            AppL10n.serviceStatusAccessibility(
+                status: serviceStatusButtonTitle,
+                appLanguage: settings.appLanguage
+            )
+        )
+    }
+
+    private var serviceStatusButtonTitle: String {
+        if cloudServiceStatusStore.isLoading {
+            return AppL10n.text(.checking, appLanguage: settings.appLanguage)
+        }
+
+        guard let aggregateHealth = aggregateServiceHealth else {
+            return AppL10n.text(.serverStatus, appLanguage: settings.appLanguage)
+        }
+
+        return aggregateHealth.serverStatusHeaderTitle(appLanguage: settings.appLanguage)
+    }
+
+    private var serviceStatusHelpText: String {
+        guard let snapshot = cloudServiceStatusStore.snapshot else {
+            return AppL10n.text(.fetchOfficialServiceStatus, appLanguage: settings.appLanguage)
+        }
+
+        let aggregateHealth = CloudServiceStatusPresentation.aggregateHealth(for: snapshot.items)
+        let issueCount = serviceStatusIssueItems.count
+        let statusText = issueCount == 0
+            ? String(
+                format: AppL10n.text(.serverStatusNoIssues, appLanguage: settings.appLanguage),
+                aggregateHealth.serverStatusHeaderTitle(appLanguage: settings.appLanguage).lowercased()
+            )
+            : AppL10n.serverStatusWithIssues(
+                status: aggregateHealth.serverStatusHeaderTitle(appLanguage: settings.appLanguage).lowercased(),
+                issueCount: issueCount,
+                appLanguage: settings.appLanguage
+            )
+
+        return "\(statusText). \(AppL10n.lastChecked(fullServiceCheckTime(snapshot.fetchedAt), age: relativeServiceAge(from: snapshot.fetchedAt), appLanguage: settings.appLanguage)) \(AppL10n.text(.clickForPerServiceDetails, appLanguage: settings.appLanguage))"
+    }
+
+    private var serviceStatusSymbolName: String {
+        if cloudServiceStatusStore.isLoading {
+            return "arrow.triangle.2.circlepath"
+        }
+
+        guard let aggregateHealth = aggregateServiceHealth else {
+            return "cloud.fill"
+        }
+
+        return aggregateHealth.serverStatusSymbolName
+    }
+
+    private var serviceStatusTint: Color {
+        if cloudServiceStatusStore.isLoading {
+            return .blue
+        }
+
+        guard let aggregateHealth = aggregateServiceHealth else {
+            return .secondary
+        }
+
+        return aggregateHealth.serverStatusTint
+    }
+
+    private var serviceStatusIssueItems: [CloudServiceStatusItem] {
+        cloudServiceStatusStore.snapshot?.items.filter { $0.health.isServerIssue } ?? []
+    }
+
+    private var aggregateServiceHealth: CloudServiceHealth? {
+        cloudServiceStatusStore.snapshot.map {
+            CloudServiceStatusPresentation.aggregateHealth(for: $0.items)
         }
     }
 
-    private var recentMonthPanel: some View {
-        railPanel(title: t(.recentMonth)) {
-            VStack(spacing: 8) {
-                HStack(spacing: 8) {
-                    Button {
-                        store.showPreviousCalendarMonth()
-                    } label: {
-                        Image(systemName: "chevron.left")
-                    }
-                    .buttonStyle(.borderless)
-                    .disabled(!store.snapshot.canNavigatePreviousCalendarMonth)
-                    .help(t(.previousMonth))
+    private func fullServiceCheckTime(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = .current
+        formatter.timeZone = .current
 
-                    Text(store.snapshot.calendarMonthTitle)
+        if Calendar.current.isDateInToday(date) {
+            formatter.setLocalizedDateFormatFromTemplate("jm")
+        } else {
+            formatter.setLocalizedDateFormatFromTemplate("MMM d, jm")
+        }
+
+        return formatter.string(from: date)
+    }
+
+    private func relativeServiceAge(from date: Date) -> String {
+        let elapsed = max(0, Date().timeIntervalSince(date))
+        if elapsed < 60 {
+            return AppL10n.text(.justNow, appLanguage: settings.appLanguage)
+        }
+
+        let minutes = Int(elapsed / 60)
+        if minutes < 60 {
+            return AppL10n.minutesAgo(minutes, appLanguage: settings.appLanguage)
+        }
+
+        return AppL10n.hoursAgo(max(1, minutes / 60), appLanguage: settings.appLanguage)
+    }
+
+    private var calendarPickerPanel: some View {
+        VStack(spacing: 9) {
+            HStack(spacing: 8) {
+                Button {
+                    store.showPreviousCalendarMonth()
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .frame(width: 24, height: 24)
+                }
+                .buttonStyle(.plain)
+                .disabled(!store.snapshot.canNavigatePreviousCalendarMonth)
+                .help(t(.previousMonth))
+
+                Text(store.snapshot.calendarMonthTitle)
+                    .font(.system(size: 11, weight: .bold))
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity)
+
+                Button {
+                    store.showNextCalendarMonth()
+                } label: {
+                    Image(systemName: "chevron.right")
+                        .frame(width: 24, height: 24)
+                }
+                .buttonStyle(.plain)
+                .disabled(!store.snapshot.canNavigateNextCalendarMonth)
+                .help(t(.nextMonth))
+            }
+
+            Button {
+                store.selectTodayCalendarDay()
+                isCalendarPickerPresented = false
+            } label: {
+                HStack(spacing: 6) {
+                    Text(t(.periodToday).uppercased())
+                        .font(.system(size: 8, weight: .black))
+                        .tracking(0.8)
+                    Text(store.snapshot.todayCalendarDayTitle)
                         .font(.system(size: 10, weight: .bold))
-                        .lineLimit(1)
-                        .frame(maxWidth: .infinity)
-
-                    Button {
-                        store.showNextCalendarMonth()
-                    } label: {
-                        Image(systemName: "chevron.right")
+                    Spacer(minLength: 0)
+                    if store.snapshot.selectedCalendarDayID == store.snapshot.todayCalendarDayID {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 10, weight: .bold))
                     }
-                    .buttonStyle(.borderless)
-                    .disabled(!store.snapshot.canNavigateNextCalendarMonth)
-                    .help(t(.nextMonth))
+                }
+                .foregroundStyle(store.snapshot.selectedCalendarDayID == store.snapshot.todayCalendarDayID ? .white : .primary)
+                .padding(.horizontal, 9)
+                .padding(.vertical, 6)
+                .background(
+                    store.snapshot.selectedCalendarDayID == store.snapshot.todayCalendarDayID
+                        ? selectedControlAccent
+                        : Color.primary.opacity(0.045),
+                    in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+                )
+            }
+            .buttonStyle(.plain)
+            .help(store.snapshot.todayCalendarDayTitle)
+
+            LazyVGrid(
+                columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 7),
+                spacing: 4
+            ) {
+                ForEach(Array(store.snapshot.calendarWeekdayTitles.enumerated()), id: \.offset) { _, title in
+                    Text(title)
+                        .font(.system(size: 8, weight: .black))
+                        .foregroundStyle(.secondary)
+                        .frame(height: 14)
                 }
 
-                LazyVGrid(
-                    columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 7),
-                    spacing: 4
-                ) {
-                    ForEach(Array(store.snapshot.calendarWeekdayTitles.enumerated()), id: \.offset) { _, title in
-                        Text(title)
-                            .font(.system(size: 8, weight: .black))
-                            .foregroundStyle(.secondary)
-                            .frame(height: 14)
-                    }
-
-                    ForEach(store.snapshot.calendarDays) { day in
-                        if day.isPlaceholder {
-                            Color.clear
-                                .frame(height: 24)
-                        } else {
+                ForEach(store.snapshot.calendarDays) { day in
+                    if day.isPlaceholder {
+                        Color.clear
+                            .frame(height: 24)
+                    } else {
+                        Button {
+                            store.selectCalendarDay(day.id)
+                            isCalendarPickerPresented = false
+                        } label: {
                             VStack(spacing: 2) {
                                 Text(day.title)
-                                    .font(.system(size: 8, weight: day.hasEvents ? .bold : .medium, design: .monospaced))
-                                    .foregroundStyle(day.isCurrentMonth ? Color.primary : Color.secondary.opacity(0.55))
+                                    .font(.system(size: 8, weight: day.hasEvents || day.isSelected ? .bold : .medium, design: .monospaced))
+                                    .foregroundStyle(day.isSelected ? Color.white : (day.isCurrentMonth ? Color.primary : Color.secondary.opacity(0.55)))
                                 Capsule(style: .continuous)
-                                    .fill(day.hasEvents ? Color.teal : Color.primary.opacity(0.08))
+                                    .fill(day.hasEvents ? (day.isSelected ? Color.white : Color.teal) : Color.primary.opacity(0.08))
                                     .frame(height: 4)
                                     .opacity(day.hasEvents ? max(0.35, min(1.0, day.ratio)) : 1.0)
                             }
-                            .frame(height: 24)
-                            .help(day.detail)
+                            .frame(maxWidth: .infinity, minHeight: 24)
+                            .background(
+                                day.isSelected ? selectedControlAccent : Color.clear,
+                                in: RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            )
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    .stroke(day.isToday && !day.isSelected ? selectedControlAccent.opacity(0.65) : Color.clear, lineWidth: 1)
+                            }
                         }
+                        .buttonStyle(.plain)
+                        .help(day.detail)
+                        .accessibilityLabel(day.detail)
                     }
                 }
             }
@@ -423,7 +635,13 @@ struct TokenMeteringDashboardView: View {
                     infoTitle: t(.aiToolInfoTitle),
                     infoDetail: t(.aiToolInfoDetail)
                 ) {
-                    barRows(store.snapshot.toolRows, emptyText: t(.noAIToolData), idPrefix: "tool", tint: .teal)
+                    barRows(
+                        store.snapshot.toolRows,
+                        emptyText: t(.noAIToolData),
+                        idPrefix: "tool",
+                        tint: .teal,
+                        serviceStatus: { row in serviceStatus(for: row) }
+                    )
                 }
 
                 dashboardPanel(
@@ -463,6 +681,7 @@ struct TokenMeteringDashboardView: View {
             VStack(alignment: .leading, spacing: 14) {
                 modelPanel
                 sourcePanel
+                receiverPanel
                 privacyPanel
             }
             .padding(.vertical, 18)
@@ -477,6 +696,15 @@ struct TokenMeteringDashboardView: View {
         ) {
             VStack(spacing: 8) {
                 compactSummaryRows(store.snapshot.modelRows.prefix(5), emptyText: t(.noModelData), idPrefix: "model")
+            }
+        }
+    }
+
+    private var receiverPanel: some View {
+        railPanel(title: t(.receivers)) {
+            VStack(spacing: 8) {
+                receiverTile(title: t(.localQueue), state: t(.defaultState), systemImage: "tray.and.arrow.down", tint: .green)
+                receiverTile(title: t(.adapters), state: t(.onDemand), systemImage: "bolt.horizontal", tint: .teal)
             }
         }
     }
@@ -565,12 +793,12 @@ struct TokenMeteringDashboardView: View {
                             .padding(.vertical, 10)
                             .foregroundStyle(isSelected ? .white : .primary)
                             .background(
-                                isSelected ? Color.teal : Color.primary.opacity(0.025),
+                                isSelected ? selectedControlAccent : Color.primary.opacity(0.025),
                                 in: RoundedRectangle(cornerRadius: 8, style: .continuous)
                             )
                             .overlay {
                                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .stroke(isSelected ? Color.teal.opacity(0.35) : Color.primary.opacity(0.04), lineWidth: 0.5)
+                                    .stroke(isSelected ? selectedControlAccent.opacity(0.26) : Color.primary.opacity(0.04), lineWidth: 0.5)
                             }
                             .modifier(TokenMeteringLiveUpdateEffect(isActive: isLiveUpdated && !isSelected, marker: store.liveUpdateMarker, cornerRadius: 8))
                         }
@@ -593,6 +821,10 @@ struct TokenMeteringDashboardView: View {
     }
 
     private var activeAccumulationWindowText: String {
+        if let selectedCalendarDayTitle = store.snapshot.selectedCalendarDayTitle {
+            return selectedCalendarDayTitle
+        }
+
         let formatter = DateFormatter()
         formatter.locale = Locale.current
         formatter.dateStyle = .medium
@@ -630,9 +862,12 @@ struct TokenMeteringDashboardView: View {
             )
             .font(.system(size: 11, weight: .bold))
             .foregroundStyle(.secondary)
-            Spacer()
         }
         .padding(.horizontal, 4)
+    }
+
+    private var datePickerTitle: String {
+        store.snapshot.selectedCalendarDayTitle ?? t(.pickDate)
     }
 
     private func detailPanel(for session: TokenUsageDashboardSessionRow) -> some View {
@@ -743,13 +978,6 @@ struct TokenMeteringDashboardView: View {
                             value: kpisByID["output"]?.value ?? "-"
                         )
                     }
-
-                    let rawLatency = kpisByID["latency"]?.value ?? ""
-                    let isLatencyUnavailable = rawLatency.contains("ms") == false
-                    metricPill(
-                        title: t(.avgLatency),
-                        value: isLatencyUnavailable ? (currentLanguage == .korean ? "측정 불가" : "Unavailable") : rawLatency
-                    )
                 }
 
                 workItemPopoverSection(
@@ -870,46 +1098,6 @@ struct TokenMeteringDashboardView: View {
         }
     }
 
-    private var diagnosticsPanel: some View {
-        railPanel(title: t(.diagnostics)) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(t(.diagnosticsDetail))
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                Button {
-                    Task {
-                        await store.runLocalQueueSelfTest()
-                    }
-                } label: {
-                    HStack {
-                        Image(systemName: store.isRunningSelfTest ? "hourglass" : "tray.and.arrow.down")
-                        Text(store.isRunningSelfTest ? t(.writing) : t(.queueTest))
-                    }
-                    .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.teal)
-                .disabled(store.isRunningSelfTest)
-
-                if let selfTestMessage = store.selfTestMessage {
-                    Text(selfTestMessage.text)
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(selfTestMessage.isSuccess ? .green : .red)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                if let lastError = store.lastError {
-                    Text(lastError)
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(.red)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-        }
-    }
-
     private func dashboardPanel<Content: View>(
         title: String,
         subtitle: String,
@@ -980,75 +1168,180 @@ struct TokenMeteringDashboardView: View {
         }
     }
 
-    private func railFilterButton(
-        title: String,
-        detail: String,
-        lastUpdated: String? = nil,
-        isSelected: Bool,
-        liveUpdateID: String? = nil,
-        action: @escaping () -> Void
-    ) -> some View {
-        let isHovered = hoveredFilterTitle == title
-        let isLiveUpdated = liveUpdateID.map { store.isLiveUpdated($0) } ?? false
-        return Button(action: action) {
+    private func topToolTab(_ filter: TokenUsageDashboardToolFilter) -> some View {
+        let liveUpdateID = "filter:tool:\(filter.id)"
+        let isLiveUpdated = store.isLiveUpdated(liveUpdateID)
+        let toolLastUpdated = lastUpdatedString(for: filter.tool)
+        let detail = toolLastUpdated.map { "\(filter.detail) · \($0)" } ?? filter.detail
+        let serviceStatus: CloudServiceStatusItem?
+        if let tool = filter.tool {
+            serviceStatus = self.serviceStatus(for: tool)
+        } else {
+            serviceStatus = nil
+        }
+
+        return Button {
+            store.setSelectedTool(filter.tool)
+        } label: {
             HStack(spacing: 9) {
                 Circle()
-                    .fill(isSelected ? .white : (isHovered ? Color.teal : Color.primary.opacity(0.12)))
-                    .frame(width: 6, height: 6)
+                    .fill(filter.isSelected ? .white : Color.teal.opacity(0.75))
+                    .frame(width: 7, height: 7)
 
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(title)
-                        .font(.system(size: 11, weight: isSelected ? .bold : .medium))
-                        .lineLimit(1)
-                    Text(detail)
-                        .font(.system(size: 8.5, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(isSelected ? .white.opacity(0.8) : .secondary)
-                        .lineLimit(1)
-                        .contentTransition(.numericText())
-                        .animation(.snappy(duration: 0.35), value: detail)
-                    if let lastUpdated {
-                        Text(lastUpdated)
-                            .font(.system(size: 8, weight: .medium))
-                            .foregroundStyle(isSelected ? .white.opacity(0.6) : .secondary.opacity(0.8))
-                            .lineLimit(1)
-                    }
-                }
-
-                Spacer(minLength: 0)
-                TokenMeteringLiveUpdateDot(
+                topToolTabLabel(
+                    filter: filter,
+                    detail: detail,
+                    serviceStatus: serviceStatus,
                     isActive: isLiveUpdated,
-                    marker: store.liveUpdateMarker,
-                    tint: isSelected ? .white : .teal
+                    marker: store.liveUpdateMarker
                 )
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(.horizontal, 10)
-            .frame(height: lastUpdated != nil ? 44 : 38)
-            .foregroundStyle(isSelected ? .white : .primary)
+            .padding(.horizontal, 11)
+            .frame(maxWidth: .infinity, minHeight: 46, alignment: .leading)
+            .foregroundStyle(filter.isSelected ? .white : .primary)
             .background {
-                if isSelected {
+                if filter.isSelected {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .fill(
                             LinearGradient(
-                                colors: [Color.teal, Color.teal.opacity(0.82)],
+                                colors: [selectedControlAccentHighlight, selectedControlAccent],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             )
                         )
-                        .shadow(color: Color.teal.opacity(0.25), radius: 4, x: 0, y: 1.5)
+                        .shadow(color: selectedControlAccent.opacity(0.16), radius: 4, x: 0, y: 1.5)
                 } else {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(isHovered ? Color.primary.opacity(0.06) : Color.primary.opacity(0.03))
+                        .fill(Color.primary.opacity(0.035))
                 }
             }
-            .modifier(TokenMeteringLiveUpdateEffect(isActive: isLiveUpdated && !isSelected, marker: store.liveUpdateMarker, cornerRadius: 8))
+            .overlay {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(Color.primary.opacity(0.055), lineWidth: 0.5)
+            }
+            .modifier(TokenMeteringLiveUpdateEffect(isActive: isLiveUpdated && !filter.isSelected, marker: store.liveUpdateMarker, cornerRadius: 8))
         }
         .buttonStyle(.plain)
         .focusEffectDisabled()
-        .onHover { hovering in
-            withAnimation(.easeOut(duration: 0.15)) {
-                hoveredFilterTitle = hovering ? title : nil
+    }
+
+    private func topToolTabLabel(
+        filter: TokenUsageDashboardToolFilter,
+        detail: String,
+        serviceStatus: CloudServiceStatusItem?,
+        isActive: Bool,
+        marker: TokenUsageLiveUpdateMarker
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 6) {
+                topToolTitle(filter)
+
+                if hasServiceStatusAccessory(serviceStatus: serviceStatus, tool: filter.tool) {
+                    toolServiceStatusAccessory(serviceStatus: serviceStatus, tool: filter.tool)
+                }
+
+                Spacer(minLength: 0)
+            }
+
+            topToolDetailLine(
+                filter: filter,
+                detail: detail,
+                isActive: isActive,
+                marker: marker
+            )
+        }
+    }
+
+    private func topToolTitle(_ filter: TokenUsageDashboardToolFilter) -> some View {
+        Text(filter.title)
+            .font(.system(size: 11, weight: filter.isSelected ? .bold : .semibold))
+            .lineLimit(1)
+            .layoutPriority(1)
+            .minimumScaleFactor(0.78)
+    }
+
+    private func topToolDetailLine(
+        filter: TokenUsageDashboardToolFilter,
+        detail: String,
+        isActive: Bool,
+        marker: TokenUsageLiveUpdateMarker
+    ) -> some View {
+        HStack(spacing: 5) {
+            topToolDetailText(filter: filter, detail: detail)
+
+            TokenMeteringLiveUpdateDot(
+                isActive: isActive,
+                marker: marker,
+                tint: filter.isSelected ? .white : .teal
+            )
+
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func topToolDetailText(
+        filter: TokenUsageDashboardToolFilter,
+        detail: String
+    ) -> some View {
+        Text(detail)
+            .font(.system(size: 9, weight: .semibold, design: .monospaced))
+            .foregroundStyle(filter.isSelected ? .white.opacity(0.78) : .secondary)
+            .lineLimit(1)
+            .contentTransition(.numericText())
+            .animation(.snappy(duration: 0.35), value: filter.detail)
+    }
+
+    private func hasServiceStatusAccessory(
+        serviceStatus: CloudServiceStatusItem?,
+        tool: TokenUsageAITool?
+    ) -> Bool {
+        serviceStatus != nil || CloudServiceStatusPresentation.hasCloudService(for: tool)
+    }
+
+    @ViewBuilder
+    private func toolServiceStatusAccessory(
+        serviceStatus: CloudServiceStatusItem?,
+        tool: TokenUsageAITool?
+    ) -> some View {
+        if let serviceStatus {
+            CloudServiceStatusBadge(item: serviceStatus, appLanguage: settings.appLanguage)
+                .fixedSize(horizontal: true, vertical: false)
+        } else if CloudServiceStatusPresentation.hasCloudService(for: tool) {
+            aiServerPendingBadge()
+                .fixedSize(horizontal: true, vertical: false)
+        }
+    }
+
+    private func periodPill(_ filter: TokenUsageDashboardPeriodFilter) -> some View {
+        Button {
+            store.setSelectedPeriod(filter.period)
+        } label: {
+            HStack(spacing: 6) {
+                Text(filter.title)
+                    .font(.system(size: 10, weight: .bold))
+                    .lineLimit(1)
+                Text(filter.detail)
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .foregroundStyle(filter.isSelected ? .white.opacity(0.78) : .secondary)
+                    .lineLimit(1)
+                    .contentTransition(.numericText())
+                    .animation(.snappy(duration: 0.35), value: filter.detail)
+            }
+            .foregroundStyle(filter.isSelected ? .white : .primary)
+            .padding(.horizontal, 10)
+            .frame(height: 30)
+            .background(
+                filter.isSelected ? selectedControlAccent : Color.primary.opacity(0.045),
+                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(Color.primary.opacity(0.06), lineWidth: 0.5)
             }
         }
+        .buttonStyle(.plain)
+        .focusEffectDisabled()
     }
 
     private func requestClear(_ scope: TokenUsageClearScope) {
@@ -1071,6 +1364,42 @@ struct TokenMeteringDashboardView: View {
         default:
             return nil
         }
+    }
+
+    private func serviceStatus(for row: TokenUsageDashboardBarRow) -> CloudServiceStatusItem? {
+        guard let tool = TokenUsageAITool(rawValue: row.id) else {
+            return nil
+        }
+
+        return serviceStatus(for: tool)
+    }
+
+    private func serviceStatus(for tool: TokenUsageAITool) -> CloudServiceStatusItem? {
+        CloudServiceStatusPresentation.serviceStatus(
+            for: tool,
+            in: cloudServiceStatusStore.snapshot
+        )
+    }
+
+    private func aiServerPendingBadge() -> some View {
+        let tint = cloudServiceStatusStore.isLoading ? Color.blue : Color.secondary
+        let value = cloudServiceStatusStore.isLoading
+            ? AppL10n.text(.checking, appLanguage: settings.appLanguage)
+            : AppL10n.text(.server, appLanguage: settings.appLanguage)
+
+        return HStack(spacing: 4) {
+            Image(systemName: cloudServiceStatusStore.isLoading ? "arrow.triangle.2.circlepath" : "cloud.fill")
+                .font(.system(size: 8, weight: .bold))
+
+            Text(value)
+                .font(.system(size: 8.5, weight: .bold, design: .rounded))
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 5)
+        .frame(height: 18)
+        .foregroundStyle(tint)
+        .background(tint.opacity(0.10), in: Capsule())
+        .help(AppL10n.text(.serverStatusPendingHelp, appLanguage: settings.appLanguage))
     }
 
     private func receiverTile(title: String, state: String, systemImage: String, tint: Color) -> some View {
@@ -1104,7 +1433,13 @@ struct TokenMeteringDashboardView: View {
         }
     }
 
-    private func barRows(_ rows: [TokenUsageDashboardBarRow], emptyText: String, idPrefix: String, tint: Color = .teal) -> some View {
+    private func barRows(
+        _ rows: [TokenUsageDashboardBarRow],
+        emptyText: String,
+        idPrefix: String,
+        tint: Color = .teal,
+        serviceStatus: ((TokenUsageDashboardBarRow) -> CloudServiceStatusItem?)? = nil
+    ) -> some View {
         VStack(alignment: .leading, spacing: 11) {
             if rows.isEmpty {
                 emptyMessage(title: emptyText, detail: t(.waitingForEvents))
@@ -1112,6 +1447,7 @@ struct TokenMeteringDashboardView: View {
                 ForEach(rows.prefix(6)) { row in
                     let liveUpdateID = "\(idPrefix):\(row.id)"
                     let isLiveUpdated = store.isLiveUpdated(liveUpdateID)
+                    let rowServiceStatus = serviceStatus?(row)
                     VStack(alignment: .leading, spacing: 5) {
                         HStack {
                             HStack(spacing: 6) {
@@ -1121,6 +1457,9 @@ struct TokenMeteringDashboardView: View {
                                     .lineLimit(1)
                             }
                             Spacer()
+                            if let rowServiceStatus {
+                                CloudServiceStatusBadge(item: rowServiceStatus, appLanguage: settings.appLanguage)
+                            }
                             Text(row.value)
                                 .font(.system(size: 10, weight: .bold, design: .monospaced))
                                 .foregroundStyle(.secondary)
@@ -1258,18 +1597,6 @@ struct TokenMeteringDashboardView: View {
             .background(Color.green.opacity(0.11), in: Capsule(style: .continuous))
     }
 
-    private func copyToClipboard(_ text: String, target: String) {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
-        copiedTarget = target
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
-            if copiedTarget == target {
-                copiedTarget = nil
-            }
-        }
-    }
-
     private var dashboardCardBackground: some ShapeStyle {
         .regularMaterial
     }
@@ -1292,6 +1619,10 @@ private struct TokenMeteringInfoButton: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .focusable(false)
+        .focusEffectDisabled()
+        .accessibilityLabel(title)
+        .accessibilityHint(detail)
         .help(detail)
         .popover(isPresented: $isPresented, arrowEdge: .top) {
             VStack(alignment: .leading, spacing: 8) {

@@ -45,6 +45,7 @@ enum TokenMeteringTextKey: String {
     case clearAllLocalData
     case clearSelection
     case recentMonth
+    case pickDate
     case previousMonth
     case nextMonth
     case allLocalData
@@ -232,14 +233,17 @@ enum TokenMeteringL10n {
         latest: String,
         language: TokenMeteringLanguage = .current()
     ) -> String {
-        let latency = latencyMS.map { "\($0) ms" } ?? text(.latencyUnavailable, language: language)
+        let latency = latencyMS.map { "\($0) ms" }
         switch language {
         case .english:
-            return "\(spanCount) events / \(latency) / \(latest)"
+            return latency.map { "\(spanCount) events / \($0) / \(latest)" }
+                ?? "\(spanCount) events / \(latest)"
         case .korean:
-            return "이벤트 \(spanCount)개 / \(latency) / \(latest)"
+            return latency.map { "이벤트 \(spanCount)개 / \($0) / \(latest)" }
+                ?? "이벤트 \(spanCount)개 / \(latest)"
         case .japanese:
-            return "イベント \(spanCount)件 / \(latency) / \(latest)"
+            return latency.map { "イベント \(spanCount)件 / \($0) / \(latest)" }
+                ?? "イベント \(spanCount)件 / \(latest)"
         }
     }
 
@@ -375,6 +379,7 @@ enum TokenMeteringL10n {
             .clearAllLocalData: "Clear All Local Data",
             .clearSelection: "Clear Selection",
             .recentMonth: "Recent Month",
+            .pickDate: "Pick Date",
             .previousMonth: "Previous month",
             .nextMonth: "Next month",
             .allLocalData: "All local data",
@@ -532,6 +537,7 @@ enum TokenMeteringL10n {
             .clearAllLocalData: "전체 로컬 데이터 지우기",
             .clearSelection: "선택 해제",
             .recentMonth: "최근 1개월",
+            .pickDate: "날짜 선택",
             .previousMonth: "이전 달",
             .nextMonth: "다음 달",
             .allLocalData: "전체 로컬 데이터",
@@ -689,6 +695,7 @@ enum TokenMeteringL10n {
             .clearAllLocalData: "すべてのローカルデータを消去",
             .clearSelection: "選択を解除",
             .recentMonth: "直近1か月",
+            .pickDate: "日付を選択",
             .previousMonth: "前月",
             .nextMonth: "翌月",
             .allLocalData: "すべてのローカルデータ",

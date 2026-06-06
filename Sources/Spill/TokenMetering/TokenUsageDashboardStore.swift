@@ -40,6 +40,7 @@ final class TokenUsageDashboardStore: ObservableObject {
     @Published private(set) var liveUpdateMarker = TokenUsageLiveUpdateMarker.empty
     @Published private(set) var selectedTool: TokenUsageAITool?
     @Published private(set) var selectedPeriod: TokenUsageDashboardPeriod = .today
+    @Published private(set) var selectedCalendarDayID: String?
     @Published private(set) var selectedSessionID: String?
     @Published private(set) var calendarMonthStart: Date?
     @Published private(set) var displayMode: TokenUsageDisplayMode = .tokens
@@ -94,7 +95,9 @@ final class TokenUsageDashboardStore: ObservableObject {
         let displayCalendarMonth = TokenUsageDashboardSnapshot.normalizedCalendarMonthStart(
             events: events.filter { $0.aiTool.isDashboardTool },
             now: now,
-            proposedMonthStart: calendarMonthStart,
+            proposedMonthStart: calendarMonthStart ?? selectedCalendarDayID.flatMap {
+                TokenUsageDashboardSnapshot.date(forDayID: $0, calendar: calendar)
+            },
             calendar: calendar
         )
         calendarMonthStart = displayCalendarMonth
@@ -104,6 +107,7 @@ final class TokenUsageDashboardStore: ObservableObject {
             events: events,
             selectedTool: selectedTool,
             selectedPeriod: selectedPeriod,
+            selectedCalendarDayID: selectedCalendarDayID,
             selectedSessionID: selectedSessionID,
             displayMode: displayMode,
             language: language,
@@ -119,6 +123,7 @@ final class TokenUsageDashboardStore: ObservableObject {
             events: events,
             selectedTool: nil,
             selectedPeriod: selectedPeriod,
+            selectedCalendarDayID: selectedCalendarDayID,
             selectedSessionID: nil,
             displayMode: displayMode,
             language: language,
@@ -149,6 +154,39 @@ final class TokenUsageDashboardStore: ObservableObject {
 
     func setSelectedPeriod(_ period: TokenUsageDashboardPeriod) {
         selectedPeriod = period
+        selectedCalendarDayID = nil
+        selectedSessionID = nil
+        rebuildSnapshot()
+    }
+
+    func selectCalendarDay(_ dayID: String) {
+        var calendar = Calendar.autoupdatingCurrent
+        calendar.firstWeekday = 1
+        guard TokenUsageDashboardSnapshot.date(forDayID: dayID, calendar: calendar) != nil else {
+            return
+        }
+
+        selectedCalendarDayID = dayID
+        selectedSessionID = nil
+        if let date = TokenUsageDashboardSnapshot.date(forDayID: dayID, calendar: calendar) {
+            calendarMonthStart = TokenUsageDashboardSnapshot.monthStart(for: date, calendar: calendar)
+        }
+        rebuildSnapshot()
+    }
+
+    func selectTodayCalendarDay() {
+        var calendar = Calendar.autoupdatingCurrent
+        calendar.firstWeekday = 1
+        let now = Date()
+        selectedCalendarDayID = TokenUsageDashboardSnapshot.dayID(for: now, calendar: calendar)
+        selectedSessionID = nil
+        calendarMonthStart = TokenUsageDashboardSnapshot.monthStart(for: now, calendar: calendar)
+        rebuildSnapshot()
+    }
+
+    func clearSelectedCalendarDay() {
+        selectedCalendarDayID = nil
+        selectedSessionID = nil
         rebuildSnapshot()
     }
 
@@ -193,6 +231,7 @@ final class TokenUsageDashboardStore: ObservableObject {
             events: events,
             selectedTool: selectedTool,
             selectedPeriod: selectedPeriod,
+            selectedCalendarDayID: selectedCalendarDayID,
             selectedSessionID: sessionID,
             displayMode: displayMode,
             language: language,
@@ -269,7 +308,8 @@ final class TokenUsageDashboardStore: ObservableObject {
 
     private func events(matching scope: TokenUsageClearScope) -> [TokenUsageEvent] {
         let now = Date()
-        let calendar = Calendar.autoupdatingCurrent
+        var calendar = Calendar.autoupdatingCurrent
+        calendar.firstWeekday = 1
         let dashboardEvents = events.filter { $0.aiTool.isDashboardTool }
 
         switch scope {
@@ -279,6 +319,7 @@ final class TokenUsageDashboardStore: ObservableObject {
             let periodEvents = TokenUsageDashboardSnapshot.filterEvents(
                 dashboardEvents,
                 selectedPeriod: selectedPeriod,
+                selectedCalendarDayID: selectedCalendarDayID,
                 now: now,
                 calendar: calendar
             )
@@ -315,6 +356,9 @@ final class TokenUsageDashboardStore: ObservableObject {
             if let selectedSessionID,
                let selectedSession = snapshot.sessions.first(where: { $0.id == selectedSessionID }) {
                 return selectedSession.title
+            }
+            if let selectedCalendarDayTitle = snapshot.selectedCalendarDayTitle {
+                return selectedCalendarDayTitle
             }
             return TokenMeteringL10n.text(.currentDashboardScope, language: language)
         case let .tool(tool):
@@ -440,7 +484,8 @@ final class TokenUsageDashboardStore: ObservableObject {
             previousUnfilteredSnapshot: previousUnfilteredSnapshot,
             nextUnfilteredSnapshot: nextUnfilteredSnapshot,
             selectedTool: selectedTool,
-            selectedPeriod: selectedPeriod
+            selectedPeriod: selectedPeriod,
+            selectedCalendarDayID: selectedCalendarDayID
         )
         guard !ids.isEmpty else {
             return
@@ -468,17 +513,20 @@ final class TokenUsageDashboardStore: ObservableObject {
         previousUnfilteredSnapshot: TokenUsageDashboardSnapshot,
         nextUnfilteredSnapshot: TokenUsageDashboardSnapshot,
         selectedTool: TokenUsageAITool?,
-        selectedPeriod: TokenUsageDashboardPeriod
+        selectedPeriod: TokenUsageDashboardPeriod,
+        selectedCalendarDayID: String?
     ) -> Set<String> {
         let previousPeriodEvents = dashboardEvents(
             previousEvents,
             selectedTool: nil,
-            selectedPeriod: selectedPeriod
+            selectedPeriod: selectedPeriod,
+            selectedCalendarDayID: selectedCalendarDayID
         )
         let nextPeriodEvents = dashboardEvents(
             nextEvents,
             selectedTool: nil,
-            selectedPeriod: selectedPeriod
+            selectedPeriod: selectedPeriod,
+            selectedCalendarDayID: selectedCalendarDayID
         )
         let previousVisibleEvents = selectedTool.map { tool in
             previousPeriodEvents.filter { $0.aiTool == tool }
@@ -493,9 +541,6 @@ final class TokenUsageDashboardStore: ObservableObject {
         let nextVisibleTotal = nextVisibleEvents.reduce(0) { $0 + $1.totalTokens }
         if nextVisibleTotal != previousVisibleTotal {
             ids.formUnion(["kpi:total", "kpi:input", "kpi:output"])
-        }
-        if averageLatency(previousVisibleEvents) != averageLatency(nextVisibleEvents) {
-            ids.insert("kpi:latency")
         }
 
         appendChangedTotals(
@@ -603,41 +648,23 @@ final class TokenUsageDashboardStore: ObservableObject {
         _ events: [TokenUsageEvent],
         selectedTool: TokenUsageAITool?,
         selectedPeriod: TokenUsageDashboardPeriod,
+        selectedCalendarDayID: String?,
         now: Date = Date(),
         calendar: Calendar = .current
     ) -> [TokenUsageEvent] {
-        events.filter { event in
+        let filteredEvents = events.filter { event in
             guard event.aiTool.isDashboardTool else {
                 return false
             }
-            if let selectedTool, event.aiTool != selectedTool {
-                return false
-            }
-            guard let cutoffDate = cutoffDate(for: selectedPeriod, now: now, calendar: calendar) else {
-                return true
-            }
-            guard let createdAt = ISO8601DateFormatter.parseTokenUsageDate(from: event.createdAt) else {
-                return false
-            }
-            return createdAt >= cutoffDate && createdAt <= now
+            return selectedTool.map { event.aiTool == $0 } ?? true
         }
-    }
-
-    private static func cutoffDate(
-        for period: TokenUsageDashboardPeriod,
-        now: Date,
-        calendar: Calendar
-    ) -> Date? {
-        switch period {
-        case .today:
-            return calendar.startOfDay(for: now)
-        case .sevenDays:
-            return calendar.date(byAdding: .day, value: -7, to: now)
-        case .thirtyDays:
-            return calendar.date(byAdding: .day, value: -30, to: now)
-        case .all:
-            return nil
-        }
+        return TokenUsageDashboardSnapshot.filterEvents(
+            filteredEvents,
+            selectedPeriod: selectedPeriod,
+            selectedCalendarDayID: selectedCalendarDayID,
+            now: now,
+            calendar: calendar
+        )
     }
 
     private static func tokenTotals(
@@ -662,14 +689,6 @@ final class TokenUsageDashboardStore: ObservableObject {
             totals["unknown", default: 0] += event.tokenBreakdown.unknown
         }
         return totals
-    }
-
-    private static func averageLatency(_ events: [TokenUsageEvent]) -> Int? {
-        let samples = events.map(\.latencyMS).filter { $0 > 0 }
-        guard !samples.isEmpty else {
-            return nil
-        }
-        return samples.reduce(0, +) / samples.count
     }
 
     private static func modelKey(_ model: String) -> String {

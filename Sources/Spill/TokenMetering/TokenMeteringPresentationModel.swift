@@ -60,6 +60,8 @@ struct TokenUsageDashboardCalendarDay: Identifiable, Equatable {
     let isCurrentMonth: Bool
     let hasEvents: Bool
     let isPlaceholder: Bool
+    let isToday: Bool
+    let isSelected: Bool
 }
 
 struct TokenUsageDashboardToolFilter: Identifiable, Equatable {
@@ -130,6 +132,10 @@ struct TokenUsageDashboardSnapshot: Equatable {
     let calendarDays: [TokenUsageDashboardCalendarDay]
     let calendarMonthTitle: String
     let calendarWeekdayTitles: [String]
+    let selectedCalendarDayID: String?
+    let selectedCalendarDayTitle: String?
+    let todayCalendarDayID: String
+    let todayCalendarDayTitle: String
     let canNavigatePreviousCalendarMonth: Bool
     let canNavigateNextCalendarMonth: Bool
     let codexLastUpdated: Date?
@@ -146,6 +152,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
         events: [TokenUsageEvent],
         selectedTool: TokenUsageAITool? = nil,
         selectedPeriod: TokenUsageDashboardPeriod = .all,
+        selectedCalendarDayID: String? = nil,
         selectedSessionID: String? = nil,
         displayMode: TokenUsageDisplayMode = .tokens,
         language: TokenMeteringLanguage = .current(),
@@ -165,6 +172,13 @@ struct TokenUsageDashboardSnapshot: Equatable {
                 return event.aiTool.isDashboardTool
             }
         }
+        let selectedDayID = selectedCalendarDayID.flatMap { Self.date(forDayID: $0, calendar: calendar) == nil ? nil : $0 }
+        self.selectedCalendarDayID = selectedDayID
+        selectedCalendarDayTitle = selectedDayID.flatMap {
+            Self.formatCalendarDayID($0, calendar: calendar, locale: locale, timeZone: timeZone)
+        }
+        todayCalendarDayID = Self.dayID(for: now, calendar: calendar)
+        todayCalendarDayTitle = Self.formatCalendarDayTitle(now, locale: locale, timeZone: timeZone)
 
         codexLastUpdated = dashboardEvents
             .filter { $0.aiTool == .codex }
@@ -188,6 +202,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
         let periodEvents = Self.filterEvents(
             dashboardEvents,
             selectedPeriod: selectedPeriod,
+            selectedCalendarDayID: selectedDayID,
             now: now,
             calendar: calendar
         )
@@ -230,7 +245,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
                 period: period,
                 title: period.title(language: language),
                 detail: Self.formatTokens(capturedPeriodTotal),
-                isSelected: selectedPeriod == period
+                isSelected: selectedDayID == nil && selectedPeriod == period
             )
         }
 
@@ -245,10 +260,6 @@ struct TokenUsageDashboardSnapshot: Equatable {
 
         let inputTokens = focusedEvents.reduce(0) { $0 + $1.inputTokens }
         let outputTokens = focusedEvents.reduce(0) { $0 + $1.outputTokens }
-        let latencySamples = focusedEvents.map(\.latencyMS).filter { $0 > 0 }
-        let averageLatency = latencySamples.isEmpty
-            ? nil
-            : latencySamples.reduce(0, +) / latencySamples.count
 
         switch displayMode {
         case .tokens:
@@ -270,14 +281,6 @@ struct TokenUsageDashboardSnapshot: Equatable {
                     title: TokenMeteringL10n.text(.output, language: language),
                     value: Self.formatTokens(outputTokens),
                     detail: Self.percentageDetail(value: outputTokens, total: totalTokens, language: language)
-                ),
-                TokenUsageDashboardKPI(
-                    id: "latency",
-                    title: TokenMeteringL10n.text(.avgLatency, language: language),
-                    value: averageLatency.map { "\($0) ms" } ?? TokenMeteringL10n.text(.latencyUnavailable, language: language),
-                    detail: averageLatency == nil
-                        ? TokenMeteringL10n.text(.runtimeTimingUnavailable, language: language)
-                        : TokenMeteringL10n.text(.perLocalSpan, language: language)
                 )
             ]
         case .percentage:
@@ -302,14 +305,6 @@ struct TokenUsageDashboardSnapshot: Equatable {
                     title: TokenMeteringL10n.text(.outputShare, language: language),
                     value: Self.formatPercentage(outputPercent),
                     detail: TokenMeteringL10n.tokenCountDetail(Self.formatTokens(outputTokens), language: language)
-                ),
-                TokenUsageDashboardKPI(
-                    id: "latency",
-                    title: TokenMeteringL10n.text(.avgLatency, language: language),
-                    value: averageLatency.map { "\($0) ms" } ?? TokenMeteringL10n.text(.latencyUnavailable, language: language),
-                    detail: averageLatency == nil
-                        ? TokenMeteringL10n.text(.runtimeTimingUnavailable, language: language)
-                        : TokenMeteringL10n.text(.perLocalSpan, language: language)
                 )
             ]
         }
@@ -365,7 +360,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
         selectedSession = selectedSessionRow
 
         // Comparison period tokens (nil when a work item is selected or period is .all)
-        if selectedSessionRow != nil {
+        if selectedSessionRow != nil || selectedDayID != nil {
             comparisonTotalTokens = nil
         } else {
             let toolFilteredEvents = selectedDashboardTool
@@ -400,10 +395,13 @@ struct TokenUsageDashboardSnapshot: Equatable {
             }
         }
 
+        let selectedDayMonth = selectedDayID
+            .flatMap { Self.date(forDayID: $0, calendar: calendar) }
+            .map { Self.monthStart(for: $0, calendar: calendar) }
         let calendarMonth = Self.normalizedCalendarMonthStart(
             events: dashboardEvents,
             now: now,
-            proposedMonthStart: calendarMonthStart,
+            proposedMonthStart: calendarMonthStart ?? selectedDayMonth,
             calendar: calendar
         )
         let firstDataMonth = Self.firstDataMonthStart(
@@ -419,6 +417,8 @@ struct TokenUsageDashboardSnapshot: Equatable {
         calendarDays = Self.calendarDays(
             events: dashboardEvents,
             monthStart: calendarMonth,
+            selectedCalendarDayID: selectedDayID,
+            todayCalendarDayID: todayCalendarDayID,
             calendar: calendar,
             locale: locale,
             timeZone: timeZone
@@ -466,9 +466,16 @@ struct TokenUsageDashboardSnapshot: Equatable {
     static func filterEvents(
         _ events: [TokenUsageEvent],
         selectedPeriod: TokenUsageDashboardPeriod,
+        selectedCalendarDayID: String? = nil,
         now: Date,
         calendar: Calendar
     ) -> [TokenUsageEvent] {
+        if let selectedCalendarDayID {
+            return events.filter { event in
+                localDayBucket(for: event.createdAt, calendar: calendar) == selectedCalendarDayID
+            }
+        }
+
         guard let cutoff = cutoffDate(for: selectedPeriod, now: now, calendar: calendar) else {
             return events
         }
@@ -736,9 +743,62 @@ struct TokenUsageDashboardSnapshot: Equatable {
         return String(format: "%04d-%02d-%02d", year, month, day)
     }
 
+    static func dayID(for date: Date, calendar: Calendar) -> String {
+        let components = calendar.dateComponents([.year, .month, .day], from: date)
+        guard let year = components.year,
+              let month = components.month,
+              let day = components.day
+        else {
+            return String(ISO8601DateFormatter.tokenUsage.string(from: date).prefix(10))
+        }
+
+        return String(format: "%04d-%02d-%02d", year, month, day)
+    }
+
+    static func date(forDayID dayID: String, calendar: Calendar) -> Date? {
+        let parts = dayID
+            .split(separator: "-")
+            .compactMap { Int($0) }
+        guard parts.count == 3 else {
+            return nil
+        }
+
+        return calendar.date(from: DateComponents(
+            calendar: calendar,
+            year: parts[0],
+            month: parts[1],
+            day: parts[2]
+        ))
+    }
+
+    private static func formatCalendarDayID(
+        _ dayID: String,
+        calendar: Calendar,
+        locale: Locale,
+        timeZone: TimeZone
+    ) -> String? {
+        date(forDayID: dayID, calendar: calendar).map {
+            formatCalendarDayTitle($0, locale: locale, timeZone: timeZone)
+        }
+    }
+
+    private static func formatCalendarDayTitle(
+        _ date: Date,
+        locale: Locale,
+        timeZone: TimeZone
+    ) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = locale
+        formatter.timeZone = timeZone
+        formatter.setLocalizedDateFormatFromTemplate("MMM d")
+        return formatter.string(from: date)
+    }
+
     private static func calendarDays(
         events: [TokenUsageEvent],
         monthStart: Date,
+        selectedCalendarDayID: String?,
+        todayCalendarDayID: String,
         calendar: Calendar,
         locale: Locale,
         timeZone: TimeZone
@@ -771,7 +831,9 @@ struct TokenUsageDashboardSnapshot: Equatable {
                 ratio: 0.0,
                 isCurrentMonth: false,
                 hasEvents: false,
-                isPlaceholder: true
+                isPlaceholder: true,
+                isToday: false,
+                isSelected: false
             ))
         }
 
@@ -784,15 +846,18 @@ struct TokenUsageDashboardSnapshot: Equatable {
             let groupedEvents = eventsByDay[dayBucket, default: []]
             let tokens = groupedEvents.reduce(0) { $0 + $1.totalTokens }
             let day = calendar.component(.day, from: cursor)
+            let calendarDayTitle = formatCalendarDayTitle(cursor, locale: locale, timeZone: timeZone)
             days.append(TokenUsageDashboardCalendarDay(
                 id: dayBucket,
                 day: day,
                 title: dayFormatter.string(from: cursor),
-                detail: formatTokens(tokens),
+                detail: "\(calendarDayTitle) · \(formatTokens(tokens))",
                 ratio: tokens > 0 ? Double(tokens) / Double(maxTokens) : 0.0,
                 isCurrentMonth: true,
                 hasEvents: !groupedEvents.isEmpty,
-                isPlaceholder: false
+                isPlaceholder: false,
+                isToday: dayBucket == todayCalendarDayID,
+                isSelected: dayBucket == selectedCalendarDayID
             ))
             guard let next = calendar.date(byAdding: .day, value: 1, to: cursor) else {
                 break
@@ -810,7 +875,9 @@ struct TokenUsageDashboardSnapshot: Equatable {
                 ratio: 0.0,
                 isCurrentMonth: false,
                 hasEvents: false,
-                isPlaceholder: true
+                isPlaceholder: true,
+                isToday: false,
+                isSelected: false
             ))
         }
         return days

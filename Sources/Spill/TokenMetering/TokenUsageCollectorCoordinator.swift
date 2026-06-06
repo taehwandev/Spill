@@ -10,6 +10,8 @@ final class TokenUsageCollectorCoordinator: TokenUsageExternalCollecting, @unche
     private let lock = NSLock()
     private let codexImporterURLProvider: () -> URL?
     private let nodeExecutableURLProvider: () -> URL?
+    private let importerDrainInterval: TimeInterval
+    private let importerMaximumRuntime: TimeInterval
     private var isCollecting = false
     private var hasPendingRequest = false
 
@@ -24,11 +26,15 @@ final class TokenUsageCollectorCoordinator: TokenUsageExternalCollecting, @unche
         },
         nodeExecutableURLProvider: @escaping () -> URL? = {
             TokenUsageCollectorCoordinator.nodeExecutableURL()
-        }
+        },
+        importerDrainInterval: TimeInterval = 0.25,
+        importerMaximumRuntime: TimeInterval = 30
     ) {
         self.store = store
         self.codexImporterURLProvider = codexImporterURLProvider
         self.nodeExecutableURLProvider = nodeExecutableURLProvider
+        self.importerDrainInterval = importerDrainInterval
+        self.importerMaximumRuntime = importerMaximumRuntime
     }
 
     func requestCollection(reason: String) {
@@ -53,6 +59,9 @@ final class TokenUsageCollectorCoordinator: TokenUsageExternalCollecting, @unche
 
     private func runCollectionLoop() {
         while true {
+            // Import inbox events first so the dashboard shows existing data
+            // immediately, without waiting for the Codex importer to finish.
+            store.importQueuedEvents()
             runCodexImporterIfAvailable()
             store.importQueuedEvents()
 
@@ -88,15 +97,33 @@ final class TokenUsageCollectorCoordinator: TokenUsageExternalCollecting, @unche
             "6",
             "--json"
         ]
-        process.standardOutput = Pipe()
-        process.standardError = Pipe()
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
 
         do {
             try process.run()
-            process.waitUntilExit()
+            importQueuedEventsWhileProcessRuns(process)
         } catch {
             return
         }
+    }
+
+    private func importQueuedEventsWhileProcessRuns(_ process: Process) {
+        let startedAt = Date()
+
+        while process.isRunning {
+            store.importQueuedEvents()
+
+            if Date().timeIntervalSince(startedAt) > importerMaximumRuntime {
+                process.terminate()
+                break
+            }
+
+            Thread.sleep(forTimeInterval: importerDrainInterval)
+        }
+
+        process.waitUntilExit()
+        store.importQueuedEvents()
     }
 
     static func nodeExecutableURL(
