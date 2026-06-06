@@ -328,7 +328,5 @@ def main() -> None:
 if __name__ == "__main__":
     try:
         main()
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        sys.exit(1)
+    except Exception:
+        pass

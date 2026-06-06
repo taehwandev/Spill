@@ -426,356 +426,83 @@ def _read_stdin_nonblocking() -> str:
     return ""
 
 
-SESSION_STATE_DIR = pathlib.Path(
-    os.environ.get(
-        "SPILL_TOKEN_USAGE_SESSION_STATE_DIR",
-        pathlib.Path.home() / "Library/Application Support/Spill/token-metering/session-state",
-    )
-)
-
-
-def _load_session_state(run_id: str) -> tuple[int, int]:
-    """Return (prev_input, prev_output) recorded for this run, or (0, 0)."""
-    state_path = SESSION_STATE_DIR / f"{run_id}.json"
-    try:
-        data = json.loads(state_path.read_text())
-        if isinstance(data, dict):
-            return int(data.get("input", 0)), int(data.get("output", 0))
-    except Exception:
-        pass
-    return 0, 0
-
-
-def _save_session_state(run_id: str, input_tokens: int, output_tokens: int) -> None:
-    try:
-        SESSION_STATE_DIR.mkdir(parents=True, exist_ok=True)
-        state_path = SESSION_STATE_DIR / f"{run_id}.json"
-        tmp_path = SESSION_STATE_DIR / f".{run_id}.tmp"
-        tmp_path.write_text(json.dumps({"input": input_tokens, "output": output_tokens}))
-        os.replace(tmp_path, state_path)
-    except Exception:
-        pass
-
-
-def _normalize_token_type(raw: str) -> str:
-    val = str(raw).replace("-", "_").replace(" ", "_").lower()
-    if val in {"input", "input_token", "input_tokens"}:
-        return "input"
-    if val in {"output", "output_token", "output_tokens"}:
-        return "output"
-    if val in {"cache", "cached", "cached_content", "cache_read"}:
-        return "cache"
-    if val in {"thought", "thoughts", "reasoning"}:
-        return "thought"
-    if val in {"tool", "tools"}:
-        return "tool"
-    return "unknown"
-
-
-def _parse_otel_telemetry_log(telemetry_path: pathlib.Path) -> dict:
-    """Parse an OpenTelemetry JSONL telemetry log (Gemini CLI or Antigravity format).
-
-    Returns a dict keyed by session_id, each containing model and token buckets.
-    """
-    if not telemetry_path.is_file():
-        return {}
-
-    try:
-        content = telemetry_path.read_text(encoding="utf-8", errors="replace")
-    except Exception:
-        return {}
-
-    decoder = json.JSONDecoder()
-    index = 0
-    length = len(content)
-    sessions: dict = {}
-
-    while index < length:
-        while index < length and content[index].isspace():
-            index += 1
-        if index >= length:
-            break
-        if content[index] != "{":
-            next_obj = content.find("{", index + 1)
-            if next_obj < 0:
-                break
-            index = next_obj
-        try:
-            payload, end = decoder.raw_decode(content, index)
-            index = end
-        except json.JSONDecodeError:
-            next_obj = content.find("{", index + 1)
-            if next_obj < 0:
-                break
-            index = next_obj
-            continue
-
-        # Support both scopeMetrics (OTel) and resourceMetrics > scopeMetrics wrappers
-        scope_metrics_list = payload.get("scopeMetrics") or []
-        for resource_metric in payload.get("resourceMetrics") or []:
-            if isinstance(resource_metric, dict):
-                scope_metrics_list = scope_metrics_list + (resource_metric.get("scopeMetrics") or [])
-
-        for scope in scope_metrics_list:
-            if not isinstance(scope, dict):
-                continue
-            for metric in scope.get("metrics") or []:
-                desc = metric.get("descriptor") or {}
-                m_name = desc.get("name") or metric.get("name") or ""
-                if m_name not in {
-                    "gemini_cli.token.usage",
-                    "gen_ai.client.token.usage",
-                    "antigravity.token.usage",
-                    "agy.token.usage",
-                }:
-                    continue
-                for point in metric.get("dataPoints") or []:
-                    if not isinstance(point, dict):
-                        continue
-                    attrs = point.get("attributes") or {}
-                    session_id = (
-                        attrs.get("session.id")
-                        or attrs.get("session_id")
-                        or attrs.get("conversation.id")
-                        or attrs.get("conversation_id")
-                    )
-                    if not session_id:
-                        continue
-
-                    raw_type = (
-                        attrs.get("type")
-                        or attrs.get("gen_ai.token.type")
-                        or attrs.get("token.type")
-                        or ""
-                    )
-                    token_type = _normalize_token_type(raw_type)
-                    if token_type == "unknown":
-                        continue
-
-                    model = (
-                        attrs.get("model")
-                        or attrs.get("gen_ai.response.model")
-                        or attrs.get("gen_ai.request.model")
-                        or "unknown"
-                    )
-                    val = point.get("value")
-                    if val is None:
-                        continue
-                    try:
-                        val = int(val)
-                    except (ValueError, TypeError):
-                        continue
-
-                    end_time_raw = point.get("endTime") or point.get("startTime")
-                    end_time = 0.0
-                    if isinstance(end_time_raw, list) and len(end_time_raw) >= 1:
-                        end_time = float(end_time_raw[0]) + (float(end_time_raw[1]) / 1e9 if len(end_time_raw) > 1 else 0.0)
-
-                    if session_id not in sessions:
-                        sessions[session_id] = {
-                            "session_id": session_id,
-                            "model": model,
-                            "last_time": end_time,
-                            "tokens": {}
-                        }
-
-                    sess = sessions[session_id]
-                    if end_time >= sess["last_time"]:
-                        sess["last_time"] = end_time
-                        sess["tokens"][token_type] = val
-                        if model != "unknown":
-                            sess["model"] = model
-
-    return sessions
-
-
-def _parse_telemetry_log() -> dict:
-    """Try antigravity-telemetry.log first, then fall back to gemini telemetry.log."""
-    agt_path = pathlib.Path.home() / ".agentcat/gemini/antigravity-telemetry.log"
-    sessions = _parse_otel_telemetry_log(agt_path)
-    if sessions:
-        return sessions
-    # Legacy fallback for gemini-cli telemetry
-    gem_path = pathlib.Path.home() / ".agentcat/gemini/telemetry.log"
-    return _parse_otel_telemetry_log(gem_path)
-
-
 def main() -> None:
     raw_payload = _read_stdin_nonblocking()
 
-    # DEBUG DUMP
-    try:
-        with open("/tmp/spill-hook-debug.log", "a") as f:
-            f.write(f"\n--- Hook Fired: {datetime.datetime.now()} ---\n")
-            f.write(f"Arguments: {sys.argv}\n")
-            f.write(f"Environment keys: {list(os.environ.keys())}\n")
-            f.write(f"Environment SPILL_ keys: {{k: v for k, v in os.environ.items() if k.startswith('SPILL')}}\n")
-            f.write(f"Raw stdin length: {len(raw_payload)}\n")
-            if raw_payload:
-                f.write(f"Raw stdin: {raw_payload[:1000]}\n")
-    except Exception as e:
-        pass
-
-    # Try parsing stdin if it is not empty
-    payload = None
-    if raw_payload.strip():
-        try:
-            payload = json.loads(raw_payload)
-        except Exception:
-            pass
-
-    if payload and isinstance(payload, dict):
-        input_tokens, output_tokens, total, total_only = _payload_token_counts(payload)
-
-        if total > 0:
-            model = _payload_model(payload)
-            # Prefer ANTIGRAVITY_CONVERSATION_ID env var as a stable opaque session key
-            env_conv_id = os.environ.get("ANTIGRAVITY_CONVERSATION_ID", "")
-            session_id = (
-                env_conv_id
-                or str(payload.get("session_id", payload.get("conversationId", "")))
-            )
-            run_id = _opaque(session_id, "run-" + uuid.uuid4().hex[:12])
-            span_hint = _payload_span_hint(payload, total_only)
-            span_id = _stable_span_id(run_id, model, str(input_tokens), str(output_tokens), str(total), span_hint)
-            now = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.000Z")
-
-            task_type = _safe_label(
-                payload,
-                ("task_type", "taskType"),
-                ("SPILL_TOKEN_USAGE_TASK_TYPE", "SPILL_WORKFLOW_TASK_TYPE"),
-                "uncategorized",
-            )
-            stage = _safe_label(
-                payload,
-                ("stage", "workflow_stage", "workflowStage"),
-                ("SPILL_TOKEN_USAGE_STAGE", "SPILL_WORKFLOW_STAGE"),
-                "summarize",
-            )
-
-            event = {
-                "schema_version": 1,
-                "device_id": "device_local",
-                "project_id": "project_global",
-                "artifact_id": "artifact_global",
-                "run_id": run_id,
-                "span_id": span_id,
-                "ai_tool": "antigravity",
-                "task_type": task_type,
-                "stage": stage,
-                "model": model,
-                "input_tokens": input_tokens,
-                "output_tokens": output_tokens,
-                "total_tokens": total,
-                "token_breakdown": {
-                    "system": 0,
-                    "user": 0,
-                    "history": 0,
-                    "repo_context": 0,
-                    "tool_output": 0,
-                    "generated_output": 0 if total_only else output_tokens,
-                    "unknown": total if total_only else input_tokens,
-                },
-                "latency_ms": 0,
-                "created_at": now,
-                "sync_mode": "local_only",
-            }
-
-            _enqueue_event(event)
-            _consume_label_file()
-            return
-        else:
-            _write_diagnostic("missing_exact_token_usage", payload)
-            return
-
-    # Fallback to parsing telemetry.log when stdin is empty/invalid
-    sessions = _parse_telemetry_log()
-    if not sessions:
+    if not raw_payload.strip():
         _write_diagnostic("empty_stdin")
         return
 
-    events_emitted = 0
-    for session_id, sess in sessions.items():
-        raw_input = sess["tokens"].get("input", 0)
-        raw_output = sess["tokens"].get("output", 0)
-        raw_thought = sess["tokens"].get("thought", 0)
-        raw_tool = sess["tokens"].get("tool", 0)
-        raw_cache = sess["tokens"].get("cache", 0)
+    try:
+        payload = json.loads(raw_payload)
+    except Exception:
+        _write_diagnostic("invalid_json")
+        return
 
-        session_input = raw_input + raw_cache
-        session_output = raw_output + raw_thought + raw_tool
+    if not isinstance(payload, dict):
+        _write_diagnostic("non_object_payload")
+        return
 
-        if session_input == 0 and session_output == 0:
-            continue
+    input_tokens, output_tokens, total, total_only = _payload_token_counts(payload)
 
-        model = sess["model"]
-        if not _MODEL_ID.match(model):
-            model = "gemini-unknown"
+    if total <= 0:
+        _write_diagnostic("missing_exact_token_usage", payload)
+        return
 
-        run_id = _opaque(session_id, "run-" + uuid.uuid4().hex[:12])
-        prev_input, prev_output = _load_session_state(run_id)
+    model = _payload_model(payload)
+    env_conv_id = os.environ.get("ANTIGRAVITY_CONVERSATION_ID", "")
+    session_id = (
+        env_conv_id
+        or str(payload.get("session_id", payload.get("conversationId", "")))
+    )
+    run_id = _opaque(session_id, "run-" + uuid.uuid4().hex[:12])
+    span_hint = _payload_span_hint(payload, total_only)
+    span_id = _stable_span_id(run_id, model, str(input_tokens), str(output_tokens), str(total), span_hint)
+    now = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.000Z")
 
-        delta_input = session_input - prev_input
-        delta_output = session_output - prev_output
+    task_type = _safe_label(
+        payload,
+        ("task_type", "taskType"),
+        ("SPILL_TOKEN_USAGE_TASK_TYPE", "SPILL_WORKFLOW_TASK_TYPE"),
+        "uncategorized",
+    )
+    stage = _safe_label(
+        payload,
+        ("stage", "workflow_stage", "workflowStage"),
+        ("SPILL_TOKEN_USAGE_STAGE", "SPILL_WORKFLOW_STAGE"),
+        "summarize",
+    )
 
-        if delta_input <= 0 and delta_output <= 0:
-            if prev_input == 0 and prev_output == 0:
-                _save_session_state(run_id, session_input, session_output)
-            continue
+    event = {
+        "schema_version": 1,
+        "device_id": "device_local",
+        "project_id": "project_global",
+        "artifact_id": "artifact_global",
+        "run_id": run_id,
+        "span_id": span_id,
+        "ai_tool": "antigravity",
+        "task_type": task_type,
+        "stage": stage,
+        "model": model,
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "total_tokens": total,
+        "token_breakdown": {
+            "system": 0,
+            "user": 0,
+            "history": 0,
+            "repo_context": 0,
+            "tool_output": 0,
+            "generated_output": 0 if total_only else output_tokens,
+            "unknown": total if total_only else input_tokens,
+        },
+        "latency_ms": 0,
+        "created_at": now,
+        "sync_mode": "local_only",
+    }
 
-        _save_session_state(run_id, session_input, session_output)
-
-        span_id = _stable_span_id(run_id, model, str(session_input), str(session_output))
-        now = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.000Z")
-
-        task_type = _safe_label(
-            {},
-            ("task_type", "taskType"),
-            ("SPILL_TOKEN_USAGE_TASK_TYPE", "SPILL_WORKFLOW_TASK_TYPE"),
-            "uncategorized",
-        )
-        stage = _safe_label(
-            {},
-            ("stage", "workflow_stage", "workflowStage"),
-            ("SPILL_TOKEN_USAGE_STAGE", "SPILL_WORKFLOW_STAGE"),
-            "summarize",
-        )
-
-        event = {
-            "schema_version": 1,
-            "device_id": "device_local",
-            "project_id": "project_global",
-            "artifact_id": "artifact_global",
-            "run_id": run_id,
-            "span_id": span_id,
-            "ai_tool": "antigravity",
-            "task_type": task_type,
-            "stage": stage,
-            "model": model,
-            "input_tokens": delta_input,
-            "output_tokens": delta_output,
-            "total_tokens": delta_input + delta_output,
-            "token_breakdown": {
-                "system": 0,
-                "user": 0,
-                "history": raw_cache,
-                "repo_context": 0,
-                "tool_output": raw_tool,
-                "generated_output": delta_output,
-                "unknown": delta_input,
-            },
-            "latency_ms": 0,
-            "created_at": now,
-            "sync_mode": "local_only",
-        }
-
-        _enqueue_event(event)
-        events_emitted += 1
-
-    if events_emitted > 0:
-        _consume_label_file()
-    else:
-        _write_diagnostic("empty_stdin")
+    _enqueue_event(event)
+    _consume_label_file()
 
 
 if __name__ == "__main__":
