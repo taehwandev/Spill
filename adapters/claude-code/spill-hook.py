@@ -232,9 +232,11 @@ def _write_success_diagnostic(event: dict) -> None:
             f.write(json.dumps(diagnostic, separators=(",", ":")))
         os.chmod(temporary_path, 0o600)
         os.replace(temporary_path, final_path)
-        _clear_diagnostic_file(MISMATCH_DIAGNOSTIC_FILE_NAME)
     except Exception:
         pass
+
+    _clear_diagnostic_file(MISMATCH_DIAGNOSTIC_FILE_NAME)
+    _clear_diagnostic_file(EMPTY_DIAGNOSTIC_FILE_NAME)
 
 
 def _clear_diagnostic_file(filename: str) -> None:
@@ -415,9 +417,6 @@ def main() -> None:
     total = fresh + output
 
     if total <= 0:
-        # No new tokens since last fire — update state in case this is the first run.
-        if prev_fresh == 0 and prev_output == 0:
-            _save_session_state(run_id, session_fresh, session_output)
         _write_diagnostic_file(
             EMPTY_DIAGNOSTIC_FILE_NAME,
             "no_usage_hook_call",
@@ -427,10 +426,15 @@ def main() -> None:
         )
         return
 
-    _save_session_state(run_id, session_fresh, session_output)
-
-    # span_id encodes the cumulative session position so the same checkpoint deduplicates.
-    span_id = _stable_span_id(run_id, model, str(session_fresh), str(session_output))
+    # span_id encodes the emitted interval so the event identity matches delta tokens.
+    span_id = _stable_span_id(
+        run_id,
+        model,
+        str(prev_fresh),
+        str(prev_output),
+        str(session_fresh),
+        str(session_output),
+    )
     now = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.000Z")
     inferred_task_type = _infer_task_type(tool_names)
     inferred_stage = _infer_stage(tool_names)
@@ -476,6 +480,7 @@ def main() -> None:
     }
 
     _enqueue_event(event)
+    _save_session_state(run_id, session_fresh, session_output)
     _write_success_diagnostic(event)
     _consume_label_file()
 
