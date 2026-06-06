@@ -1,9 +1,13 @@
 import Foundation
+import SQLite3
+
+private let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
 final class TokenUsageStore: @unchecked Sendable {
     static let eventsDidChangeNotification = Notification.Name("app.spill.token-usage-store.events-did-change")
 
     private let fileURL: URL
+    private let databaseURL: URL
     private let inboxURL: URL?
     private let lock = NSLock()
 
@@ -12,11 +16,16 @@ final class TokenUsageStore: @unchecked Sendable {
         inboxURL: URL? = nil
     ) {
         self.fileURL = fileURL
+        self.databaseURL = Self.defaultDatabaseURL(for: fileURL)
         self.inboxURL = inboxURL
     }
 
     var eventsFileURL: URL {
         fileURL
+    }
+
+    var eventsDatabaseURL: URL {
+        databaseURL
     }
 
     var eventsInboxURL: URL? {
@@ -49,13 +58,11 @@ final class TokenUsageStore: @unchecked Sendable {
                 try event.validate()
             }
 
-            try FileManager.default.createDirectory(
-                at: fileURL.deletingLastPathComponent(),
-                withIntermediateDirectories: true
-            )
-            let data = try TokenUsageSanitizer.jsonEncoder.encode(events)
-            try data.write(to: fileURL, options: [.atomic])
-            return events
+            let database = try openDatabase()
+            defer { sqlite3_close(database) }
+            try replaceDatabaseEvents(events, database: database)
+            try removeLegacyEventsFileWithoutLock()
+            return loadDatabaseEvents(database: database)
         }
 
         postEventsDidChange()
@@ -66,16 +73,11 @@ final class TokenUsageStore: @unchecked Sendable {
     func appendEvent(_ event: TokenUsageEvent) throws -> [TokenUsageEvent] {
         let nextEvents = try lock.withLock {
             try event.validate()
-            let currentEvents = loadEventsWithoutLock().events
-            let nextEvents = currentEvents + [event]
-
-            try FileManager.default.createDirectory(
-                at: fileURL.deletingLastPathComponent(),
-                withIntermediateDirectories: true
-            )
-            let data = try TokenUsageSanitizer.jsonEncoder.encode(nextEvents)
-            try data.write(to: fileURL, options: [.atomic])
-            return nextEvents
+            let database = try openDatabase()
+            defer { sqlite3_close(database) }
+            try migrateLegacyJSONEventsIfNeeded(database: database)
+            try insertEvent(event, database: database)
+            return loadDatabaseEvents(database: database)
         }
 
         postEventsDidChange()
@@ -84,9 +86,10 @@ final class TokenUsageStore: @unchecked Sendable {
 
     func clearEvents() throws {
         try lock.withLock {
-            if FileManager.default.fileExists(atPath: fileURL.path) {
-                try FileManager.default.removeItem(at: fileURL)
-            }
+            let database = try openDatabase()
+            defer { sqlite3_close(database) }
+            try execute("DELETE FROM token_usage_events", database: database)
+            try removeLegacyEventsFileWithoutLock()
             if let inboxURL, FileManager.default.fileExists(atPath: inboxURL.path) {
                 try FileManager.default.removeItem(at: inboxURL)
             }
@@ -134,6 +137,10 @@ final class TokenUsageStore: @unchecked Sendable {
             .appendingPathComponent("events.json")
     }
 
+    static func defaultDatabaseURL() -> URL {
+        defaultDatabaseURL(for: defaultEventsURL())
+    }
+
     static func defaultInboxURL() -> URL {
         let baseURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
             .first ?? URL(fileURLWithPath: NSTemporaryDirectory())
@@ -151,23 +158,37 @@ final class TokenUsageStore: @unchecked Sendable {
     }
 
     private func loadEventsWithoutLock() -> StoreLoadResult {
+        let database: OpaquePointer
+        do {
+            database = try openDatabase()
+        } catch {
+            return StoreLoadResult(events: [], didImportQueuedEvents: false)
+        }
+        defer { sqlite3_close(database) }
+
+        try? migrateLegacyJSONEventsIfNeeded(database: database)
         let inboxResult = loadInboxEvents()
-        let events = deduplicatedEvents(loadJSONEvents(from: fileURL) + inboxResult.events)
+        var didImportQueuedEvents = false
 
         if !inboxResult.consumedURLs.isEmpty {
-            try? persistEventsWithoutLock(events)
-            removeConsumedInboxFiles(inboxResult.consumedURLs)
+            do {
+                try insertEvents(inboxResult.events, database: database)
+                removeConsumedInboxFiles(inboxResult.consumedURLs)
+                didImportQueuedEvents = true
+            } catch {
+                didImportQueuedEvents = false
+            }
         }
 
         return StoreLoadResult(
-            events: events,
-            didImportQueuedEvents: !inboxResult.consumedURLs.isEmpty
+            events: loadDatabaseEvents(database: database),
+            didImportQueuedEvents: didImportQueuedEvents
         )
     }
 
     private func loadJSONEvents(from url: URL) -> [TokenUsageEvent] {
         guard let data = try? Data(contentsOf: url),
-              let events = try? JSONDecoder().decode([TokenUsageEvent].self, from: data)
+              let events = try? JSONDecoder().decode(SafeDecodableArray<TokenUsageEvent>.self, from: data).elements
         else {
             return []
         }
@@ -239,15 +260,6 @@ final class TokenUsageStore: @unchecked Sendable {
             }
     }
 
-    private func persistEventsWithoutLock(_ events: [TokenUsageEvent]) throws {
-        try FileManager.default.createDirectory(
-            at: fileURL.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-        let data = try TokenUsageSanitizer.jsonEncoder.encode(events)
-        try data.write(to: fileURL, options: [.atomic])
-    }
-
     private func removeConsumedInboxFiles(_ urls: [URL]) {
         for url in urls {
             try? FileManager.default.removeItem(at: url)
@@ -264,11 +276,326 @@ final class TokenUsageStore: @unchecked Sendable {
             .appendingPathComponent("events-inbox.jsonl")
     }
 
-    private func deduplicatedEvents(_ events: [TokenUsageEvent]) -> [TokenUsageEvent] {
-        var seenSpanIDs = Set<String>()
-        return events.filter { event in
-            seenSpanIDs.insert(event.spanID).inserted
+    private func openDatabase() throws -> OpaquePointer {
+        try FileManager.default.createDirectory(
+            at: databaseURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+
+        var database: OpaquePointer?
+        let flags = SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX
+        guard sqlite3_open_v2(databaseURL.path, &database, flags, nil) == SQLITE_OK,
+              let database
+        else {
+            defer { sqlite3_close(database) }
+            throw TokenUsageStoreError.databaseOpenFailed
         }
+
+        do {
+            try execute("PRAGMA journal_mode = WAL", database: database)
+            try execute("PRAGMA synchronous = NORMAL", database: database)
+            try execute("PRAGMA busy_timeout = 5000", database: database)
+            try execute(
+                """
+                CREATE TABLE IF NOT EXISTS token_usage_events (
+                    span_id TEXT PRIMARY KEY NOT NULL,
+                    run_id TEXT,
+                    created_at TEXT NOT NULL,
+                    ai_tool TEXT NOT NULL,
+                    task_type TEXT,
+                    stage TEXT,
+                    model TEXT,
+                    total_tokens INTEGER NOT NULL,
+                    payload_json BLOB NOT NULL
+                )
+                """,
+                database: database
+            )
+            try ensureDashboardColumns(database: database)
+            try backfillDashboardColumns(database: database)
+            try execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_token_usage_events_created_at
+                ON token_usage_events(created_at)
+                """,
+                database: database
+            )
+            try execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_token_usage_events_tool_created_at
+                ON token_usage_events(ai_tool, created_at)
+                """,
+                database: database
+            )
+            try execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_token_usage_events_task_type_created_at
+                ON token_usage_events(task_type, created_at)
+                """,
+                database: database
+            )
+            try execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_token_usage_events_stage_created_at
+                ON token_usage_events(stage, created_at)
+                """,
+                database: database
+            )
+            try execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_token_usage_events_model_created_at
+                ON token_usage_events(model, created_at)
+                """,
+                database: database
+            )
+            try execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_token_usage_events_run_id
+                ON token_usage_events(run_id)
+                """,
+                database: database
+            )
+            return database
+        } catch {
+            sqlite3_close(database)
+            throw error
+        }
+    }
+
+    private func execute(_ sql: String, database: OpaquePointer) throws {
+        guard sqlite3_exec(database, sql, nil, nil, nil) == SQLITE_OK else {
+            throw TokenUsageStoreError.databaseWriteFailed
+        }
+    }
+
+    private func ensureDashboardColumns(database: OpaquePointer) throws {
+        let existingColumns = databaseColumns(tableName: "token_usage_events", database: database)
+        let requiredColumns: [(name: String, definition: String)] = [
+            ("run_id", "TEXT"),
+            ("task_type", "TEXT"),
+            ("stage", "TEXT"),
+            ("model", "TEXT")
+        ]
+
+        for column in requiredColumns where !existingColumns.contains(column.name) {
+            try execute(
+                "ALTER TABLE token_usage_events ADD COLUMN \(column.name) \(column.definition)",
+                database: database
+            )
+        }
+    }
+
+    private func databaseColumns(tableName: String, database: OpaquePointer) -> Set<String> {
+        let sql = "PRAGMA table_info(\(tableName))"
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
+              let statement
+        else {
+            return []
+        }
+        defer { sqlite3_finalize(statement) }
+
+        var columns = Set<String>()
+        while sqlite3_step(statement) == SQLITE_ROW {
+            guard let columnName = sqlite3_column_text(statement, 1) else {
+                continue
+            }
+            columns.insert(String(cString: columnName))
+        }
+        return columns
+    }
+
+    private func backfillDashboardColumns(database: OpaquePointer) throws {
+        let sql = """
+        SELECT span_id, payload_json
+        FROM token_usage_events
+        WHERE run_id IS NULL OR task_type IS NULL OR stage IS NULL OR model IS NULL
+        """
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
+              let statement
+        else {
+            throw TokenUsageStoreError.databaseWriteFailed
+        }
+        defer { sqlite3_finalize(statement) }
+
+        var events = [TokenUsageEvent]()
+        while sqlite3_step(statement) == SQLITE_ROW {
+            guard let blob = sqlite3_column_blob(statement, 1) else {
+                continue
+            }
+            let byteCount = Int(sqlite3_column_bytes(statement, 1))
+            let data = Data(bytes: blob, count: byteCount)
+            if let event = try? JSONDecoder().decode(TokenUsageEvent.self, from: data),
+               (try? event.validate()) != nil {
+                events.append(event)
+            }
+        }
+
+        guard !events.isEmpty else {
+            return
+        }
+
+        try execute("BEGIN IMMEDIATE TRANSACTION", database: database)
+        do {
+            for event in events {
+                try updateDashboardColumns(for: event, database: database)
+            }
+            try execute("COMMIT", database: database)
+        } catch {
+            try? execute("ROLLBACK", database: database)
+            throw error
+        }
+    }
+
+    private func updateDashboardColumns(for event: TokenUsageEvent, database: OpaquePointer) throws {
+        let sql = """
+        UPDATE token_usage_events
+        SET run_id = ?, task_type = ?, stage = ?, model = ?
+        WHERE span_id = ?
+        """
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
+              let statement
+        else {
+            throw TokenUsageStoreError.databaseWriteFailed
+        }
+        defer { sqlite3_finalize(statement) }
+
+        sqlite3_bind_text(statement, 1, event.runID, -1, SQLITE_TRANSIENT)
+        sqlite3_bind_text(statement, 2, event.taskType.rawValue, -1, SQLITE_TRANSIENT)
+        sqlite3_bind_text(statement, 3, event.stage.rawValue, -1, SQLITE_TRANSIENT)
+        sqlite3_bind_text(statement, 4, event.model, -1, SQLITE_TRANSIENT)
+        sqlite3_bind_text(statement, 5, event.spanID, -1, SQLITE_TRANSIENT)
+
+        guard sqlite3_step(statement) == SQLITE_DONE else {
+            throw TokenUsageStoreError.databaseWriteFailed
+        }
+    }
+
+    private func migrateLegacyJSONEventsIfNeeded(database: OpaquePointer) throws {
+        let legacyEvents = loadJSONEvents(from: fileURL)
+        guard !legacyEvents.isEmpty else {
+            return
+        }
+
+        try insertEvents(legacyEvents, database: database)
+        try removeLegacyEventsFileWithoutLock()
+    }
+
+    private func insertEvents(_ events: [TokenUsageEvent], database: OpaquePointer) throws {
+        try execute("BEGIN IMMEDIATE TRANSACTION", database: database)
+        do {
+            for event in events {
+                try insertEvent(event, database: database)
+            }
+            try execute("COMMIT", database: database)
+        } catch {
+            try? execute("ROLLBACK", database: database)
+            throw error
+        }
+    }
+
+    private func replaceDatabaseEvents(_ events: [TokenUsageEvent], database: OpaquePointer) throws {
+        try execute("BEGIN IMMEDIATE TRANSACTION", database: database)
+        do {
+            try execute("DELETE FROM token_usage_events", database: database)
+            for event in events {
+                try insertEvent(event, database: database)
+            }
+            try execute("COMMIT", database: database)
+        } catch {
+            try? execute("ROLLBACK", database: database)
+            throw error
+        }
+    }
+
+    private func insertEvent(_ event: TokenUsageEvent, database: OpaquePointer) throws {
+        try event.validate()
+
+        let sql = """
+        INSERT OR IGNORE INTO token_usage_events (
+            span_id,
+            run_id,
+            created_at,
+            ai_tool,
+            task_type,
+            stage,
+            model,
+            total_tokens,
+            payload_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
+              let statement
+        else {
+            throw TokenUsageStoreError.databaseWriteFailed
+        }
+        defer { sqlite3_finalize(statement) }
+
+        let payload = try TokenUsageSanitizer.eventData(event)
+        sqlite3_bind_text(statement, 1, event.spanID, -1, SQLITE_TRANSIENT)
+        sqlite3_bind_text(statement, 2, event.runID, -1, SQLITE_TRANSIENT)
+        sqlite3_bind_text(statement, 3, event.createdAt, -1, SQLITE_TRANSIENT)
+        sqlite3_bind_text(statement, 4, event.aiTool.rawValue, -1, SQLITE_TRANSIENT)
+        sqlite3_bind_text(statement, 5, event.taskType.rawValue, -1, SQLITE_TRANSIENT)
+        sqlite3_bind_text(statement, 6, event.stage.rawValue, -1, SQLITE_TRANSIENT)
+        sqlite3_bind_text(statement, 7, event.model, -1, SQLITE_TRANSIENT)
+        sqlite3_bind_int64(statement, 8, sqlite3_int64(event.totalTokens))
+        _ = payload.withUnsafeBytes { buffer in
+            sqlite3_bind_blob(statement, 9, buffer.baseAddress, Int32(buffer.count), SQLITE_TRANSIENT)
+        }
+
+        guard sqlite3_step(statement) == SQLITE_DONE else {
+            throw TokenUsageStoreError.databaseWriteFailed
+        }
+    }
+
+    private func loadDatabaseEvents(database: OpaquePointer) -> [TokenUsageEvent] {
+        let sql = """
+        SELECT payload_json
+        FROM token_usage_events
+        ORDER BY created_at ASC, rowid ASC
+        """
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
+              let statement
+        else {
+            return []
+        }
+        defer { sqlite3_finalize(statement) }
+
+        var events = [TokenUsageEvent]()
+        while sqlite3_step(statement) == SQLITE_ROW {
+            guard let blob = sqlite3_column_blob(statement, 0) else {
+                continue
+            }
+            let byteCount = Int(sqlite3_column_bytes(statement, 0))
+            let data = Data(bytes: blob, count: byteCount)
+            if let event = try? JSONDecoder().decode(TokenUsageEvent.self, from: data),
+               (try? event.validate()) != nil {
+                events.append(event)
+            }
+        }
+        return events
+    }
+
+    private func removeLegacyEventsFileWithoutLock() throws {
+        if FileManager.default.fileExists(atPath: fileURL.path),
+           fileURL != databaseURL {
+            try FileManager.default.removeItem(at: fileURL)
+        }
+    }
+
+    private static func defaultDatabaseURL(for fileURL: URL) -> URL {
+        let databaseExtensions: Set<String> = ["db", "sqlite", "sqlite3"]
+        if databaseExtensions.contains(fileURL.pathExtension.lowercased()) {
+            return fileURL
+        }
+        return fileURL
+            .deletingPathExtension()
+            .appendingPathExtension("sqlite3")
     }
 
     private func postEventsDidChange() {
@@ -277,6 +604,11 @@ final class TokenUsageStore: @unchecked Sendable {
             object: self
         )
     }
+}
+
+private enum TokenUsageStoreError: Error {
+    case databaseOpenFailed
+    case databaseWriteFailed
 }
 
 private struct InboxReadResult {
@@ -294,5 +626,25 @@ private extension NSLock {
         lock()
         defer { unlock() }
         return try body()
+    }
+}
+
+struct SafeDecodableArray<Element: Decodable>: Decodable {
+    let elements: [Element]
+
+    private struct DummyDecodable: Decodable {}
+
+    init(from decoder: Decoder) throws {
+        var container = try decoder.unkeyedContainer()
+        var elements = [Element]()
+        while !container.isAtEnd {
+            do {
+                let element = try container.decode(Element.self)
+                elements.append(element)
+            } catch {
+                _ = try? container.decode(DummyDecodable.self)
+            }
+        }
+        self.elements = elements
     }
 }

@@ -345,7 +345,7 @@ struct TokenUsageEvent: Codable, Equatable, Identifiable, Sendable {
               totalTokens >= 0,
               latencyMS >= 0,
               totalTokens == inputTokens + outputTokens,
-              ISO8601DateFormatter.tokenUsage.date(from: createdAt) != nil
+              ISO8601DateFormatter.parseTokenUsageDate(from: createdAt) != nil
         else {
             throw TokenUsageValidationError.invalidRequiredField
         }
@@ -489,5 +489,15 @@ extension ISO8601DateFormatter {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return formatter
+    }
+
+    private static var tokenUsageWithoutFractionalSeconds: ISO8601DateFormatter {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }
+
+    static func parseTokenUsageDate(from string: String) -> Date? {
+        tokenUsage.date(from: string) ?? tokenUsageWithoutFractionalSeconds.date(from: string)
     }
 }
