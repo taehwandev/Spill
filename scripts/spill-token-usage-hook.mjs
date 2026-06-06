@@ -22,7 +22,6 @@ const eventKeys = [
   "token_breakdown",
   "latency_ms",
   "created_at",
-  "sync_mode",
 ];
 
 const breakdownKeys = [
@@ -183,10 +182,6 @@ function validateEvent(value) {
 
   if (Number.isNaN(Date.parse(value.created_at))) {
     throw new Error("created_at");
-  }
-
-  if (value.sync_mode !== "local_only") {
-    throw new Error("sync_mode");
   }
 
   validateBreakdown(value.token_breakdown, value.total_tokens);

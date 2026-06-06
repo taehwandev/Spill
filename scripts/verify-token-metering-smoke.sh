@@ -60,7 +60,6 @@ const event = {
   },
   latency_ms: 1,
   created_at: process.env.HOOK_TIMESTAMP,
-  sync_mode: "local_only",
 };
 
 process.stdout.write(JSON.stringify(event));
@@ -524,8 +523,8 @@ if (event.ai_tool !== "claude" || event.model !== "spill-hook-test") {
 if (event.total_tokens !== 15 || event.input_tokens !== 9 || event.output_tokens !== 6) {
   throw new Error("stored token counts do not match hook event");
 }
-if (event.token_breakdown.unknown !== 15 || event.sync_mode !== "local_only") {
-  throw new Error("stored hook event does not preserve local-only unknown breakdown");
+if (event.token_breakdown.unknown !== 15 || Object.hasOwn(event, "sync_mode")) {
+  throw new Error("stored hook event does not preserve unknown breakdown without event sync mode");
 }
 
 const keys = new Set(events.map((candidate) => `${candidate.ai_tool}:${candidate.task_type}:${candidate.stage}`));

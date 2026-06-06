@@ -515,7 +515,6 @@ function toSpillEvent({
     },
     latency_ms: 0,
     created_at: timestamp.toISOString(),
-    sync_mode: "local_only",
   };
 }
 

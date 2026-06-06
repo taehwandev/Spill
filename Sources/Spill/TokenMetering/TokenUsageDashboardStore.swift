@@ -463,8 +463,7 @@ final class TokenUsageDashboardStore: ObservableObject {
                 unknown: 0
             ),
             latencyMS: 1,
-            createdAt: timestamp,
-            syncMode: .localOnly
+            createdAt: timestamp
         )
     }
 
@@ -757,8 +756,7 @@ final class TokenUsageDashboardStore: ObservableObject {
                 generatedOutput: generatedOutput
             ),
             latencyMS: 320 + index * 20,
-            createdAt: ISO8601DateFormatter.tokenUsage.string(from: Date()),
-            syncMode: .localOnly
+            createdAt: ISO8601DateFormatter.tokenUsage.string(from: Date())
         )
     }
 }

@@ -41,21 +41,22 @@ const safeEvent: UsageEvent = {
     unknown: 0
   },
   latency_ms: 350,
-  created_at: "2026-06-04T00:15:00.000Z",
-  sync_mode: "cloud_aggregate"
+  created_at: "2026-06-04T00:15:00.000Z"
 };
 
 test("sanitizeUsageEvent reconstructs only allowlisted fields", () => {
   const result = sanitizeUsageEvent({
     ...safeEvent,
     note: "cloud_preview_fixture",
-    arbitrary_extra_field: "ignored"
+    arbitrary_extra_field: "ignored",
+    sync_mode: "cloud_aggregate"
   });
 
   assert.equal(result.ok, true);
   assert.deepEqual(result.omittedKeys.sort(), [
     "arbitrary_extra_field",
-    "note"
+    "note",
+    "sync_mode"
   ]);
 
   if (!result.ok) {
@@ -64,6 +65,7 @@ test("sanitizeUsageEvent reconstructs only allowlisted fields", () => {
 
   assert.equal(Object.hasOwn(result.event, "note"), false);
   assert.equal(Object.hasOwn(result.event, "arbitrary_extra_field"), false);
+  assert.equal(Object.hasOwn(result.event, "sync_mode"), false);
   assert.deepEqual(Object.keys(result.event).sort(), [
     "ai_tool",
     "artifact_id",
@@ -78,7 +80,6 @@ test("sanitizeUsageEvent reconstructs only allowlisted fields", () => {
     "schema_version",
     "span_id",
     "stage",
-    "sync_mode",
     "task_type",
     "token_breakdown",
     "total_tokens"

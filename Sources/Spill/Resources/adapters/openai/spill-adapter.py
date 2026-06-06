@@ -73,7 +73,6 @@ def _append_event(model: str, input_tokens: int, output_tokens: int, run_id: str
         },
         "latency_ms": 0,
         "created_at": now,
-        "sync_mode": "local_only",
     }
 
     _enqueue_event(event)

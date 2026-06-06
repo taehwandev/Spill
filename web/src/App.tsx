@@ -57,8 +57,7 @@ export function App() {
         unknown: 0
       },
       latency_ms: 1200,
-      created_at: new Date().toISOString(), // Today
-      sync_mode: "local_only"
+      created_at: new Date().toISOString() // Today
     };
     setEvents((prev) => [newEvent, ...prev]);
   };

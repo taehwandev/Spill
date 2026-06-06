@@ -163,12 +163,6 @@ enum TokenUsageAITool: String, Codable, CaseIterable, Sendable {
     }
 }
 
-enum TokenUsageSyncMode: String, Codable, CaseIterable, Sendable {
-    case localOnly = "local_only"
-    case cloudAggregate = "cloud_aggregate"
-    case cloudDetailed = "cloud_detailed"
-}
-
 struct TokenUsageBreakdown: Codable, Equatable, Sendable {
     let system: Int
     let user: Int
@@ -245,7 +239,6 @@ struct TokenUsageEvent: Codable, Equatable, Identifiable, Sendable {
     let tokenBreakdown: TokenUsageBreakdown
     let latencyMS: Int
     let createdAt: String
-    let syncMode: TokenUsageSyncMode
 
     enum CodingKeys: String, CodingKey, CaseIterable {
         case schemaVersion = "schema_version"
@@ -264,7 +257,6 @@ struct TokenUsageEvent: Codable, Equatable, Identifiable, Sendable {
         case tokenBreakdown = "token_breakdown"
         case latencyMS = "latency_ms"
         case createdAt = "created_at"
-        case syncMode = "sync_mode"
     }
 
     var id: String {
@@ -287,8 +279,7 @@ struct TokenUsageEvent: Codable, Equatable, Identifiable, Sendable {
         totalTokens: Int,
         tokenBreakdown: TokenUsageBreakdown,
         latencyMS: Int,
-        createdAt: String,
-        syncMode: TokenUsageSyncMode
+        createdAt: String
     ) {
         self.schemaVersion = schemaVersion
         self.deviceID = deviceID
@@ -306,7 +297,6 @@ struct TokenUsageEvent: Codable, Equatable, Identifiable, Sendable {
         self.tokenBreakdown = tokenBreakdown
         self.latencyMS = latencyMS
         self.createdAt = createdAt
-        self.syncMode = syncMode
     }
 
     init(from decoder: Decoder) throws {
@@ -327,7 +317,26 @@ struct TokenUsageEvent: Codable, Equatable, Identifiable, Sendable {
         tokenBreakdown = try container.decode(TokenUsageBreakdown.self, forKey: .tokenBreakdown)
         latencyMS = try container.decode(Int.self, forKey: .latencyMS)
         createdAt = try container.decode(String.self, forKey: .createdAt)
-        syncMode = try container.decode(TokenUsageSyncMode.self, forKey: .syncMode)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(schemaVersion, forKey: .schemaVersion)
+        try container.encode(deviceID, forKey: .deviceID)
+        try container.encode(projectID, forKey: .projectID)
+        try container.encode(artifactID, forKey: .artifactID)
+        try container.encode(runID, forKey: .runID)
+        try container.encode(spanID, forKey: .spanID)
+        try container.encode(aiTool, forKey: .aiTool)
+        try container.encode(taskType, forKey: .taskType)
+        try container.encode(stage, forKey: .stage)
+        try container.encode(model, forKey: .model)
+        try container.encode(inputTokens, forKey: .inputTokens)
+        try container.encode(outputTokens, forKey: .outputTokens)
+        try container.encode(totalTokens, forKey: .totalTokens)
+        try container.encode(tokenBreakdown, forKey: .tokenBreakdown)
+        try container.encode(latencyMS, forKey: .latencyMS)
+        try container.encode(createdAt, forKey: .createdAt)
     }
 
     func validate() throws {

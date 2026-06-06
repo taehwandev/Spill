@@ -476,7 +476,6 @@ def main() -> None:
         },
         "latency_ms": 0,
         "created_at": now,
-        "sync_mode": "local_only",
     }
 
     _enqueue_event(event)

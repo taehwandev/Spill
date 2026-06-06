@@ -738,7 +738,6 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(event.taskType, .debugging)
         XCTAssertEqual(event.stage, .verify)
         XCTAssertEqual(event.model, "spill-self-test")
-        XCTAssertEqual(event.syncMode, .localOnly)
         XCTAssertEqual(event.tokenBreakdown.generatedOutput, 16)
         XCTAssertEqual(event.tokenBreakdown.repoContext, 18)
         XCTAssertEqual(event.tokenBreakdown.toolOutput, 12)
@@ -775,8 +774,38 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(object?["task_type"] as? String, "analysis")
         XCTAssertEqual(object?["input_tokens"] as? Int, 100)
         XCTAssertEqual(object?["output_tokens"] as? Int, 50)
+        XCTAssertNil(object?["sync_mode"])
         XCTAssertNil(object?["prompt"])
         XCTAssertNil(object?["command"])
+    }
+
+    func testSanitizerRejectsSyncModeField() throws {
+        let data = try jsonData([
+            "schema_version": 1,
+            "device_id": "device_local",
+            "project_id": "project_local",
+            "artifact_id": "artifact_one",
+            "run_id": "run_local_01",
+            "span_id": "span_local_01",
+            "ai_tool": "codex",
+            "task_type": "analysis",
+            "stage": "plan",
+            "model": "local-manual",
+            "input_tokens": 100,
+            "output_tokens": 50,
+            "total_tokens": 150,
+            "token_breakdown": Self.safeBreakdown(),
+            "latency_ms": 20,
+            "created_at": "2026-06-04T00:00:00.000Z",
+            "sync_mode": "local_only"
+        ])
+
+        XCTAssertThrowsError(try TokenUsageSanitizer.sanitizeEventJSONData(data)) { error in
+            XCTAssertEqual(
+                error as? TokenUsageValidationError,
+                .unknownFieldPresent(["sync_mode"])
+            )
+        }
     }
 
     func testSanitizerRejectsForbiddenTopLevelField() throws {
@@ -1466,6 +1495,8 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(runtime.contains("events-inbox"))
         XCTAssertTrue(runtime.contains("Never send, derive, or store conversation titles"))
         XCTAssertTrue(runtime.contains("Spill generates default work item display names locally"))
+        XCTAssertTrue(runtime.contains("Spill applies its own\n  sync policy from app settings"))
+        XCTAssertFalse(runtime.contains("`sync_mode`"))
         XCTAssertTrue(runtime.contains("unknown` equal to `total_tokens`"))
         XCTAssertFalse(runtime.contains("ollama"))
 
@@ -2343,8 +2374,7 @@ final class TokenUsageStoreTests: XCTestCase {
             totalTokens: totalTokens,
             tokenBreakdown: tokenBreakdown,
             latencyMS: latencyMS,
-            createdAt: resolvedCreatedAt,
-            syncMode: .localOnly
+            createdAt: resolvedCreatedAt
         )
     }
 

@@ -39,7 +39,6 @@ export type UsageEvent = {
   token_breakdown: TokenBreakdown;
   latency_ms: number;
   created_at: string;
-  sync_mode: SyncMode;
 };
 
 type SafeUsageEventKey = keyof UsageEvent;
@@ -60,8 +59,7 @@ const SAFE_USAGE_EVENT_KEYS: ReadonlySet<string> = new Set<SafeUsageEventKey>([
   "total_tokens",
   "token_breakdown",
   "latency_ms",
-  "created_at",
-  "sync_mode"
+  "created_at"
 ]);
 
 export const TASK_TYPES = [
@@ -231,7 +229,6 @@ export function sanitizeUsageEvent(raw: unknown): SanitizedUsageEventResult {
   const tokenBreakdown = sanitizeTokenBreakdown(raw.token_breakdown);
   const latencyMs = sanitizeNonNegativeInteger(raw.latency_ms);
   const createdAt = sanitizeIsoTimestamp(raw.created_at);
-  const syncMode = pickEnum(raw.sync_mode, SYNC_MODES);
 
   if (
     schemaVersion === null ||
@@ -249,8 +246,7 @@ export function sanitizeUsageEvent(raw: unknown): SanitizedUsageEventResult {
     totalTokens === null ||
     tokenBreakdown === null ||
     latencyMs === null ||
-    createdAt === null ||
-    syncMode === null
+    createdAt === null
   ) {
     return {
       ok: false,
@@ -279,8 +275,7 @@ export function sanitizeUsageEvent(raw: unknown): SanitizedUsageEventResult {
       total_tokens: totalTokens,
       token_breakdown: tokenBreakdown,
       latency_ms: latencyMs,
-      created_at: createdAt,
-      sync_mode: syncMode
+      created_at: createdAt
     },
     omittedKeys
   };

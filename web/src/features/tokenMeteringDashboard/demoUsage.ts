@@ -36,7 +36,6 @@ const rawDemoUsageEvents: readonly DemoRawUsageEvent[] = [
     },
     latency_ms: 2180,
     created_at: "2026-06-04T00:15:00.000Z",
-    sync_mode: "cloud_aggregate",
     note: "cloud_preview_fixture"
   },
   {
@@ -64,7 +63,6 @@ const rawDemoUsageEvents: readonly DemoRawUsageEvent[] = [
     },
     latency_ms: 1960,
     created_at: "2026-06-04T00:20:00.000Z",
-    sync_mode: "cloud_aggregate",
     note: "cloud_preview_fixture"
   },
   {
@@ -92,7 +90,6 @@ const rawDemoUsageEvents: readonly DemoRawUsageEvent[] = [
     },
     latency_ms: 1640,
     created_at: "2026-06-04T01:02:00.000Z",
-    sync_mode: "cloud_aggregate",
     note: "cloud_preview_fixture"
   },
   {
@@ -120,7 +117,6 @@ const rawDemoUsageEvents: readonly DemoRawUsageEvent[] = [
     },
     latency_ms: 2890,
     created_at: "2026-06-04T01:18:00.000Z",
-    sync_mode: "cloud_aggregate",
     note: "cloud_preview_fixture"
   },
   {
@@ -148,7 +144,6 @@ const rawDemoUsageEvents: readonly DemoRawUsageEvent[] = [
     },
     latency_ms: 2380,
     created_at: "2026-06-04T02:04:00.000Z",
-    sync_mode: "cloud_aggregate",
     note: "cloud_preview_fixture"
   },
   {
@@ -176,7 +171,6 @@ const rawDemoUsageEvents: readonly DemoRawUsageEvent[] = [
     },
     latency_ms: 2010,
     created_at: "2026-06-04T02:22:00.000Z",
-    sync_mode: "cloud_aggregate",
     note: "cloud_preview_fixture"
   },
   {
@@ -204,7 +198,6 @@ const rawDemoUsageEvents: readonly DemoRawUsageEvent[] = [
     },
     latency_ms: 2640,
     created_at: "2026-06-04T03:10:00.000Z",
-    sync_mode: "cloud_aggregate",
     note: "cloud_preview_fixture"
   },
   {
@@ -232,7 +225,6 @@ const rawDemoUsageEvents: readonly DemoRawUsageEvent[] = [
     },
     latency_ms: 1280,
     created_at: "2026-06-04T03:32:00.000Z",
-    sync_mode: "cloud_aggregate",
     note: "cloud_preview_fixture"
   }
 ];
