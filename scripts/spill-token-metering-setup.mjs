@@ -842,5 +842,8 @@ function safeTTLMinutes(value) {
 }
 
 function shellQuote(value) {
-  return `'${value.replaceAll("'", "'\\''")}'`;
+  if (value.includes(" ") || value.includes("'") || value.includes('"') || value.includes("$") || value.includes("\\")) {
+    return `'${value.replaceAll("'", "'\\''")}'`;
+  }
+  return value;
 }
