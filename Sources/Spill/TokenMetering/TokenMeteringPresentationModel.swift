@@ -216,6 +216,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
             language: language,
             localAliases: localAliases,
             calendar: calendar,
+            now: now,
             locale: locale,
             timeZone: timeZone
         )
@@ -425,16 +426,16 @@ struct TokenUsageDashboardSnapshot: Equatable {
         )
 
         codexLastUpdatedString = codexLastUpdated.map {
-            Self.formatLocalTimestamp($0, locale: locale, timeZone: timeZone)
+            Self.formatLocalTimestamp($0, now: now, calendar: calendar, locale: locale, timeZone: timeZone)
         }
         claudeLastUpdatedString = claudeLastUpdated.map {
-            Self.formatLocalTimestamp($0, locale: locale, timeZone: timeZone)
+            Self.formatLocalTimestamp($0, now: now, calendar: calendar, locale: locale, timeZone: timeZone)
         }
         antigravityLastUpdatedString = antigravityLastUpdated.map {
-            Self.formatLocalTimestamp($0, locale: locale, timeZone: timeZone)
+            Self.formatLocalTimestamp($0, now: now, calendar: calendar, locale: locale, timeZone: timeZone)
         }
         overallLastUpdatedString = overallLastUpdated.map {
-            Self.formatLocalTimestamp($0, locale: locale, timeZone: timeZone)
+            Self.formatLocalTimestamp($0, now: now, calendar: calendar, locale: locale, timeZone: timeZone)
         }
     }
 
@@ -626,6 +627,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
         language: TokenMeteringLanguage,
         localAliases: [String: String],
         calendar: Calendar,
+        now: Date,
         locale: Locale,
         timeZone: TimeZone
     ) -> [TokenUsageDashboardSessionRow] {
@@ -642,7 +644,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
                     ?? groupedEvents.map(\.createdAt).max()
                     ?? "unknown"
                 let latestDisplay = latestDate.map {
-                    Self.formatLocalTimestamp($0, locale: locale, timeZone: timeZone)
+                    Self.formatLocalTimestamp($0, now: now, calendar: calendar, locale: locale, timeZone: timeZone)
                 } ?? latestRaw
                 let runIDs = Set(groupedEvents.map(\.runID))
 
@@ -713,14 +715,26 @@ struct TokenUsageDashboardSnapshot: Equatable {
 
     private static func formatLocalTimestamp(
         _ date: Date,
+        now: Date,
+        calendar: Calendar,
         locale: Locale,
         timeZone: TimeZone
     ) -> String {
+        var calendar = calendar
+        calendar.timeZone = timeZone
+
         let formatter = DateFormatter()
         formatter.locale = locale
         formatter.timeZone = timeZone
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .short
+
+        if calendar.isDate(date, inSameDayAs: now) {
+            formatter.setLocalizedDateFormatFromTemplate("jm")
+        } else if calendar.component(.year, from: date) == calendar.component(.year, from: now) {
+            formatter.setLocalizedDateFormatFromTemplate("MMM d jm")
+        } else {
+            formatter.setLocalizedDateFormatFromTemplate("y MMM d jm")
+        }
+
         return formatter.string(from: date)
     }
 

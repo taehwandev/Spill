@@ -119,6 +119,62 @@ final class TokenUsageStoreTests: XCTestCase {
         )
     }
 
+    func testDashboardLastUpdatedUsesTimeOnlyForToday() throws {
+        let timeZone = try XCTUnwrap(TimeZone(identifier: "UTC"))
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let now = try Self.date("2026-06-06T20:00:00.000Z")
+        let event = Self.safeEvent(
+            spanID: "span_today_last_updated",
+            createdAt: "2026-06-06T19:45:00.000Z"
+        )
+
+        let snapshot = TokenUsageDashboardSnapshot(
+            events: [event],
+            now: now,
+            calendar: calendar,
+            locale: Locale(identifier: "en_US_POSIX"),
+            timeZone: timeZone
+        )
+
+        let overallLastUpdated = try XCTUnwrap(snapshot.overallLastUpdatedString)
+        let codexLastUpdated = try XCTUnwrap(snapshot.codexLastUpdatedString)
+        XCTAssertTrue(overallLastUpdated.contains("7:45"))
+        XCTAssertTrue(overallLastUpdated.contains("PM"))
+        XCTAssertFalse(overallLastUpdated.contains("Jun"))
+        XCTAssertFalse(overallLastUpdated.contains("2026"))
+        XCTAssertTrue(codexLastUpdated.contains("7:45"))
+        XCTAssertTrue(codexLastUpdated.contains("PM"))
+        XCTAssertFalse(codexLastUpdated.contains("Jun"))
+        XCTAssertFalse(codexLastUpdated.contains("2026"))
+    }
+
+    func testDashboardLastUpdatedUsesShortDateForOlderSameYearEvents() throws {
+        let timeZone = try XCTUnwrap(TimeZone(identifier: "UTC"))
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let now = try Self.date("2026-06-06T20:00:00.000Z")
+        let event = Self.safeEvent(
+            spanID: "span_yesterday_last_updated",
+            createdAt: "2026-06-05T19:45:00.000Z"
+        )
+
+        let snapshot = TokenUsageDashboardSnapshot(
+            events: [event],
+            now: now,
+            calendar: calendar,
+            locale: Locale(identifier: "en_US_POSIX"),
+            timeZone: timeZone
+        )
+
+        let lastUpdated = try XCTUnwrap(snapshot.overallLastUpdatedString)
+        XCTAssertTrue(lastUpdated.contains("Jun"))
+        XCTAssertTrue(lastUpdated.contains("5"))
+        XCTAssertTrue(lastUpdated.contains("7:45"))
+        XCTAssertTrue(lastUpdated.contains("PM"))
+        XCTAssertFalse(lastUpdated.contains("2026"))
+    }
+
     func testDashboardSnapshotShowsOnlySupportedAgentTools() {
         let codex = Self.safeEvent(aiTool: .codex, spanID: "span_codex_01")
         let unknown = Self.safeEvent(
@@ -332,6 +388,24 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(collector.contains("importerMaximumRuntime"))
         XCTAssertTrue(collector.contains("process.standardOutput = FileHandle.nullDevice"))
         XCTAssertTrue(collector.contains("process.standardError = FileHandle.nullDevice"))
+    }
+
+    func testMenuBarAITokenStatusRefreshesFromSharedStoreChanges() throws {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let appDelegate = try String(contentsOf: root.appendingPathComponent("Sources/Spill/App/AppDelegate.swift"))
+        let usageStore = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenUsageStore.swift"))
+        let dashboardStore = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenUsageDashboardStore.swift"))
+
+        XCTAssertTrue(usageStore.contains("distributedEventsDidChangeNotification"))
+        XCTAssertTrue(usageStore.contains("DistributedNotificationCenter.default().postNotificationName"))
+        XCTAssertTrue(appDelegate.contains("TokenUsageStore.distributedEventsDidChangeNotification"))
+        XCTAssertTrue(appDelegate.contains("tokenUsageEventsDidChangeFromDistributedNotification"))
+        XCTAssertTrue(appDelegate.contains("private var shouldRefreshMenuBarAITokenTotal"))
+        XCTAssertTrue(appDelegate.contains("settings.enabledMenuBarStatusItems.contains(.ai)"))
+        XCTAssertTrue(appDelegate.contains("events: tokenUsageStore.importQueuedEvents()"))
+        XCTAssertFalse(appDelegate.contains("guard force || menuBarAITokenDayStart != dayStart else"))
+        XCTAssertTrue(dashboardStore.contains("distributedEventsDidChangeObserver"))
+        XCTAssertTrue(dashboardStore.contains("TokenUsageStore.distributedEventsDidChangeNotification"))
     }
 
     func testTokenDashboardHelperProcessContracts() throws {
@@ -2003,7 +2077,7 @@ final class TokenUsageStoreTests: XCTestCase {
         let session = try XCTUnwrap(snapshot.sessions.first)
         XCTAssertTrue(session.id.contains("2026_06_05"))
         XCTAssertFalse(session.detail.contains("2026-06-04T23:30"))
-        XCTAssertTrue(session.detail.contains("2026"))
+        XCTAssertFalse(session.detail.contains("2026"))
         XCTAssertTrue(session.detail.contains("8:30"))
     }
 
@@ -2347,6 +2421,11 @@ final class TokenUsageStoreTests: XCTestCase {
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         process.arguments = ["python3", hookURL.path]
         var environment = ProcessInfo.processInfo.environment
+        for key in environment.keys {
+            if key.hasPrefix("ANTIGRAVITY_") || key.hasPrefix("CLAUDE_") || key.hasPrefix("SPILL_") {
+                environment.removeValue(forKey: key)
+            }
+        }
         environment["SPILL_TOKEN_USAGE_INBOX_DIR"] = inboxURL.path
         environment["SPILL_TOKEN_USAGE_DIAGNOSTICS_DIR"] = diagnosticsURL.path
         environment["SPILL_TOKEN_USAGE_LABEL_FILE"] = labelURL.path
@@ -2384,6 +2463,11 @@ final class TokenUsageStoreTests: XCTestCase {
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         process.arguments = ["python3", hookURL.path]
         var environment = ProcessInfo.processInfo.environment
+        for key in environment.keys {
+            if key.hasPrefix("ANTIGRAVITY_") || key.hasPrefix("CLAUDE_") || key.hasPrefix("SPILL_") {
+                environment.removeValue(forKey: key)
+            }
+        }
         environment["SPILL_TOKEN_USAGE_INBOX_DIR"] = inboxURL.path
         environment["SPILL_TOKEN_USAGE_DIAGNOSTICS_DIR"] = diagnosticsURL.path
         environment["SPILL_TOKEN_USAGE_LABEL_FILE"] = labelURL.path
