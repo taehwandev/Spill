@@ -25,7 +25,7 @@ struct SpillBarView: View {
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
-            VStack(spacing: 14) {
+            VStack(spacing: settings.panelSectionSpacing) {
                 header
 
                 if updateStore.showsDashboardUpdateStatus {
@@ -336,13 +336,17 @@ struct SpillBarView: View {
                             .font(.system(size: 11.5, weight: .semibold))
 
                         Text(status.value)
-                            .font(.system(size: 16, weight: .bold, design: .rounded))
+                            .font(.system(
+                                size: settings.statusValueFontSize,
+                                weight: settings.statusValueBold ? .bold : .regular,
+                                design: settings.statusFontDesign.fontDesign
+                            ))
                             .monospacedDigit()
                             .foregroundStyle(metricValueTint(for: module, state: status.state))
                     }
 
                     Text(subtitleText(status.subtitle))
-                        .font(.system(size: 10, weight: .medium, design: .rounded))
+                        .font(.system(size: 10, weight: .medium, design: settings.statusFontDesign.fontDesign))
                         .lineLimit(1)
                         .minimumScaleFactor(0.72)
                         .foregroundStyle(metricSubtitleTint(for: module))
@@ -637,32 +641,10 @@ struct SpillBarView: View {
     }
 
     private func serviceStatus(for kind: LocalAIToolKind) -> CloudServiceStatusItem? {
-        let serviceKinds = cloudServiceKinds(for: kind)
-        guard !serviceKinds.isEmpty else {
-            return nil
-        }
-
-        return cloudServiceStatusStore.snapshot?.items
-            .filter { serviceKinds.contains($0.kind) }
-            .sorted { lhs, rhs in
-                lhs.health.serverStatusRank > rhs.health.serverStatusRank
-            }
-            .first
-    }
-
-    private func cloudServiceKinds(for kind: LocalAIToolKind) -> [CloudServiceKind] {
-        switch kind {
-        case .codex:
-            return [.codex]
-        case .claude:
-            return [.claudeCode]
-        case .antigravity:
-            return [.antigravity]
-        case .ollama:
-            return []
-        case .openAI:
-            return [.openAI]
-        }
+        CloudServiceStatusPresentation.serviceStatus(
+            for: kind,
+            in: cloudServiceStatusStore.snapshot
+        )
     }
 
     private func fullServiceCheckTime(_ date: Date) -> String {
@@ -959,7 +941,7 @@ struct SpillBarView: View {
     ) -> some View {
         if let serviceStatus {
             aiServerStatusBadge(serviceStatus)
-        } else if cloudServiceKinds(for: status.kind).isEmpty {
+        } else if CloudServiceStatusPresentation.serviceKinds(for: status.kind).isEmpty {
             aiLocalStatusBadge(status)
         } else {
             aiServerPendingBadge()
@@ -1013,19 +995,7 @@ struct SpillBarView: View {
     }
 
     private func aiServerStatusBadge(_ item: CloudServiceStatusItem) -> some View {
-        HStack(spacing: 3) {
-            Image(systemName: item.health.serverStatusSymbolName)
-                .font(.system(size: 8, weight: .bold))
-
-            Text(item.health.serverStatusBadgeTitle)
-                .font(.system(size: 8.5, weight: .bold, design: .rounded))
-                .lineLimit(1)
-        }
-        .padding(.horizontal, 5)
-        .frame(height: 18)
-        .foregroundStyle(item.health.serverStatusTint)
-        .background(item.health.serverStatusTint.opacity(0.13), in: Capsule())
-        .help("\(item.title) \(AppL10n.text(.server, appLanguage: settings.appLanguage)) \(item.health.serverStatusHeaderTitle): \(item.detail)")
+        CloudServiceStatusBadge(item: item, appLanguage: settings.appLanguage)
     }
 
     private func statusIconBadge(symbolName: String, tint: Color) -> some View {

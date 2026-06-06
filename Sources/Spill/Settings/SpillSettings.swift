@@ -1,6 +1,34 @@
 import Foundation
 import SwiftUI
 
+enum SpillStatusFontDesign: String, CaseIterable, Identifiable {
+    case `default`
+    case rounded
+    case monospaced
+
+    var id: String { rawValue }
+
+    var title: String {
+        title(appLanguage: .persisted())
+    }
+
+    func title(appLanguage: SpillAppLanguage) -> String {
+        switch self {
+        case .default: return PreferencesL10n.text(.fontDefault, appLanguage: appLanguage)
+        case .rounded: return PreferencesL10n.text(.fontRounded, appLanguage: appLanguage)
+        case .monospaced: return PreferencesL10n.text(.fontMono, appLanguage: appLanguage)
+        }
+    }
+
+    var fontDesign: Font.Design {
+        switch self {
+        case .default: return .default
+        case .rounded: return .rounded
+        case .monospaced: return .monospaced
+        }
+    }
+}
+
 enum SpillAppLanguage: String, CaseIterable, Identifiable {
     case automatic
     case english
@@ -172,6 +200,20 @@ final class SpillSettings: ObservableObject {
         }
     }
 
+    @Published var menuBarStatusFontSize: Double {
+        didSet {
+            let normalizedValue = Self.normalizedMenuBarStatusFontSize(menuBarStatusFontSize)
+            if menuBarStatusFontSize != normalizedValue {
+                menuBarStatusFontSize = normalizedValue
+            }
+            defaults.set(normalizedValue, forKey: Keys.menuBarStatusFontSize)
+        }
+    }
+
+    @Published var menuBarStatusTextBold: Bool {
+        didSet { defaults.set(menuBarStatusTextBold, forKey: Keys.menuBarStatusTextBold) }
+    }
+
     @Published var menuBarTriggerIconStyle: MenuBarTriggerIconStyle {
         didSet { defaults.set(menuBarTriggerIconStyle.rawValue, forKey: Keys.menuBarTriggerIconStyle) }
     }
@@ -215,6 +257,22 @@ final class SpillSettings: ObservableObject {
 
     @Published var tokenUsageShowAdvancedTools: Bool {
         didSet { defaults.set(tokenUsageShowAdvancedTools, forKey: Keys.tokenUsageShowAdvancedTools) }
+    }
+
+    @Published var statusValueBold: Bool {
+        didSet { defaults.set(statusValueBold, forKey: Keys.statusValueBold) }
+    }
+
+    @Published var statusFontDesign: SpillStatusFontDesign {
+        didSet { defaults.set(statusFontDesign.rawValue, forKey: Keys.statusFontDesign) }
+    }
+
+    @Published var statusValueFontSize: Double {
+        didSet { defaults.set(statusValueFontSize, forKey: Keys.statusValueFontSize) }
+    }
+
+    @Published var panelSectionSpacing: Double {
+        didSet { defaults.set(panelSectionSpacing, forKey: Keys.panelSectionSpacing) }
     }
 
     private let defaults: UserDefaults
@@ -287,6 +345,10 @@ final class SpillSettings: ObservableObject {
         let thresholdRawValue = defaults.object(forKey: Keys.menuBarStatusHighlightThreshold) as? Int
             ?? MenuBarStatusHighlightThreshold.seventy.rawValue
         menuBarStatusHighlightThreshold = MenuBarStatusHighlightThreshold(rawValue: thresholdRawValue) ?? .seventy
+        menuBarStatusFontSize = Self.normalizedMenuBarStatusFontSize(
+            defaults.object(forKey: Keys.menuBarStatusFontSize) as? Double
+        )
+        menuBarStatusTextBold = defaults.object(forKey: Keys.menuBarStatusTextBold) as? Bool ?? false
         menuBarTriggerIconStyle = MenuBarTriggerIconStyle.normalized(
             rawValue: defaults.string(forKey: Keys.menuBarTriggerIconStyle)
         )
@@ -301,6 +363,11 @@ final class SpillSettings: ObservableObject {
         tokenMeteringPromptAllowsLocalDisplayNames = defaults.object(forKey: Keys.tokenMeteringPromptAllowsLocalDisplayNames) as? Bool ?? false
         tokenUsageLocalAliases = defaults.dictionary(forKey: Keys.tokenUsageLocalAliases) as? [String: String] ?? [:]
         tokenUsageShowAdvancedTools = defaults.object(forKey: Keys.tokenUsageShowAdvancedTools) as? Bool ?? false
+        statusValueBold = defaults.object(forKey: Keys.statusValueBold) as? Bool ?? true
+        let fontDesignRaw = defaults.string(forKey: Keys.statusFontDesign) ?? SpillStatusFontDesign.rounded.rawValue
+        statusFontDesign = SpillStatusFontDesign(rawValue: fontDesignRaw) ?? .rounded
+        statusValueFontSize = defaults.object(forKey: Keys.statusValueFontSize) as? Double ?? 16
+        panelSectionSpacing = defaults.object(forKey: Keys.panelSectionSpacing) as? Double ?? 14
     }
 
     func selectionState(for item: MenuBarItemSnapshot) -> MenuBarItemSelectionState {
@@ -547,6 +614,14 @@ final class SpillSettings: ObservableObject {
 
         return max(value, 5)
     }
+
+    private static func normalizedMenuBarStatusFontSize(_ value: Double?) -> Double {
+        guard let value, value.isFinite else {
+            return 13.5
+        }
+
+        return value.clamped(to: 10...15)
+    }
 }
 
 private struct WindowActionShortcutRegistrationKey: Hashable {
@@ -576,6 +651,8 @@ private enum Keys {
     static let menuBarStatusLayoutStyle = "menuBarStatusLayoutStyle"
     static let menuBarStatusPrecision = "menuBarStatusPrecision"
     static let menuBarStatusHighlightThreshold = "menuBarStatusHighlightThreshold"
+    static let menuBarStatusFontSize = "menuBarStatusFontSize"
+    static let menuBarStatusTextBold = "menuBarStatusTextBold"
     static let menuBarTriggerIconStyle = "menuBarTriggerIconStyle"
     static let selectedItemKeys = "selectedItemKeys"
     static let hiddenItemKeys = "hiddenItemKeys"
@@ -586,4 +663,8 @@ private enum Keys {
     static let tokenMeteringPromptAllowsLocalDisplayNames = "tokenMeteringPromptAllowsLocalDisplayNames"
     static let tokenUsageLocalAliases = "tokenUsageLocalAliases"
     static let tokenUsageShowAdvancedTools = "tokenUsageShowAdvancedTools"
+    static let statusValueBold = "statusValueBold"
+    static let statusFontDesign = "statusFontDesign"
+    static let statusValueFontSize = "statusValueFontSize"
+    static let panelSectionSpacing = "panelSectionSpacing"
 }

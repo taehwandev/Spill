@@ -76,10 +76,21 @@ enum PreferencesTextKey: String {
     case warningShowNeverDuration
     case neverCaffeineWarning
     case panelStatus
+    case panelStatusDetail
     case coreBars
     case aggregate
     case cpuCoreBars
+    case statusValueBold
+    case statusFontDesign
+    case statusValueSize
+    case panelSectionSpacing
+    case fontDefault
+    case fontRounded
+    case fontMono
     case clockAreaStatus
+    case clockAreaStatusDetail
+    case clockAreaTextBold
+    case clockAreaTextSize
     case layout
     case decimals
     case highlight
@@ -301,15 +312,26 @@ enum PreferencesL10n {
             .warningShowNeverDuration: "Warning: show Never duration",
             .neverCaffeineWarning: "Never keeps Caffeine active until you stop it manually.",
             .panelStatus: "Panel Status",
+            .panelStatusDetail: "Controls the status cards inside the Spill panel.",
             .coreBars: "Core Bars",
             .aggregate: "Aggregate",
             .cpuCoreBars: "CPU Core Bars",
-            .clockAreaStatus: "Clock Area Status",
+            .statusValueBold: "Bold Values",
+            .statusFontDesign: "Value Font",
+            .statusValueSize: "Value Size",
+            .panelSectionSpacing: "Panel Section Spacing",
+            .fontDefault: "Default",
+            .fontRounded: "Rounded",
+            .fontMono: "Mono",
+            .clockAreaStatus: "Clock Area",
+            .clockAreaStatusDetail: "Shown next to the macOS clock. Clicking AI opens the local token dashboard.",
+            .clockAreaTextBold: "Bold Clock Text",
+            .clockAreaTextSize: "Clock Text Size",
             .layout: "Layout",
-            .decimals: "Decimals",
-            .highlight: "Highlight",
-            .inline: "Inline",
-            .stacked: "Stacked",
+            .decimals: "CPU/MEM Decimals",
+            .highlight: "High Usage",
+            .inline: "Horizontal",
+            .stacked: "Vertical",
             .iconOnly: "Icon Only",
             .bundleID: "Bundle ID",
             .bundle: "Bundle",
@@ -394,15 +416,26 @@ enum PreferencesL10n {
             .warningShowNeverDuration: "경고: Never 지속 시간 표시",
             .neverCaffeineWarning: "Never는 수동으로 중지할 때까지 카페인을 활성 상태로 유지합니다.",
             .panelStatus: "패널 상태",
+            .panelStatusDetail: "Spill 패널 안의 상태 카드 표시를 조정합니다.",
             .coreBars: "코어 바",
             .aggregate: "집계",
             .cpuCoreBars: "CPU 코어 바",
-            .clockAreaStatus: "시계 영역 상태",
+            .statusValueBold: "값 굵게",
+            .statusFontDesign: "값 글꼴",
+            .statusValueSize: "값 크기",
+            .panelSectionSpacing: "패널 섹션 간격",
+            .fontDefault: "기본",
+            .fontRounded: "둥근",
+            .fontMono: "고정폭",
+            .clockAreaStatus: "시계 옆 상태",
+            .clockAreaStatusDetail: "macOS 시계 옆에 표시됩니다. AI를 누르면 로컬 토큰 대시보드가 열립니다.",
+            .clockAreaTextBold: "시계 옆 텍스트 굵게",
+            .clockAreaTextSize: "시계 옆 텍스트 크기",
             .layout: "레이아웃",
-            .decimals: "소수점",
-            .highlight: "강조",
-            .inline: "한 줄",
-            .stacked: "쌓기",
+            .decimals: "CPU/MEM 소수점",
+            .highlight: "높은 사용량",
+            .inline: "가로",
+            .stacked: "세로",
             .iconOnly: "아이콘만",
             .bundleID: "번들 ID",
             .bundle: "번들",
@@ -487,15 +520,26 @@ enum PreferencesL10n {
             .warningShowNeverDuration: "警告: Never の時間を表示",
             .neverCaffeineWarning: "Never は手動で停止するまでカフェインを有効にします。",
             .panelStatus: "パネル状態",
+            .panelStatusDetail: "Spill パネル内の状態カード表示を調整します。",
             .coreBars: "コアバー",
             .aggregate: "集計",
             .cpuCoreBars: "CPU コアバー",
-            .clockAreaStatus: "時計エリア状態",
+            .statusValueBold: "値を太字",
+            .statusFontDesign: "値のフォント",
+            .statusValueSize: "値のサイズ",
+            .panelSectionSpacing: "パネルセクション間隔",
+            .fontDefault: "既定",
+            .fontRounded: "丸ゴシック",
+            .fontMono: "等幅",
+            .clockAreaStatus: "時計横の状態",
+            .clockAreaStatusDetail: "macOS の時計横に表示されます。AI をクリックするとローカルトークンダッシュボードを開きます。",
+            .clockAreaTextBold: "時計横テキストを太字",
+            .clockAreaTextSize: "時計横テキストサイズ",
             .layout: "レイアウト",
-            .decimals: "小数",
-            .highlight: "強調",
-            .inline: "インライン",
-            .stacked: "積み重ね",
+            .decimals: "CPU/MEM 小数",
+            .highlight: "高使用率",
+            .inline: "横",
+            .stacked: "縦",
             .iconOnly: "アイコンのみ",
             .bundleID: "Bundle ID",
             .bundle: "バンドル",

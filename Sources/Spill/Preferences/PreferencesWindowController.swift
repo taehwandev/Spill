@@ -14,6 +14,7 @@ final class PreferencesWindowController {
     private let tokenUsageStore: TokenUsageStore
     private let showPanelAction: () -> Void
     private let openTokenDashboardAction: () -> Void
+    private let navigationState = PreferencesNavigationState()
     private var window: NSWindow?
     private var languageObservation: AnyCancellable?
 
@@ -33,7 +34,11 @@ final class PreferencesWindowController {
         self.openTokenDashboardAction = openTokenDashboardAction
     }
 
-    func show() {
+    func show(selectedTab: String? = nil) {
+        if let selectedTab {
+            navigationState.selectedTab = selectedTab
+        }
+
         let window = ensureWindow()
         window.title = PreferencesL10n.text(.preferencesWindowTitle, appLanguage: settings.appLanguage)
         constrainToVisibleScreen(window)
@@ -52,6 +57,7 @@ final class PreferencesWindowController {
             settings: settings,
             scanner: scanner,
             updateStore: updateStore,
+            navigationState: navigationState,
             tokenUsageStore: tokenUsageStore,
             showPanelAction: showPanelAction,
             openTokenDashboardAction: openTokenDashboardAction

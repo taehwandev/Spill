@@ -174,6 +174,35 @@ final class MenuBarStatusContentViewTests: XCTestCase {
         }
     }
 
+    func testMenuBarTextOptionsAffectWidthAndLabelFont() {
+        let cpu = makeStatusSegment(kind: .cpu, value: "34.0%")
+        let normalWidth = MenuBarStatusContentView.preferredWidth(
+            for: [cpu],
+            textFontSize: 11,
+            textIsBold: false
+        )
+        let largerBoldWidth = MenuBarStatusContentView.preferredWidth(
+            for: [cpu],
+            textFontSize: 15,
+            textIsBold: true
+        )
+
+        XCTAssertGreaterThan(largerBoldWidth, normalWidth)
+
+        let view = MenuBarStatusContentView(
+            segments: [cpu],
+            textFontSize: 15,
+            textIsBold: true
+        )
+        let valueLabel = view.subviews
+            .flatMap(\.subviews)
+            .compactMap { $0 as? NSTextField }
+            .first
+
+        XCTAssertEqual(valueLabel?.font?.pointSize, 15)
+        XCTAssertEqual(valueLabel?.font?.fontDescriptor.symbolicTraits.contains(.bold), true)
+    }
+
     func testVisibleSegmentsKeepAllRequestedSegmentsWhenTheyFit() {
         let trigger = makeTriggerSegment()
         let caffeine = makeCaffeineSegment(value: "15m", active: true)

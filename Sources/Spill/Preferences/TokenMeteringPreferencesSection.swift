@@ -23,11 +23,11 @@ struct TokenMeteringPreferencesSection: View {
         VStack(alignment: .leading, spacing: 14) {
             VStack(alignment: .leading, spacing: 6) {
                 Text(t(.preferencesTitle))
-                    .font(.system(size: 12, weight: .bold))
+                    .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(.primary)
 
                 Text(t(.preferencesSubtitle))
-                    .font(.system(size: 11))
+                    .font(.system(size: 12))
                     .foregroundStyle(.secondary)
                     .lineSpacing(3)
                     .fixedSize(horizontal: false, vertical: true)
@@ -42,7 +42,7 @@ struct TokenMeteringPreferencesSection: View {
                 )
 
                 Text(t(.installPromptDetail))
-                    .font(.system(size: 10))
+                    .font(.system(size: 12))
                     .foregroundStyle(.secondary)
                     .lineSpacing(2)
                     .fixedSize(horizontal: false, vertical: true)
@@ -101,10 +101,10 @@ struct TokenMeteringPreferencesSection: View {
                     }
                 }
                 .buttonStyle(.bordered)
-                .font(.system(size: 10, weight: .semibold))
+                .font(.system(size: 12, weight: .semibold))
 
                 Text(TokenMeteringSetupInstaller.setupCommand())
-                    .font(.system(size: 9, weight: .medium, design: .monospaced))
+                    .font(.system(size: 11, weight: .medium, design: .monospaced))
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
                     .textSelection(.enabled)
@@ -115,9 +115,9 @@ struct TokenMeteringPreferencesSection: View {
                     VStack(alignment: .leading, spacing: 3) {
                         HStack(spacing: 7) {
                             Text(t(.promptDisplayNamesTitle))
-                                .font(.system(size: 10, weight: .bold))
+                                .font(.system(size: 12, weight: .bold))
                             Text(settings.tokenMeteringPromptAllowsLocalDisplayNames ? t(.promptDisplayNamesEnabled) : t(.promptDisplayNamesDisabled))
-                                .font(.system(size: 8, weight: .bold))
+                                .font(.system(size: 11, weight: .bold))
                                 .foregroundStyle(settings.tokenMeteringPromptAllowsLocalDisplayNames ? .orange : .secondary)
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 2)
@@ -127,7 +127,7 @@ struct TokenMeteringPreferencesSection: View {
                                 )
                         }
                         Text(t(.promptDisplayNamesDetail))
-                            .font(.system(size: 9))
+                            .font(.system(size: 11))
                             .foregroundStyle(.secondary)
                             .lineSpacing(2)
                             .fixedSize(horizontal: false, vertical: true)
@@ -137,7 +137,7 @@ struct TokenMeteringPreferencesSection: View {
 
                 if settings.tokenMeteringPromptAllowsLocalDisplayNames {
                     Label(t(.promptDisplayNamesReapplyWarning), systemImage: "exclamationmark.triangle.fill")
-                        .font(.system(size: 9, weight: .semibold))
+                        .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(.orange)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -208,7 +208,7 @@ struct TokenMeteringPreferencesSection: View {
 
             HStack(spacing: 8) {
                 Text(TokenUsageStore.defaultInboxURL().path)
-                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
                     .textSelection(.enabled)
@@ -223,7 +223,7 @@ struct TokenMeteringPreferencesSection: View {
                         systemImage: copiedTarget == "inbox" ? "checkmark" : "doc.on.doc"
                     )
                 }
-                .font(.system(size: 10, weight: .semibold))
+                .font(.system(size: 12, weight: .semibold))
             }
         }
         .padding(10)
@@ -288,7 +288,7 @@ struct TokenMeteringPreferencesSection: View {
                 tokens: TokenUsageDashboardSnapshot.formatTokens(localDataPreview.totalTokens),
                 language: currentLanguage
             ))
-            .font(.system(size: 9, weight: .semibold, design: .monospaced))
+            .font(.system(size: 11, weight: .semibold, design: .monospaced))
             .foregroundStyle(.secondary)
 
             Button(role: .destructive) {
@@ -301,12 +301,12 @@ struct TokenMeteringPreferencesSection: View {
                 Label(t(.clearAllLocalData), systemImage: "trash")
             }
             .buttonStyle(.bordered)
-            .font(.system(size: 10, weight: .semibold))
+            .font(.system(size: 12, weight: .semibold))
             .disabled(!localDataPreview.hasEvents)
 
             if let clearAllError {
                 Text(clearAllError)
-                    .font(.system(size: 9, weight: .semibold))
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.red)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -343,7 +343,7 @@ struct TokenMeteringPreferencesSection: View {
     private var agentStatusSection: some View {
         VStack(alignment: .leading, spacing: 6) {
             Label(t(.agentConnectionStatus), systemImage: "bolt.horizontal.circle.fill")
-                .font(.system(size: 11, weight: .bold))
+                .font(.system(size: 12, weight: .bold))
                 .foregroundStyle(.secondary)
 
             VStack(spacing: 7) {
@@ -356,9 +356,9 @@ struct TokenMeteringPreferencesSection: View {
 
                         VStack(alignment: .leading, spacing: 1) {
                             Text(adapter.title)
-                                .font(.system(size: 11, weight: .bold))
+                                .font(.system(size: 12, weight: .bold))
                             Text(adapterStatusDetail(status, adapter: adapter))
-                                .font(.system(size: 9))
+                                .font(.system(size: 11))
                                 .foregroundStyle(.secondary)
                         }
 
@@ -377,10 +377,10 @@ struct TokenMeteringPreferencesSection: View {
                                 )
                             }
                             .buttonStyle(.bordered)
-                            .font(.system(size: 9, weight: .semibold))
+                            .font(.system(size: 11, weight: .semibold))
                         } else {
                             Text(t(.active))
-                                .font(.system(size: 9, weight: .bold))
+                                .font(.system(size: 11, weight: .bold))
                                 .foregroundStyle(.green)
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 2)
@@ -557,11 +557,11 @@ private struct TokenMeteringOptionHeader: View {
                 .frame(width: 18, height: 18)
 
             Text(title)
-                .font(.system(size: 11, weight: .bold))
+                .font(.system(size: 12, weight: .bold))
                 .foregroundStyle(.primary)
 
             Text(state)
-                .font(.system(size: 9, weight: .bold))
+                .font(.system(size: 11, weight: .bold))
                 .foregroundStyle(tint)
                 .padding(.horizontal, 7)
                 .padding(.vertical, 3)
@@ -582,17 +582,17 @@ private struct TokenMeteringSetupGuidanceRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 9) {
             Image(systemName: systemImage)
-                .font(.system(size: 12, weight: .bold))
+                .font(.system(size: 13, weight: .bold))
                 .foregroundStyle(tint)
                 .frame(width: 16, height: 16)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 10, weight: .bold))
+                    .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(.primary)
 
                 Text(detail)
-                    .font(.system(size: 9))
+                    .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .lineSpacing(2)
                     .fixedSize(horizontal: false, vertical: true)
@@ -616,11 +616,11 @@ private struct TokenMeteringModeRow: View {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text(mode.title)
-                        .font(.system(size: 11, weight: .bold))
+                        .font(.system(size: 12, weight: .bold))
                         .foregroundStyle(.primary)
 
                     Text(mode.state)
-                        .font(.system(size: 9, weight: .bold))
+                        .font(.system(size: 11, weight: .bold))
                         .foregroundStyle(mode.isActive ? .green : .secondary)
                         .padding(.horizontal, 7)
                         .padding(.vertical, 3)
@@ -631,7 +631,7 @@ private struct TokenMeteringModeRow: View {
                 }
 
                 Text(mode.detail)
-                    .font(.system(size: 10))
+                    .font(.system(size: 12))
                     .foregroundStyle(.secondary)
                     .lineSpacing(2)
                     .fixedSize(horizontal: false, vertical: true)
@@ -662,7 +662,7 @@ struct FlowingTokenMeteringLabels: View {
         LazyVGrid(columns: columns, alignment: .leading, spacing: 6) {
             ForEach(labels, id: \.self) { label in
                 Text(label)
-                    .font(.system(size: 9, weight: .semibold))
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 5)

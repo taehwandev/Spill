@@ -16,6 +16,8 @@ final class SpillSettingsTests: XCTestCase {
         XCTAssertEqual(settings.menuBarStatusLayoutStyle, .inline)
         XCTAssertEqual(settings.menuBarStatusPrecision, .tenths)
         XCTAssertEqual(settings.menuBarStatusHighlightThreshold, .seventy)
+        XCTAssertEqual(settings.menuBarStatusFontSize, 13.5)
+        XCTAssertFalse(settings.menuBarStatusTextBold)
         XCTAssertEqual(settings.menuBarTriggerIconStyle, .spill)
         XCTAssertEqual(settings.sleepGuardDefaultDuration, .fifteenMinutes)
         XCTAssertFalse(settings.sleepGuardAllowsIndefinite)
@@ -309,17 +311,23 @@ final class SpillSettingsTests: XCTestCase {
         settings.menuBarStatusLayoutStyle = .stacked
         settings.menuBarStatusPrecision = .tenths
         settings.menuBarStatusHighlightThreshold = .ninety
+        settings.menuBarStatusFontSize = 14.5
+        settings.menuBarStatusTextBold = true
         settings.menuBarTriggerIconStyle = .spill
 
         XCTAssertEqual(defaults.string(forKey: "menuBarStatusLayoutStyle"), "stacked")
         XCTAssertEqual(defaults.integer(forKey: "menuBarStatusPrecision"), 1)
         XCTAssertEqual(defaults.integer(forKey: "menuBarStatusHighlightThreshold"), 90)
+        XCTAssertEqual(defaults.double(forKey: "menuBarStatusFontSize"), 14.5)
+        XCTAssertTrue(defaults.bool(forKey: "menuBarStatusTextBold"))
         XCTAssertEqual(defaults.string(forKey: "menuBarTriggerIconStyle"), "spill")
 
         let reloadedSettings = SpillSettings(defaults: defaults)
         XCTAssertEqual(reloadedSettings.menuBarStatusLayoutStyle, .stacked)
         XCTAssertEqual(reloadedSettings.menuBarStatusPrecision, .tenths)
         XCTAssertEqual(reloadedSettings.menuBarStatusHighlightThreshold, .ninety)
+        XCTAssertEqual(reloadedSettings.menuBarStatusFontSize, 14.5)
+        XCTAssertTrue(reloadedSettings.menuBarStatusTextBold)
         XCTAssertEqual(reloadedSettings.menuBarTriggerIconStyle, .spill)
     }
 
@@ -356,7 +364,9 @@ final class SpillSettingsTests: XCTestCase {
             PreferencesL10n.upToDate(version: "1.2.3", appLanguage: .korean),
             "Spill은 최신 상태입니다 (1.2.3)."
         )
-        XCTAssertEqual(PreferencesL10n.text(.inline, appLanguage: .korean), "한 줄")
+        XCTAssertEqual(PreferencesL10n.text(.inline, appLanguage: .korean), "가로")
+        XCTAssertEqual(PreferencesL10n.text(.clockAreaStatus, appLanguage: .korean), "시계 옆 상태")
+        XCTAssertEqual(PreferencesL10n.text(.clockAreaTextSize, appLanguage: .korean), "시계 옆 텍스트 크기")
         XCTAssertEqual(PreferencesL10n.text(.iconOnly, appLanguage: .japanese), "アイコンのみ")
     }
 
@@ -392,6 +402,7 @@ final class SpillSettingsTests: XCTestCase {
         defaults.set("bad-layout", forKey: "menuBarStatusLayoutStyle")
         defaults.set(9, forKey: "menuBarStatusPrecision")
         defaults.set(12, forKey: "menuBarStatusHighlightThreshold")
+        defaults.set(Double.nan, forKey: "menuBarStatusFontSize")
         defaults.set("bad-trigger", forKey: "menuBarTriggerIconStyle")
 
         let settings = SpillSettings(defaults: defaults)
@@ -399,6 +410,7 @@ final class SpillSettingsTests: XCTestCase {
         XCTAssertEqual(settings.menuBarStatusLayoutStyle, .inline)
         XCTAssertEqual(settings.menuBarStatusPrecision, .tenths)
         XCTAssertEqual(settings.menuBarStatusHighlightThreshold, .seventy)
+        XCTAssertEqual(settings.menuBarStatusFontSize, 13.5)
         XCTAssertEqual(settings.menuBarTriggerIconStyle, .spill)
     }
 

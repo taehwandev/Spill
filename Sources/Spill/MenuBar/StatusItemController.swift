@@ -23,6 +23,8 @@ final class StatusItemController: NSObject {
     private var statusContentView: MenuBarStatusContentView?
     private var currentSegments: [MenuBarStatusSegment] = []
     private var currentLayoutStyle: MenuBarStatusLayoutStyle = .inline
+    private var currentMenuBarStatusFontSize: CGFloat = MenuBarStatusContentView.defaultTextFontSize
+    private var currentMenuBarStatusTextBold = false
 
     init(
         settings: SpillSettings,
@@ -80,30 +82,47 @@ final class StatusItemController: NSObject {
         let performanceEffect = menuBarPerformanceEffect
         let sleepGuardSegment = sleepGuardMenuBarSegment
         let layoutStyle = settings.menuBarStatusLayoutStyle
+        let textFontSize = MenuBarStatusContentView.normalizedTextFontSize(
+            CGFloat(settings.menuBarStatusFontSize)
+        )
+        let textIsBold = settings.menuBarStatusTextBold
         let segments = Self.visibleSegments(
             trigger: triggerSegment(performanceEffect: performanceEffect),
             statusSegments: summary.segments,
             caffeineSegment: sleepGuardSegment,
             maximumWidth: maximumStatusItemLength,
-            layoutStyle: layoutStyle
+            layoutStyle: layoutStyle,
+            textFontSize: textFontSize,
+            textIsBold: textIsBold
         )
         let segmentsChanged = segments != currentSegments
         let layoutChanged = layoutStyle != currentLayoutStyle
+        let fontSizeChanged = textFontSize != currentMenuBarStatusFontSize
+        let fontWeightChanged = textIsBold != currentMenuBarStatusTextBold
         currentSegments = segments
         currentLayoutStyle = layoutStyle
+        currentMenuBarStatusFontSize = textFontSize
+        currentMenuBarStatusTextBold = textIsBold
         let statusTooltip = statusTooltip(
             summary: summary,
             sleepGuardSegment: sleepGuardSegment,
             performanceEffect: performanceEffect
         )
         triggerItem.isVisible = true
-        triggerItem.length = MenuBarStatusContentView.preferredWidth(for: segments, layoutStyle: layoutStyle)
+        triggerItem.length = MenuBarStatusContentView.preferredWidth(
+            for: segments,
+            layoutStyle: layoutStyle,
+            textFontSize: textFontSize,
+            textIsBold: textIsBold
+        )
         configureAppearance(
             for: button,
             segments: segments,
             statusTooltip: statusTooltip,
             layoutStyle: layoutStyle,
-            rebuildsContentView: segmentsChanged || layoutChanged
+            textFontSize: textFontSize,
+            textIsBold: textIsBold,
+            rebuildsContentView: segmentsChanged || layoutChanged || fontSizeChanged || fontWeightChanged
         )
         button.state = self.isSpillBarVisible ? .on : .off
         button.toolTip = tooltip(
@@ -150,7 +169,9 @@ final class StatusItemController: NSObject {
         statusSegments: [MenuBarStatusSegment],
         caffeineSegment: MenuBarStatusSegment?,
         maximumWidth: CGFloat,
-        layoutStyle: MenuBarStatusLayoutStyle = .inline
+        layoutStyle: MenuBarStatusLayoutStyle = .inline,
+        textFontSize: CGFloat = MenuBarStatusContentView.defaultTextFontSize,
+        textIsBold: Bool = false
     ) -> [MenuBarStatusSegment] {
         let requestedSegments = orderedSegments(
             trigger: trigger,
@@ -159,7 +180,9 @@ final class StatusItemController: NSObject {
         )
         guard MenuBarStatusContentView.preferredWidth(
             for: requestedSegments,
-            layoutStyle: layoutStyle
+            layoutStyle: layoutStyle,
+            textFontSize: textFontSize,
+            textIsBold: textIsBold
         ) > maximumWidth else {
             return requestedSegments
         }
@@ -175,7 +198,9 @@ final class StatusItemController: NSObject {
         while !visibleStatusSegments.isEmpty,
               MenuBarStatusContentView.preferredWidth(
                   for: fittedSegments,
-                  layoutStyle: layoutStyle
+                  layoutStyle: layoutStyle,
+                  textFontSize: textFontSize,
+                  textIsBold: textIsBold
               ) > maximumWidth {
             visibleStatusSegments.removeLast()
             fittedSegments = orderedSegments(
@@ -187,7 +212,9 @@ final class StatusItemController: NSObject {
 
         if MenuBarStatusContentView.preferredWidth(
             for: fittedSegments,
-            layoutStyle: layoutStyle
+            layoutStyle: layoutStyle,
+            textFontSize: textFontSize,
+            textIsBold: textIsBold
         ) <= maximumWidth {
             return fittedSegments
         }
@@ -199,7 +226,9 @@ final class StatusItemController: NSObject {
         )
         guard MenuBarStatusContentView.preferredWidth(
             for: essentialSegments,
-            layoutStyle: layoutStyle
+            layoutStyle: layoutStyle,
+            textFontSize: textFontSize,
+            textIsBold: textIsBold
         ) > maximumWidth else {
             return essentialSegments
         }
@@ -263,6 +292,8 @@ final class StatusItemController: NSObject {
         segments: [MenuBarStatusSegment],
         statusTooltip: String,
         layoutStyle: MenuBarStatusLayoutStyle,
+        textFontSize: CGFloat,
+        textIsBold: Bool,
         rebuildsContentView: Bool
     ) {
         button.image = nil
@@ -276,6 +307,8 @@ final class StatusItemController: NSObject {
                 on: button,
                 segments: segments,
                 layoutStyle: layoutStyle,
+                textFontSize: textFontSize,
+                textIsBold: textIsBold,
                 rebuildsContentView: rebuildsContentView
             )
             button.setAccessibilityLabel(statusTooltip.isEmpty ? "Spill" : statusTooltip)
@@ -314,6 +347,8 @@ final class StatusItemController: NSObject {
         on button: NSStatusBarButton,
         segments: [MenuBarStatusSegment],
         layoutStyle: MenuBarStatusLayoutStyle,
+        textFontSize: CGFloat,
+        textIsBold: Bool,
         rebuildsContentView: Bool
     ) {
         guard rebuildsContentView || statusContentView == nil else {
@@ -322,7 +357,12 @@ final class StatusItemController: NSObject {
 
         removeStatusContentView()
 
-        let contentView = MenuBarStatusContentView(segments: segments, layoutStyle: layoutStyle)
+        let contentView = MenuBarStatusContentView(
+            segments: segments,
+            layoutStyle: layoutStyle,
+            textFontSize: textFontSize,
+            textIsBold: textIsBold
+        )
         button.addSubview(contentView)
         NSLayoutConstraint.activate([
             contentView.leadingAnchor.constraint(equalTo: button.leadingAnchor),
@@ -470,7 +510,9 @@ final class StatusItemController: NSObject {
         return MenuBarStatusContentView.segmentKind(
             at: point,
             in: currentSegments,
-            layoutStyle: currentLayoutStyle
+            layoutStyle: currentLayoutStyle,
+            textFontSize: currentMenuBarStatusFontSize,
+            textIsBold: currentMenuBarStatusTextBold
         )
     }
 

@@ -84,7 +84,7 @@ struct UpdatePreferencesSection: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
                 Image(systemName: "terminal.fill")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.blue)
 
                 Text(t(.terminalInstallCommand))

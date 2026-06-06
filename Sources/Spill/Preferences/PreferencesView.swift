@@ -49,7 +49,7 @@ struct PreferenceCard<Content: View>: View {
                         .shadow(color: iconColor.opacity(0.3), radius: 3, x: 0, y: 1.5)
 
                     Image(systemName: symbolName)
-                        .font(.system(size: 10.5, weight: .bold))
+                        .font(.system(size: 13, weight: .bold))
                         .foregroundStyle(.white)
                 }
                 .frame(width: 22, height: 22)
@@ -73,16 +73,21 @@ struct PreferenceCard<Content: View>: View {
     }
 }
 
+@MainActor
+final class PreferencesNavigationState: ObservableObject {
+    @Published var selectedTab: String = "general"
+}
+
 struct PreferencesView: View {
     @ObservedObject var settings: SpillSettings
     @ObservedObject var scanner: AXMenuBarItemScanner
     @ObservedObject var updateStore: UpdateCheckStore
+    @ObservedObject var navigationState: PreferencesNavigationState
     let tokenUsageStore: TokenUsageStore
     let showPanelAction: () -> Void
     let openTokenDashboardAction: () -> Void
     @State private var accessibilityTrusted = AccessibilityPermission.isTrusted
     @State private var loginItemError: String?
-    @State private var selectedTab: String = "general"
     @State private var hoveredTab: String? = nil
 
     private func t(_ key: PreferencesTextKey) -> String {
@@ -103,7 +108,7 @@ struct PreferencesView: View {
                             .font(.system(size: 15, weight: .bold))
                             .foregroundStyle(.primary)
                         Text("v\(updateStore.currentVersion)")
-                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                            .font(.system(size: 12, weight: .semibold, design: .monospaced))
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -140,10 +145,10 @@ struct PreferencesView: View {
                                     .frame(width: 12, height: 12)
                             } else {
                                 Image(systemName: "arrow.clockwise")
-                                    .font(.system(size: 10, weight: .semibold))
+                                    .font(.system(size: 12, weight: .semibold))
                             }
                             Text(updateStore.isChecking ? t(.checkingForUpdates) : t(.checkForUpdates))
-                                .font(.system(size: 11, weight: .semibold))
+                                .font(.system(size: 12, weight: .semibold))
                         }
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 6)
@@ -173,7 +178,7 @@ struct PreferencesView: View {
             VStack(alignment: .leading, spacing: 0) {
                 // Top Tab Title
                 HStack {
-                    Text(tabTitle(for: selectedTab))
+                    Text(tabTitle(for: navigationState.selectedTab))
                         .font(.system(size: 16, weight: .bold))
                         .foregroundStyle(.primary)
                     Spacer()
@@ -184,7 +189,7 @@ struct PreferencesView: View {
 
                 // Scrollable Content
                 ScrollView(.vertical, showsIndicators: false) {
-                    detailContent(for: selectedTab)
+                    detailContent(for: navigationState.selectedTab)
                         .padding(.horizontal, 24)
                         .padding(.bottom, 24)
                 }
@@ -205,23 +210,23 @@ struct PreferencesView: View {
     }
 
     private func sidebarItem(title: String, imageName: String, tag: String) -> some View {
-        let isSelected = selectedTab == tag
+        let isSelected = navigationState.selectedTab == tag
         let isHovered = hoveredTab == tag
 
         return Button {
             withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
-                selectedTab = tag
+                navigationState.selectedTab = tag
             }
         } label: {
             HStack(spacing: 8) {
                 Image(systemName: imageName)
-                    .font(.system(size: 11.5, weight: .semibold))
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(isSelected ? .white : (isHovered ? .primary : .secondary))
                     .frame(width: 16, height: 16)
                     .scaleEffect(isHovered && !isSelected ? 1.08 : 1.0)
 
                 Text(title)
-                    .font(.system(size: 12, weight: isSelected ? .semibold : .medium))
+                    .font(.system(size: 13, weight: isSelected ? .semibold : .medium))
                     .foregroundStyle(isSelected ? .white : (isHovered ? .primary : .primary.opacity(0.85)))
 
                 Spacer()
@@ -292,17 +297,17 @@ struct PreferencesView: View {
                 VStack(alignment: .leading, spacing: 10) {
                     Toggle(t(.launchAtLogin), isOn: launchAtLoginBinding)
                         .disabled(!LoginItemController.isAvailable)
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.system(size: 13, weight: .medium))
 
                     if !LoginItemController.isAvailable {
                         Text(t(.launchAtLoginUnavailable))
-                            .font(.system(size: 10))
+                            .font(.system(size: 12))
                             .foregroundStyle(.secondary)
                     }
 
                     if let loginItemError {
                        Text(loginItemError)
-                           .font(.system(size: 10))
+                           .font(.system(size: 12))
                            .foregroundStyle(.red)
                     }
                 }
@@ -312,7 +317,7 @@ struct PreferencesView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
                         Text(t(.appLanguage))
-                            .font(.system(size: 12, weight: .medium))
+                            .font(.system(size: 13, weight: .medium))
 
                         Spacer()
 
@@ -326,7 +331,7 @@ struct PreferencesView: View {
                     }
 
                     Text(PreferencesL10n.languageDetail(settings.appLanguage, appLanguage: settings.appLanguage))
-                        .font(.system(size: 10))
+                        .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                 }
             }
@@ -355,7 +360,7 @@ struct PreferencesView: View {
             PreferenceCard(title: t(.menuBarIconAnimation), symbolName: "paintpalette.fill", iconColor: .pink) {
                 VStack(alignment: .leading, spacing: 14) {
                     Toggle(t(.useSpillAnimation), isOn: $settings.useSpillAnimation)
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.system(size: 13, weight: .medium))
 
                     Divider()
                         .background(Color.primary.opacity(0.04))
@@ -363,10 +368,10 @@ struct PreferencesView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         HStack {
                             Text(t(.menuBarTriggerIcon))
-                                .font(.system(size: 11, weight: .bold))
+                                .font(.system(size: 12, weight: .bold))
                             Spacer()
                             Text(settings.menuBarTriggerIconStyle.title)
-                                .font(.system(size: 10))
+                                .font(.system(size: 12))
                                 .foregroundStyle(.secondary)
                         }
 
@@ -386,7 +391,7 @@ struct PreferencesView: View {
                         )
 
                         Text(settings.menuBarTriggerIconStyle.subtitle)
-                            .font(.system(size: 10))
+                            .font(.system(size: 12))
                             .foregroundStyle(.secondary)
                             .lineSpacing(2)
                             .fixedSize(horizontal: false, vertical: true)
@@ -398,10 +403,10 @@ struct PreferencesView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         HStack {
                             Text(t(.menuBarIconSpacing))
-                                .font(.system(size: 11, weight: .bold))
+                                .font(.system(size: 12, weight: .bold))
                             Spacer()
                             Text("\(Int(settings.iconSpacing)) px")
-                                .font(.system(size: 11).monospacedDigit())
+                                .font(.system(size: 12).monospacedDigit())
                                 .foregroundStyle(.secondary)
                         }
 
@@ -433,11 +438,11 @@ struct PreferencesView: View {
             PreferenceCard(title: t(.globalShortcut), symbolName: "keyboard", iconColor: .indigo) {
                 VStack(alignment: .leading, spacing: 8) {
                     Toggle(t(.keyboardShortcut), isOn: $settings.hotKeyEnabled)
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.system(size: 13, weight: .medium))
 
                     if settings.hotKeyEnabled {
                         Text("\(WindowActionShortcutModifier.standard.title) + Space")
-                            .font(.system(size: 10, design: .monospaced))
+                            .font(.system(size: 12, design: .monospaced))
                             .foregroundStyle(.secondary)
                             .padding(.leading, 20)
                     }
@@ -449,12 +454,12 @@ struct PreferencesView: View {
                     ForEach(WindowActionKind.panelOrder, id: \.self) { kind in
                         HStack(spacing: 10) {
                             Label(kind.title, systemImage: kind.symbolName)
-                                .font(.system(size: 11))
+                                .font(.system(size: 12))
 
                             Spacer()
 
                             Text(kind.shortcutModifier.glyph)
-                                .font(.system(size: 11, design: .monospaced))
+                                .font(.system(size: 12, design: .monospaced))
                                 .foregroundStyle(.secondary)
 
                             Picker("", selection: shortcutBinding(for: kind)) {
@@ -473,8 +478,12 @@ struct PreferencesView: View {
 
     private var statusCaffeineTab: some View {
         VStack(alignment: .leading, spacing: 16) {
-            PreferenceCard(title: t(.statusModules), symbolName: "waveform.path.ecg", iconColor: .purple) {
-                StatusModulesPreferencesSection(settings: settings)
+            PreferenceCard(title: t(.panelStatus), symbolName: "waveform.path.ecg", iconColor: .purple) {
+                PanelStatusPreferencesSection(settings: settings)
+            }
+
+            PreferenceCard(title: t(.clockAreaStatus), symbolName: "menubar.rectangle", iconColor: .teal) {
+                ClockAreaStatusPreferencesSection(settings: settings)
             }
 
             PreferenceCard(title: t(.caffeineSettings), symbolName: "cup.and.saucer.fill", iconColor: .orange) {
@@ -542,16 +551,16 @@ struct PreferencesView: View {
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "hand.thumbsup.fill")
-                            .font(.system(size: 9))
+                            .font(.system(size: 11))
                         Text(t(.feedbackContribution))
                     }
-                    .font(.system(size: 10, weight: .bold))
+                    .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
 
                 Text("•")
-                    .font(.system(size: 10))
+                    .font(.system(size: 12))
                     .foregroundStyle(.secondary.opacity(0.5))
 
                 Button {
@@ -559,17 +568,17 @@ struct PreferencesView: View {
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "arrow.up.forward.app.fill")
-                            .font(.system(size: 9))
+                            .font(.system(size: 11))
                         Text(t(.githubOpenSource))
                     }
-                    .font(.system(size: 10, weight: .bold))
+                    .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
             }
 
             Text(t(.openSourceLicense))
-                .font(.system(size: 9))
+                .font(.system(size: 11))
                 .foregroundStyle(.secondary.opacity(0.7))
         }
         .frame(maxWidth: .infinity, alignment: .center)

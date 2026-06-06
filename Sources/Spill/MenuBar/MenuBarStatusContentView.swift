@@ -14,13 +14,14 @@ final class MenuBarStatusContentView: NSView {
     private static let compactStackHorizontalPadding: CGFloat = 8
     private static let verticalChipMinWidth: CGFloat = 33
     private static let verticalHorizontalPadding: CGFloat = 9
-    private static let textFont = NSFont.monospacedDigitSystemFont(ofSize: 13.5, weight: .light)
-    fileprivate static let compactStackTextFont = NSFont.monospacedDigitSystemFont(ofSize: 8.2, weight: .medium)
-    fileprivate static let verticalTitleFont = NSFont.systemFont(ofSize: 7.6, weight: .semibold)
-    fileprivate static let verticalValueFont = NSFont.monospacedDigitSystemFont(ofSize: 10.8, weight: .medium)
+    static let defaultTextFontSize: CGFloat = 13.5
+    static let minimumTextFontSize: CGFloat = 10
+    static let maximumTextFontSize: CGFloat = 15
 
     private let segments: [MenuBarStatusSegment]
     private let layoutStyle: MenuBarStatusLayoutStyle
+    private let textFontSize: CGFloat
+    private let textIsBold: Bool
 
     private enum ChipDescriptor {
         case single(MenuBarStatusSegment)
@@ -28,9 +29,16 @@ final class MenuBarStatusContentView: NSView {
         case vertical(MenuBarStatusSegment)
     }
 
-    init(segments: [MenuBarStatusSegment], layoutStyle: MenuBarStatusLayoutStyle = .inline) {
+    init(
+        segments: [MenuBarStatusSegment],
+        layoutStyle: MenuBarStatusLayoutStyle = .inline,
+        textFontSize: CGFloat = MenuBarStatusContentView.defaultTextFontSize,
+        textIsBold: Bool = false
+    ) {
         self.segments = segments
         self.layoutStyle = layoutStyle
+        self.textFontSize = Self.normalizedTextFontSize(textFontSize)
+        self.textIsBold = textIsBold
         super.init(frame: .zero)
 
         translatesAutoresizingMaskIntoConstraints = false
@@ -45,7 +53,15 @@ final class MenuBarStatusContentView: NSView {
     }
 
     override var intrinsicContentSize: NSSize {
-        NSSize(width: Self.preferredWidth(for: segments, layoutStyle: layoutStyle), height: Self.height)
+        NSSize(
+            width: Self.preferredWidth(
+                for: segments,
+                layoutStyle: layoutStyle,
+                textFontSize: textFontSize,
+                textIsBold: textIsBold
+            ),
+            height: Self.height
+        )
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
@@ -54,15 +70,22 @@ final class MenuBarStatusContentView: NSView {
 
     static func preferredWidth(
         for segments: [MenuBarStatusSegment],
-        layoutStyle: MenuBarStatusLayoutStyle = .inline
+        layoutStyle: MenuBarStatusLayoutStyle = .inline,
+        textFontSize: CGFloat = MenuBarStatusContentView.defaultTextFontSize,
+        textIsBold: Bool = false
     ) -> CGFloat {
         guard !segments.isEmpty else {
             return 26
         }
 
+        let normalizedFontSize = Self.normalizedTextFontSize(textFontSize)
         let chips = chipDescriptors(for: segments, layoutStyle: layoutStyle)
         let chipTotal = chips.reduce(CGFloat.zero) { partial, descriptor in
-            partial + chipWidth(for: descriptor)
+            partial + chipWidth(
+                for: descriptor,
+                textFontSize: normalizedFontSize,
+                textIsBold: textIsBold
+            )
         }
         let gapTotal = CGFloat(max(chips.count - 1, 0)) * gap
         return sidePadding + chipTotal + gapTotal + sidePadding
@@ -71,12 +94,19 @@ final class MenuBarStatusContentView: NSView {
     static func segmentKind(
         at point: NSPoint,
         in segments: [MenuBarStatusSegment],
-        layoutStyle: MenuBarStatusLayoutStyle = .inline
+        layoutStyle: MenuBarStatusLayoutStyle = .inline,
+        textFontSize: CGFloat = MenuBarStatusContentView.defaultTextFontSize,
+        textIsBold: Bool = false
     ) -> MenuBarStatusSegment.Kind? {
+        let normalizedFontSize = Self.normalizedTextFontSize(textFontSize)
         var currentX = sidePadding
 
         for descriptor in chipDescriptors(for: segments, layoutStyle: layoutStyle) {
-            let width = chipWidth(for: descriptor)
+            let width = chipWidth(
+                for: descriptor,
+                textFontSize: normalizedFontSize,
+                textIsBold: textIsBold
+            )
             let frame = NSRect(x: currentX, y: 0, width: width, height: height)
             if frame.contains(point) {
                 return segmentKind(at: point, in: frame, descriptor: descriptor)
@@ -178,14 +208,48 @@ final class MenuBarStatusContentView: NSView {
         }
     }
 
-    private static func chipWidth(for descriptor: ChipDescriptor) -> CGFloat {
+    static func normalizedTextFontSize(_ textFontSize: CGFloat) -> CGFloat {
+        guard textFontSize.isFinite else {
+            return defaultTextFontSize
+        }
+
+        return textFontSize.clamped(to: minimumTextFontSize...maximumTextFontSize)
+    }
+
+    fileprivate static func textFont(textFontSize: CGFloat, textIsBold: Bool) -> NSFont {
+        NSFont.monospacedDigitSystemFont(
+            ofSize: normalizedTextFontSize(textFontSize),
+            weight: textIsBold ? .semibold : .light
+        )
+    }
+
+    fileprivate static func compactStackTextFont(textFontSize: CGFloat, textIsBold: Bool) -> NSFont {
+        let size = (normalizedTextFontSize(textFontSize) * 0.61).clamped(to: 7.6...9.4)
+        return NSFont.monospacedDigitSystemFont(ofSize: size, weight: textIsBold ? .semibold : .medium)
+    }
+
+    fileprivate static func verticalTitleFont(textFontSize: CGFloat) -> NSFont {
+        let size = (normalizedTextFontSize(textFontSize) * 0.56).clamped(to: 7.2...8.8)
+        return NSFont.systemFont(ofSize: size, weight: .semibold)
+    }
+
+    fileprivate static func verticalValueFont(textFontSize: CGFloat, textIsBold: Bool) -> NSFont {
+        let size = (normalizedTextFontSize(textFontSize) * 0.80).clamped(to: 9.8...12.2)
+        return NSFont.monospacedDigitSystemFont(ofSize: size, weight: textIsBold ? .semibold : .medium)
+    }
+
+    private static func chipWidth(
+        for descriptor: ChipDescriptor,
+        textFontSize: CGFloat,
+        textIsBold: Bool
+    ) -> CGFloat {
         switch descriptor {
         case let .single(segment):
-            return chipWidth(for: segment)
+            return chipWidth(for: segment, textFontSize: textFontSize, textIsBold: textIsBold)
         case let .compactStack(segments):
-            return compactStackChipWidth(for: segments)
+            return compactStackChipWidth(for: segments, textFontSize: textFontSize, textIsBold: textIsBold)
         case let .vertical(segment):
-            return verticalChipWidth(for: segment)
+            return verticalChipWidth(for: segment, textFontSize: textFontSize, textIsBold: textIsBold)
         }
     }
 
@@ -198,20 +262,31 @@ final class MenuBarStatusContentView: NSView {
         }
     }
 
-    private static func compactStackChipWidth(for segments: [MenuBarStatusSegment]) -> CGFloat {
+    private static func compactStackChipWidth(
+        for segments: [MenuBarStatusSegment],
+        textFontSize: CGFloat,
+        textIsBold: Bool
+    ) -> CGFloat {
+        let font = compactStackTextFont(textFontSize: textFontSize, textIsBold: textIsBold)
         let maxTextWidth = segments.reduce(CGFloat.zero) { partial, segment in
-            let textWidth = (segment.value as NSString).size(withAttributes: [.font: compactStackTextFont]).width
+            let textWidth = (segment.value as NSString).size(withAttributes: [.font: font]).width
             return max(partial, ceil(textWidth))
         }
 
         return max(compactStackChipMinWidth, maxTextWidth + compactStackHorizontalPadding)
     }
 
-    private static func verticalChipWidth(for segment: MenuBarStatusSegment) -> CGFloat {
+    private static func verticalChipWidth(
+        for segment: MenuBarStatusSegment,
+        textFontSize: CGFloat,
+        textIsBold: Bool
+    ) -> CGFloat {
         let titleWidth = (verticalTitle(for: segment) as NSString).size(
-            withAttributes: [.font: verticalTitleFont]
+            withAttributes: [.font: verticalTitleFont(textFontSize: textFontSize)]
         ).width
-        let valueWidth = (segment.value as NSString).size(withAttributes: [.font: verticalValueFont]).width
+        let valueWidth = (segment.value as NSString).size(
+            withAttributes: [.font: verticalValueFont(textFontSize: textFontSize, textIsBold: textIsBold)]
+        ).width
         return max(verticalChipMinWidth, ceil(max(titleWidth, valueWidth)) + verticalHorizontalPadding)
     }
 
@@ -226,7 +301,11 @@ final class MenuBarStatusContentView: NSView {
         }
     }
 
-    private static func chipWidth(for segment: MenuBarStatusSegment) -> CGFloat {
+    private static func chipWidth(
+        for segment: MenuBarStatusSegment,
+        textFontSize: CGFloat,
+        textIsBold: Bool
+    ) -> CGFloat {
         if segment.kind == .trigger {
             return triggerChipWidth
         }
@@ -235,7 +314,9 @@ final class MenuBarStatusContentView: NSView {
             return iconOnlyChipWidth
         }
 
-        let textWidth = (segment.value as NSString).size(withAttributes: [.font: textFont]).width
+        let textWidth = (segment.value as NSString).size(
+            withAttributes: [.font: textFont(textFontSize: textFontSize, textIsBold: textIsBold)]
+        ).width
         if segment.isValueOnly {
             return ceil(textWidth) + valueOnlyHorizontalPadding
         }
@@ -254,18 +335,34 @@ final class MenuBarStatusContentView: NSView {
             let chip: NSView
             switch descriptor {
             case let .single(segment):
-                chip = MenuBarMetricChipView(segment: segment)
+                chip = MenuBarMetricChipView(
+                    segment: segment,
+                    textFontSize: textFontSize,
+                    textIsBold: textIsBold
+                )
             case let .compactStack(segments):
-                chip = MenuBarCompactStackMetricChipView(segments: segments)
+                chip = MenuBarCompactStackMetricChipView(
+                    segments: segments,
+                    textFontSize: textFontSize,
+                    textIsBold: textIsBold
+                )
             case let .vertical(segment):
-                chip = MenuBarVerticalMetricChipView(segment: segment)
+                chip = MenuBarVerticalMetricChipView(
+                    segment: segment,
+                    textFontSize: textFontSize,
+                    textIsBold: textIsBold
+                )
             }
 
             addSubview(chip)
 
             var constraints = [
                 chip.centerYAnchor.constraint(equalTo: centerYAnchor),
-                chip.widthAnchor.constraint(equalToConstant: Self.chipWidth(for: descriptor)),
+                chip.widthAnchor.constraint(equalToConstant: Self.chipWidth(
+                    for: descriptor,
+                    textFontSize: textFontSize,
+                    textIsBold: textIsBold
+                )),
                 chip.heightAnchor.constraint(equalToConstant: Self.chipHeight(for: descriptor))
             ]
 
@@ -288,10 +385,14 @@ final class MenuBarStatusContentView: NSView {
 @MainActor
 private final class MenuBarCompactStackMetricChipView: NSView {
     private let segments: [MenuBarStatusSegment]
+    private let textFontSize: CGFloat
+    private let textIsBold: Bool
     private var segmentLabels: [(segment: MenuBarStatusSegment, label: NSTextField)] = []
 
-    init(segments: [MenuBarStatusSegment]) {
+    init(segments: [MenuBarStatusSegment], textFontSize: CGFloat, textIsBold: Bool) {
         self.segments = segments
+        self.textFontSize = textFontSize
+        self.textIsBold = textIsBold
         super.init(frame: .zero)
 
         translatesAutoresizingMaskIntoConstraints = false
@@ -339,7 +440,10 @@ private final class MenuBarCompactStackMetricChipView: NSView {
     private func makeLabel(for segment: MenuBarStatusSegment) -> NSTextField {
         let label = NSTextField(labelWithString: segment.value)
         label.translatesAutoresizingMaskIntoConstraints = false
-        label.font = MenuBarStatusContentView.compactStackTextFont
+        label.font = MenuBarStatusContentView.compactStackTextFont(
+            textFontSize: textFontSize,
+            textIsBold: textIsBold
+        )
         label.alignment = .center
         label.lineBreakMode = .byClipping
         label.setContentCompressionResistancePriority(.required, for: .horizontal)
@@ -383,11 +487,15 @@ private final class MenuBarCompactStackMetricChipView: NSView {
 @MainActor
 private final class MenuBarVerticalMetricChipView: NSView {
     private let segment: MenuBarStatusSegment
+    private let textFontSize: CGFloat
+    private let textIsBold: Bool
     private let titleLabel = NSTextField(labelWithString: "")
     private let valueLabel = NSTextField(labelWithString: "")
 
-    init(segment: MenuBarStatusSegment) {
+    init(segment: MenuBarStatusSegment, textFontSize: CGFloat, textIsBold: Bool) {
         self.segment = segment
+        self.textFontSize = textFontSize
+        self.textIsBold = textIsBold
         super.init(frame: .zero)
 
         translatesAutoresizingMaskIntoConstraints = false
@@ -409,7 +517,7 @@ private final class MenuBarVerticalMetricChipView: NSView {
     private func configureLabels() {
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         titleLabel.stringValue = MenuBarStatusContentView.verticalTitle(for: segment)
-        titleLabel.font = MenuBarStatusContentView.verticalTitleFont
+        titleLabel.font = MenuBarStatusContentView.verticalTitleFont(textFontSize: textFontSize)
         titleLabel.alignment = .center
         titleLabel.lineBreakMode = .byClipping
         titleLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
@@ -417,7 +525,10 @@ private final class MenuBarVerticalMetricChipView: NSView {
 
         valueLabel.translatesAutoresizingMaskIntoConstraints = false
         valueLabel.stringValue = segment.value
-        valueLabel.font = MenuBarStatusContentView.verticalValueFont
+        valueLabel.font = MenuBarStatusContentView.verticalValueFont(
+            textFontSize: textFontSize,
+            textIsBold: textIsBold
+        )
         valueLabel.alignment = .center
         valueLabel.lineBreakMode = .byClipping
         valueLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
@@ -469,13 +580,17 @@ private final class MenuBarVerticalMetricChipView: NSView {
 @MainActor
 private final class MenuBarMetricChipView: NSView {
     private let segment: MenuBarStatusSegment
+    private let textFontSize: CGFloat
+    private let textIsBold: Bool
     private let iconView = NSImageView()
     private let valueLabel = NSTextField(labelWithString: "")
     private var animationTimer: Timer?
     private var animationPhase: CGFloat = 0
 
-    init(segment: MenuBarStatusSegment) {
+    init(segment: MenuBarStatusSegment, textFontSize: CGFloat, textIsBold: Bool) {
         self.segment = segment
+        self.textFontSize = textFontSize
+        self.textIsBold = textIsBold
         super.init(frame: .zero)
 
         translatesAutoresizingMaskIntoConstraints = false
@@ -574,7 +689,10 @@ private final class MenuBarMetricChipView: NSView {
     private func configureValue() {
         valueLabel.translatesAutoresizingMaskIntoConstraints = false
         valueLabel.stringValue = segment.value
-        valueLabel.font = .monospacedDigitSystemFont(ofSize: 13.5, weight: .light)
+        valueLabel.font = MenuBarStatusContentView.textFont(
+            textFontSize: textFontSize,
+            textIsBold: textIsBold
+        )
         valueLabel.alignment = .right
         valueLabel.lineBreakMode = .byClipping
         valueLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
