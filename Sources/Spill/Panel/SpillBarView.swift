@@ -428,7 +428,7 @@ struct SpillBarView: View {
     }
 
     private var tokenMeteringSummary: some View {
-        let snapshot = tokenUsageDashboardStore.unfilteredSnapshot
+        let snapshot = tokenUsageDashboardStore.panelSummary
         let displayTotalTokens = snapshot.totalTokens
         let topTask = snapshot.taskRows.first
         let topSource = snapshot.sourceRows.first
@@ -489,7 +489,7 @@ struct SpillBarView: View {
         }
         .buttonStyle(.plain)
         .onAppear {
-            tokenUsageDashboardStore.refresh()
+            tokenUsageDashboardStore.refreshPanelSummary()
         }
         .help(AppL10n.text(.openLocalTokenMeteringDetails, appLanguage: settings.appLanguage))
         .accessibilityLabel(
@@ -836,7 +836,7 @@ struct SpillBarView: View {
     }
 
     private func toolTokenUsage(for kind: LocalAIToolKind) -> (value: String, ratio: Double) {
-        let snapshot = tokenUsageDashboardStore.unfilteredSnapshot
+        let snapshot = tokenUsageDashboardStore.panelSummary
         let rawValue = tokenUsageRawValue(for: kind)
 
         if let row = snapshot.toolRows.first(where: { $0.id == rawValue }) {

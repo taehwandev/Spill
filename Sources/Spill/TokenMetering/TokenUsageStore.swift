@@ -89,6 +89,23 @@ final class TokenUsageStore: @unchecked Sendable {
         }
     }
 
+    func dashboardSummary(dashboardToolsOnly: Bool = true) -> TokenUsageDashboardSummary {
+        lock.withLock {
+            let database: OpaquePointer
+            do {
+                database = try openDatabase()
+            } catch {
+                return .empty
+            }
+            defer { sqlite3_close(database) }
+
+            return loadDashboardSummary(
+                dashboardToolsOnly: dashboardToolsOnly,
+                database: database
+            )
+        }
+    }
+
     @discardableResult
     func replaceEvents(_ events: [TokenUsageEvent]) throws -> [TokenUsageEvent] {
         let replacedEvents = try lock.withLock {
@@ -430,7 +447,14 @@ final class TokenUsageStore: @unchecked Sendable {
             ("run_id", "TEXT"),
             ("task_type", "TEXT"),
             ("stage", "TEXT"),
-            ("model", "TEXT")
+            ("model", "TEXT"),
+            ("source_system", "INTEGER"),
+            ("source_user", "INTEGER"),
+            ("source_history", "INTEGER"),
+            ("source_repo_context", "INTEGER"),
+            ("source_tool_output", "INTEGER"),
+            ("source_generated_output", "INTEGER"),
+            ("source_unknown", "INTEGER")
         ]
 
         for column in requiredColumns where !existingColumns.contains(column.name) {
@@ -465,7 +489,17 @@ final class TokenUsageStore: @unchecked Sendable {
         let sql = """
         SELECT span_id, payload_json
         FROM token_usage_events
-        WHERE run_id IS NULL OR task_type IS NULL OR stage IS NULL OR model IS NULL
+        WHERE run_id IS NULL
+            OR task_type IS NULL
+            OR stage IS NULL
+            OR model IS NULL
+            OR source_system IS NULL
+            OR source_user IS NULL
+            OR source_history IS NULL
+            OR source_repo_context IS NULL
+            OR source_tool_output IS NULL
+            OR source_generated_output IS NULL
+            OR source_unknown IS NULL
         """
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
@@ -588,7 +622,17 @@ final class TokenUsageStore: @unchecked Sendable {
     private func updateDashboardColumns(for event: TokenUsageEvent, database: OpaquePointer) throws {
         let sql = """
         UPDATE token_usage_events
-        SET run_id = ?, task_type = ?, stage = ?, model = ?
+        SET run_id = ?,
+            task_type = ?,
+            stage = ?,
+            model = ?,
+            source_system = ?,
+            source_user = ?,
+            source_history = ?,
+            source_repo_context = ?,
+            source_tool_output = ?,
+            source_generated_output = ?,
+            source_unknown = ?
         WHERE span_id = ?
         """
         var statement: OpaquePointer?
@@ -603,7 +647,14 @@ final class TokenUsageStore: @unchecked Sendable {
         sqlite3_bind_text(statement, 2, event.taskType.rawValue, -1, SQLITE_TRANSIENT)
         sqlite3_bind_text(statement, 3, event.stage.rawValue, -1, SQLITE_TRANSIENT)
         sqlite3_bind_text(statement, 4, event.model, -1, SQLITE_TRANSIENT)
-        sqlite3_bind_text(statement, 5, event.spanID, -1, SQLITE_TRANSIENT)
+        sqlite3_bind_int64(statement, 5, sqlite3_int64(event.tokenBreakdown.system))
+        sqlite3_bind_int64(statement, 6, sqlite3_int64(event.tokenBreakdown.user))
+        sqlite3_bind_int64(statement, 7, sqlite3_int64(event.tokenBreakdown.history))
+        sqlite3_bind_int64(statement, 8, sqlite3_int64(event.tokenBreakdown.repoContext))
+        sqlite3_bind_int64(statement, 9, sqlite3_int64(event.tokenBreakdown.toolOutput))
+        sqlite3_bind_int64(statement, 10, sqlite3_int64(event.tokenBreakdown.generatedOutput))
+        sqlite3_bind_int64(statement, 11, sqlite3_int64(event.tokenBreakdown.unknown))
+        sqlite3_bind_text(statement, 12, event.spanID, -1, SQLITE_TRANSIENT)
 
         guard sqlite3_step(statement) == SQLITE_DONE else {
             throw TokenUsageStoreError.databaseWriteFailed
@@ -661,9 +712,16 @@ final class TokenUsageStore: @unchecked Sendable {
             task_type,
             stage,
             model,
+            source_system,
+            source_user,
+            source_history,
+            source_repo_context,
+            source_tool_output,
+            source_generated_output,
+            source_unknown,
             total_tokens,
             payload_json
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
@@ -687,9 +745,16 @@ final class TokenUsageStore: @unchecked Sendable {
         sqlite3_bind_text(statement, 5, event.taskType.rawValue, -1, SQLITE_TRANSIENT)
         sqlite3_bind_text(statement, 6, event.stage.rawValue, -1, SQLITE_TRANSIENT)
         sqlite3_bind_text(statement, 7, event.model, -1, SQLITE_TRANSIENT)
-        sqlite3_bind_int64(statement, 8, sqlite3_int64(event.totalTokens))
+        sqlite3_bind_int64(statement, 8, sqlite3_int64(event.tokenBreakdown.system))
+        sqlite3_bind_int64(statement, 9, sqlite3_int64(event.tokenBreakdown.user))
+        sqlite3_bind_int64(statement, 10, sqlite3_int64(event.tokenBreakdown.history))
+        sqlite3_bind_int64(statement, 11, sqlite3_int64(event.tokenBreakdown.repoContext))
+        sqlite3_bind_int64(statement, 12, sqlite3_int64(event.tokenBreakdown.toolOutput))
+        sqlite3_bind_int64(statement, 13, sqlite3_int64(event.tokenBreakdown.generatedOutput))
+        sqlite3_bind_int64(statement, 14, sqlite3_int64(event.tokenBreakdown.unknown))
+        sqlite3_bind_int64(statement, 15, sqlite3_int64(event.totalTokens))
         _ = payload.withUnsafeBytes { buffer in
-            sqlite3_bind_blob(statement, 9, buffer.baseAddress, Int32(buffer.count), SQLITE_TRANSIENT)
+            sqlite3_bind_blob(statement, 16, buffer.baseAddress, Int32(buffer.count), SQLITE_TRANSIENT)
         }
 
         guard sqlite3_step(statement) == SQLITE_DONE else {
@@ -726,6 +791,133 @@ final class TokenUsageStore: @unchecked Sendable {
         return events
     }
 
+    private func loadDashboardSummary(
+        dashboardToolsOnly: Bool,
+        database: OpaquePointer
+    ) -> TokenUsageDashboardSummary {
+        let totals = loadDashboardCountAndTotal(
+            dashboardToolsOnly: dashboardToolsOnly,
+            database: database
+        )
+        return TokenUsageDashboardSummary(
+            eventCount: totals.eventCount,
+            totalTokens: totals.totalTokens,
+            toolTotals: loadGroupedTokenTotals(
+                column: "ai_tool",
+                dashboardToolsOnly: dashboardToolsOnly,
+                database: database
+            ),
+            taskTotals: loadGroupedTokenTotals(
+                column: "task_type",
+                dashboardToolsOnly: dashboardToolsOnly,
+                database: database
+            ),
+            sourceTotals: loadSourceTokenTotals(
+                dashboardToolsOnly: dashboardToolsOnly,
+                database: database
+            )
+        )
+    }
+
+    private func loadDashboardCountAndTotal(
+        dashboardToolsOnly: Bool,
+        database: OpaquePointer
+    ) -> (eventCount: Int, totalTokens: Int) {
+        let sql = """
+        SELECT COUNT(*), COALESCE(SUM(total_tokens), 0)
+        FROM token_usage_events
+        \(Self.dashboardToolWhereClause(dashboardToolsOnly: dashboardToolsOnly))
+        """
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
+              let statement
+        else {
+            return (0, 0)
+        }
+        defer { sqlite3_finalize(statement) }
+
+        guard sqlite3_step(statement) == SQLITE_ROW else {
+            return (0, 0)
+        }
+
+        return (
+            eventCount: Int(sqlite3_column_int64(statement, 0)),
+            totalTokens: Int(sqlite3_column_int64(statement, 1))
+        )
+    }
+
+    private func loadGroupedTokenTotals(
+        column: String,
+        dashboardToolsOnly: Bool,
+        database: OpaquePointer
+    ) -> [String: Int] {
+        let sql = """
+        SELECT \(column), COALESCE(SUM(total_tokens), 0)
+        FROM token_usage_events
+        \(Self.dashboardToolWhereClause(dashboardToolsOnly: dashboardToolsOnly))
+        GROUP BY \(column)
+        """
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
+              let statement
+        else {
+            return [:]
+        }
+        defer { sqlite3_finalize(statement) }
+
+        var totals = [String: Int]()
+        while sqlite3_step(statement) == SQLITE_ROW {
+            guard let keyText = sqlite3_column_text(statement, 0) else {
+                continue
+            }
+            let key = String(cString: keyText)
+            guard !key.isEmpty else {
+                continue
+            }
+            totals[key] = Int(sqlite3_column_int64(statement, 1))
+        }
+        return totals
+    }
+
+    private func loadSourceTokenTotals(
+        dashboardToolsOnly: Bool,
+        database: OpaquePointer
+    ) -> [String: Int] {
+        let sql = """
+        SELECT
+            COALESCE(SUM(source_system), 0),
+            COALESCE(SUM(source_user), 0),
+            COALESCE(SUM(source_history), 0),
+            COALESCE(SUM(source_repo_context), 0),
+            COALESCE(SUM(source_tool_output), 0),
+            COALESCE(SUM(source_generated_output), 0),
+            COALESCE(SUM(source_unknown), 0)
+        FROM token_usage_events
+        \(Self.dashboardToolWhereClause(dashboardToolsOnly: dashboardToolsOnly))
+        """
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
+              let statement
+        else {
+            return [:]
+        }
+        defer { sqlite3_finalize(statement) }
+
+        guard sqlite3_step(statement) == SQLITE_ROW else {
+            return [:]
+        }
+
+        return [
+            "system": Int(sqlite3_column_int64(statement, 0)),
+            "user": Int(sqlite3_column_int64(statement, 1)),
+            "history": Int(sqlite3_column_int64(statement, 2)),
+            "repo_context": Int(sqlite3_column_int64(statement, 3)),
+            "tool_output": Int(sqlite3_column_int64(statement, 4)),
+            "generated_output": Int(sqlite3_column_int64(statement, 5)),
+            "unknown": Int(sqlite3_column_int64(statement, 6))
+        ]
+    }
+
     private func loadTotalTokens(
         startingAt startDate: Date,
         endingBefore endDate: Date,
@@ -759,6 +951,12 @@ final class TokenUsageStore: @unchecked Sendable {
         }
 
         return Int(sqlite3_column_int64(statement, 0))
+    }
+
+    private static func dashboardToolWhereClause(dashboardToolsOnly: Bool) -> String {
+        dashboardToolsOnly
+            ? "WHERE ai_tool IN ('codex', 'claude', 'antigravity')"
+            : ""
     }
 
     private static func normalizedCreatedAt(_ createdAt: String) -> String? {
@@ -798,6 +996,22 @@ final class TokenUsageStore: @unchecked Sendable {
             deliverImmediately: true
         )
     }
+}
+
+struct TokenUsageDashboardSummary: Equatable {
+    let eventCount: Int
+    let totalTokens: Int
+    let toolTotals: [String: Int]
+    let taskTotals: [String: Int]
+    let sourceTotals: [String: Int]
+
+    static let empty = TokenUsageDashboardSummary(
+        eventCount: 0,
+        totalTokens: 0,
+        toolTotals: [:],
+        taskTotals: [:],
+        sourceTotals: [:]
+    )
 }
 
 private enum TokenUsageStoreError: Error {

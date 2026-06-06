@@ -369,7 +369,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func showSpillBar(source: String = "unknown") {
         requestTokenUsageCollection(reason: "panel_open")
-        tokenUsageDashboardStore.refresh()
+        tokenUsageDashboardStore.refreshPanelSummary()
         spillPanelController.show(
             anchorFrame: statusItemController?.buttonScreenFrame,
             tokenUsageAlreadyRefreshed: true

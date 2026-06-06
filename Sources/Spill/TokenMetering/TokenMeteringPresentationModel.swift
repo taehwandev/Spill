@@ -42,6 +42,116 @@ struct TokenUsageDashboardBarRow: Identifiable, Equatable {
     let ratio: Double
 }
 
+struct TokenUsagePanelSummarySnapshot: Equatable {
+    let eventCount: Int
+    let totalTokens: Int
+    let displayMode: TokenUsageDisplayMode
+    let toolRows: [TokenUsageDashboardBarRow]
+    let taskRows: [TokenUsageDashboardBarRow]
+    let sourceRows: [TokenUsageDashboardBarRow]
+
+    init(
+        summary: TokenUsageDashboardSummary,
+        displayMode: TokenUsageDisplayMode = .tokens,
+        language: TokenMeteringLanguage = .current()
+    ) {
+        eventCount = summary.eventCount
+        totalTokens = summary.totalTokens
+        self.displayMode = displayMode
+
+        let toolTotals = summary.toolTotals.reduce(into: [TokenUsageAITool: Int]()) { totals, element in
+            guard let tool = TokenUsageAITool(rawValue: element.key) else {
+                return
+            }
+            totals[tool] = element.value
+        }
+        toolRows = Self.rows(
+            tokenValues: toolTotals,
+            totalTokens: summary.totalTokens,
+            displayMode: displayMode,
+            id: { $0.rawValue },
+            label: { $0.dashboardLabel(language: language) }
+        )
+
+        let taskTotals = summary.taskTotals.reduce(into: [TokenUsageTaskType: Int]()) { totals, element in
+            guard let taskType = TokenUsageTaskType(rawValue: element.key) else {
+                return
+            }
+            totals[taskType] = element.value
+        }
+        taskRows = Self.rows(
+            tokenValues: taskTotals,
+            totalTokens: summary.totalTokens,
+            displayMode: displayMode,
+            id: { $0.rawValue },
+            label: { $0.dashboardLabel(language: language) }
+        )
+
+        let sourceTotals = summary.sourceTotals.reduce(into: [TokenUsageSource: Int]()) { totals, element in
+            guard let source = TokenUsageSource(rawValue: element.key) else {
+                return
+            }
+            totals[source] = element.value
+        }
+        sourceRows = Self.rows(
+            tokenValues: sourceTotals,
+            totalTokens: summary.totalTokens,
+            displayMode: displayMode,
+            id: { $0.rawValue },
+            label: { $0.label(language: language) }
+        )
+    }
+
+    init(snapshot: TokenUsageDashboardSnapshot) {
+        eventCount = snapshot.eventCount
+        totalTokens = snapshot.totalTokens
+        displayMode = snapshot.displayMode
+        toolRows = snapshot.toolRows
+        taskRows = snapshot.taskRows
+        sourceRows = snapshot.sourceRows
+    }
+
+    static let empty = TokenUsagePanelSummarySnapshot(summary: .empty)
+
+    private static func rows<Key: Hashable>(
+        tokenValues: [Key: Int],
+        totalTokens: Int,
+        displayMode: TokenUsageDisplayMode,
+        id: (Key) -> String,
+        label: (Key) -> String
+    ) -> [TokenUsageDashboardBarRow] {
+        tokenValues.keys
+            .compactMap { key -> TokenUsageDashboardBarRow? in
+                let tokens = tokenValues[key, default: 0]
+                guard tokens > 0 else {
+                    return nil
+                }
+
+                let value: String
+                let ratio = totalTokens > 0 ? Double(tokens) / Double(totalTokens) : 0.0
+                switch displayMode {
+                case .tokens:
+                    value = TokenUsageDashboardSnapshot.formatTokens(tokens)
+                case .percentage:
+                    value = TokenUsageDashboardSnapshot.formatPercentage(ratio * 100.0)
+                }
+
+                return TokenUsageDashboardBarRow(
+                    id: id(key),
+                    title: label(key),
+                    value: value,
+                    ratio: ratio
+                )
+            }
+            .sorted { lhs, rhs in
+                if lhs.ratio == rhs.ratio {
+                    return lhs.title < rhs.title
+                }
+                return lhs.ratio > rhs.ratio
+            }
+    }
+}
+
 struct TokenUsageDashboardSessionRow: Identifiable, Equatable {
     let id: String
     let runID: String
@@ -1249,13 +1359,13 @@ enum TokenMeteringPreferencesModel {
     }
 }
 
-private enum TokenUsageSource: Hashable {
+private enum TokenUsageSource: String, Hashable {
     case system
     case user
     case history
-    case repoContext
-    case toolOutput
-    case generatedOutput
+    case repoContext = "repo_context"
+    case toolOutput = "tool_output"
+    case generatedOutput = "generated_output"
     case unknown
 
     func label(language: TokenMeteringLanguage) -> String {
@@ -1274,27 +1384,6 @@ private enum TokenUsageSource: Hashable {
             return TokenMeteringL10n.text(.sourceGeneratedOutput, language: language)
         case .unknown:
             return TokenMeteringL10n.text(.sourceUnavailable, language: language)
-        }
-    }
-}
-
-extension TokenUsageSource {
-    var rawValue: String {
-        switch self {
-        case .system:
-            return "system"
-        case .user:
-            return "user"
-        case .history:
-            return "history"
-        case .repoContext:
-            return "repo_context"
-        case .toolOutput:
-            return "tool_output"
-        case .generatedOutput:
-            return "generated_output"
-        case .unknown:
-            return "unknown"
         }
     }
 }

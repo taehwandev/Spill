@@ -37,6 +37,7 @@ enum TokenUsageClearScope: Equatable, Identifiable {
 final class TokenUsageDashboardStore: ObservableObject {
     @Published private(set) var snapshot = TokenUsageDashboardSnapshot.empty
     @Published private(set) var unfilteredSnapshot = TokenUsageDashboardSnapshot.empty
+    @Published private(set) var panelSummary = TokenUsagePanelSummarySnapshot.empty
     @Published private(set) var liveUpdateMarker = TokenUsageLiveUpdateMarker.empty
     @Published private(set) var selectedTool: TokenUsageAITool?
     @Published private(set) var selectedPeriod: TokenUsageDashboardPeriod = .today
@@ -77,7 +78,7 @@ final class TokenUsageDashboardStore: ObservableObject {
                 self?.scheduleRefresh()
             }
         }
-        refresh()
+        refreshPanelSummary()
     }
 
     deinit {
@@ -95,11 +96,28 @@ final class TokenUsageDashboardStore: ObservableObject {
         scheduledRefreshTask?.cancel()
         scheduledRefreshTask = nil
         let previousEvents = events
+        let shouldTrackLiveUpdates = trackLiveUpdates && (
+            hasRebuiltSnapshot || (previousEvents.isEmpty && panelSummary.eventCount == 0)
+        )
         events = usageStore.loadEvents()
         rebuildSnapshot(
-            trackLiveUpdates: trackLiveUpdates && hasRebuiltSnapshot,
+            trackLiveUpdates: shouldTrackLiveUpdates,
             previousEvents: previousEvents
         )
+    }
+
+    func refreshPanelSummary() {
+        scheduledRefreshTask?.cancel()
+        scheduledRefreshTask = nil
+        let summary = usageStore.dashboardSummary(
+            dashboardToolsOnly: !SpillSettings.shared.tokenUsageShowAdvancedTools
+        )
+        panelSummary = TokenUsagePanelSummarySnapshot(
+            summary: summary,
+            displayMode: displayMode,
+            language: language
+        )
+        lastError = nil
     }
 
     private func scheduleRefresh(trackLiveUpdates: Bool = true) {
@@ -145,6 +163,7 @@ final class TokenUsageDashboardStore: ObservableObject {
         selectedSessionID = filteredSnapshot.selectedSession?.id
         snapshot = filteredSnapshot
         unfilteredSnapshot = snapshotPair.unfiltered
+        panelSummary = TokenUsagePanelSummarySnapshot(snapshot: unfilteredSnapshot)
         lastError = nil
         if trackLiveUpdates, let previousEvents {
             publishLiveUpdates(
@@ -226,7 +245,11 @@ final class TokenUsageDashboardStore: ObservableObject {
 
     func setAdvancedToolsEnabled(_ enabled: Bool) {
         SpillSettings.shared.tokenUsageShowAdvancedTools = enabled
-        rebuildSnapshot()
+        if hasRebuiltSnapshot {
+            rebuildSnapshot()
+        } else {
+            refreshPanelSummary()
+        }
     }
 
     func snapshotForWorkItem(_ sessionID: String) -> TokenUsageDashboardSnapshot {
@@ -265,7 +288,11 @@ final class TokenUsageDashboardStore: ObservableObject {
 
     func setDisplayMode(_ mode: TokenUsageDisplayMode) {
         displayMode = mode
-        rebuildSnapshot()
+        if hasRebuiltSnapshot {
+            rebuildSnapshot()
+        } else {
+            refreshPanelSummary()
+        }
     }
 
     func setLanguage(_ language: TokenMeteringLanguage) {
@@ -273,7 +300,11 @@ final class TokenUsageDashboardStore: ObservableObject {
             return
         }
         self.language = language
-        rebuildSnapshot()
+        if hasRebuiltSnapshot {
+            rebuildSnapshot()
+        } else {
+            refreshPanelSummary()
+        }
     }
 
     func clearLocalEvents() {

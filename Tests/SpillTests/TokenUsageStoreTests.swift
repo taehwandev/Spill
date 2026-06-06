@@ -603,6 +603,25 @@ final class TokenUsageStoreTests: XCTestCase {
     }
 
     @MainActor
+    func testDashboardStoreInitializesPanelSummaryWithoutFullSnapshot() throws {
+        let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
+        try usageStore.appendEvent(Self.safeEvent(aiTool: .codex, spanID: "span_panel_summary"))
+
+        let dashboardStore = dashboardStore(usageStore: usageStore)
+
+        XCTAssertEqual(dashboardStore.snapshot.eventCount, 0)
+        XCTAssertEqual(dashboardStore.unfilteredSnapshot.eventCount, 0)
+        XCTAssertEqual(dashboardStore.panelSummary.eventCount, 1)
+        XCTAssertEqual(dashboardStore.panelSummary.totalTokens, 150)
+
+        dashboardStore.refresh()
+
+        XCTAssertEqual(dashboardStore.snapshot.eventCount, 1)
+        XCTAssertEqual(dashboardStore.unfilteredSnapshot.eventCount, 1)
+        XCTAssertEqual(dashboardStore.panelSummary.eventCount, 1)
+    }
+
+    @MainActor
     func testDashboardRefreshDoesNotDrainInbox() throws {
         let inboxURL = temporaryInboxURL()
         let usageStore = TokenUsageStore(fileURL: temporaryEventsURL(), inboxURL: inboxURL)
@@ -993,8 +1012,6 @@ final class TokenUsageStoreTests: XCTestCase {
             aiTool: .claude,
             runID: "run_indexed",
             spanID: "span_indexed",
-            inputTokens: 200,
-            outputTokens: 50,
             taskType: .codeReview,
             stage: .verify,
             model: "claude-indexed"
@@ -1005,11 +1022,24 @@ final class TokenUsageStoreTests: XCTestCase {
         let rows = try sqliteRows(
             databaseURL: store.eventsDatabaseURL,
             sql: """
-            SELECT run_id, task_type, stage, model, ai_tool, total_tokens
+            SELECT
+                run_id,
+                task_type,
+                stage,
+                model,
+                ai_tool,
+                total_tokens,
+                source_system,
+                source_user,
+                source_history,
+                source_repo_context,
+                source_tool_output,
+                source_generated_output,
+                source_unknown
             FROM token_usage_events
             WHERE span_id = 'span_indexed'
             """,
-            columnCount: 6
+            columnCount: 13
         )
         XCTAssertEqual(rows, [[
             "run_indexed",
@@ -1017,7 +1047,14 @@ final class TokenUsageStoreTests: XCTestCase {
             "verify",
             "claude-indexed",
             "claude",
-            "250"
+            "150",
+            "10",
+            "20",
+            "20",
+            "30",
+            "20",
+            "50",
+            "0"
         ]])
 
         let indexNames = Set(try sqliteRows(
@@ -1071,6 +1108,52 @@ final class TokenUsageStoreTests: XCTestCase {
             store.totalTokens(startingAt: start, endingBefore: end, dashboardToolsOnly: false),
             1_330
         )
+    }
+
+    func testStoreReadsDashboardSummaryWithoutLoadingEvents() throws {
+        let store = TokenUsageStore(fileURL: temporaryEventsURL())
+        try store.appendEvent(Self.safeEvent(
+            aiTool: .codex,
+            spanID: "span_summary_codex",
+            taskType: .analysis
+        ))
+        try store.appendEvent(Self.safeEvent(
+            aiTool: .claude,
+            spanID: "span_summary_claude",
+            inputTokens: 200,
+            outputTokens: 80,
+            taskType: .codeReview
+        ))
+        try store.appendEvent(Self.safeEvent(
+            aiTool: .openAI,
+            spanID: "span_summary_openai",
+            inputTokens: 700,
+            outputTokens: 200,
+            taskType: .testing
+        ))
+
+        let dashboardSummary = store.dashboardSummary()
+        XCTAssertEqual(dashboardSummary.eventCount, 2)
+        XCTAssertEqual(dashboardSummary.totalTokens, 430)
+        XCTAssertEqual(dashboardSummary.toolTotals["codex"], 150)
+        XCTAssertEqual(dashboardSummary.toolTotals["claude"], 280)
+        XCTAssertNil(dashboardSummary.toolTotals["openai"])
+        XCTAssertEqual(dashboardSummary.taskTotals["analysis"], 150)
+        XCTAssertEqual(dashboardSummary.taskTotals["code_review"], 280)
+        XCTAssertEqual(dashboardSummary.sourceTotals["system"], 10)
+        XCTAssertEqual(dashboardSummary.sourceTotals["user"], 20)
+        XCTAssertEqual(dashboardSummary.sourceTotals["history"], 20)
+        XCTAssertEqual(dashboardSummary.sourceTotals["repo_context"], 30)
+        XCTAssertEqual(dashboardSummary.sourceTotals["tool_output"], 20)
+        XCTAssertEqual(dashboardSummary.sourceTotals["generated_output"], 50)
+        XCTAssertEqual(dashboardSummary.sourceTotals["unknown"], 280)
+
+        let fullSummary = store.dashboardSummary(dashboardToolsOnly: false)
+        XCTAssertEqual(fullSummary.eventCount, 3)
+        XCTAssertEqual(fullSummary.totalTokens, 1_330)
+        XCTAssertEqual(fullSummary.toolTotals["openai"], 900)
+        XCTAssertEqual(fullSummary.taskTotals["testing"], 900)
+        XCTAssertEqual(fullSummary.sourceTotals["unknown"], 1_180)
     }
 
     func testStoreReadsPeriodTotalWithOffsetTimestamps() throws {
@@ -1149,17 +1232,35 @@ final class TokenUsageStoreTests: XCTestCase {
         let rows = try sqliteRows(
             databaseURL: databaseURL,
             sql: """
-            SELECT run_id, task_type, stage, model
+            SELECT
+                run_id,
+                task_type,
+                stage,
+                model,
+                source_system,
+                source_user,
+                source_history,
+                source_repo_context,
+                source_tool_output,
+                source_generated_output,
+                source_unknown
             FROM token_usage_events
             WHERE span_id = 'span_legacy_sqlite'
             """,
-            columnCount: 4
+            columnCount: 11
         )
         XCTAssertEqual(rows, [[
             "run_legacy_sqlite",
             "debugging",
             "implement",
-            "gemini-legacy"
+            "gemini-legacy",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "370"
         ]])
         let dateRows = try sqliteRows(
             databaseURL: databaseURL,

@@ -396,7 +396,7 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
         aiStatusStore.refreshInBackground()
         cloudServiceStatusStore.refreshIfNeeded()
         if refreshTokenUsage {
-            tokenUsageDashboardStore.refresh()
+            tokenUsageDashboardStore.refreshPanelSummary()
         }
         windowActionStore.refresh()
         Task { @MainActor [statusStore] in
