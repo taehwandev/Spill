@@ -4,6 +4,7 @@ import {
   hasOnlySyncSafeKeys,
   type AITool,
   type TokenSource,
+  type TokenBreakdown,
   type UsageEvent
 } from "./syncSafeUsage.ts";
 import {
@@ -41,17 +42,26 @@ export type SessionTraceRun = {
   workItemId: string;
   title: string;
   totalTokens: number;
+  inputTokens: number;
+  outputTokens: number;
   latencyMs: number | null;
   eventCount: number;
+  aiTool: AITool;
   steps: {
+    runId: string;
+    spanId: string;
     taskType: string;
     stage: string;
     model: string;
+    inputTokens: number;
+    outputTokens: number;
     totalTokens: number;
+    tokenBreakdown: TokenBreakdown;
     latencyMs: number | null;
     createdAt: string;
   }[];
 };
+
 
 export type PrivacyAudit = {
   eventsPrepared: number;
@@ -301,21 +311,36 @@ function buildSessionTrace(
         (sum, event) => sum + event.total_tokens,
         0
       ),
+      inputTokens: sortedEvents.reduce(
+        (sum, event) => sum + event.input_tokens,
+        0
+      ),
+      outputTokens: sortedEvents.reduce(
+        (sum, event) => sum + event.output_tokens,
+        0
+      ),
       latencyMs: latencySamples.length > 0
-        ? latencySamples.reduce((sum, latency) => sum + latency, 0)
+        ? Math.round(latencySamples.reduce((sum, latency) => sum + latency, 0) / latencySamples.length)
         : null,
       eventCount: sortedEvents.length,
+      aiTool: first ? first.ai_tool : "unknown",
       steps: sortedEvents.map((event) => ({
+        runId: event.run_id,
+        spanId: event.span_id,
         taskType: messages.taskTypeLabels[event.task_type] ?? labelFromSlug(event.task_type),
         stage: messages.usageStageLabels[event.stage] ?? labelFromSlug(event.stage),
         model: modelLabel(event.model, messages),
+        inputTokens: event.input_tokens,
+        outputTokens: event.output_tokens,
         totalTokens: event.total_tokens,
+        tokenBreakdown: event.token_breakdown,
         latencyMs: event.latency_ms > 0 ? event.latency_ms : null,
         createdAt: event.created_at
       }))
     };
   }).sort((left, right) => right.totalTokens - left.totalTokens || left.title.localeCompare(right.title));
 }
+
 
 function percentOf(value: number, total: number): number {
   return total === 0 ? 0 : (value / total) * 100;

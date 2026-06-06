@@ -11,7 +11,7 @@ import {
   setupPrompt,
   type CopiedTarget
 } from "./features/tokenMeteringDashboard/setupCopy";
-import type { SyncMode } from "./features/tokenMeteringDashboard/syncSafeUsage";
+import type { SyncMode, UsageEvent } from "./features/tokenMeteringDashboard/syncSafeUsage";
 
 type ViewMode = "intro" | "dashboard";
 
@@ -19,8 +19,8 @@ export function App() {
   const [viewMode, setViewMode] = useState<ViewMode>("intro");
   const [syncMode, setSyncMode] = useState<SyncMode>(DEFAULT_DEMO_SYNC_MODE);
   const [copiedTarget, setCopiedTarget] = useState<CopiedTarget>(null);
+  const [events, setEvents] = useState<readonly UsageEvent[]>(demoUsageEvents);
 
-  const dashboard = useMemo(() => buildDashboardModel(demoUsageEvents), []);
   const previewDashboard = useMemo(
     () => buildDashboardModel(demoUsageEvents),
     []
@@ -31,6 +31,37 @@ export function App() {
     setCopiedTarget(target);
     window.setTimeout(() => setCopiedTarget(null), 1800);
   }
+
+  const triggerSelfTest = () => {
+    const newEvent: UsageEvent = {
+      schema_version: 1,
+      device_id: "device_self_test",
+      project_id: "project_global",
+      artifact_id: "artifact_global",
+      run_id: `run_test_${Date.now()}`,
+      span_id: `span_test_${Date.now()}`,
+      ai_tool: "antigravity",
+      task_type: "testing",
+      stage: "verify",
+      model: "demo-self-test-reasoning",
+      input_tokens: 5000,
+      output_tokens: 1500,
+      total_tokens: 6500,
+      token_breakdown: {
+        system: 500,
+        user: 1000,
+        history: 1500,
+        repo_context: 2000,
+        tool_output: 1000,
+        generated_output: 500,
+        unknown: 0
+      },
+      latency_ms: 1200,
+      created_at: new Date().toISOString(), // Today
+      sync_mode: "local_only"
+    };
+    setEvents((prev) => [newEvent, ...prev]);
+  };
 
   return (
     <div className={viewMode === "intro" ? "introShell" : "appShell"}>
@@ -44,10 +75,11 @@ export function App() {
         />
       ) : (
         <DashboardPage
-          dashboard={dashboard}
+          events={events}
           onBack={() => setViewMode("intro")}
           setSyncMode={setSyncMode}
           syncMode={syncMode}
+          onTriggerSelfTest={triggerSelfTest}
         />
       )}
     </div>

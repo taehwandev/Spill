@@ -5,10 +5,12 @@ import { CollapsiblePanel } from "./CollapsiblePanel";
 
 export function PrivacySettings({
   dashboard,
-  syncMode
+  syncMode,
+  onTriggerSelfTest
 }: {
   dashboard: DashboardModel;
   syncMode: SyncMode;
+  onTriggerSelfTest?: () => void;
 }) {
   const messages = getTokenMeteringMessages();
   const rows = [
@@ -86,6 +88,18 @@ export function PrivacySettings({
           ))}
         </div>
       </div>
+
+      {onTriggerSelfTest && (
+        <div className="diagnosticsBlock">
+          <strong>Diagnostics & Diagnostics Self-Test</strong>
+          <p className="diagnosticsDescription">
+            The self-test event is local-only, clearly synthetic, uses only numeric buckets and enum labels, and can demonstrate non-unknown source breakdowns without implying real usage classification.
+          </p>
+          <button className="secondary diagnosticsBtn" onClick={onTriggerSelfTest} type="button">
+            Inject Synthetic Self-Test Event
+          </button>
+        </div>
+      )}
     </CollapsiblePanel>
   );
 }

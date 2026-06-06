@@ -1,7 +1,7 @@
-import { useState } from "react";
-import { type DashboardModel } from "../dashboardModel";
+import { useMemo, useState } from "react";
+import { buildDashboardModel } from "../dashboardModel";
 import { getTokenMeteringMessages } from "../i18n";
-import type { SyncMode } from "../syncSafeUsage";
+import type { SyncMode, UsageEvent } from "../syncSafeUsage";
 import { AIToolBreakdown } from "./AIToolBreakdown";
 import { KpiTile } from "./KpiTile";
 import { PrivacySettings } from "./PrivacySettings";
@@ -10,20 +10,60 @@ import { SourceHotspots } from "./SourceHotspots";
 import { SyncContractPanel } from "./SyncContractPanel";
 import { TaskBreakdown } from "./TaskBreakdown";
 
+
 export function DashboardPage({
-  dashboard,
+  events,
   onBack,
   setSyncMode,
-  syncMode
+  syncMode,
+  onTriggerSelfTest
 }: {
-  dashboard: DashboardModel;
+  events: readonly UsageEvent[];
   onBack: () => void;
   setSyncMode: (mode: SyncMode) => void;
   syncMode: SyncMode;
+  onTriggerSelfTest: () => void;
 }) {
   const [contractPanelOpen, setContractPanelOpen] = useState(false);
+  const [timeRange, setTimeRange] = useState<"today" | "7days" | "30days" | "all">("today");
+  const [showAdvancedTools, setShowAdvancedTools] = useState(false);
+
   const messages = getTokenMeteringMessages();
   const syncModeContent = messages.syncModeContent;
+
+  const filteredEvents = useMemo(() => {
+    let evs = [...events];
+
+    // Agent Filter: Codex, Claude Code, and Antigravity only by default
+    if (!showAdvancedTools) {
+      evs = evs.filter(
+        (e) => e.ai_tool === "codex" || e.ai_tool === "claude" || e.ai_tool === "antigravity"
+      );
+    }
+
+    // Time Range Filter
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    return evs.filter((e) => {
+      const eventDate = new Date(e.created_at);
+      if (timeRange === "today") {
+        return eventDate >= todayStart;
+      } else if (timeRange === "7days") {
+        const sevenDaysAgo = new Date(todayStart.getTime() - 7 * 24 * 60 * 60 * 1000);
+        return eventDate >= sevenDaysAgo;
+      } else if (timeRange === "30days") {
+        const thirtyDaysAgo = new Date(todayStart.getTime() - 30 * 24 * 60 * 60 * 1000);
+        return eventDate >= thirtyDaysAgo;
+      }
+      return true; // "all"
+    });
+  }, [events, timeRange, showAdvancedTools]);
+
+  const dashboard = useMemo(() => buildDashboardModel(filteredEvents), [filteredEvents]);
+
+  // Info content for tooltip
+  const kpiInfoText = "Usage aggregates represent strictly token counts, latency, and safe enums. Raw prompts or code are never processed.";
 
   return (
     <>
@@ -79,10 +119,69 @@ export function DashboardPage({
           </div>
         </section>
 
-        <section className="kpiGrid" aria-label={messages.dashboard.kpiAria}>
-          {dashboard.kpis.map((kpi, index) => (
-            <KpiTile index={index} kpi={kpi} key={kpi.id} />
-          ))}
+        {/* Filter Controls Row */}
+        <section className="dashboardFilters glassCard">
+          <div className="filterGroup">
+            <span className="filterLabel">Time Range</span>
+            <div className="segmentedControl">
+              <button
+                className={timeRange === "today" ? "active" : ""}
+                onClick={() => setTimeRange("today")}
+                type="button"
+              >
+                Today
+              </button>
+              <button
+                className={timeRange === "7days" ? "active" : ""}
+                onClick={() => setTimeRange("7days")}
+                type="button"
+              >
+                7 Days
+              </button>
+              <button
+                className={timeRange === "30days" ? "active" : ""}
+                onClick={() => setTimeRange("30days")}
+                type="button"
+              >
+                30 Days
+              </button>
+              <button
+                className={timeRange === "all" ? "active" : ""}
+                onClick={() => setTimeRange("all")}
+                type="button"
+              >
+                All Time
+              </button>
+            </div>
+          </div>
+
+          <div className="filterGroup">
+            <label className="checkboxLabel">
+              <input
+                checked={showAdvancedTools}
+                onChange={(e) => setShowAdvancedTools(e.target.checked)}
+                type="checkbox"
+              />
+              Show all tools (including unknown & OpenAI SDK)
+            </label>
+          </div>
+        </section>
+
+        <section className="kpiSection">
+          <div className="kpiSectionHeader">
+            <h2>
+              Key Metrics
+              <span className="infoIcon" title={kpiInfoText}>ⓘ</span>
+            </h2>
+            <span className="kpiBasis">
+              Accumulation window: <strong>{timeRange === "today" ? "Today" : timeRange === "7days" ? "Last 7 Days" : timeRange === "30days" ? "Last 30 Days" : "All Time"}</strong>
+            </span>
+          </div>
+          <div className="kpiGrid" aria-label={messages.dashboard.kpiAria}>
+            {dashboard.kpis.map((kpi, index) => (
+              <KpiTile index={index} kpi={kpi} key={kpi.id} />
+            ))}
+          </div>
         </section>
 
         <section className="cloudPreview glassCard" aria-labelledby="cloud-preview-title">
@@ -107,7 +206,7 @@ export function DashboardPage({
           <TaskBreakdown rows={dashboard.taskBreakdown} total={dashboard.totalTokens} />
           <SourceHotspots rows={dashboard.hotspots} />
           <SessionTrace runs={dashboard.sessionTrace} />
-          <PrivacySettings dashboard={dashboard} syncMode={syncMode} />
+          <PrivacySettings dashboard={dashboard} syncMode={syncMode} onTriggerSelfTest={onTriggerSelfTest} />
         </div>
       </main>
 

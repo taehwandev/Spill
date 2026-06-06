@@ -5,11 +5,17 @@ export function SourceHotspots({ rows }: { rows: HotspotRow[] }) {
   const messages = getTokenMeteringMessages();
   const visibleRows = rows.filter((row) => row.tokens > 0);
 
+  const unknownSourceTooltip = "This represents tokens where the runtime or adapter only reported the total token count without exposing a detailed source breakdown (system, user, history, etc.).";
+  const hotspotsTooltip = "Categorized token consumption breakdown. These sources indicate the context type of input and output tokens.";
+
   return (
     <section className="panel glassCard hotspotPanel" id="hotspots" aria-labelledby="hotspots-title">
       <div className="sectionHeader">
         <div>
-          <h2 id="hotspots-title">{messages.panels.sourceHotspots}</h2>
+          <h2 id="hotspots-title">
+            {messages.panels.sourceHotspots}
+            <span className="infoIcon" title={hotspotsTooltip}>ⓘ</span>
+          </h2>
           <p>{messages.panels.sourceHotspotsDescription}</p>
         </div>
       </div>
@@ -25,10 +31,15 @@ export function SourceHotspots({ rows }: { rows: HotspotRow[] }) {
           <tbody>
             {visibleRows.map((row) => (
               <tr key={row.id}>
-                <td>{row.label}</td>
+                <td>
+                  {row.label}
+                  {row.id === "unknown" && (
+                    <span className="infoIcon" title={unknownSourceTooltip} style={{ marginLeft: "6px" }}>ⓘ</span>
+                  )}
+                </td>
                 <td>{formatTokens(row.tokens)}</td>
                 <td>
-                  <span className="shareCell">{row.percentage}%</span>
+                  <span className="shareCell">{row.percentage.toFixed(1)}%</span>
                 </td>
               </tr>
             ))}

@@ -285,13 +285,14 @@ test("dashboard model breakdown uses actual event model ids and omits cost kpi",
   assert.deepEqual(dashboard.modelBreakdown.map((row) => row.tokens), [140, 30]);
 });
 
-test("dashboard work items hide raw run and span ids", () => {
+test("dashboard work items keep raw ids out of display ids but expose diagnostic span ids", () => {
   const dashboard = buildDashboardModel([safeEvent]);
   const workItem = dashboard.sessionTrace[0];
 
   assert.equal(workItem?.title, "Codex - Analysis - Plan");
   assert.doesNotMatch(workItem?.workItemId ?? "", /run_meter_001|span_001_plan/);
-  assert.equal(Object.hasOwn(workItem?.steps[0] ?? {}, "spanId"), false);
+  assert.equal(workItem?.steps[0]?.runId, "run_meter_001");
+  assert.equal(workItem?.steps[0]?.spanId, "span_001_plan");
 });
 
 test("dashboard work item dates use the selected local timezone", () => {
@@ -400,7 +401,7 @@ test("setup prompt bootstraps the public token metering installer", () => {
   assert.match(setupPrompt, /claude-last-mismatch\.json/);
   assert.match(setupPrompt, /claude-last-success\.json/);
   assert.match(setupPrompt, /observed_safe_shape/);
-  assert.match(setupPrompt, /Empty stdin diagnostics must not overwrite/);
+  assert.match(setupPrompt, /Empty\/no-usage diagnostics must not overwrite/);
   assert.doesNotMatch(setupPrompt, /workflow-setup-prompt\.md/);
   assert.match(setupPrompt, /Do not save only the runtime instruction and call the task done/);
 });
