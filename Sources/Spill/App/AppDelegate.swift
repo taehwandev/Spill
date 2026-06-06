@@ -29,7 +29,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         port: tokenUsageBridgePort
     )
     private lazy var tokenUsageInboxMonitor = TokenUsageInboxMonitor(store: tokenUsageStore)
-    private lazy var tokenUsageDashboardStore = TokenUsageDashboardStore(usageStore: tokenUsageStore)
+    private lazy var tokenUsageDashboardStore = TokenUsageDashboardStore(
+        usageStore: tokenUsageStore
+    )
     private lazy var tokenMeteringDashboardWindowController = TokenMeteringDashboardWindowController(
         store: tokenUsageDashboardStore
     )
@@ -63,6 +65,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settings: settings,
         scanner: scanner,
         updateStore: updateCheckStore,
+        tokenUsageStore: tokenUsageStore,
         showPanelAction: { [weak self] in
             self?.showSpillBar(source: "preferences")
         },
@@ -396,7 +399,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         preferencesWindowController.show()
     }
 
-    private func openTokenDashboard(source _: String = "unknown") {
+    private func openTokenDashboard(source: String = "unknown") {
+        let wasPanelVisible = spillPanelController.isVisible
+        if wasPanelVisible {
+            spillPanelController.hide(animated: false)
+            SpillTelemetry.shared.track("panel_closed", props: ["source": "token_dashboard_\(source)"])
+        }
+
+        if wasPanelVisible {
+            Task { @MainActor [weak self] in
+                self?.presentTokenDashboardWindow()
+            }
+        } else {
+            presentTokenDashboardWindow()
+        }
+    }
+
+    private func presentTokenDashboardWindow() {
         tokenUsageDashboardStore.refresh()
         refreshMenuBarAITokenTotal(force: true)
         statusItemController?.refresh()
@@ -411,12 +430,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         menuBarAITokenDayStart = dayStart
-        menuBarAITokenTotal = TokenUsageDashboardSnapshot(
+        let snapshot = TokenUsageDashboardSnapshot(
             events: tokenUsageStore.loadEvents(),
             selectedPeriod: .today,
             now: now,
             calendar: calendar
-        ).totalTokens
+        )
+        menuBarAITokenTotal = snapshot.totalTokens
     }
 
     private func showPreferencesFromPanel() {

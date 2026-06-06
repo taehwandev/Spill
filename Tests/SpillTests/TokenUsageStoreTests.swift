@@ -1,7 +1,10 @@
 import Foundation
 import Darwin
+import SQLite3
 import XCTest
 @testable import Spill
+
+private let TEST_SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
 final class TokenUsageStoreTests: XCTestCase {
     func testPreferencesModelSeparatesLocalAndCloudOptInModes() {
@@ -47,8 +50,8 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(snapshot.modelRows.map(\.title), ["local-manual"])
         XCTAssertEqual(snapshot.taskRows.map(\.title), [TokenMeteringL10n.taskLabel("analysis")])
         XCTAssertTrue(snapshot.sourceRows.contains { $0.title == TokenMeteringL10n.text(.sourceGeneratedOutput) && $0.value == "50" })
-        XCTAssertEqual(snapshot.sessions.first?.title, "Codex - Analysis - Plan")
-        XCTAssertEqual(snapshot.selectedSession?.title, "Codex - Analysis - Plan")
+        XCTAssertEqual(snapshot.sessions.first?.title, "Analysis - Plan")
+        XCTAssertNil(snapshot.selectedSession)
     }
 
     func testDashboardSnapshotFiltersByAITool() {
@@ -69,7 +72,7 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(claudeSnapshot.eventCount, 1)
         XCTAssertEqual(claudeSnapshot.totalTokens, 30)
         XCTAssertEqual(claudeSnapshot.toolRows.map(\.title), ["Claude"])
-        XCTAssertEqual(claudeSnapshot.sessions.map(\.title), ["Claude - Analysis - Plan"])
+        XCTAssertEqual(claudeSnapshot.sessions.map(\.title), ["Analysis - Plan"])
     }
 
     func testDashboardSnapshotFiltersTodayUsingLocalCalendar() throws {
@@ -106,7 +109,7 @@ final class TokenUsageStoreTests: XCTestCase {
 
         XCTAssertEqual(snapshot.eventCount, 1)
         XCTAssertEqual(snapshot.totalTokens, 150)
-        XCTAssertEqual(snapshot.sessions.map(\.id), ["work_codex_analysis_plan_local_manual_2026_06_05"])
+        XCTAssertEqual(snapshot.sessions.map(\.id), ["work_analysis_plan_2026_06_05"])
         XCTAssertEqual(
             snapshot.periodFilters.first { $0.period == .today }?.detail,
             "150"
@@ -197,9 +200,42 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(snapshot.sourceRows.contains { $0.title == TokenMeteringL10n.text(.sourceUnavailable) && $0.value == "22" })
     }
 
-    @MainActor
-    func testDashboardClearActionIsVisible() {
-        XCTAssertTrue(TokenMeteringDashboardView.showsClearAction)
+    func testDashboardViewSimplifiesClearActions() throws {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let dashboardView = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardView.swift"))
+        let preferencesSection = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Preferences/TokenMeteringPreferencesSection.swift"))
+
+        XCTAssertFalse(dashboardView.contains("dataManagementPanel"))
+        XCTAssertFalse(dashboardView.contains("title: t(.clearAllLocalData)"))
+        XCTAssertFalse(dashboardView.contains("scope: .currentScope"))
+        XCTAssertFalse(dashboardView.contains("requestClear(.all)"))
+        XCTAssertFalse(dashboardView.contains("scope: .tool(tool)"))
+        XCTAssertFalse(dashboardView.contains("scope: .period(period)"))
+        XCTAssertTrue(dashboardView.contains(".contextMenu"))
+        XCTAssertTrue(dashboardView.contains("requestClear(.workItem(session.id))"))
+        XCTAssertFalse(dashboardView.contains("requestClear(.workItem(detailSession.id))"))
+        XCTAssertTrue(preferencesSection.contains("localDataManagementSection"))
+        XCTAssertTrue(preferencesSection.contains("Label(t(.clearAllLocalData), systemImage: \"trash\")"))
+        XCTAssertTrue(preferencesSection.contains("try tokenUsageStore.clearEvents()"))
+    }
+
+    func testDashboardShowsSelectedWorkItemInPopover() throws {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let dashboardView = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardView.swift"))
+
+        XCTAssertTrue(dashboardView.contains("@State private var presentedWorkItemID"))
+        XCTAssertTrue(dashboardView.contains("presentedWorkItemID = session.id"))
+        XCTAssertTrue(dashboardView.contains(".popover("))
+        XCTAssertTrue(dashboardView.contains("workItemPopover(session)"))
+        XCTAssertTrue(dashboardView.contains("store.snapshotForWorkItem(session.id)"))
+        XCTAssertFalse(dashboardView.contains("store.selectSession(session.id)"))
+        XCTAssertTrue(dashboardView.contains("title: t(.aiTool)"))
+        XCTAssertTrue(dashboardView.contains("title: t(.modelBreakdown)"))
+        XCTAssertTrue(dashboardView.contains("title: t(.workflowBreakdown)"))
+        XCTAssertTrue(dashboardView.contains("title: t(.stageBreakdown)"))
+        XCTAssertTrue(dashboardView.contains("title: t(.sourceBreakdown)"))
+        XCTAssertFalse(dashboardView.contains("private var detailPanel"))
+        XCTAssertFalse(dashboardView.contains("detailPanel\n"))
     }
 
     func testDashboardViewKeepsAgentFilterRailAndSuppressesDefaultFocusBoxes() throws {
@@ -219,10 +255,21 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(dashboardView.contains(".contentTransition(.numericText())"))
     }
 
+    func testOpeningTokenDashboardDismissesPanelBeforeShowingWindow() throws {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let appDelegate = try String(contentsOf: root.appendingPathComponent("Sources/Spill/App/AppDelegate.swift"))
+
+        XCTAssertTrue(appDelegate.contains("let wasPanelVisible = spillPanelController.isVisible"))
+        XCTAssertTrue(appDelegate.contains("spillPanelController.hide(animated: false)"))
+        XCTAssertTrue(appDelegate.contains("Task { @MainActor [weak self] in"))
+        XCTAssertTrue(appDelegate.contains("self?.presentTokenDashboardWindow()"))
+        XCTAssertTrue(appDelegate.contains("tokenMeteringDashboardWindowController.show()"))
+    }
+
     @MainActor
     func testDashboardStoreAddsAndClearsLocalTestEvents() {
         let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
-        let dashboardStore = TokenUsageDashboardStore(usageStore: usageStore)
+        let dashboardStore = dashboardStore(usageStore: usageStore)
 
         XCTAssertEqual(dashboardStore.snapshot.eventCount, 0)
 
@@ -236,9 +283,62 @@ final class TokenUsageStoreTests: XCTestCase {
     }
 
     @MainActor
+    func testDashboardStoreClearsSelectedWorkItemOnly() throws {
+        let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
+        let dashboardStore = dashboardStore(usageStore: usageStore)
+        let selectedEvent = Self.safeEvent(
+            spanID: "span_delete_selected",
+            taskType: .codeReview,
+            stage: .verify
+        )
+        let remainingEvent = Self.safeEvent(
+            spanID: "span_delete_remaining",
+            taskType: .testing,
+            stage: .verify
+        )
+
+        try usageStore.replaceEvents([selectedEvent, remainingEvent])
+        dashboardStore.refresh()
+        let selectedID = try XCTUnwrap(dashboardStore.snapshot.sessions.first { $0.title == "Testing - Verify" }?.id)
+        dashboardStore.selectSession(selectedID)
+        let preview = dashboardStore.clearPreview(for: .workItem(selectedID))
+
+        XCTAssertEqual(preview.eventCount, 1)
+        XCTAssertEqual(preview.totalTokens, 150)
+
+        dashboardStore.clearEvents(in: .workItem(selectedID))
+
+        XCTAssertEqual(usageStore.loadEvents().map(\.spanID), ["span_delete_selected"])
+        XCTAssertNil(dashboardStore.selectedSessionID)
+    }
+
+    @MainActor
+    func testDashboardStoreClearsToolAndCurrentScope() throws {
+        let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
+        let dashboardStore = dashboardStore(usageStore: usageStore)
+        let codex = Self.safeEvent(aiTool: .codex, spanID: "span_scope_codex")
+        let claude = Self.safeEvent(aiTool: .claude, spanID: "span_scope_claude")
+        let agy = Self.safeEvent(aiTool: .antigravity, spanID: "span_scope_agy")
+
+        try usageStore.replaceEvents([codex, claude, agy])
+        dashboardStore.refresh()
+        XCTAssertEqual(dashboardStore.clearPreview(for: .tool(.claude)).eventCount, 1)
+
+        dashboardStore.clearEvents(in: .tool(.claude))
+
+        XCTAssertEqual(Set(usageStore.loadEvents().map(\.spanID)), ["span_scope_codex", "span_scope_agy"])
+
+        dashboardStore.setSelectedTool(.antigravity)
+        XCTAssertEqual(dashboardStore.clearPreview(for: .currentScope).eventCount, 1)
+        dashboardStore.clearEvents(in: .currentScope)
+
+        XCTAssertEqual(usageStore.loadEvents().map(\.spanID), ["span_scope_codex"])
+    }
+
+    @MainActor
     func testDashboardStoreUnfilteredSnapshotBypassesSelectedToolFilter() throws {
         let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
-        let dashboardStore = TokenUsageDashboardStore(usageStore: usageStore)
+        let dashboardStore = dashboardStore(usageStore: usageStore)
 
         try usageStore.appendEvent(Self.safeEvent(aiTool: .codex, spanID: "span_codex"))
         try usageStore.appendEvent(Self.safeEvent(aiTool: .claude, spanID: "span_claude"))
@@ -253,9 +353,40 @@ final class TokenUsageStoreTests: XCTestCase {
     }
 
     @MainActor
+    func testDashboardStoreBuildsWorkItemSnapshotWithoutFocusingDashboard() throws {
+        let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
+        let dashboardStore = dashboardStore(usageStore: usageStore)
+        let first = Self.safeEvent(
+            spanID: "span_popover_first",
+            taskType: .analysis,
+            stage: .plan
+        )
+        let second = Self.safeEvent(
+            spanID: "span_popover_second",
+            inputTokens: 40,
+            outputTokens: 20,
+            taskType: .testing,
+            stage: .verify,
+            model: "popover-model"
+        )
+
+        try usageStore.replaceEvents([first, second])
+        dashboardStore.refresh()
+        let workItemID = try XCTUnwrap(dashboardStore.snapshot.sessions.first { $0.title == "Testing - Verify" }?.id)
+        let itemSnapshot = dashboardStore.snapshotForWorkItem(workItemID)
+
+        XCTAssertNil(dashboardStore.selectedSessionID)
+        XCTAssertNil(dashboardStore.snapshot.selectedSession)
+        XCTAssertEqual(dashboardStore.snapshot.eventCount, 2)
+        XCTAssertEqual(itemSnapshot.selectedSession?.id, workItemID)
+        XCTAssertEqual(itemSnapshot.eventCount, 1)
+        XCTAssertEqual(itemSnapshot.modelRows.map(\.title), ["popover-model"])
+    }
+
+    @MainActor
     func testDashboardStoreMarksLiveUpdatesOnlyWhenEventDataChanges() throws {
         let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
-        let dashboardStore = TokenUsageDashboardStore(usageStore: usageStore)
+        let dashboardStore = dashboardStore(usageStore: usageStore)
         let createdAt = ISO8601DateFormatter.tokenUsage.string(from: Date())
 
         XCTAssertEqual(dashboardStore.liveUpdateMarker, .empty)
@@ -302,7 +433,7 @@ final class TokenUsageStoreTests: XCTestCase {
 
     func testDashboardStoreRefreshesWhenUsageStoreChangesExternally() async throws {
         let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
-        let dashboardStore = TokenUsageDashboardStore(usageStore: usageStore)
+        let dashboardStore = dashboardStore(usageStore: usageStore)
 
         XCTAssertEqual(dashboardStore.snapshot.eventCount, 0)
 
@@ -316,7 +447,7 @@ final class TokenUsageStoreTests: XCTestCase {
     @MainActor
     func testDashboardStoreRunsLocalQueueSelfTest() async throws {
         let usageStore = TokenUsageStore(fileURL: temporaryEventsURL(), inboxURL: temporaryInboxURL())
-        let dashboardStore = TokenUsageDashboardStore(usageStore: usageStore)
+        let dashboardStore = dashboardStore(usageStore: usageStore)
 
         XCTAssertEqual(dashboardStore.snapshot.eventCount, 0)
 
@@ -352,7 +483,7 @@ final class TokenUsageStoreTests: XCTestCase {
         )
         try? Data("blocked".utf8).write(to: blockedInboxURL)
         let usageStore = TokenUsageStore(fileURL: temporaryEventsURL(), inboxURL: blockedInboxURL)
-        let dashboardStore = TokenUsageDashboardStore(usageStore: usageStore)
+        let dashboardStore = dashboardStore(usageStore: usageStore)
 
         await dashboardStore.runLocalQueueSelfTest()
 
@@ -511,14 +642,138 @@ final class TokenUsageStoreTests: XCTestCase {
 
         XCTAssertEqual(store.loadEvents(), [])
         XCTAssertEqual(try store.appendEvent(event), [event])
+        XCTAssertEqual(try store.appendEvent(event), [event])
         XCTAssertEqual(store.loadEvents(), [event])
 
         try Data("{not-json".utf8).write(to: url)
-        XCTAssertEqual(store.loadEvents(), [])
+        XCTAssertEqual(store.loadEvents(), [event])
 
         XCTAssertEqual(try store.replaceEvents([event]), [event])
         try store.clearEvents()
         XCTAssertEqual(store.loadEvents(), [])
+    }
+
+    func testStoreMigratesLegacyJSONEventsIntoSQLite() throws {
+        let eventsURL = temporaryEventsURL()
+        let store = TokenUsageStore(fileURL: eventsURL)
+        let event = Self.safeEvent()
+        let duplicate = Self.safeEvent()
+        let secondEvent = Self.safeEvent(
+            aiTool: .claude,
+            spanID: "span_legacy_second",
+            inputTokens: 20,
+            outputTokens: 10
+        )
+
+        try FileManager.default.createDirectory(
+            at: eventsURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        let data = try TokenUsageSanitizer.jsonEncoder.encode([event, duplicate, secondEvent])
+        try data.write(to: eventsURL)
+
+        let events = store.loadEvents()
+
+        XCTAssertEqual(events.map(\.spanID), ["span_local_01", "span_legacy_second"])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: store.eventsDatabaseURL.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: eventsURL.path))
+    }
+
+    func testStoreWritesDashboardBreakdownColumnsAndIndexes() throws {
+        let store = TokenUsageStore(fileURL: temporaryEventsURL())
+        let event = Self.safeEvent(
+            aiTool: .claude,
+            runID: "run_indexed",
+            spanID: "span_indexed",
+            inputTokens: 200,
+            outputTokens: 50,
+            taskType: .codeReview,
+            stage: .verify,
+            model: "claude-indexed"
+        )
+
+        try store.appendEvent(event)
+
+        let rows = try sqliteRows(
+            databaseURL: store.eventsDatabaseURL,
+            sql: """
+            SELECT run_id, task_type, stage, model, ai_tool, total_tokens
+            FROM token_usage_events
+            WHERE span_id = 'span_indexed'
+            """,
+            columnCount: 6
+        )
+        XCTAssertEqual(rows, [[
+            "run_indexed",
+            "code_review",
+            "verify",
+            "claude-indexed",
+            "claude",
+            "250"
+        ]])
+
+        let indexNames = Set(try sqliteRows(
+            databaseURL: store.eventsDatabaseURL,
+            sql: "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'token_usage_events'",
+            columnCount: 1
+        ).flatMap { $0 })
+        XCTAssertTrue(indexNames.contains("idx_token_usage_events_task_type_created_at"))
+        XCTAssertTrue(indexNames.contains("idx_token_usage_events_stage_created_at"))
+        XCTAssertTrue(indexNames.contains("idx_token_usage_events_model_created_at"))
+        XCTAssertTrue(indexNames.contains("idx_token_usage_events_run_id"))
+    }
+
+    func testStoreBackfillsDashboardBreakdownColumnsForExistingSQLiteRows() throws {
+        let store = TokenUsageStore(fileURL: temporaryEventsURL())
+        let databaseURL = store.eventsDatabaseURL
+        let event = Self.safeEvent(
+            aiTool: .antigravity,
+            runID: "run_legacy_sqlite",
+            spanID: "span_legacy_sqlite",
+            inputTokens: 300,
+            outputTokens: 70,
+            taskType: .debugging,
+            stage: .implement,
+            model: "gemini-legacy"
+        )
+
+        try FileManager.default.createDirectory(
+            at: databaseURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        let database = try openSQLiteDatabase(databaseURL)
+        defer { sqlite3_close(database) }
+        try executeSQLite(
+            """
+            CREATE TABLE token_usage_events (
+                span_id TEXT PRIMARY KEY NOT NULL,
+                created_at TEXT NOT NULL,
+                ai_tool TEXT NOT NULL,
+                total_tokens INTEGER NOT NULL,
+                payload_json BLOB NOT NULL
+            )
+            """,
+            database: database
+        )
+        try insertLegacySQLiteEvent(event, database: database)
+
+        XCTAssertEqual(store.loadEvents().map(\.spanID), ["span_legacy_sqlite"])
+
+        let rows = try sqliteRows(
+            databaseURL: databaseURL,
+            sql: """
+            SELECT run_id, task_type, stage, model
+            FROM token_usage_events
+            WHERE span_id = 'span_legacy_sqlite'
+            """,
+            columnCount: 4
+        )
+        XCTAssertEqual(rows, [[
+            "run_legacy_sqlite",
+            "debugging",
+            "implement",
+            "gemini-legacy"
+        ]])
     }
 
     func testStoreDrainsQueuedInboxEventsAndDeduplicates() throws {
@@ -550,7 +805,8 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(events.map(\.spanID), ["span_local_01", "span_inbox_01"])
         XCTAssertEqual(events.map(\.aiTool), [.codex, .claude])
         XCTAssertEqual(store.loadEvents(), events)
-        XCTAssertTrue(FileManager.default.fileExists(atPath: eventsURL.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: store.eventsDatabaseURL.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: eventsURL.path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: duplicateURL.path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: inboxEventURL.path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: invalidURL.path))
@@ -1142,9 +1398,9 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(
             snapshot.sessions.map(\.title),
             [
-                "Codex - Code generation - Implement",
-                "Codex - Code review - Verify",
-                "Codex - Analysis - Plan"
+                "Code generation - Implement",
+                "Code review - Verify",
+                "Analysis - Plan"
             ]
         )
         XCTAssertFalse(snapshot.sessions.map(\.runID).contains("run_same_latest_more_tokens"))
@@ -1166,11 +1422,50 @@ final class TokenUsageStoreTests: XCTestCase {
             createdAt: "2026-06-05T00:01:00.000Z"
         )
         let initial = TokenUsageDashboardSnapshot(events: [first, second])
-        let selectedID = try! XCTUnwrap(initial.sessions.first { $0.title == "Codex - Analysis - Plan" }?.id)
+        XCTAssertNil(initial.selectedSession)
+        let selectedID = try! XCTUnwrap(initial.sessions.first { $0.title == "Analysis - Plan" }?.id)
         let selected = TokenUsageDashboardSnapshot(events: [first, second], selectedSessionID: selectedID)
 
         XCTAssertEqual(selected.selectedSession?.id, selectedID)
-        XCTAssertEqual(selected.selectedSession?.title, "Codex - Analysis - Plan")
+        XCTAssertEqual(selected.selectedSession?.title, "Analysis - Plan")
+        XCTAssertEqual(selected.eventCount, 1)
+        XCTAssertEqual(selected.totalTokens, 150)
+        XCTAssertEqual(selected.modelRows.map(\.title), ["model-first"])
+    }
+
+    func testDashboardSnapshotGroupsWorkItemsAcrossAgentTools() {
+        let codex = Self.safeEvent(
+            aiTool: .codex,
+            spanID: "span_group_codex",
+            inputTokens: 80,
+            outputTokens: 20,
+            taskType: .codeGeneration,
+            stage: .implement,
+            model: "codex-model",
+            createdAt: "2026-06-05T00:00:00.000Z"
+        )
+        let claude = Self.safeEvent(
+            aiTool: .claude,
+            spanID: "span_group_claude",
+            inputTokens: 30,
+            outputTokens: 20,
+            taskType: .codeGeneration,
+            stage: .implement,
+            model: "claude-model",
+            createdAt: "2026-06-05T00:01:00.000Z"
+        )
+        let initial = TokenUsageDashboardSnapshot(events: [codex, claude])
+        let session = try! XCTUnwrap(initial.sessions.first)
+
+        XCTAssertEqual(initial.sessions.count, 1)
+        XCTAssertEqual(session.title, "Code generation - Implement")
+        XCTAssertEqual(session.eventCount, 2)
+
+        let selected = TokenUsageDashboardSnapshot(events: [codex, claude], selectedSessionID: session.id)
+        XCTAssertEqual(selected.eventCount, 2)
+        XCTAssertEqual(selected.totalTokens, 150)
+        XCTAssertEqual(selected.toolRows.map(\.title), ["Codex", "Claude"])
+        XCTAssertEqual(selected.modelRows.map(\.title), ["codex-model", "claude-model"])
     }
 
     func testDashboardSnapshotUsesLocalLocaleAndTimeZoneForEventTimes() throws {
@@ -1195,6 +1490,55 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertFalse(session.detail.contains("2026-06-04T23:30"))
         XCTAssertTrue(session.detail.contains("2026"))
         XCTAssertTrue(session.detail.contains("8:30"))
+    }
+
+    func testDashboardSnapshotBuildsCurrentMonthCalendarFromSunday() throws {
+        let timeZone = try XCTUnwrap(TimeZone(identifier: "Asia/Seoul"))
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        calendar.firstWeekday = 1
+        let snapshot = TokenUsageDashboardSnapshot(
+            events: [
+                Self.safeEvent(createdAt: "2026-05-31T15:05:00.000Z"),
+                Self.safeEvent(spanID: "span_current_month", createdAt: "2026-06-04T15:05:00.000Z")
+            ],
+            now: try Self.date("2026-06-05T01:00:00.000Z"),
+            calendar: calendar,
+            locale: Locale(identifier: "ko_KR"),
+            timeZone: timeZone
+        )
+
+        XCTAssertEqual(snapshot.calendarWeekdayTitles.prefix(2), ["일", "월"])
+        XCTAssertEqual(snapshot.calendarMonthTitle, "2026년 6월")
+        XCTAssertFalse(snapshot.canNavigateNextCalendarMonth)
+        XCTAssertFalse(snapshot.canNavigatePreviousCalendarMonth)
+        XCTAssertEqual(snapshot.calendarDays.first?.isPlaceholder, true)
+        XCTAssertEqual(snapshot.calendarDays.first { !$0.isPlaceholder }?.id, "2026-06-01")
+        XCTAssertTrue(snapshot.calendarDays.contains { $0.id == "2026-06-01" && $0.hasEvents })
+        XCTAssertTrue(snapshot.calendarDays.contains { $0.id == "2026-06-05" && $0.hasEvents })
+        XCTAssertFalse(snapshot.calendarDays.contains { $0.id.hasPrefix("2026-05") && !$0.isPlaceholder })
+    }
+
+    func testDashboardSnapshotClampsCalendarToFirstDataMonth() throws {
+        let timeZone = try XCTUnwrap(TimeZone(identifier: "Asia/Seoul"))
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        calendar.firstWeekday = 1
+        let snapshot = TokenUsageDashboardSnapshot(
+            events: [
+                Self.safeEvent(createdAt: "2026-06-04T15:05:00.000Z")
+            ],
+            now: try Self.date("2026-06-20T01:00:00.000Z"),
+            calendarMonthStart: try Self.date("2026-04-01T00:00:00.000Z"),
+            calendar: calendar,
+            locale: Locale(identifier: "en_US"),
+            timeZone: timeZone
+        )
+
+        XCTAssertEqual(snapshot.calendarMonthTitle, "June 2026")
+        XCTAssertFalse(snapshot.canNavigatePreviousCalendarMonth)
+        XCTAssertFalse(snapshot.canNavigateNextCalendarMonth)
+        XCTAssertTrue(snapshot.calendarDays.contains { $0.id == "2026-06-05" && $0.hasEvents })
     }
 
     private static func safeEvent(
@@ -1321,10 +1665,105 @@ final class TokenUsageStoreTests: XCTestCase {
         return UInt16(bigEndian: boundAddress.sin_port)
     }
 
+    private func openSQLiteDatabase(_ databaseURL: URL) throws -> OpaquePointer {
+        var database: OpaquePointer?
+        guard sqlite3_open(databaseURL.path, &database) == SQLITE_OK,
+              let database
+        else {
+            defer { sqlite3_close(database) }
+            throw sqliteError(database)
+        }
+        return database
+    }
+
+    private func executeSQLite(_ sql: String, database: OpaquePointer) throws {
+        guard sqlite3_exec(database, sql, nil, nil, nil) == SQLITE_OK else {
+            throw sqliteError(database)
+        }
+    }
+
+    private func sqliteRows(databaseURL: URL, sql: String, columnCount: Int) throws -> [[String]] {
+        let database = try openSQLiteDatabase(databaseURL)
+        defer { sqlite3_close(database) }
+
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
+              let statement
+        else {
+            throw sqliteError(database)
+        }
+        defer { sqlite3_finalize(statement) }
+
+        var rows = [[String]]()
+        while sqlite3_step(statement) == SQLITE_ROW {
+            var row = [String]()
+            for index in 0..<columnCount {
+                if let text = sqlite3_column_text(statement, Int32(index)) {
+                    row.append(String(cString: text))
+                } else {
+                    row.append("")
+                }
+            }
+            rows.append(row)
+        }
+        return rows
+    }
+
+    private func insertLegacySQLiteEvent(_ event: TokenUsageEvent, database: OpaquePointer) throws {
+        let sql = """
+        INSERT INTO token_usage_events (
+            span_id,
+            created_at,
+            ai_tool,
+            total_tokens,
+            payload_json
+        ) VALUES (?, ?, ?, ?, ?)
+        """
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
+              let statement
+        else {
+            throw sqliteError(database)
+        }
+        defer { sqlite3_finalize(statement) }
+
+        let payload = try TokenUsageSanitizer.eventData(event)
+        sqlite3_bind_text(statement, 1, event.spanID, -1, TEST_SQLITE_TRANSIENT)
+        sqlite3_bind_text(statement, 2, event.createdAt, -1, TEST_SQLITE_TRANSIENT)
+        sqlite3_bind_text(statement, 3, event.aiTool.rawValue, -1, TEST_SQLITE_TRANSIENT)
+        sqlite3_bind_int64(statement, 4, sqlite3_int64(event.totalTokens))
+        let result = payload.withUnsafeBytes { buffer -> Int32 in
+            sqlite3_bind_blob(statement, 5, buffer.baseAddress, Int32(buffer.count), TEST_SQLITE_TRANSIENT)
+            return sqlite3_step(statement)
+        }
+
+        guard result == SQLITE_DONE else {
+            throw sqliteError(database)
+        }
+    }
+
+    private func sqliteError(_ database: OpaquePointer?) -> NSError {
+        let code = database.map { Int(sqlite3_errcode($0)) } ?? -1
+        let message = database
+            .flatMap { sqlite3_errmsg($0) }
+            .map { String(cString: $0) }
+            ?? "Unknown SQLite error"
+        return NSError(
+            domain: "SpillTests.SQLite",
+            code: code,
+            userInfo: [NSLocalizedDescriptionKey: message]
+        )
+    }
+
     private func temporaryEventsURL() -> URL {
         URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent(UUID().uuidString)
             .appendingPathComponent("events.json")
+    }
+
+    @MainActor
+    private func dashboardStore(usageStore: TokenUsageStore) -> TokenUsageDashboardStore {
+        TokenUsageDashboardStore(usageStore: usageStore)
     }
 
     private func temporaryInboxURL() -> URL {

@@ -425,6 +425,7 @@ struct SpillBarView: View {
 
     private var tokenMeteringSummary: some View {
         let snapshot = tokenUsageDashboardStore.unfilteredSnapshot
+        let displayTotalTokens = snapshot.totalTokens
         let topTask = snapshot.taskRows.first
         let topSource = snapshot.sourceRows.first
 
@@ -449,7 +450,7 @@ struct SpillBarView: View {
                     }
 
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text(TokenUsageDashboardSnapshot.formatTokens(snapshot.totalTokens))
+                        Text(TokenUsageDashboardSnapshot.formatTokens(displayTotalTokens))
                             .font(.system(size: 18, weight: .bold, design: .rounded))
                             .monospacedDigit()
 
@@ -489,7 +490,7 @@ struct SpillBarView: View {
         .help(AppL10n.text(.openLocalTokenMeteringDetails, appLanguage: settings.appLanguage))
         .accessibilityLabel(
             AppL10n.tokenMeteringAccessibility(
-                tokenCount: TokenUsageDashboardSnapshot.formatTokens(snapshot.totalTokens),
+                tokenCount: TokenUsageDashboardSnapshot.formatTokens(displayTotalTokens),
                 appLanguage: settings.appLanguage
             )
         )

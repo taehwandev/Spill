@@ -77,6 +77,7 @@ struct PreferencesView: View {
     @ObservedObject var settings: SpillSettings
     @ObservedObject var scanner: AXMenuBarItemScanner
     @ObservedObject var updateStore: UpdateCheckStore
+    let tokenUsageStore: TokenUsageStore
     let showPanelAction: () -> Void
     let openTokenDashboardAction: () -> Void
     @State private var accessibilityTrusted = AccessibilityPermission.isTrusted
@@ -420,6 +421,7 @@ struct PreferencesView: View {
             PreferenceCard(title: t(.tokenMetering), symbolName: "chart.bar.xaxis", iconColor: .teal) {
                 TokenMeteringPreferencesSection(
                     settings: settings,
+                    tokenUsageStore: tokenUsageStore,
                     openDashboardAction: openTokenDashboardAction
                 )
             }

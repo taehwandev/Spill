@@ -39,6 +39,20 @@ enum TokenMeteringTextKey: String {
     case copied
     case copyPrompt
     case clear
+    case dataManagement
+    case clearCurrentScope
+    case clearSelectedWorkItem
+    case clearAllLocalData
+    case clearSelection
+    case recentMonth
+    case previousMonth
+    case nextMonth
+    case allLocalData
+    case currentDashboardScope
+    case selectedWorkItem
+    case deleteTokenDataTitle
+    case deleteTokenDataConfirm
+    case deleteTokenDataCancel
     case period
     case aiTool
     case workflowFocus
@@ -121,6 +135,7 @@ enum TokenMeteringTextKey: String {
     case totalShare
     case inputShare
     case outputShare
+    case lastUpdatedLabel
 
     case sourceSystem
     case sourceUser
@@ -260,6 +275,44 @@ enum TokenMeteringL10n {
         }
     }
 
+    static func clearToolData(_ tool: String, language: TokenMeteringLanguage = .current()) -> String {
+        switch language {
+        case .english:
+            return "Clear \(tool)"
+        case .korean:
+            return "\(tool) 지우기"
+        case .japanese:
+            return "\(tool) を消去"
+        }
+    }
+
+    static func clearPeriodData(_ period: String, language: TokenMeteringLanguage = .current()) -> String {
+        switch language {
+        case .english:
+            return "Clear \(period)"
+        case .korean:
+            return "\(period) 지우기"
+        case .japanese:
+            return "\(period) を消去"
+        }
+    }
+
+    static func deleteTokenDataMessage(
+        scope: String,
+        eventCount: Int,
+        tokens: String,
+        language: TokenMeteringLanguage = .current()
+    ) -> String {
+        switch language {
+        case .english:
+            return "This permanently deletes \(eventCount) local events in \(scope) (\(tokens) tokens). This cannot be undone."
+        case .korean:
+            return "\(scope) 범위의 로컬 이벤트 \(eventCount)개(\(tokens) 토큰)를 영구 삭제합니다. 이 작업은 되돌릴 수 없습니다."
+        case .japanese:
+            return "\(scope) のローカルイベント \(eventCount)件（\(tokens)トークン）を完全に削除します。この操作は元に戻せません。"
+        }
+    }
+
     static func installedAt(_ path: String, language: TokenMeteringLanguage = .current()) -> String {
         "\(text(.installed, language: language)) -> \(path)"
     }
@@ -319,6 +372,20 @@ enum TokenMeteringL10n {
             .copied: "Copied",
             .copyPrompt: "Copy Prompt",
             .clear: "Clear",
+            .dataManagement: "Data Management",
+            .clearCurrentScope: "Clear Current Scope",
+            .clearSelectedWorkItem: "Clear Selected Work Item",
+            .clearAllLocalData: "Clear All Local Data",
+            .clearSelection: "Clear Selection",
+            .recentMonth: "Recent Month",
+            .previousMonth: "Previous month",
+            .nextMonth: "Next month",
+            .allLocalData: "All local data",
+            .currentDashboardScope: "Current dashboard scope",
+            .selectedWorkItem: "Selected work item",
+            .deleteTokenDataTitle: "Delete token data?",
+            .deleteTokenDataConfirm: "Delete",
+            .deleteTokenDataCancel: "Cancel",
             .period: "Period",
             .aiTool: "AI Tool",
             .workflowFocus: "Workflow Focus",
@@ -400,6 +467,7 @@ enum TokenMeteringL10n {
             .totalShare: "Total Share",
             .inputShare: "Input Share",
             .outputShare: "Output Share",
+            .lastUpdatedLabel: "Last updated",
             .sourceSystem: "System",
             .sourceUser: "User",
             .sourceHistory: "History",
@@ -460,6 +528,20 @@ enum TokenMeteringL10n {
             .copied: "복사됨",
             .copyPrompt: "프롬프트 복사",
             .clear: "지우기",
+            .dataManagement: "데이터 관리",
+            .clearCurrentScope: "현재 범위 지우기",
+            .clearSelectedWorkItem: "선택한 작업 지우기",
+            .clearAllLocalData: "전체 로컬 데이터 지우기",
+            .clearSelection: "선택 해제",
+            .recentMonth: "최근 1개월",
+            .previousMonth: "이전 달",
+            .nextMonth: "다음 달",
+            .allLocalData: "전체 로컬 데이터",
+            .currentDashboardScope: "현재 대시보드 범위",
+            .selectedWorkItem: "선택한 작업",
+            .deleteTokenDataTitle: "토큰 데이터를 삭제할까요?",
+            .deleteTokenDataConfirm: "삭제",
+            .deleteTokenDataCancel: "취소",
             .period: "기간",
             .aiTool: "AI 도구",
             .workflowFocus: "워크플로우 포커스",
@@ -541,6 +623,7 @@ enum TokenMeteringL10n {
             .totalShare: "전체 비중",
             .inputShare: "입력 비중",
             .outputShare: "출력 비중",
+            .lastUpdatedLabel: "마지막 갱신",
             .sourceSystem: "시스템",
             .sourceUser: "사용자",
             .sourceHistory: "히스토리",
@@ -601,6 +684,20 @@ enum TokenMeteringL10n {
             .copied: "コピー済み",
             .copyPrompt: "プロンプトをコピー",
             .clear: "消去",
+            .dataManagement: "データ管理",
+            .clearCurrentScope: "現在の範囲を消去",
+            .clearSelectedWorkItem: "選択中の作業を消去",
+            .clearAllLocalData: "すべてのローカルデータを消去",
+            .clearSelection: "選択を解除",
+            .recentMonth: "直近1か月",
+            .previousMonth: "前月",
+            .nextMonth: "翌月",
+            .allLocalData: "すべてのローカルデータ",
+            .currentDashboardScope: "現在のダッシュボード範囲",
+            .selectedWorkItem: "選択中の作業",
+            .deleteTokenDataTitle: "トークンデータを削除しますか？",
+            .deleteTokenDataConfirm: "削除",
+            .deleteTokenDataCancel: "キャンセル",
             .period: "期間",
             .aiTool: "AI ツール",
             .workflowFocus: "ワークフロー焦点",
@@ -682,6 +779,7 @@ enum TokenMeteringL10n {
             .totalShare: "合計割合",
             .inputShare: "入力割合",
             .outputShare: "出力割合",
+            .lastUpdatedLabel: "最終更新",
             .sourceSystem: "システム",
             .sourceUser: "ユーザー",
             .sourceHistory: "履歴",

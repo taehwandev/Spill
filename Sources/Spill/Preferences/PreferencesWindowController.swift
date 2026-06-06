@@ -11,6 +11,7 @@ final class PreferencesWindowController {
     private let settings: SpillSettings
     private let scanner: AXMenuBarItemScanner
     private let updateStore: UpdateCheckStore
+    private let tokenUsageStore: TokenUsageStore
     private let showPanelAction: () -> Void
     private let openTokenDashboardAction: () -> Void
     private var window: NSWindow?
@@ -20,12 +21,14 @@ final class PreferencesWindowController {
         settings: SpillSettings,
         scanner: AXMenuBarItemScanner,
         updateStore: UpdateCheckStore,
+        tokenUsageStore: TokenUsageStore,
         showPanelAction: @escaping () -> Void,
         openTokenDashboardAction: @escaping () -> Void
     ) {
         self.settings = settings
         self.scanner = scanner
         self.updateStore = updateStore
+        self.tokenUsageStore = tokenUsageStore
         self.showPanelAction = showPanelAction
         self.openTokenDashboardAction = openTokenDashboardAction
     }
@@ -49,6 +52,7 @@ final class PreferencesWindowController {
             settings: settings,
             scanner: scanner,
             updateStore: updateStore,
+            tokenUsageStore: tokenUsageStore,
             showPanelAction: showPanelAction,
             openTokenDashboardAction: openTokenDashboardAction
         )

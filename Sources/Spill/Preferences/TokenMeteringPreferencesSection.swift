@@ -3,6 +3,7 @@ import SwiftUI
 
 struct TokenMeteringPreferencesSection: View {
     @ObservedObject var settings: SpillSettings
+    let tokenUsageStore: TokenUsageStore
     let openDashboardAction: () -> Void
     @State private var copiedTarget: String?
     @State private var setupInstalledPath: URL?
@@ -10,6 +11,9 @@ struct TokenMeteringPreferencesSection: View {
     @State private var setupInstallSucceeded = false
     @State private var advancedVisible = false
     @State private var adapterStatuses: [String: TokenMeteringAdapterConnectionStatus] = [:]
+    @State private var localDataPreview = TokenUsageClearPreview(scopeTitle: "", eventCount: 0, totalTokens: 0)
+    @State private var pendingClearAllPreview: TokenUsageClearPreview?
+    @State private var clearAllError: String?
 
     private var currentLanguage: TokenMeteringLanguage {
         TokenMeteringLanguage.current(appLanguage: settings.appLanguage)
@@ -140,6 +144,8 @@ struct TokenMeteringPreferencesSection: View {
                 }
             }
 
+            localDataManagementSection
+
             DisclosureGroup(isExpanded: $advancedVisible) {
                 VStack(alignment: .leading, spacing: 12) {
                     VStack(alignment: .leading, spacing: 9) {
@@ -210,6 +216,36 @@ struct TokenMeteringPreferencesSection: View {
         }
         .onAppear {
             refreshAdapterStatuses()
+            refreshLocalDataPreview()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: TokenUsageStore.eventsDidChangeNotification)) { _ in
+            refreshLocalDataPreview()
+        }
+        .alert(
+            t(.deleteTokenDataTitle),
+            isPresented: Binding(
+                get: { pendingClearAllPreview != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        pendingClearAllPreview = nil
+                    }
+                }
+            ),
+            presenting: pendingClearAllPreview
+        ) { _ in
+            Button(t(.deleteTokenDataCancel), role: .cancel) {
+                pendingClearAllPreview = nil
+            }
+            Button(t(.deleteTokenDataConfirm), role: .destructive) {
+                clearAllLocalTokenData()
+            }
+        } message: { preview in
+            Text(TokenMeteringL10n.deleteTokenDataMessage(
+                scope: preview.scopeTitle,
+                eventCount: preview.eventCount,
+                tokens: TokenUsageDashboardSnapshot.formatTokens(preview.totalTokens),
+                language: currentLanguage
+            ))
         }
     }
 
@@ -258,6 +294,72 @@ struct TokenMeteringPreferencesSection: View {
                 (adapter.id, TokenMeteringAdapterConnectionDiagnostics.status(for: adapter))
             }
         )
+    }
+
+    private var localDataManagementSection: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            TokenMeteringOptionHeader(
+                title: t(.dataManagement),
+                state: t(.localOnly),
+                systemImage: "externaldrive.fill",
+                tint: .orange
+            )
+
+            Text(TokenMeteringL10n.eventsTokensDetail(
+                eventCount: localDataPreview.eventCount,
+                tokens: TokenUsageDashboardSnapshot.formatTokens(localDataPreview.totalTokens),
+                language: currentLanguage
+            ))
+            .font(.system(size: 9, weight: .semibold, design: .monospaced))
+            .foregroundStyle(.secondary)
+
+            Button(role: .destructive) {
+                let preview = makeAllLocalDataPreview()
+                localDataPreview = preview
+                if preview.hasEvents {
+                    pendingClearAllPreview = preview
+                }
+            } label: {
+                Label(t(.clearAllLocalData), systemImage: "trash")
+            }
+            .buttonStyle(.bordered)
+            .font(.system(size: 10, weight: .semibold))
+            .disabled(!localDataPreview.hasEvents)
+
+            if let clearAllError {
+                Text(clearAllError)
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(10)
+        .background(tokenMeteringOptionBackground)
+    }
+
+    private func refreshLocalDataPreview() {
+        localDataPreview = makeAllLocalDataPreview()
+    }
+
+    private func makeAllLocalDataPreview() -> TokenUsageClearPreview {
+        let events = tokenUsageStore.loadEvents()
+        return TokenUsageClearPreview(
+            scopeTitle: t(.allLocalData),
+            eventCount: events.count,
+            totalTokens: events.reduce(0) { $0 + $1.totalTokens }
+        )
+    }
+
+    private func clearAllLocalTokenData() {
+        do {
+            try tokenUsageStore.clearEvents()
+            clearAllError = nil
+            pendingClearAllPreview = nil
+            refreshLocalDataPreview()
+        } catch {
+            clearAllError = TokenMeteringL10n.text(.clearFailed, language: currentLanguage)
+            pendingClearAllPreview = nil
+        }
     }
 
     private var agentStatusSection: some View {

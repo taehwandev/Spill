@@ -1,15 +1,21 @@
 import AppKit
 import SwiftUI
 
+private struct TokenUsageClearRequest: Identifiable {
+    let id = UUID()
+    let scope: TokenUsageClearScope
+    let preview: TokenUsageClearPreview
+}
+
 struct TokenMeteringDashboardView: View {
     @ObservedObject var store: TokenUsageDashboardStore
     @ObservedObject private var settings: SpillSettings
     @State private var copiedTarget: String?
     @State private var isDiagnosticsExpanded = false
     @State private var hoveredFilterTitle: String? = nil
+    @State private var pendingClearRequest: TokenUsageClearRequest?
+    @State private var presentedWorkItemID: String?
     private let titleDidChange: () -> Void
-
-    static let showsClearAction = true
 
     init(
         store: TokenUsageDashboardStore,
@@ -70,6 +76,33 @@ struct TokenMeteringDashboardView: View {
             titleDidChange()
             store.setLanguage(currentLanguage)
         }
+        .alert(
+            t(.deleteTokenDataTitle),
+            isPresented: Binding(
+                get: { pendingClearRequest != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        pendingClearRequest = nil
+                    }
+                }
+            ),
+            presenting: pendingClearRequest
+        ) { request in
+            Button(t(.deleteTokenDataCancel), role: .cancel) {
+                pendingClearRequest = nil
+            }
+            Button(t(.deleteTokenDataConfirm), role: .destructive) {
+                store.clearEvents(in: request.scope)
+                pendingClearRequest = nil
+            }
+        } message: { request in
+            Text(TokenMeteringL10n.deleteTokenDataMessage(
+                scope: request.preview.scopeTitle,
+                eventCount: request.preview.eventCount,
+                tokens: TokenUsageDashboardSnapshot.formatTokens(request.preview.totalTokens),
+                language: currentLanguage
+            ))
+        }
     }
 
     private var topHeader: some View {
@@ -99,10 +132,23 @@ struct TokenMeteringDashboardView: View {
                     localOnlyBadge
                 }
 
-                Text(t(.dashboardSubtitle))
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                HStack(spacing: 6) {
+                    Text(t(.dashboardSubtitle))
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+
+                    if let overallUpdated = store.snapshot.overallLastUpdatedString {
+                        Text("•")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(.secondary.opacity(0.5))
+
+                        Text("\(t(.lastUpdatedLabel)): \(overallUpdated)")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
             }
 
             Spacer(minLength: 16)
@@ -143,14 +189,6 @@ struct TokenMeteringDashboardView: View {
                     Label(copiedTarget == "prompt" ? t(.copied) : t(.copyPrompt), systemImage: copiedTarget == "prompt" ? "checkmark" : "doc.on.doc")
                 }
 
-                if Self.showsClearAction {
-                    Button(role: .destructive) {
-                        store.clearLocalEvents()
-                    } label: {
-                        Label(t(.clear), systemImage: "trash")
-                    }
-                    .disabled(store.snapshot.eventCount == 0)
-                }
             }
             .buttonStyle(.bordered)
             .font(.system(size: 11, weight: .semibold))
@@ -176,12 +214,16 @@ struct TokenMeteringDashboardView: View {
                     }
                 }
 
+                recentMonthPanel
+
                 railPanel(title: t(.aiTool)) {
                     VStack(spacing: 7) {
                         ForEach(store.snapshot.toolFilters) { filter in
+                            let toolLastUpdated = lastUpdatedString(for: filter.tool)
                             railFilterButton(
                                 title: filter.title,
                                 detail: filter.detail,
+                                lastUpdated: toolLastUpdated,
                                 isSelected: filter.isSelected,
                                 liveUpdateID: "filter:tool:\(filter.id)"
                             ) {
@@ -209,6 +251,68 @@ struct TokenMeteringDashboardView: View {
                 diagnostics
             }
             .padding(.vertical, 18)
+        }
+    }
+
+    private var recentMonthPanel: some View {
+        railPanel(title: t(.recentMonth)) {
+            VStack(spacing: 8) {
+                HStack(spacing: 8) {
+                    Button {
+                        store.showPreviousCalendarMonth()
+                    } label: {
+                        Image(systemName: "chevron.left")
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(!store.snapshot.canNavigatePreviousCalendarMonth)
+                    .help(t(.previousMonth))
+
+                    Text(store.snapshot.calendarMonthTitle)
+                        .font(.system(size: 10, weight: .bold))
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity)
+
+                    Button {
+                        store.showNextCalendarMonth()
+                    } label: {
+                        Image(systemName: "chevron.right")
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(!store.snapshot.canNavigateNextCalendarMonth)
+                    .help(t(.nextMonth))
+                }
+
+                LazyVGrid(
+                    columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 7),
+                    spacing: 4
+                ) {
+                    ForEach(Array(store.snapshot.calendarWeekdayTitles.enumerated()), id: \.offset) { _, title in
+                        Text(title)
+                            .font(.system(size: 8, weight: .black))
+                            .foregroundStyle(.secondary)
+                            .frame(height: 14)
+                    }
+
+                    ForEach(store.snapshot.calendarDays) { day in
+                        if day.isPlaceholder {
+                            Color.clear
+                                .frame(height: 24)
+                        } else {
+                            VStack(spacing: 2) {
+                                Text(day.title)
+                                    .font(.system(size: 8, weight: day.hasEvents ? .bold : .medium, design: .monospaced))
+                                    .foregroundStyle(day.isCurrentMonth ? Color.primary : Color.secondary.opacity(0.55))
+                                Capsule(style: .continuous)
+                                    .fill(day.hasEvents ? Color.teal : Color.primary.opacity(0.08))
+                                    .frame(height: 4)
+                                    .opacity(day.hasEvents ? max(0.35, min(1.0, day.ratio)) : 1.0)
+                            }
+                            .frame(height: 24)
+                            .help(day.detail)
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -301,44 +405,11 @@ struct TokenMeteringDashboardView: View {
     private var rightRail: some View {
         ScrollView(.vertical, showsIndicators: false) {
             VStack(alignment: .leading, spacing: 14) {
-                detailPanel
                 modelPanel
                 sourcePanel
                 privacyPanel
             }
             .padding(.vertical, 18)
-        }
-    }
-
-    private var detailPanel: some View {
-        railPanel(
-            title: t(.selectedRun),
-            infoTitle: t(.runsInfoTitle),
-            infoDetail: t(.runsInfoDetail)
-        ) {
-            if let session = store.snapshot.selectedSession {
-                VStack(alignment: .leading, spacing: 11) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(session.title)
-                            .font(.system(size: 11, weight: .bold))
-                            .lineLimit(2)
-                        Text(session.detail)
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-
-                    HStack {
-                        metricPill(title: t(.total), value: session.value, liveUpdateID: "session:\(session.id)")
-                        metricPill(title: t(.events), value: "\(session.eventCount)", liveUpdateID: "session:\(session.id)")
-                    }
-                }
-            } else {
-                emptyMessage(
-                    title: t(.noRunSelected),
-                    detail: t(.noRunSelectedDetail)
-                )
-            }
         }
     }
 
@@ -406,11 +477,12 @@ struct TokenMeteringDashboardView: View {
                     .padding(.bottom, 8)
 
                     ForEach(store.snapshot.sessions.prefix(8)) { session in
-                        let isSelected = store.snapshot.selectedSession?.id == session.id
+                        let isSelected = presentedWorkItemID == session.id
                         let liveUpdateID = "session:\(session.id)"
                         let isLiveUpdated = store.isLiveUpdated(liveUpdateID)
                         Button {
-                            store.selectSession(session.id)
+                            store.clearWorkItemSelection()
+                            presentedWorkItemID = session.id
                         } label: {
                             HStack(spacing: 12) {
                                 HStack(spacing: 6) {
@@ -445,9 +517,152 @@ struct TokenMeteringDashboardView: View {
                         }
                         .buttonStyle(.plain)
                         .padding(.top, 6)
+                        .popover(
+                            isPresented: Binding(
+                                get: {
+                                    presentedWorkItemID == session.id
+                                },
+                                set: { isPresented in
+                                    if !isPresented, presentedWorkItemID == session.id {
+                                        presentedWorkItemID = nil
+                                    }
+                                }
+                            ),
+                            arrowEdge: .trailing
+                        ) {
+                            workItemPopover(session)
+                        }
+                        .contextMenu {
+                            Button(role: .destructive) {
+                                requestClear(.workItem(session.id))
+                                if presentedWorkItemID == session.id {
+                                    presentedWorkItemID = nil
+                                }
+                            } label: {
+                                Label(t(.clearSelectedWorkItem), systemImage: "trash")
+                            }
+                        }
                     }
                 }
             }
+        }
+    }
+
+    private func workItemPopover(_ session: TokenUsageDashboardSessionRow) -> some View {
+        let detailSnapshot = store.snapshotForWorkItem(session.id)
+        let detailSession = detailSnapshot.selectedSession ?? session
+        let kpisByID = Dictionary(uniqueKeysWithValues: detailSnapshot.kpis.map { ($0.id, $0) })
+
+        return ScrollView(.vertical, showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 13) {
+                HStack(alignment: .top, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(t(.selectedRun).uppercased())
+                            .font(.system(size: 9, weight: .black))
+                            .tracking(1.0)
+                            .foregroundStyle(.secondary)
+                        Text(detailSession.title)
+                            .font(.system(size: 13, weight: .bold))
+                            .lineLimit(2)
+                        Text(detailSession.detail)
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    Spacer(minLength: 8)
+
+                    Button {
+                        presentedWorkItemID = nil
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                VStack(spacing: 8) {
+                    HStack {
+                        metricPill(
+                            title: t(.total),
+                            value: kpisByID["total"]?.value ?? detailSession.value,
+                            liveUpdateID: "session:\(detailSession.id)"
+                        )
+                        metricPill(
+                            title: t(.events),
+                            value: "\(detailSession.eventCount)",
+                            liveUpdateID: "session:\(detailSession.id)"
+                        )
+                    }
+                    HStack {
+                        metricPill(
+                            title: t(.input),
+                            value: kpisByID["input"]?.value ?? "-"
+                        )
+                        metricPill(
+                            title: t(.output),
+                            value: kpisByID["output"]?.value ?? "-"
+                        )
+                    }
+                }
+
+                workItemPopoverSection(
+                    title: t(.aiTool),
+                    rows: detailSnapshot.toolRows.prefix(4),
+                    emptyText: t(.noAIToolData),
+                    idPrefix: "tool"
+                )
+                workItemPopoverSection(
+                    title: t(.modelBreakdown),
+                    rows: detailSnapshot.modelRows.prefix(4),
+                    emptyText: t(.noModelData),
+                    idPrefix: "model"
+                )
+                workItemPopoverSection(
+                    title: t(.workflowBreakdown),
+                    rows: detailSnapshot.taskRows.prefix(4),
+                    emptyText: t(.noWorkflowData),
+                    idPrefix: "task"
+                )
+                workItemPopoverSection(
+                    title: t(.stageBreakdown),
+                    rows: detailSnapshot.stageRows.prefix(4),
+                    emptyText: t(.noStageData),
+                    idPrefix: "stage"
+                )
+                workItemPopoverSection(
+                    title: t(.sourceBreakdown),
+                    rows: detailSnapshot.sourceRows.prefix(4),
+                    emptyText: t(.noSourceBreakdown),
+                    idPrefix: "source"
+                )
+
+            }
+            .padding(14)
+        }
+        .frame(width: 380, alignment: .leading)
+        .frame(maxHeight: 560, alignment: .topLeading)
+    }
+
+    private func workItemPopoverSection<T: Collection>(
+        title: String,
+        rows: T,
+        emptyText: String,
+        idPrefix: String
+    ) -> some View where T.Element == TokenUsageDashboardBarRow {
+        VStack(alignment: .leading, spacing: 7) {
+            Text(title.uppercased())
+                .font(.system(size: 8.5, weight: .black))
+                .tracking(0.9)
+                .foregroundStyle(.secondary)
+            compactSummaryRows(rows, emptyText: emptyText, idPrefix: idPrefix)
+        }
+        .padding(10)
+        .background(Color.primary.opacity(0.025), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.primary.opacity(0.04), lineWidth: 0.5)
         }
     }
 
@@ -572,6 +787,7 @@ struct TokenMeteringDashboardView: View {
     private func railFilterButton(
         title: String,
         detail: String,
+        lastUpdated: String? = nil,
         isSelected: Bool,
         liveUpdateID: String? = nil,
         action: @escaping () -> Void
@@ -594,6 +810,12 @@ struct TokenMeteringDashboardView: View {
                         .lineLimit(1)
                         .contentTransition(.numericText())
                         .animation(.snappy(duration: 0.35), value: detail)
+                    if let lastUpdated {
+                        Text(lastUpdated)
+                            .font(.system(size: 8, weight: .medium))
+                            .foregroundStyle(isSelected ? .white.opacity(0.6) : .secondary.opacity(0.8))
+                            .lineLimit(1)
+                    }
                 }
 
                 Spacer(minLength: 0)
@@ -604,7 +826,7 @@ struct TokenMeteringDashboardView: View {
                 )
             }
             .padding(.horizontal, 10)
-            .frame(height: 38)
+            .frame(height: lastUpdated != nil ? 44 : 38)
             .foregroundStyle(isSelected ? .white : .primary)
             .background {
                 if isSelected {
@@ -630,6 +852,28 @@ struct TokenMeteringDashboardView: View {
             withAnimation(.easeOut(duration: 0.15)) {
                 hoveredFilterTitle = hovering ? title : nil
             }
+        }
+    }
+
+    private func requestClear(_ scope: TokenUsageClearScope) {
+        let preview = store.clearPreview(for: scope)
+        guard preview.hasEvents else {
+            return
+        }
+        pendingClearRequest = TokenUsageClearRequest(scope: scope, preview: preview)
+    }
+
+    private func lastUpdatedString(for tool: TokenUsageAITool?) -> String? {
+        guard let tool else { return nil }
+        switch tool {
+        case .codex:
+            return store.snapshot.codexLastUpdatedString
+        case .claude:
+            return store.snapshot.claudeLastUpdatedString
+        case .antigravity:
+            return store.snapshot.antigravityLastUpdatedString
+        default:
+            return nil
         }
     }
 
