@@ -44,6 +44,15 @@ LABEL_FILE = pathlib.Path(
         pathlib.Path.home() / "Library/Application Support/Spill/token-metering/label-context/claude.json",
     )
 )
+DIAGNOSTICS_DIR = pathlib.Path(
+    os.environ.get(
+        "SPILL_TOKEN_USAGE_DIAGNOSTICS_DIR",
+        pathlib.Path.home() / "Library/Application Support/Spill/token-metering/diagnostics",
+    )
+)
+EMPTY_DIAGNOSTIC_FILE_NAME = "claude-last-empty.json"
+MISMATCH_DIAGNOSTIC_FILE_NAME = "claude-last-mismatch.json"
+SUCCESS_DIAGNOSTIC_FILE_NAME = "claude-last-success.json"
 _OPAQUE_ID = re.compile(r'^[A-Za-z0-9_-]{6,64}$')
 _MODEL_ID = re.compile(r'^[A-Za-z0-9_.:-]{2,80}$')
 _SAFE_SLUG = re.compile(r'^[a-z][a-z0-9_]{1,40}$')
@@ -137,6 +146,104 @@ def _enqueue_event(event: dict) -> None:
     os.replace(temporary_path, final_path)
 
 
+def _diagnostic_timestamp() -> str:
+    return datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+
+def _safe_payload_shape(payload: dict = None) -> dict:
+    if not isinstance(payload, dict):
+        return {
+            "payload_object": False,
+            "has_transcript_path": False,
+            "has_session_id": False,
+            "has_safe_label_hint": False,
+        }
+
+    return {
+        "payload_object": True,
+        "has_transcript_path": isinstance(payload.get("transcript_path"), str)
+        and bool(payload.get("transcript_path")),
+        "has_session_id": isinstance(payload.get("session_id"), str)
+        and bool(payload.get("session_id")),
+        "has_safe_label_hint": any(
+            isinstance(payload.get(key), str) and _SAFE_SLUG.match(payload.get(key))
+            for key in ("task_type", "taskType", "stage", "workflow_stage", "workflowStage")
+        ),
+    }
+
+
+def _write_diagnostic_file(filename: str, kind: str, reason: str, payload: dict = None, meaning: str = "") -> None:
+    if os.environ.get("SPILL_TOKEN_USAGE_DISABLE_DIAGNOSTICS") == "1":
+        return
+
+    diagnostic = {
+        "schema_version": 1,
+        "ai_tool": "claude",
+        "kind": kind,
+        "reason": reason,
+        "created_at": _diagnostic_timestamp(),
+        "expected_input_contracts": [
+            "claude_stop_hook_transcript_path",
+            "claude_stop_hook_session_id",
+        ],
+        "observed_safe_shape": _safe_payload_shape(payload),
+        "privacy": "No payload values, prompts, commands, file paths, logs, diffs, transcript content, source, environment values, or secrets are stored.",
+    }
+    if meaning:
+        diagnostic["meaning"] = meaning
+
+    try:
+        DIAGNOSTICS_DIR.mkdir(parents=True, exist_ok=True)
+        final_path = DIAGNOSTICS_DIR / filename
+        temporary_path = DIAGNOSTICS_DIR / f".{filename}.tmp"
+        with open(temporary_path, "w") as f:
+            f.write(json.dumps(diagnostic, separators=(",", ":")))
+        os.chmod(temporary_path, 0o600)
+        os.replace(temporary_path, final_path)
+    except Exception:
+        pass
+
+
+def _write_success_diagnostic(event: dict) -> None:
+    if os.environ.get("SPILL_TOKEN_USAGE_DISABLE_DIAGNOSTICS") == "1":
+        return
+
+    diagnostic = {
+        "schema_version": 1,
+        "ai_tool": "claude",
+        "kind": "success",
+        "reason": "usage_event_enqueued",
+        "created_at": _diagnostic_timestamp(),
+        "event_created_at": event["created_at"],
+        "task_type": event["task_type"],
+        "stage": event["stage"],
+        "model": event["model"],
+        "input_tokens": event["input_tokens"],
+        "output_tokens": event["output_tokens"],
+        "total_tokens": event["total_tokens"],
+        "privacy": "No prompts, commands, file paths, logs, diffs, transcript content, source, environment values, secrets, run ids, or span ids are stored.",
+    }
+
+    try:
+        DIAGNOSTICS_DIR.mkdir(parents=True, exist_ok=True)
+        final_path = DIAGNOSTICS_DIR / SUCCESS_DIAGNOSTIC_FILE_NAME
+        temporary_path = DIAGNOSTICS_DIR / f".{SUCCESS_DIAGNOSTIC_FILE_NAME}.tmp"
+        with open(temporary_path, "w") as f:
+            f.write(json.dumps(diagnostic, separators=(",", ":")))
+        os.chmod(temporary_path, 0o600)
+        os.replace(temporary_path, final_path)
+        _clear_diagnostic_file(MISMATCH_DIAGNOSTIC_FILE_NAME)
+    except Exception:
+        pass
+
+
+def _clear_diagnostic_file(filename: str) -> None:
+    try:
+        (DIAGNOSTICS_DIR / filename).unlink()
+    except Exception:
+        pass
+
+
 def _stable_span_id(*parts: str) -> str:
     source = ":".join(parts)
     return "span-" + hashlib.sha256(source.encode("utf-8")).hexdigest()[:12]
@@ -196,14 +303,39 @@ def _infer_stage(tool_names: set) -> str:
 
 def main() -> None:
     try:
-        payload = json.load(sys.stdin)
+        raw_payload = sys.stdin.read()
     except Exception:
+        _write_diagnostic_file(MISMATCH_DIAGNOSTIC_FILE_NAME, "runtime_payload_mismatch", "stdin_unavailable")
+        return
+
+    if not raw_payload.strip():
+        _write_diagnostic_file(
+            EMPTY_DIAGNOSTIC_FILE_NAME,
+            "empty_stdin_hook_call",
+            "empty_stdin",
+            meaning="Claude Code invoked the Stop hook without a transcript payload on stdin; no usage event can be created.",
+        )
+        return
+
+    try:
+        payload = json.loads(raw_payload)
+    except Exception:
+        _write_diagnostic_file(MISMATCH_DIAGNOSTIC_FILE_NAME, "runtime_payload_mismatch", "invalid_json")
+        return
+
+    if not isinstance(payload, dict):
+        _write_diagnostic_file(MISMATCH_DIAGNOSTIC_FILE_NAME, "runtime_payload_mismatch", "non_object_payload")
         return
 
     transcript_path = payload.get("transcript_path", "")
     session_id = payload.get("session_id", "")
 
-    if not transcript_path or not pathlib.Path(transcript_path).is_file():
+    if not transcript_path:
+        _write_diagnostic_file(MISMATCH_DIAGNOSTIC_FILE_NAME, "runtime_payload_mismatch", "missing_transcript_path", payload)
+        return
+
+    if not pathlib.Path(transcript_path).is_file():
+        _write_diagnostic_file(MISMATCH_DIAGNOSTIC_FILE_NAME, "runtime_payload_mismatch", "transcript_unavailable", payload)
         return
 
     # Collect all assistant messages across the entire session.
@@ -230,9 +362,17 @@ def main() -> None:
         # Include any trailing assistant messages (current turn in progress).
         all_turns.extend(current_group)
     except Exception:
+        _write_diagnostic_file(MISMATCH_DIAGNOSTIC_FILE_NAME, "runtime_payload_mismatch", "transcript_read_failed", payload)
         return
 
     if not all_turns:
+        _write_diagnostic_file(
+            EMPTY_DIAGNOSTIC_FILE_NAME,
+            "no_usage_hook_call",
+            "no_assistant_usage",
+            payload,
+            meaning="Claude Stop hook ran, but the transcript did not expose assistant usage records for this stop.",
+        )
         return
 
     # Collect tool names from all turns (name field only, not inputs).
@@ -254,6 +394,13 @@ def main() -> None:
     session_output = sum(t["usage"].get("output_tokens", 0) for t in all_turns)
 
     if session_fresh == 0 and session_output == 0:
+        _write_diagnostic_file(
+            EMPTY_DIAGNOSTIC_FILE_NAME,
+            "no_usage_hook_call",
+            "zero_token_usage",
+            payload,
+            meaning="Claude Stop hook ran, but exact token usage totals were zero.",
+        )
         return
 
     raw_model = all_turns[-1].get("model", "")
@@ -271,6 +418,13 @@ def main() -> None:
         # No new tokens since last fire — update state in case this is the first run.
         if prev_fresh == 0 and prev_output == 0:
             _save_session_state(run_id, session_fresh, session_output)
+        _write_diagnostic_file(
+            EMPTY_DIAGNOSTIC_FILE_NAME,
+            "no_usage_hook_call",
+            "no_new_token_delta",
+            payload,
+            meaning="Claude Stop hook ran, but this session checkpoint had no new exact usage delta to enqueue.",
+        )
         return
 
     _save_session_state(run_id, session_fresh, session_output)
@@ -322,6 +476,7 @@ def main() -> None:
     }
 
     _enqueue_event(event)
+    _write_success_diagnostic(event)
     _consume_label_file()
 
 

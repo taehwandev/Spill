@@ -30,14 +30,10 @@ DIAGNOSTICS_DIR = pathlib.Path(
         pathlib.Path.home() / "Library/Application Support/Spill/token-metering/diagnostics",
     )
 )
-DIAGNOSTIC_FILE_NAME = "antigravity-latest.json"
-_DIAGNOSTIC_PRIORITIES = {
-    "empty_stdin": 10,
-    "stdin_unavailable": 20,
-    "invalid_json": 30,
-    "non_object_payload": 30,
-    "missing_exact_token_usage": 100,
-}
+EMPTY_DIAGNOSTIC_FILE_NAME = "antigravity-last-empty.json"
+MISMATCH_DIAGNOSTIC_FILE_NAME = "antigravity-last-mismatch.json"
+SUCCESS_DIAGNOSTIC_FILE_NAME = "antigravity-last-success.json"
+LEGACY_DIAGNOSTIC_FILE_NAME = "antigravity-latest.json"
 LABEL_FILE = pathlib.Path(
     os.environ.get(
         "SPILL_TOKEN_USAGE_LABEL_FILE",
@@ -136,16 +132,20 @@ def _enqueue_event(event: dict) -> None:
     os.replace(temporary_path, final_path)
 
 
-def _write_diagnostic(reason: str, payload: dict = None) -> None:
+def _diagnostic_timestamp() -> str:
+    return datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+
+def _write_diagnostic_file(filename: str, kind: str, reason: str, payload: dict = None, meaning: str = "") -> None:
     if os.environ.get("SPILL_TOKEN_USAGE_DISABLE_DIAGNOSTICS") == "1":
         return
 
     diagnostic = {
         "schema_version": 1,
         "ai_tool": "antigravity",
-        "kind": "runtime_payload_mismatch",
+        "kind": kind,
         "reason": reason,
-        "created_at": datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+        "created_at": _diagnostic_timestamp(),
         "expected_input_contracts": [
             "top_level_input_output_tokens",
             "usage_input_output_tokens",
@@ -156,13 +156,13 @@ def _write_diagnostic(reason: str, payload: dict = None) -> None:
         "observed_safe_shape": _safe_payload_shape(payload),
         "privacy": "No payload values, prompts, commands, file paths, logs, diffs, source, environment values, or secrets are stored.",
     }
+    if meaning:
+        diagnostic["meaning"] = meaning
 
     try:
         DIAGNOSTICS_DIR.mkdir(parents=True, exist_ok=True)
-        final_path = DIAGNOSTICS_DIR / DIAGNOSTIC_FILE_NAME
-        if _existing_diagnostic_priority(final_path) > _diagnostic_priority(reason):
-            return
-        temporary_path = DIAGNOSTICS_DIR / ".antigravity-latest.tmp"
+        final_path = DIAGNOSTICS_DIR / filename
+        temporary_path = DIAGNOSTICS_DIR / f".{filename}.tmp"
         with open(temporary_path, "w") as f:
             f.write(json.dumps(diagnostic, separators=(",", ":")))
         os.chmod(temporary_path, 0o600)
@@ -171,19 +171,36 @@ def _write_diagnostic(reason: str, payload: dict = None) -> None:
         pass
 
 
-def _diagnostic_priority(reason: str) -> int:
-    return _DIAGNOSTIC_PRIORITIES.get(reason, 50)
+def _write_success_diagnostic(event: dict) -> None:
+    if os.environ.get("SPILL_TOKEN_USAGE_DISABLE_DIAGNOSTICS") == "1":
+        return
 
+    diagnostic = {
+        "schema_version": 1,
+        "ai_tool": "antigravity",
+        "kind": "success",
+        "reason": "usage_event_enqueued",
+        "created_at": _diagnostic_timestamp(),
+        "event_created_at": event["created_at"],
+        "task_type": event["task_type"],
+        "stage": event["stage"],
+        "model": event["model"],
+        "input_tokens": event["input_tokens"],
+        "output_tokens": event["output_tokens"],
+        "total_tokens": event["total_tokens"],
+        "privacy": "No prompts, commands, file paths, logs, diffs, source, environment values, secrets, run ids, or span ids are stored.",
+    }
 
-def _existing_diagnostic_priority(path: pathlib.Path) -> int:
     try:
-        data = json.loads(path.read_text())
+        DIAGNOSTICS_DIR.mkdir(parents=True, exist_ok=True)
+        final_path = DIAGNOSTICS_DIR / SUCCESS_DIAGNOSTIC_FILE_NAME
+        temporary_path = DIAGNOSTICS_DIR / f".{SUCCESS_DIAGNOSTIC_FILE_NAME}.tmp"
+        with open(temporary_path, "w") as f:
+            f.write(json.dumps(diagnostic, separators=(",", ":")))
+        os.chmod(temporary_path, 0o600)
+        os.replace(temporary_path, final_path)
     except Exception:
-        return 0
-    if not isinstance(data, dict):
-        return 0
-    reason = data.get("reason")
-    return _diagnostic_priority(reason) if isinstance(reason, str) else 0
+        pass
 
 
 def _safe_payload_shape(payload: dict = None) -> dict:
@@ -426,27 +443,42 @@ def _read_stdin_nonblocking() -> str:
     return ""
 
 
+def _clear_diagnostic() -> None:
+    try:
+        for name in (MISMATCH_DIAGNOSTIC_FILE_NAME, LEGACY_DIAGNOSTIC_FILE_NAME):
+            final_path = DIAGNOSTICS_DIR / name
+            if final_path.is_file():
+                final_path.unlink()
+    except Exception:
+        pass
+
+
 def main() -> None:
     raw_payload = _read_stdin_nonblocking()
 
     if not raw_payload.strip():
-        _write_diagnostic("empty_stdin")
+        _write_diagnostic_file(
+            EMPTY_DIAGNOSTIC_FILE_NAME,
+            "empty_stdin_hook_call",
+            "empty_stdin",
+            meaning="AGY invoked the hook for a lifecycle or tool step that did not expose token usage payload on stdin.",
+        )
         return
 
     try:
         payload = json.loads(raw_payload)
     except Exception:
-        _write_diagnostic("invalid_json")
+        _write_diagnostic_file(MISMATCH_DIAGNOSTIC_FILE_NAME, "runtime_payload_mismatch", "invalid_json")
         return
 
     if not isinstance(payload, dict):
-        _write_diagnostic("non_object_payload")
+        _write_diagnostic_file(MISMATCH_DIAGNOSTIC_FILE_NAME, "runtime_payload_mismatch", "non_object_payload")
         return
 
     input_tokens, output_tokens, total, total_only = _payload_token_counts(payload)
 
     if total <= 0:
-        _write_diagnostic("missing_exact_token_usage", payload)
+        _write_diagnostic_file(MISMATCH_DIAGNOSTIC_FILE_NAME, "runtime_payload_mismatch", "missing_exact_token_usage", payload)
         return
 
     model = _payload_model(payload)
@@ -503,6 +535,8 @@ def main() -> None:
 
     _enqueue_event(event)
     _consume_label_file()
+    _clear_diagnostic()
+    _write_success_diagnostic(event)
 
 
 if __name__ == "__main__":

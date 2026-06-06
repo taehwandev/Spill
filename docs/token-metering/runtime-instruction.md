@@ -28,6 +28,18 @@ Runtime input normalization:
   booleans about whether expected token fields were present. Diagnostics must
   never store payload values, prompts, responses, commands, file paths, logs,
   diffs, source content, environment values, or secrets.
+- AGY empty stdin is a normal no-event hook call when a lifecycle or tool step
+  completes without token usage. Record it only as `antigravity-last-empty.json`;
+  do not treat it as a failed metering state.
+- AGY payload mismatches must be isolated in `antigravity-last-mismatch.json`.
+  Successful AGY usage events must update `antigravity-last-success.json` and
+  clear stale mismatch diagnostics.
+- Claude Code uses a different Stop-hook contract: stdin should contain a safe
+  payload with a `transcript_path`, and the adapter reads exact usage from the
+  transcript. Claude diagnostics must be split into `claude-last-empty.json`,
+  `claude-last-mismatch.json`, and `claude-last-success.json` so hook execution,
+  no-event outcomes, and real payload failures can be distinguished without
+  storing transcript paths or transcript content.
 
 Runtime label handoff:
 

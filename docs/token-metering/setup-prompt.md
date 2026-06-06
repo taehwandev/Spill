@@ -57,15 +57,23 @@ For Antigravity/AGY specifically, verify both things separately:
   normalized `spill_token_usage` object.
 
 If AGY runs the hook but does not expose exact token fields, the adapter must not
-invent usage. It should leave a local-only safe diagnostic under Spill's
-token-metering diagnostics directory and skip the usage event until the runtime
-or workflow provides exact counts.
+invent usage. AGY may invoke `PostInvocation` for lifecycle or tool steps that
+consume no model tokens and therefore pass empty stdin. Treat empty stdin as a
+normal no-event hook call, not as a metering failure. Leave local-only safe
+diagnostics under Spill's token-metering diagnostics directory and skip the
+usage event until the runtime or workflow provides exact counts.
 
 AGY diagnostic files must use this fixed local-only protocol:
 
-- Write `~/Library/Application Support/Spill/token-metering/diagnostics/antigravity-latest.json`.
+- Write `~/Library/Application Support/Spill/token-metering/diagnostics/antigravity-last-empty.json`
+  for empty stdin hook calls. Use `kind: "empty_stdin_hook_call"` and
+  `reason: "empty_stdin"`.
+- Write `~/Library/Application Support/Spill/token-metering/diagnostics/antigravity-last-mismatch.json`
+  for payloads that exist but do not match a supported exact-count shape.
+- Write `~/Library/Application Support/Spill/token-metering/diagnostics/antigravity-last-success.json`
+  after a valid usage event is enqueued.
 - Write a `.tmp` file in the same diagnostics directory first, close it, then
-  atomically rename it to `antigravity-latest.json`.
+  atomically rename it to the final diagnostic file.
 - The JSON object must contain only safe diagnostic metadata keys such as
   `schema_version`, `ai_tool`, `kind`, `reason`, `created_at`,
   `expected_input_contracts`, `observed_safe_shape`, and `privacy`.
@@ -73,11 +81,26 @@ AGY diagnostic files must use this fixed local-only protocol:
   payload was an object, whether exact input/output token fields were present,
   whether only total tokens were present, whether a model hint was present, and
   whether an opaque run hint was present.
+- Success diagnostics may include only safe labels, model id, numeric token
+  counts, and timestamps. Do not store run ids or span ids in diagnostics.
 - Never store raw payload values, prompts, responses, commands, file paths, logs,
-  diffs, source content, environment values, or secrets in diagnostics.
-- Low-information diagnostics such as `empty_stdin` must not overwrite a more
-  useful `missing_exact_token_usage` diagnostic that records the safe observed
-  shape of an AGY runtime payload.
+  diffs, transcript content, source content, environment values, or secrets in
+  diagnostics.
+- Empty stdin diagnostics must never overwrite mismatch or success diagnostics.
+  On success, clear stale mismatch diagnostics and the legacy
+  `antigravity-latest.json` diagnostic if present.
+
+Claude Code diagnostic files must use the same local-only separation:
+
+- Write `claude-last-empty.json` for empty stdin, no assistant usage, zero token
+  usage, or no new token delta. These are no-event outcomes, not usage events.
+- Write `claude-last-mismatch.json` when the Stop hook payload is invalid,
+  missing `transcript_path`, points to an unavailable transcript, or the
+  transcript cannot be read.
+- Write `claude-last-success.json` after a valid usage event is enqueued.
+- Claude diagnostics must not store transcript paths, transcript content,
+  prompts, responses, commands, file paths, logs, diffs, source content,
+  environment values, secrets, run ids, or span ids.
 
 After the setup installer succeeds, fetch the current runtime instruction and apply it as a global agent instruction:
 
