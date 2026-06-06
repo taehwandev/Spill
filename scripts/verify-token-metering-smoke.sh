@@ -366,6 +366,87 @@ if (event.task_type !== "code_generation" || event.stage !== "implement") {
 }
 NODE
 
+CODEX_FALLBACK_HOME="$ADAPTER_TMP_DIR/codex-fallback-home"
+CODEX_FALLBACK_INBOX="$ADAPTER_TMP_DIR/codex-fallback-inbox"
+CODEX_FALLBACK_STATE="$ADAPTER_TMP_DIR/codex-fallback-state.json"
+CODEX_FALLBACK_SESSION_DIR="$CODEX_FALLBACK_HOME/sessions/2026/06/05"
+mkdir -p "$CODEX_FALLBACK_SESSION_DIR" "$CODEX_FALLBACK_INBOX"
+CODEX_FALLBACK_SESSION="$CODEX_FALLBACK_SESSION_DIR/rollout-spill-fallback.jsonl"
+CODEX_FALLBACK_SESSION="$CODEX_FALLBACK_SESSION" node --input-type=module <<'NODE'
+import { writeFile } from 'node:fs/promises';
+
+const timestamp = new Date().toISOString();
+const lines = [
+  {
+    timestamp,
+    type: "session_meta",
+    originator: "codex_cli_rs",
+    session_id: "codexFallbackRun01",
+    model: "gpt-5-codex",
+  },
+  {
+    timestamp,
+    type: "event_msg",
+    payload: {
+      type: "agent_event",
+      item: {
+        type: "function_call",
+        name: "apply_patch",
+      },
+    },
+  },
+  {
+    timestamp,
+    type: "event_msg",
+    payload: {
+      type: "token_count",
+      info: {
+        model: "gpt-5-codex",
+        last_token_usage: {
+          input_tokens: 42,
+          cached_input_tokens: 0,
+          output_tokens: 8,
+          reasoning_output_tokens: 0,
+          total_tokens: 50,
+        },
+        total_token_usage: {
+          input_tokens: 42,
+          cached_input_tokens: 0,
+          output_tokens: 8,
+          reasoning_output_tokens: 0,
+          total_tokens: 50,
+        },
+      },
+    },
+  },
+].map((line) => JSON.stringify(line)).join("\n");
+
+await writeFile(process.env.CODEX_FALLBACK_SESSION, `${lines}\n`);
+NODE
+
+node "$ROOT_DIR/scripts/spill-codex-session-importer.mjs" \
+    --codex-home "$CODEX_FALLBACK_HOME" \
+    --transport file \
+    --inbox "$CODEX_FALLBACK_INBOX" \
+    --events "$ADAPTER_TMP_DIR/codex-fallback-events.json" \
+    --state "$CODEX_FALLBACK_STATE" \
+    --since-hours 1 \
+    --json >/dev/null
+
+CODEX_FALLBACK_INBOX="$CODEX_FALLBACK_INBOX" node --input-type=module <<'NODE'
+import { readFile, readdir } from 'node:fs/promises';
+import { join } from 'node:path';
+
+const files = (await readdir(process.env.CODEX_FALLBACK_INBOX)).filter((file) => file.endsWith(".json"));
+if (files.length !== 1) {
+  throw new Error(`expected one Codex fallback event, found ${files.length}`);
+}
+const event = JSON.parse(await readFile(join(process.env.CODEX_FALLBACK_INBOX, files[0]), "utf8"));
+if (event.task_type !== "code_generation" || event.stage !== "implement") {
+  throw new Error(`expected Codex fallback code_generation/implement, found ${event.task_type}/${event.stage}`);
+}
+NODE
+
 INBOX_DIR="$INBOX_DIR" node --input-type=module <<'NODE'
 import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';

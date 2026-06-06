@@ -221,7 +221,7 @@ def _safe_payload_shape(payload: dict = None) -> dict:
         or _has_tokens_alias_input_output(payload),
         "has_total_only": _has_any_int_field(containers, _TOTAL_TOKEN_KEYS),
         "has_model_hint": bool(_payload_model_hint(payload)),
-        "has_opaque_run_hint": any(isinstance(payload.get(key), str) for key in ("session_id", "conversationId")),
+        "has_opaque_run_hint": bool(_payload_run_hint(payload)),
     }
 
 
@@ -232,20 +232,7 @@ def _stable_span_id(*parts: str) -> str:
 
 def _payload_model_hint(payload: dict) -> str:
     keys = ("model", "model_name", "modelName", "model_id", "modelId", "modelVersion")
-    for container in (
-        payload,
-        payload.get("spill_token_usage", {}),
-        payload.get("spillTokenUsage", {}),
-        payload.get("token_usage", {}),
-        payload.get("tokenUsage", {}),
-        payload.get("llm_request", {}),
-        payload.get("llmRequest", {}),
-        payload.get("usage", {}),
-        payload.get("response", {}),
-        payload.get("metadata", {}),
-    ):
-        if not isinstance(container, dict):
-            continue
+    for container in _token_containers(payload):
         for key in keys:
             value = container.get(key)
             if isinstance(value, str) and _MODEL_ID.match(value):
@@ -325,6 +312,21 @@ _CACHE_INPUT_KEYS = (
     "cache_read_input_tokens",
     "cacheReadInputTokens",
 )
+_TOKEN_ALIAS_CONTAINER_KEYS = (
+    "tokens",
+    "tokenCounts",
+    "token_counts",
+    "usageTokens",
+    "usage_tokens",
+)
+_RUN_HINT_KEYS = (
+    "session_id",
+    "sessionId",
+    "conversation_id",
+    "conversationId",
+    "run_id",
+    "runId",
+)
 
 
 def _add_container(containers: list[dict], candidate) -> None:
@@ -334,7 +336,25 @@ def _add_container(containers: list[dict], candidate) -> None:
 
 def _token_containers(payload: dict) -> list[dict]:
     containers: list[dict] = []
-    _add_container(containers, payload)
+    seen: set[int] = set()
+
+    def visit(candidate, depth: int = 0) -> None:
+        if depth > 8:
+            return
+        if isinstance(candidate, dict):
+            object_id = id(candidate)
+            if object_id in seen:
+                return
+            seen.add(object_id)
+            containers.append(candidate)
+            for value in candidate.values():
+                visit(value, depth + 1)
+        elif isinstance(candidate, list):
+            for item in candidate[:100]:
+                visit(item, depth + 1)
+
+    visit(payload)
+
     for key in (
         "spill_token_usage",
         "spillTokenUsage",
@@ -360,6 +380,30 @@ def _token_containers(payload: dict) -> list[dict]:
     return containers
 
 
+def _token_alias_containers(payload: dict) -> list[dict]:
+    containers: list[dict] = []
+    seen: set[int] = set()
+
+    def visit(candidate, depth: int = 0) -> None:
+        if depth > 8:
+            return
+        if isinstance(candidate, dict):
+            object_id = id(candidate)
+            if object_id in seen:
+                return
+            seen.add(object_id)
+            for key, value in candidate.items():
+                if key in _TOKEN_ALIAS_CONTAINER_KEYS and isinstance(value, dict):
+                    containers.append(value)
+                visit(value, depth + 1)
+        elif isinstance(candidate, list):
+            for item in candidate[:100]:
+                visit(item, depth + 1)
+
+    visit(payload)
+    return containers
+
+
 def _first_positive_int(containers: list[dict], keys: tuple[str, ...]) -> int:
     for container in containers:
         for key in keys:
@@ -374,10 +418,8 @@ def _has_any_int_field(containers: list[dict], keys: tuple[str, ...]) -> bool:
 
 
 def _has_tokens_alias_input_output(payload: dict) -> bool:
-    tokens = payload.get("tokens")
-    if not isinstance(tokens, dict):
-        return False
-    return _has_any_int_field([tokens], _TOKENS_INPUT_KEYS) or _has_any_int_field([tokens], _TOKENS_OUTPUT_KEYS)
+    containers = _token_alias_containers(payload)
+    return _has_any_int_field(containers, _TOKENS_INPUT_KEYS) or _has_any_int_field(containers, _TOKENS_OUTPUT_KEYS)
 
 
 def _payload_token_counts(payload: dict) -> tuple[int, int, int, bool]:
@@ -385,10 +427,9 @@ def _payload_token_counts(payload: dict) -> tuple[int, int, int, bool]:
     input_tokens = _first_positive_int(containers, _INPUT_TOKEN_KEYS)
     output_tokens = _first_positive_int(containers, _OUTPUT_TOKEN_KEYS)
     cache_tokens = _first_positive_int(containers, _CACHE_INPUT_KEYS)
-    tokens = payload.get("tokens")
-    if isinstance(tokens, dict):
-        input_tokens = input_tokens or _first_positive_int([tokens], _TOKENS_INPUT_KEYS)
-        output_tokens = output_tokens or _first_positive_int([tokens], _TOKENS_OUTPUT_KEYS)
+    token_alias_containers = _token_alias_containers(payload)
+    input_tokens = input_tokens or _first_positive_int(token_alias_containers, _TOKENS_INPUT_KEYS)
+    output_tokens = output_tokens or _first_positive_int(token_alias_containers, _TOKENS_OUTPUT_KEYS)
     # cached content tokens count as input for billing purposes
     if cache_tokens > 0 and input_tokens == 0:
         input_tokens = cache_tokens
@@ -402,6 +443,15 @@ def _payload_token_counts(payload: dict) -> tuple[int, int, int, bool]:
         return total, 0, total, True
 
     return 0, 0, 0, False
+
+
+def _payload_run_hint(payload: dict) -> str:
+    for container in _token_containers(payload):
+        for key in _RUN_HINT_KEYS:
+            value = container.get(key)
+            if isinstance(value, str) and _OPAQUE_ID.match(value):
+                return value
+    return ""
 
 
 def _payload_span_hint(payload: dict, total_only: bool) -> str:
@@ -497,10 +547,7 @@ def main() -> None:
 
     model = _payload_model(payload)
     env_conv_id = os.environ.get("ANTIGRAVITY_CONVERSATION_ID", "")
-    session_id = (
-        env_conv_id
-        or str(payload.get("session_id", payload.get("conversationId", "")))
-    )
+    session_id = env_conv_id or _payload_run_hint(payload)
     run_id = _opaque(session_id, "run-" + uuid.uuid4().hex[:12])
     span_hint = _payload_span_hint(payload, total_only)
     span_id = _stable_span_id(run_id, model, str(input_tokens), str(output_tokens), str(total), span_hint)

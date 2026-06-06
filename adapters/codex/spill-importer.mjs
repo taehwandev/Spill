@@ -11,6 +11,42 @@ const DEFAULT_PORT = "48731";
 const DEFAULT_SINCE_HOURS = 24;
 const DEFAULT_WATCH_INTERVAL_MS = 5000;
 const MAX_LINE_BYTES = 1024 * 1024;
+const WRITE_TOOL_NAMES = new Set([
+  "apply_patch",
+  "edit",
+  "write",
+  "multi_edit",
+  "multiedit",
+  "notebook_edit",
+  "notebookedit",
+]);
+const READ_TOOL_NAMES = new Set([
+  "cat",
+  "find",
+  "grep",
+  "ls",
+  "nl",
+  "open",
+  "read",
+  "rg",
+  "screenshot",
+  "sed",
+  "view_image",
+  "wc",
+  "web_fetch",
+  "web_search",
+  "webfetch",
+  "websearch",
+]);
+const SHELL_TOOL_NAMES = new Set([
+  "bash",
+  "exec",
+  "exec_command",
+  "functions.exec_command",
+  "run_command",
+  "shell",
+  "terminal",
+]);
 
 const options = parseArgs(process.argv.slice(2));
 const codexHome = options.codexHome ?? process.env.CODEX_HOME ?? join(homedir(), ".codex");
@@ -79,14 +115,12 @@ const intervalMS = options.intervalMS ?? DEFAULT_WATCH_INTERVAL_MS;
 const taskTypeOverride = safeWorkflowSlug(
   options.taskType ??
     process.env.SPILL_TOKEN_USAGE_TASK_TYPE ??
-    process.env.SPILL_WORKFLOW_TASK_TYPE ??
-    runtimeLabel.taskType,
+    process.env.SPILL_WORKFLOW_TASK_TYPE,
 );
 const stageOverride = safeWorkflowSlug(
   options.stage ??
     process.env.SPILL_TOKEN_USAGE_STAGE ??
-    process.env.SPILL_WORKFLOW_STAGE ??
-    runtimeLabel.stage,
+    process.env.SPILL_WORKFLOW_STAGE,
 );
 const afterDate = options.after ? new Date(options.after) : sinceDate(options.sinceHours ?? DEFAULT_SINCE_HOURS);
 
@@ -119,11 +153,13 @@ async function importOnce() {
   let importedEvents = 0;
   let markedExisting = 0;
   let skippedSeen = 0;
+  let usedRuntimeLabel = false;
 
   for (const source of sources) {
     scannedFiles += 1;
-    const events = await parseSessionFile(source, afterDate, state);
-    for (const event of events) {
+    const records = await parseSessionFile(source, afterDate, state);
+    for (const record of records) {
+      const event = record.event;
       if (state.sentSpanIDs.includes(event.span_id) || storedSpans.has(event.span_id)) {
         skippedSeen += 1;
         continue;
@@ -143,6 +179,9 @@ async function importOnce() {
         storedSpans.add(event.span_id);
       }
 
+      if (record.usedRuntimeLabel) {
+        usedRuntimeLabel = true;
+      }
       state.sentSpanIDs.push(event.span_id);
       if (state.sentSpanIDs.length > 5000) {
         state.sentSpanIDs = state.sentSpanIDs.slice(-5000);
@@ -153,7 +192,7 @@ async function importOnce() {
   state.updatedAt = new Date().toISOString();
   if (!dryRun) {
     await writeState(statePath, state);
-    if (runtimeLabel.hasLabel && (importedEvents > 0 || markedExisting > 0 || skippedSeen > 0)) {
+    if (usedRuntimeLabel) {
       await unlink(labelPath).catch(() => {});
     }
   }
@@ -204,6 +243,7 @@ async function parseSessionFile(path, after, state) {
   const counters = {
     sessionID: "",
     sessionModel: "",
+    toolNames: new Set(),
     previousCumulativeTotal: null,
     previousInput: 0,
     previousCached: 0,
@@ -228,6 +268,9 @@ async function parseSessionFile(path, after, state) {
         const model = rawJSONField(line, "model");
         if (model) counters.sessionModel = model;
         continue;
+      }
+      if (mayContainToolMetadata(line)) {
+        collectSafeToolNames(safeJSON(line), counters.toolNames);
       }
       if (!line.includes('"token_count"')) continue;
 
@@ -262,19 +305,28 @@ async function parseSessionFile(path, after, state) {
   if (!delta) return [];
 
   counters.eventIndex += 1;
+  const fallbackLabel = fallbackLabelFromTools(counters.toolNames);
+  const eventLabel = labelForTimestamp(runtimeLabel, latest.timestamp);
+  const usedRuntimeLabel = Boolean(
+    (!taskTypeOverride && eventLabel.taskType) ||
+      (!stageOverride && eventLabel.stage),
+  );
   return [
-    toSpillEvent({
-      sourcePath: path,
-      sessionID: counters.sessionID,
-      eventIndex: counters.eventIndex,
-      timestamp: latest.timestamp,
-      model: latest.usage.model || counters.sessionModel || "codex-unknown",
-      inputTokens: delta.inputTokens,
-      outputTokens: delta.outputTokens,
-      cumulativeTotal: latest.usage.total.totalTokens,
-      taskType: taskTypeOverride ?? "uncategorized",
-      stage: stageOverride ?? "summarize",
-    }),
+    {
+      event: toSpillEvent({
+        sourcePath: path,
+        sessionID: counters.sessionID,
+        eventIndex: counters.eventIndex,
+        timestamp: latest.timestamp,
+        model: latest.usage.model || counters.sessionModel || "codex-unknown",
+        inputTokens: delta.inputTokens,
+        outputTokens: delta.outputTokens,
+        cumulativeTotal: latest.usage.total.totalTokens,
+        taskType: taskTypeOverride ?? eventLabel.taskType ?? fallbackLabel.taskType,
+        stage: stageOverride ?? eventLabel.stage ?? fallbackLabel.stage,
+      }),
+      usedRuntimeLabel,
+    },
   ];
 }
 
@@ -354,6 +406,70 @@ function tokenUsage(value) {
     reasoningTokens,
     totalTokens,
   };
+}
+
+function mayContainToolMetadata(line) {
+  return line.includes('"tool"') || line.includes('"function_call"') || line.includes('"recipient_name"');
+}
+
+function collectSafeToolNames(value, names) {
+  if (!value || typeof value !== "object") return;
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      collectSafeToolNames(item, names);
+    }
+    return;
+  }
+
+  const type = typeof value.type === "string" ? value.type.toLowerCase() : "";
+  if (type === "tool_use" || type === "tool_call" || type === "function_call" || type.includes("tool")) {
+    addRecognizedToolName(names, value.name);
+    addRecognizedToolName(names, value.tool_name);
+    addRecognizedToolName(names, value.toolName);
+  }
+  addRecognizedToolName(names, value.recipient_name);
+
+  for (const item of Object.values(value)) {
+    collectSafeToolNames(item, names);
+  }
+}
+
+function addRecognizedToolName(names, value) {
+  const name = normalizeToolName(value);
+  if (!name) return;
+  if (WRITE_TOOL_NAMES.has(name) || READ_TOOL_NAMES.has(name) || SHELL_TOOL_NAMES.has(name)) {
+    names.add(name);
+  }
+}
+
+function fallbackLabelFromTools(toolNames) {
+  if (hasAny(toolNames, WRITE_TOOL_NAMES)) {
+    return { taskType: "code_generation", stage: "implement" };
+  }
+  if (toolNames.size === 0) {
+    return { taskType: "analysis", stage: "summarize" };
+  }
+  if (allKnownReadOrShell(toolNames)) {
+    return {
+      taskType: "analysis",
+      stage: hasAny(toolNames, SHELL_TOOL_NAMES) ? "verify" : "summarize",
+    };
+  }
+  return { taskType: "uncategorized", stage: "summarize" };
+}
+
+function hasAny(values, candidates) {
+  for (const value of values) {
+    if (candidates.has(value)) return true;
+  }
+  return false;
+}
+
+function allKnownReadOrShell(values) {
+  for (const value of values) {
+    if (!READ_TOOL_NAMES.has(value) && !SHELL_TOOL_NAMES.has(value)) return false;
+  }
+  return true;
 }
 
 function toSpillEvent({
@@ -547,18 +663,35 @@ async function readRuntimeLabel(path, expectedTool) {
   const tool = typeof parsed.ai_tool === "string" ? parsed.ai_tool : "";
   if (tool && tool !== "unknown" && tool !== expectedTool) return {};
 
-  if (typeof parsed.expires_at === "string" && parsed.expires_at.length > 0) {
-    const expiresAt = new Date(parsed.expires_at);
-    if (Number.isNaN(expiresAt.getTime()) || Date.now() > expiresAt.getTime()) {
-      return {};
-    }
-  }
+  const updatedAt = optionalDate(parsed.updated_at);
+  const expiresAt = optionalDate(parsed.expires_at);
+  if (typeof parsed.updated_at === "string" && parsed.updated_at.length > 0 && !updatedAt) return {};
+  if (typeof parsed.expires_at === "string" && parsed.expires_at.length > 0 && !expiresAt) return {};
 
   return {
     taskType: optionalWorkflowSlug(parsed.task_type),
     stage: optionalWorkflowSlug(parsed.stage),
     hasLabel: Boolean(optionalWorkflowSlug(parsed.task_type) || optionalWorkflowSlug(parsed.stage)),
+    updatedAt,
+    expiresAt,
   };
+}
+
+function labelForTimestamp(label, timestamp) {
+  if (!label?.hasLabel) return {};
+  if (!(timestamp instanceof Date) || Number.isNaN(timestamp.getTime())) return {};
+  if (label.updatedAt && timestamp < label.updatedAt) return {};
+  if (label.expiresAt && timestamp > label.expiresAt) return {};
+  return {
+    taskType: label.taskType,
+    stage: label.stage,
+  };
+}
+
+function optionalDate(value) {
+  if (typeof value !== "string" || value.length === 0) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 async function writeState(path, state) {
@@ -686,6 +819,15 @@ function opaqueHash(value) {
 function safeModel(value) {
   const cleaned = String(value || "codex-unknown").replace(/[^A-Za-z0-9_.:-]/g, "-").slice(0, 80);
   return cleaned.length >= 2 ? cleaned : "codex-unknown";
+}
+
+function normalizeToolName(value) {
+  if (typeof value !== "string") return "";
+  const cleaned = value.toLowerCase().replace(/[^a-z0-9_.:-]/g, "_").slice(0, 80);
+  if (cleaned.endsWith(".apply_patch") || cleaned.includes("apply_patch")) return "apply_patch";
+  if (cleaned.endsWith(".exec_command") || cleaned.includes("exec_command")) return "exec_command";
+  if (cleaned.endsWith(".view_image") || cleaned.includes("view_image")) return "view_image";
+  return cleaned;
 }
 
 function safeWorkflowSlug(value) {

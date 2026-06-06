@@ -55,6 +55,11 @@ For Antigravity/AGY specifically, verify both things separately:
   `input_tokens`/`output_tokens`, `usage.input_tokens`/`usage.output_tokens`,
   `tokens.input`/`tokens.output`, `usageMetadata.totalTokenCount`, or a
   normalized `spill_token_usage` object.
+- AGY may wrap those exact token fields in runtime-specific envelopes such as
+  `data`, `event`, `response`, `metadata`, or workflow objects. The adapter
+  should search nested object shapes for known numeric token keys and extract
+  only the numeric counts plus safe labels/model/run hints. Do not store raw
+  payload values.
 
 If AGY runs the hook but does not expose exact token fields, the adapter must not
 invent usage. AGY may invoke `PostInvocation` for lifecycle, tool, or
@@ -63,6 +68,9 @@ token numbers. Treat those shapes as normal no-event hook calls, not as metering
 failures, even when the payload contains model or session hints. Leave
 local-only safe diagnostics under Spill's token-metering diagnostics directory
 and skip the usage event until the runtime or workflow provides exact counts.
+Structured payloads that contain an empty `tokens` object, zero-valued token
+fields, model hints, or opaque session hints are still no-event hook calls unless
+at least one supported numeric token count is greater than zero.
 
 AGY diagnostic files must use this fixed local-only protocol:
 

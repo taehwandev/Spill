@@ -20,6 +20,10 @@ Runtime input normalization:
   `tokens.input`/`tokens.output`, `usageMetadata.totalTokenCount`, or a
   normalized `spill_token_usage` object. The adapter may accept these input
   shapes, but it must still write only the strict Spill event keys.
+- Antigravity/AGY may wrap exact usage data in nested runtime envelopes such as
+  `data`, `event`, `response`, `metadata`, or workflow objects. Search nested
+  object shapes for supported numeric token keys, but extract only token counts,
+  safe labels, safe model ids, and opaque ids.
 - Do not assume a hook event has token usage merely because the hook runs.
   Antigravity/AGY `PostInvocation` hooks can execute for tool steps or model
   steps that do not expose exact token fields to the hook payload.
@@ -33,6 +37,8 @@ Runtime input normalization:
   numbers is also a normal no-event lifecycle, tool, or model-adjacent hook
   payload. Record both only as `antigravity-last-empty.json`; do not treat them
   as failed metering states.
+- Structured AGY payloads with an empty `tokens` object or zero-valued token
+  fields are no-event hook calls, even if they include model or session hints.
 - AGY payload mismatches must be reserved for malformed input such as invalid
   JSON or non-object payloads and isolated in `antigravity-last-mismatch.json`.
   Successful AGY usage events must update `antigravity-last-success.json` and

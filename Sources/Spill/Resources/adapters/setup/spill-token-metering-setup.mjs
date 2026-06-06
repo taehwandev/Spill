@@ -21,15 +21,6 @@ const defaultHookAdapters = "codex,claude,antigravity";
 const alwaysInstallAdapters = new Set(defaultHookAdapters.split(","));
 const include = new Set((args.include ?? defaultHookAdapters).split(",").map((item) => item.trim()).filter(Boolean));
 const workflowHook = args.workflowHook ? expandHome(args.workflowHook) : null;
-const implementationDominantTaskTypes = new Set([
-  "code_generation",
-  "debugging",
-  "refactoring",
-  "test_generation",
-  "ui_design",
-  "prompt_design",
-  "workflow_setup",
-]);
 
 if (args.label) {
   const label = await writeRuntimeLabel({
@@ -544,7 +535,7 @@ async function writeManagedTextBlock({ path, begin, end, block }) {
 async function writeRuntimeLabel({ tool, taskType, stage, labelFile, ttlMinutes, ifAbsent }) {
   const safeTool = safeToolLabel(tool);
   const safeTaskType = safeWorkflowSlug(taskType, "task_type");
-  const safeStage = dominantStageForTask(safeTaskType, safeWorkflowSlug(stage, "stage"));
+  const safeStage = safeWorkflowSlug(stage, "stage");
   const ttl = safeTTLMinutes(ttlMinutes);
   const now = new Date();
   const expiresAt = new Date(now.getTime() + ttl * 60 * 1000);
@@ -609,13 +600,6 @@ async function readActiveRuntimeLabel(path, expectedTool, now) {
   } catch {
     return null;
   }
-}
-
-function dominantStageForTask(taskType, stage) {
-  if (stage === "verify" && implementationDominantTaskTypes.has(taskType)) {
-    return "implement";
-  }
-  return stage;
 }
 
 async function resolveSourceRoot(option) {
