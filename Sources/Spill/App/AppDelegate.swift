@@ -344,6 +344,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             name: TokenMeteringDashboardProcess.openPreferencesNotification,
             object: nil
         )
+        DistributedNotificationCenter.default().removeObserver(
+            self,
+            name: TokenUsageStore.distributedEventsDidChangeNotification,
+            object: nil
+        )
         statusRefreshTask?.cancel()
         sleepGuard.stop()
         spillPanelController.hide(animated: false)
@@ -460,18 +465,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func refreshMenuBarAITokenTotal(now: Date = Date(), force: Bool = false) {
         let calendar = Calendar.autoupdatingCurrent
         let dayStart = calendar.startOfDay(for: now)
-        guard force || menuBarAITokenDayStart != dayStart else {
+        guard force || shouldRefreshMenuBarAITokenTotal || menuBarAITokenDayStart != dayStart else {
             return
         }
 
         menuBarAITokenDayStart = dayStart
         let snapshot = TokenUsageDashboardSnapshot(
-            events: tokenUsageStore.loadEvents(),
+            events: tokenUsageStore.importQueuedEvents(),
             selectedPeriod: .today,
             now: now,
             calendar: calendar
         )
         menuBarAITokenTotal = snapshot.totalTokens
+    }
+
+    private var shouldRefreshMenuBarAITokenTotal: Bool {
+        isSpillPanelVisible || settings.enabledMenuBarStatusItems.contains(.ai)
     }
 
     private func showPreferencesFromPanel() {
@@ -727,11 +736,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             name: TokenMeteringDashboardProcess.openPreferencesNotification,
             object: nil
         )
+        DistributedNotificationCenter.default().addObserver(
+            self,
+            selector: #selector(tokenUsageEventsDidChangeFromDistributedNotification(_:)),
+            name: TokenUsageStore.distributedEventsDidChangeNotification,
+            object: nil
+        )
     }
 
     @objc private func showPreferencesFromDashboardRequest(_ notification: Notification) {
         let selectedTab = notification.userInfo?[TokenMeteringDashboardProcess.preferencesTabUserInfoKey] as? String
         showPreferences(source: "token_dashboard", selectedTab: selectedTab)
+    }
+
+    @objc private func tokenUsageEventsDidChangeFromDistributedNotification(_ notification: Notification) {
+        refreshMenuBarAITokenTotal(force: true)
+        statusItemController?.refresh()
     }
 
     private func configureStatusRefreshLoop() {

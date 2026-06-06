@@ -5,6 +5,7 @@ private let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.sel
 
 final class TokenUsageStore: @unchecked Sendable {
     static let eventsDidChangeNotification = Notification.Name("app.spill.token-usage-store.events-did-change")
+    static let distributedEventsDidChangeNotification = Notification.Name("app.spill.token-usage-store.events-did-change.distributed")
 
     private let fileURL: URL
     private let databaseURL: URL
@@ -614,6 +615,12 @@ final class TokenUsageStore: @unchecked Sendable {
         NotificationCenter.default.post(
             name: Self.eventsDidChangeNotification,
             object: self
+        )
+        DistributedNotificationCenter.default().postNotificationName(
+            Self.distributedEventsDidChangeNotification,
+            object: nil,
+            userInfo: nil,
+            deliverImmediately: true
         )
     }
 }

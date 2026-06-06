@@ -52,6 +52,7 @@ final class TokenUsageDashboardStore: ObservableObject {
     private let usageStore: TokenUsageStore
     private var events: [TokenUsageEvent] = []
     private var eventsDidChangeObserver: NSObjectProtocol?
+    private var distributedEventsDidChangeObserver: NSObjectProtocol?
     private var hasRebuiltSnapshot = false
     private var clearLiveUpdateTask: Task<Void, Never>?
 
@@ -66,12 +67,24 @@ final class TokenUsageDashboardStore: ObservableObject {
                 self?.refresh()
             }
         }
+        distributedEventsDidChangeObserver = DistributedNotificationCenter.default().addObserver(
+            forName: TokenUsageStore.distributedEventsDidChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.refresh()
+            }
+        }
         refresh()
     }
 
     deinit {
         if let eventsDidChangeObserver {
             NotificationCenter.default.removeObserver(eventsDidChangeObserver)
+        }
+        if let distributedEventsDidChangeObserver {
+            DistributedNotificationCenter.default().removeObserver(distributedEventsDidChangeObserver)
         }
         clearLiveUpdateTask?.cancel()
     }
