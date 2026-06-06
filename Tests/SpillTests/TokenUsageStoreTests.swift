@@ -1053,6 +1053,17 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(prompt.contains("SPILL_AI_TOOL=antigravity"))
         XCTAssertTrue(prompt.contains("Spill label handoff commands"))
         XCTAssertTrue(prompt.contains("Workflow runner permissions are separate"))
+        XCTAssertTrue(prompt.contains("runtime-specific exact-count input shapes"))
+        XCTAssertTrue(prompt.contains("AGY empty stdin is a normal no-event lifecycle/tool hook call"))
+        XCTAssertTrue(prompt.contains("antigravity-last-empty.json"))
+        XCTAssertTrue(prompt.contains("antigravity-last-mismatch.json"))
+        XCTAssertTrue(prompt.contains("antigravity-last-success.json"))
+        XCTAssertTrue(prompt.contains("Claude Code uses a different Stop-hook contract"))
+        XCTAssertTrue(prompt.contains("claude-last-empty.json"))
+        XCTAssertTrue(prompt.contains("claude-last-mismatch.json"))
+        XCTAssertTrue(prompt.contains("claude-last-success.json"))
+        XCTAssertTrue(prompt.contains("observed_safe_shape booleans only"))
+        XCTAssertTrue(prompt.contains("Diagnostics must never store transcript paths"))
         XCTAssertFalse(prompt.contains("agent-preflight.py"))
         XCTAssertFalse(prompt.contains("agent-finish-check.py"))
         XCTAssertTrue(prompt.contains("~/.codex/rules/default.rules"))
@@ -1119,6 +1130,8 @@ final class TokenUsageStoreTests: XCTestCase {
         let helper = try String(contentsOf: root.appendingPathComponent("adapters/setup/spill-token-metering-setup.mjs"))
         let agyHook = try String(contentsOf: root.appendingPathComponent("adapters/antigravity/spill-hook.py"))
         let bundledAgyHook = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Resources/adapters/antigravity/spill-hook.py"))
+        let claudeHook = try String(contentsOf: root.appendingPathComponent("adapters/claude-code/spill-hook.py"))
+        let bundledClaudeHook = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Resources/adapters/claude-code/spill-hook.py"))
         let preferencesSection = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Preferences/TokenMeteringPreferencesSection.swift"))
 
         XCTAssertTrue(setup.contains("MANDATORY ACTION: install or repair Spill token metering now"))
@@ -1174,10 +1187,16 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(setup.contains("shared runtime hook input schema"))
         XCTAssertTrue(setup.contains("hook payload exposes exact token usage fields"))
         XCTAssertTrue(setup.contains("normalized `spill_token_usage` object"))
-        XCTAssertTrue(setup.contains("local-only safe diagnostic"))
-        XCTAssertTrue(setup.contains("antigravity-latest.json"))
+        XCTAssertTrue(setup.contains("diagnostics under Spill's token-metering diagnostics directory"))
+        XCTAssertTrue(setup.contains("antigravity-last-empty.json"))
+        XCTAssertTrue(setup.contains("antigravity-last-mismatch.json"))
+        XCTAssertTrue(setup.contains("antigravity-last-success.json"))
+        XCTAssertTrue(setup.contains("claude-last-empty.json"))
+        XCTAssertTrue(setup.contains("claude-last-mismatch.json"))
+        XCTAssertTrue(setup.contains("claude-last-success.json"))
         XCTAssertTrue(setup.contains("observed_safe_shape"))
-        XCTAssertTrue(setup.contains("Low-information diagnostics such as `empty_stdin` must not overwrite"))
+        XCTAssertTrue(setup.contains("Empty stdin diagnostics must never overwrite"))
+        XCTAssertTrue(setup.contains("Claude Code diagnostic files must use the same local-only separation"))
         XCTAssertFalse(setup.contains("root-level `PostInvocation[]`"))
         XCTAssertFalse(setup.contains("Do not nest this under `\"spill-metering\"`"))
 
@@ -1188,6 +1207,10 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(runtime.contains("Runtime hook input formats are allowed to differ by tool"))
         XCTAssertTrue(runtime.contains("Antigravity/AGY `PostInvocation` hooks can execute"))
         XCTAssertTrue(runtime.contains("write a local-only diagnostic"))
+        XCTAssertTrue(runtime.contains("AGY empty stdin is a normal no-event hook call"))
+        XCTAssertTrue(runtime.contains("antigravity-last-success.json"))
+        XCTAssertTrue(runtime.contains("Claude Code uses a different Stop-hook contract"))
+        XCTAssertTrue(runtime.contains("claude-last-mismatch.json"))
         XCTAssertTrue(runtime.contains("short-lived safe label context"))
         XCTAssertTrue(runtime.contains("Workflow integration is an enhancement, not a prerequisite"))
         XCTAssertTrue(runtime.contains("Workflow-provided labels win"))
@@ -1281,7 +1304,10 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(agyHook.contains("runtime_payload_mismatch"))
         XCTAssertTrue(agyHook.contains("missing_exact_token_usage"))
         XCTAssertTrue(agyHook.contains("spill_token_usage"))
-        XCTAssertTrue(agyHook.contains("DIAGNOSTIC_FILE_NAME"))
+        XCTAssertTrue(agyHook.contains("EMPTY_DIAGNOSTIC_FILE_NAME"))
+        XCTAssertTrue(agyHook.contains("MISMATCH_DIAGNOSTIC_FILE_NAME"))
+        XCTAssertTrue(agyHook.contains("SUCCESS_DIAGNOSTIC_FILE_NAME"))
+        XCTAssertTrue(agyHook.contains("empty_stdin_hook_call"))
         XCTAssertTrue(agyHook.contains(#""input""#))
         XCTAssertTrue(agyHook.contains(#""output""#))
         XCTAssertFalse(agyHook.contains("def _usage_metadata_total"))
@@ -1291,6 +1317,14 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertFalse(agyHook.contains("Raw stdin"))
         XCTAssertTrue(agyHook.contains("No payload values"))
         XCTAssertEqual(agyHook, bundledAgyHook)
+        XCTAssertTrue(claudeHook.contains("DIAGNOSTICS_DIR"))
+        XCTAssertTrue(claudeHook.contains("claude-last-empty.json"))
+        XCTAssertTrue(claudeHook.contains("claude-last-mismatch.json"))
+        XCTAssertTrue(claudeHook.contains("claude-last-success.json"))
+        XCTAssertTrue(claudeHook.contains("transcript_path"))
+        XCTAssertTrue(claudeHook.contains("No payload values"))
+        XCTAssertFalse(claudeHook.contains("traceback.print_exc"))
+        XCTAssertEqual(claudeHook, bundledClaudeHook)
     }
 
     func testAntigravityHookAcceptsTokensInputOutputPayload() throws {
@@ -1318,13 +1352,28 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(events.first?["output_tokens"] as? Int, 50)
         XCTAssertEqual(events.first?["total_tokens"] as? Int, 150)
         XCTAssertEqual(events.first?["ai_tool"] as? String, "antigravity")
-        XCTAssertFalse(FileManager.default.fileExists(atPath: diagnosticsURL.appendingPathComponent("antigravity-latest.json").path))
+        let success = try decodedJSONObject(
+            from: Data(contentsOf: diagnosticsURL.appendingPathComponent("antigravity-last-success.json"))
+        )
+        XCTAssertEqual(success["kind"] as? String, "success")
+        XCTAssertEqual(success["total_tokens"] as? Int, 150)
+        XCTAssertNil(success["run_id"])
+        XCTAssertNil(success["span_id"])
     }
 
-    func testAntigravityHookPreservesMissingUsageDiagnosticOverEmptyStdin() throws {
+    func testAntigravityHookSeparatesEmptyMismatchAndSuccessDiagnostics() throws {
         let inboxURL = temporaryInboxURL()
         let diagnosticsURL = temporaryDiagnosticsURL()
-        let diagnosticURL = diagnosticsURL.appendingPathComponent("antigravity-latest.json")
+        let emptyURL = diagnosticsURL.appendingPathComponent("antigravity-last-empty.json")
+        let mismatchURL = diagnosticsURL.appendingPathComponent("antigravity-last-mismatch.json")
+        let successURL = diagnosticsURL.appendingPathComponent("antigravity-last-success.json")
+
+        try runAntigravityHook(rawInput: "\n", inboxURL: inboxURL, diagnosticsURL: diagnosticsURL)
+
+        var empty = try decodedJSONObject(from: Data(contentsOf: emptyURL))
+        XCTAssertEqual(empty["kind"] as? String, "empty_stdin_hook_call")
+        XCTAssertEqual(empty["reason"] as? String, "empty_stdin")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: mismatchURL.path))
 
         try runAntigravityHook(
             payload: [
@@ -1338,16 +1387,37 @@ final class TokenUsageStoreTests: XCTestCase {
             diagnosticsURL: diagnosticsURL
         )
 
-        var diagnostic = try decodedJSONObject(from: Data(contentsOf: diagnosticURL))
-        XCTAssertEqual(diagnostic["reason"] as? String, "missing_exact_token_usage")
-        let shape = try XCTUnwrap(diagnostic["observed_safe_shape"] as? [String: Any])
+        let mismatch = try decodedJSONObject(from: Data(contentsOf: mismatchURL))
+        XCTAssertEqual(mismatch["kind"] as? String, "runtime_payload_mismatch")
+        XCTAssertEqual(mismatch["reason"] as? String, "missing_exact_token_usage")
+        let shape = try XCTUnwrap(mismatch["observed_safe_shape"] as? [String: Any])
         XCTAssertEqual(shape["payload_object"] as? Bool, true)
         XCTAssertEqual(shape["has_exact_input_output"] as? Bool, false)
 
         try runAntigravityHook(rawInput: "\n", inboxURL: inboxURL, diagnosticsURL: diagnosticsURL)
 
-        diagnostic = try decodedJSONObject(from: Data(contentsOf: diagnosticURL))
-        XCTAssertEqual(diagnostic["reason"] as? String, "missing_exact_token_usage")
+        empty = try decodedJSONObject(from: Data(contentsOf: emptyURL))
+        XCTAssertEqual(empty["reason"] as? String, "empty_stdin")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: mismatchURL.path))
+
+        try runAntigravityHook(
+            payload: [
+                "session_id": "agySession02",
+                "model": "gemini-2.5-pro",
+                "usage": [
+                    "input_tokens": 10,
+                    "output_tokens": 5
+                ]
+            ],
+            inboxURL: inboxURL,
+            diagnosticsURL: diagnosticsURL
+        )
+
+        let success = try decodedJSONObject(from: Data(contentsOf: successURL))
+        XCTAssertEqual(success["kind"] as? String, "success")
+        XCTAssertEqual(success["total_tokens"] as? Int, 15)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: mismatchURL.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: diagnosticsURL.appendingPathComponent("antigravity-latest.json").path))
     }
 
     func testAntigravityTotalOnlyPayloadsDoNotCollideOnSameTokenCount() throws {
@@ -1369,6 +1439,98 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(Set(events.compactMap { $0["span_id"] as? String }).count, 2)
         XCTAssertEqual(events.map { $0["input_tokens"] as? Int }, [500, 500])
         XCTAssertEqual(events.map { $0["output_tokens"] as? Int }, [0, 0])
+    }
+
+    func testClaudeHookSeparatesEmptyMismatchAndSuccessDiagnostics() throws {
+        let inboxURL = temporaryInboxURL()
+        let diagnosticsURL = temporaryDiagnosticsURL()
+        let sessionStateURL = temporaryDiagnosticsURL().deletingLastPathComponent().appendingPathComponent("claude-session-state")
+        let emptyURL = diagnosticsURL.appendingPathComponent("claude-last-empty.json")
+        let mismatchURL = diagnosticsURL.appendingPathComponent("claude-last-mismatch.json")
+        let successURL = diagnosticsURL.appendingPathComponent("claude-last-success.json")
+
+        try runClaudeHook(
+            rawInput: "\n",
+            inboxURL: inboxURL,
+            diagnosticsURL: diagnosticsURL,
+            sessionStateURL: sessionStateURL
+        )
+
+        var empty = try decodedJSONObject(from: Data(contentsOf: emptyURL))
+        XCTAssertEqual(empty["kind"] as? String, "empty_stdin_hook_call")
+        XCTAssertEqual(empty["reason"] as? String, "empty_stdin")
+
+        try runClaudeHook(
+            rawInput: #"{"session_id":"claudeDiag01"}"#,
+            inboxURL: inboxURL,
+            diagnosticsURL: diagnosticsURL,
+            sessionStateURL: sessionStateURL
+        )
+
+        let mismatch = try decodedJSONObject(from: Data(contentsOf: mismatchURL))
+        XCTAssertEqual(mismatch["kind"] as? String, "runtime_payload_mismatch")
+        XCTAssertEqual(mismatch["reason"] as? String, "missing_transcript_path")
+        let shape = try XCTUnwrap(mismatch["observed_safe_shape"] as? [String: Any])
+        XCTAssertEqual(shape["payload_object"] as? Bool, true)
+        XCTAssertEqual(shape["has_session_id"] as? Bool, true)
+
+        let transcriptURL = diagnosticsURL
+            .deletingLastPathComponent()
+            .appendingPathComponent("claude-transcript.jsonl")
+        let transcript = [
+            #"{"message":{"role":"user"}}"#,
+            #"{"message":{"role":"assistant","model":"claude-sonnet-4","usage":{"input_tokens":20,"cache_creation_input_tokens":5,"cache_read_input_tokens":100,"output_tokens":7},"content":[{"type":"tool_use","name":"Read"}]}}"#,
+        ].joined(separator: "\n")
+        try "\(transcript)\n".write(to: transcriptURL, atomically: true, encoding: .utf8)
+        let payload = #"{"session_id":"claudeDiag01","transcript_path":"\#(transcriptURL.path)"}"#
+
+        try runClaudeHook(
+            rawInput: payload,
+            inboxURL: inboxURL,
+            diagnosticsURL: diagnosticsURL,
+            sessionStateURL: sessionStateURL
+        )
+
+        let success = try decodedJSONObject(from: Data(contentsOf: successURL))
+        XCTAssertEqual(success["kind"] as? String, "success")
+        XCTAssertEqual(success["total_tokens"] as? Int, 32)
+        XCTAssertNil(success["run_id"])
+        XCTAssertNil(success["span_id"])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: mismatchURL.path))
+
+        let events = try antigravityEventObjects(in: inboxURL)
+        XCTAssertEqual(events.count, 1)
+        XCTAssertEqual(events.first?["ai_tool"] as? String, "claude")
+
+        try runClaudeHook(
+            rawInput: payload,
+            inboxURL: inboxURL,
+            diagnosticsURL: diagnosticsURL,
+            sessionStateURL: sessionStateURL
+        )
+
+        empty = try decodedJSONObject(from: Data(contentsOf: emptyURL))
+        XCTAssertEqual(empty["kind"] as? String, "no_usage_hook_call")
+        XCTAssertEqual(empty["reason"] as? String, "no_new_token_delta")
+
+        let updatedTranscript = [
+            transcript,
+            #"{"message":{"role":"user"}}"#,
+            #"{"message":{"role":"assistant","model":"claude-sonnet-4","usage":{"input_tokens":3,"cache_creation_input_tokens":4,"output_tokens":2},"content":[{"type":"tool_use","name":"Edit"}]}}"#,
+        ].joined(separator: "\n")
+        try "\(updatedTranscript)\n".write(to: transcriptURL, atomically: true, encoding: .utf8)
+
+        try runClaudeHook(
+            rawInput: payload,
+            inboxURL: inboxURL,
+            diagnosticsURL: diagnosticsURL,
+            sessionStateURL: sessionStateURL
+        )
+
+        let refreshedEvents = try antigravityEventObjects(in: inboxURL)
+        XCTAssertEqual(refreshedEvents.count, 2)
+        XCTAssertEqual(refreshedEvents.compactMap { $0["total_tokens"] as? Int }.sorted(), [9, 32])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: emptyURL.path))
     }
 
     func testAdapterHookConfigsUseExactRuntimeHookShapes() throws {
@@ -1912,6 +2074,44 @@ final class TokenUsageStoreTests: XCTestCase {
         environment["SPILL_TOKEN_USAGE_INBOX_DIR"] = inboxURL.path
         environment["SPILL_TOKEN_USAGE_DIAGNOSTICS_DIR"] = diagnosticsURL.path
         environment["SPILL_TOKEN_USAGE_LABEL_FILE"] = labelURL.path
+        environment["PYTHONPYCACHEPREFIX"] = "/tmp/spill-pycache"
+        process.environment = environment
+
+        let inputPipe = Pipe()
+        let errorPipe = Pipe()
+        process.standardInput = inputPipe
+        process.standardError = errorPipe
+
+        try process.run()
+        inputPipe.fileHandleForWriting.write(Data(rawInput.utf8))
+        try inputPipe.fileHandleForWriting.close()
+        process.waitUntilExit()
+
+        let stderr = String(data: errorPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        XCTAssertEqual(process.terminationStatus, 0, stderr)
+    }
+
+    private func runClaudeHook(
+        rawInput: String,
+        inboxURL: URL,
+        diagnosticsURL: URL,
+        sessionStateURL: URL
+    ) throws {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let hookURL = root.appendingPathComponent("adapters/claude-code/spill-hook.py")
+        let labelURL = diagnosticsURL
+            .deletingLastPathComponent()
+            .appendingPathComponent("label-context", isDirectory: true)
+            .appendingPathComponent("claude.json")
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = ["python3", hookURL.path]
+        var environment = ProcessInfo.processInfo.environment
+        environment["SPILL_TOKEN_USAGE_INBOX_DIR"] = inboxURL.path
+        environment["SPILL_TOKEN_USAGE_DIAGNOSTICS_DIR"] = diagnosticsURL.path
+        environment["SPILL_TOKEN_USAGE_LABEL_FILE"] = labelURL.path
+        environment["SPILL_TOKEN_USAGE_SESSION_STATE_DIR"] = sessionStateURL.path
         environment["PYTHONPYCACHEPREFIX"] = "/tmp/spill-pycache"
         process.environment = environment
 
