@@ -34,14 +34,14 @@ final class TokenUsageStore: @unchecked Sendable {
 
     func loadEvents() -> [TokenUsageEvent] {
         lock.withLock {
-            loadEventsWithoutLock().events
+            readEventsWithoutLock()
         }
     }
 
     @discardableResult
     func importQueuedEvents() -> [TokenUsageEvent] {
         let result = lock.withLock {
-            loadEventsWithoutLock()
+            importQueuedEventsWithoutLock()
         }
 
         if result.didImportQueuedEvents {
@@ -75,7 +75,7 @@ final class TokenUsageStore: @unchecked Sendable {
             try event.validate()
             let database = try openDatabase()
             defer { sqlite3_close(database) }
-            try migrateLegacyJSONEventsIfNeeded(database: database)
+            _ = try migrateLegacyJSONEventsIfNeeded(database: database)
             try insertEvent(event, database: database)
             return loadDatabaseEvents(database: database)
         }
@@ -120,8 +120,6 @@ final class TokenUsageStore: @unchecked Sendable {
             try data.write(to: temporaryURL, options: [.withoutOverwriting])
             try FileManager.default.moveItem(at: temporaryURL, to: finalURL)
         }
-
-        postEventsDidChange()
     }
 
     func envelopeData() throws -> Data {
@@ -157,7 +155,19 @@ final class TokenUsageStore: @unchecked Sendable {
         )
     }
 
-    private func loadEventsWithoutLock() -> StoreLoadResult {
+    private func readEventsWithoutLock() -> [TokenUsageEvent] {
+        let database: OpaquePointer
+        do {
+            database = try openDatabase()
+        } catch {
+            return []
+        }
+        defer { sqlite3_close(database) }
+
+        return loadDatabaseEvents(database: database)
+    }
+
+    private func importQueuedEventsWithoutLock() -> StoreLoadResult {
         let database: OpaquePointer
         do {
             database = try openDatabase()
@@ -166,9 +176,9 @@ final class TokenUsageStore: @unchecked Sendable {
         }
         defer { sqlite3_close(database) }
 
-        try? migrateLegacyJSONEventsIfNeeded(database: database)
+        let didMigrateLegacyEvents = (try? migrateLegacyJSONEventsIfNeeded(database: database)) ?? false
         let inboxResult = loadInboxEvents()
-        var didImportQueuedEvents = false
+        var didImportQueuedEvents = didMigrateLegacyEvents
 
         if !inboxResult.consumedURLs.isEmpty {
             do {
@@ -473,14 +483,16 @@ final class TokenUsageStore: @unchecked Sendable {
         }
     }
 
-    private func migrateLegacyJSONEventsIfNeeded(database: OpaquePointer) throws {
+    @discardableResult
+    private func migrateLegacyJSONEventsIfNeeded(database: OpaquePointer) throws -> Bool {
         let legacyEvents = loadJSONEvents(from: fileURL)
         guard !legacyEvents.isEmpty else {
-            return
+            return false
         }
 
         try insertEvents(legacyEvents, database: database)
         try removeLegacyEventsFileWithoutLock()
+        return true
     }
 
     private func insertEvents(_ events: [TokenUsageEvent], database: OpaquePointer) throws {

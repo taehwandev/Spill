@@ -9,14 +9,21 @@ final class TokenMeteringDashboardWindowController {
     private let screenPadding: CGFloat = 32
     private let store: TokenUsageDashboardStore
     private let settings: SpillSettings
+    private let refreshAction: () -> Void
     private var window: NSWindow?
 
-    init(store: TokenUsageDashboardStore, settings: SpillSettings = .shared) {
+    init(
+        store: TokenUsageDashboardStore,
+        settings: SpillSettings = .shared,
+        refreshAction: @escaping () -> Void = {}
+    ) {
         self.store = store
         self.settings = settings
+        self.refreshAction = refreshAction
     }
 
     func show() {
+        refreshAction()
         store.refresh()
         let window = ensureWindow()
         updateWindowTitle(window)
@@ -35,6 +42,7 @@ final class TokenMeteringDashboardWindowController {
         let contentView = TokenMeteringDashboardView(
             store: store,
             settings: settings,
+            refreshAction: refreshAction,
             titleDidChange: { [weak self] in
                 self?.updateWindowTitle()
             }

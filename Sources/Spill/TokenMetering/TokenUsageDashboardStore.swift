@@ -333,6 +333,7 @@ final class TokenUsageDashboardStore: ObservableObject {
         do {
             let event = Self.makeLocalSelfTestEvent(index: snapshot.eventCount)
             try usageStore.enqueueInboxEvent(event)
+            usageStore.importQueuedEvents()
             refresh()
             selfTestMessage = TokenUsageSelfTestMessage(
                 text: TokenMeteringL10n.text(.queueSelfTestSuccess, language: language),

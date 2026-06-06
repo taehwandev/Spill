@@ -15,15 +15,18 @@ struct TokenMeteringDashboardView: View {
     @State private var hoveredFilterTitle: String? = nil
     @State private var pendingClearRequest: TokenUsageClearRequest?
     @State private var presentedWorkItemID: String?
+    private let refreshAction: () -> Void
     private let titleDidChange: () -> Void
 
     init(
         store: TokenUsageDashboardStore,
         settings: SpillSettings = .shared,
+        refreshAction: @escaping () -> Void = {},
         titleDidChange: @escaping () -> Void = {}
     ) {
         self.store = store
         _settings = ObservedObject(wrappedValue: settings)
+        self.refreshAction = refreshAction
         self.titleDidChange = titleDidChange
     }
 
@@ -173,6 +176,7 @@ struct TokenMeteringDashboardView: View {
 
             HStack(spacing: 8) {
                 Button {
+                    refreshAction()
                     store.refresh()
                 } label: {
                     Label(t(.refresh), systemImage: "arrow.clockwise")

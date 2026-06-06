@@ -29,11 +29,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         port: tokenUsageBridgePort
     )
     private lazy var tokenUsageInboxMonitor = TokenUsageInboxMonitor(store: tokenUsageStore)
+    private lazy var tokenUsageCollectorCoordinator = TokenUsageCollectorCoordinator(
+        store: tokenUsageStore
+    )
     private lazy var tokenUsageDashboardStore = TokenUsageDashboardStore(
         usageStore: tokenUsageStore
     )
     private lazy var tokenMeteringDashboardWindowController = TokenMeteringDashboardWindowController(
-        store: tokenUsageDashboardStore
+        store: tokenUsageDashboardStore,
+        refreshAction: { [weak self] in
+            self?.requestTokenUsageCollection(reason: "dashboard_refresh")
+        }
     )
     private lazy var hotKeyController = HotKeyController(
         registrations: makeHotKeyRegistrations()
@@ -164,6 +170,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         observeStateChanges()
         tokenUsageInboxMonitor.start()
+        requestTokenUsageCollection(reason: "app_launch")
         configureTokenUsageBridge()
         configureStatusRefreshLoop()
 
@@ -343,6 +350,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func showSpillBar(source: String = "unknown") {
+        requestTokenUsageCollection(reason: "panel_open")
         tokenUsageDashboardStore.refresh()
         spillPanelController.show(anchorFrame: statusItemController?.buttonScreenFrame)
         statusItemController?.refresh(isSpillBarVisible: spillPanelController.isVisible)
@@ -365,6 +373,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func refreshMenuBarItems(source: String = "status_menu") {
         SpillTelemetry.shared.track("menu_bar_scan_requested", props: ["source": source])
+        requestTokenUsageCollection(reason: "manual_refresh")
         scanCoordinator.refreshNow()
         statusItemController?.refresh()
         Task { @MainActor [weak self] in
@@ -420,6 +429,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         refreshMenuBarAITokenTotal(force: true)
         statusItemController?.refresh()
         tokenMeteringDashboardWindowController.show()
+    }
+
+    private func requestTokenUsageCollection(reason: String) {
+        if isSmokeTest,
+           ProcessInfo.processInfo.environment["SPILL_SMOKE_ENABLE_TOKEN_COLLECTORS"] != "1" {
+            return
+        }
+
+        tokenUsageCollectorCoordinator.requestCollection(reason: reason)
     }
 
     private func refreshMenuBarAITokenTotal(now: Date = Date(), force: Bool = false) {
