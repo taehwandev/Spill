@@ -181,6 +181,30 @@ Requirements:
 - The global setup prompt is a safety contract, not a runtime hook. If a
   runtime does not expose exact token counts, it must skip event creation
   instead of estimating or reading local logs.
+- Runtime hook input contracts are allowed to differ by tool. A hook execution
+  means a runtime lifecycle step completed; it does not by itself mean exact
+  model token usage is available.
+- Antigravity/AGY `PostInvocation` may run for lifecycle or tool steps that
+  consume no model tokens and pass empty stdin. Empty stdin must be treated as a
+  normal no-event hook call, not as a metering failure and not as a reason to
+  invent usage.
+- AGY diagnostics must be split into local-only files:
+  `antigravity-last-empty.json` for empty no-event hook calls,
+  `antigravity-last-mismatch.json` for payloads that exist but do not match a
+  supported exact-count shape, and `antigravity-last-success.json` after a
+  valid usage event is enqueued. Empty diagnostics must never overwrite
+  mismatch or success diagnostics; success must clear stale mismatch and legacy
+  `antigravity-latest.json` diagnostics.
+- Claude Code uses a different Stop-hook contract: stdin should contain a safe
+  payload with `transcript_path`, and the adapter reads exact numeric usage
+  from the transcript. Claude diagnostics must be split into
+  `claude-last-empty.json`, `claude-last-mismatch.json`, and
+  `claude-last-success.json` so hook execution, no-event outcomes, and real
+  payload failures are distinguishable.
+- Diagnostic files are local support metadata only. They must never store
+  prompts, responses, commands, file paths, transcript paths, transcript
+  content, payload values, repo names, diffs, logs, source content, environment
+  values, secrets, run ids, or span ids.
 - Local tool adapters may be installed separately from the prompt when a tool
   exposes exact token-only usage records in local state. Those adapters must
   read only known numeric usage records, such as Codex `token_count` entries,
@@ -290,6 +314,9 @@ Acceptance:
   total fallback instead of appearing as meaningful zeroes or generic unknowns.
 - Global setup instructions state that exact counts are required and estimates
   should not be sent.
+- Runtime-specific no-event diagnostics such as AGY empty stdin or Claude no
+  new token delta are visible as support diagnostics, not counted usage events
+  and not dashboard failures.
 - UI copy must not imply that a prompt alone can measure token usage.
 - Local setup UI offers a one-step installer path before exposing per-adapter
   script and hook snippets.

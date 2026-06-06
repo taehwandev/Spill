@@ -203,6 +203,26 @@ Rules:
   status lines to normal assistant replies.
 - Global agent setup instructions are not a runtime hook. They cannot expose
   token counts by themselves, and the app must not imply otherwise.
+- Runtime hook input contracts differ by tool and must be handled explicitly.
+  The receiver must not infer token usage merely because a hook process ran.
+- Antigravity/AGY `PostInvocation` may execute with empty stdin for lifecycle
+  or tool steps that have no model token usage. Treat that as a normal no-event
+  result and write only `antigravity-last-empty.json` local diagnostics. Payloads
+  that exist but lack supported exact-count fields go to
+  `antigravity-last-mismatch.json`; successful usage goes to
+  `antigravity-last-success.json` and clears stale mismatch diagnostics.
+- Claude Code Stop hooks use a separate contract. The expected stdin payload is
+  a safe object with `transcript_path`; the adapter may read exact numeric usage
+  from that transcript but must not store transcript paths or transcript
+  content. Empty stdin, no assistant usage, zero tokens, or no new token delta
+  go to `claude-last-empty.json`; invalid payloads, missing transcripts, or read
+  failures go to `claude-last-mismatch.json`; successful enqueue goes to
+  `claude-last-success.json`.
+- Diagnostic files are local-only support state. They may contain fixed
+  booleans about payload shape, safe labels, model id, numeric token counts, and
+  timestamps, but never raw payload values, prompts, responses, commands, file
+  paths, transcript paths, transcript content, repo names, diffs, logs, source
+  content, environment values, secrets, run ids, or span ids.
 - A one-step setup helper may install bundled adapter scripts and merge known
   user-level hook files for detected tools, but it must be explicit opt-in,
   support dry-run behavior, avoid overwriting unrelated hook entries, and back

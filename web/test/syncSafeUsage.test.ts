@@ -393,9 +393,14 @@ test("setup prompt bootstraps the public token metering installer", () => {
   assert.match(setupPrompt, /--label <current-tool>/);
   assert.match(setupPrompt, /agy, treat it as an input alias for the canonical antigravity event label/);
   assert.match(setupPrompt, /Never let Claude Code or Antigravity\/AGY workflow routing fall back to codex/);
-  assert.match(setupPrompt, /antigravity-latest\.json/);
+  assert.match(setupPrompt, /antigravity-last-empty\.json/);
+  assert.match(setupPrompt, /antigravity-last-mismatch\.json/);
+  assert.match(setupPrompt, /antigravity-last-success\.json/);
+  assert.match(setupPrompt, /claude-last-empty\.json/);
+  assert.match(setupPrompt, /claude-last-mismatch\.json/);
+  assert.match(setupPrompt, /claude-last-success\.json/);
   assert.match(setupPrompt, /observed_safe_shape/);
-  assert.match(setupPrompt, /empty_stdin` must not overwrite/);
+  assert.match(setupPrompt, /Empty stdin diagnostics must not overwrite/);
   assert.doesNotMatch(setupPrompt, /workflow-setup-prompt\.md/);
   assert.match(setupPrompt, /Do not save only the runtime instruction and call the task done/);
 });
@@ -412,6 +417,10 @@ test("hosted runtime instruction stays silent and exact-count-only", () => {
   assert.match(runtime, /Runtime hook input formats are allowed to differ by tool/);
   assert.match(runtime, /Antigravity\/AGY `PostInvocation` hooks can execute/);
   assert.match(runtime, /write a local-only diagnostic/);
+  assert.match(runtime, /AGY empty stdin is a normal no-event hook call/);
+  assert.match(runtime, /antigravity-last-success\.json/);
+  assert.match(runtime, /Claude Code uses a different Stop-hook contract/);
+  assert.match(runtime, /claude-last-mismatch\.json/);
   assert.match(runtime, /Workflow integration is an enhancement, not a prerequisite/);
   assert.match(runtime, /Workflow-provided labels win/);
   assert.match(runtime, /--if-absent/);
