@@ -44,6 +44,10 @@ Required hook shapes after install:
 - Codex: `~/.codex/hooks.json` contains `hooks.Stop[]` with `matcher: ""` and a command that runs the Spill Codex importer. `~/.codex/rules/default.rules` contains managed Spill `prefix_rule` entries for Spill Codex label handoff.
 - Claude Code: `~/.claude/settings.json` contains `hooks.Stop[]` with `matcher: ""`, a command that runs the Spill Claude hook, `SPILL_AI_TOOL=claude`, and narrow allowlist entries for Spill label handoff. The matcher field is required.
 - Antigravity/AGY: `~/.gemini/config/hooks.json` contains a `"spill-metering"` JSONHookSpec with `PostInvocation[]`, `matcher: ""`, and a command that runs the Spill AGY hook. The canonical installed hook lives at `~/Library/Application Support/Spill/adapters/antigravity/spill-hook.py`; when that path contains spaces, the installer may instead put `python3 '~/.gemini/spill-hook.py'` in `hooks.json` and create that file as a symlink or fresh copy to the canonical installed hook. Treat either command path as valid only when the compatibility file resolves to, or matches, the canonical installed hook. `~/.gemini/antigravity-cli/settings.json` contains `SPILL_AI_TOOL=antigravity` and narrow allowlist entries for Spill label handoff. Do not write `PostInvocation` as a root-level array.
+- After installing or repairing Antigravity/AGY metering, restart any running
+  AGY CLI or Antigravity IDE sessions before verifying. Running sessions may
+  cache hook configuration and continue without invoking the newly installed
+  hook.
 
 The installed adapters must force one strict Spill output event schema, not one
 shared runtime hook input schema. Each runtime may expose usage differently, so
@@ -72,6 +76,14 @@ Structured payloads that contain an empty `tokens` object, zero-valued token
 fields, model hints, or opaque session hints are still no-event hook calls unless
 at least one supported numeric token count is greater than zero.
 
+The AGY adapter may accept exact token counts from stdin, explicit
+`--payload-json` / `--usage-json` arguments, or fixed allowlisted runtime
+environment fields such as `SPILL_TOKEN_USAGE_PAYLOAD`,
+`ANTIGRAVITY_INPUT_TOKENS`, `ANTIGRAVITY_OUTPUT_TOKENS`, `AGY_INPUT_TOKENS`, and
+`GEMINI_OUTPUT_TOKENS`. It must not inspect arbitrary environment values,
+runtime logs, shell history, file paths, prompts, commands, diffs, or source
+content to recover usage.
+
 AGY diagnostic files must use this fixed local-only protocol:
 
 - Write `~/Library/Application Support/Spill/token-metering/diagnostics/antigravity-last-empty.json`
@@ -88,7 +100,8 @@ AGY diagnostic files must use this fixed local-only protocol:
   atomically rename it to the final diagnostic file.
 - The JSON object must contain only safe diagnostic metadata keys such as
   `schema_version`, `ai_tool`, `kind`, `reason`, `created_at`,
-  `expected_input_contracts`, `observed_safe_shape`, and `privacy`.
+  `payload_source`, `expected_input_contracts`, `observed_safe_shape`, and
+  `privacy`.
 - `observed_safe_shape` must contain booleans only, for example whether the
   payload was an object, whether exact input/output token fields were present,
   whether only total tokens were present, whether a model hint was present, and

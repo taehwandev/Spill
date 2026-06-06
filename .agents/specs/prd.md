@@ -188,6 +188,12 @@ Requirements:
   consume no model tokens and pass empty stdin. Empty stdin must be treated as a
   normal no-event hook call, not as a metering failure and not as a reason to
   invent usage.
+- Antigravity/AGY adapters may accept exact token counts from stdin, explicit
+  payload JSON arguments, or allowlisted runtime environment fields when a
+  runtime exposes those fields to the hook. The adapter must read only fixed
+  allowlisted usage keys, must never inspect arbitrary environment values or
+  file paths, and must still skip event creation when no exact numeric token
+  count is exposed.
 - AGY diagnostics must be split into local-only files:
   `antigravity-last-empty.json` for empty no-event hook calls,
   `antigravity-last-mismatch.json` for payloads that exist but do not match a

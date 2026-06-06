@@ -74,6 +74,7 @@ Do not give manual per-adapter setup steps as the primary answer.
 Do not claim Spill token metering is installed until these conditions are satisfied:
 - The installer has run and Codex, Claude Code, and Antigravity/AGY setup has been verified, including Codex prefix_rule entries, SPILL_AI_TOOL runtime defaults, and Spill label handoff allowlists where supported.
 - For Antigravity/AGY, the canonical installed hook is ~/Library/Application Support/Spill/adapters/antigravity/spill-hook.py. If that path contains spaces, the installer may use ~/.gemini/spill-hook.py in hooks.json as a compatibility symlink or fresh copy to the canonical hook; verify that it resolves to, or matches, the canonical installed hook.
+- After installing or repairing Antigravity/AGY metering, restart any running AGY CLI or Antigravity IDE sessions before verifying. Running sessions may cache hook configuration and continue without invoking the newly installed hook.
 - If workflow labels were requested, every workflow edit was approved by the user.
 - If workflow labels were requested, script-based workflows were checked first and used when present.
 - If workflow labels were requested, at least one workflow step can write a safe label context before the AI tool starts.

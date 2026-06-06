@@ -1386,6 +1386,7 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(setup.contains("canonical installed hook lives at `~/Library/Application Support/Spill/adapters/antigravity/spill-hook.py`"))
         XCTAssertTrue(setup.contains("`python3 '~/.gemini/spill-hook.py'`"))
         XCTAssertTrue(setup.contains("compatibility file resolves to, or matches, the canonical installed hook"))
+        XCTAssertTrue(setup.contains("restart any running\n  AGY CLI or Antigravity IDE sessions before verifying"))
         XCTAssertTrue(setup.contains("--label <current-tool>"))
         XCTAssertTrue(setup.contains("Never let Claude"))
         XCTAssertTrue(setup.contains("Never encode project names"))
@@ -1489,6 +1490,10 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(helper.contains("SPILL_TOKEN_USAGE_AI_TOOL"))
         XCTAssertTrue(helper.contains(#""claude""#))
         XCTAssertTrue(helper.contains(#""antigravity""#))
+        XCTAssertTrue(helper.contains("runtime_restart_required"))
+        XCTAssertTrue(helper.contains("Running AGY or Antigravity IDE sessions may cache hook configuration"))
+        XCTAssertFalse(helper.contains("agentcatd"))
+        XCTAssertFalse(helper.contains("daemon_restarted"))
         XCTAssertTrue(helper.contains(#".claude", "settings.json"#))
         XCTAssertTrue(helper.contains(#".gemini", "spill-hook.py"#))
         XCTAssertTrue(helper.contains(#".gemini", "antigravity-cli", "settings.json"#))
@@ -1627,6 +1632,121 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(events.first?["model"] as? String, "gemini-3.5-flash-medium")
         XCTAssertEqual(events.first?["task_type"] as? String, "debugging")
         XCTAssertEqual(events.first?["stage"] as? String, "implement")
+    }
+
+    func testAntigravityHookAcceptsAllowlistedEnvironmentTokenFieldsWhenStdinIsEmpty() throws {
+        let inboxURL = temporaryInboxURL()
+        let diagnosticsURL = temporaryDiagnosticsURL()
+
+        try runAntigravityHook(
+            rawInput: "\n",
+            inboxURL: inboxURL,
+            diagnosticsURL: diagnosticsURL,
+            extraEnvironment: [
+                "ANTIGRAVITY_INPUT_TOKENS": "420",
+                "ANTIGRAVITY_OUTPUT_TOKENS": "80",
+                "ANTIGRAVITY_MODEL": "gemini-3.5-flash-medium",
+                "ANTIGRAVITY_SESSION_ID": "agyEnvRun01",
+                "SPILL_TOKEN_USAGE_TASK_TYPE": "debugging",
+                "SPILL_TOKEN_USAGE_STAGE": "implement"
+            ]
+        )
+
+        let events = try antigravityEventObjects(in: inboxURL)
+        XCTAssertEqual(events.count, 1)
+        XCTAssertEqual(events.first?["input_tokens"] as? Int, 420)
+        XCTAssertEqual(events.first?["output_tokens"] as? Int, 80)
+        XCTAssertEqual(events.first?["total_tokens"] as? Int, 500)
+        XCTAssertEqual(events.first?["run_id"] as? String, "agyEnvRun01")
+        XCTAssertEqual(events.first?["model"] as? String, "gemini-3.5-flash-medium")
+        XCTAssertEqual(events.first?["task_type"] as? String, "debugging")
+        XCTAssertEqual(events.first?["stage"] as? String, "implement")
+
+        let success = try decodedJSONObject(
+            from: Data(contentsOf: diagnosticsURL.appendingPathComponent("antigravity-last-success.json"))
+        )
+        XCTAssertEqual(success["kind"] as? String, "success")
+        XCTAssertEqual(success["payload_source"] as? String, "env_fields")
+        XCTAssertNil(success["run_id"])
+        XCTAssertNil(success["span_id"])
+    }
+
+    func testAntigravityHookAcceptsExplicitPayloadJsonArgumentWhenStdinIsEmpty() throws {
+        let inboxURL = temporaryInboxURL()
+        let diagnosticsURL = temporaryDiagnosticsURL()
+        let payload: [String: Any] = [
+            "session_id": "agyArgRun01",
+            "model": "gemini-2.5-pro",
+            "usage": [
+                "input_tokens": 210,
+                "output_tokens": 40
+            ],
+            "task_type": "testing",
+            "stage": "verify"
+        ]
+        let data = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
+        let rawPayload = try XCTUnwrap(String(data: data, encoding: .utf8))
+
+        try runAntigravityHook(
+            rawInput: "\n",
+            inboxURL: inboxURL,
+            diagnosticsURL: diagnosticsURL,
+            extraArguments: ["--payload-json", rawPayload]
+        )
+
+        let events = try antigravityEventObjects(in: inboxURL)
+        XCTAssertEqual(events.count, 1)
+        XCTAssertEqual(events.first?["input_tokens"] as? Int, 210)
+        XCTAssertEqual(events.first?["output_tokens"] as? Int, 40)
+        XCTAssertEqual(events.first?["total_tokens"] as? Int, 250)
+        XCTAssertEqual(events.first?["run_id"] as? String, "agyArgRun01")
+        XCTAssertEqual(events.first?["task_type"] as? String, "testing")
+        XCTAssertEqual(events.first?["stage"] as? String, "verify")
+
+        let success = try decodedJSONObject(
+            from: Data(contentsOf: diagnosticsURL.appendingPathComponent("antigravity-last-success.json"))
+        )
+        XCTAssertEqual(success["payload_source"] as? String, "argv_json")
+    }
+
+    func testAntigravityHookAcceptsAllowlistedEnvironmentJSONPayloadWhenStdinIsEmpty() throws {
+        let inboxURL = temporaryInboxURL()
+        let diagnosticsURL = temporaryDiagnosticsURL()
+        let payload: [String: Any] = [
+            "session_id": "agyEnvJsonRun01",
+            "model": "gemini-2.5-pro",
+            "usageMetadata": [
+                "promptTokenCount": 320,
+                "candidatesTokenCount": 70
+            ],
+            "task_type": "code_review",
+            "stage": "verify"
+        ]
+        let data = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
+        let rawPayload = try XCTUnwrap(String(data: data, encoding: .utf8))
+
+        try runAntigravityHook(
+            rawInput: "\n",
+            inboxURL: inboxURL,
+            diagnosticsURL: diagnosticsURL,
+            extraEnvironment: [
+                "SPILL_TOKEN_USAGE_PAYLOAD": rawPayload
+            ]
+        )
+
+        let events = try antigravityEventObjects(in: inboxURL)
+        XCTAssertEqual(events.count, 1)
+        XCTAssertEqual(events.first?["input_tokens"] as? Int, 320)
+        XCTAssertEqual(events.first?["output_tokens"] as? Int, 70)
+        XCTAssertEqual(events.first?["total_tokens"] as? Int, 390)
+        XCTAssertEqual(events.first?["run_id"] as? String, "agyEnvJsonRun01")
+        XCTAssertEqual(events.first?["task_type"] as? String, "code_review")
+        XCTAssertEqual(events.first?["stage"] as? String, "verify")
+
+        let success = try decodedJSONObject(
+            from: Data(contentsOf: diagnosticsURL.appendingPathComponent("antigravity-last-success.json"))
+        )
+        XCTAssertEqual(success["payload_source"] as? String, "env_json")
     }
 
     func testAntigravityHookTreatsEmptyTokenContainersAsNoUsage() throws {
@@ -2411,7 +2531,9 @@ final class TokenUsageStoreTests: XCTestCase {
     private func runAntigravityHook(
         rawInput: String,
         inboxURL: URL,
-        diagnosticsURL: URL
+        diagnosticsURL: URL,
+        extraEnvironment: [String: String] = [:],
+        extraArguments: [String] = []
     ) throws {
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let hookURL = root.appendingPathComponent("adapters/antigravity/spill-hook.py")
@@ -2422,7 +2544,7 @@ final class TokenUsageStoreTests: XCTestCase {
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["python3", hookURL.path]
+        process.arguments = ["python3", hookURL.path] + extraArguments
         var environment = ProcessInfo.processInfo.environment
         for key in environment.keys {
             if key.hasPrefix("ANTIGRAVITY_") || key.hasPrefix("CLAUDE_") || key.hasPrefix("SPILL_") {
@@ -2433,6 +2555,9 @@ final class TokenUsageStoreTests: XCTestCase {
         environment["SPILL_TOKEN_USAGE_DIAGNOSTICS_DIR"] = diagnosticsURL.path
         environment["SPILL_TOKEN_USAGE_LABEL_FILE"] = labelURL.path
         environment["PYTHONPYCACHEPREFIX"] = "/tmp/spill-pycache"
+        for (key, value) in extraEnvironment {
+            environment[key] = value
+        }
         process.environment = environment
 
         let inputPipe = Pipe()

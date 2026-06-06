@@ -5,10 +5,6 @@ import { constants } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
-import { exec } from "node:child_process";
-import { promisify } from "node:util";
-
-const execPromise = promisify(exec);
 
 const STAMP = new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
 const args = parseArgs(process.argv.slice(2));
@@ -415,13 +411,12 @@ async function configureAgentRuntimeSettings({ tool, target, permissionPrefix })
   await writeJSONObject(target, config);
   results.push({ tool, action: "configured_agent_runtime", path: target });
 
-  if (apply && tool === "antigravity" && process.platform === "darwin") {
-    try {
-      await execPromise("launchctl kickstart -k gui/$(id -u)/com.trappist.agentcatd");
-      results.push({ tool: "antigravity", action: "daemon_restarted" });
-    } catch (err) {
-      results.push({ tool: "antigravity", action: "daemon_restart_failed", reason: err.message });
-    }
+  if (tool === "antigravity") {
+    results.push({
+      tool: "antigravity",
+      action: "runtime_restart_required",
+      reason: "Running AGY or Antigravity IDE sessions may cache hook configuration. Restart them after install or repair.",
+    });
   }
 }
 

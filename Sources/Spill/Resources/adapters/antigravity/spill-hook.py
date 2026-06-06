@@ -146,12 +146,16 @@ def _write_diagnostic_file(filename: str, kind: str, reason: str, payload: dict 
         "kind": kind,
         "reason": reason,
         "created_at": _diagnostic_timestamp(),
+        "payload_source": _payload_source(payload),
         "expected_input_contracts": [
             "top_level_input_output_tokens",
             "usage_input_output_tokens",
             "tokens_input_output",
             "usage_metadata_total_tokens",
             "spill_token_usage_normalized",
+            "allowlisted_env_usage_payload",
+            "allowlisted_env_token_fields",
+            "explicit_payload_json_argument",
         ],
         "observed_safe_shape": _safe_payload_shape(payload),
         "privacy": "No payload values, prompts, commands, file paths, logs, diffs, source, environment values, or secrets are stored.",
@@ -171,7 +175,7 @@ def _write_diagnostic_file(filename: str, kind: str, reason: str, payload: dict 
         pass
 
 
-def _write_success_diagnostic(event: dict) -> None:
+def _write_success_diagnostic(event: dict, payload_source: str = "stdin") -> None:
     if os.environ.get("SPILL_TOKEN_USAGE_DISABLE_DIAGNOSTICS") == "1":
         return
 
@@ -181,6 +185,7 @@ def _write_success_diagnostic(event: dict) -> None:
         "kind": "success",
         "reason": "usage_event_enqueued",
         "created_at": _diagnostic_timestamp(),
+        "payload_source": payload_source,
         "event_created_at": event["created_at"],
         "task_type": event["task_type"],
         "stage": event["stage"],
@@ -203,7 +208,16 @@ def _write_success_diagnostic(event: dict) -> None:
         pass
 
 
+def _payload_source(payload: dict = None) -> str:
+    if isinstance(payload, dict):
+        source = payload.get("_spill_payload_source")
+        if source in ("stdin", "argv_json", "env_json", "env_fields"):
+            return source
+    return "none"
+
+
 def _safe_payload_shape(payload: dict = None) -> dict:
+    env_shape = _safe_env_shape()
     if not isinstance(payload, dict):
         return {
             "payload_object": False,
@@ -211,6 +225,10 @@ def _safe_payload_shape(payload: dict = None) -> dict:
             "has_total_only": False,
             "has_model_hint": False,
             "has_opaque_run_hint": False,
+            "has_allowlisted_env_usage_payload": env_shape["has_allowlisted_env_usage_payload"],
+            "has_allowlisted_env_token_fields": env_shape["has_allowlisted_env_token_fields"],
+            "has_allowlisted_env_model_hint": env_shape["has_allowlisted_env_model_hint"],
+            "has_allowlisted_env_run_hint": env_shape["has_allowlisted_env_run_hint"],
         }
 
     containers = _token_containers(payload)
@@ -222,6 +240,10 @@ def _safe_payload_shape(payload: dict = None) -> dict:
         "has_total_only": _has_any_int_field(containers, _TOTAL_TOKEN_KEYS),
         "has_model_hint": bool(_payload_model_hint(payload)),
         "has_opaque_run_hint": bool(_payload_run_hint(payload)),
+        "has_allowlisted_env_usage_payload": env_shape["has_allowlisted_env_usage_payload"],
+        "has_allowlisted_env_token_fields": env_shape["has_allowlisted_env_token_fields"],
+        "has_allowlisted_env_model_hint": env_shape["has_allowlisted_env_model_hint"],
+        "has_allowlisted_env_run_hint": env_shape["has_allowlisted_env_run_hint"],
     }
 
 
@@ -245,10 +267,10 @@ def _payload_model(payload: dict) -> str:
     if payload_hint:
         return payload_hint
 
-    # Check AGY environment variable
-    env_model = os.environ.get("ANTIGRAVITY_MODEL", "")
-    if env_model and _MODEL_ID.match(env_model):
-        return env_model
+    for env_key in _ENV_MODEL_KEYS:
+        env_model = os.environ.get(env_key, "")
+        if env_model and _MODEL_ID.match(env_model):
+            return env_model
     # Try reading current model from AGY settings.json
     try:
         settings_path = pathlib.Path.home() / ".gemini/antigravity-cli/settings.json"
@@ -326,6 +348,65 @@ _RUN_HINT_KEYS = (
     "conversationId",
     "run_id",
     "runId",
+)
+_ENV_JSON_PAYLOAD_KEYS = (
+    "SPILL_TOKEN_USAGE_PAYLOAD",
+    "SPILL_TOKEN_USAGE_EVENT",
+    "ANTIGRAVITY_TOKEN_USAGE",
+    "ANTIGRAVITY_USAGE",
+    "AGY_TOKEN_USAGE",
+    "AGY_USAGE",
+    "GEMINI_TOKEN_USAGE",
+    "GEMINI_USAGE",
+)
+_ENV_INPUT_TOKEN_KEYS = (
+    "ANTIGRAVITY_INPUT_TOKENS",
+    "ANTIGRAVITY_PROMPT_TOKENS",
+    "ANTIGRAVITY_PROMPT_TOKEN_COUNT",
+    "AGY_INPUT_TOKENS",
+    "AGY_PROMPT_TOKENS",
+    "AGY_PROMPT_TOKEN_COUNT",
+    "GEMINI_INPUT_TOKENS",
+    "GEMINI_PROMPT_TOKENS",
+    "GEMINI_PROMPT_TOKEN_COUNT",
+)
+_ENV_OUTPUT_TOKEN_KEYS = (
+    "ANTIGRAVITY_OUTPUT_TOKENS",
+    "ANTIGRAVITY_COMPLETION_TOKENS",
+    "ANTIGRAVITY_CANDIDATES_TOKEN_COUNT",
+    "AGY_OUTPUT_TOKENS",
+    "AGY_COMPLETION_TOKENS",
+    "AGY_CANDIDATES_TOKEN_COUNT",
+    "GEMINI_OUTPUT_TOKENS",
+    "GEMINI_COMPLETION_TOKENS",
+    "GEMINI_CANDIDATES_TOKEN_COUNT",
+)
+_ENV_TOTAL_TOKEN_KEYS = (
+    "ANTIGRAVITY_TOTAL_TOKENS",
+    "ANTIGRAVITY_TOTAL_TOKEN_COUNT",
+    "AGY_TOTAL_TOKENS",
+    "AGY_TOTAL_TOKEN_COUNT",
+    "GEMINI_TOTAL_TOKENS",
+    "GEMINI_TOTAL_TOKEN_COUNT",
+)
+_ENV_MODEL_KEYS = (
+    "ANTIGRAVITY_MODEL",
+    "ANTIGRAVITY_MODEL_ID",
+    "AGY_MODEL",
+    "AGY_MODEL_ID",
+    "GEMINI_MODEL",
+    "GEMINI_MODEL_ID",
+)
+_ENV_RUN_HINT_KEYS = (
+    "ANTIGRAVITY_CONVERSATION_ID",
+    "ANTIGRAVITY_SESSION_ID",
+    "ANTIGRAVITY_RUN_ID",
+    "AGY_CONVERSATION_ID",
+    "AGY_SESSION_ID",
+    "AGY_RUN_ID",
+    "GEMINI_CONVERSATION_ID",
+    "GEMINI_SESSION_ID",
+    "GEMINI_RUN_ID",
 )
 
 
@@ -413,6 +494,33 @@ def _first_positive_int(containers: list[dict], keys: tuple[str, ...]) -> int:
     return 0
 
 
+def _first_env_positive_int(keys: tuple[str, ...]) -> int:
+    for key in keys:
+        value = _non_negative_int(os.environ.get(key))
+        if value > 0:
+            return value
+    return 0
+
+
+def _first_env_safe_value(keys: tuple[str, ...], pattern: re.Pattern) -> str:
+    for key in keys:
+        value = os.environ.get(key, "")
+        if isinstance(value, str) and pattern.match(value):
+            return value
+    return ""
+
+
+def _safe_env_shape() -> dict:
+    return {
+        "has_allowlisted_env_usage_payload": any(os.environ.get(key, "").strip() for key in _ENV_JSON_PAYLOAD_KEYS),
+        "has_allowlisted_env_token_fields": _first_env_positive_int(_ENV_INPUT_TOKEN_KEYS) > 0
+        or _first_env_positive_int(_ENV_OUTPUT_TOKEN_KEYS) > 0
+        or _first_env_positive_int(_ENV_TOTAL_TOKEN_KEYS) > 0,
+        "has_allowlisted_env_model_hint": bool(_first_env_safe_value(_ENV_MODEL_KEYS, _MODEL_ID)),
+        "has_allowlisted_env_run_hint": bool(_first_env_safe_value(_ENV_RUN_HINT_KEYS, _OPAQUE_ID)),
+    }
+
+
 def _has_any_int_field(containers: list[dict], keys: tuple[str, ...]) -> bool:
     return any(_non_negative_int(container.get(key)) > 0 for container in containers for key in keys)
 
@@ -452,6 +560,10 @@ def _payload_run_hint(payload: dict) -> str:
             if isinstance(value, str) and _OPAQUE_ID.match(value):
                 return value
     return ""
+
+
+def _env_run_hint() -> str:
+    return _first_env_safe_value(_ENV_RUN_HINT_KEYS, _OPAQUE_ID)
 
 
 def _payload_span_hint(payload: dict, total_only: bool) -> str:
@@ -501,6 +613,64 @@ def _read_stdin_nonblocking() -> str:
     return ""
 
 
+def _mark_payload_source(payload: dict, source: str) -> dict:
+    payload["_spill_payload_source"] = source
+    return payload
+
+
+def _payload_from_env_fields() -> dict:
+    input_tokens = _first_env_positive_int(_ENV_INPUT_TOKEN_KEYS)
+    output_tokens = _first_env_positive_int(_ENV_OUTPUT_TOKEN_KEYS)
+    total_tokens = _first_env_positive_int(_ENV_TOTAL_TOKEN_KEYS)
+
+    usage = {}
+    if input_tokens > 0 or output_tokens > 0:
+        usage["input_tokens"] = input_tokens
+        usage["output_tokens"] = output_tokens
+    elif total_tokens > 0:
+        usage["total_tokens"] = total_tokens
+    else:
+        return {}
+
+    payload = {"spill_token_usage": usage}
+    model = _first_env_safe_value(_ENV_MODEL_KEYS, _MODEL_ID)
+    run_hint = _env_run_hint()
+    if model:
+        payload["model"] = model
+    if run_hint:
+        payload["session_id"] = run_hint
+    return payload
+
+
+def _read_payload_source() -> tuple[str, str]:
+    raw_payload = _read_stdin_nonblocking()
+    if raw_payload.strip():
+        return raw_payload, "stdin"
+
+    args = sys.argv[1:]
+    for index, arg in enumerate(args):
+        if arg in ("--payload-json", "--usage-json") and index + 1 < len(args):
+            raw_arg = args[index + 1]
+            if raw_arg.strip():
+                return raw_arg, "argv_json"
+        for prefix in ("--payload-json=", "--usage-json="):
+            if arg.startswith(prefix):
+                raw_arg = arg[len(prefix):]
+                if raw_arg.strip():
+                    return raw_arg, "argv_json"
+
+    for env_key in _ENV_JSON_PAYLOAD_KEYS:
+        raw_env = os.environ.get(env_key, "")
+        if raw_env.strip():
+            return raw_env, "env_json"
+
+    env_payload = _payload_from_env_fields()
+    if env_payload:
+        return json.dumps(env_payload, separators=(",", ":")), "env_fields"
+
+    return "", "none"
+
+
 def _clear_diagnostic() -> None:
     try:
         for name in (MISMATCH_DIAGNOSTIC_FILE_NAME, LEGACY_DIAGNOSTIC_FILE_NAME):
@@ -512,7 +682,7 @@ def _clear_diagnostic() -> None:
 
 
 def main() -> None:
-    raw_payload = _read_stdin_nonblocking()
+    raw_payload, payload_source = _read_payload_source()
 
     if not raw_payload.strip():
         _write_diagnostic_file(
@@ -526,12 +696,23 @@ def main() -> None:
     try:
         payload = json.loads(raw_payload)
     except Exception:
-        _write_diagnostic_file(MISMATCH_DIAGNOSTIC_FILE_NAME, "runtime_payload_mismatch", "invalid_json")
+        _write_diagnostic_file(
+            MISMATCH_DIAGNOSTIC_FILE_NAME,
+            "runtime_payload_mismatch",
+            "invalid_json",
+            {"_spill_payload_source": payload_source},
+        )
         return
 
     if not isinstance(payload, dict):
-        _write_diagnostic_file(MISMATCH_DIAGNOSTIC_FILE_NAME, "runtime_payload_mismatch", "non_object_payload")
+        _write_diagnostic_file(
+            MISMATCH_DIAGNOSTIC_FILE_NAME,
+            "runtime_payload_mismatch",
+            "non_object_payload",
+            {"_spill_payload_source": payload_source},
+        )
         return
+    payload = _mark_payload_source(payload, payload_source)
 
     input_tokens, output_tokens, total, total_only = _payload_token_counts(payload)
 
@@ -546,8 +727,7 @@ def main() -> None:
         return
 
     model = _payload_model(payload)
-    env_conv_id = os.environ.get("ANTIGRAVITY_CONVERSATION_ID", "")
-    session_id = env_conv_id or _payload_run_hint(payload)
+    session_id = _payload_run_hint(payload) or _env_run_hint()
     run_id = _opaque(session_id, "run-" + uuid.uuid4().hex[:12])
     span_hint = _payload_span_hint(payload, total_only)
     span_id = _stable_span_id(run_id, model, str(input_tokens), str(output_tokens), str(total), span_hint)
@@ -591,13 +771,12 @@ def main() -> None:
         },
         "latency_ms": 0,
         "created_at": now,
-        "sync_mode": "local_only",
     }
 
     _enqueue_event(event)
     _consume_label_file()
     _clear_diagnostic()
-    _write_success_diagnostic(event)
+    _write_success_diagnostic(event, payload_source)
 
 
 if __name__ == "__main__":
