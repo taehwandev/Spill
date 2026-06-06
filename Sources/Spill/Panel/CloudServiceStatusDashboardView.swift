@@ -48,7 +48,7 @@ struct CloudServiceStatusDashboardView: View {
             Spacer()
 
             Button {
-                store.refreshIfNeeded(force: NSEvent.modifierFlags.contains(.option))
+                store.refreshIfNeeded(force: true)
             } label: {
                 Image(systemName: "arrow.clockwise")
                     .font(.system(size: 11, weight: .bold))

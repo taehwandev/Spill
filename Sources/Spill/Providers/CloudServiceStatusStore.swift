@@ -8,6 +8,7 @@ final class CloudServiceStatusStore: ObservableObject {
     private let provider: CloudServiceStatusProvider
     private let cacheURL: URL
     private let cacheTTL: TimeInterval
+    private let issueCacheTTL: TimeInterval
     private let now: () -> Date
     private var refreshTask: Task<Void, Never>?
 
@@ -15,11 +16,13 @@ final class CloudServiceStatusStore: ObservableObject {
         provider: CloudServiceStatusProvider = CloudServiceStatusProvider(),
         cacheURL: URL = CloudServiceStatusStore.defaultCacheURL(),
         cacheTTL: TimeInterval = CloudServiceStatusProvider.defaultCacheTTL,
+        issueCacheTTL: TimeInterval = CloudServiceStatusProvider.issueCacheTTL,
         now: @escaping () -> Date = Date.init
     ) {
         self.provider = provider
         self.cacheURL = cacheURL
         self.cacheTTL = cacheTTL
+        self.issueCacheTTL = issueCacheTTL
         self.now = now
         state = .idle(snapshot: Self.readCache(from: cacheURL))
     }
@@ -48,7 +51,7 @@ final class CloudServiceStatusStore: ObservableObject {
         let cachedSnapshot = state.snapshot
         if !force,
            let cachedSnapshot,
-           cachedSnapshot.isFresh(now: now(), ttl: cacheTTL) {
+           cachedSnapshot.isFresh(now: now(), healthyTTL: cacheTTL, issueTTL: issueCacheTTL) {
             state = .loaded(cachedSnapshot)
             return
         }

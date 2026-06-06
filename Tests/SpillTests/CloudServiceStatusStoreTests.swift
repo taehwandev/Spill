@@ -30,6 +30,71 @@ final class CloudServiceStatusStoreTests: XCTestCase {
         XCTAssertEqual(store.snapshot, cachedSnapshot)
     }
 
+    func testIssueCacheUsesShorterTTLWithoutNetworkCallBeforeExpiry() async throws {
+        let cacheURL = temporaryCacheURL()
+        let cachedSnapshot = CloudServiceStatusSnapshot(
+            fetchedAt: Date(timeIntervalSince1970: 1_000),
+            items: [cachedItem(health: .outage)]
+        )
+        try writeCache(cachedSnapshot, to: cacheURL)
+        let requestCounter = RequestCounter()
+        let store = CloudServiceStatusStore(
+            provider: CloudServiceStatusProvider { _ in
+                await requestCounter.increment()
+                return Data("[]".utf8)
+            },
+            cacheURL: cacheURL,
+            cacheTTL: 15 * 60,
+            issueCacheTTL: 5 * 60,
+            now: { Date(timeIntervalSince1970: 1_250) }
+        )
+
+        store.refreshIfNeeded()
+        try await waitForNonLoadingState(in: store)
+
+        let requestCount = await requestCounter.currentValue()
+        XCTAssertEqual(requestCount, 0)
+        XCTAssertEqual(store.snapshot, cachedSnapshot)
+    }
+
+    func testIssueCacheRefreshesAfterShortTTL() async throws {
+        let cacheURL = temporaryCacheURL()
+        let cachedSnapshot = CloudServiceStatusSnapshot(
+            fetchedAt: Date(timeIntervalSince1970: 1_000),
+            items: [cachedItem(health: .outage)]
+        )
+        try writeCache(cachedSnapshot, to: cacheURL)
+        let requestCounter = RequestCounter()
+        let openAIStatusJSON = Self.operationalStatusPageJSON
+        let claudeStatusJSON = Self.operationalClaudeStatusJSON
+        let store = CloudServiceStatusStore(
+            provider: CloudServiceStatusProvider { url in
+                await requestCounter.increment()
+                switch url {
+                case CloudServiceStatusProvider.openAIStatusURL:
+                    return Data(openAIStatusJSON.utf8)
+                case CloudServiceStatusProvider.claudeStatusURL:
+                    return Data(claudeStatusJSON.utf8)
+                case CloudServiceStatusProvider.googleCloudIncidentsURL:
+                    return Data("[]".utf8)
+                default:
+                    throw CloudServiceStatusError.invalidHTTPStatus(404)
+                }
+            },
+            cacheURL: cacheURL,
+            cacheTTL: 15 * 60,
+            issueCacheTTL: 5 * 60,
+            now: { Date(timeIntervalSince1970: 1_301) }
+        )
+
+        store.refreshIfNeeded()
+        try await waitForLoadedState(in: store)
+
+        let requestCount = await requestCounter.currentValue()
+        XCTAssertEqual(requestCount, 3)
+        XCTAssertNotEqual(store.snapshot, cachedSnapshot)
+    }
+
     func testForceRefreshBypassesFreshCache() async throws {
         let cacheURL = temporaryCacheURL()
         let cachedSnapshot = CloudServiceStatusSnapshot(

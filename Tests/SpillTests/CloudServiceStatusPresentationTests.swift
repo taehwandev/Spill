@@ -48,6 +48,42 @@ final class CloudServiceStatusPresentationTests: XCTestCase {
         XCTAssertFalse(CloudServiceHealth.unknown.isServerIssue)
     }
 
+    func testLocalAIToolKindsMapToCloudServiceKinds() {
+        XCTAssertEqual(CloudServiceStatusPresentation.serviceKinds(for: LocalAIToolKind.codex), [.codex])
+        XCTAssertEqual(CloudServiceStatusPresentation.serviceKinds(for: LocalAIToolKind.claude), [.claudeCode])
+        XCTAssertEqual(CloudServiceStatusPresentation.serviceKinds(for: LocalAIToolKind.antigravity), [.antigravity])
+        XCTAssertEqual(CloudServiceStatusPresentation.serviceKinds(for: LocalAIToolKind.openAI), [.openAI])
+        XCTAssertEqual(CloudServiceStatusPresentation.serviceKinds(for: LocalAIToolKind.ollama), [])
+    }
+
+    func testTokenAIToolsMapToCloudServiceKinds() {
+        XCTAssertEqual(CloudServiceStatusPresentation.serviceKinds(for: TokenUsageAITool.codex), [.codex])
+        XCTAssertEqual(CloudServiceStatusPresentation.serviceKinds(for: TokenUsageAITool.claude), [.claudeCode])
+        XCTAssertEqual(CloudServiceStatusPresentation.serviceKinds(for: TokenUsageAITool.antigravity), [.antigravity])
+        XCTAssertEqual(CloudServiceStatusPresentation.serviceKinds(for: TokenUsageAITool.openAI), [.openAI])
+        XCTAssertEqual(CloudServiceStatusPresentation.serviceKinds(for: TokenUsageAITool.unknown), [])
+    }
+
+    func testServiceStatusUsesWorstMappedHealth() {
+        let snapshot = CloudServiceStatusSnapshot(
+            fetchedAt: Date(),
+            items: [
+                item(kind: .claudeAPI, health: .outage),
+                item(kind: .claudeCode, health: .degraded),
+                item(kind: .openAI, health: .operational)
+            ]
+        )
+
+        XCTAssertEqual(
+            CloudServiceStatusPresentation.serviceStatus(for: TokenUsageAITool.claude, in: snapshot)?.kind,
+            .claudeCode
+        )
+        XCTAssertEqual(
+            CloudServiceStatusPresentation.serviceStatus(for: TokenUsageAITool.claude, in: snapshot)?.health,
+            .degraded
+        )
+    }
+
     private func item(kind: CloudServiceKind, health: CloudServiceHealth) -> CloudServiceStatusItem {
         CloudServiceStatusItem(
             kind: kind,

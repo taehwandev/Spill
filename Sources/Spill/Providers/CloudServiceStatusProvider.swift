@@ -96,10 +96,23 @@ struct CloudServiceStatusSnapshot: Codable, Equatable, Sendable {
     func isFresh(now: Date = Date(), ttl: TimeInterval) -> Bool {
         now.timeIntervalSince(fetchedAt) < ttl
     }
+
+    func isFresh(
+        now: Date = Date(),
+        healthyTTL: TimeInterval,
+        issueTTL: TimeInterval
+    ) -> Bool {
+        now.timeIntervalSince(fetchedAt) < (usesIssueRefreshInterval ? issueTTL : healthyTTL)
+    }
+
+    var usesIssueRefreshInterval: Bool {
+        items.isEmpty || items.contains { $0.health != .operational }
+    }
 }
 
 struct CloudServiceStatusProvider: Sendable {
     static let defaultCacheTTL: TimeInterval = 15 * 60
+    static let issueCacheTTL: TimeInterval = 5 * 60
     static let openAIStatusURL = URL(string: "https://status.openai.com/api/v2/summary.json")!
     static let claudeStatusURL = URL(string: "https://status.claude.com/api/v2/summary.json")!
     static let googleCloudIncidentsURL = URL(string: "https://status.cloud.google.com/incidents.json")!
