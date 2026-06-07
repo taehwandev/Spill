@@ -212,7 +212,7 @@ Rules:
   paths, repo names, branch names, commit messages, terminal output, logs,
   diffs, source content, environment values, secrets, and arbitrary extra
   fields.
-- Detailed task/source breakdowns require exact runtime usage metadata supplied
+- Detailed task and token category breakdowns require exact runtime usage metadata supplied
   through the safe local event contract.
 - `task_type` and `stage` are extensible safe workflow slugs, not closed enums.
   Spill publishes recommended labels, but AI runtimes, workflow hooks, and
@@ -244,7 +244,7 @@ Rules:
 - Agent-facing instructions must include explicit commands for all first-class
   runtime labels: `--tool codex`, `--tool claude`, and `--tool antigravity`.
 - The helper may output aggregate totals, event counts, model/task/stage
-  breakdowns, source buckets, and recent activity.
+  breakdowns, token detail categories, and recent activity.
 - The helper must not write usage events, labels, diagnostics, hooks, importer
   cursors, or setup files.
 - The helper must not inspect prompts, responses, commands, file paths, repo

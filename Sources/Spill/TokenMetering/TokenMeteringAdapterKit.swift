@@ -88,7 +88,7 @@ enum TokenMeteringAdapterKit {
     static let claudeCode = TokenMeteringAdapter(
         aiTool: .claude,
         title: "Claude Code",
-        subtitle: "Stop hook — transcript reader",
+        subtitle: "Local transcript reader",
         scriptFileName: "spill-hook.py",
         hookConfigTemplate: """
         Add one entry to the "Stop" array in ~/.claude/settings.json.
@@ -111,7 +111,7 @@ enum TokenMeteringAdapterKit {
     static let codex = TokenMeteringAdapter(
         aiTool: .codex,
         title: "Codex",
-        subtitle: "Stop hook — session token_count importer",
+        subtitle: "Local session usage reader",
         scriptFileName: "spill-importer.mjs",
         hookConfigTemplate: """
         Add to ~/.codex/hooks.json:

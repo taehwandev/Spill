@@ -67,7 +67,7 @@ node ~/Library/Application\ Support/Spill/adapters/setup/spill-token-metering-st
 The status helper must read only Spill's app-owned local
 `token_usage_events` aggregates and sanitized usage JSON. It must print a
 self-scoped summary with total, input, output, event count, average event size,
-peak event size, model/task/stage breakdowns, source buckets, and recent
+peak record size, model/task/stage breakdowns, token detail categories, and recent
 activity. It must not create usage events, write labels, run hooks, or inspect
 prompts, responses, commands, file paths, logs, diffs, source content,
 environment values, transcripts, shell history, or secrets. Do not run this

@@ -185,7 +185,7 @@ Requirements:
 - Token metering works without login, cloud upload, telemetry, or a running web
   app.
 - Local usage records may include only numeric counts, timestamps, model ids,
-  opaque ids, latency, source buckets, safe `ai_tool`, `task_type`, and `stage`
+  opaque ids, latency, token detail categories, safe `ai_tool`, `task_type`, and `stage`
   labels.
 - Local usage records must never include prompts, responses, commands, file
   paths, repo names, branch names, terminal output, logs, diffs, source content,
@@ -213,7 +213,7 @@ Requirements:
   commands for `--tool codex`, `--tool claude`, and `--tool antigravity`, not
   only a generic placeholder. This helper must show more than input/output
   totals: event count, total tokens, average event size, peak event size,
-  model/task/stage breakdowns, source buckets, and recent activity should be
+  model/task/stage breakdowns, token detail categories, and recent activity should be
   available in the response.
 - Agent-facing status reads are a secondary reporting surface, not a metering
   source. They must not create usage events, write labels, run hooks, infer
@@ -262,9 +262,9 @@ Dashboard UX requirements:
   SDK events belong behind diagnostics or an advanced filter.
 - Work item rows are selectable and update a detail panel with safe aggregates:
   total/input/output tokens, event count, agent tool, model breakdown, stage
-  breakdown, source breakdown, time range, label source, and optional local
+  breakdown, token detail split, time range, label source, and optional local
   alias.
-- Every summary card, work item table, source breakdown, model breakdown, and
+- Every summary card, work item table, token detail chart, model breakdown, and
   technical detail panel has a short info affordance explaining what is counted,
   what is inferred from safe labels, and what is unavailable due to the privacy
   boundary.

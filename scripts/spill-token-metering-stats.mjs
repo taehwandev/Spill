@@ -240,7 +240,7 @@ function appendSection(lines, title, rows) {
 
 function appendSourceSection(lines, rows) {
   lines.push("");
-  lines.push("Source Buckets");
+  lines.push("Token Details");
   if (rows.length === 0) {
     lines.push("  none");
     return;
@@ -367,9 +367,9 @@ Options:
   --json             Print JSON instead of a compact text report.
 
 This command is read-only. It reads Spill's app-owned local usage store and
-prints aggregate token counts, model/task/stage breakdowns, source buckets, and
-recent activity. It does not create usage events and does not read prompts,
-responses, commands, file paths, logs, diffs, source content, environment
+prints aggregate token counts, model/task/stage breakdowns, token detail
+categories, and recent activity. It does not create usage events and does not read prompts,
+responses, commands, file paths, logs, diffs, code content, environment
 values, or secrets.
 `);
 }

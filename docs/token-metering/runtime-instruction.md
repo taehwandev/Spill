@@ -40,7 +40,7 @@ node ~/Library/Application\ Support/Spill/adapters/setup/spill-token-metering-st
 - Include the full local aggregate summary in the answer, not only input and
   output tokens: total tokens, input tokens, output tokens, event count, average
   tokens per event, peak event size, model breakdown, task breakdown, stage breakdown,
-  source buckets, and recent activity.
+  token detail categories, and recent activity.
 - This command is a read-only status query, not a usage event, hook, importer,
   label handoff, or proof that the current turn was recorded.
 - Do not run this status helper in normal replies. Run it only when the user
@@ -265,7 +265,7 @@ The JSON event must contain only these keys:
 
 Token breakdown rules:
 
-- Only fill a source bucket when the runtime or adapter exposes that exact source count.
-- If the source breakdown is not exact, put the total in `unknown` and set the other source buckets to `0`.
+- Only fill a token detail category when the runtime or adapter exposes that exact source count.
+- If the token detail split is not exact, put the total in `unknown` and set the other token detail categories to `0`.
 - Do not infer `repo_context`, `tool_output`, `history`, `user`, `system`, or `generated_output` from prompts, transcripts, logs, files, or message text.
-- If exact totals are available but exact source buckets are not, still send the event with `unknown` equal to `total_tokens`.
+- If exact totals are available but exact token detail categories are not, still send the event with `unknown` equal to `total_tokens`.
