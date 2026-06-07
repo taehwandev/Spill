@@ -466,6 +466,41 @@ Implementation order:
 7. Add tests for unauthenticated, normal user, admin, stale role, direct route,
    direct API call, device credential, and revoked role cases.
 
+### ARD-006B: Hosted Web Source Boundary
+
+Decision:
+
+The open-source macOS app and shared token-only contracts may remain public, but
+the hosted Spill web portal may be separated into a private repository or
+private package if the product needs to keep hosted UI implementation,
+deployment wiring, or product experiments out of the public source tree.
+
+Browser-delivered JavaScript and HTML are never a trusted secret boundary. Route
+guards and hidden navigation are presentation controls only; every protected
+read, mutation, admin response, device action, and account-scoped query must
+still be enforced by Supabase RLS or the `private-usage-relay` Edge Function.
+
+Rationale:
+
+Open-source users should be able to inspect and run the Mac app and local
+token-metering safety contract. Hosted account surfaces have different product
+and abuse considerations. Separating hosted web source can reduce public
+implementation exposure, but it does not replace server-side session, role, and
+account authorization.
+
+Rules:
+
+- Keep public env templates value-free and never commit hosted secrets.
+- Do not rely on minification, route hiding, bundle splitting, or feature flags
+  as authorization.
+- Public web code may include self-hostable examples only when they do not
+  expose hosted deployment internals or privileged behavior.
+- If the hosted web portal moves private, keep shared schemas, DTO contracts,
+  and privacy guarantees documented in the public app repo.
+- Protected routes must render only after a signed-in viewer is available.
+- Admin routes must render only after the server-provided viewer role confirms
+  `admin`.
+
 ### ARD-007: Distribution Model
 
 Decision:
