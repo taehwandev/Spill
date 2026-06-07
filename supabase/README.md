@@ -87,12 +87,12 @@ npx supabase functions deploy private-usage-relay
 Use this checklist to track remote setup. Unchecked CLI steps change remote
 Supabase state and require explicit approval at execution time.
 
-- [ ] In Vercel, add only browser-visible Vite variables:
+- [x] In Vercel, add only browser-visible Vite variables:
   `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, and
   `VITE_SPILL_RELAY_FUNCTION_URL`.
-- [ ] In Supabase Auth, configure the production site URL and local/production
+- [x] In Supabase Auth, configure the production site URL and local/production
   redirect URLs for `https://spill.thdev.app` and `http://localhost:5173`.
-- [ ] In Supabase Auth providers, enable GitHub and Google OAuth and enter
+- [x] In Supabase Auth providers, enable GitHub and Google OAuth and enter
   provider client secrets only in the Supabase Dashboard.
 - [x] In Supabase Function secrets, set `SPILL_WEB_ORIGIN` and
   `SPILL_ADMIN_EMAIL` with placeholders replaced through the Dashboard or an
@@ -113,6 +113,18 @@ types:
 - Spill write-only device credentials for encrypted bucket uploads.
 
 The function verifies both credential types itself.
+
+## Device Access Model
+
+Each Mac receives its own write-only device credential after a signed-in user
+creates and exchanges a short-lived device grant. Browser dashboard calls use
+the Supabase user JWT. Device credentials can upload encrypted buckets only and
+must receive `403` from viewer, device list, device revoke, bucket read, grant
+creation, and admin routes.
+
+Disconnecting a Mac sets `revoked_at` on the device and its active credentials.
+This stops that Mac from uploading without signing the user out of other Macs or
+browser sessions.
 
 ## Roles And Admin Setup
 

@@ -9,6 +9,7 @@ const TOKEN_TTL_SECONDS = 10 * 60;
 const SAFE_OPAQUE_ID = /^[A-Za-z0-9._:-]{1,160}$/;
 const SAFE_REQUEST_ID = /^[A-Za-z0-9._:-]{1,160}$/;
 const SHA256_HEX = /^[a-f0-9]{64}$/;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const USER_PERMISSIONS = ["usage.read_own", "device.manage_own"] as const;
 const ADMIN_PERMISSIONS = [
   ...USER_PERMISSIONS,
@@ -407,6 +408,124 @@ async function handleViewer(request: Request): Promise<Response> {
   });
 }
 
+async function listDevicesForUser(
+  admin: ReturnType<typeof supabaseAdmin>,
+  accountId: string
+) {
+  return await admin
+    .from("private_usage_devices")
+    .select("id, opaque_device_id, device_key_fingerprint, created_at, revoked_at, last_upload_at")
+    .eq("account_id", accountId)
+    .order("created_at", { ascending: true });
+}
+
+async function handleListDevices(request: Request): Promise<Response> {
+  const admin = supabaseAdmin();
+  const user = await requireUser(request, admin);
+
+  if (!user.ok) {
+    return jsonResponse(request, user.status, { error: user.reason });
+  }
+
+  const { data, error } = await listDevicesForUser(admin, user.account.id);
+
+  if (error) {
+    return jsonResponse(request, 500, { error: "devices_unavailable" });
+  }
+
+  return jsonResponse(request, 200, {
+    devices: data ?? []
+  });
+}
+
+async function handleRevokeDevice(request: Request): Promise<Response> {
+  const admin = supabaseAdmin();
+  const user = await requireUser(request, admin);
+
+  if (!user.ok) {
+    return jsonResponse(request, user.status, { error: user.reason });
+  }
+
+  const body = await readJson(request);
+  if (!body || forbiddenPaths(body).length > 0) {
+    return jsonResponse(request, 400, { error: "invalid_request" });
+  }
+
+  const deviceId = safeString(body.device_id, UUID);
+  if (!deviceId) {
+    return jsonResponse(request, 400, { error: "invalid_request" });
+  }
+
+  const revokedAt = new Date().toISOString();
+  const { data: device, error: deviceError } = await admin
+    .from("private_usage_devices")
+    .update({ revoked_at: revokedAt })
+    .eq("account_id", user.account.id)
+    .eq("id", deviceId)
+    .select("id")
+    .maybeSingle();
+
+  if (deviceError) {
+    await writeAdminAudit(admin, {
+      accountId: user.account.id,
+      actorUserId: user.user.id,
+      targetUserId: user.user.id,
+      action: "device.revoke",
+      result: "failed",
+      reasonCode: "device_update_failed",
+      requestId: requestId(request)
+    });
+    return jsonResponse(request, 500, { error: "device_unavailable" });
+  }
+
+  if (!device) {
+    await writeAdminAudit(admin, {
+      accountId: user.account.id,
+      actorUserId: user.user.id,
+      action: "device.revoke",
+      result: "denied",
+      reasonCode: "device_not_found",
+      requestId: requestId(request)
+    });
+    return jsonResponse(request, 404, { error: "device_not_found" });
+  }
+
+  const { error: credentialError } = await admin
+    .from("private_usage_device_credentials")
+    .update({ revoked_at: revokedAt })
+    .eq("account_id", user.account.id)
+    .eq("device_id", deviceId)
+    .is("revoked_at", null);
+
+  if (credentialError) {
+    await writeAdminAudit(admin, {
+      accountId: user.account.id,
+      actorUserId: user.user.id,
+      targetUserId: user.user.id,
+      action: "device.revoke",
+      result: "failed",
+      reasonCode: "credential_update_failed",
+      requestId: requestId(request)
+    });
+    return jsonResponse(request, 500, { error: "device_unavailable" });
+  }
+
+  await writeAdminAudit(admin, {
+    accountId: user.account.id,
+    actorUserId: user.user.id,
+    targetUserId: user.user.id,
+    action: "device.revoke",
+    result: "updated",
+    reasonCode: "user_requested",
+    requestId: requestId(request)
+  });
+
+  return jsonResponse(request, 200, {
+    device_id: deviceId,
+    revoked_at: revokedAt
+  });
+}
+
 async function handleAdminRoute(request: Request): Promise<Response> {
   const admin = supabaseAdmin();
   const user = await requireAdmin(request, admin);
@@ -599,11 +718,7 @@ async function handleListBuckets(request: Request): Promise<Response> {
     return jsonResponse(request, user.status, { error: user.reason });
   }
 
-  const { data: devices, error: devicesError } = await admin
-    .from("private_usage_devices")
-    .select("id, opaque_device_id, device_key_fingerprint, created_at, revoked_at, last_upload_at")
-    .eq("account_id", user.account.id)
-    .order("created_at", { ascending: true });
+  const { data: devices, error: devicesError } = await listDevicesForUser(admin, user.account.id);
 
   if (devicesError) {
     return jsonResponse(request, 500, { error: "devices_unavailable" });
@@ -647,6 +762,14 @@ Deno.serve(async (request) => {
 
     if (request.method === "GET" && path === "/buckets") {
       return await handleListBuckets(request);
+    }
+
+    if (request.method === "GET" && path === "/devices") {
+      return await handleListDevices(request);
+    }
+
+    if (request.method === "POST" && path === "/devices/revoke") {
+      return await handleRevokeDevice(request);
     }
 
     if (request.method === "GET" && path === "/viewer") {

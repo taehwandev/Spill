@@ -8,6 +8,7 @@ import {
   relayPublishableKeyDisplayLabel,
   type EncryptedUsageBucketInput
 } from "../src/features/webPortal/model/privateUsageRelay.ts";
+import { spillAuthProvidersFromEnv } from "../src/features/webPortal/model/spillAuth.ts";
 
 const repoRoot = new URL("../../", import.meta.url);
 
@@ -65,6 +66,17 @@ test("private usage relay display labels do not expose env variable names", () =
     "Public browser key present"
   );
   assert.equal(relayPublishableKeyDisplayLabel(missingConfig).includes("VITE_"), false);
+});
+
+test("web auth providers can be limited by local environment config", () => {
+  const providerIds = (env: { readonly VITE_SPILL_AUTH_PROVIDERS?: string }) => (
+    spillAuthProvidersFromEnv(env).map((provider) => provider.id)
+  );
+
+  assert.deepEqual(providerIds({}), ["github", "google"]);
+  assert.deepEqual(providerIds({ VITE_SPILL_AUTH_PROVIDERS: "google" }), ["google"]);
+  assert.deepEqual(providerIds({ VITE_SPILL_AUTH_PROVIDERS: "google, unknown" }), ["google"]);
+  assert.deepEqual(providerIds({ VITE_SPILL_AUTH_PROVIDERS: "unknown" }), ["github", "google"]);
 });
 
 test("settings UI does not render private usage backend readiness internals", () => {
@@ -202,4 +214,72 @@ test("private usage relay viewer uses the authenticated server boundary", async 
     throw new Error("expected viewer response");
   }
   assert.equal(JSON.stringify(result.data).includes("@"), false);
+});
+
+test("private usage relay manages Mac device access with the user session token", async () => {
+  const calls: Array<{
+    body?: unknown;
+    headers?: Headers;
+    method?: string;
+    url?: string;
+  }> = [];
+  const client = createPrivateUsageRelayClient({
+    relayFunctionUrl: "https://otggbleddlmzamgpqxjm.supabase.co/functions/v1/private-usage-relay",
+    fetchImpl: async (input, init) => {
+      const url = String(input);
+      calls.push({
+        body: init?.body ? JSON.parse(String(init.body)) : undefined,
+        headers: new Headers(init?.headers),
+        method: init?.method,
+        url
+      });
+
+      if (url.endsWith("/devices")) {
+        return new Response(
+          JSON.stringify({
+            devices: [
+              {
+                id: "device_opaque",
+                opaque_device_id: "install_opaque",
+                device_key_fingerprint: null,
+                created_at: "2026-06-07T00:00:00.000Z",
+                revoked_at: null,
+                last_upload_at: null
+              }
+            ]
+          }),
+          {
+            headers: { "Content-Type": "application/json" },
+            status: 200
+          }
+        );
+      }
+
+      return new Response(
+        JSON.stringify({
+          device_id: "device_opaque",
+          revoked_at: "2026-06-07T01:00:00.000Z"
+        }),
+        {
+          headers: { "Content-Type": "application/json" },
+          status: 200
+        }
+      );
+    }
+  });
+
+  const listed = await client.listDevices("supabase_user_access_token");
+  const revoked = await client.revokeDevice("supabase_user_access_token", {
+    device_id: "device_opaque"
+  });
+
+  assert.equal(listed.ok, true);
+  assert.equal(revoked.ok, true);
+  assert.equal(calls[0]?.url?.endsWith("/devices"), true);
+  assert.equal(calls[0]?.method, "GET");
+  assert.equal(calls[0]?.headers?.get("Authorization"), "Bearer supabase_user_access_token");
+  assert.equal(calls[1]?.url?.endsWith("/devices/revoke"), true);
+  assert.equal(calls[1]?.method, "POST");
+  assert.equal(calls[1]?.headers?.get("Authorization"), "Bearer supabase_user_access_token");
+  assert.deepEqual(calls[1]?.body, { device_id: "device_opaque" });
 });

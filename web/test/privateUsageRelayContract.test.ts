@@ -44,12 +44,25 @@ test("private usage relay has split browser and device credential routes", () =>
   assert.match(relay, /handleExchangeDeviceGrant/);
   assert.match(relay, /handleUploadBuckets/);
   assert.match(relay, /handleListBuckets/);
+  assert.match(relay, /handleListDevices/);
+  assert.match(relay, /handleRevokeDevice/);
   assert.match(relay, /handleViewer/);
   assert.match(relay, /SPILL_ADMIN_EMAIL/);
   assert.match(relay, /FORBIDDEN_REQUEST_KEYS/);
   assert.match(relay, /SPILL_WEB_ORIGIN/);
   assert.match(relay, /SUPABASE_SERVICE_ROLE_KEY/);
   assert.doesNotMatch(relay, emailShapedValue);
+});
+
+test("private usage relay can revoke one Mac credential without exposing token values", () => {
+  const relay = readRepoFile("supabase/functions/private-usage-relay/index.ts");
+
+  assert.match(relay, /path === "\/devices"/);
+  assert.match(relay, /path === "\/devices\/revoke"/);
+  assert.match(relay, /private_usage_device_credentials/);
+  assert.match(relay, /revoked_at: revokedAt/);
+  assert.match(relay, /action: "device\.revoke"/);
+  assert.doesNotMatch(relay, /credential_hash\s*[,}]/i);
 });
 
 test("private usage schema models server-enforced account roles and audit logs", () => {
@@ -69,7 +82,21 @@ test("web environment template exposes names without checked-in values", () => {
 
   assert.match(envExample, /^VITE_SUPABASE_URL=$/m);
   assert.match(envExample, /^VITE_SUPABASE_PUBLISHABLE_KEY=$/m);
+  assert.match(envExample, /^VITE_SPILL_AUTH_PROVIDERS=$/m);
   assert.match(envExample, /^VITE_SPILL_RELAY_FUNCTION_URL=$/m);
   assert.doesNotMatch(envExample, /service_role/i);
   assert.doesNotMatch(envExample, /sb_publishable_/);
+});
+
+test("vercel routes oauth callback paths to the Vite app", () => {
+  const vercelConfig = JSON.parse(readRepoFile("web/vercel.json")) as {
+    rewrites?: Array<{ source?: string; destination?: string }>;
+  };
+
+  assert.deepEqual(vercelConfig.rewrites, [
+    {
+      source: "/(.*)",
+      destination: "/index.html"
+    }
+  ]);
 });

@@ -85,6 +85,19 @@ export type ListBucketsResponse = {
   buckets: RemoteEncryptedUsageBucket[];
 };
 
+export type ListDevicesResponse = {
+  devices: RemotePrivateUsageDevice[];
+};
+
+export type RevokeDeviceRequest = {
+  device_id: string;
+};
+
+export type RevokeDeviceResponse = {
+  device_id: string;
+  revoked_at: string;
+};
+
 export type SpillViewerRole = "admin" | "user";
 
 export type SpillViewerPermission =
@@ -130,6 +143,13 @@ export type PrivateUsageRelayClient = {
   listBuckets: (
     userAccessToken: string
   ) => Promise<PrivateUsageRelayResult<ListBucketsResponse>>;
+  listDevices: (
+    userAccessToken: string
+  ) => Promise<PrivateUsageRelayResult<ListDevicesResponse>>;
+  revokeDevice: (
+    userAccessToken: string,
+    request: RevokeDeviceRequest
+  ) => Promise<PrivateUsageRelayResult<RevokeDeviceResponse>>;
   getViewer: (
     userAccessToken: string
   ) => Promise<PrivateUsageRelayResult<SpillViewer>>;
@@ -307,6 +327,27 @@ export function createPrivateUsageRelayClient({
         {
           headers: authorizationHeaders(userAccessToken),
           method: "GET"
+        }
+      );
+    },
+    listDevices(userAccessToken) {
+      return requestJson<ListDevicesResponse>(
+        fetchImpl,
+        `${baseUrl}/devices`,
+        {
+          headers: authorizationHeaders(userAccessToken),
+          method: "GET"
+        }
+      );
+    },
+    revokeDevice(userAccessToken, request) {
+      return requestJson<RevokeDeviceResponse>(
+        fetchImpl,
+        `${baseUrl}/devices/revoke`,
+        {
+          body: request,
+          headers: authorizationHeaders(userAccessToken),
+          method: "POST"
         }
       );
     },
