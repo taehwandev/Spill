@@ -324,5 +324,5 @@ Sparkle, signing, notarization, or GitHub Releases:
 
 Without Developer ID and notarization settings, release artifacts are ad-hoc
 signed and suitable only for local validation or trusted manual sharing.
-Official release packaging requires the signing and notarization environment
-documented in `README.md`.
+Official release packaging requires the Developer ID signing secrets and App
+Store Connect API-key notarization environment documented in `README.md`.

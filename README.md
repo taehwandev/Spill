@@ -155,17 +155,43 @@ Developer ID release example:
 SPILL_VERSION=2026.21.2 \
 SPILL_SIGN_IDENTITY="Developer ID Application: Example Name (TEAMID)" \
 SPILL_INSTALLER_SIGN_IDENTITY="Developer ID Installer: Example Name (TEAMID)" \
-SPILL_NOTARY_KEYCHAIN_PROFILE="spill-notary" \
 ./scripts/package-release.sh
 ```
 
-Before running that command, store notarization credentials with `xcrun notarytool
-store-credentials`. Release versions use `ISO-year.ISO-week.release-count`, such
-as `2026.20.1`. The default local version is the current ISO year/week with
-release count `1`. `SPILL_BUILD` defaults to the final version component, so
-`SPILL_VERSION=2026.21.2` uses build `2` unless overridden. Use
-`SPILL_VERSION`, `SPILL_BUILD`, and `SPILL_BUNDLE_ID` to override release
-metadata.
+For local notarization tests, use App Store Connect Team API key auth. The full
+local sequence is build, notarize the app bundle, package from that notarized app
+without rebuilding, then notarize the packaged DMG/PKG artifacts. Keep the `.p8`
+file outside the repository and pass its ignored path only to the notarization
+script:
+
+```bash
+SPILL_VERSION=2026.21.2 \
+SPILL_SIGN_IDENTITY="Developer ID Application: Example Name (TEAMID)" \
+SPILL_INSTALLER_SIGN_IDENTITY="Developer ID Installer: Example Name (TEAMID)" \
+./scripts/build-app.sh
+
+APPLE_NOTARYTOOL_API_KEY_PATH=/path/to/AuthKey_EXAMPLE.p8 \
+APPLE_NOTARYTOOL_API_KEY_ID=EXAMPLE123 \
+APPLE_NOTARYTOOL_API_ISSUER=00000000-0000-0000-0000-000000000000 \
+./scripts/notarize-release-artifacts.sh --app .build/Spill.app
+
+SPILL_VERSION=2026.21.2 \
+SPILL_SKIP_BUILD=1 \
+SPILL_SIGN_IDENTITY="Developer ID Application: Example Name (TEAMID)" \
+SPILL_INSTALLER_SIGN_IDENTITY="Developer ID Installer: Example Name (TEAMID)" \
+./scripts/package-release.sh
+
+APPLE_NOTARYTOOL_API_KEY_PATH=/path/to/AuthKey_EXAMPLE.p8 \
+APPLE_NOTARYTOOL_API_KEY_ID=EXAMPLE123 \
+APPLE_NOTARYTOOL_API_ISSUER=00000000-0000-0000-0000-000000000000 \
+./scripts/notarize-release-artifacts.sh --artifacts .build/release-artifacts
+```
+
+Release versions use `ISO-year.ISO-week.release-count`, such as `2026.20.1`.
+The default local version is the current ISO year/week with release count `1`.
+`SPILL_BUILD` defaults to the final version component, so
+`SPILL_VERSION=2026.21.2` uses build `2` unless overridden. Use `SPILL_VERSION`,
+`SPILL_BUILD`, and `SPILL_BUNDLE_ID` to override release metadata.
 
 ### GitHub Releases
 
@@ -210,17 +236,18 @@ ID signing and notarization, configure the Apple signing secrets as well:
 - `MACOS_DEVELOPER_ID_INSTALLER_CERTIFICATE_PASSWORD`: optional `.p12` import password for the installer certificate.
 - `MACOS_INSTALLER_SIGN_IDENTITY`: optional full Developer ID Installer identity, for example `Developer ID Installer: Example Name (TEAMID)`.
 - `MACOS_SIGNING_KEYCHAIN_PASSWORD`: optional temporary CI keychain password.
-- `APPLE_ID`: Apple ID used for notarization.
-- `APPLE_TEAM_ID`: Apple Developer Team ID.
-- `APPLE_APP_SPECIFIC_PASSWORD`: app-specific password for `notarytool`.
+- `APPLE_NOTARYTOOL_API_KEY`: App Store Connect Team API private key `.p8` file contents.
+- `APPLE_NOTARYTOOL_API_KEY_ID`: App Store Connect API Key ID.
+- `APPLE_NOTARYTOOL_API_ISSUER`: App Store Connect API Issuer ID.
 - `SPARKLE_PUBLIC_ED_KEY`: Sparkle public EdDSA key embedded as `SUPublicEDKey`.
 - `SPARKLE_PRIVATE_ED_KEY`: Sparkle private EdDSA key used by `generate_appcast`.
 
 If the Developer ID certificate secrets are present, the workflow signs with that
-identity. If the Apple notarization secrets are also present, the workflow stores a
-temporary `notarytool` profile and notarizes the app and DMG before publishing.
-If the Developer ID Installer secrets are also present, the workflow additionally
-builds, signs, notarizes, and uploads stable `.pkg` installer assets. When
+identity. Notarization uses the App Store Connect API key values in a separate
+script step; the `.p8` content is written only to a temporary `mktemp` directory
+with private permissions and is removed after the step. If the Developer ID
+Installer secrets are also present, the workflow additionally builds, signs,
+notarizes, and uploads stable `.pkg` installer assets. When
 Sparkle is configured in the app bundle, Check for Updates uses Sparkle's in-app
 updater first. Older non-Sparkle builds still fall back to the public
 `update.json` manifest and open the installer package or DMG externally.
