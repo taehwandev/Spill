@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { buildDashboardModel } from "../tokenMeteringDashboard/dashboardModel";
-import { demoUsageEvents } from "../tokenMeteringDashboard/demoUsage";
-import type { AuthProviderId } from "./model/syncSecurityPolicy";
+import { useSpillAuth } from "./hooks/useSpillAuth";
 import { OnboardingPage } from "./pages/OnboardingPage";
 import { PortalDashboardPage } from "./pages/PortalDashboardPage";
 import { SettingsPage } from "./pages/SettingsPage";
@@ -23,7 +22,9 @@ export function WebPortal() {
   const [route, setRoute] = useState<PortalRoute>(() => currentRoute());
   const [copiedInstall, setCopiedInstall] = useState(false);
 
-  const dashboard = useMemo(() => buildDashboardModel(demoUsageEvents), []);
+  const dashboard = useMemo(() => buildDashboardModel([]), []);
+  const onAuthReady = useCallback(() => setRoute(currentRoute()), []);
+  const auth = useSpillAuth({ onAuthReady });
 
   useEffect(() => {
     const onHashChange = () => setRoute(currentRoute());
@@ -48,26 +49,38 @@ export function WebPortal() {
     window.setTimeout(() => setCopiedInstall(false), 1800);
   }, []);
 
-  const handleAuth = useCallback((provider: AuthProviderId) => {
-    void provider;
-    navigate("dashboard");
-  }, [navigate]);
-
   if (route === "dashboard") {
-    return <PortalDashboardPage dashboard={dashboard} onNavigate={navigate} />;
+    return (
+      <PortalDashboardPage
+        auth={auth.state}
+        dashboard={dashboard}
+        onNavigate={navigate}
+        onSignIn={auth.signIn}
+        onSignOut={auth.signOut}
+      />
+    );
   }
 
   if (route === "settings") {
-    return <SettingsPage onNavigate={navigate} />;
+    return (
+      <SettingsPage
+        auth={auth.state}
+        onNavigate={navigate}
+        onSignIn={auth.signIn}
+        onSignOut={auth.signOut}
+      />
+    );
   }
 
   return (
     <OnboardingPage
+      auth={auth.state}
       copiedInstall={copiedInstall}
       dashboard={dashboard}
-      onAuth={handleAuth}
       onCopyInstall={copyInstall}
       onNavigate={navigate}
+      onSignIn={auth.signIn}
+      onSignOut={auth.signOut}
     />
   );
 }

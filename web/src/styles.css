@@ -1,23 +1,23 @@
 :root {
   color-scheme: light;
-  --primary: #006a62;
-  --primary-container: #00d1c1;
-  --primary-fixed: #57fae9;
-  --primary-fixed-dim: #2addcd;
-  --secondary: #0050cc;
-  --secondary-container: #0266ff;
-  --secondary-fixed: #dae1ff;
-  --secondary-fixed-dim: #b3c5ff;
-  --tertiary: #565e74;
-  --tertiary-container: #b3bad4;
-  --surface: #f7f9fb;
+  --primary: #09887e;
+  --primary-container: #00decb;
+  --primary-fixed: #6ffceb;
+  --primary-fixed-dim: #35edd8;
+  --secondary: #1e62ec;
+  --secondary-container: #3b74e6;
+  --secondary-fixed: #e0e6ff;
+  --secondary-fixed-dim: #bdccff;
+  --tertiary: #545e75;
+  --tertiary-container: #b1bad6;
+  --surface: #f4f6fa;
   --surface-lowest: #ffffff;
-  --surface-low: #f2f4f6;
-  --surface-container: #eceef0;
-  --surface-high: #e6e8ea;
-  --surface-highest: #e0e3e5;
-  --inverse-surface: #2d3133;
-  --text: #191c1e;
+  --surface-low: #edf0f4;
+  --surface-container: #e5e9ef;
+  --surface-high: #dbe1e9;
+  --surface-highest: #d1dae3;
+  --inverse-surface: #2b3033;
+  --text: #171b1d;
   --text-variant: #3b4a47;
   --outline: #6b7a77;
   --outline-variant: #bacac6;
@@ -37,14 +37,16 @@
 }
 
 html {
-  background: var(--surface);
+  background: radial-gradient(circle at 80% 20%, rgba(9, 136, 126, 0.05) 0%, transparent 50%),
+              radial-gradient(circle at 20% 80%, rgba(30, 98, 236, 0.04) 0%, transparent 50%),
+              var(--surface);
 }
 
 body {
   min-width: 320px;
   margin: 0;
   color: var(--text);
-  background: var(--surface);
+  background: transparent;
 }
 
 button,
@@ -291,6 +293,23 @@ input:focus-visible {
   gap: 12px;
 }
 
+.authControls {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.authControls.compact {
+  flex-wrap: nowrap;
+}
+
+.authControls span {
+  color: var(--text-variant);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
 .authButton {
   display: inline-flex;
   align-items: center;
@@ -522,7 +541,8 @@ input:focus-visible {
 }
 
 .previewPills span,
-.requiredPill {
+.requiredPill,
+.warningPill {
   display: inline-flex;
   align-items: center;
   min-height: 24px;
@@ -533,6 +553,11 @@ input:focus-visible {
   font-size: 0.7rem;
   font-weight: 800;
   text-transform: uppercase;
+}
+
+.warningPill {
+  color: #8a5200;
+  background: rgb(255 179 64 / 18%);
 }
 
 .previewMetricGrid {
@@ -924,6 +949,15 @@ input:focus-visible {
   border-radius: 999px;
   color: var(--text-variant);
   background: transparent;
+}
+
+.topActions .authControls button {
+  width: auto;
+  padding: 0 14px;
+}
+
+.topActions .authControls {
+  justify-content: flex-end;
 }
 
 .avatarBadge {
@@ -1429,6 +1463,16 @@ input:focus-visible {
   margin-bottom: 4px;
 }
 
+.settingsValue {
+  max-width: 380px;
+  color: var(--text-variant);
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.45;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
 .switchControl {
   position: relative;
   display: inline-flex;
@@ -1652,6 +1696,11 @@ input:focus-visible {
     align-items: stretch;
   }
 
+  .settingsValue {
+    max-width: none;
+    text-align: left;
+  }
+
   .rangeControl,
   .segmentedPill {
     overflow-x: auto;
@@ -1677,10 +1726,15 @@ input:focus-visible {
 
   .heroActions,
   .authButtonStack,
+  .authControls,
   .authButton,
   .secondaryAction,
   .primaryAction {
     width: 100%;
+  }
+
+  .authControls {
+    justify-content: center;
   }
 
   .authButton,

@@ -1,10 +1,4 @@
-import { ConnectedDeviceList } from "../components/ConnectedDeviceList";
 import { MaterialIcon } from "../components/MaterialIcon";
-import { SecurityControlGrid } from "../components/SecurityControlGrid";
-import {
-  authProviders,
-  syncDepthOptions
-} from "../model/syncSecurityPolicy";
 
 export function GeneralSettingsBlock() {
   return (
@@ -41,77 +35,6 @@ export function GeneralSettingsBlock() {
   );
 }
 
-export function LoginProvidersBlock() {
-  return (
-    <section className="portalCard settingsSection">
-      <div className="settingsSectionHeader withAction">
-        <div>
-          <MaterialIcon name="account_circle" />
-          <h2>Login Providers</h2>
-        </div>
-        <span className="requiredPill">Server session required</span>
-      </div>
-
-      <div className="providerGrid">
-        {authProviders.map((provider) => (
-          <article className="providerCard" key={provider.id}>
-            <strong>{provider.shortLabel}</strong>
-            <span>{provider.status}</span>
-            <p>{provider.detail}</p>
-            <button type="button">{provider.label}</button>
-          </article>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-export function SyncPrivacyBlock() {
-  return (
-    <section className="portalCard settingsSection">
-      <div className="settingsSectionHeader withAction">
-        <div>
-          <MaterialIcon name="security" />
-          <h2>Sync & Privacy</h2>
-        </div>
-        <span className="requiredPill">Encrypted</span>
-      </div>
-
-      <div className="syncDepthGrid" aria-label="Cloud sync depth">
-        {syncDepthOptions.map((option) => (
-          <button
-            className={option.id === "cloud_aggregate" ? "syncDepth active" : "syncDepth"}
-            key={option.id}
-            type="button"
-          >
-            <MaterialIcon filled={option.id === "cloud_aggregate"} name={option.icon} />
-            <strong>{option.label}</strong>
-            <span>{option.description}</span>
-          </button>
-        ))}
-      </div>
-
-      <SecurityControlGrid />
-    </section>
-  );
-}
-
-export function ConnectedDevicesBlock() {
-  return (
-    <section className="portalCard settingsSection">
-      <div className="settingsSectionHeader withAction">
-        <div>
-          <MaterialIcon name="devices" />
-          <h2>Connected Devices</h2>
-        </div>
-        <button className="dangerTextButton" type="button">Revoke All</button>
-      </div>
-
-      <ConnectedDeviceList />
-    </section>
-  );
-}
-
 export function LocalOnlyContentBlock() {
   return (
     <section className="portalCard settingsSection">
@@ -123,15 +46,15 @@ export function LocalOnlyContentBlock() {
       <div className="localOnlyGrid">
         <article>
           <strong>Prompts</strong>
-          <p>Never synced. Prompt text stays on the device and is excluded from web DTOs.</p>
+          <p>Prompt text stays on the device.</p>
         </article>
         <article>
           <strong>Responses</strong>
-          <p>Never synced. Generated output content is not uploaded or shown here.</p>
+          <p>Generated output content is not uploaded or shown here.</p>
         </article>
         <article>
           <strong>Logs & Source</strong>
-          <p>Never synced. Commands, file paths, logs, diffs, and source content are blocked.</p>
+          <p>Commands, file paths, logs, diffs, and source content stay local.</p>
         </article>
       </div>
     </section>

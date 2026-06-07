@@ -1,9 +1,5 @@
 import type { DashboardModel } from "../../tokenMeteringDashboard/dashboardModel";
-import { ConnectedDeviceList } from "../components/ConnectedDeviceList";
 import { MaterialIcon } from "../components/MaterialIcon";
-import { SecurityControlGrid } from "../components/SecurityControlGrid";
-import { connectedDevices } from "../model/syncSecurityPolicy";
-import type { PortalRoute } from "../routes";
 
 const toolColors = ["var(--secondary-container)", "var(--primary-container)", "var(--secondary-fixed-dim)"];
 
@@ -24,7 +20,7 @@ export function DashboardKpiStrip({
             <span className={index === 1 ? "kpiIcon blue" : index === 2 ? "kpiIcon slate" : "kpiIcon"}>
               <MaterialIcon name={index === 3 ? "speed" : index === 2 ? "payments" : "toll"} />
             </span>
-            <small>{index === 1 ? "Input" : index === 2 ? "Output" : index === 3 ? "Latency" : "Synced"}</small>
+            <small>{index === 1 ? "Input" : index === 2 ? "Output" : index === 3 ? "Latency" : "Total"}</small>
           </div>
           <span className="kpiLabel">{kpi.label}</span>
           <strong>{kpi.value}</strong>
@@ -50,7 +46,7 @@ export function ToolDistributionBlock({
       <div className="cardHeader">
         <div>
           <h2>AI Tool Distribution</h2>
-          <p>Inference volume by local agent</p>
+          <p>Usage by local tool</p>
         </div>
         <button aria-label="More options" type="button">
           <MaterialIcon name="more_vert" />
@@ -83,7 +79,7 @@ export function WorkflowBreakdownBlock({
       <div className="cardHeader">
         <div>
           <h2>Workflow Breakdown</h2>
-          <p>Processing stages by token volume</p>
+          <p>Workflow stages by token volume</p>
         </div>
       </div>
       <div className="workflowList">
@@ -131,7 +127,7 @@ export function UsageIntensityBlock() {
           <span>Fri</span>
           <span>Sun</span>
         </div>
-        <div className="heatmapGrid" aria-label="Weekly usage intensity preview">
+        <div className="heatmapGrid" aria-label="Weekly usage intensity">
           {Array.from({ length: 168 }, (_, index) => (
             <span
               className={`heat-${heatmapIntensity(index)}`}
@@ -141,61 +137,6 @@ export function UsageIntensityBlock() {
           ))}
         </div>
       </div>
-    </article>
-  );
-}
-
-export function DesktopAppRequiredBlock() {
-  return (
-    <article className="portalCard deviceRequiredPanel">
-      <img
-        alt="Spill desktop dashboard preview"
-        src="https://lh3.googleusercontent.com/aida-public/AB6AXuBOZToIICiW6_wCepIGos78UcZCotrbXUDc1cSOU7uR8rVCoSEkOKZGJC3CPK50K1I15U4E_shsVRwe4Wiood5D5Ggz5qEz9AB2CYacRQm2u8IjqWD3OELzCUjRkDEFPKebfkK60JBN27nuZ6x5rT4awd5-dSI_CubjUNUySfr-LPAIoaCNRiKUV7XAUDg_XkGQzIKXBUOlidKrYB45HNwjVHi3Jjccd5uDo1gFRQkTrBv74h_9dWtcnqSONTrbFfvGu4PvYJ5cNVM"
-      />
-      <div>
-        <span>Connected</span>
-        <h2>Desktop App Required</h2>
-        <p>Connect your local Spill instance to sync safe AI usage totals to this web dashboard.</p>
-        <button type="button">
-          <MaterialIcon name="download" />
-          Download Desktop App
-        </button>
-      </div>
-    </article>
-  );
-}
-
-export function DeviceSummaryBlock({
-  onNavigate
-}: {
-  onNavigate: (route: PortalRoute) => void;
-}) {
-  return (
-    <article className="portalCard deviceSummary">
-      <div className="cardHeader">
-        <div>
-          <h2>Connected Devices</h2>
-          <p>{connectedDevices.length} trusted device profiles</p>
-        </div>
-        <button onClick={() => onNavigate("settings")} type="button">
-          Manage
-        </button>
-      </div>
-      <ConnectedDeviceList compact />
-    </article>
-  );
-}
-
-export function SyncSecuritySummaryBlock() {
-  return (
-    <article className="portalCard securitySummary">
-      <div className="cardHeader">
-        <div>
-          <h2>Sync Security Contract</h2>
-          <p>Cloud sync cannot ship until every required control is enforced.</p>
-        </div>
-      </div>
-      <SecurityControlGrid />
     </article>
   );
 }

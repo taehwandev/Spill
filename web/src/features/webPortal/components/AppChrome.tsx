@@ -1,17 +1,33 @@
 import type React from "react";
-import { connectedDevices } from "../model/syncSecurityPolicy";
+import { AuthControls } from "./AuthControls";
+import type { SpillAuthProvider, SpillAuthState } from "../model/spillAuth";
 import type { PortalRoute } from "../routes";
 import { MaterialIcon } from "./MaterialIcon";
 
 export function AppChrome({
   activeRoute,
+  auth,
   children,
-  onNavigate
+  onNavigate,
+  onSignIn,
+  onSignOut
 }: {
   activeRoute: Exclude<PortalRoute, "onboarding">;
+  auth: SpillAuthState;
   children: React.ReactNode;
   onNavigate: (route: PortalRoute) => void;
+  onSignIn: (provider: SpillAuthProvider) => void;
+  onSignOut: () => void;
 }) {
+  const profileTitle = auth.status === "signed_in"
+    ? "Account Connected"
+    : "Local Dashboard";
+  const profileDetail = auth.status === "signed_in" && auth.viewer.role === "admin"
+    ? "Admin access enabled"
+    : auth.status === "signed_in"
+      ? "Signed in"
+      : "No account required";
+
   return (
     <div className="appChrome">
       <aside className="sideNav" aria-label="Spill web navigation">
@@ -25,7 +41,7 @@ export function AppChrome({
           </span>
           <span>
             <strong>Spill</strong>
-            <small>AI Monitoring</small>
+            <small>Local Usage</small>
           </span>
         </button>
 
@@ -51,8 +67,8 @@ export function AppChrome({
         <div className="sideProfile">
           <MaterialIcon name="account_circle" />
           <span>
-            <strong>GitHub Profile</strong>
-            <small>OAuth pending</small>
+            <strong>{profileTitle}</strong>
+            <small>{profileDetail}</small>
           </span>
         </div>
       </aside>
@@ -60,17 +76,15 @@ export function AppChrome({
       <header className="topBar">
         <div className="topStatus">
           <span className="statusDot" aria-hidden="true" />
-          <strong>Local Sync: Active</strong>
-          <span>Devices: {connectedDevices.length}</span>
+          <strong>Local Usage</strong>
+          <span>Content stays on this device</span>
         </div>
         <div className="topActions">
+          <AuthControls state={auth} onSignIn={onSignIn} onSignOut={onSignOut} />
           <button aria-label="Refresh dashboard" type="button">
             <MaterialIcon name="refresh" />
           </button>
-          <button aria-label="Copy sync invite" type="button">
-            <MaterialIcon name="content_copy" />
-          </button>
-          <span className="avatarBadge" aria-label="Signed in preview user">
+          <span className="avatarBadge" aria-label="Spill dashboard">
             SP
           </span>
         </div>

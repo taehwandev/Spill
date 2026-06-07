@@ -1,26 +1,30 @@
 import type { DashboardModel } from "../../tokenMeteringDashboard/dashboardModel";
 import { installCommand } from "../../tokenMeteringDashboard/setupCopy";
-import { AuthButtons } from "../components/AuthButtons";
+import { AuthControls } from "../components/AuthControls";
 import { MaterialIcon } from "../components/MaterialIcon";
-import type { AuthProviderId } from "../model/syncSecurityPolicy";
+import type { SpillAuthProvider, SpillAuthState } from "../model/spillAuth";
 import type { PortalRoute } from "../routes";
 
 export function OnboardingHeroBlock({
+  auth,
   copiedInstall,
-  onAuth,
   onCopyInstall,
-  onNavigate
+  onNavigate,
+  onSignIn,
+  onSignOut
 }: {
+  auth: SpillAuthState;
   copiedInstall: boolean;
-  onAuth: (provider: AuthProviderId) => void;
   onCopyInstall: () => void;
   onNavigate: (route: PortalRoute) => void;
+  onSignIn: (provider: SpillAuthProvider) => void;
+  onSignOut: () => void;
 }) {
   return (
     <section className="heroSection">
       <div className="heroBadge">
         <MaterialIcon filled name="verified" />
-        <span>v2.4 · Secure Cloud Sync Preview</span>
+        <span>macOS Control Tray</span>
       </div>
 
       <h1>
@@ -28,16 +32,18 @@ export function OnboardingHeroBlock({
         <span> Just Spill it.</span>
       </h1>
       <p>
-        A premium performance dashboard for macOS professionals. Monitor local AI
-        token usage, connect trusted devices, and prepare cloud sync without
-        uploading prompts or source content.
+        A compact macOS control tray and local usage dashboard for AI-heavy
+        work.
       </p>
 
       <div className="heroActions">
-        <AuthButtons onSelect={onAuth} />
-        <button className="secondaryAction" onClick={() => onNavigate("dashboard")} type="button">
-          View Demo
+        <button className="primaryAction" onClick={onCopyInstall} type="button">
+          Download Mac App
         </button>
+        <button className="secondaryAction" onClick={() => onNavigate("dashboard")} type="button">
+          Open Dashboard
+        </button>
+        <AuthControls state={auth} onSignIn={onSignIn} onSignOut={onSignOut} />
       </div>
 
       <div className="terminalCard" aria-label="Spill install command">
@@ -75,8 +81,8 @@ export function OnboardingFlowPreviewBlock({
   return (
     <section className="flowSection" id="features">
       <div className="sectionHeading">
-        <span>The Flow Experience</span>
-        <h2>System insights, redefined.</h2>
+        <span>Dashboard</span>
+        <h2>Local usage at a glance.</h2>
       </div>
 
       <div className="dashboardPreview glassPanel">
@@ -91,19 +97,19 @@ export function OnboardingFlowPreviewBlock({
           </span>
           <span>
             <MaterialIcon name="settings" />
-            Config
+            Settings
           </span>
         </aside>
 
         <div className="previewCanvas">
           <div className="previewHeader">
             <div>
-              <h3>Performance Hub</h3>
-              <p>Token usage and runtime health</p>
+              <h3>Usage Overview</h3>
+              <p>Local token totals and activity patterns</p>
             </div>
             <div className="previewPills">
-              <span>Live</span>
-              <span>System Health: Optimal</span>
+              <span>Local</span>
+              <span>Content stays private</span>
             </div>
           </div>
 
@@ -121,7 +127,7 @@ export function OnboardingFlowPreviewBlock({
             <svg preserveAspectRatio="none" viewBox="0 0 1000 120">
               <path d="M0,120 L0,62 C110,44 190,78 302,65 C430,50 492,26 628,44 C744,60 825,46 1000,58 L1000,120 Z" />
             </svg>
-            <span>Visualizing token stream</span>
+            <span>Weekly activity pattern</span>
           </div>
         </div>
       </div>
@@ -144,7 +150,7 @@ export function OnboardingFeatureGridBlock() {
           </p>
           <ul>
             <li><MaterialIcon filled name="check_circle" /> Per-tool activity tracking</li>
-            <li><MaterialIcon filled name="check_circle" /> Token-only cloud contract</li>
+            <li><MaterialIcon filled name="check_circle" /> Content stays private</li>
           </ul>
         </div>
         <div className="barVisual" aria-hidden="true">
@@ -177,7 +183,7 @@ export function OnboardingFeatureGridBlock() {
         </span>
         <h3>Purely Local First</h3>
         <p>
-          System data starts local. Cloud sync must stay encrypted and content-free.
+          Usage stays local unless you choose to back it up.
         </p>
       </article>
 
@@ -189,8 +195,7 @@ export function OnboardingFeatureGridBlock() {
         <div>
           <h3>Architected for speed.</h3>
           <p>
-            Lightweight local capture, explicit sync policy, and server-ready
-            account boundaries.
+            Lightweight local capture and clear privacy controls.
           </p>
         </div>
       </article>
@@ -205,11 +210,11 @@ export function OnboardingFinalCtaBlock({
 }) {
   return (
     <section className="finalCta" id="docs">
-      <h2>Ready to enter The Flow?</h2>
-      <p>Connect a local Spill instance, sign in, then review exactly which devices can sync.</p>
+      <h2>Ready to use Spill?</h2>
+      <p>Install the Mac app, then review local usage from the dashboard.</p>
       <div>
         <button className="primaryAction" onClick={() => onNavigate("dashboard")} type="button">
-          Get Started Free
+          Open Dashboard
         </button>
         <button className="secondaryAction" type="button">
           Read Documentation

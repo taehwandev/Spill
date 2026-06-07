@@ -1,29 +1,39 @@
 import type { DashboardModel } from "../../tokenMeteringDashboard/dashboardModel";
 import {
   DashboardKpiStrip,
-  DesktopAppRequiredBlock,
-  DeviceSummaryBlock,
-  SyncSecuritySummaryBlock,
   ToolDistributionBlock,
   UsageIntensityBlock,
   WorkflowBreakdownBlock
 } from "../blocks/DashboardBlocks";
 import { AppChrome } from "../components/AppChrome";
+import type { SpillAuthProvider, SpillAuthState } from "../model/spillAuth";
 import type { PortalRoute } from "../routes";
 
 export function DashboardScreen({
+  auth,
   dashboard,
-  onNavigate
+  onNavigate,
+  onSignIn,
+  onSignOut
 }: {
+  auth: SpillAuthState;
   dashboard: DashboardModel;
   onNavigate: (route: PortalRoute) => void;
+  onSignIn: (provider: SpillAuthProvider) => void;
+  onSignOut: () => void;
 }) {
   return (
-    <AppChrome activeRoute="dashboard" onNavigate={onNavigate}>
+    <AppChrome
+      activeRoute="dashboard"
+      auth={auth}
+      onNavigate={onNavigate}
+      onSignIn={onSignIn}
+      onSignOut={onSignOut}
+    >
       <div className="pageHeader">
         <div>
-          <h1>System Performance</h1>
-          <p>Real-time inference and token usage analysis</p>
+          <h1>Usage Overview</h1>
+          <p>Local usage totals and activity patterns</p>
         </div>
         <div className="rangeControl" aria-label="Time range">
           <button type="button">Day</button>
@@ -39,9 +49,6 @@ export function DashboardScreen({
         <ToolDistributionBlock dashboard={dashboard} />
         <WorkflowBreakdownBlock dashboard={dashboard} />
         <UsageIntensityBlock />
-        <DesktopAppRequiredBlock />
-        <DeviceSummaryBlock onNavigate={onNavigate} />
-        <SyncSecuritySummaryBlock />
       </section>
     </AppChrome>
   );

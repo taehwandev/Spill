@@ -5,22 +5,27 @@ import {
   OnboardingFlowPreviewBlock,
   OnboardingHeroBlock
 } from "../blocks/OnboardingBlocks";
+import { AuthControls } from "../components/AuthControls";
 import { MaterialIcon } from "../components/MaterialIcon";
-import type { AuthProviderId } from "../model/syncSecurityPolicy";
+import type { SpillAuthProvider, SpillAuthState } from "../model/spillAuth";
 import type { PortalRoute } from "../routes";
 
 export function OnboardingScreen({
+  auth,
   copiedInstall,
   dashboard,
-  onAuth,
   onCopyInstall,
-  onNavigate
+  onNavigate,
+  onSignIn,
+  onSignOut
 }: {
+  auth: SpillAuthState;
   copiedInstall: boolean;
   dashboard: DashboardModel;
-  onAuth: (provider: AuthProviderId) => void;
   onCopyInstall: () => void;
   onNavigate: (route: PortalRoute) => void;
+  onSignIn: (provider: SpillAuthProvider) => void;
+  onSignOut: () => void;
 }) {
   return (
     <div className="landingPage">
@@ -39,6 +44,7 @@ export function OnboardingScreen({
         </nav>
 
         <div className="landingActions">
+          <AuthControls state={auth} onSignIn={onSignIn} onSignOut={onSignOut} />
           <button className="ghostAction" type="button">
             Download
           </button>
@@ -50,10 +56,12 @@ export function OnboardingScreen({
 
       <main className="landingMain">
         <OnboardingHeroBlock
+          auth={auth}
           copiedInstall={copiedInstall}
-          onAuth={onAuth}
           onCopyInstall={onCopyInstall}
           onNavigate={onNavigate}
+          onSignIn={onSignIn}
+          onSignOut={onSignOut}
         />
         <OnboardingFlowPreviewBlock dashboard={dashboard} />
         <OnboardingFeatureGridBlock />
