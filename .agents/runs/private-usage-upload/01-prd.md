@@ -33,6 +33,10 @@ decryption.
     combined account view.
   - Web login should complete in the browser and callback to the app.
   - All cloud usage payloads must be end-to-end encrypted in addition to HTTPS.
+  - JWTs are for login and authorization only. They must not be used as E2EE
+    data encryption keys.
+  - E2EE uses app-held bucket data keys and browser/app local wrapping secrets;
+    the relay may store encrypted key envelopes but never plaintext keys.
 - repo-researched facts:
   - Spill's existing PRD/ARD define token metering as local-first, token-only,
     and content-free.
@@ -199,17 +203,20 @@ decryption.
 24. The server may store only minimal routing/index metadata in plaintext, such
     as opaque account id, opaque device id, bucket kind, bucket start, schema
     version, ciphertext hash, and timestamps.
-25. Plaintext aggregate values, tool totals, model totals, task/stage totals,
+25. The server may store encrypted key envelopes needed for browser-side
+    decryption, but must not receive browser/app local wrap secrets or plaintext
+    bucket data keys.
+26. Plaintext aggregate values, tool totals, model totals, task/stage totals,
     token counts, local aliases, prompts, responses, commands, paths, logs,
     diffs, source content, environment values, and secrets must not be stored by
     the server.
-26. Web dashboard reads must be account-authenticated.
-27. Web dashboard decryption and account/device aggregation must happen after
+27. Web dashboard reads must be account-authenticated.
+28. Web dashboard decryption and account/device aggregation must happen after
     encrypted buckets are fetched by the browser.
-28. The web dashboard must distinguish no devices, device connected but no
+29. The web dashboard must distinguish no devices, device connected but no
     upload, upload delayed, upload failed, and successful backup states.
-29. Provider/storage backend details must remain behind the relay API.
-30. Upload behavior must be observable locally through last success, last
+30. Provider/storage backend details must remain behind the relay API.
+31. Upload behavior must be observable locally through last success, last
     failure, queued bucket count, next eligible retry, and last acked bucket.
 
 ## Behavior Scenarios
@@ -250,6 +257,12 @@ Given encrypted buckets have uploaded for multiple devices
 When the user opens the web dashboard
 Then the web dashboard fetches encrypted buckets, decrypts them in the browser,
 and shows both per-device and combined totals.
+
+Given a browser has lost its local wrapping secret
+When it fetches encrypted buckets and key envelopes
+Then the server still cannot decrypt the data, and the web UI shows a
+decryption-unavailable state until the user pairs again or uses a future
+recovery flow.
 
 ### Relevant Edge States
 
@@ -306,6 +319,8 @@ can present dates honestly.
 - Server storage contains no plaintext token totals or breakdown values.
 - Server storage contains no prompts, responses, commands, paths, repo names,
   logs, diffs, source content, environment values, secrets, or local aliases.
+- Server storage contains no plaintext bucket data keys or browser/app local
+  wrap secrets.
 - Web dashboard shows per-device data separately.
 - Web dashboard shows combined totals computed from decrypted per-device buckets.
 - Delayed upload is reflected as "last backed up" or equivalent copy, not

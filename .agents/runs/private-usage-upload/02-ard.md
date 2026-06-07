@@ -66,7 +66,10 @@ Decision:
 The database stores encrypted bucket payloads as opaque ciphertext plus minimal
 metadata: account id, device id, bucket kind, bucket boundaries, timezone,
 schema version, key version, ciphertext hash, upload timestamps, and retry
-support state.
+support state. It also stores encrypted key envelopes for bucket data-key
+versions. Key envelopes contain only a key version, wrapping key id, wrapping
+algorithm, and wrapped data key ciphertext. The server never receives the local
+browser/app wrapping secret or plaintext bucket data keys.
 
 Rationale:
 
@@ -80,6 +83,44 @@ Alternatives considered:
 - Server-side aggregate rows by model/tool/task/stage: rejected because it would
   put usage values in server plaintext.
 - Raw event upload: rejected by PRD.
+
+### D3A: E2EE Uses App Data Keys And Browser-Only Wrap Secrets
+
+Decision:
+
+The macOS app encrypts each daily aggregate bucket with an AES-256-GCM data key
+stored in the macOS Keychain. Data keys are versioned and rotate on a conservative
+schedule. The browser creates a high-entropy local wrap secret when it creates a
+Mac connection code. The displayed connection code has this shape:
+
+```text
+spill-v1:<server-grant-code>:<browser-local-wrap-secret>
+```
+
+The native app sends only `<server-grant-code>` to the relay while exchanging the
+device grant. The `<browser-local-wrap-secret>` is stored locally by the browser
+and in the Mac Keychain, but is never sent to the relay. The app derives an
+AES-256-GCM key-wrapping key with HKDF-SHA256 and uploads `key_envelopes` that
+wrap each bucket data-key version for that browser-local secret.
+
+Rationale:
+
+This keeps operating cost low because it uses browser WebCrypto/native CryptoKit
+and normal database rows rather than a paid KMS or server-side decryption path.
+It is also safe for the open-source app: the algorithm and code are public, but
+the data-key material and wrap secrets are generated at runtime and stay in local
+credential stores.
+
+Implications:
+
+- JWTs remain for authentication and authorization only; they are not E2EE keys.
+- Server compromise can expose ciphertext, key envelopes, and routing metadata,
+  but not plaintext usage aggregates without a user's local wrap secret.
+- If a user loses browser local storage, that browser may need a new Mac pairing
+  or a future recovery flow before it can decrypt existing buckets.
+- Multi-recipient sharing and account key recovery are deferred; the current
+  contract supports adding more wrapping recipients later by storing additional
+  key envelopes.
 
 ### D4: Browser Login Creates A Short-Lived Device Grant
 
@@ -223,6 +264,14 @@ Authorization: Bearer spill_device_v1_<credential>
 
 Request:
 {
+  "key_envelopes": [
+    {
+      "key_version": 1,
+      "wrapping_key_id": "sha256-prefix-of-browser-local-wrap-secret",
+      "algorithm": "aes-256-gcm-hkdf-sha256",
+      "wrapped_key": "base64-aes-gcm-combined-data-key"
+    }
+  ],
   "buckets": [
     {
       "bucket_key": "2026-06-06:daily",
@@ -246,7 +295,8 @@ Authorization: Bearer <supabase-user-jwt>
 Response:
 {
   "devices": [...],
-  "buckets": [...]
+  "buckets": [...],
+  "key_envelopes": [...]
 }
 ```
 
@@ -322,8 +372,8 @@ local events -> local daily aggregate -> encrypt on Mac
 - Duplicate upload: relay accepts identical idempotency state as success.
 - Changed bucket after failed upload: relay stores the latest ciphertext for the
   same bucket key and schema version.
-- Browser decryption failure: web UI marks the affected device bucket failed
-  without dropping other devices.
+- Browser decryption failure or missing local wrap secret: web UI marks the
+  affected device bucket unavailable without dropping other devices.
 - Unsafe request fields: relay rejects the request before database writes.
 - Normal user opens admin URL: UI route guard shows a redacted forbidden state;
   admin data is not fetched.
@@ -385,9 +435,9 @@ local events -> local daily aggregate -> encrypt on Mac
 
 ## Risks
 
-- Browser-side E2EE key custody and recovery are not fully designed in this
-  slice; the relay stores ciphertext only, but the UX for account recovery is
-  future work.
+- Account key recovery is not included in this slice. The relay stores
+  ciphertext and key envelopes only; a browser that loses its local wrap secret
+  may need a new pairing or a future recovery flow.
 - Supabase Auth sessions in a static Vite/Vercel app may require a later move to
   server-managed cookies if browser token exposure becomes unacceptable.
 - Service role key configuration is operationally sensitive and must stay in
