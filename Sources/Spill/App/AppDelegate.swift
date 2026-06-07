@@ -39,16 +39,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         usageStore: tokenUsageStore,
         collectionCoordinator: tokenUsageCollectorCoordinator
     )
-    private lazy var tokenMeteringDashboardWindowController = TokenMeteringDashboardWindowController(
-        store: tokenUsageDashboardStore,
-        cloudServiceStatusStore: cloudServiceStatusStore,
-        refreshAction: { [weak self] in
-            self?.requestTokenUsageCollection(reason: "dashboard_refresh")
-        },
-        settingsAction: { [weak self] in
-            self?.showPreferences(source: "token_dashboard", selectedTab: TokenMeteringDashboardProcess.tokenMeteringPreferencesTab)
-        }
-    )
+    private var tokenMeteringDashboardWindowController: TokenMeteringDashboardWindowController?
     private lazy var hotKeyController = HotKeyController(
         registrations: makeHotKeyRegistrations()
     )
@@ -544,7 +535,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func presentTokenDashboardWindow() {
         refreshMenuBarAITokenTotal(force: true)
         statusItemController?.refresh()
-        tokenMeteringDashboardWindowController.show()
+        dashboardWindowController().show()
+    }
+
+    private func dashboardWindowController() -> TokenMeteringDashboardWindowController {
+        if let tokenMeteringDashboardWindowController {
+            return tokenMeteringDashboardWindowController
+        }
+
+        let controller = TokenMeteringDashboardWindowController(
+            store: tokenUsageDashboardStore,
+            cloudServiceStatusStore: cloudServiceStatusStore,
+            refreshAction: { [weak self] in
+                self?.requestTokenUsageCollection(reason: "dashboard_refresh")
+            },
+            settingsAction: { [weak self] in
+                self?.showPreferences(source: "token_dashboard", selectedTab: TokenMeteringDashboardProcess.tokenMeteringPreferencesTab)
+            }
+        )
+        tokenMeteringDashboardWindowController = controller
+        return controller
     }
 
     private func requestTokenUsageCollection(reason: String) {

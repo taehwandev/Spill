@@ -13,20 +13,7 @@ final class TokenMeteringDashboardAppDelegate: NSObject, NSApplicationDelegate {
         usageStore: tokenUsageStore,
         collectionCoordinator: tokenUsageCollectorCoordinator
     )
-    private lazy var windowController = TokenMeteringDashboardWindowController(
-        store: tokenUsageDashboardStore,
-        cloudServiceStatusStore: cloudServiceStatusStore,
-        settings: settings,
-        refreshAction: { [weak self] in
-            self?.requestTokenUsageCollection(reason: "dashboard_refresh")
-        },
-        settingsAction: { [weak self] in
-            self?.openMainAppTokenMeteringSettings()
-        },
-        closeAction: {
-            NSApp.terminate(nil)
-        }
-    )
+    private var windowController: TokenMeteringDashboardWindowController?
 
     override init() {
         tokenUsageStore = Self.makeTokenUsageStore()
@@ -39,7 +26,7 @@ final class TokenMeteringDashboardAppDelegate: NSObject, NSApplicationDelegate {
         observeSettingsChanges()
         tokenUsageInboxMonitor.start()
         requestTokenUsageCollection(reason: "dashboard_launch")
-        windowController.show()
+        dashboardWindowController().show()
 
         if isSmokeTest {
             startSmokeTestExitTimer()
@@ -78,6 +65,29 @@ final class TokenMeteringDashboardAppDelegate: NSObject, NSApplicationDelegate {
 
     private var isSmokeTest: Bool {
         ProcessInfo.processInfo.environment["SPILL_SMOKE_TEST"] == "1"
+    }
+
+    private func dashboardWindowController() -> TokenMeteringDashboardWindowController {
+        if let windowController {
+            return windowController
+        }
+
+        let controller = TokenMeteringDashboardWindowController(
+            store: tokenUsageDashboardStore,
+            cloudServiceStatusStore: cloudServiceStatusStore,
+            settings: settings,
+            refreshAction: { [weak self] in
+                self?.requestTokenUsageCollection(reason: "dashboard_refresh")
+            },
+            settingsAction: { [weak self] in
+                self?.openMainAppTokenMeteringSettings()
+            },
+            closeAction: {
+                NSApp.terminate(nil)
+            }
+        )
+        windowController = controller
+        return controller
     }
 
     private func requestTokenUsageCollection(reason: String) {

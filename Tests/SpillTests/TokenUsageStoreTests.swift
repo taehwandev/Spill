@@ -583,7 +583,7 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(appDelegate.contains("self?.openTokenDashboardProcessOrFallback()"))
         XCTAssertTrue(appDelegate.contains("tokenMeteringDashboardLauncher.open"))
         XCTAssertTrue(appDelegate.contains("self?.presentTokenDashboardWindow()"))
-        XCTAssertTrue(appDelegate.contains("tokenMeteringDashboardWindowController.show()"))
+        XCTAssertTrue(appDelegate.contains("dashboardWindowController().show()"))
         XCTAssertTrue(appDelegate.contains("TokenUsageCollectorCoordinator("))
         XCTAssertTrue(appDelegate.contains("requestTokenUsageCollection(reason: \"panel_open\")"))
         XCTAssertTrue(appDelegate.contains("requestTokenUsageCollection(reason: \"dashboard_refresh\")"))
