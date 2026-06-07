@@ -595,12 +595,6 @@ final class TokenUsageDashboardStore: ObservableObject {
 
         var ids = Set<String>()
 
-        let previousVisibleTotal = previousVisibleEvents.reduce(0) { $0 + $1.totalTokens }
-        let nextVisibleTotal = nextVisibleEvents.reduce(0) { $0 + $1.totalTokens }
-        if nextVisibleTotal != previousVisibleTotal {
-            ids.formUnion(["kpi:total", "kpi:input", "kpi:output"])
-        }
-
         appendChangedTotals(
             to: &ids,
             previous: tokenTotals(previousPeriodEvents, by: { $0.aiTool.rawValue }),

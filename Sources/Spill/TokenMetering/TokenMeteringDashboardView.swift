@@ -47,11 +47,11 @@ struct TokenMeteringDashboardView: View {
     }
 
     private var selectedControlAccent: Color {
-        Color(red: 0.18, green: 0.48, blue: 0.50)
+        Color(red: 0.08, green: 0.54, blue: 0.57)
     }
 
     private var selectedControlAccentHighlight: Color {
-        Color(red: 0.25, green: 0.58, blue: 0.59)
+        Color(red: 0.11, green: 0.65, blue: 0.68)
     }
 
     var body: some View {
@@ -88,7 +88,20 @@ struct TokenMeteringDashboardView: View {
             .padding(.horizontal, 18)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
-        .background(VisualEffectView(material: .windowBackground, blendingMode: .withinWindow))
+        .background {
+            ZStack {
+                VisualEffectView(material: .sidebar, blendingMode: .withinWindow)
+                LinearGradient(
+                    colors: [
+                        Color.teal.opacity(0.04),
+                        Color.blue.opacity(0.03),
+                        Color.purple.opacity(0.04)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            }
+        }
         .frame(minWidth: 1060, minHeight: 640)
         .onAppear {
             titleDidChange()
@@ -1711,13 +1724,12 @@ private struct TokenMeteringLiveUpdateEffect: ViewModifier {
         content
             .background {
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .fill(Color.teal.opacity(isActive && isFlashing ? 0.10 : 0.0))
+                    .fill(Color.teal.opacity(isActive && isFlashing ? 0.05 : 0.0))
             }
             .overlay {
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .stroke(Color.teal.opacity(isActive && isFlashing ? 0.34 : 0.0), lineWidth: 0.8)
+                    .stroke(Color.teal.opacity(isActive && isFlashing ? 0.12 : 0.0), lineWidth: 0.8)
             }
-            .scaleEffect(isActive && isFlashing ? 1.006 : 1.0)
             .animation(.easeOut(duration: 0.34), value: isFlashing)
             .animation(.easeOut(duration: 0.14), value: isActive)
             .onAppear {
