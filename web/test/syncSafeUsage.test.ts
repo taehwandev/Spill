@@ -383,6 +383,9 @@ test("setup prompt bootstraps the public token metering installer", () => {
   assert.match(setupPrompt, /Spill label handoff commands/);
   assert.match(setupPrompt, /read-only Spill status commands/);
   assert.match(setupPrompt, /spill-token-metering-stats\.mjs --tool <current-tool>/);
+  assert.match(setupPrompt, /spill-token-metering-stats\.mjs --tool codex/);
+  assert.match(setupPrompt, /spill-token-metering-stats\.mjs --tool claude/);
+  assert.match(setupPrompt, /spill-token-metering-stats\.mjs --tool antigravity/);
   assert.match(setupPrompt, /full self-scoped aggregate summary/);
   assert.match(setupPrompt, /Workflow runner permissions are separate/);
   assert.match(setupPrompt, /common safe path spellings/);
@@ -448,6 +451,9 @@ test("hosted runtime instruction stays silent and exact-count-only", () => {
   assert.match(runtime, /does not grant access to token counts by itself/);
   assert.match(runtime, /Explicit local usage status requests/);
   assert.match(runtime, /spill-token-metering-stats\.mjs --tool <current-tool>/);
+  assert.match(runtime, /spill-token-metering-stats\.mjs --tool codex/);
+  assert.match(runtime, /spill-token-metering-stats\.mjs --tool claude/);
+  assert.match(runtime, /spill-token-metering-stats\.mjs --tool antigravity/);
   assert.match(runtime, /--self` is also allowed/);
   assert.match(runtime, /model breakdown, task breakdown, stage breakdown/);
   assert.match(runtime, /read-only status query/);

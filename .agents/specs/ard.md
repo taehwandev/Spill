@@ -224,8 +224,8 @@ Rules:
 Decision:
 
 Install a small read-only stats helper beside the setup helper so agents can
-answer explicit user requests such as "Spill status" from the app-owned local
-usage store.
+answer explicit user requests such as "spill" or "Spill status" from the
+app-owned local usage store.
 
 Rationale:
 
@@ -241,6 +241,8 @@ Rules:
 - The default query is self-scoped to the current runtime tool using
   `SPILL_TOKEN_USAGE_AI_TOOL`, `SPILL_AI_TOOL`, or the Codex default when no
   runtime env label is installed.
+- Agent-facing instructions must include explicit commands for all first-class
+  runtime labels: `--tool codex`, `--tool claude`, and `--tool antigravity`.
 - The helper may output aggregate totals, event counts, model/task/stage
   breakdowns, source buckets, and recent activity.
 - The helper must not write usage events, labels, diagnostics, hooks, importer

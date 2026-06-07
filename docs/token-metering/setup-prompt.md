@@ -24,6 +24,9 @@ The installer must add narrow permission allowlist entries, when the runtime sup
 - `node ~/Library/Application\ Support/Spill/adapters/setup/spill-token-metering-setup.mjs --label <current-tool>`
 - `node ~/Library/Application\ Support/Spill/adapters/setup/spill-token-metering-stats.mjs --self`
 - `node ~/Library/Application\ Support/Spill/adapters/setup/spill-token-metering-stats.mjs --tool <current-tool>`
+- `node ~/Library/Application\ Support/Spill/adapters/setup/spill-token-metering-stats.mjs --tool codex`
+- `node ~/Library/Application\ Support/Spill/adapters/setup/spill-token-metering-stats.mjs --tool claude`
+- `node ~/Library/Application\ Support/Spill/adapters/setup/spill-token-metering-stats.mjs --tool antigravity`
 
 The Spill label handoff allowlist must include the same exact helper command
 for common safe path spellings: the absolute installed path, `~/...`,
@@ -45,11 +48,20 @@ The installer must also install the read-only local usage stats helper at:
 ~/Library/Application Support/Spill/adapters/setup/spill-token-metering-stats.mjs
 ```
 
-When the user explicitly asks the agent for Spill status, Spill usage status, or
-a similar local metering summary, the agent should run:
+When the user explicitly asks the agent for `spill`, Spill status, Spill usage
+status, token usage status, or a similar local metering summary, the agent
+should run the command for its current runtime:
 
 ```bash
 node ~/Library/Application\ Support/Spill/adapters/setup/spill-token-metering-stats.mjs --tool <current-tool>
+```
+
+Concrete runtime commands:
+
+```bash
+node ~/Library/Application\ Support/Spill/adapters/setup/spill-token-metering-stats.mjs --tool codex
+node ~/Library/Application\ Support/Spill/adapters/setup/spill-token-metering-stats.mjs --tool claude
+node ~/Library/Application\ Support/Spill/adapters/setup/spill-token-metering-stats.mjs --tool antigravity
 ```
 
 The status helper must read only Spill's app-owned local

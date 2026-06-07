@@ -12,3 +12,15 @@ For multi-step work, the route command shape is:
 ```bash
 SPILL_AI_TOOL=antigravity python3 "${AGENTPLAYBOOK_HOME:-$HOME/Documents/KeyFlowVault/AgentPlaybook}/scripts/workflow.py" route <command> --request "<USER_REQUEST>"
 ```
+
+When the user explicitly asks Antigravity/AGY for `spill`, Spill status, token
+usage status, or a local metering summary, run the read-only local stats helper
+for Antigravity:
+
+```bash
+node ~/Library/Application\ Support/Spill/adapters/setup/spill-token-metering-stats.mjs --tool antigravity
+```
+
+Return the full aggregate summary, not only input/output totals. This helper is
+read-only and is not a usage event, hook, importer, label handoff, or proof that
+the current turn was recorded.

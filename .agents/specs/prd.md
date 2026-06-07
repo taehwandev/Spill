@@ -206,12 +206,15 @@ Requirements:
   Runtime-specific hooks, importers, or SDK adapters normalize into that store;
   the app should not present Codex, Claude Code, and Antigravity/AGY as three
   separate product databases.
-- When a user explicitly asks an agent for Spill status or local usage status,
-  installed agents should be able to read the same app-owned local store through
-  a read-only helper and return a self-scoped aggregate summary. This helper
-  must show more than input/output totals: event count, total tokens, average
-  event size, peak event size, model/task/stage breakdowns, source buckets, and
-  recent activity should be available in the response.
+- When a user explicitly asks an agent for `spill`, Spill status, token usage
+  status, or local usage status, installed agents should be able to read the
+  same app-owned local store through a read-only helper and return a
+  self-scoped aggregate summary. The installed prompt should include concrete
+  commands for `--tool codex`, `--tool claude`, and `--tool antigravity`, not
+  only a generic placeholder. This helper must show more than input/output
+  totals: event count, total tokens, average event size, peak event size,
+  model/task/stage breakdowns, source buckets, and recent activity should be
+  available in the response.
 - Agent-facing status reads are a secondary reporting surface, not a metering
   source. They must not create usage events, write labels, run hooks, infer
   counts, inspect private content, or be reported as proof that the current turn

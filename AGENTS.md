@@ -37,6 +37,23 @@ Runtime-specific routing labels:
 - Antigravity/AGY context verification marker:
   `spill_antigravity_context_v1`.
 
+Explicit Spill local status commands:
+
+- Treat a user request such as `spill`, `Spill status`, token usage status, or
+  a local metering summary as an explicit request to run the read-only local
+  stats helper for the current runtime.
+- Codex command:
+  `node ~/Library/Application\ Support/Spill/adapters/setup/spill-token-metering-stats.mjs --tool codex`
+- Claude Code command:
+  `node ~/Library/Application\ Support/Spill/adapters/setup/spill-token-metering-stats.mjs --tool claude`
+- Antigravity/AGY command:
+  `node ~/Library/Application\ Support/Spill/adapters/setup/spill-token-metering-stats.mjs --tool antigravity`
+- Answer with the full aggregate summary: total, input, output, event count,
+  average event size, peak event size, model/task/stage breakdowns, source
+  buckets, and recent activity. Do not answer only with input/output totals.
+- This helper is read-only and is not a usage event, hook, importer, label
+  handoff, or proof that the current turn was recorded.
+
 Runtime hook evidence and privacy:
 
 - A Spill label handoff permission prompt, such as a setup helper `--label

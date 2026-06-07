@@ -160,11 +160,20 @@ Important paths:
 ~/Library/Application Support/Spill/token-metering/diagnostics/
 ```
 
-When the user explicitly asks an agent for Spill status or local usage status,
-the agent may run the installed read-only status helper:
+When the user explicitly asks an agent for `spill`, Spill status, token usage
+status, or local usage status, the agent may run the installed read-only status
+helper for its current runtime:
 
 ```bash
 node ~/Library/Application\ Support/Spill/adapters/setup/spill-token-metering-stats.mjs --tool <current-tool>
+```
+
+Concrete runtime commands:
+
+```bash
+node ~/Library/Application\ Support/Spill/adapters/setup/spill-token-metering-stats.mjs --tool codex
+node ~/Library/Application\ Support/Spill/adapters/setup/spill-token-metering-stats.mjs --tool claude
+node ~/Library/Application\ Support/Spill/adapters/setup/spill-token-metering-stats.mjs --tool antigravity
 ```
 
 This command reads the local `token_usage_events` store and prints a self-scoped

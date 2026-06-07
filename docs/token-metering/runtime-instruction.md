@@ -13,14 +13,22 @@ If your runtime or adapter does not expose exact token counts to an approved hoo
 
 Explicit local usage status requests:
 
-- When the user explicitly asks for Spill status, Spill usage status, token
-  usage status, or a similar local metering summary, answer by reading the
-  app-owned local usage store with the installed read-only stats helper when it
-  exists.
+- When the user explicitly asks for `spill`, Spill status, Spill usage status,
+  token usage status, or a similar local metering summary, answer by reading
+  the app-owned local usage store with the installed read-only stats helper when
+  it exists.
 - Preferred command shape:
 
 ```bash
 node ~/Library/Application\ Support/Spill/adapters/setup/spill-token-metering-stats.mjs --tool <current-tool>
+```
+
+- Concrete runtime commands:
+
+```bash
+node ~/Library/Application\ Support/Spill/adapters/setup/spill-token-metering-stats.mjs --tool codex
+node ~/Library/Application\ Support/Spill/adapters/setup/spill-token-metering-stats.mjs --tool claude
+node ~/Library/Application\ Support/Spill/adapters/setup/spill-token-metering-stats.mjs --tool antigravity
 ```
 
 - Keep the default scope to the current runtime tool only. Use `--tool codex`,

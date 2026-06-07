@@ -26,6 +26,25 @@ Key rules from that guide:
   treat it as usage failure unless diagnostics and stored events also show no
   real model usage was recorded.
 
+## Mandatory: Spill Local Usage Status Requests
+
+When the user explicitly asks Claude for `spill`, Spill status, token usage
+status, or a local metering summary, run the read-only local stats helper for
+Claude Code:
+
+```bash
+node ~/Library/Application\ Support/Spill/adapters/setup/spill-token-metering-stats.mjs --tool claude
+```
+
+Do not answer from memory or from hook/setup status. Return the full aggregate
+summary: total, input, output, event count, average event size, peak event size,
+model/task/stage breakdowns, source buckets, and recent activity.
+
+This helper is read-only. It is not a usage event, hook, importer, label
+handoff, or proof that the current turn was recorded. Do not inspect prompts,
+responses, commands, file paths, logs, diffs, source content, environment
+values, transcripts, shell history, or secrets to explain the output.
+
 ## Mandatory: Route Before Every Task
 
 **Every task — including direct questions, single-step edits, and reviews —
