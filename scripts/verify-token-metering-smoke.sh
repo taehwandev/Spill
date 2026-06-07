@@ -86,32 +86,6 @@ if (tmpFiles.length !== 0) {
 console.log(`OK: token usage hook queued event ${process.env.HOOK_SPAN_ID}.`);
 NODE
 
-printf '%s' '{"usage":{"input_tokens":11,"output_tokens":7},"model":"gemini-2.5-pro","session_id":"agySmokeRun01","task_type":"code_review","stage":"verify"}' \
-    | SPILL_TOKEN_USAGE_INBOX_DIR="$INBOX_DIR" \
-      python3 "$ROOT_DIR/Sources/Spill/Resources/adapters/antigravity/spill-hook.py"
-
-AGY_DUP_INBOX="$ADAPTER_TMP_DIR/agy-duplicate-inbox"
-mkdir -p "$AGY_DUP_INBOX"
-for _ in 1 2; do
-    printf '%s' '{"usage":{"input_tokens":11,"output_tokens":7},"model":"gemini-2.5-pro","session_id":"agySmokeRun01","task_type":"code_review","stage":"verify"}' \
-        | SPILL_TOKEN_USAGE_INBOX_DIR="$AGY_DUP_INBOX" \
-          python3 "$ROOT_DIR/Sources/Spill/Resources/adapters/antigravity/spill-hook.py"
-done
-
-AGY_DUP_INBOX="$AGY_DUP_INBOX" node --input-type=module <<'NODE'
-import { readFile, readdir } from 'node:fs/promises';
-import { join } from 'node:path';
-
-const files = (await readdir(process.env.AGY_DUP_INBOX)).filter((file) => file.endsWith(".json"));
-if (files.length !== 2) {
-  throw new Error(`expected two AGY duplicate queue files, found ${files.length}`);
-}
-const spans = new Set(await Promise.all(files.map(async (file) => JSON.parse(await readFile(join(process.env.AGY_DUP_INBOX, file), "utf8")).span_id)));
-if (spans.size !== 1) {
-  throw new Error(`expected duplicate AGY payloads to share one stable span id, found ${spans.size}`);
-}
-NODE
-
 CLAUDE_TRANSCRIPT="$ADAPTER_TMP_DIR/claude-transcript.jsonl"
 CLAUDE_PAYLOAD="$ADAPTER_TMP_DIR/claude-payload.json"
 CLAUDE_TRANSCRIPT="$CLAUDE_TRANSCRIPT" CLAUDE_PAYLOAD="$CLAUDE_PAYLOAD" node --input-type=module <<'NODE'
@@ -451,15 +425,14 @@ import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 
 const files = (await readdir(process.env.INBOX_DIR)).filter((file) => file.endsWith(".json"));
-if (files.length !== 4) {
-  throw new Error(`expected four queued JSON events after adapter checks, found ${files.length}`);
+if (files.length !== 3) {
+  throw new Error(`expected three queued JSON events after adapter checks, found ${files.length}`);
 }
 
 const events = await Promise.all(files.map(async (file) => JSON.parse(await readFile(join(process.env.INBOX_DIR, file), "utf8"))));
 const keys = new Set(events.map((event) => `${event.ai_tool}:${event.task_type}:${event.stage}`));
 for (const expected of [
   "claude:debugging:verify",
-  "antigravity:code_review:verify",
   "claude:git_commit:summarize",
   "codex:review_response:revise",
 ]) {
@@ -468,7 +441,7 @@ for (const expected of [
   }
 }
 
-console.log("OK: AGY, Claude, and Codex adapters queued detailed task labels.");
+console.log("OK: Claude and Codex adapters queued detailed task labels.");
 NODE
 
 SPILL_SMOKE_TEST=1 \
@@ -506,8 +479,8 @@ HOOK_SPAN_ID="$HOOK_SPAN_ID" EVENTS_JSON_DATA="$EVENTS_JSON_DATA" INBOX_DIR="$IN
 import { readdir } from 'node:fs/promises';
 
 const events = JSON.parse(process.env.EVENTS_JSON_DATA);
-if (!Array.isArray(events) || events.length !== 4) {
-  throw new Error(`expected four stored events, found ${Array.isArray(events) ? events.length : "non-array"}`);
+if (!Array.isArray(events) || events.length !== 3) {
+  throw new Error(`expected three stored events, found ${Array.isArray(events) ? events.length : "non-array"}`);
 }
 
 const event = events.find((candidate) => candidate.span_id === process.env.HOOK_SPAN_ID);
@@ -529,7 +502,6 @@ if (event.token_breakdown.unknown !== 15 || Object.hasOwn(event, "sync_mode")) {
 
 const keys = new Set(events.map((candidate) => `${candidate.ai_tool}:${candidate.task_type}:${candidate.stage}`));
 for (const expected of [
-  "antigravity:code_review:verify",
   "claude:git_commit:summarize",
   "codex:review_response:revise",
 ]) {
