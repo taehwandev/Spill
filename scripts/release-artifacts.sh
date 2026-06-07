@@ -18,7 +18,7 @@ safe_artifact_label() {
 }
 
 collect_unique_artifacts() {
-    local artifacts=()
+    local -a artifacts=()
     local artifact
     local canonical
     local existing
@@ -28,12 +28,14 @@ collect_unique_artifacts() {
         [[ -e "$artifact" ]] || continue
         canonical="$(canonical_artifact_path "$artifact")"
         duplicate=false
-        for existing in "${artifacts[@]}"; do
-            if [[ "$(canonical_artifact_path "$existing")" == "$canonical" ]]; then
-                duplicate=true
-                break
-            fi
-        done
+        if [[ ${#artifacts[@]} -gt 0 ]]; then
+            for existing in "${artifacts[@]}"; do
+                if [[ "$(canonical_artifact_path "$existing")" == "$canonical" ]]; then
+                    duplicate=true
+                    break
+                fi
+            done
+        fi
         if [[ "$duplicate" == false ]]; then
             artifacts+=("$artifact")
         fi

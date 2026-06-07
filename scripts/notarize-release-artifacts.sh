@@ -175,8 +175,8 @@ notarize_artifact() {
     xcrun stapler validate "$artifact"
 }
 
-artifact_args=()
-artifact_dirs=()
+declare -a artifact_args=()
+declare -a artifact_dirs=()
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -230,7 +230,7 @@ mkdir -p "$NOTARYTOOL_LOG_DIR"
 TEMP_SUBMISSION_DIR="$(mktemp -d)"
 build_notarytool_auth_args
 
-artifacts=()
+declare -a artifacts=()
 while IFS= read -r -d '' artifact; do
     artifacts+=("$artifact")
 done < <(collect_unique_artifacts "${artifact_args[@]}")

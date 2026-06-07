@@ -78,6 +78,7 @@ final class ReleaseNotarizationContractTests: XCTestCase {
         XCTAssertTrue(helper.contains("canonical_artifact_path()"))
         XCTAssertTrue(helper.contains("safe_artifact_label()"))
         XCTAssertTrue(helper.contains("collect_unique_artifacts()"))
+        XCTAssertTrue(helper.contains("local -a artifacts=()"))
         XCTAssertTrue(helper.contains("shasum -a 256"))
         XCTAssertTrue(helper.contains("substr($1, 1, 12)"))
     }
