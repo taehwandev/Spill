@@ -1,0 +1,41 @@
+feature_id: private-usage-upload
+status: draft
+
+necessity:
+  decision: build | defer | reject | needs-clarification
+  reason:
+  ambiguity:
+    clarity: clear | needs-clarification
+    blockers_resolved: false
+    resolution_sources:
+      - maintainer | repo-research | assumption
+  clarification_required: true
+  questions:
+    -
+
+tasks:
+  - id: private-usage-upload-T1
+    title: <task title>
+    owner_role: builder
+    state: todo
+    depends_on: []
+    write_scope:
+      - Sources/Spill/<File.swift>
+    read_scope:
+      - .agents/specs/prd.md
+      - .agents/specs/ard.md
+    forbidden_scope:
+      - Sources/Spill/<UnrelatedFile.swift>
+    acceptance:
+      - swift build passes.
+    verification:
+      commands:
+        - swift build
+      manual:
+        - Launch app and verify behavior.
+
+parallel_groups:
+  - id: group-1
+    tasks:
+      - private-usage-upload-T1
+    rule: Tasks in a group must have disjoint write_scope entries.
