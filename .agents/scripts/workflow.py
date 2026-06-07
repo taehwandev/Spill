@@ -62,7 +62,7 @@ LOCALIZED_CONTENT_FILES = {
     "Sources/Spill/App/AppLocalization.swift",
     "Sources/Spill/Preferences/PreferencesLocalization.swift",
     "Sources/Spill/TokenMetering/TokenMeteringLocalization.swift",
-    "web/src/features/tokenMeteringDashboard/i18n.ts",
+    "Sources/Spill/TokenMetering/TokenMeteringDashboardView.swift",
 }
 
 

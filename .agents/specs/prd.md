@@ -423,6 +423,9 @@ Requirements:
 
 - Web portal is an optional companion for account connection, install guidance,
   device overview, settings, and encrypted aggregate usage statistics.
+- Hosted web portal implementation lives in the private
+  `taehwandev/Spill-web` repository. The public app repo documents only shared
+  contracts and privacy guarantees that affect the open-source app.
 - Local app remains fully usable when the user never signs in.
 - Web login completes in the browser and returns to the app through a callback
   or deep link.

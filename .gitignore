@@ -12,6 +12,12 @@ DerivedData/
 !.env.example
 supabase/.temp/
 
+# Hosted web portal local leftovers after source moved private
+web/node_modules/
+web/dist/
+web/.vite/
+web/.vercel/
+
 # Local experiments and probes
 test*.swift
 test*.tiff

@@ -1,4 +1,0 @@
-project_id = "otggbleddlmzamgpqxjm"
-
-[functions.private-usage-relay]
-verify_jwt = false

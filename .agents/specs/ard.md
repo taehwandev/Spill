@@ -470,10 +470,10 @@ Implementation order:
 
 Decision:
 
-The open-source macOS app and shared token-only contracts may remain public, but
-the hosted Spill web portal may be separated into a private repository or
-private package if the product needs to keep hosted UI implementation,
-deployment wiring, or product experiments out of the public source tree.
+The open-source macOS app and shared token-only contracts remain public. The
+hosted Spill web portal implementation lives in the private
+`taehwandev/Spill-web` repository so hosted UI implementation, deployment
+wiring, and product experiments stay out of the public source tree.
 
 Browser-delivered JavaScript and HTML are never a trusted secret boundary. Route
 guards and hidden navigation are presentation controls only; every protected
@@ -495,8 +495,9 @@ Rules:
   as authorization.
 - Public web code may include self-hostable examples only when they do not
   expose hosted deployment internals or privileged behavior.
-- If the hosted web portal moves private, keep shared schemas, DTO contracts,
-  and privacy guarantees documented in the public app repo.
+- Keep shared schemas, DTO contracts, and privacy guarantees documented in the
+  public app repo when they affect the open-source app or local metering safety
+  contract.
 - Protected routes must render only after a signed-in viewer is available.
 - Admin routes must render only after the server-provided viewer role confirms
   `admin`.

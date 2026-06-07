@@ -286,7 +286,7 @@ Use the narrowest command that proves the changed surface.
 | Runtime app launch smoke | `python3 .agents/scripts/workflow.py runtime-smoke` |
 | Token metering queue/adapters | `python3 .agents/scripts/workflow.py token-metering-smoke` |
 | Status item click path | `python3 .agents/scripts/workflow.py status-click-smoke` |
-| Web dashboard | `cd web && npm test && npm run build` |
+| Hosted web portal | Private `taehwandev/Spill-web` repo: `cd web && npm test && npm run build` |
 
 For documentation-only edits, run at least:
 

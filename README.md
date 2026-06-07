@@ -33,6 +33,15 @@ This repository currently contains an MVP shell:
 
 The current Spill Bar can detect some visible menu bar extras when Accessibility permission is granted. This is best-effort behavior. Spill does not promise to recover every item hidden behind the notch or forcibly rearrange other apps' menu bar items.
 
+## Hosted web portal
+
+The hosted account web portal for `spill.thdev.app` lives in the private
+`taehwandev/Spill-web` repository. This public repository keeps the open-source
+macOS app, local token-metering contracts, installer documents, and privacy
+requirements. Browser-delivered web code is not a security boundary; hosted
+account reads, device actions, and admin actions must still be enforced by the
+server-side Supabase/RLS relay boundary.
+
 ## Important macOS constraint
 
 macOS does not provide a public API that reliably enumerates, hides, resizes, reorders, clones, or reparents every third-party menu bar extra. `NSStatusBar` works for Spill's own item. Other apps' items live in their own processes, and deep control usually requires Accessibility observation, user-approved automation, or private implementation details.
