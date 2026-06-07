@@ -36,6 +36,7 @@ final class TokenMeteringDashboardAppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
         configureMainMenu()
+        observeSettingsChanges()
         tokenUsageInboxMonitor.start()
         requestTokenUsageCollection(reason: "dashboard_launch")
         windowController.show()
@@ -51,6 +52,11 @@ final class TokenMeteringDashboardAppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         tokenUsageInboxMonitor.stop()
+        DistributedNotificationCenter.default().removeObserver(
+            self,
+            name: TokenMeteringDashboardProcess.settingsDidChangeNotification,
+            object: nil
+        )
     }
 
     private static func makeTokenUsageStore() -> TokenUsageStore {
@@ -95,6 +101,24 @@ final class TokenMeteringDashboardAppDelegate: NSObject, NSApplicationDelegate {
         NSWorkspace.shared.openApplication(at: mainAppURL, configuration: configuration) { _, _ in
             TokenMeteringDashboardProcess.postOpenPreferencesRequest()
         }
+    }
+
+    private func observeSettingsChanges() {
+        DistributedNotificationCenter.default().addObserver(
+            self,
+            selector: #selector(settingsDidChangeFromMainApp(_:)),
+            name: TokenMeteringDashboardProcess.settingsDidChangeNotification,
+            object: nil
+        )
+    }
+
+    @objc private func settingsDidChangeFromMainApp(_ notification: Notification) {
+        let settingsKey = notification.userInfo?[TokenMeteringDashboardProcess.settingsKeyUserInfoKey] as? String
+        guard settingsKey == nil || settingsKey == TokenMeteringDashboardProcess.appLanguageSettingsKey else {
+            return
+        }
+
+        settings.reloadAppLanguageFromDefaults()
     }
 
     private func startSmokeTestExitTimer() {

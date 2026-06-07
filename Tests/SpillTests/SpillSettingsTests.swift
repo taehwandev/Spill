@@ -345,6 +345,44 @@ final class SpillSettingsTests: XCTestCase {
         XCTAssertEqual(SpillSettings(defaults: defaults).appLanguage, .automatic)
     }
 
+    func testAppLanguageReloadsExternalDefaultChanges() {
+        let defaults = makeDefaults()
+        let settings = SpillSettings(defaults: defaults)
+
+        settings.appLanguage = .english
+        defaults.set(SpillAppLanguage.korean.rawValue, forKey: SpillAppLanguage.defaultsKey)
+
+        XCTAssertEqual(settings.appLanguage, .english)
+
+        settings.reloadAppLanguageFromDefaults()
+
+        XCTAssertEqual(settings.appLanguage, .korean)
+    }
+
+    func testDashboardHelperUsesMainAppDefaultsDomain() {
+        XCTAssertNil(SpillSettings.sharedDefaultsSuiteName(
+            bundleIdentifier: "dev.spill.Spill",
+            arguments: [],
+            environment: [:]
+        ))
+        XCTAssertEqual(
+            SpillSettings.sharedDefaultsSuiteName(
+                bundleIdentifier: "dev.spill.Spill.TokenDashboard",
+                arguments: [],
+                environment: [:]
+            ),
+            "dev.spill.Spill"
+        )
+        XCTAssertEqual(
+            SpillSettings.sharedDefaultsSuiteName(
+                bundleIdentifier: "dev.spill.Spill.TokenDashboard",
+                arguments: [TokenMeteringDashboardProcess.standaloneArgument],
+                environment: [TokenMeteringDashboardProcess.mainBundleIdentifierEnvironmentKey: "com.example.Spill"]
+            ),
+            "com.example.Spill"
+        )
+    }
+
     func testPreferencesLocalizationCoversSupportedLanguages() {
         XCTAssertEqual(
             PreferencesL10n.text(.preferencesWindowTitle, appLanguage: .english),

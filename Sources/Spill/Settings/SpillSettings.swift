@@ -94,10 +94,56 @@ enum SpillAppLanguage: String, CaseIterable, Identifiable {
 
 @MainActor
 final class SpillSettings: ObservableObject {
-    static let shared = SpillSettings()
+    static let shared = SpillSettings(defaults: sharedDefaults())
+
+    static func sharedDefaults(
+        bundleIdentifier: String? = Bundle.main.bundleIdentifier,
+        arguments: [String] = ProcessInfo.processInfo.arguments,
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> UserDefaults {
+        guard let suiteName = sharedDefaultsSuiteName(
+            bundleIdentifier: bundleIdentifier,
+            arguments: arguments,
+            environment: environment
+        ) else {
+            return .standard
+        }
+
+        return UserDefaults(suiteName: suiteName) ?? .standard
+    }
+
+    static func sharedDefaultsSuiteName(
+        bundleIdentifier: String?,
+        arguments: [String],
+        environment: [String: String]
+    ) -> String? {
+        let isDashboardProcess = environment[TokenMeteringDashboardProcess.standaloneEnvironmentKey] == "1"
+            || arguments.contains(TokenMeteringDashboardProcess.standaloneArgument)
+            || TokenMeteringDashboardProcess.isDashboardBundleIdentifier(bundleIdentifier)
+        guard isDashboardProcess else {
+            return nil
+        }
+
+        if let mainBundleIdentifier = environment[TokenMeteringDashboardProcess.mainBundleIdentifierEnvironmentKey],
+           !mainBundleIdentifier.isEmpty
+        {
+            return mainBundleIdentifier
+        }
+
+        guard let bundleIdentifier,
+              TokenMeteringDashboardProcess.isDashboardBundleIdentifier(bundleIdentifier)
+        else {
+            return nil
+        }
+
+        return String(bundleIdentifier.dropLast(TokenMeteringDashboardProcess.helperBundleIdentifierSuffix.count))
+    }
 
     @Published var appLanguage: SpillAppLanguage {
-        didSet { defaults.set(appLanguage.rawValue, forKey: Keys.appLanguage) }
+        didSet {
+            defaults.set(appLanguage.rawValue, forKey: Keys.appLanguage)
+            defaults.synchronize()
+        }
     }
 
     @Published var iconSpacing: Double {
@@ -257,6 +303,16 @@ final class SpillSettings: ObservableObject {
 
     @Published var tokenUsageShowAdvancedTools: Bool {
         didSet { defaults.set(tokenUsageShowAdvancedTools, forKey: Keys.tokenUsageShowAdvancedTools) }
+    }
+
+    func reloadAppLanguageFromDefaults() {
+        defaults.synchronize()
+        let persistedLanguage = SpillAppLanguage.normalized(rawValue: defaults.string(forKey: Keys.appLanguage))
+        guard appLanguage != persistedLanguage else {
+            return
+        }
+
+        appLanguage = persistedLanguage
     }
 
     @Published var statusValueBold: Bool {

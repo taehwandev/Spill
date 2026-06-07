@@ -24,9 +24,13 @@ final class TokenMeteringDashboardLauncher {
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.activates = true
         configuration.arguments = [TokenMeteringDashboardProcess.standaloneArgument]
-        configuration.environment = [
+        var environment = [
             TokenMeteringDashboardProcess.standaloneEnvironmentKey: "1"
         ]
+        if let mainBundleIdentifier = Bundle.main.bundleIdentifier {
+            environment[TokenMeteringDashboardProcess.mainBundleIdentifierEnvironmentKey] = mainBundleIdentifier
+        }
+        configuration.environment = environment
 
         workspace.openApplication(at: helperURL, configuration: configuration) { _, error in
             guard error != nil else {

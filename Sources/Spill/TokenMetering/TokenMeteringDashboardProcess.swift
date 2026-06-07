@@ -4,10 +4,14 @@ enum TokenMeteringDashboardProcess {
     static let helperBundleName = "Spill Token Dashboard.app"
     static let helperBundleIdentifierSuffix = ".TokenDashboard"
     static let standaloneEnvironmentKey = "SPILL_TOKEN_DASHBOARD_STANDALONE"
+    static let mainBundleIdentifierEnvironmentKey = "SPILL_MAIN_BUNDLE_ID"
     static let standaloneArgument = "--token-dashboard"
     static let openPreferencesNotification = Notification.Name("app.spill.open-preferences")
+    static let settingsDidChangeNotification = Notification.Name("app.spill.settings-did-change")
     static let preferencesTabUserInfoKey = "tab"
+    static let settingsKeyUserInfoKey = "key"
     static let tokenMeteringPreferencesTab = "tokens"
+    static let appLanguageSettingsKey = "appLanguage"
 
     static var isDashboardProcess: Bool {
         let processInfo = ProcessInfo.processInfo
@@ -52,6 +56,15 @@ enum TokenMeteringDashboardProcess {
             openPreferencesNotification,
             object: nil,
             userInfo: [preferencesTabUserInfoKey: tab],
+            deliverImmediately: true
+        )
+    }
+
+    static func postAppLanguageDidChange() {
+        DistributedNotificationCenter.default().postNotificationName(
+            settingsDidChangeNotification,
+            object: nil,
+            userInfo: [settingsKeyUserInfoKey: appLanguageSettingsKey],
             deliverImmediately: true
         )
     }

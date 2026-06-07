@@ -766,8 +766,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .dropFirst()
             .sink { [weak self] _ in
                 SpillTelemetry.shared.track("preference_changed", props: ["name": "app_language"])
-                self?.configureMainMenu()
-                self?.statusItemController?.refresh()
+                DispatchQueue.main.async { [weak self] in
+                    self?.configureMainMenu()
+                    self?.statusItemController?.refresh()
+                    TokenMeteringDashboardProcess.postAppLanguageDidChange()
+                }
             }
             .store(in: &cancellables)
     }
