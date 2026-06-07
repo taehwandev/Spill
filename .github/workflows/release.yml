@@ -328,20 +328,12 @@ jobs:
           cat > "$notes_file" <<NOTES
           Spill $version for macOS.
 
-          Artifacts:
-          - Spill-$version-macos.dmg
-          - Spill-$version-macos.zip
-          - Spill-$version-macos.pkg when a Developer ID Installer identity is configured
-          - Spill-macos.dmg and Spill-macos.zip for stable website download links
-          - update.json for manual in-app update checks
-          - appcast.xml for Sparkle in-app updates
-          - checksums.txt
+          - Release notarization now uses App Store Connect API keys.
+          - Current local token dashboard and AI metering updates are included.
 
-          Signing:
-          $SIGNING_NOTE
-
-          Updates:
-          $SPARKLE_NOTE
+          Download \`Spill-macos.dmg\` for standard installation.
+          Signing: $SIGNING_NOTE
+          Updates: $SPARKLE_NOTE
           $install_note
           NOTES
 
