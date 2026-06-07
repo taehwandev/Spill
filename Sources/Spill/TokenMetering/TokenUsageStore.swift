@@ -11,7 +11,7 @@ final class TokenUsageStore: @unchecked Sendable {
     private let databaseURL: URL
     private let inboxURL: URL?
     private let lock = NSLock()
-    private var didPrepareDatabaseSchema = false
+    private var preparedDatabaseSchemaCheckpoint: DatabaseSchemaCheckpoint?
 
     init(
         fileURL: URL = TokenUsageStore.defaultEventsURL(),
@@ -131,12 +131,49 @@ final class TokenUsageStore: @unchecked Sendable {
             let database = try openDatabase()
             defer { sqlite3_close(database) }
             _ = try migrateLegacyJSONEventsIfNeeded(database: database)
-            try insertEvent(event, database: database)
+            _ = try insertEvent(event, database: database)
             return loadDatabaseEvents(database: database)
         }
 
         postEventsDidChange()
         return nextEvents
+    }
+
+    @discardableResult
+    func appendEventsWithoutLoading(_ events: [TokenUsageEvent]) throws -> Int {
+        guard !events.isEmpty else {
+            return 0
+        }
+
+        let insertedCount = try lock.withLock {
+            for event in events {
+                try event.validate()
+            }
+
+            let database = try openDatabase()
+            defer { sqlite3_close(database) }
+            _ = try migrateLegacyJSONEventsIfNeeded(database: database)
+            return try insertEvents(events, database: database)
+        }
+
+        if insertedCount > 0 {
+            postEventsDidChange()
+        }
+        return insertedCount
+    }
+
+    func existingSpanIDs() -> Set<String> {
+        lock.withLock {
+            let database: OpaquePointer
+            do {
+                database = try openDatabase()
+            } catch {
+                return []
+            }
+            defer { sqlite3_close(database) }
+
+            return loadSpanIDs(database: database)
+        }
     }
 
     func clearEvents() throws {
@@ -237,7 +274,7 @@ final class TokenUsageStore: @unchecked Sendable {
 
         if !inboxResult.consumedURLs.isEmpty {
             do {
-                try insertEvents(inboxResult.events, database: database)
+                _ = try insertEvents(inboxResult.events, database: database)
                 removeConsumedInboxFiles(inboxResult.consumedURLs)
                 didImportQueuedEvents = true
             } catch {
@@ -360,15 +397,51 @@ final class TokenUsageStore: @unchecked Sendable {
             try execute("PRAGMA journal_mode = WAL", database: database)
             try execute("PRAGMA synchronous = NORMAL", database: database)
             try execute("PRAGMA busy_timeout = 5000", database: database)
-            if !didPrepareDatabaseSchema {
+            let schemaCheckpoint = databaseSchemaCheckpoint(database: database)
+            if schemaCheckpoint.fileIdentity == nil
+                || preparedDatabaseSchemaCheckpoint != schemaCheckpoint {
                 try prepareDatabaseSchema(database: database)
-                didPrepareDatabaseSchema = true
+                preparedDatabaseSchemaCheckpoint = databaseSchemaCheckpoint(database: database)
             }
             return database
         } catch {
             sqlite3_close(database)
             throw error
         }
+    }
+
+    private func databaseSchemaCheckpoint(database: OpaquePointer) -> DatabaseSchemaCheckpoint {
+        DatabaseSchemaCheckpoint(
+            fileIdentity: databaseFileIdentity(),
+            schemaVersion: databaseSchemaVersion(database: database)
+        )
+    }
+
+    private func databaseFileIdentity() -> String? {
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: databaseURL.path),
+              let systemNumber = attributes[.systemNumber],
+              let systemFileNumber = attributes[.systemFileNumber]
+        else {
+            return nil
+        }
+
+        return "\(String(describing: systemNumber)):\(String(describing: systemFileNumber))"
+    }
+
+    private func databaseSchemaVersion(database: OpaquePointer) -> Int {
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(database, "PRAGMA schema_version", -1, &statement, nil) == SQLITE_OK,
+              let statement
+        else {
+            return -1
+        }
+        defer { sqlite3_finalize(statement) }
+
+        guard sqlite3_step(statement) == SQLITE_ROW else {
+            return -1
+        }
+
+        return Int(sqlite3_column_int(statement, 0))
     }
 
     private func execute(_ sql: String, database: OpaquePointer) throws {
@@ -668,18 +741,20 @@ final class TokenUsageStore: @unchecked Sendable {
             return false
         }
 
-        try insertEvents(legacyEvents, database: database)
+        _ = try insertEvents(legacyEvents, database: database)
         try removeLegacyEventsFileWithoutLock()
         return true
     }
 
-    private func insertEvents(_ events: [TokenUsageEvent], database: OpaquePointer) throws {
+    private func insertEvents(_ events: [TokenUsageEvent], database: OpaquePointer) throws -> Int {
         try execute("BEGIN IMMEDIATE TRANSACTION", database: database)
+        var insertedCount = 0
         do {
             for event in events {
-                try insertEvent(event, database: database)
+                insertedCount += try insertEvent(event, database: database)
             }
             try execute("COMMIT", database: database)
+            return insertedCount
         } catch {
             try? execute("ROLLBACK", database: database)
             throw error
@@ -691,7 +766,7 @@ final class TokenUsageStore: @unchecked Sendable {
         do {
             try execute("DELETE FROM token_usage_events", database: database)
             for event in events {
-                try insertEvent(event, database: database)
+                _ = try insertEvent(event, database: database)
             }
             try execute("COMMIT", database: database)
         } catch {
@@ -700,7 +775,7 @@ final class TokenUsageStore: @unchecked Sendable {
         }
     }
 
-    private func insertEvent(_ event: TokenUsageEvent, database: OpaquePointer) throws {
+    private func insertEvent(_ event: TokenUsageEvent, database: OpaquePointer) throws -> Int {
         try event.validate()
 
         let sql = """
@@ -760,6 +835,27 @@ final class TokenUsageStore: @unchecked Sendable {
         guard sqlite3_step(statement) == SQLITE_DONE else {
             throw TokenUsageStoreError.databaseWriteFailed
         }
+        return Int(sqlite3_changes(database))
+    }
+
+    private func loadSpanIDs(database: OpaquePointer) -> Set<String> {
+        let sql = "SELECT span_id FROM token_usage_events"
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
+              let statement
+        else {
+            return []
+        }
+        defer { sqlite3_finalize(statement) }
+
+        var spanIDs = Set<String>()
+        while sqlite3_step(statement) == SQLITE_ROW {
+            guard let text = sqlite3_column_text(statement, 0) else {
+                continue
+            }
+            spanIDs.insert(String(cString: text))
+        }
+        return spanIDs
     }
 
     private func loadDatabaseEvents(database: OpaquePointer) -> [TokenUsageEvent] {
@@ -1027,6 +1123,11 @@ private struct InboxReadResult {
 private struct StoreLoadResult {
     let events: [TokenUsageEvent]
     let didImportQueuedEvents: Bool
+}
+
+private struct DatabaseSchemaCheckpoint: Equatable {
+    let fileIdentity: String?
+    let schemaVersion: Int
 }
 
 private extension NSLock {

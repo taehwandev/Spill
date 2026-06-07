@@ -54,11 +54,15 @@ final class TokenUsageDashboardStore: ObservableObject {
     private var events: [TokenUsageEvent] = []
     private var eventsDidChangeObserver: NSObjectProtocol?
     private var distributedEventsDidChangeObserver: NSObjectProtocol?
+    private var collectionDidFinishObserver: NSObjectProtocol?
     private var hasRebuiltSnapshot = false
     private var clearLiveUpdateTask: Task<Void, Never>?
     private var scheduledRefreshTask: Task<Void, Never>?
 
-    init(usageStore: TokenUsageStore) {
+    init(
+        usageStore: TokenUsageStore,
+        collectionCoordinator: AnyObject? = nil
+    ) {
         self.usageStore = usageStore
         eventsDidChangeObserver = NotificationCenter.default.addObserver(
             forName: TokenUsageStore.eventsDidChangeNotification,
@@ -78,6 +82,15 @@ final class TokenUsageDashboardStore: ObservableObject {
                 self?.scheduleRefresh()
             }
         }
+        collectionDidFinishObserver = NotificationCenter.default.addObserver(
+            forName: TokenUsageCollectorCoordinator.collectionDidFinishNotification,
+            object: collectionCoordinator,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.scheduleRefresh()
+            }
+        }
         refreshPanelSummary()
     }
 
@@ -87,6 +100,9 @@ final class TokenUsageDashboardStore: ObservableObject {
         }
         if let distributedEventsDidChangeObserver {
             DistributedNotificationCenter.default().removeObserver(distributedEventsDidChangeObserver)
+        }
+        if let collectionDidFinishObserver {
+            NotificationCenter.default.removeObserver(collectionDidFinishObserver)
         }
         clearLiveUpdateTask?.cancel()
         scheduledRefreshTask?.cancel()

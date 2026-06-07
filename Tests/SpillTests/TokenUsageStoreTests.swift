@@ -369,11 +369,13 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(dashboardView.contains("private let settingsAction: () -> Void"))
         XCTAssertTrue(dashboardView.contains("settingsAction: @escaping () -> Void = {}"))
         XCTAssertTrue(dashboardView.contains("refreshAction()"))
+        XCTAssertTrue(collector.contains("runLocalImportersIfAvailable()"))
         XCTAssertTrue(collector.contains("TokenMeteringAdapterKit.defaultInstallURL(for: TokenMeteringAdapterKit.codex)"))
         XCTAssertTrue(collector.contains("runCodexImporterIfAvailable()"))
+        XCTAssertTrue(collector.contains("runAntigravityImporterIfAvailable()"))
+        XCTAssertTrue(collector.contains("TokenUsageAntigravityImporter()"))
         XCTAssertTrue(collector.contains("importQueuedEventsWhileProcessRuns(process)"))
         XCTAssertFalse(collector.contains("TokenMeteringAdapterKit.claudeCode"))
-        XCTAssertFalse(collector.contains("TokenMeteringAdapterKit.agy"))
     }
 
     func testDashboardLocalRefreshIsSeparatedFromServerStatusRefresh() throws {
@@ -405,6 +407,102 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(collector.contains("importerMaximumRuntime"))
         XCTAssertTrue(collector.contains("process.standardOutput = FileHandle.nullDevice"))
         XCTAssertTrue(collector.contains("process.standardError = FileHandle.nullDevice"))
+    }
+
+    func testTokenUsageCollectorPostsCollectionFinishedNotification() {
+        let store = TokenUsageStore(fileURL: temporaryEventsURL())
+        let collector = TokenUsageCollectorCoordinator(
+            store: store,
+            codexImporterURLProvider: { nil },
+            nodeExecutableURLProvider: { nil },
+            antigravityImporterProvider: { nil }
+        )
+        let notification = expectation(description: "collection finished notification")
+        let observer = NotificationCenter.default.addObserver(
+            forName: TokenUsageCollectorCoordinator.collectionDidFinishNotification,
+            object: collector,
+            queue: .main
+        ) { _ in
+            notification.fulfill()
+        }
+        defer {
+            NotificationCenter.default.removeObserver(observer)
+        }
+
+        collector.requestCollection(reason: "test")
+
+        wait(for: [notification], timeout: 1)
+    }
+
+    func testAntigravityActiveImporterReadsExactUsageFromConversationDatabase() throws {
+        let rootURL = temporaryDirectoryURL()
+        let conversationsURL = rootURL.appendingPathComponent("conversations", isDirectory: true)
+        let databaseURL = conversationsURL.appendingPathComponent("opaque-conversation.db")
+        let labelURL = rootURL
+            .appendingPathComponent("label-context", isDirectory: true)
+            .appendingPathComponent("antigravity.json")
+        let diagnosticsURL = rootURL
+            .appendingPathComponent("diagnostics", isDirectory: true)
+            .appendingPathComponent("antigravity-active-importer-last.json")
+
+        try writeAntigravityConversationDatabase(
+            at: databaseURL,
+            rows: [
+                (
+                    7,
+                    antigravityGenerationMetadataBlob(
+                        inputTokens: 120,
+                        outputTokens: 34,
+                        cachedInputTokens: 56,
+                        model: "gemini-3.5-flash-low"
+                    )
+                )
+            ]
+        )
+        try FileManager.default.createDirectory(
+            at: labelURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try Data(
+            """
+            {"ai_tool":"antigravity","task_type":"debugging","stage":"implement","updated_at":"1970-01-01T00:00:00.000Z","expires_at":"2999-01-01T00:00:00.000Z"}
+            """.utf8
+        ).write(to: labelURL)
+
+        let store = TokenUsageStore(fileURL: temporaryEventsURL())
+        let importer = TokenUsageAntigravityImporter(
+            conversationsDirectory: conversationsURL,
+            labelTimelineURL: labelURL,
+            diagnosticsURL: diagnosticsURL
+        )
+
+        let summary = importer.importRecentEvents(into: store, since: Date(timeIntervalSince1970: 0))
+
+        XCTAssertEqual(summary.scannedDatabases, 1)
+        XCTAssertEqual(summary.scannedGenerationRows, 1)
+        XCTAssertEqual(summary.parsedUsageEvents, 1)
+        XCTAssertEqual(summary.importedEvents, 1)
+
+        let event = try XCTUnwrap(store.loadEvents().first)
+        XCTAssertEqual(event.aiTool, .antigravity)
+        XCTAssertEqual(event.taskType, .debugging)
+        XCTAssertEqual(event.stage, .implement)
+        XCTAssertEqual(event.model, "gemini-3.5-flash-low")
+        XCTAssertEqual(event.inputTokens, 176)
+        XCTAssertEqual(event.outputTokens, 34)
+        XCTAssertEqual(event.totalTokens, 210)
+        XCTAssertEqual(event.tokenBreakdown.unknown, 176)
+        XCTAssertEqual(event.tokenBreakdown.generatedOutput, 34)
+
+        let duplicateSummary = importer.importRecentEvents(into: store, since: Date(timeIntervalSince1970: 0))
+        XCTAssertEqual(duplicateSummary.importedEvents, 0)
+        XCTAssertEqual(duplicateSummary.skippedDuplicateEvents, 1)
+        XCTAssertEqual(store.loadEvents().count, 1)
+
+        let diagnostic = try String(contentsOf: diagnosticsURL)
+        XCTAssertTrue(diagnostic.contains(#""kind":"active_importer_scan""#))
+        XCTAssertTrue(diagnostic.contains(#""imported_events":0"#))
+        XCTAssertFalse(diagnostic.contains(databaseURL.path))
     }
 
     func testMenuBarAITokenStatusRefreshesFromSharedStoreChanges() throws {
@@ -754,6 +852,51 @@ final class TokenUsageStoreTests: XCTestCase {
 
         XCTAssertEqual(dashboardStore.snapshot.eventCount, 1)
         XCTAssertEqual(dashboardStore.snapshot.totalTokens, 150)
+    }
+
+    @MainActor
+    func testDashboardStoreRefreshesWhenLocalCollectionFinishes() async throws {
+        let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
+        try usageStore.appendEvent(Self.safeEvent(spanID: "span_collection_finish"))
+        let dashboardStore = dashboardStore(usageStore: usageStore)
+
+        XCTAssertEqual(dashboardStore.snapshot.eventCount, 0)
+        XCTAssertEqual(dashboardStore.panelSummary.eventCount, 1)
+
+        NotificationCenter.default.post(
+            name: TokenUsageCollectorCoordinator.collectionDidFinishNotification,
+            object: nil
+        )
+        try await Task.sleep(nanoseconds: 350_000_000)
+
+        XCTAssertEqual(dashboardStore.snapshot.eventCount, 1)
+        XCTAssertEqual(dashboardStore.snapshot.totalTokens, 150)
+    }
+
+    @MainActor
+    func testDashboardStoreRefreshesOnlyForObservedCollector() async throws {
+        let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
+        try usageStore.appendEvent(Self.safeEvent(spanID: "span_collection_finish_filtered"))
+        let observedCollector = TokenUsageCollectorCoordinator(store: usageStore)
+        let otherCollector = TokenUsageCollectorCoordinator(store: usageStore)
+        let dashboardStore = TokenUsageDashboardStore(
+            usageStore: usageStore,
+            collectionCoordinator: observedCollector
+        )
+
+        NotificationCenter.default.post(
+            name: TokenUsageCollectorCoordinator.collectionDidFinishNotification,
+            object: otherCollector
+        )
+        try await Task.sleep(nanoseconds: 350_000_000)
+        XCTAssertEqual(dashboardStore.snapshot.eventCount, 0)
+
+        NotificationCenter.default.post(
+            name: TokenUsageCollectorCoordinator.collectionDidFinishNotification,
+            object: observedCollector
+        )
+        try await Task.sleep(nanoseconds: 350_000_000)
+        XCTAssertEqual(dashboardStore.snapshot.eventCount, 1)
     }
 
     @MainActor
@@ -1498,20 +1641,22 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(prompt.contains("Spill label handoff commands"))
         XCTAssertTrue(prompt.contains("Workflow runner permissions are separate"))
         XCTAssertTrue(prompt.contains("runtime-specific exact-count input shapes"))
-        XCTAssertTrue(prompt.contains("nested runtime envelopes"))
-        XCTAssertTrue(prompt.contains("empty tokens objects"))
-        XCTAssertTrue(prompt.contains("zero-valued token fields"))
-        XCTAssertTrue(prompt.contains("structured lifecycle/tool/model-adjacent payloads"))
-        XCTAssertTrue(prompt.contains("even when they include model or session hints"))
-        XCTAssertTrue(prompt.contains("antigravity-last-empty.json"))
-        XCTAssertTrue(prompt.contains("antigravity-last-mismatch.json"))
-        XCTAssertTrue(prompt.contains("antigravity-last-success.json"))
+        XCTAssertTrue(prompt.contains("Do not install AGY PostInvocation, Stop, or lifecycle hooks"))
+        XCTAssertTrue(prompt.contains("remove managed Spill AGY hook entries"))
+        XCTAssertTrue(prompt.contains("antigravity-active-importer-last.json"))
+        XCTAssertFalse(prompt.contains("antigravity-last-entry.json"))
+        XCTAssertFalse(prompt.contains("antigravity-hook-trace.jsonl"))
         XCTAssertTrue(prompt.contains("Claude Code uses a different Stop-hook contract"))
         XCTAssertTrue(prompt.contains("claude-last-empty.json"))
         XCTAssertTrue(prompt.contains("claude-last-mismatch.json"))
         XCTAssertTrue(prompt.contains("claude-last-success.json"))
         XCTAssertTrue(prompt.contains("observed_safe_shape booleans only"))
         XCTAssertTrue(prompt.contains("Diagnostics must never store transcript paths"))
+        XCTAssertTrue(prompt.contains("Do not confuse Spill label handoff with usage metering"))
+        XCTAssertTrue(prompt.contains("permission prompts alone"))
+        XCTAssertTrue(prompt.contains("Do not add forced dummy tool calls"))
+        XCTAssertTrue(prompt.contains("Do not implement a heuristic classifier"))
+        XCTAssertTrue(prompt.contains("AGY importer side effects"))
         XCTAssertFalse(prompt.contains("agent-preflight.py"))
         XCTAssertFalse(prompt.contains("agent-finish-check.py"))
         XCTAssertTrue(prompt.contains("~/.codex/rules/default.rules"))
@@ -1545,11 +1690,13 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(prompt.contains("Do not claim Spill token metering is installed until these conditions are satisfied"))
         XCTAssertTrue(prompt.contains("If workflow labels were requested, script-based workflows were checked first"))
         XCTAssertTrue(prompt.contains(#"/bin/bash -c "$(curl -fsSL https://spill.thdev.app/token-metering/install.sh)""#))
-        XCTAssertTrue(prompt.contains(#""spill-metering" JSONHookSpec containing PostInvocation[]"#))
-        XCTAssertTrue(prompt.contains("~/.gemini/spill-hook.py"))
-        XCTAssertTrue(prompt.contains("compatibility symlink or fresh copy"))
-        XCTAssertTrue(prompt.contains("matches, the canonical installed hook"))
-        XCTAssertTrue(prompt.contains("Do not use a root-level PostInvocation array"))
+        XCTAssertTrue(prompt.contains("local active importer"))
+        XCTAssertTrue(prompt.contains("managed Spill AGY hook entries"))
+        XCTAssertFalse(prompt.contains("~/.gemini/spill-hook.py"))
+        XCTAssertFalse(prompt.contains("~/.gemini/spill-hook-wrapper.py"))
+        XCTAssertFalse(prompt.contains("hook wrapper"))
+        XCTAssertFalse(prompt.contains("compatibility symlink or fresh copy"))
+        XCTAssertFalse(prompt.contains("root-level PostInvocation array"))
         XCTAssertFalse(prompt.contains("workflow-setup-prompt.md"))
         XCTAssertFalse(prompt.contains("Do not nest AGY hooks under \"spill-metering\""))
         XCTAssertFalse(prompt.contains("root-level PostInvocation[] with matcher"))
@@ -1577,8 +1724,7 @@ final class TokenUsageStoreTests: XCTestCase {
         let installer = try String(contentsOf: root.appendingPathComponent("docs/token-metering/install.sh"))
         let helper = try String(contentsOf: root.appendingPathComponent("adapters/setup/spill-token-metering-setup.mjs"))
         let codexImporter = try String(contentsOf: root.appendingPathComponent("adapters/codex/spill-importer.mjs"))
-        let agyHook = try String(contentsOf: root.appendingPathComponent("adapters/antigravity/spill-hook.py"))
-        let bundledAgyHook = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Resources/adapters/antigravity/spill-hook.py"))
+        let antigravityImporter = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenUsageAntigravityImporter.swift"))
         let claudeHook = try String(contentsOf: root.appendingPathComponent("adapters/claude-code/spill-hook.py"))
         let bundledClaudeHook = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Resources/adapters/claude-code/spill-hook.py"))
         let preferencesSection = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Preferences/TokenMeteringPreferencesSection.swift"))
@@ -1622,36 +1768,36 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(setup.contains("code_generation"))
         XCTAssertTrue(setup.contains("git_commit"))
         XCTAssertTrue(setup.contains("commit_message"))
-        XCTAssertTrue(setup.contains("canonical installed hook lives at `~/Library/Application Support/Spill/adapters/antigravity/spill-hook.py`"))
-        XCTAssertTrue(setup.contains("`python3 '~/.gemini/spill-hook.py'`"))
-        XCTAssertTrue(setup.contains("compatibility file resolves to, or matches, the canonical installed hook"))
-        XCTAssertTrue(setup.contains("restart any running\n  AGY CLI or Antigravity IDE sessions before verifying"))
+        XCTAssertTrue(setup.contains("AGY collection path is the local active importer"))
+        XCTAssertTrue(setup.contains("Do not install AGY `PostInvocation`, Stop, or lifecycle hooks"))
+        XCTAssertTrue(setup.contains("remove managed Spill AGY hook entries"))
+        XCTAssertTrue(setup.contains("antigravity-active-importer-last.json"))
         XCTAssertTrue(setup.contains("--label <current-tool>"))
         XCTAssertTrue(setup.contains("Never let Claude"))
         XCTAssertTrue(setup.contains("Never encode project names"))
         XCTAssertTrue(setup.contains("Never encode conversation titles"))
         XCTAssertFalse(setup.contains("workflow-setup-prompt.md"))
-        XCTAssertTrue(setup.contains(#"`~/.gemini/config/hooks.json` contains a `"spill-metering"` JSONHookSpec"#))
-        XCTAssertTrue(setup.contains("Do not write `PostInvocation` as a root-level array"))
+        XCTAssertFalse(setup.contains("spill-hook-wrapper.py"))
+        XCTAssertFalse(setup.contains("compatibility files resolve"))
+        XCTAssertFalse(setup.contains("PostInvocation[]"))
         XCTAssertTrue(setup.contains("force one strict Spill output event schema"))
         XCTAssertTrue(setup.contains("shared runtime hook input schema"))
-        XCTAssertTrue(setup.contains("hook payload exposes exact token usage fields"))
-        XCTAssertTrue(setup.contains("normalized `spill_token_usage` object"))
-        XCTAssertTrue(setup.contains("AGY may wrap those exact token fields in runtime-specific envelopes"))
-        XCTAssertTrue(setup.contains("empty `tokens` object"))
-        XCTAssertTrue(setup.contains("local-only safe diagnostics under Spill's token-metering diagnostics directory"))
-        XCTAssertTrue(setup.contains("model-adjacent"))
-        XCTAssertTrue(setup.contains("even when the payload contains model or session hints"))
-        XCTAssertTrue(setup.contains("no_token_usage_payload"))
-        XCTAssertTrue(setup.contains("antigravity-last-empty.json"))
-        XCTAssertTrue(setup.contains("antigravity-last-mismatch.json"))
-        XCTAssertTrue(setup.contains("antigravity-last-success.json"))
+        XCTAssertTrue(setup.contains("active importer can read exact\nnumeric usage fields"))
+        XCTAssertFalse(setup.contains("antigravity-last-empty.json"))
+        XCTAssertFalse(setup.contains("antigravity-last-mismatch.json"))
+        XCTAssertFalse(setup.contains("antigravity-last-success.json"))
+        XCTAssertFalse(setup.contains("antigravity-last-entry.json"))
+        XCTAssertFalse(setup.contains("antigravity-hook-trace.jsonl"))
         XCTAssertTrue(setup.contains("claude-last-empty.json"))
         XCTAssertTrue(setup.contains("claude-last-mismatch.json"))
         XCTAssertTrue(setup.contains("claude-last-success.json"))
         XCTAssertTrue(setup.contains("observed_safe_shape"))
-        XCTAssertTrue(setup.contains("Empty/no-usage diagnostics must never overwrite"))
         XCTAssertTrue(setup.contains("Claude Code diagnostic files must use the same local-only separation"))
+        XCTAssertTrue(setup.contains("Do not confuse Spill label handoff with usage metering"))
+        XCTAssertTrue(setup.contains("permission prompts alone"))
+        XCTAssertTrue(setup.contains("Do not add forced dummy tool calls"))
+        XCTAssertTrue(setup.contains("Do not implement a heuristic classifier"))
+        XCTAssertTrue(setup.contains("AGY importer side effects"))
         XCTAssertFalse(setup.contains("root-level `PostInvocation[]`"))
         XCTAssertFalse(setup.contains("Do not nest this under `\"spill-metering\"`"))
 
@@ -1660,16 +1806,19 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(runtime.contains("Runtime input normalization"))
         XCTAssertTrue(runtime.contains("strict contract is the Spill output event schema"))
         XCTAssertTrue(runtime.contains("Runtime hook input formats are allowed to differ by tool"))
-        XCTAssertTrue(runtime.contains("Antigravity/AGY may wrap exact usage data in nested runtime envelopes"))
-        XCTAssertTrue(runtime.contains("empty `tokens` object"))
-        XCTAssertTrue(runtime.contains("Antigravity/AGY `PostInvocation` hooks can execute"))
+        XCTAssertTrue(runtime.contains("Antigravity/AGY uses Spill's local active importer"))
+        XCTAssertTrue(runtime.contains("Do not install AGY runtime hooks"))
         XCTAssertTrue(runtime.contains("write a local-only diagnostic"))
-        XCTAssertTrue(runtime.contains("AGY empty stdin is a normal no-event hook call"))
-        XCTAssertTrue(runtime.contains("Any structured AGY payload without exact token"))
-        XCTAssertTrue(runtime.contains("invalid\n  JSON or non-object payloads"))
-        XCTAssertTrue(runtime.contains("antigravity-last-success.json"))
+        XCTAssertTrue(runtime.contains("antigravity-active-importer-last.json"))
+        XCTAssertFalse(runtime.contains("AGY empty stdin is a normal no-event hook call"))
+        XCTAssertFalse(runtime.contains("antigravity-last-entry.json"))
+        XCTAssertFalse(runtime.contains("antigravity-hook-trace.jsonl"))
         XCTAssertTrue(runtime.contains("Claude Code uses a different Stop-hook contract"))
         XCTAssertTrue(runtime.contains("claude-last-mismatch.json"))
+        XCTAssertTrue(runtime.contains("AGY evidence discipline"))
+        XCTAssertTrue(runtime.contains("label handoff command or permission prompt"))
+        XCTAssertTrue(runtime.contains("Do not force dummy tool calls"))
+        XCTAssertTrue(runtime.contains("Do not add AGY Stop, PostInvocation, or lifecycle hooks"))
         XCTAssertTrue(runtime.contains("short-lived safe label context"))
         XCTAssertTrue(runtime.contains("Workflow integration is an enhancement, not a prerequisite"))
         XCTAssertTrue(runtime.contains("Workflow-provided labels win"))
@@ -1678,6 +1827,7 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(runtime.contains("--if-absent"))
         XCTAssertTrue(runtime.contains("Always attempt the per-turn fallback label with `--if-absent`"))
         XCTAssertTrue(runtime.contains("omit `--if-absent`"))
+        XCTAssertTrue(runtime.contains("Do not infer labels from tool names"))
         XCTAssertTrue(runtime.contains("uncategorized/summarize"))
         XCTAssertTrue(runtime.contains("Never skip usage event creation only because"))
         XCTAssertTrue(runtime.contains("Use `code_review` for review-only work"))
@@ -1714,7 +1864,8 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(installer.contains("adapters/setup/spill-token-metering-setup.mjs"))
         XCTAssertTrue(installer.contains("adapters/codex/spill-importer.mjs"))
         XCTAssertTrue(installer.contains("adapters/claude-code/spill-hook.py"))
-        XCTAssertTrue(installer.contains("adapters/antigravity/spill-hook.py"))
+        XCTAssertFalse(installer.contains("adapters/antigravity/spill-hook.py"))
+        XCTAssertFalse(installer.contains("adapters/antigravity/spill-hook-wrapper.py"))
         XCTAssertTrue(installer.contains("--include codex,claude,antigravity"))
         XCTAssertTrue(installer.contains("--source-root \"$TMP_DIR/adapters\""))
 
@@ -1731,18 +1882,21 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(helper.contains("SPILL_TOKEN_USAGE_AI_TOOL"))
         XCTAssertTrue(helper.contains(#""claude""#))
         XCTAssertTrue(helper.contains(#""antigravity""#))
-        XCTAssertTrue(helper.contains("runtime_restart_required"))
-        XCTAssertTrue(helper.contains("Running AGY or Antigravity IDE sessions may cache hook configuration"))
+        XCTAssertTrue(helper.contains("active_importer_only"))
+        XCTAssertTrue(helper.contains("removeAgyHookFile"))
+        XCTAssertFalse(helper.contains("runtime_restart_required"))
+        XCTAssertFalse(helper.contains("installAntigravityWrapper"))
         XCTAssertFalse(helper.contains("agentcatd"))
         XCTAssertFalse(helper.contains("daemon_restarted"))
         XCTAssertTrue(helper.contains(#".claude", "settings.json"#))
-        XCTAssertTrue(helper.contains(#".gemini", "spill-hook.py"#))
+        XCTAssertTrue(helper.contains(#""spill-hook.py""#))
+        XCTAssertTrue(helper.contains(#""spill-hook-wrapper.py""#))
         XCTAssertTrue(helper.contains(#".gemini", "antigravity-cli", "settings.json"#))
         XCTAssertFalse(helper.contains("Allow trusted AgentPlaybook"))
         XCTAssertTrue(helper.contains("permissionPathVariants"))
         XCTAssertTrue(helper.contains("homeEnvironmentPathVariants"))
         XCTAssertTrue(helper.contains("doubleQuote(path)"))
-        XCTAssertTrue(preferencesSection.contains(#"compatibilityURLs: [homeURL(".gemini/spill-hook.py")]"#))
+        XCTAssertFalse(preferencesSection.contains(#"compatibilityURLs: [homeURL(".gemini/spill-hook.py")]"#))
         XCTAssertTrue(preferencesSection.contains("resolvingSymlinksInPath()"))
         XCTAssertTrue(preferencesSection.contains("contentsEqual("))
         XCTAssertTrue(helper.contains("$HOME/${suffix}"))
@@ -1767,29 +1921,15 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(codexImporter.contains("usedRuntimeLabel"))
         XCTAssertTrue(codexImporter.contains("taskType: taskTypeOverride ?? eventLabel.taskType ?? fallbackLabel.taskType"))
 
-        XCTAssertTrue(agyHook.contains("model_name"))
-        XCTAssertTrue(agyHook.contains("modelId"))
-        XCTAssertTrue(agyHook.contains("modelVersion"))
-        XCTAssertTrue(agyHook.contains(#""antigravity", "agy""#))
-        XCTAssertTrue(agyHook.contains("usageMetadata"))
-        XCTAssertTrue(agyHook.contains("totalTokenCount"))
-        XCTAssertTrue(agyHook.contains("SPILL_TOKEN_USAGE_DIAGNOSTICS_DIR"))
-        XCTAssertTrue(agyHook.contains("runtime_payload_mismatch"))
-        XCTAssertTrue(agyHook.contains("no_usage_hook_call"))
-        XCTAssertTrue(agyHook.contains("spill_token_usage"))
-        XCTAssertTrue(agyHook.contains("EMPTY_DIAGNOSTIC_FILE_NAME"))
-        XCTAssertTrue(agyHook.contains("MISMATCH_DIAGNOSTIC_FILE_NAME"))
-        XCTAssertTrue(agyHook.contains("SUCCESS_DIAGNOSTIC_FILE_NAME"))
-        XCTAssertTrue(agyHook.contains("empty_stdin_hook_call"))
-        XCTAssertTrue(agyHook.contains(#""input""#))
-        XCTAssertTrue(agyHook.contains(#""output""#))
-        XCTAssertFalse(agyHook.contains("def _usage_metadata_total"))
-        XCTAssertFalse(agyHook.contains("agentcat"))
-        XCTAssertFalse(agyHook.contains("telemetry.log"))
-        XCTAssertFalse(agyHook.contains("/tmp/spill-hook-debug.log"))
-        XCTAssertFalse(agyHook.contains("Raw stdin"))
-        XCTAssertTrue(agyHook.contains("No payload values"))
-        XCTAssertEqual(agyHook, bundledAgyHook)
+        XCTAssertTrue(antigravityImporter.contains("SELECT idx, data FROM gen_metadata ORDER BY idx"))
+        XCTAssertTrue(antigravityImporter.contains("SQLITE_OPEN_READONLY | SQLITE_OPEN_FULLMUTEX"))
+        XCTAssertTrue(antigravityImporter.contains("artifactID: \"artifact_global\""))
+        XCTAssertTrue(antigravityImporter.contains("Observed AGY gen_metadata usage fields"))
+        XCTAssertTrue(antigravityImporter.contains("Observed AGY model fields"))
+        XCTAssertTrue(antigravityImporter.contains("antigravity-active-importer-last.json"))
+        XCTAssertTrue(antigravityImporter.contains("opaqueHash"))
+        XCTAssertFalse(antigravityImporter.contains("transcript_path"))
+        XCTAssertFalse(antigravityImporter.contains("PostInvocation"))
         XCTAssertTrue(claudeHook.contains("DIAGNOSTICS_DIR"))
         XCTAssertTrue(claudeHook.contains("claude-last-empty.json"))
         XCTAssertTrue(claudeHook.contains("claude-last-mismatch.json"))
@@ -1798,333 +1938,6 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(claudeHook.contains("No payload values"))
         XCTAssertFalse(claudeHook.contains("traceback.print_exc"))
         XCTAssertEqual(claudeHook, bundledClaudeHook)
-    }
-
-    func testAntigravityHookAcceptsTokensInputOutputPayload() throws {
-        let inboxURL = temporaryInboxURL()
-        let diagnosticsURL = temporaryDiagnosticsURL()
-
-        try runAntigravityHook(
-            payload: [
-                "session_id": "agySession01",
-                "model": "gemini-2.5-pro",
-                "tokens": [
-                    "input": 100,
-                    "output": 50
-                ],
-                "task_type": "code_generation",
-                "stage": "implement"
-            ],
-            inboxURL: inboxURL,
-            diagnosticsURL: diagnosticsURL
-        )
-
-        let events = try antigravityEventObjects(in: inboxURL)
-        XCTAssertEqual(events.count, 1)
-        XCTAssertEqual(events.first?["input_tokens"] as? Int, 100)
-        XCTAssertEqual(events.first?["output_tokens"] as? Int, 50)
-        XCTAssertEqual(events.first?["total_tokens"] as? Int, 150)
-        XCTAssertEqual(events.first?["ai_tool"] as? String, "antigravity")
-        let success = try decodedJSONObject(
-            from: Data(contentsOf: diagnosticsURL.appendingPathComponent("antigravity-last-success.json"))
-        )
-        XCTAssertEqual(success["kind"] as? String, "success")
-        XCTAssertEqual(success["total_tokens"] as? Int, 150)
-        XCTAssertNil(success["run_id"])
-        XCTAssertNil(success["span_id"])
-    }
-
-    func testAntigravityHookExtractsNestedTokenPayloads() throws {
-        let inboxURL = temporaryInboxURL()
-        let diagnosticsURL = temporaryDiagnosticsURL()
-
-        try runAntigravityHook(
-            payload: [
-                "hook_event": "PostInvocation",
-                "data": [
-                    "conversationId": "agyNested01",
-                    "response": [
-                        "modelVersion": "gemini-3.5-flash-medium",
-                        "usageMetadata": [
-                            "promptTokenCount": 120,
-                            "candidatesTokenCount": 30
-                        ]
-                    ]
-                ],
-                "workflow": [
-                    "tokens": [
-                        "input": 1,
-                        "output": 1
-                    ]
-                ],
-                "task_type": "debugging",
-                "stage": "implement"
-            ],
-            inboxURL: inboxURL,
-            diagnosticsURL: diagnosticsURL
-        )
-
-        let events = try antigravityEventObjects(in: inboxURL)
-        XCTAssertEqual(events.count, 1)
-        XCTAssertEqual(events.first?["input_tokens"] as? Int, 120)
-        XCTAssertEqual(events.first?["output_tokens"] as? Int, 30)
-        XCTAssertEqual(events.first?["total_tokens"] as? Int, 150)
-        XCTAssertEqual(events.first?["run_id"] as? String, "agyNested01")
-        XCTAssertEqual(events.first?["model"] as? String, "gemini-3.5-flash-medium")
-        XCTAssertEqual(events.first?["task_type"] as? String, "debugging")
-        XCTAssertEqual(events.first?["stage"] as? String, "implement")
-    }
-
-    func testAntigravityHookAcceptsAllowlistedEnvironmentTokenFieldsWhenStdinIsEmpty() throws {
-        let inboxURL = temporaryInboxURL()
-        let diagnosticsURL = temporaryDiagnosticsURL()
-
-        try runAntigravityHook(
-            rawInput: "\n",
-            inboxURL: inboxURL,
-            diagnosticsURL: diagnosticsURL,
-            extraEnvironment: [
-                "ANTIGRAVITY_INPUT_TOKENS": "420",
-                "ANTIGRAVITY_OUTPUT_TOKENS": "80",
-                "ANTIGRAVITY_MODEL": "gemini-3.5-flash-medium",
-                "ANTIGRAVITY_SESSION_ID": "agyEnvRun01",
-                "SPILL_TOKEN_USAGE_TASK_TYPE": "debugging",
-                "SPILL_TOKEN_USAGE_STAGE": "implement"
-            ]
-        )
-
-        let events = try antigravityEventObjects(in: inboxURL)
-        XCTAssertEqual(events.count, 1)
-        XCTAssertEqual(events.first?["input_tokens"] as? Int, 420)
-        XCTAssertEqual(events.first?["output_tokens"] as? Int, 80)
-        XCTAssertEqual(events.first?["total_tokens"] as? Int, 500)
-        XCTAssertEqual(events.first?["run_id"] as? String, "agyEnvRun01")
-        XCTAssertEqual(events.first?["model"] as? String, "gemini-3.5-flash-medium")
-        XCTAssertEqual(events.first?["task_type"] as? String, "debugging")
-        XCTAssertEqual(events.first?["stage"] as? String, "implement")
-
-        let success = try decodedJSONObject(
-            from: Data(contentsOf: diagnosticsURL.appendingPathComponent("antigravity-last-success.json"))
-        )
-        XCTAssertEqual(success["kind"] as? String, "success")
-        XCTAssertEqual(success["payload_source"] as? String, "env_fields")
-        XCTAssertNil(success["run_id"])
-        XCTAssertNil(success["span_id"])
-    }
-
-    func testAntigravityHookAcceptsExplicitPayloadJsonArgumentWhenStdinIsEmpty() throws {
-        let inboxURL = temporaryInboxURL()
-        let diagnosticsURL = temporaryDiagnosticsURL()
-        let payload: [String: Any] = [
-            "session_id": "agyArgRun01",
-            "model": "gemini-2.5-pro",
-            "usage": [
-                "input_tokens": 210,
-                "output_tokens": 40
-            ],
-            "task_type": "testing",
-            "stage": "verify"
-        ]
-        let data = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
-        let rawPayload = try XCTUnwrap(String(data: data, encoding: .utf8))
-
-        try runAntigravityHook(
-            rawInput: "\n",
-            inboxURL: inboxURL,
-            diagnosticsURL: diagnosticsURL,
-            extraArguments: ["--payload-json", rawPayload]
-        )
-
-        let events = try antigravityEventObjects(in: inboxURL)
-        XCTAssertEqual(events.count, 1)
-        XCTAssertEqual(events.first?["input_tokens"] as? Int, 210)
-        XCTAssertEqual(events.first?["output_tokens"] as? Int, 40)
-        XCTAssertEqual(events.first?["total_tokens"] as? Int, 250)
-        XCTAssertEqual(events.first?["run_id"] as? String, "agyArgRun01")
-        XCTAssertEqual(events.first?["task_type"] as? String, "testing")
-        XCTAssertEqual(events.first?["stage"] as? String, "verify")
-
-        let success = try decodedJSONObject(
-            from: Data(contentsOf: diagnosticsURL.appendingPathComponent("antigravity-last-success.json"))
-        )
-        XCTAssertEqual(success["payload_source"] as? String, "argv_json")
-    }
-
-    func testAntigravityHookAcceptsAllowlistedEnvironmentJSONPayloadWhenStdinIsEmpty() throws {
-        let inboxURL = temporaryInboxURL()
-        let diagnosticsURL = temporaryDiagnosticsURL()
-        let payload: [String: Any] = [
-            "session_id": "agyEnvJsonRun01",
-            "model": "gemini-2.5-pro",
-            "usageMetadata": [
-                "promptTokenCount": 320,
-                "candidatesTokenCount": 70
-            ],
-            "task_type": "code_review",
-            "stage": "verify"
-        ]
-        let data = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
-        let rawPayload = try XCTUnwrap(String(data: data, encoding: .utf8))
-
-        try runAntigravityHook(
-            rawInput: "\n",
-            inboxURL: inboxURL,
-            diagnosticsURL: diagnosticsURL,
-            extraEnvironment: [
-                "SPILL_TOKEN_USAGE_PAYLOAD": rawPayload
-            ]
-        )
-
-        let events = try antigravityEventObjects(in: inboxURL)
-        XCTAssertEqual(events.count, 1)
-        XCTAssertEqual(events.first?["input_tokens"] as? Int, 320)
-        XCTAssertEqual(events.first?["output_tokens"] as? Int, 70)
-        XCTAssertEqual(events.first?["total_tokens"] as? Int, 390)
-        XCTAssertEqual(events.first?["run_id"] as? String, "agyEnvJsonRun01")
-        XCTAssertEqual(events.first?["task_type"] as? String, "code_review")
-        XCTAssertEqual(events.first?["stage"] as? String, "verify")
-
-        let success = try decodedJSONObject(
-            from: Data(contentsOf: diagnosticsURL.appendingPathComponent("antigravity-last-success.json"))
-        )
-        XCTAssertEqual(success["payload_source"] as? String, "env_json")
-    }
-
-    func testAntigravityHookTreatsEmptyTokenContainersAsNoUsage() throws {
-        let inboxURL = temporaryInboxURL()
-        let diagnosticsURL = temporaryDiagnosticsURL()
-        let emptyURL = diagnosticsURL.appendingPathComponent("antigravity-last-empty.json")
-
-        try runAntigravityHook(
-            payload: [
-                "data": [
-                    "conversationId": "agyEmptyTokens01",
-                    "response": [
-                        "modelVersion": "gemini-3.5-flash-medium",
-                        "tokens": [:]
-                    ]
-                ]
-            ],
-            inboxURL: inboxURL,
-            diagnosticsURL: diagnosticsURL
-        )
-
-        XCTAssertEqual(try antigravityEventObjects(in: inboxURL).count, 0)
-        let empty = try decodedJSONObject(from: Data(contentsOf: emptyURL))
-        XCTAssertEqual(empty["kind"] as? String, "no_usage_hook_call")
-        XCTAssertEqual(empty["reason"] as? String, "no_token_usage_payload")
-        let shape = try XCTUnwrap(empty["observed_safe_shape"] as? [String: Any])
-        XCTAssertEqual(shape["payload_object"] as? Bool, true)
-        XCTAssertEqual(shape["has_exact_input_output"] as? Bool, false)
-        XCTAssertEqual(shape["has_model_hint"] as? Bool, true)
-        XCTAssertEqual(shape["has_opaque_run_hint"] as? Bool, true)
-    }
-
-    func testAntigravityHookSeparatesEmptyMismatchAndSuccessDiagnostics() throws {
-        let inboxURL = temporaryInboxURL()
-        let diagnosticsURL = temporaryDiagnosticsURL()
-        let emptyURL = diagnosticsURL.appendingPathComponent("antigravity-last-empty.json")
-        let mismatchURL = diagnosticsURL.appendingPathComponent("antigravity-last-mismatch.json")
-        let successURL = diagnosticsURL.appendingPathComponent("antigravity-last-success.json")
-
-        try runAntigravityHook(rawInput: "\n", inboxURL: inboxURL, diagnosticsURL: diagnosticsURL)
-
-        var empty = try decodedJSONObject(from: Data(contentsOf: emptyURL))
-        XCTAssertEqual(empty["kind"] as? String, "empty_stdin_hook_call")
-        XCTAssertEqual(empty["reason"] as? String, "empty_stdin")
-        XCTAssertFalse(FileManager.default.fileExists(atPath: mismatchURL.path))
-
-        try runAntigravityHook(
-            payload: [
-                "session_id": "agySession02",
-                "model": "gemini-2.5-pro",
-                "usage": [
-                    "requests": 1
-                ]
-            ],
-            inboxURL: inboxURL,
-            diagnosticsURL: diagnosticsURL
-        )
-
-        empty = try decodedJSONObject(from: Data(contentsOf: emptyURL))
-        XCTAssertEqual(empty["kind"] as? String, "no_usage_hook_call")
-        XCTAssertEqual(empty["reason"] as? String, "no_token_usage_payload")
-        let shape = try XCTUnwrap(empty["observed_safe_shape"] as? [String: Any])
-        XCTAssertEqual(shape["payload_object"] as? Bool, true)
-        XCTAssertEqual(shape["has_exact_input_output"] as? Bool, false)
-        XCTAssertEqual(shape["has_model_hint"] as? Bool, true)
-        XCTAssertEqual(shape["has_opaque_run_hint"] as? Bool, true)
-        XCTAssertFalse(FileManager.default.fileExists(atPath: mismatchURL.path))
-
-        try runAntigravityHook(rawInput: "not-json", inboxURL: inboxURL, diagnosticsURL: diagnosticsURL)
-
-        let mismatch = try decodedJSONObject(from: Data(contentsOf: mismatchURL))
-        XCTAssertEqual(mismatch["kind"] as? String, "runtime_payload_mismatch")
-        XCTAssertEqual(mismatch["reason"] as? String, "invalid_json")
-
-        try runAntigravityHook(rawInput: "\n", inboxURL: inboxURL, diagnosticsURL: diagnosticsURL)
-
-        empty = try decodedJSONObject(from: Data(contentsOf: emptyURL))
-        XCTAssertEqual(empty["reason"] as? String, "empty_stdin")
-        XCTAssertTrue(FileManager.default.fileExists(atPath: mismatchURL.path))
-
-        try runAntigravityHook(
-            payload: [
-                "hook_event": "post_invocation",
-                "phase": "tool"
-            ],
-            inboxURL: inboxURL,
-            diagnosticsURL: diagnosticsURL
-        )
-
-        empty = try decodedJSONObject(from: Data(contentsOf: emptyURL))
-        XCTAssertEqual(empty["kind"] as? String, "no_usage_hook_call")
-        XCTAssertEqual(empty["reason"] as? String, "no_token_usage_payload")
-        let lifecycleShape = try XCTUnwrap(empty["observed_safe_shape"] as? [String: Any])
-        XCTAssertEqual(lifecycleShape["payload_object"] as? Bool, true)
-        XCTAssertEqual(lifecycleShape["has_model_hint"] as? Bool, false)
-        XCTAssertEqual(lifecycleShape["has_opaque_run_hint"] as? Bool, false)
-        XCTAssertTrue(FileManager.default.fileExists(atPath: mismatchURL.path))
-
-        try runAntigravityHook(
-            payload: [
-                "session_id": "agySession02",
-                "model": "gemini-2.5-pro",
-                "usage": [
-                    "input_tokens": 10,
-                    "output_tokens": 5
-                ]
-            ],
-            inboxURL: inboxURL,
-            diagnosticsURL: diagnosticsURL
-        )
-
-        let success = try decodedJSONObject(from: Data(contentsOf: successURL))
-        XCTAssertEqual(success["kind"] as? String, "success")
-        XCTAssertEqual(success["total_tokens"] as? Int, 15)
-        XCTAssertFalse(FileManager.default.fileExists(atPath: mismatchURL.path))
-        XCTAssertFalse(FileManager.default.fileExists(atPath: diagnosticsURL.appendingPathComponent("antigravity-latest.json").path))
-    }
-
-    func testAntigravityTotalOnlyPayloadsDoNotCollideOnSameTokenCount() throws {
-        let inboxURL = temporaryInboxURL()
-        let diagnosticsURL = temporaryDiagnosticsURL()
-        let payload: [String: Any] = [
-            "session_id": "agySession03",
-            "model": "gemini-2.5-pro",
-            "usageMetadata": [
-                "totalTokenCount": 500
-            ]
-        ]
-
-        try runAntigravityHook(payload: payload, inboxURL: inboxURL, diagnosticsURL: diagnosticsURL)
-        try runAntigravityHook(payload: payload, inboxURL: inboxURL, diagnosticsURL: diagnosticsURL)
-
-        let events = try antigravityEventObjects(in: inboxURL)
-        XCTAssertEqual(events.count, 2)
-        XCTAssertEqual(Set(events.compactMap { $0["span_id"] as? String }).count, 2)
-        XCTAssertEqual(events.map { $0["input_tokens"] as? Int }, [500, 500])
-        XCTAssertEqual(events.map { $0["output_tokens"] as? Int }, [0, 0])
     }
 
     func testClaudeHookSeparatesEmptyMismatchAndSuccessDiagnostics() throws {
@@ -2222,7 +2035,6 @@ final class TokenUsageStoreTests: XCTestCase {
     func testAdapterHookConfigsUseExactRuntimeHookShapes() throws {
         let claudePath = URL(fileURLWithPath: "/tmp/Spill Support/adapters/claude-code/spill-hook.py")
         let codexPath = URL(fileURLWithPath: "/tmp/Spill Support/adapters/codex/spill-importer.mjs")
-        let agyPath = URL(fileURLWithPath: "/tmp/Spill Support/adapters/antigravity/spill-hook.py")
 
         let claudeConfig = try XCTUnwrap(TokenMeteringAdapterKit.claudeCode.hookConfig(installedAt: claudePath))
         XCTAssertTrue(claudeConfig.contains(#""matcher": """#))
@@ -2236,22 +2048,15 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(codexConfig.contains("node '/tmp/Spill Support/adapters/codex/spill-importer.mjs' --since-hours 6"))
         XCTAssertTrue(codexConfig.contains(#""timeout": 30"#))
 
-        let agyConfig = try XCTUnwrap(TokenMeteringAdapterKit.agy.hookConfig(installedAt: agyPath))
-        XCTAssertTrue(agyConfig.contains(#"named "spill-metering" hook spec"#))
-        XCTAssertTrue(agyConfig.contains(#""spill-metering": {"#))
-        XCTAssertTrue(agyConfig.contains(#""PostInvocation": ["#))
-        XCTAssertTrue(agyConfig.contains(#""matcher": """#))
-        XCTAssertTrue(agyConfig.contains("python3 '/tmp/Spill Support/adapters/antigravity/spill-hook.py'"))
-        XCTAssertTrue(agyConfig.contains("root-level PostInvocation arrays are rejected"))
-        XCTAssertTrue(agyConfig.contains("~/.gemini/spill-hook.py"))
-        XCTAssertTrue(agyConfig.contains("compatibility symlink or fresh copy"))
-        XCTAssertFalse(agyConfig.contains("Do not nest this under \"spill-metering\""))
+        XCTAssertNil(TokenMeteringAdapterKit.agy.hookConfig(installedAt: URL(fileURLWithPath: "/tmp/unused")))
+        XCTAssertNil(TokenMeteringAdapterKit.agy.hookConfigTarget)
+        XCTAssertEqual(TokenMeteringAdapterKit.agy.subtitle, "Active importer — no runtime hook")
     }
 
     func testAdapterInstallPathsUseHookRuntimeDirectories() {
         XCTAssertEqual(
             TokenMeteringAdapterKit.hookAdapters.map(\.aiTool),
-            [.claude, .codex, .antigravity]
+            [.claude, .codex]
         )
         XCTAssertTrue(
             TokenMeteringAdapterKit.defaultInstallURL(for: TokenMeteringAdapterKit.claudeCode)
@@ -2262,11 +2067,6 @@ final class TokenUsageStoreTests: XCTestCase {
             TokenMeteringAdapterKit.defaultInstallURL(for: TokenMeteringAdapterKit.codex)
                 .path
                 .contains("/adapters/codex/spill-importer.mjs")
-        )
-        XCTAssertTrue(
-            TokenMeteringAdapterKit.defaultInstallURL(for: TokenMeteringAdapterKit.agy)
-                .path
-                .contains("/adapters/antigravity/spill-hook.py")
         )
         XCTAssertEqual(
             TokenMeteringSetupInstaller.setupCommand(),
@@ -2722,6 +2522,101 @@ final class TokenUsageStoreTests: XCTestCase {
         }
     }
 
+    private func writeAntigravityConversationDatabase(at databaseURL: URL, rows: [(Int, Data)]) throws {
+        try FileManager.default.createDirectory(
+            at: databaseURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        let database = try openSQLiteDatabase(databaseURL)
+        defer { sqlite3_close(database) }
+
+        try executeSQLite(
+            """
+            CREATE TABLE gen_metadata (
+                idx integer,
+                data blob,
+                size integer NOT NULL DEFAULT 0,
+                PRIMARY KEY (idx)
+            )
+            """,
+            database: database
+        )
+
+        let sql = "INSERT INTO gen_metadata (idx, data, size) VALUES (?, ?, ?)"
+        for row in rows {
+            var statement: OpaquePointer?
+            guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
+                  let statement
+            else {
+                throw sqliteError(database)
+            }
+            defer { sqlite3_finalize(statement) }
+
+            sqlite3_bind_int64(statement, 1, sqlite3_int64(row.0))
+            sqlite3_bind_int64(statement, 3, sqlite3_int64(row.1.count))
+            let result = row.1.withUnsafeBytes { buffer -> Int32 in
+                sqlite3_bind_blob(statement, 2, buffer.baseAddress, Int32(buffer.count), TEST_SQLITE_TRANSIENT)
+                return sqlite3_step(statement)
+            }
+
+            guard result == SQLITE_DONE else {
+                throw sqliteError(database)
+            }
+        }
+    }
+
+    private func antigravityGenerationMetadataBlob(
+        inputTokens: Int,
+        outputTokens: Int,
+        cachedInputTokens: Int,
+        model: String
+    ) -> Data {
+        var usage = Data()
+        usage.append(protoVarintField(1, 1020))
+        usage.append(protoVarintField(2, inputTokens))
+        usage.append(protoVarintField(3, outputTokens))
+        usage.append(protoVarintField(5, cachedInputTokens))
+        usage.append(protoVarintField(9, 12))
+        usage.append(protoVarintField(10, max(0, outputTokens - 12)))
+
+        var generation = Data()
+        generation.append(protoBytesField(4, usage))
+        generation.append(protoBytesField(19, Data(model.utf8)))
+
+        var envelope = Data()
+        envelope.append(protoBytesField(1, generation))
+        return envelope
+    }
+
+    private func protoVarintField(_ number: Int, _ value: Int) -> Data {
+        var data = protoVarint(UInt64(number << 3))
+        data.append(protoVarint(UInt64(max(0, value))))
+        return data
+    }
+
+    private func protoBytesField(_ number: Int, _ value: Data) -> Data {
+        var data = protoVarint(UInt64((number << 3) | 2))
+        data.append(protoVarint(UInt64(value.count)))
+        data.append(value)
+        return data
+    }
+
+    private func protoVarint(_ value: UInt64) -> Data {
+        var value = value
+        var bytes = [UInt8]()
+
+        repeat {
+            var byte = UInt8(value & 0x7f)
+            value >>= 7
+            if value != 0 {
+                byte |= 0x80
+            }
+            bytes.append(byte)
+        } while value != 0
+
+        return Data(bytes)
+    }
+
     private func sqliteError(_ database: OpaquePointer?) -> NSError {
         let code = database.map { Int(sqlite3_errcode($0)) } ?? -1
         let message = database
@@ -2741,6 +2636,11 @@ final class TokenUsageStoreTests: XCTestCase {
             .appendingPathComponent("events.json")
     }
 
+    private func temporaryDirectoryURL() -> URL {
+        URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    }
+
     @MainActor
     private func dashboardStore(usageStore: TokenUsageStore) -> TokenUsageDashboardStore {
         TokenUsageDashboardStore(usageStore: usageStore)
@@ -2756,62 +2656,6 @@ final class TokenUsageStoreTests: XCTestCase {
         URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent(UUID().uuidString)
             .appendingPathComponent("diagnostics", isDirectory: true)
-    }
-
-    private func runAntigravityHook(
-        payload: [String: Any],
-        inboxURL: URL,
-        diagnosticsURL: URL
-    ) throws {
-        let data = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
-        let input = try XCTUnwrap(String(data: data, encoding: .utf8))
-        try runAntigravityHook(rawInput: input, inboxURL: inboxURL, diagnosticsURL: diagnosticsURL)
-    }
-
-    private func runAntigravityHook(
-        rawInput: String,
-        inboxURL: URL,
-        diagnosticsURL: URL,
-        extraEnvironment: [String: String] = [:],
-        extraArguments: [String] = []
-    ) throws {
-        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let hookURL = root.appendingPathComponent("adapters/antigravity/spill-hook.py")
-        let labelURL = diagnosticsURL
-            .deletingLastPathComponent()
-            .appendingPathComponent("label-context", isDirectory: true)
-            .appendingPathComponent("antigravity.json")
-
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["python3", hookURL.path] + extraArguments
-        var environment = ProcessInfo.processInfo.environment
-        for key in environment.keys {
-            if key.hasPrefix("ANTIGRAVITY_") || key.hasPrefix("CLAUDE_") || key.hasPrefix("SPILL_") {
-                environment.removeValue(forKey: key)
-            }
-        }
-        environment["SPILL_TOKEN_USAGE_INBOX_DIR"] = inboxURL.path
-        environment["SPILL_TOKEN_USAGE_DIAGNOSTICS_DIR"] = diagnosticsURL.path
-        environment["SPILL_TOKEN_USAGE_LABEL_FILE"] = labelURL.path
-        environment["PYTHONPYCACHEPREFIX"] = "/tmp/spill-pycache"
-        for (key, value) in extraEnvironment {
-            environment[key] = value
-        }
-        process.environment = environment
-
-        let inputPipe = Pipe()
-        let errorPipe = Pipe()
-        process.standardInput = inputPipe
-        process.standardError = errorPipe
-
-        try process.run()
-        inputPipe.fileHandleForWriting.write(Data(rawInput.utf8))
-        try inputPipe.fileHandleForWriting.close()
-        process.waitUntilExit()
-
-        let stderr = String(data: errorPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-        XCTAssertEqual(process.terminationStatus, 0, stderr)
     }
 
     private func runClaudeHook(

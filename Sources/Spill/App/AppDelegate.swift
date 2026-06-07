@@ -35,7 +35,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     )
     private lazy var tokenMeteringDashboardLauncher = TokenMeteringDashboardLauncher()
     private lazy var tokenUsageDashboardStore = TokenUsageDashboardStore(
-        usageStore: tokenUsageStore
+        usageStore: tokenUsageStore,
+        collectionCoordinator: tokenUsageCollectorCoordinator
     )
     private lazy var tokenMeteringDashboardWindowController = TokenMeteringDashboardWindowController(
         store: tokenUsageDashboardStore,

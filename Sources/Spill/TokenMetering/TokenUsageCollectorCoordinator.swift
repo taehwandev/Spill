@@ -5,13 +5,17 @@ protocol TokenUsageExternalCollecting: AnyObject {
 }
 
 final class TokenUsageCollectorCoordinator: TokenUsageExternalCollecting, @unchecked Sendable {
+    static let collectionDidFinishNotification = Notification.Name("app.spill.token-usage-collector.collection-did-finish")
+
     private let store: TokenUsageStore
     private let queue = DispatchQueue(label: "app.spill.token-usage-collector")
     private let lock = NSLock()
     private let codexImporterURLProvider: () -> URL?
     private let nodeExecutableURLProvider: () -> URL?
+    private let antigravityImporterProvider: () -> TokenUsageAntigravityImporter?
     private let importerDrainInterval: TimeInterval
     private let importerMaximumRuntime: TimeInterval
+    private let importerLookbackInterval: TimeInterval
     private var isCollecting = false
     private var hasPendingRequest = false
 
@@ -27,14 +31,20 @@ final class TokenUsageCollectorCoordinator: TokenUsageExternalCollecting, @unche
         nodeExecutableURLProvider: @escaping () -> URL? = {
             TokenUsageCollectorCoordinator.nodeExecutableURL()
         },
+        antigravityImporterProvider: @escaping () -> TokenUsageAntigravityImporter? = {
+            TokenUsageAntigravityImporter()
+        },
         importerDrainInterval: TimeInterval = 0.25,
-        importerMaximumRuntime: TimeInterval = 30
+        importerMaximumRuntime: TimeInterval = 30,
+        importerLookbackInterval: TimeInterval = 6 * 60 * 60
     ) {
         self.store = store
         self.codexImporterURLProvider = codexImporterURLProvider
         self.nodeExecutableURLProvider = nodeExecutableURLProvider
+        self.antigravityImporterProvider = antigravityImporterProvider
         self.importerDrainInterval = importerDrainInterval
         self.importerMaximumRuntime = importerMaximumRuntime
+        self.importerLookbackInterval = importerLookbackInterval
     }
 
     func requestCollection(reason: String) {
@@ -60,9 +70,9 @@ final class TokenUsageCollectorCoordinator: TokenUsageExternalCollecting, @unche
     private func runCollectionLoop() {
         while true {
             // Import inbox events first so the dashboard shows existing data
-            // immediately, without waiting for the Codex importer to finish.
+            // immediately, without waiting for local importers to finish.
             store.importQueuedEventsWithoutLoading()
-            runCodexImporterIfAvailable()
+            runLocalImportersIfAvailable()
             store.importQueuedEventsWithoutLoading()
 
             let shouldRunAgain = lock.withLock {
@@ -76,6 +86,7 @@ final class TokenUsageCollectorCoordinator: TokenUsageExternalCollecting, @unche
             }
 
             if !shouldRunAgain {
+                NotificationCenter.default.post(name: Self.collectionDidFinishNotification, object: self)
                 return
             }
         }
@@ -106,6 +117,20 @@ final class TokenUsageCollectorCoordinator: TokenUsageExternalCollecting, @unche
         } catch {
             return
         }
+    }
+
+    private func runLocalImportersIfAvailable() {
+        runCodexImporterIfAvailable()
+        runAntigravityImporterIfAvailable()
+    }
+
+    private func runAntigravityImporterIfAvailable() {
+        guard let importer = antigravityImporterProvider() else {
+            return
+        }
+
+        let startDate = Date().addingTimeInterval(-importerLookbackInterval)
+        _ = importer.importRecentEvents(into: store, since: startDate)
     }
 
     private func importQueuedEventsWhileProcessRuns(_ process: Process) {
