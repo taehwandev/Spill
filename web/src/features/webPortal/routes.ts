@@ -1,4 +1,5 @@
 export type PortalRoute = "onboarding" | "dashboard" | "settings" | "admin";
+export type ProtectedPortalRoute = Exclude<PortalRoute, "onboarding">;
 
 const routePaths = {
   onboarding: "/",
@@ -31,4 +32,8 @@ export function parsePortalRoute(hash: string): PortalRoute {
 
 export function portalRoutePath(route: PortalRoute): string {
   return routePaths[route];
+}
+
+export function isProtectedPortalRoute(route: PortalRoute): route is ProtectedPortalRoute {
+  return route !== "onboarding";
 }

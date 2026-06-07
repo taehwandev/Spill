@@ -85,11 +85,13 @@ input:focus-visible {
 }
 
 .landingPage,
-.appChrome {
+.appChrome,
+.protectedPage {
   min-height: 100vh;
 }
 
 .landingHeader,
+.protectedHeader,
 .siteFooter,
 .landingMain {
   width: min(calc(100% - 32px), 1280px);
@@ -110,6 +112,14 @@ input:focus-visible {
   background: rgb(247 249 251 / 88%);
   box-shadow: 0 8px 28px rgb(25 28 30 / 4%);
   backdrop-filter: blur(20px);
+}
+
+.protectedHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 64px;
+  padding: 0 24px;
 }
 
 .landingBrand,
@@ -238,6 +248,52 @@ input:focus-visible {
 
 .landingMain {
   padding-bottom: 72px;
+}
+
+.protectedMain {
+  display: grid;
+  place-items: center;
+  min-height: calc(100vh - 64px);
+  padding: 32px 16px 80px;
+}
+
+.protectedPanel {
+  display: grid;
+  justify-items: center;
+  width: min(100%, 480px);
+  padding: 34px;
+  text-align: center;
+}
+
+.protectedIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  margin-bottom: 18px;
+  border-radius: 8px;
+  color: var(--primary);
+  background: rgb(0 106 98 / 10%);
+}
+
+.protectedPanel h1 {
+  margin: 0 0 8px;
+  font-size: 2rem;
+}
+
+.protectedPanel p {
+  max-width: 340px;
+  margin: 0 0 24px;
+  color: var(--text-variant);
+  line-height: 1.45;
+}
+
+.protectedActions {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  width: 100%;
 }
 
 .heroSection {

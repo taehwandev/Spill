@@ -14,6 +14,7 @@ const webPortalRenderFiles = [
   "src/features/webPortal/screens/AdminScreen.tsx",
   "src/features/webPortal/screens/DashboardScreen.tsx",
   "src/features/webPortal/screens/SettingsScreen.tsx",
+  "src/features/webPortal/screens/ProtectedRouteScreen.tsx",
   "src/features/webPortal/blocks/OnboardingBlocks.tsx",
   "src/features/webPortal/blocks/DashboardBlocks.tsx",
   "src/features/webPortal/blocks/SettingsBlocks.tsx",
@@ -40,7 +41,8 @@ const forbiddenUserFacingTerms = [
   /server-ready/i,
   /HTTP-only/,
   /E2EE/,
-  /safe enum/i
+  /safe enum/i,
+  /Account connection unavailable/i
 ];
 
 const emailShapedValue = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
@@ -89,6 +91,29 @@ test("admin navigation and route rendering are gated by viewer role", () => {
   assert.match(adminScreen, /auth\.status === "signed_in" && auth\.viewer\.role === "admin"/);
   assert.doesNotMatch(appChrome, /SPILL_ADMIN_EMAIL/);
   assert.doesNotMatch(adminScreen, /SPILL_ADMIN_EMAIL/);
+});
+
+test("protected portal routes do not render page content without account access", () => {
+  const routes = readFileSync(
+    new URL("web/src/features/webPortal/routes.ts", repoRoot),
+    "utf8"
+  );
+  const webPortal = readFileSync(
+    new URL("web/src/features/webPortal/WebPortal.tsx", repoRoot),
+    "utf8"
+  );
+  const protectedRouteScreen = readFileSync(
+    new URL("web/src/features/webPortal/screens/ProtectedRouteScreen.tsx", repoRoot),
+    "utf8"
+  );
+
+  assert.match(routes, /export function isProtectedPortalRoute/);
+  assert.match(webPortal, /isProtectedPortalRoute\(route\)/);
+  assert.match(webPortal, /auth\.state\.status !== "signed_in"/);
+  assert.match(webPortal, /route === "admin" && auth\.state\.viewer\.role !== "admin"/);
+  assert.match(webPortal, /<ProtectedRouteScreen/);
+  assert.match(protectedRouteScreen, /Sign in to continue/);
+  assert.doesNotMatch(protectedRouteScreen, /Supabase|VITE_|SPILL_ADMIN_EMAIL/);
 });
 
 test("auth controls use configured providers instead of a fixed render list", () => {

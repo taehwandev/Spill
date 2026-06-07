@@ -8,7 +8,9 @@ import { AdminPage } from "./pages/AdminPage";
 import { OnboardingPage } from "./pages/OnboardingPage";
 import { PortalDashboardPage } from "./pages/PortalDashboardPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { ProtectedRouteScreen } from "./screens/ProtectedRouteScreen";
 import {
+  isProtectedPortalRoute,
   parsePortalRoute,
   portalRoutePath,
   type PortalRoute
@@ -64,6 +66,34 @@ export function WebPortal() {
     setCopiedInstall(true);
     window.setTimeout(() => setCopiedInstall(false), 1800);
   }, []);
+
+  if (isProtectedPortalRoute(route)) {
+    if (auth.state.status !== "signed_in") {
+      return (
+        <ProtectedRouteScreen
+          auth={auth.state}
+          authProviders={auth.providers}
+          route={route}
+          onNavigate={navigate}
+          onSignIn={auth.signIn}
+          onSignOut={auth.signOut}
+        />
+      );
+    }
+
+    if (route === "admin" && auth.state.viewer.role !== "admin") {
+      return (
+        <ProtectedRouteScreen
+          auth={auth.state}
+          authProviders={auth.providers}
+          route={route}
+          onNavigate={navigate}
+          onSignIn={auth.signIn}
+          onSignOut={auth.signOut}
+        />
+      );
+    }
+  }
 
   if (route === "dashboard") {
     return (

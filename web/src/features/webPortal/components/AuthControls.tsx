@@ -19,7 +19,7 @@ export function AuthControls({
   if (state.status === "unconfigured") {
     return (
       <div className="authControls compact">
-        <span>Account connection unavailable</span>
+        <span>Sign in unavailable</span>
       </div>
     );
   }
