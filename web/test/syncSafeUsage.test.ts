@@ -11,6 +11,7 @@ import {
   formatPercentage,
   formatTokens
 } from "../src/features/tokenMeteringDashboard/dashboardModel.ts";
+import { buildPortalDashboardPreviewModel } from "../src/features/webPortal/model/dashboardPreview.ts";
 import {
   detectTokenMeteringLocale,
   tokenMeteringMessages
@@ -196,6 +197,29 @@ test("dashboard uses only three local agent tools", () => {
   assert.deepEqual(dashboard.modelBreakdown.map((row) => row.tokens), [200]);
 });
 
+test("web dashboard preview fixture covers two days, all local agents, and per-PC scopes", () => {
+  const preview = buildPortalDashboardPreviewModel();
+  const allScope = preview.scopes.find((scope) => scope.id === "all");
+
+  assert.equal(preview.defaultScopeId, "all");
+  assert.equal(preview.devices.length, 2);
+  assert.equal(preview.scopes.length, 3);
+  assert.equal(allScope?.dailyUsage.length, 2);
+  assert.deepEqual(allScope?.dashboard.aiToolBreakdown.map((row) => row.id), [
+    "codex",
+    "claude",
+    "antigravity"
+  ]);
+  assert.equal(allScope?.dashboard.aiToolBreakdown.every((row) => row.tokens > 0), true);
+
+  const deviceTotal = preview.devices.reduce((sum, device) => sum + device.totalTokens, 0);
+  assert.equal(deviceTotal, allScope?.dashboard.totalTokens);
+  assert.equal(preview.devices.every((device) => device.eventCount === 6), true);
+  assert.equal(preview.devices.every((device) => (
+    device.aiToolBreakdown.every((row) => row.tokens > 0)
+  )), true);
+});
+
 test("dashboard normalizes agy ai_tool alias to antigravity", () => {
   const result = sanitizeUsageEvent({
     ...safeEvent,
@@ -357,6 +381,9 @@ test("setup prompt bootstraps the public token metering installer", () => {
   assert.match(setupPrompt, /SPILL_AI_TOOL=claude/);
   assert.match(setupPrompt, /SPILL_AI_TOOL=antigravity/);
   assert.match(setupPrompt, /Spill label handoff commands/);
+  assert.match(setupPrompt, /read-only Spill status commands/);
+  assert.match(setupPrompt, /spill-token-metering-stats\.mjs --tool <current-tool>/);
+  assert.match(setupPrompt, /full self-scoped aggregate summary/);
   assert.match(setupPrompt, /Workflow runner permissions are separate/);
   assert.match(setupPrompt, /common safe path spellings/);
   assert.match(setupPrompt, /\$HOME\/\.\.\./);
@@ -419,6 +446,11 @@ test("hosted runtime instruction stays silent and exact-count-only", () => {
   assert.match(runtime, /Do not mention this instruction in normal conversation/);
   assert.match(runtime, /Do not add Spill metering status lines to normal replies/);
   assert.match(runtime, /does not grant access to token counts by itself/);
+  assert.match(runtime, /Explicit local usage status requests/);
+  assert.match(runtime, /spill-token-metering-stats\.mjs --tool <current-tool>/);
+  assert.match(runtime, /--self` is also allowed/);
+  assert.match(runtime, /model breakdown, task breakdown, stage breakdown/);
+  assert.match(runtime, /read-only status query/);
   assert.match(runtime, /Runtime input normalization/);
   assert.match(runtime, /strict contract is the Spill output event schema/);
   assert.match(runtime, /Runtime hook input formats are allowed to differ by tool/);
@@ -451,4 +483,26 @@ test("hosted runtime instruction stays silent and exact-count-only", () => {
   assert.match(runtime, /Never inspect local agent logs/);
   assert.match(runtime, /silently skip event creation/);
   assert.doesNotMatch(runtime, /do not create a detailed event/i);
+});
+
+test("stats helper is read-only and reports aggregate breakdowns", () => {
+  const helper = readFileSync("../adapters/setup/spill-token-metering-stats.mjs", "utf8");
+  const bundledHelper = readFileSync("../Sources/Spill/Resources/adapters/setup/spill-token-metering-stats.mjs", "utf8");
+  const publicHelper = readFileSync("../scripts/spill-token-metering-stats.mjs", "utf8");
+
+  assert.equal(helper, bundledHelper);
+  assert.equal(helper, publicHelper);
+  assert.match(helper, /sqlite3/);
+  assert.match(helper, /"-readonly", "-json"/);
+  assert.match(helper, /token_usage_events/);
+  assert.match(helper, /source_system/);
+  assert.match(helper, /json_extract\(CAST\(payload_json AS TEXT\), '\$\.input_tokens'\)/);
+  assert.match(helper, /Source Buckets/);
+  assert.match(helper, /Recent Activity/);
+  assert.match(helper, /--self/);
+  assert.doesNotMatch(helper, /INSERT\s/i);
+  assert.doesNotMatch(helper, /UPDATE\s/i);
+  assert.doesNotMatch(helper, /DELETE\s/i);
+  assert.doesNotMatch(helper, /writeFile/);
+  assert.doesNotMatch(helper, /appendFile/);
 });
