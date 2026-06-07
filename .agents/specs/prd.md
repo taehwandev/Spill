@@ -206,6 +206,16 @@ Requirements:
   Runtime-specific hooks, importers, or SDK adapters normalize into that store;
   the app should not present Codex, Claude Code, and Antigravity/AGY as three
   separate product databases.
+- When a user explicitly asks an agent for Spill status or local usage status,
+  installed agents should be able to read the same app-owned local store through
+  a read-only helper and return a self-scoped aggregate summary. This helper
+  must show more than input/output totals: event count, total tokens, average
+  event size, peak event size, model/task/stage breakdowns, source buckets, and
+  recent activity should be available in the response.
+- Agent-facing status reads are a secondary reporting surface, not a metering
+  source. They must not create usage events, write labels, run hooks, infer
+  counts, inspect private content, or be reported as proof that the current turn
+  was recorded.
 - Token metering setup and documentation must describe the primary collection
   path, runtime diagnostics, and rationale for each first-class AI runtime:
   - Codex: use a local session importer that reads exact token-count records
@@ -266,6 +276,10 @@ Acceptance:
 - Documentation and setup surfaces explain the Codex, Claude Code,
   Antigravity/AGY, and optional OpenAI SDK collection paths, including why AGY
   does not rely on hooks as the primary path.
+- Explicit agent-facing Spill status requests can return a self-scoped local
+  aggregate summary from the app-owned store without exposing prompts,
+  responses, commands, file paths, logs, diffs, source content, environment
+  values, transcripts, shell history, or secrets.
 - Work item rows are clickable and update a safe detail panel.
 - UI copy states that exact counts are required and estimates should not be
   sent.

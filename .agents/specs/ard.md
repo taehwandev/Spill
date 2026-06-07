@@ -218,6 +218,38 @@ Rules:
   Spill publishes recommended labels, but AI runtimes, workflow hooks, and
   adapters may define custom reusable categories that match
   `^[a-z][a-z0-9_]{1,40}$`.
+
+### ARD-005D: Agent-Facing Status Uses A Read-Only Local Stats Helper
+
+Decision:
+
+Install a small read-only stats helper beside the setup helper so agents can
+answer explicit user requests such as "Spill status" from the app-owned local
+usage store.
+
+Rationale:
+
+The local dashboard remains the rich UI surface, but users may ask the active
+agent for a quick status report while staying in the agent conversation. The
+helper keeps that path deterministic and privacy-scoped without asking agents to
+hand-write SQLite queries or inspect runtime logs.
+
+Rules:
+
+- The helper reads only the app-owned `token_usage_events` store and sanitized
+  usage JSON fields needed for numeric input/output aggregates.
+- The default query is self-scoped to the current runtime tool using
+  `SPILL_TOKEN_USAGE_AI_TOOL`, `SPILL_AI_TOOL`, or the Codex default when no
+  runtime env label is installed.
+- The helper may output aggregate totals, event counts, model/task/stage
+  breakdowns, source buckets, and recent activity.
+- The helper must not write usage events, labels, diagnostics, hooks, importer
+  cursors, or setup files.
+- The helper must not inspect prompts, responses, commands, file paths, repo
+  names, branches, terminal output, logs, diffs, source content, environment
+  values, transcripts, shell history, or secrets.
+- A stats helper run is not evidence that the current turn was recorded. It is
+  only a read-only report over events that already exist in the local store.
 - Custom workflow labels must not encode task text, feature names, project
   names, file names, branch names, ticket ids, user names, or private content.
 - The `ai_tool` label is additive and content-free. Missing labels from older

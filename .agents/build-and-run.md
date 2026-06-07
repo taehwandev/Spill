@@ -108,6 +108,7 @@ being tested separate from the copy being edited.
 | `adapters/<tool>/...` | Repo-level adapter source used for local development and comparison. |
 | `scripts/spill-token-metering-setup.mjs` | Public setup helper source copied into the hosted setup package by `scripts/prepare-docs.sh`. |
 | `Sources/Spill/Resources/adapters/setup/spill-token-metering-setup.mjs` | Setup helper bundled into the app resources. |
+| `Sources/Spill/Resources/adapters/setup/spill-token-metering-stats.mjs` | Read-only local usage stats helper bundled into the app resources and installed beside the setup helper. |
 | `~/Library/Application Support/Spill/adapters/<tool>/...` | Installed user-level runtime hook or importer used by Codex, Claude Code, and AGY after setup. |
 
 Rebuilding the app updates the `.build/Spill.app` resource copy. It does not
@@ -141,6 +142,8 @@ instead of assuming they are synchronized:
 ```bash
 diff -q scripts/spill-token-metering-setup.mjs Sources/Spill/Resources/adapters/setup/spill-token-metering-setup.mjs
 diff -q adapters/setup/spill-token-metering-setup.mjs Sources/Spill/Resources/adapters/setup/spill-token-metering-setup.mjs
+diff -q adapters/setup/spill-token-metering-stats.mjs Sources/Spill/Resources/adapters/setup/spill-token-metering-stats.mjs
+diff -q scripts/spill-token-metering-stats.mjs Sources/Spill/Resources/adapters/setup/spill-token-metering-stats.mjs
 ```
 
 ## Token Metering Runtime Facts
@@ -156,6 +159,18 @@ Important paths:
 ~/Library/Application Support/Spill/token-metering/events.sqlite3
 ~/Library/Application Support/Spill/token-metering/diagnostics/
 ```
+
+When the user explicitly asks an agent for Spill status or local usage status,
+the agent may run the installed read-only status helper:
+
+```bash
+node ~/Library/Application\ Support/Spill/adapters/setup/spill-token-metering-stats.mjs --tool <current-tool>
+```
+
+This command reads the local `token_usage_events` store and prints a self-scoped
+aggregate summary with totals, model/task/stage breakdowns, source buckets, and
+recent activity. It is not a usage event, label handoff, hook, importer, or
+proof that the current turn was recorded.
 
 Important tool labels:
 

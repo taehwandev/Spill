@@ -11,6 +11,37 @@ When exact runtime usage metadata is exposed by your runtime or adapter, use a l
 This instruction is only a safety contract. It is not a hook, does not measure usage, and does not grant access to token counts by itself.
 If your runtime or adapter does not expose exact token counts to an approved hook or local importer, silently skip event creation.
 
+Explicit local usage status requests:
+
+- When the user explicitly asks for Spill status, Spill usage status, token
+  usage status, or a similar local metering summary, answer by reading the
+  app-owned local usage store with the installed read-only stats helper when it
+  exists.
+- Preferred command shape:
+
+```bash
+node ~/Library/Application\ Support/Spill/adapters/setup/spill-token-metering-stats.mjs --tool <current-tool>
+```
+
+- Keep the default scope to the current runtime tool only. Use `--tool codex`,
+  `--tool claude`, or `--tool antigravity` when the current runtime is known.
+  `--self` is also allowed and uses `SPILL_TOKEN_USAGE_AI_TOOL` or
+  `SPILL_AI_TOOL` when those runtime environment labels are present; otherwise
+  it falls back to the Codex default because Codex does not require an installed
+  runtime env setting.
+- Include the full local aggregate summary in the answer, not only input and
+  output tokens: total tokens, input tokens, output tokens, event count, average
+  tokens per event, peak event size, model breakdown, task breakdown, stage breakdown,
+  source buckets, and recent activity.
+- This command is a read-only status query, not a usage event, hook, importer,
+  label handoff, or proof that the current turn was recorded.
+- Do not run this status helper in normal replies. Run it only when the user
+  asks for Spill status or local usage status.
+- Do not inspect prompts, responses, commands, file paths, repo names, branch
+  names, terminal output, logs, diffs, source code, environment values, secrets,
+  transcripts, shell history, or arbitrary local files to explain the status
+  output.
+
 Runtime input normalization:
 
 - The strict contract is the Spill output event schema below. Every adapter must

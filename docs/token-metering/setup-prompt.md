@@ -19,21 +19,48 @@ The installer must also configure supported agent runtime defaults so workflow l
 - Antigravity/AGY user settings must set `SPILL_AI_TOOL=antigravity` and `SPILL_TOKEN_USAGE_AI_TOOL=antigravity`.
 - Codex uses the `codex` tool label by default; do not configure Claude or AGY workflows in a way that falls back to `codex`.
 
-The installer must add narrow permission allowlist entries, when the runtime supports them, for Spill label handoff commands only:
+The installer must add narrow permission allowlist entries, when the runtime supports them, for Spill label handoff and explicit user-requested local status commands only:
 
 - `node ~/Library/Application\ Support/Spill/adapters/setup/spill-token-metering-setup.mjs --label <current-tool>`
+- `node ~/Library/Application\ Support/Spill/adapters/setup/spill-token-metering-stats.mjs --self`
+- `node ~/Library/Application\ Support/Spill/adapters/setup/spill-token-metering-stats.mjs --tool <current-tool>`
 
 The Spill label handoff allowlist must include the same exact helper command
 for common safe path spellings: the absolute installed path, `~/...`,
 `$HOME/...`, `${HOME}/...`, quoted `$HOME/...`, and escaped
 `Application\ Support`. These are still only narrow `node <helper> --label
-<current-tool>` entries, not broad `node` permission.
+<current-tool>` and read-only `node <stats-helper> --self` /
+`node <stats-helper> --tool <current-tool>` entries, not broad `node`
+permission.
 
 For Codex, these allowlist entries live in `~/.codex/rules/default.rules` as
 managed `prefix_rule` entries. For Claude Code and Antigravity/AGY, they live in
 their user-level permission settings files. Do not use broad `python3`, `node`,
 or shell-wide allow rules.
 Workflow runner permissions are separate from the default Spill metering install.
+
+The installer must also install the read-only local usage stats helper at:
+
+```text
+~/Library/Application Support/Spill/adapters/setup/spill-token-metering-stats.mjs
+```
+
+When the user explicitly asks the agent for Spill status, Spill usage status, or
+a similar local metering summary, the agent should run:
+
+```bash
+node ~/Library/Application\ Support/Spill/adapters/setup/spill-token-metering-stats.mjs --tool <current-tool>
+```
+
+The status helper must read only Spill's app-owned local
+`token_usage_events` aggregates and sanitized usage JSON. It must print a
+self-scoped summary with total, input, output, event count, average event size,
+peak event size, model/task/stage breakdowns, source buckets, and recent
+activity. It must not create usage events, write labels, run hooks, or inspect
+prompts, responses, commands, file paths, logs, diffs, source content,
+environment values, transcripts, shell history, or secrets. Do not run this
+status helper in normal replies; use it only when the user asks for Spill
+status.
 
 Do not ask the user to approve this trusted Spill label command over and over after the one-step installer has been explicitly requested.
 Do not save only the runtime instruction and call the task done.
