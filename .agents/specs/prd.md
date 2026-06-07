@@ -202,6 +202,43 @@ Requirements:
   runtime-total fallback instead of presented as meaningful zeroes.
 - A self-test may create synthetic token-only data, but must be clearly labeled
   as diagnostics.
+- Spill uses one app-owned local token event store for dashboard reads.
+  Runtime-specific hooks, importers, or SDK adapters normalize into that store;
+  the app should not present Codex, Claude Code, and Antigravity/AGY as three
+  separate product databases.
+- Token metering setup and documentation must describe the primary collection
+  path, runtime diagnostics, and rationale for each first-class AI runtime:
+  - Codex: use a local session importer that reads exact token-count records
+    from supported Codex session data and writes safe normalized events. This
+    avoids depending on a prompt instruction alone and keeps collection tied to
+    exact runtime usage records.
+  - Claude Code: use the Stop-hook transcript contract when available. The hook
+    receives a safe pointer to the transcript, reads only exact numeric usage
+    metadata and safe opaque runtime metadata, and writes safe normalized
+    events. This is acceptable because Claude Code exposes a post-turn contract
+    that can carry exact usage.
+  - Antigravity/AGY: use the local active importer as the primary path. It reads
+    only exact numeric usage fields and safe opaque metadata from AGY
+    conversation metadata and writes safe normalized events. AGY runtime hooks
+    must not be installed for Spill metering because they can be skipped, can run
+    with empty stdin, or can run without exact token fields for real text turns,
+    which makes them misleading setup evidence.
+  - Direct OpenAI SDK work: optional adapter support is allowed only when the
+    SDK caller exposes exact usage from the model response and can submit the
+    same strict safe event schema. It is not part of the default local agent
+    dashboard.
+- Hook execution, hook configuration, permission prompts, label-context writes,
+  unit tests, smoke tests, or mock payload injection must not be described as
+  proof that real runtime usage was recorded. Real proof is a strict safe event
+  in the local queue/store or a runtime-specific success diagnostic for exact
+  usage.
+- Because local token metering has not shipped as a compatibility-boundary
+  feature, existing experimental local usage rows, diagnostics, importer cursors,
+  and adapter cache data do not require migration or backward compatibility.
+  Development builds may reset or rebuild those local-only records when the
+  schema or collection source changes, as long as prompts, responses, commands,
+  paths, logs, diffs, source content, environment values, and secrets are still
+  never read or stored.
 
 Dashboard UX requirements:
 
@@ -226,9 +263,14 @@ Acceptance:
 - Safe event validation rejects content-like fields.
 - Local dashboard shows combined usage and lets users filter by safe AI tool
   labels.
+- Documentation and setup surfaces explain the Codex, Claude Code,
+  Antigravity/AGY, and optional OpenAI SDK collection paths, including why AGY
+  does not rely on hooks as the primary path.
 - Work item rows are clickable and update a safe detail panel.
 - UI copy states that exact counts are required and estimates should not be
   sent.
+- Pre-release local metering data can be reset or reimported without a
+  compatibility migration requirement.
 - Runtime hook, importer, diagnostics, dedupe, queue, and tool-specific adapter
   mechanics live in ARD and adapter docs, not this PRD.
 

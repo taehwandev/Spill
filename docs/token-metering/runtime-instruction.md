@@ -9,7 +9,7 @@ Do not add Spill metering status lines to normal replies.
 If the local Spill app is running, record token usage for AI work on this computer.
 When exact runtime usage metadata is exposed by your runtime or adapter, use a local hook or adapter to send the safe local event automatically in the background.
 This instruction is only a safety contract. It is not a hook, does not measure usage, and does not grant access to token counts by itself.
-If your runtime or adapter does not expose exact token counts to an executable hook, silently skip event creation.
+If your runtime or adapter does not expose exact token counts to an approved hook or local importer, silently skip event creation.
 
 Runtime input normalization:
 
@@ -20,42 +20,56 @@ Runtime input normalization:
   `tokens.input`/`tokens.output`, `usageMetadata.totalTokenCount`, or a
   normalized `spill_token_usage` object. The adapter may accept these input
   shapes, but it must still write only the strict Spill event keys.
-- Antigravity/AGY may wrap exact usage data in nested runtime envelopes such as
-  `data`, `event`, `response`, `metadata`, or workflow objects. Search nested
-  object shapes for supported numeric token keys, but extract only token counts,
-  safe labels, safe model ids, and opaque ids.
-- Antigravity/AGY may expose exact usage through stdin, an explicit
-  `--payload-json` / `--usage-json` argument, or fixed allowlisted runtime
-  environment fields. Accept only known usage keys such as
-  `SPILL_TOKEN_USAGE_PAYLOAD`, `ANTIGRAVITY_INPUT_TOKENS`,
-  `ANTIGRAVITY_OUTPUT_TOKENS`, `AGY_INPUT_TOKENS`, and
-  `GEMINI_OUTPUT_TOKENS`. Never inspect arbitrary environment values or file
-  paths to recover usage.
+- Antigravity/AGY uses Spill's local active importer as its approved metering
+  path. The importer reads known AGY conversation metadata records read-only and
+  extracts only exact numeric usage fields, safe model ids, and opaque ids.
+  Do not install AGY runtime hooks for Spill metering.
 - Do not assume a hook event has token usage merely because the hook runs.
-  Antigravity/AGY `PostInvocation` hooks can execute for tool steps or model
-  steps that do not expose exact token fields to the hook payload.
+  Hook execution can be setup or lifecycle evidence without exact token fields.
 - If a runtime hook executes but exposes no exact token count, the adapter must
   not estimate. It may write a local-only diagnostic containing only fixed
   booleans about whether expected token fields were present. Diagnostics must
   never store payload values, prompts, responses, commands, file paths, logs,
   diffs, source content, environment values, or secrets.
-- AGY empty stdin is a normal no-event hook call when a lifecycle or tool step
-  completes without token usage. Any structured AGY payload without exact token
-  numbers is also a normal no-event lifecycle, tool, or model-adjacent hook
-  payload. Record both only as `antigravity-last-empty.json`; do not treat them
-  as failed metering states.
-- Structured AGY payloads with an empty `tokens` object or zero-valued token
-  fields are no-event hook calls, even if they include model or session hints.
-- AGY payload mismatches must be reserved for malformed input such as invalid
-  JSON or non-object payloads and isolated in `antigravity-last-mismatch.json`.
-  Successful AGY usage events must update `antigravity-last-success.json` and
-  clear stale mismatch diagnostics.
+- AGY importer diagnostics must be content-free and local-only. They may record
+  scan counts, imported event counts, timestamps, and fixed booleans such as
+  whether exact usage fields were present. They must not store prompts,
+  responses, commands, file paths, logs, diffs, source content, environment
+  values, secrets, raw database paths, run ids, or span ids.
 - Claude Code uses a different Stop-hook contract: stdin should contain a safe
   payload with a `transcript_path`, and the adapter reads exact usage from the
   transcript. Claude diagnostics must be split into `claude-last-empty.json`,
   `claude-last-mismatch.json`, and `claude-last-success.json` so hook execution,
   no-event outcomes, and real payload failures can be distinguished without
   storing transcript paths or transcript content.
+
+AGY evidence discipline:
+
+- A Spill label handoff command or permission prompt, including
+  `--label antigravity ... --if-absent`, is not a usage hook and is not evidence
+  that AGY recorded tokens. It only writes safe task/stage context for a later
+  exact usage event.
+- Do not claim AGY metering works from mock payload injection, unit tests,
+  token-metering smoke tests, hook config shape, hook-load logs, hook command
+  execution logs, label-context file writes, or permission prompts alone.
+- Real AGY usage metering is proved only by a real AGY runtime turn followed by
+  a queued/imported `events-inbox` usage JSON file, a new `token_usage_events`
+  row with `ai_tool = antigravity`, or `antigravity-active-importer-last.json`
+  showing imported exact usage.
+- Spill must use the local AGY active importer instead of depending on
+  `PostInvocation`. The importer may read only exact numeric usage fields, safe
+  model ids, and opaque conversation/generation ids from AGY conversation
+  metadata. It must not store prompts, responses, commands, file paths, logs,
+  diffs, source, environment values, secrets, raw database paths, or arbitrary
+  transcript content.
+- If AGY only produces a label permission prompt, hook-load log, or other hook
+  setup artifact, treat it as no-event or label-only. Do not report it as
+  fixed.
+- Do not force dummy tool calls, permission-list calls, or other hidden
+  user-visible tool activity merely to influence AGY metering.
+- Do not add AGY Stop, PostInvocation, or lifecycle hooks for Spill metering.
+  The setup helper should remove managed AGY hook entries because they create
+  misleading evidence.
 
 Runtime label handoff:
 
@@ -86,6 +100,10 @@ Runtime label handoff:
 - Use the dominant current `task_type` and `stage` from the rules below. If the dominant task changes during the same turn, refresh the label context with the new safe labels.
 - Do not let a short verification step overwrite an implementation-heavy task. If a turn includes code, config, data, prompt, or test edits followed by tests, builds, audits, or smoke checks, keep the dominant stage as `implement`.
 - Do not mention this label command in normal conversation.
+- Do not infer labels from tool names, command names, file operations,
+  grep/list-dir patterns, prompt text, logs, diffs, source content,
+  transcripts, shell history, or arbitrary payload values. If trusted safe
+  labels are absent, use `uncategorized/summarize`.
 - If the setup helper is missing, skip label context creation silently unless the user asked to install or fix Spill metering.
 - When running a trusted workflow script that exposes safe reusable labels, set
   `SPILL_AI_TOOL` and `SPILL_TOKEN_USAGE_AI_TOOL` to the current runtime tool,

@@ -244,18 +244,16 @@ Rules:
   token counts by themselves, and the app must not imply otherwise.
 - Runtime hook input contracts differ by tool and must be handled explicitly.
   The receiver must not infer token usage merely because a hook process ran.
-- Antigravity/AGY `PostInvocation` may execute with empty stdin for lifecycle
-  or tool steps that have no model token usage. Treat that as a normal no-event
-  result and write only `antigravity-last-empty.json` local diagnostics. Payloads
-  that exist but lack supported exact-count fields go to
-  `antigravity-last-mismatch.json`; successful usage goes to
-  `antigravity-last-success.json` and clears stale mismatch diagnostics.
-- Antigravity/AGY exact token counts may arrive through stdin, an explicit
-  `--payload-json` / `--usage-json` argument, or fixed allowlisted environment
-  variables such as `SPILL_TOKEN_USAGE_PAYLOAD`, `ANTIGRAVITY_INPUT_TOKENS`, and
-  `ANTIGRAVITY_OUTPUT_TOKENS`. The adapter may read only those allowlisted usage
-  keys and must store only safe shape booleans plus usage numbers, never raw
-  environment values.
+- Antigravity/AGY uses a local active importer as the primary collection path.
+  Spill setup must remove managed AGY `PostInvocation` entries instead of
+  installing hook-based metering, because real AGY turns can skip hooks, run
+  hooks with empty stdin, or run hooks without exact token fields. A hook command
+  log or permission prompt is therefore misleading setup evidence, not a
+  reliable metering path.
+- Antigravity/AGY exact token counts may arrive through the active importer
+  only. The importer may read known AGY conversation metadata records
+  read-only, but must store only safe shape booleans plus usage numbers, never
+  raw environment values or content-like fields.
 - Claude Code Stop hooks use a separate contract. The expected stdin payload is
   a safe object with `transcript_path`; the adapter may read exact numeric usage
   from that transcript but must not store transcript paths or transcript
@@ -313,6 +311,23 @@ Rules:
   `ai_tool = codex`, `artifact_id = artifact_codex`, and `project_id =
   project_global` local events. Spill settings decide whether and how local
   aggregates sync later.
+- Antigravity/AGY importer spans are deduplicated with opaque hashes and stored
+  as `ai_tool = antigravity`, `artifact_id = artifact_global`, and
+  `project_id = project_global` local events. The importer scans recent AGY
+  conversation metadata records read-only and extracts only exact numeric usage
+  fields, safe model ids, and opaque conversation or generation ids. It must not
+  store prompts, responses, commands, file paths, conversation titles, work item
+  titles, logs, diffs, source content, environment values, secrets, raw database
+  paths, or arbitrary transcript content. It writes local-only aggregate
+  diagnostics such as `antigravity-active-importer-last.json` so support can
+  distinguish "no source", "no exact fields", and "events imported" without
+  storing private payload values.
+- Local token metering data has not shipped as a compatibility-boundary product
+  feature. During development, existing experimental token rows, diagnostics,
+  importer cursors, and adapter caches may be reset, rebuilt, or reimported
+  when the schema or runtime source changes. This does not loosen the privacy
+  boundary: adapters still must not inspect content-like fields or estimate
+  usage.
 - The local app always reads the app-owned local store. UI must not imply that
   metering starts only after pressing a local check button.
 - A local dashboard self-test may enqueue one synthetic `local_only` event

@@ -131,7 +131,6 @@ When changing adapter behavior, check the active copies before claiming the
 runtime is fixed:
 
 ```bash
-diff -q adapters/antigravity/spill-hook.py Sources/Spill/Resources/adapters/antigravity/spill-hook.py
 diff -q adapters/claude-code/spill-hook.py Sources/Spill/Resources/adapters/claude-code/spill-hook.py
 diff -q adapters/codex/spill-importer.mjs Sources/Spill/Resources/adapters/codex/spill-importer.mjs
 ```
@@ -174,16 +173,58 @@ Runtime hook input contracts differ by tool:
 - Codex imports exact token-count records from the Codex session importer.
 - Claude Code Stop hooks receive a safe payload with `transcript_path`; the
   adapter reads exact numeric usage from the transcript and writes safe events.
-- Antigravity/AGY PostInvocation hooks may run with empty stdin for lifecycle or
-  tool steps that used no model tokens. Empty stdin is a normal no-event hook
-  call, not a failed usage event.
-- Antigravity/AGY adapters also accept exact usage through explicit
-  `--payload-json` / `--usage-json` arguments and fixed allowlisted environment
-  usage fields when a runtime exposes them. Do not add arbitrary file-path or
-  environment scraping to recover usage.
+- Antigravity/AGY uses the local active importer. The setup helper removes
+  managed Spill AGY `PostInvocation` entries so hook command logs cannot be
+  mistaken for usage evidence.
 
 Never estimate token usage. If exact runtime usage is not available, write no
 usage event. Use local-only diagnostics for support state.
+
+## AGY Evidence Boundaries
+
+Treat AGY setup, label handoff, adapter tests, and real usage evidence as
+separate surfaces.
+
+A setup helper `--label antigravity ... --if-absent` permission prompt only
+writes short-lived safe label context. It does not contain token counts and must
+not be reported as proof that AGY usage was recorded.
+
+These checks are useful but synthetic:
+
+- unit tests and token-metering smoke tests;
+- hook config shape or permission allowlist inspection;
+- AGY logs that say a hook file was loaded or a command was selected;
+- label-context file writes.
+
+They prove setup or adapter behavior only. They do not prove a real AGY turn
+exposed exact usage to Spill.
+
+Accepted evidence for real AGY token metering requires a real AGY runtime turn
+followed by at least one concrete local side effect:
+
+- an `events-inbox` usage JSON file imported by Spill;
+- a new `token_usage_events` row with `ai_tool = antigravity`.
+- `antigravity-active-importer-last.json` showing imported exact usage.
+
+If AGY only asks permission for a label command, report that as label-only. Do
+not call it fixed.
+
+Do not force dummy tool calls, `list_permissions`, or other hidden user-visible
+tool activity as a normal workaround for text-only turns. Such calls may be used
+only as an explicitly approved diagnostic scenario, and the result must still be
+validated by the real AGY side effects above.
+
+## AGY Active Importer Decision Rules
+
+Use these rules when evaluating proposed AGY metering changes:
+
+| Proposal | Status | Rule |
+| --- | --- | --- |
+| Add Stop, PostInvocation, or lifecycle hooks | Prohibited | AGY hook command logs create misleading evidence. Use the active importer. |
+| Infer labels from tool names, commands, file operations, or I/O patterns | Prohibited | This violates the privacy boundary. Labels must come from trusted safe workflow labels, fixed safe env fields, safe payload labels, or the fallback `uncategorized/summarize`. |
+| Fill `token_breakdown` buckets | Conditional | Fill a bucket only when the runtime exposes that exact source count. Otherwise put the exact total in `unknown` and leave inferred buckets at `0`. |
+| Retry local event import | Allowed with constraints | Retry may persist only the strict usage event JSON or a safe temporary copy under local Spill token-metering storage. It must not store prompts, payload values, logs, commands, file paths, stack traces, env values, or secrets. |
+| Structured diagnostics | Allowed with constraints | Diagnostics may contain fixed error codes, timestamps, booleans, safe labels, model ids, and numeric token counts. Do not store stack traces, permission dumps, raw payload values, paths, logs, commands, env values, run ids, span ids, or secrets. |
 
 ## Diagnostics Contract
 
@@ -195,9 +236,7 @@ or span ids.
 AGY diagnostic files:
 
 ```text
-antigravity-last-empty.json
-antigravity-last-mismatch.json
-antigravity-last-success.json
+antigravity-active-importer-last.json
 ```
 
 Claude diagnostic files:
@@ -208,11 +247,8 @@ claude-last-mismatch.json
 claude-last-success.json
 ```
 
-Use these files to distinguish:
-
-- no model-token usage happened;
-- a payload existed but did not match a supported exact-count shape;
-- a valid usage event was queued.
+Use this file to distinguish active importer scan count, parsed exact usage,
+duplicates, and imported events without storing raw AGY payload values.
 
 ## Verification Commands
 

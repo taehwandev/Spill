@@ -39,68 +39,73 @@ Do not ask the user to approve this trusted Spill label command over and over af
 Do not save only the runtime instruction and call the task done.
 Do not give manual per-adapter setup steps as the primary answer.
 
-Required hook shapes after install:
+Required runtime setup after install:
 
 - Codex: `~/.codex/hooks.json` contains `hooks.Stop[]` with `matcher: ""` and a command that runs the Spill Codex importer. `~/.codex/rules/default.rules` contains managed Spill `prefix_rule` entries for Spill Codex label handoff.
 - Claude Code: `~/.claude/settings.json` contains `hooks.Stop[]` with `matcher: ""`, a command that runs the Spill Claude hook, `SPILL_AI_TOOL=claude`, and narrow allowlist entries for Spill label handoff. The matcher field is required.
-- Antigravity/AGY: `~/.gemini/config/hooks.json` contains a `"spill-metering"` JSONHookSpec with `PostInvocation[]`, `matcher: ""`, and a command that runs the Spill AGY hook. The canonical installed hook lives at `~/Library/Application Support/Spill/adapters/antigravity/spill-hook.py`; when that path contains spaces, the installer may instead put `python3 '~/.gemini/spill-hook.py'` in `hooks.json` and create that file as a symlink or fresh copy to the canonical installed hook. Treat either command path as valid only when the compatibility file resolves to, or matches, the canonical installed hook. `~/.gemini/antigravity-cli/settings.json` contains `SPILL_AI_TOOL=antigravity` and narrow allowlist entries for Spill label handoff. Do not write `PostInvocation` as a root-level array.
-- After installing or repairing Antigravity/AGY metering, restart any running
-  AGY CLI or Antigravity IDE sessions before verifying. Running sessions may
-  cache hook configuration and continue without invoking the newly installed
-  hook.
+- Antigravity/AGY: Spill's AGY collection path is the local active importer,
+  which scans AGY conversation metadata for exact numeric usage fields and never
+  stores prompts, responses, paths, logs, diffs, source, environment values, or
+  secrets. Do not install AGY `PostInvocation`, Stop, or lifecycle hooks for
+  Spill metering. The setup helper must remove managed Spill AGY hook entries
+  from `~/.gemini/config/hooks.json`, `~/.gemini/hooks.json`, and
+  `~/.gemini/antigravity-cli/hooks.json` so hook command logs cannot be
+  mistaken for real usage evidence. `~/.gemini/antigravity-cli/settings.json`
+  contains `SPILL_AI_TOOL=antigravity` and narrow allowlist entries for Spill
+  label handoff only.
 
 The installed adapters must force one strict Spill output event schema, not one
 shared runtime hook input schema. Each runtime may expose usage differently, so
 adapters normalize supported exact-count input shapes into the Spill event keys.
-For Antigravity/AGY specifically, verify both things separately:
+For Antigravity/AGY specifically, verify that the active importer can read exact
+numeric usage fields from recent AGY conversation metadata and can import a safe
+normalized event. If AGY metadata does not expose exact token fields, the
+importer must not invent usage. It must not inspect arbitrary environment
+values, runtime logs, shell history, file paths, prompts, commands, diffs, or
+source content to recover usage.
 
-- the `PostInvocation` hook is loaded and executing;
-- the hook payload exposes exact token usage fields such as
-  `input_tokens`/`output_tokens`, `usage.input_tokens`/`usage.output_tokens`,
-  `tokens.input`/`tokens.output`, `usageMetadata.totalTokenCount`, or a
-  normalized `spill_token_usage` object.
-- AGY may wrap those exact token fields in runtime-specific envelopes such as
-  `data`, `event`, `response`, `metadata`, or workflow objects. The adapter
-  should search nested object shapes for known numeric token keys and extract
-  only the numeric counts plus safe labels/model/run hints. Do not store raw
-  payload values.
+Do not confuse Spill label handoff with usage metering. A permission prompt or
+successful execution of
+`node .../spill-token-metering-setup.mjs --label antigravity ... --if-absent`
+only writes safe label context. It never proves that AGY imported exact token
+usage, queued an event, or changed SQLite.
 
-If AGY runs the hook but does not expose exact token fields, the adapter must not
-invent usage. AGY may invoke `PostInvocation` for lifecycle, tool, or
-model-adjacent steps that pass empty stdin or a structured payload without exact
-token numbers. Treat those shapes as normal no-event hook calls, not as metering
-failures, even when the payload contains model or session hints. Leave
-local-only safe diagnostics under Spill's token-metering diagnostics directory
-and skip the usage event until the runtime or workflow provides exact counts.
-Structured payloads that contain an empty `tokens` object, zero-valued token
-fields, model hints, or opaque session hints are still no-event hook calls unless
-at least one supported numeric token count is greater than zero.
+Do not claim real AGY usage was recorded from mock payload injection, unit
+tests, token-metering smoke tests, hook config shape, hook-load logs, hook
+command execution logs, label-context file writes, or permission prompts alone.
+Those are setup or adapter checks. Accepted proof for real AGY metering must
+come from a real AGY runtime turn followed by at least one concrete local side
+effect: an imported `events-inbox` usage JSON file, a new `token_usage_events`
+row with `ai_tool = antigravity`, or `antigravity-active-importer-last.json`
+showing imported exact usage.
 
-The AGY adapter may accept exact token counts from stdin, explicit
-`--payload-json` / `--usage-json` arguments, or fixed allowlisted runtime
-environment fields such as `SPILL_TOKEN_USAGE_PAYLOAD`,
-`ANTIGRAVITY_INPUT_TOKENS`, `ANTIGRAVITY_OUTPUT_TOKENS`, `AGY_INPUT_TOKENS`, and
-`GEMINI_OUTPUT_TOKENS`. It must not inspect arbitrary environment values,
-runtime logs, shell history, file paths, prompts, commands, diffs, or source
-content to recover usage.
+Do not add forced dummy tool calls, `list_permissions`, or any other hidden
+user-visible tool activity as the normal fix for text-only AGY turns. Such calls
+are diagnostic only, require explicit user approval, and still do not prove
+metering unless the real AGY importer side effects above move.
+
+Do not implement a heuristic classifier that infers task labels from tool names,
+commands, file writes, grep/list-dir patterns, prompt text, logs, diffs, source
+content, transcripts, shell history, or arbitrary payload values. If trusted safe
+labels are absent, degrade to `uncategorized/summarize`; do not trade privacy for
+better-looking categories.
+
+Do not add AGY `PostInvocation`, Stop, or lifecycle hooks. A second hook that
+receives empty or non-usage payloads is not a metering fix and creates
+misleading evidence.
 
 AGY diagnostic files must use this fixed local-only protocol:
 
-- Write `~/Library/Application Support/Spill/token-metering/diagnostics/antigravity-last-empty.json`
-  for empty stdin hook calls and structured no-usage lifecycle/tool/model-adjacent
-  payloads. Use `kind: "empty_stdin_hook_call"` with `reason: "empty_stdin"` for
-  empty stdin, and `kind: "no_usage_hook_call"` with
-  `reason: "no_token_usage_payload"` for structured payloads that do not expose
-  exact token numbers.
-- Write `~/Library/Application Support/Spill/token-metering/diagnostics/antigravity-last-mismatch.json`
-  only for malformed hook input such as invalid JSON or non-object payloads.
-- Write `~/Library/Application Support/Spill/token-metering/diagnostics/antigravity-last-success.json`
-  after a valid usage event is enqueued.
+- Write `~/Library/Application Support/Spill/token-metering/diagnostics/antigravity-active-importer-last.json`
+  after each local AGY active importer scan. It may contain only fixed scan
+  counts, duplicate counts, imported event counts, timestamps, fixed booleans
+  about exact usage field presence, and the same privacy statement.
 - Write a `.tmp` file in the same diagnostics directory first, close it, then
   atomically rename it to the final diagnostic file.
 - The JSON object must contain only safe diagnostic metadata keys such as
   `schema_version`, `ai_tool`, `kind`, `reason`, `created_at`,
-  `payload_source`, `expected_input_contracts`, `observed_safe_shape`, and
+  `scanned_files`, `scanned_rows`, `imported_events`, `duplicate_events`,
+  `observed_safe_shape`, and
   `privacy`.
 - `observed_safe_shape` must contain booleans only, for example whether the
   payload was an object, whether exact input/output token fields were present,
@@ -111,9 +116,6 @@ AGY diagnostic files must use this fixed local-only protocol:
 - Never store raw payload values, prompts, responses, commands, file paths, logs,
   diffs, transcript content, source content, environment values, or secrets in
   diagnostics.
-- Empty/no-usage diagnostics must never overwrite mismatch or success diagnostics.
-  On success, clear stale mismatch diagnostics and the legacy
-  `antigravity-latest.json` diagnostic if present.
 
 Claude Code diagnostic files must use the same local-only separation:
 
@@ -252,16 +254,10 @@ diffs, logs, source content, or secrets.
 Never encode conversation titles, work item titles, local aliases, task text, or
 display names in custom labels.
 
-If a selected hook/config integration point needs Spill's AGY hook merged into
-it, pass that selected path through the same public installer:
-
-```bash
-/bin/bash -c "$(curl -fsSL https://spill.thdev.app/token-metering/install.sh)" -- --workflow-hook /path/to/.agents/hooks.json
-```
-
 Do not claim Spill token metering is installed until:
 
-- the setup installer has run and the hook shapes have been verified;
+- the setup installer has run and Codex/Claude hook shapes plus AGY active
+  importer setup have been verified;
 - if workflow labels were requested, every workflow edit was approved by the
   user;
 - script-based workflows were checked first and used when present;

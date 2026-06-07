@@ -978,19 +978,19 @@ enum TokenMeteringL10n {
         .english: [
             "claude-code": "Stop hook - transcript reader",
             "codex": "Stop hook - session token_count importer",
-            "antigravity": "PostInvocation hook - token usage reporter",
+            "antigravity": "Active importer - conversation metadata",
             "openai": "SDK wrapper - SpillOpenAIClient"
         ],
         .korean: [
             "claude-code": "Stop hook - transcript reader",
             "codex": "Stop hook - session token_count importer",
-            "antigravity": "PostInvocation hook - 토큰 사용량 reporter",
+            "antigravity": "Active importer - conversation metadata",
             "openai": "SDK wrapper - SpillOpenAIClient"
         ],
         .japanese: [
             "claude-code": "Stop hook - transcript reader",
             "codex": "Stop hook - session token_count importer",
-            "antigravity": "PostInvocation hook - トークン使用量 reporter",
+            "antigravity": "Active importer - conversation metadata",
             "openai": "SDK wrapper - SpillOpenAIClient"
         ]
     ]

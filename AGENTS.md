@@ -23,6 +23,44 @@ AgentPlaybook for common, workflow, platform, and review cards. Load the
 smallest relevant shared cards and link to them instead of copying shared
 workflow guidance into this repo.
 
+Runtime-specific routing labels:
+
+- This `AGENTS.md` is the single project-root instruction entry point for Codex,
+  Claude Code, and Antigravity/AGY. Do not add separate runtime-specific root
+  docs when the same guidance can live here or in `.agents/`.
+- When running AgentPlaybook workflow, preflight, or finish commands from
+  Antigravity/AGY, use `SPILL_AI_TOOL=antigravity` or rely on the environment
+  installed by Spill token metering setup. Use the current runtime tool label
+  for other agents so safe workflow labels land in the correct label context.
+- Antigravity/AGY uses the canonical `antigravity` tool label. `agy` is only an
+  input alias.
+- Antigravity/AGY context verification marker:
+  `spill_antigravity_context_v1`.
+
+Runtime hook evidence and privacy:
+
+- A Spill label handoff permission prompt, such as a setup helper `--label
+  antigravity ... --if-absent` command, is not a usage hook and is not evidence
+  that AGY `PostInvocation` or any lifecycle hook recorded tokens. It only
+  writes safe task/stage context for a later exact usage event.
+- Do not claim AGY token metering works from mock payload injection, unit tests,
+  hook config shape, hook-load logs, hook command execution logs, label file
+  writes, or permission prompts alone. Those are setup or adapter checks only.
+- AGY usage metering is proved only by a real AGY runtime turn followed by
+  concrete local side effects: `antigravity-last-success.json` for that real
+  payload, a queued/imported `events-inbox` usage file, or a new
+  `token_usage_events` row with `ai_tool = antigravity`.
+- Do not force dummy tool calls, permission-list calls, or other hidden
+  user-visible tool activity merely to make a runtime hook fire. Such calls are
+  diagnostic only and require an explicit user-approved test plan.
+- Do not infer `task_type`, `stage`, token counts, token breakdown, or aliases
+  from prompts, commands, tool names, file paths, diffs, logs, source content,
+  shell history, transcripts, or arbitrary payload values. Use trusted safe
+  labels or degrade to `uncategorized/summarize`.
+- Adding AGY Stop or lifecycle hooks is allowed only after the current AGY
+  runtime exposes that hook shape and exact token usage fields to the hook.
+  Registering another hook without exact usage payload evidence is not a fix.
+
 Routing and executable evidence:
 
 - For multi-step tasks, run

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { access, chmod, copyFile, mkdir, readFile, rename, stat, writeFile, symlink, unlink } from "node:fs/promises";
+import { access, appendFile, chmod, copyFile, mkdir, readFile, rename, stat, writeFile, unlink } from "node:fs/promises";
 import { constants } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -13,10 +13,9 @@ const force = args.force === true;
 const json = args.json === true;
 const installRoot = expandHome(args.installDir ?? join(homedir(), "Library/Application Support/Spill/adapters"));
 const setupHelperPath = join(installRoot, "setup", "spill-token-metering-setup.mjs");
-const defaultHookAdapters = "codex,claude,antigravity";
-const alwaysInstallAdapters = new Set(defaultHookAdapters.split(","));
-const include = new Set((args.include ?? defaultHookAdapters).split(",").map((item) => item.trim()).filter(Boolean));
-const workflowHook = args.workflowHook ? expandHome(args.workflowHook) : null;
+const defaultAdapters = "codex,claude,antigravity";
+const alwaysInstallAdapters = new Set(defaultAdapters.split(","));
+const include = new Set((args.include ?? defaultAdapters).split(",").map((item) => item.trim()).filter(Boolean));
 
 if (args.label) {
   const label = await writeRuntimeLabel({
@@ -60,9 +59,9 @@ const adapters = {
   antigravity: {
     id: "antigravity",
     title: "Antigravity",
-    source: join("antigravity", "spill-hook.py"),
-    destination: join(installRoot, "antigravity", "spill-hook.py"),
-    executable: true,
+    source: null,
+    destination: null,
+    executable: false,
     detect: async () => await exists(join(homedir(), ".gemini")) || await commandExists("gemini"),
     configure: configureAntigravity,
   },
@@ -91,12 +90,6 @@ for (const adapter of Object.values(adapters)) {
   if (adapter.configure) {
     await adapter.configure(adapter.destination);
   }
-}
-
-if (workflowHook) {
-  const adapter = adapters.antigravity;
-  await installAdapter(adapter);
-  await mergeAgyHookFile(workflowHook, adapter.destination, "workflow");
 }
 
 await configureRuntimeLabelDefaults();
@@ -129,6 +122,11 @@ async function installSetupHelper() {
 }
 
 async function installAdapter(adapter) {
+  if (!adapter.source || !adapter.destination) {
+    results.push({ tool: adapter.id, action: "active_importer_only", reason: "no_runtime_hook" });
+    return;
+  }
+
   const source = join(sourceRoot, adapter.source);
   if (!await exists(source)) {
     results.push({ tool: adapter.id, action: "skip", reason: `missing_source:${source}` });
@@ -163,71 +161,20 @@ async function configureClaude(scriptPath) {
 }
 
 async function configureAntigravity(scriptPath) {
-  let finalScriptPath = scriptPath;
-  const hasSpace = scriptPath.includes(" ");
-
-  if (hasSpace) {
-    const symlinkTarget = join(homedir(), ".gemini", "spill-hook.py");
-    if (apply) {
-      try {
-        if (await exists(symlinkTarget)) {
-          await unlink(symlinkTarget);
-        }
-        await symlink(scriptPath, symlinkTarget);
-        finalScriptPath = symlinkTarget;
-        results.push({ tool: "antigravity", action: "symlink_created", path: symlinkTarget });
-      } catch (err) {
-        try {
-          await copyFile(scriptPath, symlinkTarget);
-          await chmod(symlinkTarget, 0o755);
-          finalScriptPath = symlinkTarget;
-          results.push({ tool: "antigravity", action: "fallback_copied", path: symlinkTarget });
-        } catch (copyErr) {
-          results.push({ tool: "antigravity", action: "symlink_failed", reason: `${err.message} / ${copyErr.message}` });
-        }
-      }
-    } else {
-      finalScriptPath = symlinkTarget;
-      results.push({ tool: "antigravity", action: "would_create_symlink", path: symlinkTarget });
-    }
-  }
-
-  // Write to both paths for robustness across client versions and verification logic
   const targets = [
     join(homedir(), ".gemini", "config", "hooks.json"),
     join(homedir(), ".gemini", "hooks.json"),
     join(homedir(), ".gemini", "antigravity-cli", "hooks.json")
   ];
   for (const target of targets) {
-    await mergeAgyHookFile(target, finalScriptPath, "antigravity");
+    await removeAgyHookFile(target, "antigravity");
   }
 
-  // Automatically add command permission to ~/.gemini/config/config.json
   if (apply) {
-    const configFile = join(homedir(), ".gemini", "config", "config.json");
-    try {
-      if (await exists(configFile)) {
-        const config = await readJSONObject(configFile);
-        if (plainObject(config.permissions) && Array.isArray(config.permissions.allow)) {
-          const newEntries = agentRuntimePermissionEntries("antigravity", "command");
-          let addedCount = 0;
-          for (const perm of newEntries) {
-            if (!config.permissions.allow.includes(perm)) {
-              config.permissions.allow.push(perm);
-              addedCount++;
-            }
-          }
-          if (addedCount > 0) {
-            await writeJSONObject(configFile, config);
-            results.push({ tool: "antigravity", action: "permissions_added", count: addedCount, path: configFile });
-          }
-        }
-      }
-    } catch (err) {
-      results.push({ tool: "antigravity", action: "permission_failed", reason: err.message });
-    }
+    await removeFileIfExists(join(homedir(), ".gemini", "spill-hook.py"), "antigravity");
+    await removeFileIfExists(join(homedir(), ".gemini", "spill-hook-wrapper.py"), "antigravity");
   } else {
-    results.push({ tool: "antigravity", action: "would_add_permissions", path: join(homedir(), ".gemini", "config", "config.json") });
+    results.push({ tool: "antigravity", action: "would_remove_legacy_hook_files", path: join(homedir(), ".gemini") });
   }
 }
 
@@ -270,47 +217,68 @@ async function mergeStopHookFile(target, command, timeout, tool, match) {
   results.push({ tool, action: "configured", path: target });
 }
 
-async function mergeAgyHookFile(target, scriptPath, tool) {
+async function removeAgyHookFile(target, tool) {
   if (!apply) {
-    results.push({ tool, action: "would_configure", path: target });
+    results.push({ tool, action: "would_remove_hook", path: target });
+    return;
+  }
+
+  if (!await exists(target)) {
+    results.push({ tool, action: "skip_remove_hook", reason: "missing_config", path: target });
     return;
   }
 
   const config = await readJSONObject(target);
-  const command = `python3 ${shellQuote(scriptPath)}`;
-  const timeout = 5;
-  const match = /spill-hook\.py/;
+  const match = /spill-hook(?:-wrapper)?\.py/;
   const hookName = "spill-metering";
-  const namedSpec = plainObject(config[hookName]) ? config[hookName] : {};
 
-  let list = namedSpec.PostInvocation || [];
-  if (Array.isArray(list)) {
-    list = list.map(group => {
-      if (!plainObject(group) || !Array.isArray(group.hooks)) return group;
-      const remaining = group.hooks.filter(hook => !plainObject(hook) || typeof hook.command !== "string" || !match.test(hook.command));
-      return { ...group, hooks: remaining };
-    }).filter(group => Array.isArray(group.hooks) && group.hooks.length > 0);
-  } else {
-    list = [];
+  if (plainObject(config[hookName])) {
+    const namedSpec = config[hookName];
+    if (Array.isArray(namedSpec.PostInvocation)) {
+      const list = removeMatchingHookGroups(namedSpec.PostInvocation, match);
+      if (list.length > 0) {
+        namedSpec.PostInvocation = list;
+      } else {
+        delete namedSpec.PostInvocation;
+      }
+    }
+    if (Object.keys(namedSpec).length === 0) {
+      delete config[hookName];
+    }
   }
 
-  list.push({
-    matcher: "",
-    hooks: [
-      {
-        type: "command",
-        command,
-        timeout,
-      }
-    ]
-  });
-
-  namedSpec.PostInvocation = list;
-  config[hookName] = namedSpec;
-  delete config.PostInvocation;
+  if (Array.isArray(config.PostInvocation)) {
+    const list = removeMatchingHookGroups(config.PostInvocation, match);
+    if (list.length > 0) {
+      config.PostInvocation = list;
+    } else {
+      delete config.PostInvocation;
+    }
+  }
 
   await writeJSONObject(target, config);
-  results.push({ tool, action: "configured", path: target });
+  results.push({ tool, action: "removed_hook", path: target });
+}
+
+function removeMatchingHookGroups(groups, match) {
+  return groups.map(group => {
+    if (!plainObject(group) || !Array.isArray(group.hooks)) return group;
+    const remaining = group.hooks.filter(hook => !plainObject(hook) || typeof hook.command !== "string" || !match.test(hook.command));
+    return { ...group, hooks: remaining };
+  }).filter(group => !plainObject(group) || !Array.isArray(group.hooks) || group.hooks.length > 0);
+}
+
+async function removeFileIfExists(path, tool) {
+  try {
+    await unlink(path);
+    results.push({ tool, action: "removed_legacy_hook_file", path });
+  } catch (err) {
+    if (err && err.code === "ENOENT") {
+      results.push({ tool, action: "skip_remove_legacy_hook_file", reason: "missing_file", path });
+      return;
+    }
+    results.push({ tool, action: "remove_legacy_hook_file_failed", reason: err.message, path });
+  }
 }
 
 async function configureRuntimeLabelDefaults() {
@@ -410,14 +378,6 @@ async function configureAgentRuntimeSettings({ tool, target, permissionPrefix })
 
   await writeJSONObject(target, config);
   results.push({ tool, action: "configured_agent_runtime", path: target });
-
-  if (tool === "antigravity") {
-    results.push({
-      tool: "antigravity",
-      action: "runtime_restart_required",
-      reason: "Running AGY or Antigravity IDE sessions may cache hook configuration. Restart them after install or repair.",
-    });
-  }
 }
 
 function agentRuntimePermissionEntries(tool, permissionPrefix) {
@@ -428,14 +388,11 @@ function agentRuntimePermissionEntries(tool, permissionPrefix) {
     addPermissionCommandVariants(commandForms, `node ${path} --label ${tool}`);
   }
 
-  // Add the spill-hook.py script itself
-  const hookScriptPath = join(installRoot, tool === "claude" ? "claude-code" : tool, "spill-hook.py");
-  const paths = [hookScriptPath];
-  if (tool === "antigravity") {
-    paths.push(join(homedir(), ".gemini", "spill-hook.py"));
-  }
+  const hookPaths = tool === "claude"
+    ? [join(installRoot, "claude-code", "spill-hook.py")]
+    : [];
 
-  for (const hookPath of paths) {
+  for (const hookPath of hookPaths) {
     for (const path of permissionPathVariants(hookPath)) {
       addPermissionCommandVariants(commandForms, `python3 ${path}`);
       addPermissionCommandVariants(commandForms, `SPILL_AI_TOOL=${tool} python3 ${path}`);
@@ -567,6 +524,22 @@ async function writeRuntimeLabel({ tool, taskType, stage, labelFile, ttlMinutes,
   await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
   await rename(temporary, target);
 
+  // Append to timeline so the Active Importer can match each event's timestamp
+  // to the correct label range without relying on a single overwritten file.
+  const timelineFile = target.replace(/\.json$/, "-timeline.jsonl");
+  const timelineLine = `${JSON.stringify({
+    ai_tool: safeTool,
+    task_type: safeTaskType,
+    stage: safeStage,
+    updated_at: value.updated_at,
+    expires_at: value.expires_at,
+  })}\n`;
+  try {
+    await appendFile(timelineFile, timelineLine, { mode: 0o600 });
+  } catch {
+    // Non-fatal: single JSON file is still written above.
+  }
+
   return {
     tool: safeTool,
     task_type: safeTaskType,
@@ -668,9 +641,6 @@ function parseArgs(values) {
     case "--source-root":
       parsed.sourceRoot = requiredValue(values, ++index, value);
       break;
-    case "--workflow-hook":
-      parsed.workflowHook = requiredValue(values, ++index, value);
-      break;
     case "--label":
       parsed.label = requiredValue(values, ++index, value);
       break;
@@ -705,10 +675,9 @@ function printHelp() {
   process.stdout.write(`Usage: spill-token-metering-setup.mjs [options]
 
 Options:
-  --apply                 Copy adapters and merge known user-level hook config files in one pass.
-  --force                 Install every included adapter even when it is not a default hook adapter or detected.
+  --apply                 Copy adapters, configure Codex/Claude hooks, and remove managed AGY hooks in one pass.
+  --force                 Install every included adapter even when it is not a default adapter or detected.
   --include LIST          Comma list. Default: codex,claude,antigravity. Optional: openai.
-  --workflow-hook PATH    Also add the Antigravity/AGY workflow hook to this selected hooks.json.
   --source-root PATH      Adapter source root. Default: repo or bundled adapters directory.
   --install-dir PATH      Adapter install root. Default: ~/Library/Application Support/Spill/adapters.
   --label TOOL            Write a short-lived safe task/stage label for codex, claude, antigravity, or openai.
@@ -719,17 +688,18 @@ Options:
   --ttl-minutes MINUTES   Runtime label expiry. Default: 30.
   --json                  Print JSON summary.
 
-Default mode is a dry-run. A normal --apply run installs Codex,
-Claude Code, and Antigravity/AGY metering together, even if the current
-agent is only one of those tools. Codex is the OpenAI-backed agent
-runtime hook. The OpenAI SDK adapter is optional and installs only when
-included explicitly.
+Default mode is a dry-run. A normal --apply run installs Codex/Claude Code
+hook adapters and configures Antigravity/AGY active importer cleanup together,
+even if the current agent is only one of those tools. Codex is the
+OpenAI-backed agent runtime hook. Antigravity/AGY has no Spill runtime hook.
+The OpenAI SDK adapter is optional and installs only when included explicitly.
 The helper also installs or refreshes itself at the default setup command path.
 When Claude Code or Antigravity/AGY user settings exist, the helper sets
 SPILL_AI_TOOL for that runtime and adds narrow allowlist entries for Spill label
-handoff and installed Spill hook commands so routine metering setup does not
-repeatedly ask for permission. Codex defaults to the codex tool label. Workflow
-runner permissions are separate from the default Spill metering install.
+handoff plus Codex/Claude hook commands so routine metering setup does not
+repeatedly ask for permission. Codex defaults to the codex tool label.
+Workflow runner permissions are separate from the default Spill metering
+install.
 The installer never reads prompts, transcripts, commands, logs, diffs, source
 files, environment values, or secrets.
 `);

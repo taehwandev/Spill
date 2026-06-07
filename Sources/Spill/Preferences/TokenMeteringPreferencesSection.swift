@@ -451,7 +451,7 @@ private enum TokenMeteringAdapterConnectionDiagnostics {
                 scriptURL: scriptURL
             )
         case .antigravity:
-            return agyHookConfigured(scriptURL: scriptURL)
+            return false
         case .openAI, .unknown:
             return false
         }
@@ -466,23 +466,6 @@ private enum TokenMeteringAdapterConnectionDiagnostics {
         }
 
         return hookCommands(in: stop).contains { commandMatches($0, scriptURL: scriptURL) }
-    }
-
-    private static func agyHookConfigured(scriptURL: URL) -> Bool {
-        guard let root = readJSONObject(homeURL(".gemini/config/hooks.json")) as? [String: Any],
-              let spillMetering = root["spill-metering"] as? [String: Any],
-              let postInvocation = spillMetering["PostInvocation"]
-        else {
-            return false
-        }
-
-        return hookCommands(in: postInvocation).contains {
-            commandMatches(
-                $0,
-                scriptURL: scriptURL,
-                compatibilityURLs: [homeURL(".gemini/spill-hook.py")]
-            )
-        }
     }
 
     private static func hookCommands(in value: Any) -> [String] {
