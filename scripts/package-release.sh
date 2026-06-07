@@ -18,9 +18,9 @@ APPCAST_PATH="$ARTIFACTS_DIR/appcast.xml"
 CHECKSUMS_PATH="$ARTIFACTS_DIR/checksums.txt"
 DMG_ROOT="$ARTIFACTS_DIR/dmg-root"
 APPCAST_ARCHIVE_DIR="$ARTIFACTS_DIR/appcast-input"
-NOTARY_PROFILE="${SPILL_NOTARY_KEYCHAIN_PROFILE:-}"
 INSTALLER_SIGN_IDENTITY="${SPILL_INSTALLER_SIGN_IDENTITY:-}"
 BUNDLE_ID="${SPILL_BUNDLE_ID:-dev.spill.Spill}"
+SKIP_BUILD="${SPILL_SKIP_BUILD:-false}"
 DOWNLOAD_BASE_URL="${SPILL_DOWNLOAD_BASE_URL:-https://github.com/taehwandev/Spill/releases/latest/download}"
 RELEASE_NOTES_URL="${SPILL_RELEASE_NOTES_URL:-https://github.com/taehwandev/Spill/releases/latest}"
 PUBLISHED_AT="${SPILL_PUBLISHED_AT:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
@@ -33,17 +33,14 @@ if [[ -n "$SPARKLE_DOWNLOAD_URL_PREFIX" && "$SPARKLE_DOWNLOAD_URL_PREFIX" != */ 
     SPARKLE_DOWNLOAD_URL_PREFIX="$SPARKLE_DOWNLOAD_URL_PREFIX/"
 fi
 
-if [[ -n "$NOTARY_PROFILE" && "${SPILL_SIGN_IDENTITY:--}" == "-" ]]; then
-    echo "SPILL_SIGN_IDENTITY must be a Developer ID Application identity when notarizing." >&2
-    exit 2
-fi
-
 if [[ -n "$SPARKLE_PRIVATE_KEY_FILE" && -z "$SPARKLE_PUBLIC_ED_KEY" ]]; then
     echo "SPILL_SPARKLE_PUBLIC_ED_KEY is required when SPILL_SPARKLE_PRIVATE_KEY_FILE is set." >&2
     exit 2
 fi
 
-"$ROOT_DIR/scripts/build-app.sh"
+if [[ "$SKIP_BUILD" != "1" && "$SKIP_BUILD" != "true" ]]; then
+    "$ROOT_DIR/scripts/build-app.sh"
+fi
 
 mkdir -p "$ARTIFACTS_DIR"
 rm -rf "$DMG_ROOT" "$APPCAST_ARCHIVE_DIR"
@@ -52,15 +49,6 @@ rm -f "$ARTIFACTS_DIR"/Spill-*-macos.dmg
 rm -f "$ARTIFACTS_DIR"/Spill-*-macos.pkg
 rm -f "$STABLE_ZIP_PATH" "$STABLE_DMG_PATH" "$STABLE_PKG_PATH" "$UPDATE_MANIFEST_PATH" "$APPCAST_PATH" "$CHECKSUMS_PATH"
 
-if [[ -n "$NOTARY_PROFILE" ]]; then
-    NOTARY_ZIP="$ARTIFACTS_DIR/Spill-$VERSION-notary.zip"
-    rm -f "$NOTARY_ZIP"
-    ditto -c -k --sequesterRsrc --keepParent "$APP_DIR" "$NOTARY_ZIP"
-    xcrun notarytool submit "$NOTARY_ZIP" --keychain-profile "$NOTARY_PROFILE" --wait
-    xcrun stapler staple "$APP_DIR"
-    rm -f "$NOTARY_ZIP"
-fi
-
 ditto -c -k --sequesterRsrc --keepParent "$APP_DIR" "$ZIP_PATH"
 
 mkdir -p "$DMG_ROOT"
@@ -68,11 +56,6 @@ ditto "$APP_DIR" "$DMG_ROOT/Spill.app"
 ln -s /Applications "$DMG_ROOT/Applications"
 hdiutil create -volname "Spill" -srcfolder "$DMG_ROOT" -ov -format UDZO "$DMG_PATH"
 rm -rf "$DMG_ROOT"
-
-if [[ -n "$NOTARY_PROFILE" ]]; then
-    xcrun notarytool submit "$DMG_PATH" --keychain-profile "$NOTARY_PROFILE" --wait
-    xcrun stapler staple "$DMG_PATH"
-fi
 
 HAS_INSTALLER_PACKAGE=false
 if [[ -n "$INSTALLER_SIGN_IDENTITY" ]]; then
@@ -83,11 +66,6 @@ if [[ -n "$INSTALLER_SIGN_IDENTITY" ]]; then
         --version "$VERSION" \
         --sign "$INSTALLER_SIGN_IDENTITY" \
         "$PKG_PATH"
-
-    if [[ -n "$NOTARY_PROFILE" ]]; then
-        xcrun notarytool submit "$PKG_PATH" --keychain-profile "$NOTARY_PROFILE" --wait
-        xcrun stapler staple "$PKG_PATH"
-    fi
 
     HAS_INSTALLER_PACKAGE=true
 fi
