@@ -376,6 +376,23 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertFalse(collector.contains("TokenMeteringAdapterKit.agy"))
     }
 
+    func testDashboardLocalRefreshIsSeparatedFromServerStatusRefresh() throws {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let dashboardView = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardView.swift"))
+        let panelController = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Panel/SpillPanelController.swift"))
+        let spillBarView = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Panel/SpillBarView.swift"))
+        let cloudStatusView = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Panel/CloudServiceStatusDashboardView.swift"))
+
+        XCTAssertTrue(dashboardView.contains("private func refreshLocalTokenData()"))
+        XCTAssertTrue(dashboardView.contains("private func refreshServerStatus(force: Bool = false)"))
+        XCTAssertTrue(dashboardView.contains("openServiceStatusDetails()"))
+        XCTAssertTrue(dashboardView.contains("refreshLocalTokenData()"))
+        XCTAssertFalse(dashboardView.contains("cloudServiceStatusStore.refreshIfNeeded(force: true)"))
+        XCTAssertFalse(panelController.contains("cloudServiceStatusStore.refreshIfNeeded()"))
+        XCTAssertTrue(spillBarView.contains("cloudServiceStatusStore.refreshIfNeeded()"))
+        XCTAssertTrue(cloudStatusView.contains("store.refreshIfNeeded(force: true)"))
+    }
+
     func testCodexImporterStreamsInboxWhileImporterRuns() throws {
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let collector = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenUsageCollectorCoordinator.swift"))

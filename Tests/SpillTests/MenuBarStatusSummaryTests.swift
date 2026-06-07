@@ -50,6 +50,34 @@ final class MenuBarStatusSummaryTests: XCTestCase {
         XCTAssertEqual(summary.segments, [])
     }
 
+    func testAISegmentWarnsWhenServerHealthIsUnstable() {
+        let summary = MenuBarStatusSummary.make(
+            enabledItems: [.ai],
+            cpu: SystemCPUProvider.status(previous: nil, current: nil),
+            memory: SystemMemoryProvider.status(from: nil),
+            aiTokenCount: 3_200,
+            aiServerHealth: .degraded
+        )
+
+        XCTAssertEqual(summary.title, "AI 3,200")
+        XCTAssertEqual(summary.segments.map(\.kind), [.ai])
+        XCTAssertEqual(summary.segments.map(\.state), [.warning])
+        XCTAssertTrue(summary.tooltip.contains("Server Degraded"))
+    }
+
+    func testAISegmentUsesUnavailableStateWhenServerStatusCannotBeRead() {
+        let summary = MenuBarStatusSummary.make(
+            enabledItems: [.ai],
+            cpu: SystemCPUProvider.status(previous: nil, current: nil),
+            memory: SystemMemoryProvider.status(from: nil),
+            aiTokenCount: 7,
+            aiServerHealth: .unknown
+        )
+
+        XCTAssertEqual(summary.segments.map(\.state), [.unavailable])
+        XCTAssertTrue(summary.tooltip.contains("Server Unknown"))
+    }
+
     func testSummarySupportsTenthsFormatting() {
         let summary = MenuBarStatusSummary.make(
             enabledItems: [.memory, .cpu],

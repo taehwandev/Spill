@@ -394,7 +394,6 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
         let enabledModules = settings.statusModulesRequiredForRefresh
         let readsPower = true
         aiStatusStore.refreshInBackground()
-        cloudServiceStatusStore.refreshIfNeeded()
         if refreshTokenUsage {
             tokenUsageDashboardStore.refreshPanelSummary()
         }

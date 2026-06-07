@@ -12,6 +12,7 @@ final class StatusItemController: NSObject {
     private let sleepGuard: SleepGuardController
     private let hiddenItemCountProvider: () -> Int
     private let aiTokenCountProvider: () -> Int
+    private let aiServerHealthProvider: () -> CloudServiceHealth?
     private let toggleAction: () -> Void
     private let refreshAction: () -> Void
     private let preferencesAction: () -> Void
@@ -32,6 +33,7 @@ final class StatusItemController: NSObject {
         sleepGuard: SleepGuardController,
         hiddenItemCountProvider: @escaping () -> Int,
         aiTokenCountProvider: @escaping () -> Int,
+        aiServerHealthProvider: @escaping () -> CloudServiceHealth? = { nil },
         toggleAction: @escaping () -> Void,
         refreshAction: @escaping () -> Void,
         preferencesAction: @escaping () -> Void,
@@ -44,6 +46,7 @@ final class StatusItemController: NSObject {
         self.sleepGuard = sleepGuard
         self.hiddenItemCountProvider = hiddenItemCountProvider
         self.aiTokenCountProvider = aiTokenCountProvider
+        self.aiServerHealthProvider = aiServerHealthProvider
         self.toggleAction = toggleAction
         self.refreshAction = refreshAction
         self.preferencesAction = preferencesAction
@@ -76,6 +79,7 @@ final class StatusItemController: NSObject {
             cpu: statusStore.cpu,
             memory: statusStore.memory,
             aiTokenCount: aiTokenCountProvider(),
+            aiServerHealth: aiServerHealthProvider(),
             precision: settings.menuBarStatusPrecision,
             highlightThreshold: settings.menuBarStatusHighlightThreshold
         )

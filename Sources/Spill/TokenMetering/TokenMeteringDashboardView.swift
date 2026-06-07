@@ -94,7 +94,6 @@ struct TokenMeteringDashboardView: View {
             titleDidChange()
             store.setLanguage(currentLanguage)
             store.refresh()
-            cloudServiceStatusStore.refreshIfNeeded()
         }
         .onChange(of: settings.appLanguage) { _, _ in
             titleDidChange()
@@ -210,9 +209,7 @@ struct TokenMeteringDashboardView: View {
 
             HStack(spacing: 8) {
                 Button {
-                    refreshAction()
-                    store.refresh()
-                    cloudServiceStatusStore.refreshIfNeeded(force: true)
+                    refreshLocalTokenData()
                 } label: {
                     Label(t(.refresh), systemImage: "arrow.clockwise")
                 }
@@ -306,7 +303,7 @@ struct TokenMeteringDashboardView: View {
 
     private var serviceStatusButton: some View {
         Button {
-            isServiceStatusPresented = true
+            openServiceStatusDetails()
         } label: {
             HStack(spacing: 5) {
                 Circle()
@@ -342,6 +339,20 @@ struct TokenMeteringDashboardView: View {
                 appLanguage: settings.appLanguage
             )
         )
+    }
+
+    private func refreshLocalTokenData() {
+        refreshAction()
+        store.refresh()
+    }
+
+    private func openServiceStatusDetails() {
+        isServiceStatusPresented = true
+        refreshServerStatus()
+    }
+
+    private func refreshServerStatus(force: Bool = false) {
+        cloudServiceStatusStore.refreshIfNeeded(force: force)
     }
 
     private var serviceStatusButtonTitle: String {

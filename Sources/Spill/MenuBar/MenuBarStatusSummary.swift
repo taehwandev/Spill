@@ -100,6 +100,7 @@ struct MenuBarStatusSummary: Equatable {
         cpu: SystemCPUStatus,
         memory: SystemMemoryStatus,
         aiTokenCount: Int = 0,
+        aiServerHealth: CloudServiceHealth? = nil,
         precision: MenuBarStatusPrecision = .tenths,
         highlightThreshold: MenuBarStatusHighlightThreshold = .seventy
     ) -> MenuBarStatusSummary {
@@ -112,6 +113,7 @@ struct MenuBarStatusSummary: Equatable {
                 cpu: cpu,
                 memory: memory,
                 aiTokenCount: aiTokenCount,
+                aiServerHealth: aiServerHealth,
                 precision: precision,
                 highlightThreshold: highlightThreshold
             )
@@ -132,6 +134,7 @@ struct MenuBarStatusSummary: Equatable {
         cpu: SystemCPUStatus,
         memory: SystemMemoryStatus,
         aiTokenCount: Int,
+        aiServerHealth: CloudServiceHealth?,
         precision: MenuBarStatusPrecision,
         highlightThreshold: MenuBarStatusHighlightThreshold
     ) -> MenuBarStatusEntry? {
@@ -181,6 +184,7 @@ struct MenuBarStatusSummary: Equatable {
         case .ai:
             let value = TokenUsageDashboardSnapshot.formatTokens(aiTokenCount)
             let displayText = displayText(label: item.shortTitle, value: value)
+            let state = aiStatusState(for: aiServerHealth)
             let segment = MenuBarStatusSegment(
                 kind: .ai,
                 title: item.title,
@@ -188,15 +192,19 @@ struct MenuBarStatusSummary: Equatable {
                 value: value,
                 displayText: displayText,
                 usageRatio: 0,
-                state: .normal,
+                state: state,
                 symbolName: item.symbolName
             )
+            var tooltipParts = [
+                AppL10n.tokenMeteringAccessibility(tokenCount: value),
+                AppL10n.text(.openLocalTokenDashboard)
+            ]
+            if let aiServerHealth {
+                tooltipParts.append("\(AppL10n.text(.server)) \(aiServerHealth.serverStatusHeaderTitle)")
+            }
             return MenuBarStatusEntry(
                 title: displayText,
-                tooltip: [
-                    AppL10n.tokenMeteringAccessibility(tokenCount: value),
-                    AppL10n.text(.openLocalTokenDashboard)
-                ].joined(separator: " - "),
+                tooltip: tooltipParts.joined(separator: " - "),
                 segment: segment
             )
         case .caffeine, .gpu, .network:
@@ -206,6 +214,17 @@ struct MenuBarStatusSummary: Equatable {
 
     private static func displayText(label: String, value: String) -> String {
         "\(label) \(value)"
+    }
+
+    private static func aiStatusState(for health: CloudServiceHealth?) -> SpillStatusState {
+        switch health {
+        case .degraded, .outage, .maintenance:
+            return .warning
+        case .unknown:
+            return .unavailable
+        case .operational, .none:
+            return .normal
+        }
     }
 
     private static func compactCPUValue(

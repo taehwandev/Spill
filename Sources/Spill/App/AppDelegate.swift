@@ -155,6 +155,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             aiTokenCountProvider: { [weak self] in
                 self?.menuBarAITokenTotal ?? 0
             },
+            aiServerHealthProvider: { [weak self] in
+                self?.menuBarAIServerHealth
+            },
             toggleAction: { [weak self] in
                 self?.toggleSpillBar()
             },
@@ -499,6 +502,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         isSpillPanelVisible || settings.enabledMenuBarStatusItems.contains(.ai)
     }
 
+    private var menuBarAIServerHealth: CloudServiceHealth? {
+        guard let snapshot = cloudServiceStatusStore.snapshot else {
+            return nil
+        }
+
+        let dashboardToolStatuses = TokenUsageAITool.dashboardTools.compactMap { tool in
+            CloudServiceStatusPresentation.serviceStatus(for: tool, in: snapshot)
+        }
+        guard !dashboardToolStatuses.isEmpty else {
+            return nil
+        }
+
+        return CloudServiceStatusPresentation.aggregateHealth(for: dashboardToolStatuses)
+    }
+
     private func showPreferencesFromPanel() {
         if spillPanelController.isVisible {
             spillPanelController.hide(animated: true)
@@ -605,6 +623,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         sleepGuard.objectWillChange
             .sink { [weak self] _ in
                 Task { @MainActor in
+                    self?.statusItemController?.refresh()
+                }
+            }
+            .store(in: &cancellables)
+
+        cloudServiceStatusStore.objectWillChange
+            .sink { [weak self] _ in
+                DispatchQueue.main.async {
                     self?.statusItemController?.refresh()
                 }
             }
