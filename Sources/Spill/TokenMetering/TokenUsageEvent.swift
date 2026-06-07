@@ -415,6 +415,8 @@ enum TokenUsageSanitizer {
         "log_body",
         "logBody",
         "diff",
+        "changes",
+        "change",
         "source_content",
         "sourceContent",
         "environment_value",

@@ -1,0 +1,395 @@
+import CryptoKit
+import Foundation
+
+enum PrivateUsageUploadFeatureAvailability {
+    static var isEnabledInCurrentBuild: Bool {
+        #if DEBUG
+        return true
+        #else
+        return false
+        #endif
+    }
+}
+
+enum PrivateUsageUploadEnvironment: String, CaseIterable, Codable, Identifiable, Sendable {
+    case development
+    case production
+
+    var id: String {
+        rawValue
+    }
+
+    var title: String {
+        switch self {
+        case .development:
+            return "Development"
+        case .production:
+            return "Production"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .development:
+            return "Uses the local Supabase relay and separate development credentials."
+        case .production:
+            return "Uses the live Spill relay and separate production credentials."
+        }
+    }
+
+    var relayURL: URL {
+        switch self {
+        case .development:
+            return URL(string: "http://localhost:54321/functions/v1/private-usage-relay")!
+        case .production:
+            return PrivateUsageRelayClient.defaultRelayURL
+        }
+    }
+
+    var keychainService: String {
+        "dev.spill.private-usage.\(rawValue)"
+    }
+
+    var stateKeyNamespace: String {
+        "privateUsageUpload.\(rawValue)"
+    }
+
+    static var defaultValue: Self {
+        #if DEBUG
+        return .development
+        #else
+        return .production
+        #endif
+    }
+
+    static func normalized(rawValue: String?) -> Self {
+        guard let rawValue, let environment = Self(rawValue: rawValue) else {
+            return defaultValue
+        }
+
+        return environment
+    }
+
+    static func resolvedFromEnvironment(
+        _ processEnvironment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> Self? {
+        normalizedExplicit(rawValue: processEnvironment["SPILL_PRIVATE_USAGE_ENVIRONMENT"])
+    }
+
+    private static func normalizedExplicit(rawValue: String?) -> Self? {
+        guard let rawValue, !rawValue.isEmpty else {
+            return nil
+        }
+
+        return Self(rawValue: rawValue.lowercased())
+    }
+}
+
+struct PrivateUsageDeviceCredential: Codable, Equatable, Sendable {
+    let deviceID: String
+    let credential: String
+    let tokenType: String
+    let createdAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case deviceID = "device_id"
+        case credential
+        case tokenType = "token_type"
+        case createdAt = "created_at"
+    }
+
+    var authorizationToken: String {
+        if credential.hasPrefix("spill_device_v1_") {
+            return credential
+        }
+
+        if tokenType == "spill_device_v1" {
+            return "spill_device_v1_\(credential)"
+        }
+
+        return credential
+    }
+}
+
+struct PrivateUsageConnectionCode: Equatable, Sendable {
+    static let prefix = "spill-v1"
+
+    let grantCode: String
+    let keyWrappingSecret: PrivateUsageKeyWrappingSecret
+
+    init(rawValue: String) throws {
+        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        let parts = trimmed.split(separator: ":", omittingEmptySubsequences: false).map(String.init)
+        guard parts.count == 3,
+              parts[0] == Self.prefix,
+              Self.isSafeGrantCode(parts[1])
+        else {
+            throw PrivateUsageUploadError.invalidConnectionCode
+        }
+
+        grantCode = parts[1]
+        keyWrappingSecret = try PrivateUsageKeyWrappingSecret(rawValue: parts[2])
+    }
+
+    private static func isSafeGrantCode(_ value: String) -> Bool {
+        value.range(of: #"^[A-Za-z0-9._-]{8,256}$"#, options: .regularExpression) != nil
+    }
+}
+
+enum PrivateUsageConnectionDeepLink {
+    static func connectionCode(from url: URL) -> String? {
+        guard url.scheme == "spill",
+              url.host == "private-usage",
+              url.path == "/connect",
+              let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let code = components.queryItems?.first(where: { $0.name == "code" })?.value,
+              !code.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else {
+            return nil
+        }
+
+        return code
+    }
+}
+
+struct PrivateUsageKeyWrappingSecret: Codable, Equatable, Sendable {
+    let rawValue: String
+    let keyID: String
+
+    enum CodingKeys: String, CodingKey {
+        case rawValue = "secret"
+        case keyID = "key_id"
+    }
+
+    init(rawValue: String) throws {
+        guard rawValue.range(of: #"^[A-Za-z0-9_-]{43,128}$"#, options: .regularExpression) != nil,
+              let secretData = Self.decodeBase64URL(rawValue),
+              secretData.count >= 32
+        else {
+            throw PrivateUsageUploadError.invalidConnectionCode
+        }
+
+        self.rawValue = rawValue
+        keyID = Self.makeKeyID(secretData)
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let rawValue = try container.decode(String.self, forKey: .rawValue)
+        try self.init(rawValue: rawValue)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(rawValue, forKey: .rawValue)
+        try container.encode(keyID, forKey: .keyID)
+    }
+
+    func secretData() throws -> Data {
+        guard let data = Self.decodeBase64URL(rawValue), data.count >= 32 else {
+            throw PrivateUsageUploadError.missingKeyWrappingSecret
+        }
+
+        return data
+    }
+
+    private static func decodeBase64URL(_ value: String) -> Data? {
+        var base64 = value
+            .replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
+        let padding = (4 - (base64.count % 4)) % 4
+        base64.append(String(repeating: "=", count: padding))
+        return Data(base64Encoded: base64)
+    }
+
+    private static func makeKeyID(_ secretData: Data) -> String {
+        var input = Data("spill-private-usage-key-wrap-id-v1".utf8)
+        input.append(secretData)
+        return SHA256.hash(data: input)
+            .prefix(16)
+            .map { String(format: "%02x", $0) }
+            .joined()
+    }
+}
+
+struct PrivateUsageKeyEnvelope: Codable, Equatable, Sendable {
+    static let algorithm = "aes-256-gcm-hkdf-sha256"
+
+    let keyVersion: Int
+    let wrappingKeyID: String
+    let algorithm: String
+    let wrappedKey: String
+
+    enum CodingKeys: String, CodingKey {
+        case keyVersion = "key_version"
+        case wrappingKeyID = "wrapping_key_id"
+        case algorithm
+        case wrappedKey = "wrapped_key"
+    }
+}
+
+struct PrivateUsageEncryptedBucket: Codable, Equatable, Sendable {
+    let bucketKey: String
+    let bucketKind: String
+    let bucketStartAt: String
+    let bucketEndAt: String
+    let timezone: String
+    let schemaVersion: Int
+    let keyVersion: Int
+    let ciphertext: String
+    let ciphertextHash: String
+
+    enum CodingKeys: String, CodingKey {
+        case bucketKey = "bucket_key"
+        case bucketKind = "bucket_kind"
+        case bucketStartAt = "bucket_start_at"
+        case bucketEndAt = "bucket_end_at"
+        case timezone
+        case schemaVersion = "schema_version"
+        case keyVersion = "key_version"
+        case ciphertext
+        case ciphertextHash = "ciphertext_hash"
+    }
+}
+
+struct PrivateUsageGrantExchangeRequest: Codable, Equatable, Sendable {
+    let grantCode: String
+    let installID: String
+    let deviceKeyFingerprint: String?
+
+    enum CodingKeys: String, CodingKey {
+        case grantCode = "grant_code"
+        case installID = "install_id"
+        case deviceKeyFingerprint = "device_key_fingerprint"
+    }
+}
+
+struct PrivateUsageGrantExchangeResponse: Codable, Equatable, Sendable {
+    let deviceID: String
+    let credential: String
+    let tokenType: String
+
+    enum CodingKeys: String, CodingKey {
+        case deviceID = "device_id"
+        case credential
+        case tokenType = "token_type"
+    }
+}
+
+struct PrivateUsageUploadBucketsRequest: Codable, Equatable, Sendable {
+    let keyEnvelopes: [PrivateUsageKeyEnvelope]
+    let buckets: [PrivateUsageEncryptedBucket]
+
+    enum CodingKeys: String, CodingKey {
+        case keyEnvelopes = "key_envelopes"
+        case buckets
+    }
+}
+
+struct PrivateUsageUploadResponse: Codable, Equatable, Sendable {
+    let accepted: Int
+    let uploadedAt: String?
+
+    enum CodingKeys: String, CodingKey {
+        case accepted
+        case uploadedAt = "uploaded_at"
+    }
+}
+
+struct PrivateUsageUploadStatus: Equatable, Sendable {
+    let isConnected: Bool
+    let isEnabled: Bool
+    let queuedBucketCount: Int
+    let lastSuccessfulUploadAt: Date?
+    let lastFailedUploadAt: Date?
+    let lastFailureReason: String?
+    let lastAckedBucketKey: String?
+    let nextAutomaticAttemptAfter: Date?
+
+    static let disconnected = PrivateUsageUploadStatus(
+        isConnected: false,
+        isEnabled: false,
+        queuedBucketCount: 0,
+        lastSuccessfulUploadAt: nil,
+        lastFailedUploadAt: nil,
+        lastFailureReason: nil,
+        lastAckedBucketKey: nil,
+        nextAutomaticAttemptAfter: nil
+    )
+}
+
+struct PrivateUsageUploadRunResult: Equatable, Sendable {
+    let accepted: Int
+    let attemptedBucketCount: Int
+    let uploadedAt: Date?
+
+    var didUpload: Bool {
+        accepted > 0
+    }
+}
+
+enum PrivateUsageUploadError: Error, Equatable {
+    case invalidConnectionCode
+    case invalidGrantCode
+    case uploadDisabled
+    case missingCredential
+    case missingSealingKey
+    case missingKeyWrappingSecret
+    case invalidRelayURL
+    case invalidRelayResponse
+    case relay(status: Int, reason: String?)
+    case keychainReadFailed
+    case keychainWriteFailed
+    case encryptionFailed
+    case keyWrappingFailed
+}
+
+extension PrivateUsageUploadError {
+    var safeUserMessage: String {
+        switch self {
+        case .invalidConnectionCode:
+            return TokenMeteringL10n.text(.privateUsageUploadInvalidConnectionCodeMessage)
+        case .invalidGrantCode:
+            return TokenMeteringL10n.text(.privateUsageUploadInvalidGrantCodeMessage)
+        case .uploadDisabled:
+            return TokenMeteringL10n.text(.privateUsageUploadDisabledMessage)
+        case .missingCredential:
+            return TokenMeteringL10n.text(.privateUsageUploadMissingCredentialMessage)
+        case .missingSealingKey:
+            return TokenMeteringL10n.text(.privateUsageUploadMissingSealingKeyMessage)
+        case .missingKeyWrappingSecret:
+            return TokenMeteringL10n.text(.privateUsageUploadMissingKeyWrappingSecretMessage)
+        case .invalidRelayURL:
+            return TokenMeteringL10n.text(.privateUsageUploadRelayURLUnavailableMessage)
+        case .invalidRelayResponse:
+            return TokenMeteringL10n.text(.privateUsageUploadInvalidRelayResponseMessage)
+        case let .relay(status, reason):
+            if status == 403 || reason == "device_forbidden" || reason == "grant_forbidden" {
+                return TokenMeteringL10n.text(.privateUsageUploadConnectionExpiredMessage)
+            }
+            if status == 401 {
+                return TokenMeteringL10n.text(.privateUsageUploadConnectionRequiredMessage)
+            }
+            return TokenMeteringL10n.text(.privateUsageUploadRelayUnavailableMessage)
+        case .keychainReadFailed:
+            return TokenMeteringL10n.text(.privateUsageUploadKeychainReadFailedMessage)
+        case .keychainWriteFailed:
+            return TokenMeteringL10n.text(.privateUsageUploadKeychainWriteFailedMessage)
+        case .encryptionFailed:
+            return TokenMeteringL10n.text(.privateUsageUploadEncryptionFailedMessage)
+        case .keyWrappingFailed:
+            return TokenMeteringL10n.text(.privateUsageUploadKeyWrappingFailedMessage)
+        }
+    }
+}
+
+struct PrivateUsageUploadPersistence: Codable, Equatable, Sendable {
+    var acknowledgedCiphertextHashesByBucketKey: [String: String] = [:]
+    var lastSuccessfulUploadAt: String?
+    var lastFailedUploadAt: String?
+    var lastFailureReason: String?
+    var lastAutomaticAttemptDayID: String?
+    var lastAckedBucketKey: String?
+
+    static let empty = PrivateUsageUploadPersistence()
+}

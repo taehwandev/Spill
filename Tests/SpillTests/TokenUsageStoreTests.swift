@@ -36,10 +36,239 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(TokenMeteringL10n.text(.copyWebSetup, language: .korean), "설치 명령 복사")
         XCTAssertEqual(TokenMeteringL10n.text(.adapterSetupRequired, language: .japanese), "ローカル追跡の設定が必要")
         XCTAssertEqual(TokenMeteringL10n.adapterInstalled("spill-hook.py", language: .english), "Installed: spill-hook.py")
-        XCTAssertEqual(TokenMeteringL10n.hookConfigTarget("~/.claude/settings.json", language: .korean), "Hook 설정 -> ~/.claude/settings.json")
+        XCTAssertEqual(TokenMeteringL10n.hookConfigTarget("~/.claude/settings.json", language: .korean), "연결 설정 -> ~/.claude/settings.json")
+        XCTAssertEqual(TokenMeteringL10n.text(.sourceBreakdown, language: .english), "Token Details")
+        XCTAssertEqual(TokenMeteringL10n.text(.sourceBreakdown, language: .korean), "토큰 세부 내역")
+        XCTAssertEqual(TokenMeteringL10n.text(.sourceUnavailable, language: .korean), "구분 안 된 입력")
+        XCTAssertEqual(TokenMeteringL10n.text(.cumulativeOnlyBadge, language: .japanese), "合計のみ")
+        XCTAssertEqual(TokenMeteringL10n.text(.clearAlias, language: .korean), "삭제")
+        XCTAssertEqual(TokenMeteringL10n.text(.relativePreviousWeek, language: .english), "prev week")
+        XCTAssertEqual(TokenMeteringL10n.text(.runs, language: .korean), "작업 단위")
+        XCTAssertEqual(TokenMeteringL10n.text(.previewBadge, language: .english), "ALPHA")
+        XCTAssertEqual(TokenMeteringL10n.text(.privateUsageUploadTitle, language: .korean), "비공개 사용량 업로드")
+        XCTAssertEqual(TokenMeteringL10n.text(.privateUsageUploadSyncNow, language: .japanese), "今すぐ同期")
+        XCTAssertEqual(
+            TokenMeteringL10n.deleteTokenDataMessage(
+                scope: "All",
+                eventCount: 12,
+                tokens: "1,234",
+                language: .english
+            ),
+            "This permanently deletes 12 local records in All (1,234 tokens). This cannot be undone."
+        )
+        XCTAssertEqual(
+            TokenMeteringL10n.deleteTokenDataMessage(
+                scope: "전체",
+                eventCount: 12,
+                tokens: "1,234",
+                language: .korean
+            ),
+            "전체 범위의 로컬 기록 12개(1,234 토큰)를 영구 삭제합니다. 이 작업은 되돌릴 수 없습니다."
+        )
         XCTAssertEqual(TokenMeteringL10n.taskLabel("git_commit", language: .korean), "Git 커밋")
         XCTAssertEqual(TokenMeteringL10n.stageLabel("verify", language: .japanese), "検証")
         XCTAssertEqual(TokenMeteringL10n.taskLabel("ux_copy_review", language: .english), "Ux Copy Review")
+    }
+
+    func testTokenMeteringDashboardCopyAvoidsInternalTerminology() {
+        let dashboardKeys: [TokenMeteringTextKey] = [
+            .dashboardTitle,
+            .dashboardSubtitle,
+            .aiToolDistribution,
+            .aiToolDistributionSubtitle,
+            .modelBreakdown,
+            .modelInfoTitle,
+            .modelInfoDetail,
+            .workflowBreakdown,
+            .workflowBreakdownSubtitle,
+            .stageBreakdown,
+            .stageBreakdownSubtitle,
+            .sourceBreakdown,
+            .sourceBreakdownSubtitle,
+            .noSourceBreakdown,
+            .sourceDetail,
+            .noSourceBuckets,
+            .workflowInfoTitle,
+            .workflowInfoDetail,
+            .stageInfoTitle,
+            .stageInfoDetail,
+            .sourceInfoTitle,
+            .sourceInfoDetail,
+            .aiToolInfoTitle,
+            .aiToolInfoDetail,
+            .privacyBoundary,
+            .privacyBoundaryDetail,
+            .runs,
+            .runsSubtitle,
+            .runsInfoTitle,
+            .runsInfoDetail,
+            .noLocalTokenEvents,
+            .noLocalTokenEventsDetail,
+            .cumulativeOnlyBadge,
+            .cumulativeOnlyInfoTitle,
+            .cumulativeOnlyInfoDetail,
+            .sourceSystem,
+            .sourceUser,
+            .sourceHistory,
+            .sourceRepoContext,
+            .sourceToolOutput,
+            .sourceGeneratedOutput,
+            .sourceUnavailable,
+            .localAlias,
+            .localAliasPlaceholder,
+            .applyAlias,
+            .clearAlias,
+            .localAliasDetail,
+            .aiToolHeader,
+            .selectedWorkItemHeader,
+            .previewBadge
+        ]
+        let blockedTerms: [(term: String, wholeWord: Bool)] = [
+            ("Source Breakdown", false),
+            ("Source buckets", false),
+            ("Numeric buckets", false),
+            ("Runtime Total", false),
+            ("runtime total", false),
+            ("token_breakdown", true),
+            ("task_type", true),
+            ("span_id", true),
+            ("run_id", true),
+            ("slug", true),
+            ("fallback", true),
+            ("hook", true),
+            ("raw token", false),
+            ("소스 분류", false),
+            ("소스 버킷", false),
+            ("숫자 버킷", false),
+            ("런타임 합계", false),
+            ("슬러그", false),
+            ("폴백", false),
+            ("훅", false),
+            ("ソース分類", false),
+            ("ソースバケット", false),
+            ("数値バケット", false),
+            ("ランタイム合計", false)
+        ]
+
+        for language in TokenMeteringLanguage.allCases {
+            for key in dashboardKeys {
+                let copy = TokenMeteringL10n.text(key, language: language)
+                for term in blockedTerms {
+                    XCTAssertFalse(
+                        Self.copy(copy, containsBlockedTerm: term.term, wholeWord: term.wholeWord),
+                        "\(key.rawValue) for \(language.rawValue) contains internal term: \(term.term)"
+                    )
+                }
+            }
+        }
+    }
+
+    func testTokenMeteringLocalizationUsesStringCatalog() throws {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let localizationSource = try String(
+            contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringLocalization.swift")
+        )
+        let packageSource = try String(contentsOf: root.appendingPathComponent("Package.swift"))
+        let catalogURL = root.appendingPathComponent("Sources/Spill/Resources/Localization/TokenMetering.xcstrings")
+        let catalogData = try Data(contentsOf: catalogURL)
+        let catalog = try XCTUnwrap(JSONSerialization.jsonObject(with: catalogData) as? [String: Any])
+        let strings = try XCTUnwrap(catalog["strings"] as? [String: Any])
+
+        XCTAssertFalse(localizationSource.contains("private static let table: [TokenMeteringLanguage"))
+        XCTAssertFalse(localizationSource.contains("private static let taskLabels"))
+        XCTAssertTrue(localizationSource.contains("Bundle.module"))
+        XCTAssertTrue(packageSource.contains("defaultLocalization: \"en\""))
+        XCTAssertTrue(packageSource.contains(".process(\"Resources/Localization\")"))
+        XCTAssertNotNil(strings["token_metering.sourceBreakdown"])
+        XCTAssertNotNil(strings["token_metering.format.delete_token_data_message"])
+        XCTAssertNotNil(strings["token_metering.task.git_commit"])
+        XCTAssertNotNil(strings["token_metering.forbidden.code_content"])
+        XCTAssertNotNil(strings["token_metering.privateUsageUploadTitle"])
+        XCTAssertTrue(localizationSource.contains("let stringUnit: StringCatalogStringUnit?"))
+        XCTAssertTrue(localizationSource.contains("variations: [String: [String: StringCatalogVariation]]?"))
+    }
+
+    func testTokenMeteringStringCatalogFallbackAcceptsVariationsEntries() throws {
+        let catalogJSON = """
+        {
+          "sourceLanguage": "en",
+          "strings": {
+            "token_metering.variation_test": {
+              "localizations": {
+                "en": {
+                  "variations": {
+                    "plural": {
+                      "one": {
+                        "stringUnit": {
+                          "state": "translated",
+                          "value": "One item"
+                        }
+                      },
+                      "other": {
+                        "stringUnit": {
+                          "state": "translated",
+                          "value": "%lld items"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "token_metering.normal_test": {
+              "localizations": {
+                "en": {
+                  "stringUnit": {
+                    "state": "translated",
+                    "value": "Normal"
+                  }
+                }
+              }
+            }
+          },
+          "version": "1.0"
+        }
+        """
+
+        let data = Data(catalogJSON.utf8)
+
+        XCTAssertEqual(
+            try TokenMeteringL10n.testingStringCatalogValue(
+                from: data,
+                key: "token_metering.normal_test",
+                language: .english
+            ),
+            "Normal"
+        )
+        XCTAssertEqual(
+            try TokenMeteringL10n.testingStringCatalogValue(
+                from: data,
+                key: "token_metering.variation_test",
+                language: .english
+            ),
+            "One item"
+        )
+    }
+
+    func testBuildAppCopiesSwiftPMResourceBundle() throws {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let script = try String(contentsOf: root.appendingPathComponent("scripts/build-app.sh"))
+
+        XCTAssertTrue(script.contains("Spill_Spill.bundle"))
+        XCTAssertTrue(script.contains("ditto \"$RESOURCE_BUNDLE\" \"$RESOURCES_DIR/Spill_Spill.bundle\""))
+        XCTAssertTrue(script.contains("ditto \"$RESOURCES_DIR/Spill_Spill.bundle\" \"$HELPER_RESOURCES_DIR/Spill_Spill.bundle\""))
+    }
+
+    private static func copy(_ copy: String, containsBlockedTerm term: String, wholeWord: Bool) -> Bool {
+        if !wholeWord {
+            return copy.range(of: term, options: [.caseInsensitive, .diacriticInsensitive]) != nil
+        }
+
+        let escapedTerm = NSRegularExpression.escapedPattern(for: term)
+        let pattern = #"(?<![A-Za-z0-9_])\#(escapedTerm)(?![A-Za-z0-9_])"#
+        let range = NSRange(copy.startIndex..<copy.endIndex, in: copy)
+        return (try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]))
+            .flatMap { $0.firstMatch(in: copy, range: range) } != nil
     }
 
     func testDashboardSnapshotAggregatesLocalEvents() {
@@ -242,11 +471,11 @@ final class TokenUsageStoreTests: XCTestCase {
     func testDashboardSnapshotOmitsLatencyKPIAndMissingLatencyCopy() {
         let snapshot = TokenUsageDashboardSnapshot(events: [
             Self.safeEvent(latencyMS: 0)
-        ])
+        ], language: .english)
 
         XCTAssertFalse(snapshot.kpis.contains { $0.id == "latency" })
         XCTAssertFalse(snapshot.sessions.first?.detail.contains(TokenMeteringL10n.text(.latencyUnavailable)) == true)
-        XCTAssertTrue(snapshot.sessions.first?.detail.contains("events") == true)
+        XCTAssertTrue(snapshot.sessions.first?.detail.contains("records") == true)
     }
 
     func testDashboardSourceRowsShowUnknownWhenMixedWithKnownBreakdown() {
@@ -546,16 +775,24 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(main.contains("application.setActivationPolicy(.accessory)"))
         XCTAssertTrue(process.contains(#"static let helperBundleName = "Spill Token Dashboard.app""#))
         XCTAssertTrue(process.contains(#"static let helperBundleIdentifierSuffix = ".TokenDashboard""#))
+        XCTAssertTrue(process.contains("settingsDidChangeNotification"))
+        XCTAssertTrue(process.contains("postAppLanguageDidChange"))
         XCTAssertTrue(launcher.contains("NSWorkspace.OpenConfiguration"))
         XCTAssertTrue(launcher.contains("workspace.openApplication(at: helperURL"))
+        XCTAssertTrue(launcher.contains("mainBundleIdentifierEnvironmentKey"))
         XCTAssertTrue(appDelegate.contains("private lazy var tokenMeteringDashboardLauncher"))
         XCTAssertTrue(appDelegate.contains("tokenMeteringDashboardLauncher.open"))
+        XCTAssertTrue(appDelegate.contains("DispatchQueue.main.async { [weak self] in"))
+        XCTAssertTrue(appDelegate.contains("TokenMeteringDashboardProcess.postAppLanguageDidChange()"))
 
         XCTAssertTrue(helperDelegate.contains("applicationShouldTerminateAfterLastWindowClosed"))
         XCTAssertTrue(helperDelegate.contains("SPILL_TOKEN_DASHBOARD_SMOKE_READY"))
         XCTAssertTrue(helperDelegate.contains("SPILL_TOKEN_DASHBOARD_SMOKE_EXIT"))
         XCTAssertTrue(helperDelegate.contains("openMainAppTokenMeteringSettings"))
         XCTAssertTrue(helperDelegate.contains("TokenMeteringDashboardProcess.postOpenPreferencesRequest()"))
+        XCTAssertTrue(helperDelegate.contains("observeSettingsChanges()"))
+        XCTAssertTrue(helperDelegate.contains("settingsDidChangeFromMainApp"))
+        XCTAssertTrue(helperDelegate.contains("settings.reloadAppLanguageFromDefaults()"))
         XCTAssertFalse(helperDelegate.contains("StatusItemController("))
         XCTAssertFalse(helperDelegate.contains("AXMenuBarItemScanner("))
         XCTAssertFalse(helperDelegate.contains("HotKeyController("))
@@ -1016,6 +1253,19 @@ final class TokenUsageStoreTests: XCTestCase {
             XCTAssertEqual(
                 error as? TokenUsageValidationError,
                 .forbiddenFieldPresent(["prompt"])
+            )
+        }
+    }
+
+    func testSanitizerRejectsUserFacingChangesField() throws {
+        let event = Self.safeEvent()
+        var object = try decodedJSONObject(from: TokenUsageSanitizer.eventData(event))
+        object["changes"] = "must not be accepted"
+
+        XCTAssertThrowsError(try TokenUsageSanitizer.sanitizeEventJSONData(try jsonData(object))) { error in
+            XCTAssertEqual(
+                error as? TokenUsageValidationError,
+                .forbiddenFieldPresent(["changes"])
             )
         }
     }

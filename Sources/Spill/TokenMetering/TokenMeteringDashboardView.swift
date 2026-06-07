@@ -15,6 +15,7 @@ struct TokenMeteringDashboardView: View {
     @State private var isServiceStatusPresented = false
     @State private var pendingClearRequest: TokenUsageClearRequest?
     @State private var aliasText = ""
+    @State private var resolvedLanguage: TokenMeteringLanguage
     private let refreshAction: () -> Void
     private let settingsAction: () -> Void
     private let titleDidChange: () -> Void
@@ -30,6 +31,7 @@ struct TokenMeteringDashboardView: View {
         self.store = store
         self.cloudServiceStatusStore = cloudServiceStatusStore
         _settings = ObservedObject(wrappedValue: settings)
+        _resolvedLanguage = State(initialValue: TokenMeteringLanguage.current(appLanguage: settings.appLanguage))
         self.refreshAction = refreshAction
         self.settingsAction = settingsAction
         self.titleDidChange = titleDidChange
@@ -43,7 +45,7 @@ struct TokenMeteringDashboardView: View {
     }
 
     private var currentLanguage: TokenMeteringLanguage {
-        TokenMeteringLanguage.current(appLanguage: settings.appLanguage)
+        resolvedLanguage
     }
 
     private var selectedControlAccent: Color {
@@ -104,13 +106,17 @@ struct TokenMeteringDashboardView: View {
         }
         .frame(minWidth: 1060, minHeight: 640)
         .onAppear {
+            let language = TokenMeteringLanguage.current(appLanguage: settings.appLanguage)
+            resolvedLanguage = language
             titleDidChange()
-            store.setLanguage(currentLanguage)
+            store.setLanguage(language)
             store.refresh()
         }
-        .onChange(of: settings.appLanguage) { _, _ in
+        .onChange(of: settings.appLanguage) { _, appLanguage in
+            let language = TokenMeteringLanguage.current(appLanguage: appLanguage)
+            resolvedLanguage = language
             titleDidChange()
-            store.setLanguage(currentLanguage)
+            store.setLanguage(language)
         }
         .onChange(of: store.selectedSessionID) { _, newID in
             if let newID {
@@ -244,7 +250,7 @@ struct TokenMeteringDashboardView: View {
     private var topFilterBar: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
-                Text(t(.aiTool).uppercased())
+                Text(t(.aiToolHeader))
                     .font(.system(size: 9, weight: .black))
                     .tracking(1.0)
                     .foregroundStyle(.secondary)
@@ -618,6 +624,7 @@ struct TokenMeteringDashboardView: View {
                                 .font(.system(size: 10, weight: .medium))
                                 .foregroundStyle(.secondary.opacity(0.6))
                                 .lineLimit(1)
+                                .minimumScaleFactor(0.82)
                         }
                     }
                 }
@@ -640,11 +647,11 @@ struct TokenMeteringDashboardView: View {
     private var comparisonPeriodLabel: String {
         switch store.selectedPeriod {
         case .today:
-            return currentLanguage == .korean ? "어제" : "yesterday"
+            return t(.relativeYesterday)
         case .sevenDays:
-            return currentLanguage == .korean ? "전주" : "prev week"
+            return t(.relativePreviousWeek)
         case .thirtyDays:
-            return currentLanguage == .korean ? "전달" : "prev month"
+            return t(.relativePreviousMonth)
         case .all:
             return ""
         }
@@ -762,8 +769,8 @@ struct TokenMeteringDashboardView: View {
 
     private var sessionsTable: some View {
         dashboardPanel(
-            title: currentLanguage == .korean ? "작업 단위" : "Work Items",
-            subtitle: currentLanguage == .korean ? "사용 툴, 작업 종류, 날짜별 그룹화된 세션" : "Sessions grouped by tool, task type, and date",
+            title: t(.runs),
+            subtitle: t(.runsSubtitle),
             infoTitle: t(.runsInfoTitle),
             infoDetail: t(.runsInfoDetail)
         ) {
@@ -775,7 +782,7 @@ struct TokenMeteringDashboardView: View {
             } else {
                 VStack(spacing: 0) {
                     HStack(spacing: 12) {
-                        tableHeader(currentLanguage == .korean ? "작업 항목" : "Work Item")
+                        tableHeader(t(.run))
                         tableHeader(t(.events))
                             .frame(width: 150, alignment: .leading)
                         tableHeader(t(.tokens))
@@ -864,14 +871,14 @@ struct TokenMeteringDashboardView: View {
             if let startDate = calendar.date(byAdding: .day, value: -7, to: now) {
                 return "\(formatter.string(from: startDate)) – \(formatter.string(from: now))"
             }
-            return "Last 7 Days"
+            return t(.periodSevenDays)
         case .thirtyDays:
             if let startDate = calendar.date(byAdding: .day, value: -30, to: now) {
                 return "\(formatter.string(from: startDate)) – \(formatter.string(from: now))"
             }
-            return "Last 30 Days"
+            return t(.periodThirtyDays)
         case .all:
-            return currentLanguage == .korean ? "전체 기간 누적" : "All Accumulated History"
+            return t(.periodAllHistory)
         }
     }
 
@@ -880,10 +887,7 @@ struct TokenMeteringDashboardView: View {
             Image(systemName: "calendar")
                 .font(.system(size: 11, weight: .bold))
                 .foregroundStyle(.teal)
-            Text(currentLanguage == .korean
-                ? "집계 윈도우: \(activeAccumulationWindowText)"
-                : "Active window: \(activeAccumulationWindowText)"
-            )
+            Text("\(t(.activeWindowLabel)): \(activeAccumulationWindowText)")
             .font(.system(size: 11, weight: .bold))
             .foregroundStyle(.secondary)
         }
@@ -910,7 +914,7 @@ struct TokenMeteringDashboardView: View {
             VStack(alignment: .leading, spacing: 14) {
                 HStack(alignment: .top, spacing: 8) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(currentLanguage == .korean ? "선택된 작업" : "SELECTED WORK ITEM")
+                        Text(t(.selectedWorkItemHeader))
                             .font(.system(size: 9, weight: .black))
                             .tracking(1.0)
                             .foregroundStyle(.secondary)
@@ -938,13 +942,13 @@ struct TokenMeteringDashboardView: View {
                 Divider()
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(currentLanguage == .korean ? "로컬 별칭" : "Local Alias")
+                    Text(t(.localAlias))
                         .font(.system(size: 10, weight: .bold))
                         .foregroundStyle(.secondary)
 
                     HStack(spacing: 8) {
                         TextField(
-                            currentLanguage == .korean ? "예: 기능 개발, 버그 수정" : "e.g., Feature Dev, Bug Fix",
+                            t(.localAliasPlaceholder),
                             text: $aliasText
                         )
                         .textFieldStyle(.roundedBorder)
@@ -953,7 +957,7 @@ struct TokenMeteringDashboardView: View {
                             store.updateAlias(for: session.id, alias: aliasText)
                         }
 
-                        Button(currentLanguage == .korean ? "적용" : "Apply") {
+                        Button(t(.applyAlias)) {
                             store.updateAlias(for: session.id, alias: aliasText)
                         }
                         .buttonStyle(.borderedProminent)
@@ -961,7 +965,7 @@ struct TokenMeteringDashboardView: View {
                         .font(.system(size: 10, weight: .bold))
 
                         if !aliasText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            Button(currentLanguage == .korean ? "삭제" : "Clear") {
+                            Button(t(.clearAlias)) {
                                 aliasText = ""
                                 store.updateAlias(for: session.id, alias: "")
                             }
@@ -970,7 +974,7 @@ struct TokenMeteringDashboardView: View {
                         }
                     }
 
-                    Text(currentLanguage == .korean ? "기기에만 저장되며 원본 토큰 데이터는 변경되지 않습니다." : "Saved locally on this device; raw token data remains unchanged.")
+                    Text(t(.localAliasDetail))
                         .font(.system(size: 8.5, weight: .medium))
                         .foregroundStyle(.secondary)
                 }
@@ -1045,7 +1049,7 @@ struct TokenMeteringDashboardView: View {
 
                         if isRuntimeTotalOnly {
                             HStack(spacing: 4) {
-                                Text(currentLanguage == .korean ? "토탈만 제공됨" : "Runtime Total Only")
+                                Text(t(.cumulativeOnlyBadge))
                                     .font(.system(size: 8, weight: .bold))
                                     .foregroundStyle(.orange)
                                     .padding(.horizontal, 5)
@@ -1053,10 +1057,8 @@ struct TokenMeteringDashboardView: View {
                                     .background(Color.orange.opacity(0.12), in: Capsule())
 
                                 TokenMeteringInfoButton(
-                                    title: currentLanguage == .korean ? "누적 토큰만 기록됨" : "Cumulative Tokens Only",
-                                    detail: currentLanguage == .korean
-                                        ? "이 AI 어댑터 런타임은 상세 분석을 지원하지 않아 합산만 기록되었습니다."
-                                        : "This AI adapter runtime does not expose system/user/history breakdown; only aggregate totals were recorded."
+                                    title: t(.cumulativeOnlyInfoTitle),
+                                    detail: t(.cumulativeOnlyInfoDetail)
                                 )
                             }
                         }
@@ -1073,14 +1075,14 @@ struct TokenMeteringDashboardView: View {
 
                 DisclosureGroup {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("Session ID: \(session.id)")
-                        Text("Run ID: \(session.runID)")
+                        Text("\(t(.diagnosticsSessionID)): \(session.id)")
+                        Text("\(t(.diagnosticsRunID)): \(session.runID)")
                     }
                     .font(.system(size: 9, design: .monospaced))
                     .foregroundStyle(.secondary)
                     .padding(.top, 4)
                 } label: {
-                    Text(currentLanguage == .korean ? "개발자 진단 코드" : "Diagnostics Codes")
+                    Text(t(.diagnosticsCodes))
                         .font(.system(size: 10, weight: .semibold))
                 }
                 .padding(10)
@@ -1604,7 +1606,7 @@ struct TokenMeteringDashboardView: View {
     }
 
     private var alphaBadge: some View {
-        Text("ALPHA")
+        Text(t(.previewBadge))
             .font(.system(size: 8.5, weight: .black))
             .tracking(0.9)
             .foregroundStyle(.orange)

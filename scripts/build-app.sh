@@ -114,11 +114,19 @@ rm -rf "$APP_DIR"
 mkdir -p "$MACOS_DIR" "$RESOURCES_DIR" "$FRAMEWORKS_DIR"
 cp "$ROOT_DIR/.build/release/Spill" "$MACOS_DIR/Spill"
 
-ADAPTER_RESOURCES="$(find "$ROOT_DIR/.build" -path "*/release/Spill_Spill.bundle/adapters" -type d -print -quit)"
-if [[ -z "$ADAPTER_RESOURCES" ]]; then
-    echo "Spill adapter resources were not found after swift build." >&2
+RESOURCE_BUNDLE="$(find "$ROOT_DIR/.build" -path "*/release/Spill_Spill.bundle" -type d -print -quit)"
+if [[ -z "$RESOURCE_BUNDLE" ]]; then
+    echo "Spill SwiftPM resource bundle was not found after swift build." >&2
     exit 2
 fi
+ditto "$RESOURCE_BUNDLE" "$RESOURCES_DIR/Spill_Spill.bundle"
+
+ADAPTER_RESOURCES="$RESOURCES_DIR/Spill_Spill.bundle/adapters"
+if [[ ! -d "$ADAPTER_RESOURCES" ]]; then
+    echo "Spill adapter resources were not found in the SwiftPM resource bundle." >&2
+    exit 2
+fi
+rm -rf "$RESOURCES_DIR/adapters"
 ditto "$ADAPTER_RESOURCES" "$RESOURCES_DIR/adapters"
 
 SPARKLE_FRAMEWORK="$(find "$ROOT_DIR/.build/artifacts/sparkle" -path "*/Sparkle.framework" -type d -print -quit)"
@@ -178,6 +186,7 @@ PLIST
 
 mkdir -p "$HELPER_MACOS_DIR" "$HELPER_RESOURCES_DIR" "$HELPER_FRAMEWORKS_DIR"
 cp "$MACOS_DIR/Spill" "$HELPER_MACOS_DIR/Spill"
+ditto "$RESOURCES_DIR/Spill_Spill.bundle" "$HELPER_RESOURCES_DIR/Spill_Spill.bundle"
 ditto "$RESOURCES_DIR/adapters" "$HELPER_RESOURCES_DIR/adapters"
 ditto "$FRAMEWORKS_DIR/Sparkle.framework" "$HELPER_FRAMEWORKS_DIR/Sparkle.framework"
 ditto "$RESOURCES_DIR/AppIcon.icns" "$HELPER_RESOURCES_DIR/AppIcon.icns"

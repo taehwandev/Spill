@@ -4,6 +4,7 @@ import PackageDescription
 
 let package = Package(
     name: "Spill",
+    defaultLocalization: "en",
     platforms: [
         .macOS(.v14)
     ],
@@ -20,7 +21,8 @@ let package = Package(
                 .product(name: "Sparkle", package: "Sparkle")
             ],
             resources: [
-                .copy("Resources/adapters")
+                .copy("Resources/adapters"),
+                .process("Resources/Localization")
             ],
             linkerSettings: [
                 .linkedLibrary("sqlite3"),
