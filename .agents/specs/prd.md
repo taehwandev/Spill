@@ -425,6 +425,21 @@ Requirements:
   after browser-side decryption.
 - The web dashboard must label delayed data as last backed up, not realtime
   presence.
+- The web portal has two product roles:
+  - `admin`: an administrator who can also use all normal user features.
+  - `user`: a normal end user who can access only their own account, devices,
+    settings, and encrypted usage backup surfaces.
+- Admin-only navigation, routes, and controls must render only for authenticated
+  admins, and must stay hidden while role state is loading or unavailable.
+- Admin-only UI gating is a user-experience constraint only. Every admin action
+  must also be enforced at the trusted Supabase RLS or Edge Function boundary.
+- Normal users must not be able to reach admin data or mutations by direct URL,
+  browser developer tools, client payload edits, stale cached role state, or
+  direct relay/API calls.
+- Role assignment, role changes, user/device administration, and other
+  privileged mutations must be audited without storing prompts, responses,
+  commands, file paths, logs, diffs, source content, secrets, raw token events,
+  or encrypted bucket plaintext.
 
 Acceptance:
 
@@ -432,6 +447,13 @@ Acceptance:
 - Cloud upload can be disabled without affecting local metering.
 - No raw events or content-like data are uploaded.
 - Server-side plaintext token totals are not required for the web dashboard.
+- Admin menus appear only for admins, and direct admin route access by a normal
+  user is denied.
+- RLS policies and Edge Function authorization deny normal users from admin
+  reads, role changes, and privileged mutations even when client-side checks are
+  bypassed.
+- Admin audit records capture actor, action, target, result, and timestamp with
+  content-free metadata only.
 - Detailed upload cadence, E2EE key custody, storage backend, and retry policy
   are specified in `.agents/runs/private-usage-upload/01-prd.md` and the
   follow-on ARD.

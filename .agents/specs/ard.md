@@ -358,6 +358,80 @@ Rules:
 - Preferences must show permission diagnostics.
 - UI should show disabled/fallback states, not crashes.
 
+### ARD-006A: Web Portal Roles And Admin Authorization
+
+Decision:
+
+The web portal uses two product roles for the first account-backed release:
+
+- `admin`: an administrator who is also a normal user.
+- `user`: a normal end user.
+
+Role-aware navigation and route guards are presentation behavior only. The
+trusted authorization boundary is Supabase RLS and the `private-usage-relay`
+Edge Function, which must derive the actor from a verified Supabase Auth session
+or a write-only Spill device credential. The browser must never be trusted for
+role, account id, user id, device ownership, or admin status.
+
+Rationale:
+
+Admin users need operational menus that normal users should not see, but hiding
+a menu does not protect data. The same role model must therefore be represented
+in product UI, database policy, and relay authorization so direct URL access,
+browser dev tools, stale role cache, and crafted requests fail at the trusted
+boundary.
+
+Data model requirements:
+
+- Store account membership and role in an account-scoped table such as
+  `account_memberships` or an equivalent profile/role table.
+- Role values are limited to `admin` and `user` for MVP.
+- A user may be an admin for one account and a normal user for another future
+  account only if account scoping is explicit in every role lookup.
+- The first admin is created by an explicit bootstrap path, not by client-side
+  self-assignment.
+- Role changes require a privileged trusted path and must not be possible
+  through direct browser table writes.
+
+Authorization rules:
+
+- UI may hide admin navigation until role state confirms `admin`.
+- UI hiding is not authorization; all protected reads and mutations must be
+  blocked by RLS or an Edge Function permission check.
+- Role checks in the relay must query the server-side role table using the
+  verified actor id and account scope.
+- Write-only device credentials cannot read account data, read encrypted
+  buckets, create device grants, manage devices, or call admin routes.
+- Admin mutations must be action-scoped. Prefer checks such as
+  `can(actor, "admin.user_role.update", { accountId })` over scattered
+  role-name conditionals.
+- Admin errors must be redacted and should not reveal private resource
+  existence beyond product policy.
+
+Audit requirements:
+
+- Role changes, user administration, device revocation, private upload setting
+  changes, and future privileged support actions must write an admin audit row.
+- Audit rows may include actor id, account id, action, target id, result,
+  reason code, request id, and timestamp.
+- Audit rows must not include prompts, responses, commands, file paths, logs,
+  diffs, source content, environment values, secrets, raw token events, bucket
+  plaintext, local aliases, or service-role values.
+
+Implementation order:
+
+1. Add role/account membership schema and helper functions such as
+   `is_account_admin(account_id, user_id)`.
+2. Add RLS policies for normal self/account data and admin-only tables/actions.
+3. Add relay permission helpers that verify Supabase JWTs and re-check roles
+   server-side before admin responses or mutations.
+4. Add web viewer state that loads the role from a safe DTO and hides admin
+   menus while loading.
+5. Add route guards that block direct admin routes for non-admins.
+6. Add content-free admin audit logging for privileged mutations.
+7. Add tests for unauthenticated, normal user, admin, stale role, direct route,
+   direct API call, device credential, and revoked role cases.
+
 ### ARD-007: Distribution Model
 
 Decision:
