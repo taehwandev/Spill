@@ -10,6 +10,7 @@ DerivedData/
 .env
 .env.*
 !.env.example
+supabase/.temp/
 
 # Local experiments and probes
 test*.swift
