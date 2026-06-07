@@ -174,12 +174,21 @@ enum TokenMeteringAdapterKit {
 
 enum TokenMeteringSetupInstaller {
     static let scriptFileName = "spill-token-metering-setup.mjs"
+    static let statsScriptFileName = "spill-token-metering-stats.mjs"
     static let publicInstallScriptURL = "https://spill.thdev.app/token-metering/install.sh"
     static let publicSetupCommand = #"/bin/bash -c "$(curl -fsSL https://spill.thdev.app/token-metering/install.sh)""#
 
     static var scriptURL: URL? {
         Bundle.main.url(
             forResource: "spill-token-metering-setup",
+            withExtension: "mjs",
+            subdirectory: "adapters/setup"
+        )
+    }
+
+    static var statsScriptURL: URL? {
+        Bundle.main.url(
+            forResource: "spill-token-metering-stats",
             withExtension: "mjs",
             subdirectory: "adapters/setup"
         )
@@ -195,9 +204,18 @@ enum TokenMeteringSetupInstaller {
             .appendingPathComponent(scriptFileName)
     }
 
+    static func defaultStatsInstallURL() -> URL {
+        defaultInstallURL()
+            .deletingLastPathComponent()
+            .appendingPathComponent(statsScriptFileName)
+    }
+
     static func install(to destination: URL = defaultInstallURL()) throws {
         guard let url = scriptURL else {
             throw TokenMeteringAdapterInstallError.scriptNotFound("Setup helper")
+        }
+        guard let statsURL = statsScriptURL else {
+            throw TokenMeteringAdapterInstallError.scriptNotFound("Stats helper")
         }
 
         for adapter in TokenMeteringAdapterKit.hookAdapters {
@@ -217,6 +235,19 @@ enum TokenMeteringSetupInstaller {
         let perms = (attrs[.posixPermissions] as? Int ?? 0o644) | 0o111
         attrs[.posixPermissions] = perms
         try FileManager.default.setAttributes(attrs, ofItemAtPath: destination.path)
+
+        let statsDestination = destination
+            .deletingLastPathComponent()
+            .appendingPathComponent(statsScriptFileName)
+        if FileManager.default.fileExists(atPath: statsDestination.path) {
+            try FileManager.default.removeItem(at: statsDestination)
+        }
+        try FileManager.default.copyItem(at: statsURL, to: statsDestination)
+
+        var statsAttrs = try FileManager.default.attributesOfItem(atPath: statsDestination.path)
+        let statsPerms = (statsAttrs[.posixPermissions] as? Int ?? 0o644) | 0o111
+        statsAttrs[.posixPermissions] = statsPerms
+        try FileManager.default.setAttributes(statsAttrs, ofItemAtPath: statsDestination.path)
     }
 
     static func setupCommand(installedAt scriptURL: URL = defaultInstallURL()) -> String {

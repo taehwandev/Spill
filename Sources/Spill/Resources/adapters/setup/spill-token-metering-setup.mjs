@@ -13,6 +13,7 @@ const force = args.force === true;
 const json = args.json === true;
 const installRoot = expandHome(args.installDir ?? join(homedir(), "Library/Application Support/Spill/adapters"));
 const setupHelperPath = join(installRoot, "setup", "spill-token-metering-setup.mjs");
+const statsHelperPath = join(installRoot, "setup", "spill-token-metering-stats.mjs");
 const defaultAdapters = "codex,claude,antigravity";
 const alwaysInstallAdapters = new Set(defaultAdapters.split(","));
 const include = new Set((args.include ?? defaultAdapters).split(",").map((item) => item.trim()).filter(Boolean));
@@ -109,6 +110,7 @@ if (json) {
 async function installSetupHelper() {
   if (!apply) {
     results.push({ tool: "setup", action: "would_install", path: setupHelperPath });
+    results.push({ tool: "stats", action: "would_install", path: statsHelperPath });
     return;
   }
 
@@ -119,6 +121,11 @@ async function installSetupHelper() {
   }
   await chmod(setupHelperPath, 0o755);
   results.push({ tool: "setup", action: "installed", path: setupHelperPath });
+
+  const statsSource = await resolveStatsHelperSource(source);
+  await copyFile(statsSource, statsHelperPath);
+  await chmod(statsHelperPath, 0o755);
+  results.push({ tool: "stats", action: "installed", path: statsHelperPath });
 }
 
 async function installAdapter(adapter) {
@@ -326,6 +333,16 @@ function codexRuntimeRulesBlock() {
       justification: "Allow Spill Codex label handoff without repeated approval prompts.",
     }));
   }
+  for (const path of permissionPathVariants(statsHelperPath)) {
+    rules.push(codexPrefixRule({
+      pattern: ["node", path, "--self"],
+      justification: "Allow read-only Spill local usage status checks when the user asks.",
+    }));
+    rules.push(codexPrefixRule({
+      pattern: ["node", path, "--tool", "codex"],
+      justification: "Allow read-only Spill Codex usage status checks when the user asks.",
+    }));
+  }
   return [
     "# spill-token-metering:begin",
     "# Managed by Spill token metering setup. Keep narrow; do not replace with broad python3/node allow rules.",
@@ -386,6 +403,10 @@ function agentRuntimePermissionEntries(tool, permissionPrefix) {
 
   for (const path of permissionPathVariants(setupHelperPath)) {
     addPermissionCommandVariants(commandForms, `node ${path} --label ${tool}`);
+  }
+  for (const path of permissionPathVariants(statsHelperPath)) {
+    addPermissionCommandVariants(commandForms, `node ${path} --self`);
+    addPermissionCommandVariants(commandForms, `node ${path} --tool ${tool}`);
   }
 
   const hookPaths = tool === "claude"
@@ -590,6 +611,17 @@ async function resolveSourceRoot(option) {
   return resolve(candidates[0]);
 }
 
+async function resolveStatsHelperSource(setupSource) {
+  const candidates = [
+    join(dirname(setupSource), "spill-token-metering-stats.mjs"),
+    join(sourceRoot, "setup", "spill-token-metering-stats.mjs"),
+  ];
+  for (const candidate of candidates) {
+    if (await exists(candidate)) return candidate;
+  }
+  throw new Error("Missing Spill stats helper source: spill-token-metering-stats.mjs");
+}
+
 async function exists(path) {
   try {
     await stat(path);
@@ -693,11 +725,13 @@ hook adapters and configures Antigravity/AGY active importer cleanup together,
 even if the current agent is only one of those tools. Codex is the
 OpenAI-backed agent runtime hook. Antigravity/AGY has no Spill runtime hook.
 The OpenAI SDK adapter is optional and installs only when included explicitly.
-The helper also installs or refreshes itself at the default setup command path.
+The helper also installs or refreshes itself and the read-only local usage stats
+helper at the default setup command path.
 When Claude Code or Antigravity/AGY user settings exist, the helper sets
 SPILL_AI_TOOL for that runtime and adds narrow allowlist entries for Spill label
-handoff plus Codex/Claude hook commands so routine metering setup does not
-repeatedly ask for permission. Codex defaults to the codex tool label.
+handoff, explicit user-requested Spill local usage status checks, and
+Codex/Claude hook commands so routine metering setup does not repeatedly ask for
+permission. Codex defaults to the codex tool label.
 Workflow runner permissions are separate from the default Spill metering
 install.
 The installer never reads prompts, transcripts, commands, logs, diffs, source

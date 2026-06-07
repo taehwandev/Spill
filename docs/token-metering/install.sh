@@ -28,6 +28,7 @@ require_node() {
 require_node
 
 download "adapters/setup/spill-token-metering-setup.mjs"
+download "adapters/setup/spill-token-metering-stats.mjs"
 download "adapters/codex/spill-importer.mjs"
 download "adapters/claude-code/spill-hook.py"
 download "adapters/openai/spill-adapter.py"
