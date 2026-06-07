@@ -2,11 +2,16 @@ import type { DashboardModel } from "../../tokenMeteringDashboard/dashboardModel
 import { installCommand } from "../../tokenMeteringDashboard/setupCopy";
 import { AuthControls } from "../components/AuthControls";
 import { MaterialIcon } from "../components/MaterialIcon";
-import type { SpillAuthProvider, SpillAuthState } from "../model/spillAuth";
+import type {
+  SpillAuthProvider,
+  SpillAuthProviderOption,
+  SpillAuthState
+} from "../model/spillAuth";
 import type { PortalRoute } from "../routes";
 
 export function OnboardingHeroBlock({
   auth,
+  authProviders,
   copiedInstall,
   onCopyInstall,
   onNavigate,
@@ -14,6 +19,7 @@ export function OnboardingHeroBlock({
   onSignOut
 }: {
   auth: SpillAuthState;
+  authProviders: readonly SpillAuthProviderOption[];
   copiedInstall: boolean;
   onCopyInstall: () => void;
   onNavigate: (route: PortalRoute) => void;
@@ -43,7 +49,12 @@ export function OnboardingHeroBlock({
         <button className="secondaryAction" onClick={() => onNavigate("dashboard")} type="button">
           Open Dashboard
         </button>
-        <AuthControls state={auth} onSignIn={onSignIn} onSignOut={onSignOut} />
+        <AuthControls
+          providers={authProviders}
+          state={auth}
+          onSignIn={onSignIn}
+          onSignOut={onSignOut}
+        />
       </div>
 
       <div className="terminalCard" aria-label="Spill install command">

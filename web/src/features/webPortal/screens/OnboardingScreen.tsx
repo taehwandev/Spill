@@ -7,11 +7,16 @@ import {
 } from "../blocks/OnboardingBlocks";
 import { AuthControls } from "../components/AuthControls";
 import { MaterialIcon } from "../components/MaterialIcon";
-import type { SpillAuthProvider, SpillAuthState } from "../model/spillAuth";
+import type {
+  SpillAuthProvider,
+  SpillAuthProviderOption,
+  SpillAuthState
+} from "../model/spillAuth";
 import type { PortalRoute } from "../routes";
 
 export function OnboardingScreen({
   auth,
+  authProviders,
   copiedInstall,
   dashboard,
   onCopyInstall,
@@ -20,6 +25,7 @@ export function OnboardingScreen({
   onSignOut
 }: {
   auth: SpillAuthState;
+  authProviders: readonly SpillAuthProviderOption[];
   copiedInstall: boolean;
   dashboard: DashboardModel;
   onCopyInstall: () => void;
@@ -44,7 +50,12 @@ export function OnboardingScreen({
         </nav>
 
         <div className="landingActions">
-          <AuthControls state={auth} onSignIn={onSignIn} onSignOut={onSignOut} />
+          <AuthControls
+            providers={authProviders}
+            state={auth}
+            onSignIn={onSignIn}
+            onSignOut={onSignOut}
+          />
           <button className="ghostAction" type="button">
             Download
           </button>
@@ -57,6 +68,7 @@ export function OnboardingScreen({
       <main className="landingMain">
         <OnboardingHeroBlock
           auth={auth}
+          authProviders={authProviders}
           copiedInstall={copiedInstall}
           onCopyInstall={onCopyInstall}
           onNavigate={onNavigate}

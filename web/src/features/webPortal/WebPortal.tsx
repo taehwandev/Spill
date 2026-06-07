@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { buildDashboardModel } from "../tokenMeteringDashboard/dashboardModel";
+import {
+  buildPortalDashboardPreviewModel,
+  buildPortalDashboardPreviewView
+} from "./model/dashboardPreview";
 import { useSpillAuth } from "./hooks/useSpillAuth";
+import { AdminPage } from "./pages/AdminPage";
 import { OnboardingPage } from "./pages/OnboardingPage";
 import { PortalDashboardPage } from "./pages/PortalDashboardPage";
 import { SettingsPage } from "./pages/SettingsPage";
@@ -18,12 +22,24 @@ function currentRoute(): PortalRoute {
   return parsePortalRoute(window.location.hash);
 }
 
+function replacePortalRoute(route: PortalRoute) {
+  window.history.replaceState(null, "", `/#${portalRoutePath(route)}`);
+}
+
 export function WebPortal() {
   const [route, setRoute] = useState<PortalRoute>(() => currentRoute());
   const [copiedInstall, setCopiedInstall] = useState(false);
 
-  const dashboard = useMemo(() => buildDashboardModel([]), []);
-  const onAuthReady = useCallback(() => setRoute(currentRoute()), []);
+  const dashboardPreview = useMemo(() => buildPortalDashboardPreviewModel(), []);
+  const onboardingDashboard = useMemo(() => buildPortalDashboardPreviewView({
+    aiToolId: dashboardPreview.defaultAiToolId,
+    dateId: dashboardPreview.defaultDateId,
+    scopeId: dashboardPreview.defaultScopeId
+  }).dashboard, [dashboardPreview]);
+  const onAuthReady = useCallback(() => {
+    replacePortalRoute("dashboard");
+    setRoute("dashboard");
+  }, []);
   const auth = useSpillAuth({ onAuthReady });
 
   useEffect(() => {
@@ -53,7 +69,8 @@ export function WebPortal() {
     return (
       <PortalDashboardPage
         auth={auth.state}
-        dashboard={dashboard}
+        authProviders={auth.providers}
+        dashboardPreview={dashboardPreview}
         onNavigate={navigate}
         onSignIn={auth.signIn}
         onSignOut={auth.signOut}
@@ -65,6 +82,22 @@ export function WebPortal() {
     return (
       <SettingsPage
         auth={auth.state}
+        authProviders={auth.providers}
+        devices={auth.devices}
+        onNavigate={navigate}
+        onRefreshDevices={auth.refreshDevices}
+        onRevokeDevice={auth.revokeDevice}
+        onSignIn={auth.signIn}
+        onSignOut={auth.signOut}
+      />
+    );
+  }
+
+  if (route === "admin") {
+    return (
+      <AdminPage
+        auth={auth.state}
+        authProviders={auth.providers}
         onNavigate={navigate}
         onSignIn={auth.signIn}
         onSignOut={auth.signOut}
@@ -75,8 +108,9 @@ export function WebPortal() {
   return (
     <OnboardingPage
       auth={auth.state}
+      authProviders={auth.providers}
       copiedInstall={copiedInstall}
-      dashboard={dashboard}
+      dashboard={onboardingDashboard}
       onCopyInstall={copyInstall}
       onNavigate={navigate}
       onSignIn={auth.signIn}

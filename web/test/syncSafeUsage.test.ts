@@ -11,7 +11,10 @@ import {
   formatPercentage,
   formatTokens
 } from "../src/features/tokenMeteringDashboard/dashboardModel.ts";
-import { buildPortalDashboardPreviewModel } from "../src/features/webPortal/model/dashboardPreview.ts";
+import {
+  buildPortalDashboardPreviewModel,
+  buildPortalDashboardPreviewView
+} from "../src/features/webPortal/model/dashboardPreview.ts";
 import {
   detectTokenMeteringLocale,
   tokenMeteringMessages
@@ -197,26 +200,71 @@ test("dashboard uses only three local agent tools", () => {
   assert.deepEqual(dashboard.modelBreakdown.map((row) => row.tokens), [200]);
 });
 
-test("web dashboard preview fixture covers two days, all local agents, and per-PC scopes", () => {
+test("web dashboard preview fixture covers period ranges, all local agents, and per-PC scopes", () => {
   const preview = buildPortalDashboardPreviewModel();
-  const allScope = preview.scopes.find((scope) => scope.id === "all");
+  const yearView = buildPortalDashboardPreviewView({
+    aiToolId: "all",
+    dateId: "year",
+    scopeId: "all"
+  });
 
   assert.equal(preview.defaultScopeId, "all");
-  assert.equal(preview.devices.length, 2);
+  assert.equal(preview.defaultDateId, "1d");
+  assert.equal(preview.defaultAiToolId, "all");
   assert.equal(preview.scopes.length, 3);
-  assert.equal(allScope?.dailyUsage.length, 2);
-  assert.deepEqual(allScope?.dashboard.aiToolBreakdown.map((row) => row.id), [
+  assert.deepEqual(preview.dateFilters.map((filter) => filter.id), [
+    "1d",
+    "7d",
+    "month",
+    "year"
+  ]);
+  assert.equal(preview.aiFilters.length, 4);
+  assert.equal(yearView.devices.length, 2);
+  assert.equal(yearView.dailyUsage.length, 12);
+  assert.deepEqual(yearView.dashboard.aiToolBreakdown.map((row) => row.id), [
     "codex",
     "claude",
     "antigravity"
   ]);
-  assert.equal(allScope?.dashboard.aiToolBreakdown.every((row) => row.tokens > 0), true);
+  assert.equal(yearView.dashboard.aiToolBreakdown.every((row) => row.tokens > 0), true);
 
-  const deviceTotal = preview.devices.reduce((sum, device) => sum + device.totalTokens, 0);
-  assert.equal(deviceTotal, allScope?.dashboard.totalTokens);
-  assert.equal(preview.devices.every((device) => device.eventCount === 6), true);
-  assert.equal(preview.devices.every((device) => (
+  const deviceTotal = yearView.devices.reduce((sum, device) => sum + device.totalTokens, 0);
+  assert.equal(deviceTotal, yearView.dashboard.totalTokens);
+  assert.equal(yearView.devices.every((device) => (
     device.aiToolBreakdown.every((row) => row.tokens > 0)
+  )), true);
+
+  const weekView = buildPortalDashboardPreviewView({
+    aiToolId: "all",
+    dateId: "7d",
+    scopeId: "all"
+  });
+  const monthView = buildPortalDashboardPreviewView({
+    aiToolId: "all",
+    dateId: "month",
+    scopeId: "all"
+  });
+
+  assert.equal(weekView.dailyUsage.length, 7);
+  assert.equal(monthView.dailyUsage.length, 5);
+
+  const filteredView = buildPortalDashboardPreviewView({
+    aiToolId: "codex",
+    dateId: "1d",
+    scopeId: "device_macbook_pro"
+  });
+
+  assert.equal(filteredView.selectedDate.id, "1d");
+  assert.equal(filteredView.selectedAiTool.id, "codex");
+  assert.equal(filteredView.selectedScope.id, "device_macbook_pro");
+  assert.equal(filteredView.dailyUsage.length, 1);
+  assert.equal(filteredView.dashboard.totalTokens > 0, true);
+  assert.equal(filteredView.dashboard.aiToolBreakdown[0]?.tokens > 0, true);
+  assert.deepEqual(filteredView.dashboard.aiToolBreakdown.slice(1).map((row) => row.tokens), [0, 0]);
+  assert.equal(filteredView.devices.every((device) => device.totalTokens > 0), true);
+  assert.equal(filteredView.devices.every((device) => (
+    device.aiToolBreakdown[0]?.tokens > 0 &&
+    device.aiToolBreakdown.slice(1).every((row) => row.tokens === 0)
   )), true);
 });
 

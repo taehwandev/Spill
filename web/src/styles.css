@@ -177,6 +177,8 @@ input:focus-visible {
 .rangeControl button,
 .cardHeader button,
 .deviceRequiredPanel button,
+.deviceUsageAll,
+.deviceUsageItem,
 .providerCard button,
 .settingsFooter button,
 .dangerTextButton {
@@ -228,6 +230,8 @@ input:focus-visible {
 .sideNavItem:hover,
 .topActions button:hover,
 .rangeControl button:hover,
+.deviceUsageAll:hover,
+.deviceUsageItem:hover,
 .providerCard button:hover {
   transform: translateY(-1px);
 }
@@ -1019,6 +1023,65 @@ input:focus-visible {
   box-shadow: 0 8px 18px rgb(0 106 98 / 16%);
 }
 
+.dashboardScopeControl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.dashboardFilterBar {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.dashboardScopeControl button {
+  min-height: 56px;
+}
+
+.dashboardFilterBar button,
+.dashboardScopeControl button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-width: 0;
+  padding: 0 16px;
+  border: 1px solid rgb(25 28 30 / 5%);
+  border-radius: var(--radius-card);
+  color: var(--text-variant);
+  background: rgb(255 255 255 / 62%);
+  font-weight: 800;
+  text-align: left;
+}
+
+.dashboardFilterBar button {
+  min-height: 50px;
+}
+
+.dashboardFilterBar button.active,
+.dashboardScopeControl button.active {
+  border-color: color-mix(in srgb, var(--primary) 35%, white);
+  color: var(--primary);
+  background: rgb(0 106 98 / 8%);
+}
+
+.dashboardFilterBar span,
+.dashboardFilterBar small,
+.dashboardScopeControl span,
+.dashboardScopeControl small {
+  min-width: 0;
+}
+
+.dashboardFilterBar small,
+.dashboardScopeControl small {
+  color: rgb(59 74 71 / 64%);
+  font-size: 0.72rem;
+  text-align: right;
+}
+
 .kpiStrip {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1065,6 +1128,43 @@ input:focus-visible {
   gap: 20px;
 }
 
+.adminGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  max-width: 980px;
+}
+
+.adminPanel {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.adminPanel > .symbolIcon {
+  flex: 0 0 auto;
+  width: 42px;
+  height: 42px;
+  border-radius: 8px;
+  color: white;
+  background: var(--primary);
+}
+
+.adminPanel h2 {
+  margin: 0 0 8px;
+  font-size: 1.05rem;
+}
+
+.adminPanel p {
+  margin: 0;
+  color: var(--text-variant);
+  line-height: 1.5;
+}
+
+.adminPanel.denied > .symbolIcon {
+  background: var(--tertiary);
+}
+
 .toolDistribution {
   grid-column: span 7;
 }
@@ -1074,7 +1174,15 @@ input:focus-visible {
 }
 
 .heatmapCard {
-  grid-column: span 8;
+  grid-column: span 12;
+}
+
+.deviceUsageCard {
+  grid-column: span 5;
+}
+
+.dailyUsageCard {
+  grid-column: span 7;
 }
 
 .deviceRequiredPanel {
@@ -1131,6 +1239,178 @@ input:focus-visible {
 .workflowList {
   display: grid;
   gap: 20px;
+}
+
+.deviceUsageList,
+.dailyUsageList {
+  display: grid;
+  gap: 12px;
+}
+
+.deviceUsageAll,
+.deviceUsageItem {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 16px;
+  width: 100%;
+  padding: 14px;
+  border: 1px solid rgb(25 28 30 / 5%);
+  border-radius: var(--radius-card);
+  color: var(--text);
+  background: var(--surface-low);
+  text-align: left;
+}
+
+.deviceUsageAll {
+  min-height: 78px;
+  border-color: color-mix(in srgb, var(--primary) 18%, white);
+  background: rgb(0 106 98 / 5%);
+}
+
+.deviceUsageAll.active,
+.deviceUsageItem.active {
+  border-color: color-mix(in srgb, var(--primary) 38%, white);
+  background: rgb(0 106 98 / 8%);
+}
+
+.deviceUsageAll strong,
+.deviceUsageItem strong,
+.dailyUsageLabel strong,
+.dailyUsageMetric strong {
+  display: block;
+}
+
+.deviceUsageAll small,
+.deviceUsageItem small,
+.dailyUsageLabel span,
+.dailyUsageMetric span {
+  color: var(--text-variant);
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.deviceUsageMetric {
+  text-align: right;
+}
+
+.deviceUsageMetric strong,
+.dailyUsageMetric strong {
+  color: var(--primary);
+}
+
+.deviceUsageItem > i,
+.deviceUsageItem > i span {
+  display: block;
+  height: 6px;
+  border-radius: 999px;
+}
+
+.deviceUsageItem > i {
+  grid-column: 1 / -1;
+  background: rgb(25 28 30 / 6%);
+}
+
+.deviceUsageItem > i span {
+  background: var(--primary);
+}
+
+.deviceToolStack {
+  grid-column: 1 / -1;
+  display: flex;
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgb(25 28 30 / 6%);
+}
+
+.deviceToolStack span {
+  min-width: 4px;
+}
+
+.deviceToolBreakdown {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.deviceToolBreakdown span {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 6px;
+  align-items: center;
+  min-width: 0;
+  color: var(--text-variant);
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.deviceToolBreakdown i {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+}
+
+.deviceToolBreakdown strong {
+  grid-column: 2;
+  color: var(--text);
+  font-size: 0.72rem;
+}
+
+.dailyUsageRow {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr) 112px;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 0;
+  border-top: 1px solid rgb(25 28 30 / 6%);
+}
+
+.dailyUsageRow:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.dailyUsageBar {
+  display: flex;
+  min-width: 0;
+  height: 18px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgb(25 28 30 / 6%);
+}
+
+.dailyUsageBar span {
+  min-width: 4px;
+}
+
+.dailyUsageMetric {
+  text-align: right;
+}
+
+.toolMiniLegend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid rgb(25 28 30 / 6%);
+  color: var(--text-variant);
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.toolMiniLegend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.toolMiniLegend i {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
 }
 
 .workflowRow div {
@@ -1641,15 +1921,26 @@ input:focus-visible {
   .toolDistribution,
   .workflowCard,
   .heatmapCard,
+  .deviceUsageCard,
+  .dailyUsageCard,
   .deviceRequiredPanel,
   .deviceSummary,
   .securitySummary {
     grid-column: span 12;
   }
 
+  .dashboardScopeControl {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboardFilterBar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .providerGrid,
   .syncDepthGrid,
-  .localOnlyGrid {
+  .localOnlyGrid,
+  .adminGrid {
     grid-template-columns: 1fr;
   }
 }
@@ -1704,6 +1995,18 @@ input:focus-visible {
   .rangeControl,
   .segmentedPill {
     overflow-x: auto;
+  }
+
+  .dashboardFilterBar button,
+  .dashboardScopeControl button {
+    align-items: flex-start;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  .dashboardFilterBar small,
+  .dashboardScopeControl small {
+    text-align: left;
   }
 }
 
@@ -1771,6 +2074,19 @@ input:focus-visible {
 
   .heatmapGrid {
     gap: 4px;
+  }
+
+  .dailyUsageRow {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .dailyUsageMetric {
+    text-align: left;
+  }
+
+  .deviceToolBreakdown {
+    grid-template-columns: 1fr;
   }
 
   .deviceItem {

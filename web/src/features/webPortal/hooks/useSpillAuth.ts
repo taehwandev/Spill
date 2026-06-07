@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   buildPrivateUsageRelayConfig,
   createPrivateUsageRelayClient
@@ -9,9 +9,17 @@ import {
   isAuthCallbackUrl,
   isSignedInSession,
   providerToSupabaseProvider,
+  spillAuthProvidersFromEnv,
   type SpillAuthProvider,
+  type SpillDeviceAccessState,
   type SpillAuthState
 } from "../model/spillAuth";
+
+const unavailableDevices: SpillDeviceAccessState = {
+  status: "unavailable",
+  devices: [],
+  revokingDeviceId: null
+};
 
 export function useSpillAuth({
   onAuthReady
@@ -19,6 +27,11 @@ export function useSpillAuth({
   onAuthReady: () => void;
 }) {
   const config = useMemo(() => buildPrivateUsageRelayConfig(import.meta.env), []);
+  const providers = useMemo(() => spillAuthProvidersFromEnv(import.meta.env), []);
+  const enabledProviderIds = useMemo(
+    () => new Set(providers.map((provider) => provider.id)),
+    [providers]
+  );
   const relayClient = useMemo(() => createPrivateUsageRelayClient({
     relayFunctionUrl: config.relayFunctionUrl
   }), [config.relayFunctionUrl]);
@@ -31,12 +44,44 @@ export function useSpillAuth({
       ? { status: "checking", pendingProvider: null, viewer: null }
       : { status: "unconfigured", pendingProvider: null, viewer: null }
   ));
+  const accessTokenRef = useRef<string | null>(null);
+  const shouldOpenDashboardAfterSignInRef = useRef(false);
+  const [devices, setDevices] = useState<SpillDeviceAccessState>(unavailableDevices);
+
+  const loadDevicesForToken = useCallback(async (accessToken: string) => {
+    setDevices((current) => ({
+      status: "loading",
+      devices: current.devices,
+      revokingDeviceId: null
+    }));
+
+    const result = await relayClient.listDevices(accessToken);
+
+    if (!result.ok) {
+      setDevices((current) => ({
+        status: "error",
+        devices: current.devices,
+        revokingDeviceId: null
+      }));
+      return;
+    }
+
+    setDevices({
+      status: "ready",
+      devices: result.data.devices,
+      revokingDeviceId: null
+    });
+  }, [relayClient]);
 
   const loadViewer = useCallback(async (accessToken: string) => {
+    accessTokenRef.current = accessToken;
     const viewer = await relayClient.getViewer(accessToken);
 
     if (!viewer.ok) {
+      accessTokenRef.current = null;
+      shouldOpenDashboardAfterSignInRef.current = false;
       setState({ status: "error", pendingProvider: null, viewer: null });
+      setDevices(unavailableDevices);
       return;
     }
 
@@ -45,13 +90,26 @@ export function useSpillAuth({
       pendingProvider: null,
       viewer: viewer.data
     });
-  }, [relayClient]);
+    if (shouldOpenDashboardAfterSignInRef.current) {
+      shouldOpenDashboardAfterSignInRef.current = false;
+      onAuthReady();
+    }
+    void loadDevicesForToken(accessToken);
+  }, [loadDevicesForToken, onAuthReady, relayClient]);
+
+  const clearSignedInState = useCallback(() => {
+    accessTokenRef.current = null;
+    shouldOpenDashboardAfterSignInRef.current = false;
+    setState({ status: "signed_out", pendingProvider: null, viewer: null });
+    setDevices(unavailableDevices);
+  }, []);
 
   useEffect(() => {
     let active = true;
 
     if (!authClient) {
       setState({ status: "unconfigured", pendingProvider: null, viewer: null });
+      setDevices(unavailableDevices);
       return;
     }
 
@@ -66,8 +124,7 @@ export function useSpillAuth({
             if (error) {
               throw error;
             }
-            window.history.replaceState(null, "", "/#/dashboard");
-            onAuthReady();
+            shouldOpenDashboardAfterSignInRef.current = true;
           }
         }
 
@@ -75,7 +132,7 @@ export function useSpillAuth({
         if (!active) return;
 
         if (!isSignedInSession(data.session)) {
-          setState({ status: "signed_out", pendingProvider: null, viewer: null });
+          clearSignedInState();
           return;
         }
 
@@ -83,6 +140,7 @@ export function useSpillAuth({
       } catch {
         if (active) {
           setState({ status: "error", pendingProvider: null, viewer: null });
+          setDevices(unavailableDevices);
         }
       }
     }
@@ -91,7 +149,7 @@ export function useSpillAuth({
 
     const { data: listener } = authClient.auth.onAuthStateChange((_event, session) => {
       if (!isSignedInSession(session)) {
-        setState({ status: "signed_out", pendingProvider: null, viewer: null });
+        clearSignedInState();
         return;
       }
 
@@ -102,15 +160,19 @@ export function useSpillAuth({
       active = false;
       listener.subscription.unsubscribe();
     };
-  }, [authClient, loadViewer, onAuthReady]);
+  }, [authClient, clearSignedInState, loadViewer, onAuthReady]);
 
   const signIn = useCallback(async (provider: SpillAuthProvider) => {
     if (!authClient) {
       setState({ status: "unconfigured", pendingProvider: null, viewer: null });
       return;
     }
+    if (!enabledProviderIds.has(provider)) {
+      return;
+    }
 
     setState({ status: "signed_out", pendingProvider: provider, viewer: null });
+    setDevices(unavailableDevices);
     const { error } = await authClient.auth.signInWithOAuth({
       provider: providerToSupabaseProvider(provider),
       options: {
@@ -121,7 +183,7 @@ export function useSpillAuth({
     if (error) {
       setState({ status: "error", pendingProvider: null, viewer: null });
     }
-  }, [authClient]);
+  }, [authClient, enabledProviderIds]);
 
   const signOut = useCallback(async () => {
     if (!authClient) {
@@ -129,11 +191,62 @@ export function useSpillAuth({
     }
 
     await authClient.auth.signOut();
-    setState({ status: "signed_out", pendingProvider: null, viewer: null });
-  }, [authClient]);
+    clearSignedInState();
+  }, [authClient, clearSignedInState]);
+
+  const refreshDevices = useCallback(async () => {
+    const accessToken = accessTokenRef.current;
+    if (!accessToken) {
+      setDevices(unavailableDevices);
+      return;
+    }
+
+    await loadDevicesForToken(accessToken);
+  }, [loadDevicesForToken]);
+
+  const revokeDevice = useCallback(async (deviceId: string) => {
+    const accessToken = accessTokenRef.current;
+    if (!accessToken) {
+      setDevices(unavailableDevices);
+      return;
+    }
+
+    setDevices((current) => ({
+      status: current.status === "ready" ? "ready" : "loading",
+      devices: current.devices,
+      revokingDeviceId: deviceId
+    }));
+
+    const result = await relayClient.revokeDevice(accessToken, {
+      device_id: deviceId
+    });
+
+    if (!result.ok) {
+      setDevices((current) => ({
+        status: "error",
+        devices: current.devices,
+        revokingDeviceId: null
+      }));
+      return;
+    }
+
+    setDevices((current) => ({
+      status: "ready",
+      devices: current.devices.map((device) => (
+        device.id === result.data.device_id
+          ? { ...device, revoked_at: result.data.revoked_at }
+          : device
+      )),
+      revokingDeviceId: null
+    }));
+  }, [relayClient]);
 
   return {
     config,
+    devices,
+    providers,
+    refreshDevices,
+    revokeDevice,
     signIn,
     signOut,
     state

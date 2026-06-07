@@ -1,21 +1,17 @@
-import type { DashboardModel } from "../../tokenMeteringDashboard/dashboardModel";
 import type {
   SpillAuthProvider,
   SpillAuthProviderOption,
   SpillAuthState
 } from "../model/spillAuth";
 import type { PortalRoute } from "../routes";
-import { OnboardingScreen } from "../screens/OnboardingScreen";
+import { AdminScreen } from "../screens/AdminScreen";
 
-export function OnboardingPage(props: {
+export function AdminPage(props: {
   auth: SpillAuthState;
   authProviders: readonly SpillAuthProviderOption[];
-  copiedInstall: boolean;
-  dashboard: DashboardModel;
-  onCopyInstall: () => void;
   onNavigate: (route: PortalRoute) => void;
   onSignIn: (provider: SpillAuthProvider) => void;
   onSignOut: () => void;
 }) {
-  return <OnboardingScreen {...props} />;
+  return <AdminScreen {...props} />;
 }

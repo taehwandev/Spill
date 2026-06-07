@@ -1,12 +1,17 @@
 import type React from "react";
 import { AuthControls } from "./AuthControls";
-import type { SpillAuthProvider, SpillAuthState } from "../model/spillAuth";
+import type {
+  SpillAuthProvider,
+  SpillAuthProviderOption,
+  SpillAuthState
+} from "../model/spillAuth";
 import type { PortalRoute } from "../routes";
 import { MaterialIcon } from "./MaterialIcon";
 
 export function AppChrome({
   activeRoute,
   auth,
+  authProviders,
   children,
   onNavigate,
   onSignIn,
@@ -14,6 +19,7 @@ export function AppChrome({
 }: {
   activeRoute: Exclude<PortalRoute, "onboarding">;
   auth: SpillAuthState;
+  authProviders: readonly SpillAuthProviderOption[];
   children: React.ReactNode;
   onNavigate: (route: PortalRoute) => void;
   onSignIn: (provider: SpillAuthProvider) => void;
@@ -27,6 +33,7 @@ export function AppChrome({
     : auth.status === "signed_in"
       ? "Signed in"
       : "No account required";
+  const isAdmin = auth.status === "signed_in" && auth.viewer.role === "admin";
 
   return (
     <div className="appChrome">
@@ -62,6 +69,16 @@ export function AppChrome({
             <MaterialIcon filled={activeRoute === "settings"} name="settings" />
             Settings
           </button>
+          {isAdmin ? (
+            <button
+              className={`sideNavItem ${activeRoute === "admin" ? "active" : ""}`}
+              onClick={() => onNavigate("admin")}
+              type="button"
+            >
+              <MaterialIcon filled={activeRoute === "admin"} name="verified_user" />
+              Administration
+            </button>
+          ) : null}
         </nav>
 
         <div className="sideProfile">
@@ -80,7 +97,12 @@ export function AppChrome({
           <span>Content stays on this device</span>
         </div>
         <div className="topActions">
-          <AuthControls state={auth} onSignIn={onSignIn} onSignOut={onSignOut} />
+          <AuthControls
+            providers={authProviders}
+            state={auth}
+            onSignIn={onSignIn}
+            onSignOut={onSignOut}
+          />
           <button aria-label="Refresh dashboard" type="button">
             <MaterialIcon name="refresh" />
           </button>

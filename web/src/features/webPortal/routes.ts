@@ -1,9 +1,10 @@
-export type PortalRoute = "onboarding" | "dashboard" | "settings";
+export type PortalRoute = "onboarding" | "dashboard" | "settings" | "admin";
 
 const routePaths = {
   onboarding: "/",
   dashboard: "/dashboard",
-  settings: "/settings"
+  settings: "/settings",
+  admin: "/admin"
 } as const satisfies Record<PortalRoute, string>;
 
 export function portalHref(route: PortalRoute): string {
@@ -19,6 +20,10 @@ export function parsePortalRoute(hash: string): PortalRoute {
 
   if (normalized === routePaths.settings || normalized === "settings") {
     return "settings";
+  }
+
+  if (normalized === routePaths.admin || normalized === "admin") {
+    return "admin";
   }
 
   return "onboarding";

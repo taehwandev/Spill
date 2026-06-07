@@ -1,15 +1,17 @@
 import {
-  SPILL_AUTH_PROVIDERS,
   type SpillAuthProvider,
+  type SpillAuthProviderOption,
   type SpillAuthState
 } from "../model/spillAuth";
 import { MaterialIcon } from "./MaterialIcon";
 
 export function AuthControls({
+  providers,
   state,
   onSignIn,
   onSignOut
 }: {
+  providers: readonly SpillAuthProviderOption[];
   state: SpillAuthState;
   onSignIn: (provider: SpillAuthProvider) => void;
   onSignOut: () => void;
@@ -46,7 +48,7 @@ export function AuthControls({
     return (
       <div className="authControls">
         <span>Sign in failed</span>
-        {SPILL_AUTH_PROVIDERS.map((provider) => (
+        {providers.map((provider) => (
           <button
             className="secondaryAction small"
             key={provider.id}
@@ -62,7 +64,7 @@ export function AuthControls({
 
   return (
     <div className="authControls">
-      {SPILL_AUTH_PROVIDERS.map((provider) => (
+      {providers.map((provider) => (
         <button
           className="secondaryAction small"
           disabled={state.pendingProvider !== null}

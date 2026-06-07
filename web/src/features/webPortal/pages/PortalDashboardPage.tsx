@@ -1,11 +1,16 @@
-import type { DashboardModel } from "../../tokenMeteringDashboard/dashboardModel";
-import type { SpillAuthProvider, SpillAuthState } from "../model/spillAuth";
+import type {
+  SpillAuthProvider,
+  SpillAuthProviderOption,
+  SpillAuthState
+} from "../model/spillAuth";
+import type { PortalDashboardPreviewModel } from "../model/dashboardPreview";
 import type { PortalRoute } from "../routes";
 import { DashboardScreen } from "../screens/DashboardScreen";
 
 export function PortalDashboardPage(props: {
   auth: SpillAuthState;
-  dashboard: DashboardModel;
+  authProviders: readonly SpillAuthProviderOption[];
+  dashboardPreview: PortalDashboardPreviewModel;
   onNavigate: (route: PortalRoute) => void;
   onSignIn: (provider: SpillAuthProvider) => void;
   onSignOut: () => void;
