@@ -305,6 +305,25 @@ final class SpillSettings: ObservableObject {
         didSet { defaults.set(tokenUsageShowAdvancedTools, forKey: Keys.tokenUsageShowAdvancedTools) }
     }
 
+    @Published var privateUsageUploadEnvironment: PrivateUsageUploadEnvironment {
+        didSet {
+            defaults.set(privateUsageUploadEnvironment.rawValue, forKey: Keys.privateUsageUploadEnvironment)
+            privateUsageUploadEnabled = Self.privateUsageUploadEnabled(
+                defaults: defaults,
+                environment: privateUsageUploadEnvironment
+            )
+        }
+    }
+
+    @Published var privateUsageUploadEnabled: Bool {
+        didSet {
+            defaults.set(
+                privateUsageUploadEnabled,
+                forKey: Self.privateUsageUploadEnabledKey(for: privateUsageUploadEnvironment)
+            )
+        }
+    }
+
     func reloadAppLanguageFromDefaults() {
         defaults.synchronize()
         let persistedLanguage = SpillAppLanguage.normalized(rawValue: defaults.string(forKey: Keys.appLanguage))
@@ -419,6 +438,14 @@ final class SpillSettings: ObservableObject {
         tokenMeteringPromptAllowsLocalDisplayNames = defaults.object(forKey: Keys.tokenMeteringPromptAllowsLocalDisplayNames) as? Bool ?? false
         tokenUsageLocalAliases = defaults.dictionary(forKey: Keys.tokenUsageLocalAliases) as? [String: String] ?? [:]
         tokenUsageShowAdvancedTools = defaults.object(forKey: Keys.tokenUsageShowAdvancedTools) as? Bool ?? false
+        let privateUsageEnvironment = PrivateUsageUploadEnvironment.normalized(
+            rawValue: defaults.string(forKey: Keys.privateUsageUploadEnvironment)
+        )
+        privateUsageUploadEnvironment = privateUsageEnvironment
+        privateUsageUploadEnabled = Self.privateUsageUploadEnabled(
+            defaults: defaults,
+            environment: privateUsageEnvironment
+        )
         statusValueBold = defaults.object(forKey: Keys.statusValueBold) as? Bool ?? true
         let fontDesignRaw = defaults.string(forKey: Keys.statusFontDesign) ?? SpillStatusFontDesign.rounded.rawValue
         statusFontDesign = SpillStatusFontDesign(rawValue: fontDesignRaw) ?? .rounded
@@ -678,6 +705,17 @@ final class SpillSettings: ObservableObject {
 
         return value.clamped(to: 10...15)
     }
+
+    private static func privateUsageUploadEnabled(
+        defaults: UserDefaults,
+        environment: PrivateUsageUploadEnvironment
+    ) -> Bool {
+        defaults.object(forKey: privateUsageUploadEnabledKey(for: environment)) as? Bool ?? false
+    }
+
+    private static func privateUsageUploadEnabledKey(for environment: PrivateUsageUploadEnvironment) -> String {
+        "\(Keys.privateUsageUploadEnabled).\(environment.rawValue)"
+    }
 }
 
 private struct WindowActionShortcutRegistrationKey: Hashable {
@@ -719,6 +757,8 @@ private enum Keys {
     static let tokenMeteringPromptAllowsLocalDisplayNames = "tokenMeteringPromptAllowsLocalDisplayNames"
     static let tokenUsageLocalAliases = "tokenUsageLocalAliases"
     static let tokenUsageShowAdvancedTools = "tokenUsageShowAdvancedTools"
+    static let privateUsageUploadEnvironment = "privateUsageUploadEnvironment"
+    static let privateUsageUploadEnabled = "privateUsageUploadEnabled"
     static let statusValueBold = "statusValueBold"
     static let statusFontDesign = "statusFontDesign"
     static let statusValueFontSize = "statusValueFontSize"

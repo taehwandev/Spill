@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import Combine
 
 @MainActor
@@ -88,6 +89,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     )
     private var statusItemController: StatusItemController?
     private var statusRefreshTask: Task<Void, Never>?
+    private var privateUsageUploadTask: Task<Void, Never>?
     private var isSpillPanelVisible = false
     private var menuBarAITokenTotal = 0
     private var menuBarAITokenDayStart: Date?
@@ -184,7 +186,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         tokenUsageInboxMonitor.start()
         requestTokenUsageCollection(reason: "app_launch")
         configureTokenUsageBridge()
+        registerPrivateUsageConnectionURLHandler()
         configureStatusRefreshLoop()
+        schedulePrivateUsageUploadIfNeeded()
 
         if isSmokeTest {
             startSmokeTestExitTimer()
@@ -213,6 +217,55 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var shouldStartSleepGuardInSmokeTest: Bool {
         ProcessInfo.processInfo.environment["SPILL_SMOKE_START_SLEEP_GUARD"] == "1"
+    }
+
+    private func registerPrivateUsageConnectionURLHandler() {
+        guard PrivateUsageUploadFeatureAvailability.isEnabledInCurrentBuild else {
+            return
+        }
+
+        NSAppleEventManager.shared().setEventHandler(
+            self,
+            andSelector: #selector(handlePrivateUsageConnectionURLEvent(_:withReplyEvent:)),
+            forEventClass: AEEventClass(kInternetEventClass),
+            andEventID: AEEventID(kAEGetURL)
+        )
+    }
+
+    @objc private func handlePrivateUsageConnectionURLEvent(
+        _ event: NSAppleEventDescriptor,
+        withReplyEvent replyEvent: NSAppleEventDescriptor
+    ) {
+        guard PrivateUsageUploadFeatureAvailability.isEnabledInCurrentBuild,
+              let rawURL = event.paramDescriptor(forKeyword: AEKeyword(keyDirectObject))?.stringValue,
+              let url = URL(string: rawURL),
+              let connectionCode = PrivateUsageConnectionDeepLink.connectionCode(from: url)
+        else {
+            return
+        }
+
+        Task { @MainActor [weak self] in
+            await self?.connectPrivateUsageFromDeepLink(connectionCode: connectionCode)
+        }
+    }
+
+    private func connectPrivateUsageFromDeepLink(connectionCode: String) async {
+        guard PrivateUsageUploadFeatureAvailability.isEnabledInCurrentBuild else {
+            return
+        }
+
+        let coordinator = PrivateUsageUploadCoordinator.live(
+            usageStore: tokenUsageStore,
+            environment: settings.privateUsageUploadEnvironment
+        )
+
+        do {
+            _ = try await coordinator.exchangeGrantCode(connectionCode)
+            settings.privateUsageUploadEnabled = true
+            schedulePrivateUsageUploadIfNeeded()
+        } catch {
+            return
+        }
     }
 
     private func startSmokeTestExitTimer() {
@@ -356,6 +409,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             object: nil
         )
         statusRefreshTask?.cancel()
+        privateUsageUploadTask?.cancel()
         sleepGuard.stop()
         spillPanelController.hide(animated: false)
     }
@@ -425,6 +479,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } catch {
             // The native app dashboard reads the app-owned store directly.
             return
+        }
+    }
+
+    private func schedulePrivateUsageUploadIfNeeded() {
+        guard !isSmokeTest else {
+            return
+        }
+        guard PrivateUsageUploadFeatureAvailability.isEnabledInCurrentBuild else {
+            privateUsageUploadTask?.cancel()
+            privateUsageUploadTask = nil
+            return
+        }
+
+        privateUsageUploadTask?.cancel()
+        privateUsageUploadTask = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(nanoseconds: 2_000_000_000)
+            } catch {
+                return
+            }
+
+            guard let self else {
+                return
+            }
+
+            let coordinator = PrivateUsageUploadCoordinator.live(
+                usageStore: tokenUsageStore,
+                environment: settings.privateUsageUploadEnvironment
+            )
+            _ = await coordinator.runAutomaticUploadIfNeeded(
+                isEnabled: settings.privateUsageUploadEnabled
+            )
         }
     }
 

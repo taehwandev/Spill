@@ -5,11 +5,29 @@ struct TokenMeteringPreferencesSection: View {
     @ObservedObject var settings: SpillSettings
     let tokenUsageStore: TokenUsageStore
     let openDashboardAction: () -> Void
+    @StateObject private var privateUsageUploadStore: PrivateUsageUploadStore
     @State private var copiedTarget: String?
+    @State private var privateUsageGrantCode = ""
     @State private var adapterStatuses: [String: TokenMeteringAdapterConnectionStatus] = [:]
     @State private var localDataPreview = TokenUsageClearPreview(scopeTitle: "", eventCount: 0, totalTokens: 0)
     @State private var pendingClearAllPreview: TokenUsageClearPreview?
     @State private var clearAllError: String?
+
+    init(
+        settings: SpillSettings,
+        tokenUsageStore: TokenUsageStore,
+        openDashboardAction: @escaping () -> Void
+    ) {
+        self.settings = settings
+        self.tokenUsageStore = tokenUsageStore
+        self.openDashboardAction = openDashboardAction
+        _privateUsageUploadStore = StateObject(
+            wrappedValue: PrivateUsageUploadStore(
+                settings: settings,
+                usageStore: tokenUsageStore
+            )
+        )
+    }
 
     private var currentLanguage: TokenMeteringLanguage {
         TokenMeteringLanguage.current(appLanguage: settings.appLanguage)
@@ -156,6 +174,10 @@ struct TokenMeteringPreferencesSection: View {
                 }
             }
 
+            if PrivateUsageUploadFeatureAvailability.isEnabledInCurrentBuild {
+                privateUsageUploadSection
+            }
+
             localDataManagementSection
 
             localEventQueueSection
@@ -165,9 +187,17 @@ struct TokenMeteringPreferencesSection: View {
         .onAppear {
             refreshAdapterStatuses()
             refreshLocalDataPreview()
+            refreshPrivateUsageUploadIfAvailable()
         }
         .onReceive(NotificationCenter.default.publisher(for: TokenUsageStore.eventsDidChangeNotification)) { _ in
             refreshLocalDataPreview()
+            refreshPrivateUsageUploadIfAvailable()
+        }
+        .onChange(of: settings.privateUsageUploadEnabled) { _, _ in
+            refreshPrivateUsageUploadIfAvailable()
+        }
+        .onChange(of: settings.privateUsageUploadEnvironment) { _, _ in
+            refreshPrivateUsageUploadIfAvailable()
         }
         .alert(
             t(.deleteTokenDataTitle),
@@ -230,6 +260,138 @@ struct TokenMeteringPreferencesSection: View {
         .background(tokenMeteringOptionBackground)
     }
 
+    private var privateUsageUploadSection: some View {
+        let status = privateUsageUploadStore.status
+        let stateText = status.isConnected
+            ? (settings.privateUsageUploadEnabled ? t(.privateUsageUploadStateEnabled) : t(.privateUsageUploadStateConnected))
+            : t(.privateUsageUploadStateOptional)
+        let stateColor: Color = status.isConnected
+            ? (settings.privateUsageUploadEnabled ? .green : .teal)
+            : .secondary
+
+        return VStack(alignment: .leading, spacing: 10) {
+            TokenMeteringOptionHeader(
+                title: t(.privateUsageUploadTitle),
+                state: stateText,
+                systemImage: status.isConnected ? "checkmark.shield.fill" : "lock.shield.fill",
+                tint: status.isConnected ? stateColor : .indigo
+            )
+
+            Text(t(.privateUsageUploadDetail))
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .lineSpacing(2)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Picker(t(.privateUsageUploadEnvironment), selection: $settings.privateUsageUploadEnvironment) {
+                ForEach(PrivateUsageUploadEnvironment.allCases) { environment in
+                    Text(TokenMeteringL10n.privateUsageEnvironmentTitle(environment, language: currentLanguage))
+                        .tag(environment)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            Text(TokenMeteringL10n.privateUsageEnvironmentDetail(settings.privateUsageUploadEnvironment, language: currentLanguage))
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: 8) {
+                SecureField(t(.privateUsageUploadConnectionCode), text: $privateUsageGrantCode)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(size: 12, weight: .medium, design: .monospaced))
+                    .disabled(privateUsageUploadStore.isConnecting)
+
+                Button {
+                    Task { @MainActor in
+                        await privateUsageUploadStore.connect(grantCode: privateUsageGrantCode)
+                        if privateUsageUploadStore.status.isConnected {
+                            privateUsageGrantCode = ""
+                        }
+                    }
+                } label: {
+                    if privateUsageUploadStore.isConnecting {
+                        Label(t(.privateUsageUploadConnecting), systemImage: "hourglass")
+                    } else {
+                        Label(t(.privateUsageUploadConnectMac), systemImage: "link")
+                    }
+                }
+                .buttonStyle(.bordered)
+                .font(.system(size: 12, weight: .semibold))
+                .disabled(privateUsageUploadStore.isConnecting || privateUsageGrantCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+
+            Toggle(isOn: $settings.privateUsageUploadEnabled) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(t(.privateUsageUploadToggleTitle))
+                        .font(.system(size: 12, weight: .bold))
+                    Text(t(.privateUsageUploadToggleDetail))
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .toggleStyle(.switch)
+            .disabled(!status.isConnected)
+
+            HStack(spacing: 10) {
+                PrivateUsageUploadMetric(
+                    title: t(.privateUsageUploadQueued),
+                    value: "\(status.queuedBucketCount)"
+                )
+                PrivateUsageUploadMetric(
+                    title: t(.privateUsageUploadLastBackup),
+                    value: formatUploadDate(status.lastSuccessfulUploadAt)
+                )
+                PrivateUsageUploadMetric(
+                    title: t(.privateUsageUploadNextAuto),
+                    value: formatUploadDate(status.nextAutomaticAttemptAfter)
+                )
+            }
+
+            HStack(spacing: 8) {
+                Button {
+                    Task { @MainActor in
+                        await privateUsageUploadStore.syncNow()
+                    }
+                } label: {
+                    if privateUsageUploadStore.isSyncing {
+                        Label(t(.privateUsageUploadSyncing), systemImage: "hourglass")
+                    } else {
+                        Label(t(.privateUsageUploadSyncNow), systemImage: "arrow.clockwise")
+                    }
+                }
+                .buttonStyle(.bordered)
+                .font(.system(size: 12, weight: .semibold))
+                .disabled(!status.isConnected || !settings.privateUsageUploadEnabled || privateUsageUploadStore.isSyncing)
+
+                Button(role: .destructive) {
+                    privateUsageUploadStore.disconnect()
+                } label: {
+                    Label(t(.privateUsageUploadDisconnect), systemImage: "xmark.circle")
+                }
+                .buttonStyle(.bordered)
+                .font(.system(size: 12, weight: .semibold))
+                .disabled(!status.isConnected)
+            }
+
+            if let message = privateUsageUploadStore.message {
+                Label(message, systemImage: "checkmark.circle.fill")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.green)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if let errorMessage = privateUsageUploadStore.errorMessage ?? status.lastFailureReason {
+                Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(10)
+        .background(tokenMeteringOptionBackground)
+    }
+
     private var privacyBoundarySection: some View {
         VStack(alignment: .leading, spacing: 8) {
             TokenMeteringOptionHeader(
@@ -260,6 +422,25 @@ struct TokenMeteringPreferencesSection: View {
                 copiedTarget = nil
             }
         }
+    }
+
+    private func formatUploadDate(_ date: Date?) -> String {
+        guard let date else {
+            return t(.privateUsageUploadNone)
+        }
+
+        let formatter = RelativeDateTimeFormatter()
+        formatter.locale = Locale(identifier: currentLanguage.rawValue)
+        formatter.unitsStyle = .short
+        return formatter.localizedString(for: date, relativeTo: Date())
+    }
+
+    private func refreshPrivateUsageUploadIfAvailable() {
+        guard PrivateUsageUploadFeatureAvailability.isEnabledInCurrentBuild else {
+            return
+        }
+
+        privateUsageUploadStore.refresh()
     }
 
     private func status(for adapter: TokenMeteringAdapter) -> TokenMeteringAdapterConnectionStatus {
@@ -630,6 +811,32 @@ private struct TokenMeteringModeRow: View {
         .overlay {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(Color.primary.opacity(0.06), lineWidth: 1)
+        }
+    }
+}
+
+private struct PrivateUsageUploadMetric: View {
+    let title: String
+    let value: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 7)
+        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 8))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.primary.opacity(0.05), lineWidth: 0.5)
         }
     }
 }

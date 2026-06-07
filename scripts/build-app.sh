@@ -168,6 +168,17 @@ cat > "$CONTENTS_DIR/Info.plist" <<PLIST
     <string>$VERSION</string>
     <key>CFBundleVersion</key>
     <string>$BUILD_NUMBER</string>
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>$BUNDLE_ID.private-usage</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>spill</string>
+            </array>
+        </dict>
+    </array>
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.utilities</string>
     <key>LSMinimumSystemVersion</key>

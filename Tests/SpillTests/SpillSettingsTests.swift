@@ -40,6 +40,8 @@ final class SpillSettingsTests: XCTestCase {
         XCTAssertEqual(settings.shortcutKey(for: .topHalf).shortcutLabel, "⌃⌥↑")
         XCTAssertEqual(settings.shortcutKey(for: .bottomHalf).shortcutLabel, "⌃⌥↓")
         XCTAssertFalse(settings.tokenMeteringPromptAllowsLocalDisplayNames)
+        XCTAssertEqual(settings.privateUsageUploadEnvironment, .defaultValue)
+        XCTAssertFalse(settings.privateUsageUploadEnabled)
         XCTAssertEqual(settings.shortcutKey(for: .restore).shortcutLabel, "⌃⌥⌫")
         XCTAssertEqual(
             settings.shortcutKey(for: .previousDisplay).shortcutLabel(with: .display),
@@ -58,6 +60,41 @@ final class SpillSettingsTests: XCTestCase {
 
         let reloadedSettings = SpillSettings(defaults: defaults)
         XCTAssertTrue(reloadedSettings.tokenMeteringPromptAllowsLocalDisplayNames)
+    }
+
+    func testPrivateUsageUploadOptionPersists() {
+        let defaults = makeDefaults()
+        let settings = SpillSettings(defaults: defaults)
+
+        XCTAssertFalse(settings.privateUsageUploadEnabled)
+
+        settings.privateUsageUploadEnabled = true
+
+        let reloadedSettings = SpillSettings(defaults: defaults)
+        XCTAssertTrue(reloadedSettings.privateUsageUploadEnabled)
+    }
+
+    func testPrivateUsageUploadOptionIsScopedByEnvironment() {
+        let defaults = makeDefaults()
+        let settings = SpillSettings(defaults: defaults)
+
+        settings.privateUsageUploadEnvironment = .production
+        settings.privateUsageUploadEnabled = true
+        settings.privateUsageUploadEnvironment = .development
+
+        XCTAssertFalse(settings.privateUsageUploadEnabled)
+
+        settings.privateUsageUploadEnabled = true
+        settings.privateUsageUploadEnvironment = .production
+
+        XCTAssertTrue(settings.privateUsageUploadEnabled)
+
+        let reloadedSettings = SpillSettings(defaults: defaults)
+        XCTAssertEqual(reloadedSettings.privateUsageUploadEnvironment, .production)
+        XCTAssertTrue(reloadedSettings.privateUsageUploadEnabled)
+
+        reloadedSettings.privateUsageUploadEnvironment = .development
+        XCTAssertTrue(reloadedSettings.privateUsageUploadEnabled)
     }
 
     func testPowerFooterDefaultsToVisibleAndSleepGuardDisplayAwakeDefaultsOn() {
