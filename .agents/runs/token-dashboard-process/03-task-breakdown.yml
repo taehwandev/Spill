@@ -1,0 +1,105 @@
+feature_id: token-dashboard-process
+status: completed
+
+necessity:
+  decision: build
+  reason: Detailed token analytics need a separate dashboard surface so the compact menu bar panel stays small and the main Spill app remains running when the dashboard closes.
+  ambiguity:
+    clarity: clear
+    blockers_resolved: true
+    resolution_sources:
+      - maintainer
+      - repo-research
+      - assumption
+  clarification_required: false
+  questions: []
+
+tasks:
+  - id: token-dashboard-process-T1
+    title: Route AI glance and menu actions to the local token dashboard
+    owner_role: builder
+    state: done
+    depends_on: []
+    write_scope:
+      - Sources/Spill/MenuBar/StatusItemController.swift
+      - Sources/Spill/App/AppDelegate.swift
+      - Sources/Spill/Preferences
+    read_scope:
+      - .agents/runs/token-dashboard-process/01-prd.md
+      - .agents/specs/prd.md
+      - .agents/specs/ard.md
+    forbidden_scope:
+      - Sources/Spill/TokenMetering/TokenUsageEvent.swift
+    acceptance:
+      - AI glance left-click opens the local token dashboard.
+      - Main Spill trigger still toggles the compact panel.
+      - Right-click and Control-click still show the native menu.
+    verification:
+      commands:
+        - swift test
+      manual:
+        - Open the dashboard from the menu bar AI entry.
+
+  - id: token-dashboard-process-T2
+    title: Add bundled dashboard helper process
+    owner_role: builder
+    state: done
+    depends_on:
+      - token-dashboard-process-T1
+    write_scope:
+      - Sources/Spill/App/SpillMain.swift
+      - Sources/Spill/TokenMetering/TokenMeteringDashboardProcess.swift
+      - Sources/Spill/TokenMetering/TokenMeteringDashboardLauncher.swift
+      - Sources/Spill/TokenMetering/TokenMeteringDashboardAppDelegate.swift
+      - Sources/Spill/TokenMetering/TokenMeteringDashboardWindowController.swift
+      - Sources/Spill/Settings/SpillSettings.swift
+    read_scope:
+      - Sources/Spill/App/AppDelegate.swift
+      - Sources/Spill/TokenMetering/TokenUsageDashboardStore.swift
+    forbidden_scope:
+      - Sources/Spill/Panel/SpillPanelController.swift
+      - Sources/Spill/MenuBar/AXMenuBarItemScanner.swift
+    acceptance:
+      - Helper process owns only the dashboard window and dashboard store reads.
+      - Helper does not create a status item, compact panel, scanner, hotkey, bridge server, or ingestion owner.
+      - Command-Q in the helper quits only the helper.
+    verification:
+      commands:
+        - swift test --filter TokenUsageStoreTests/testTokenDashboardHelperProcessContracts
+        - python3 .agents/scripts/workflow.py runtime-smoke
+      manual:
+        - Close and quit dashboard helper while the main menu bar app remains running.
+
+  - id: token-dashboard-process-T3
+    title: Package and verify helper bundle
+    owner_role: builder
+    state: done
+    depends_on:
+      - token-dashboard-process-T2
+    write_scope:
+      - scripts/build-app.sh
+      - scripts/verify-runtime-smoke.sh
+      - Tests/SpillTests/TokenUsageStoreTests.swift
+    read_scope:
+      - Sources/Spill/TokenMetering/TokenMeteringDashboardProcess.swift
+      - Sources/Spill/TokenMetering/TokenMeteringDashboardAppDelegate.swift
+    forbidden_scope:
+      - .github/workflows/release.yml
+    acceptance:
+      - Build output contains `Spill.app/Contents/Applications/Spill Token Dashboard.app`.
+      - Runtime smoke can launch the main app and dashboard helper.
+      - Helper bundle is included in release artifacts.
+    verification:
+      commands:
+        - ./scripts/build-app.sh
+        - python3 .agents/scripts/workflow.py runtime-smoke
+        - swift test
+      manual:
+        - Inspect packaged app bundle structure.
+
+parallel_groups:
+  - id: dashboard-entry-and-packaging
+    tasks:
+      - token-dashboard-process-T1
+      - token-dashboard-process-T3
+    rule: Parallel only after helper process contracts are stable; otherwise keep packaging after process implementation.
