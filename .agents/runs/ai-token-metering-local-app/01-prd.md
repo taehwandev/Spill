@@ -123,6 +123,6 @@ login/opt-in states with no server transfer active.
 
 ## References
 
-- `.agents/runs/ai-token-metering-web/01-prd.md`
+- Spill-web repo `.agents/runs/ai-token-metering-web/01-prd.md`
 - `.agents/specs/prd.md`
 - `.agents/specs/ard.md`

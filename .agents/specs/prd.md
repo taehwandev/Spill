@@ -475,7 +475,7 @@ Acceptance:
 - Admin audit records capture actor, action, target, result, and timestamp with
   content-free metadata only.
 - Detailed upload cadence, E2EE key custody, storage backend, and retry policy
-  are specified in `.agents/runs/private-usage-upload/01-prd.md` and the
+  are specified in the Spill-web repo `.agents/runs/private-usage-upload/01-prd.md` and the
   follow-on ARD.
 
 ### 11. Update UX
@@ -564,6 +564,6 @@ References:
   https://developer.apple.com/documentation/security/notarizing_macos_software_before_distribution
 - Apple `NSStatusBar`: https://developer.apple.com/documentation/appkit/nsstatusbar
 - Apple `NSScreen.safeAreaInsets`: https://developer.apple.com/documentation/appkit/nsscreen/safeareainsets
-- Private Usage Upload PRD: `.agents/runs/private-usage-upload/01-prd.md`
+- Private Usage Upload PRD: Spill-web repo `.agents/runs/private-usage-upload/01-prd.md`
   (follow-on feature scope)
 - Local token metering architecture: `.agents/specs/ard.md`

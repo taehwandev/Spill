@@ -40,7 +40,7 @@
 - `swift test`
 - `bash -n scripts/package-release.sh`
 - `ruby -e 'require "yaml"; YAML.load_file(".github/workflows/release.yml")'`
-- `git diff --check -- . ':!docs/index.html' ':!.agents/runs/landing-page-showcase'`
+- `git diff --check -- . ':!docs/index.html'`
 - `./scripts/build-app.sh`
 - `SPILL_VERSION=2026.20.99 SPILL_BUILD=999 ./scripts/package-release.sh`
 - `python3 .agents/scripts/workflow.py verify`

@@ -27,10 +27,10 @@ tasks:
     read_scope:
       - .agents/specs/prd.md
       - .agents/specs/ard.md
-      - .agents/runs/release-automation-site/01-prd.md
+      - Spill-web repo .agents/runs/release-automation-site/01-prd.md
     forbidden_scope:
       - docs/index.html
-      - .agents/runs/landing-page-showcase
+      - Spill-web repo .agents/runs/landing-page-showcase
     acceptance:
       - Release artifacts include update.json.
       - GitHub Release upload includes update.json.
@@ -53,7 +53,7 @@ tasks:
       - Tests/SpillTests
     forbidden_scope:
       - docs/index.html
-      - .agents/runs/landing-page-showcase
+      - Spill-web repo .agents/runs/landing-page-showcase
     acceptance:
       - Version comparison and manifest outcomes are tested.
     verification:
@@ -80,7 +80,7 @@ tasks:
       - Sources/Spill/MenuBar
     forbidden_scope:
       - docs/index.html
-      - .agents/runs/landing-page-showcase
+      - Spill-web repo .agents/runs/landing-page-showcase
     acceptance:
       - Preferences shows current version and update state.
       - Menu actions open Preferences and start a manual check.
@@ -108,7 +108,7 @@ tasks:
       - .agents/design/stitch.md
       - docs/install.sh
     forbidden_scope:
-      - .agents/runs/landing-page-showcase
+      - Spill-web repo .agents/runs/landing-page-showcase
     acceptance:
       - Update store starts idle and does not force a fake available update.
       - Available update UI prioritizes copying the Terminal install command.

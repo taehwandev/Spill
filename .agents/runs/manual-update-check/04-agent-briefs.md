@@ -6,7 +6,7 @@
 - Do not revert changes outside your assigned scope.
 - Keep the app buildable.
 - Report changed files.
-- Existing `docs/index.html` and `.agents/runs/landing-page-showcase` changes are
+- Existing `docs/index.html` and Spill-web repo `.agents/runs/landing-page-showcase` changes are
   owned by another agent. Do not edit them.
 - UI scope is Preferences and menus only; do not add panel content.
 
@@ -71,7 +71,7 @@ Write scope:
 Do not edit:
 
 - `docs/index.html`
-- `.agents/runs/landing-page-showcase`
+- Spill-web repo `.agents/runs/landing-page-showcase`
 
 Acceptance:
 

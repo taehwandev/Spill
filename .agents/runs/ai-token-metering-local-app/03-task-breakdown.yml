@@ -100,7 +100,7 @@ tasks:
       - web/src/features/tokenMeteringDashboard/**
       - web/src/styles.css
     read_scope:
-      - .agents/runs/ai-token-metering-web/01-prd.md
+      - Spill-web repo .agents/runs/ai-token-metering-web/01-prd.md
       - .agents/runs/ai-token-metering-local-app/01-prd.md
       - .agents/runs/ai-token-metering-local-app/02-ard.md
     forbidden_scope:
