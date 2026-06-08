@@ -40,6 +40,43 @@ final class CloudServiceStatusPresentationTests: XCTestCase {
         XCTAssertEqual(CloudServiceHealth.unknown.serverStatusBadgeTitle, "Unknown")
     }
 
+    func testControlStateUsesSharedServerIssuePresentation() {
+        let now = Date(timeIntervalSince1970: 10_000)
+        let snapshot = CloudServiceStatusSnapshot(
+            fetchedAt: now.addingTimeInterval(-600),
+            items: [
+                item(kind: .codex, health: .operational),
+                item(kind: .claudeCode, health: .degraded)
+            ]
+        )
+
+        let state = CloudServiceStatusPresentation.controlState(
+            snapshot: snapshot,
+            isLoading: false,
+            appLanguage: .english,
+            now: now
+        )
+
+        XCTAssertEqual(state.title, "Degraded")
+        XCTAssertEqual(state.symbolName, "exclamationmark.circle.fill")
+        XCTAssertEqual(state.issueCount, 1)
+        XCTAssertTrue(state.hasServerIssue)
+        XCTAssertTrue(state.helpText.contains("with 1 issue"))
+    }
+
+    func testControlStateKeepsLoadingVisualStateShared() {
+        let state = CloudServiceStatusPresentation.controlState(
+            snapshot: nil,
+            isLoading: true,
+            appLanguage: .english
+        )
+
+        XCTAssertEqual(state.title, "Checking")
+        XCTAssertEqual(state.symbolName, "arrow.triangle.2.circlepath")
+        XCTAssertEqual(state.issueCount, 0)
+        XCTAssertFalse(state.hasServerIssue)
+    }
+
     func testOnlyActionableHealthStatesCountAsServerIssues() {
         XCTAssertFalse(CloudServiceHealth.operational.isServerIssue)
         XCTAssertTrue(CloudServiceHealth.degraded.isServerIssue)

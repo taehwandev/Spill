@@ -532,41 +532,19 @@ struct SpillBarView: View {
 
             Spacer()
 
-            Button {
+            CloudServiceStatusButton(
+                state: serviceStatusControlState,
+                appLanguage: settings.appLanguage,
+                height: 22,
+                fontSize: 9.5,
+                horizontalPadding: 7
+            ) {
                 showsServiceStatusDashboard = true
                 cloudServiceStatusStore.refreshIfNeeded()
-            } label: {
-                HStack(spacing: 5) {
-                    Circle()
-                        .fill(serviceStatusTint)
-                        .frame(width: 5, height: 5)
-
-                    Image(systemName: serviceStatusSymbolName)
-
-                    Text(serviceStatusButtonTitle)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.78)
-                }
-                .font(.system(size: 9.5, weight: .bold))
-                .padding(.horizontal, 7)
-                .frame(height: 22)
-                .background(serviceStatusTint.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .stroke(serviceStatusTint.opacity(0.12), lineWidth: 0.5)
-                }
             }
-            .buttonStyle(.plain)
             .popover(isPresented: $showsServiceStatusDashboard, arrowEdge: .top) {
                 CloudServiceStatusDashboardView(store: cloudServiceStatusStore)
             }
-            .help(serviceStatusHelpText)
-            .accessibilityLabel(
-                AppL10n.serviceStatusAccessibility(
-                    status: serviceStatusButtonTitle,
-                    appLanguage: settings.appLanguage
-                )
-            )
 
             Image(systemName: "sparkles")
                 .font(.system(size: 10.5, weight: .bold))
@@ -574,70 +552,12 @@ struct SpillBarView: View {
         }
     }
 
-    private var serviceStatusButtonTitle: String {
-        if cloudServiceStatusStore.isLoading {
-            return AppL10n.text(.checking, appLanguage: settings.appLanguage)
-        }
-
-        guard let aggregateHealth = aggregateServiceHealth else {
-            return AppL10n.text(.serverStatus, appLanguage: settings.appLanguage)
-        }
-
-        return aggregateHealth.serverStatusHeaderTitle
-    }
-
-    private var serviceStatusHelpText: String {
-        guard let snapshot = cloudServiceStatusStore.snapshot else {
-            return AppL10n.text(.fetchOfficialServiceStatus, appLanguage: settings.appLanguage)
-        }
-
-        let aggregateHealth = CloudServiceStatusPresentation.aggregateHealth(for: snapshot.items)
-        let issueCount = serviceStatusIssueItems.count
-        let statusText = issueCount == 0
-            ? String(
-                format: AppL10n.text(.serverStatusNoIssues, appLanguage: settings.appLanguage),
-                aggregateHealth.serverStatusHeaderTitle.lowercased()
-            )
-            : AppL10n.serverStatusWithIssues(
-                status: aggregateHealth.serverStatusHeaderTitle.lowercased(),
-                issueCount: issueCount,
-                appLanguage: settings.appLanguage
-            )
-        return "\(statusText). \(AppL10n.lastChecked(fullServiceCheckTime(snapshot.fetchedAt), age: relativeServiceAge(from: snapshot.fetchedAt), appLanguage: settings.appLanguage)) \(AppL10n.text(.clickForPerServiceDetails, appLanguage: settings.appLanguage))"
-    }
-
-    private var serviceStatusSymbolName: String {
-        if cloudServiceStatusStore.isLoading {
-            return "arrow.triangle.2.circlepath"
-        }
-
-        guard let aggregateHealth = aggregateServiceHealth else {
-            return "cloud.fill"
-        }
-
-        return aggregateHealth.serverStatusSymbolName
-    }
-
-    private var serviceStatusTint: Color {
-        if cloudServiceStatusStore.isLoading {
-            return .blue
-        }
-
-        guard let aggregateHealth = aggregateServiceHealth else {
-            return .secondary
-        }
-
-        return aggregateHealth.serverStatusTint
-    }
-
-    private var serviceStatusIssueItems: [CloudServiceStatusItem] {
-        cloudServiceStatusStore.snapshot?.items.filter { $0.health.isServerIssue } ?? []
-    }
-
-    private var aggregateServiceHealth: CloudServiceHealth? {
-        cloudServiceStatusStore.snapshot.map {
-            CloudServiceStatusPresentation.aggregateHealth(for: $0.items)
-        }
+    private var serviceStatusControlState: CloudServiceStatusControlState {
+        CloudServiceStatusPresentation.controlState(
+            snapshot: cloudServiceStatusStore.snapshot,
+            isLoading: cloudServiceStatusStore.isLoading,
+            appLanguage: settings.appLanguage
+        )
     }
 
     private func serviceStatus(for kind: LocalAIToolKind) -> CloudServiceStatusItem? {
@@ -645,34 +565,6 @@ struct SpillBarView: View {
             for: kind,
             in: cloudServiceStatusStore.snapshot
         )
-    }
-
-    private func fullServiceCheckTime(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = .current
-        formatter.timeZone = .current
-
-        if Calendar.current.isDateInToday(date) {
-            formatter.setLocalizedDateFormatFromTemplate("jm")
-        } else {
-            formatter.setLocalizedDateFormatFromTemplate("MMM d, jm")
-        }
-
-        return formatter.string(from: date)
-    }
-
-    private func relativeServiceAge(from date: Date) -> String {
-        let elapsed = max(0, Date().timeIntervalSince(date))
-        if elapsed < 60 {
-            return AppL10n.text(.justNow, appLanguage: settings.appLanguage)
-        }
-
-        let minutes = Int(elapsed / 60)
-        if minutes < 60 {
-            return AppL10n.minutesAgo(minutes, appLanguage: settings.appLanguage)
-        }
-
-        return AppL10n.hoursAgo(max(1, minutes / 60), appLanguage: settings.appLanguage)
     }
 
     private func detailButton(
@@ -768,6 +660,8 @@ struct SpillBarView: View {
         let tint = status.state.panelTint
         let isActive = status.state == .active
         let isUnavailable = status.state == .unavailable
+        let hasServerIssue = serviceStatus?.health.isServerIssue ?? false
+        let cardTint = hasServerIssue ? serviceStatus?.health.serverStatusTint ?? tint : tint
         let tokenUsage = toolTokenUsage(for: status.kind)
 
         return VStack(alignment: .leading, spacing: 5) {
@@ -826,12 +720,15 @@ struct SpillBarView: View {
         .frame(height: 72)
         .frame(maxWidth: .infinity)
         .background(
-            isActive ? tint.opacity(0.06) : Color.primary.opacity(0.03),
+            hasServerIssue ? cardTint.opacity(0.12) : isActive ? tint.opacity(0.06) : Color.primary.opacity(0.03),
             in: RoundedRectangle(cornerRadius: 8, style: .continuous)
         )
         .overlay {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(isActive ? tint.opacity(0.12) : Color.primary.opacity(0.04), lineWidth: 0.5)
+                .stroke(
+                    hasServerIssue ? cardTint.opacity(0.36) : isActive ? tint.opacity(0.12) : Color.primary.opacity(0.04),
+                    lineWidth: hasServerIssue ? 0.8 : 0.5
+                )
         }
     }
 

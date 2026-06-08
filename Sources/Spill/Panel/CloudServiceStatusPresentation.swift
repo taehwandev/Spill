@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 
 enum CloudServiceStatusPresentation {
@@ -30,6 +31,44 @@ enum CloudServiceStatusPresentation {
             return false
         }
         return !serviceKinds(for: tool).isEmpty
+    }
+
+    static func controlState(
+        snapshot: CloudServiceStatusSnapshot?,
+        isLoading: Bool,
+        appLanguage: SpillAppLanguage,
+        now: Date = Date()
+    ) -> CloudServiceStatusControlState {
+        let health = snapshot.map { aggregateHealth(for: $0.items) }
+        let issueCount = snapshot?.items.filter { $0.health.isServerIssue }.count ?? 0
+        let title: String
+        let symbolName: String
+
+        if isLoading {
+            title = AppL10n.text(.checking, appLanguage: appLanguage)
+            symbolName = "arrow.triangle.2.circlepath"
+        } else if let health {
+            title = health.serverStatusHeaderTitle(appLanguage: appLanguage)
+            symbolName = health.serverStatusSymbolName
+        } else {
+            title = AppL10n.text(.serverStatus, appLanguage: appLanguage)
+            symbolName = "cloud.fill"
+        }
+
+        return CloudServiceStatusControlState(
+            title: title,
+            helpText: serviceStatusHelpText(
+                snapshot: snapshot,
+                health: health,
+                issueCount: issueCount,
+                appLanguage: appLanguage,
+                now: now
+            ),
+            symbolName: symbolName,
+            health: health,
+            issueCount: issueCount,
+            isLoading: isLoading
+        )
     }
 
     static func serviceKinds(for kind: LocalAIToolKind) -> [CloudServiceKind] {
@@ -76,6 +115,157 @@ enum CloudServiceStatusPresentation {
                 lhs.health.serverStatusRank > rhs.health.serverStatusRank
             }
             .first
+    }
+
+    private static func serviceStatusHelpText(
+        snapshot: CloudServiceStatusSnapshot?,
+        health: CloudServiceHealth?,
+        issueCount: Int,
+        appLanguage: SpillAppLanguage,
+        now: Date
+    ) -> String {
+        guard let snapshot, let health else {
+            return AppL10n.text(.fetchOfficialServiceStatus, appLanguage: appLanguage)
+        }
+
+        let statusTitle = health.serverStatusHeaderTitle(appLanguage: appLanguage).lowercased()
+        let statusText = issueCount == 0
+            ? String(
+                format: AppL10n.text(.serverStatusNoIssues, appLanguage: appLanguage),
+                statusTitle
+            )
+            : AppL10n.serverStatusWithIssues(
+                status: statusTitle,
+                issueCount: issueCount,
+                appLanguage: appLanguage
+            )
+        return "\(statusText). \(AppL10n.lastChecked(fullServiceCheckTime(snapshot.fetchedAt), age: relativeServiceAge(from: snapshot.fetchedAt, now: now, appLanguage: appLanguage), appLanguage: appLanguage)) \(AppL10n.text(.clickForPerServiceDetails, appLanguage: appLanguage))"
+    }
+
+    private static func fullServiceCheckTime(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = .current
+        formatter.timeZone = .current
+
+        if Calendar.current.isDateInToday(date) {
+            formatter.setLocalizedDateFormatFromTemplate("jm")
+        } else {
+            formatter.setLocalizedDateFormatFromTemplate("MMM d, jm")
+        }
+
+        return formatter.string(from: date)
+    }
+
+    private static func relativeServiceAge(
+        from date: Date,
+        now: Date,
+        appLanguage: SpillAppLanguage
+    ) -> String {
+        let elapsed = max(0, now.timeIntervalSince(date))
+        if elapsed < 60 {
+            return AppL10n.text(.justNow, appLanguage: appLanguage)
+        }
+
+        let minutes = Int(elapsed / 60)
+        if minutes < 60 {
+            return AppL10n.minutesAgo(minutes, appLanguage: appLanguage)
+        }
+
+        return AppL10n.hoursAgo(max(1, minutes / 60), appLanguage: appLanguage)
+    }
+}
+
+struct CloudServiceStatusControlState {
+    let title: String
+    let helpText: String
+    let symbolName: String
+    let health: CloudServiceHealth?
+    let issueCount: Int
+    let isLoading: Bool
+
+    var hasServerIssue: Bool {
+        !isLoading && (health?.isServerIssue ?? false)
+    }
+
+    var tint: Color {
+        if isLoading {
+            return .blue
+        }
+
+        return health?.serverStatusTint ?? .secondary
+    }
+
+    var backgroundOpacity: Double {
+        if hasServerIssue {
+            return 0.20
+        }
+
+        return isLoading ? 0.14 : 0.10
+    }
+
+    var borderOpacity: Double {
+        if hasServerIssue {
+            return 0.38
+        }
+
+        return isLoading ? 0.22 : 0.13
+    }
+
+    var shadowOpacity: Double {
+        hasServerIssue ? 0.15 : 0
+    }
+}
+
+struct CloudServiceStatusButton: View {
+    let state: CloudServiceStatusControlState
+    var appLanguage: SpillAppLanguage = .persisted()
+    var height: CGFloat = 26
+    var fontSize: CGFloat = 10
+    var horizontalPadding: CGFloat = 9
+    var action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Circle()
+                    .fill(state.tint)
+                    .frame(width: 5, height: 5)
+
+                Image(systemName: state.symbolName)
+                    .font(.system(size: max(8, fontSize - 1), weight: .bold))
+
+                Text(state.title)
+                    .font(.system(size: fontSize, weight: .bold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+            }
+            .padding(.horizontal, horizontalPadding)
+            .frame(height: height)
+            .foregroundStyle(state.tint)
+            .background {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(state.tint.opacity(state.backgroundOpacity))
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(state.tint.opacity(state.borderOpacity), lineWidth: 0.75)
+            }
+            .shadow(
+                color: state.tint.opacity(state.shadowOpacity),
+                radius: state.hasServerIssue ? 6 : 0,
+                x: 0,
+                y: 1.5
+            )
+        }
+        .buttonStyle(.plain)
+        .focusEffectDisabled()
+        .help(state.helpText)
+        .accessibilityLabel(
+            AppL10n.serviceStatusAccessibility(
+                status: state.title,
+                appLanguage: appLanguage
+            )
+        )
     }
 }
 
@@ -189,7 +379,17 @@ struct CloudServiceStatusBadge: View {
         .padding(.horizontal, 5)
         .frame(height: 18)
         .foregroundStyle(item.health.serverStatusTint)
-        .background(item.health.serverStatusTint.opacity(0.13), in: Capsule())
+        .background(
+            item.health.serverStatusTint.opacity(item.health.isServerIssue ? 0.20 : 0.13),
+            in: Capsule()
+        )
+        .overlay {
+            Capsule()
+                .stroke(
+                    item.health.serverStatusTint.opacity(item.health.isServerIssue ? 0.32 : 0),
+                    lineWidth: 0.65
+                )
+        }
         .help(helpText)
     }
 
