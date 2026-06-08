@@ -34,21 +34,39 @@ SPARKLE_PUBLIC_ED_KEY="${SPILL_SPARKLE_PUBLIC_ED_KEY:-$DEFAULT_SPARKLE_PUBLIC_ED
 SPARKLE_FEED_URL="${SPILL_SPARKLE_FEED_URL:-https://github.com/taehwandev/Spill/releases/latest/download/appcast.xml}"
 SPARKLE_INFO_PLIST_ENTRY=""
 ENTITLEMENTS_PATH="$ROOT_DIR/.build/Spill.entitlements"
-PRIVATE_USAGE_ENVIRONMENT="${SPILL_BUILD_PRIVATE_USAGE_ENVIRONMENT:-}"
-
-case "$PRIVATE_USAGE_ENVIRONMENT" in
-    development)
+PRIVATE_USAGE_FEATURE_ENABLED="${SPILL_BUILD_PRIVATE_USAGE_FEATURE_ENABLED:-0}"
+PRIVATE_USAGE_REQUIRES_CONFIGURATION=false
+case "$PRIVATE_USAGE_FEATURE_ENABLED" in
+    1|true|TRUE|True|yes|YES|Yes)
+        PRIVATE_USAGE_REQUIRES_CONFIGURATION=true
         ;;
-    production)
+    0|false|FALSE|False|no|NO|No|"")
         ;;
     *)
-        echo "SPILL_BUILD_PRIVATE_USAGE_ENVIRONMENT is required and must be development or production." >&2
+        echo "SPILL_BUILD_PRIVATE_USAGE_FEATURE_ENABLED must be 1/0, true/false, or yes/no." >&2
         exit 2
         ;;
 esac
 
+PRIVATE_USAGE_ENVIRONMENT="${SPILL_BUILD_PRIVATE_USAGE_ENVIRONMENT:-}"
 PRIVATE_USAGE_RELAY_URL="${SPILL_BUILD_PRIVATE_USAGE_RELAY_URL:-}"
 PRIVATE_USAGE_WEB_URL="${SPILL_BUILD_PRIVATE_USAGE_WEB_URL:-}"
+
+if [[ -n "$PRIVATE_USAGE_ENVIRONMENT" ]]; then
+    case "$PRIVATE_USAGE_ENVIRONMENT" in
+        development)
+            ;;
+        production)
+            ;;
+        *)
+            echo "SPILL_BUILD_PRIVATE_USAGE_ENVIRONMENT must be development or production." >&2
+            exit 2
+            ;;
+    esac
+elif [[ "$PRIVATE_USAGE_REQUIRES_CONFIGURATION" == "true" ]]; then
+    echo "SPILL_BUILD_PRIVATE_USAGE_ENVIRONMENT is required when SPILL_BUILD_PRIVATE_USAGE_FEATURE_ENABLED=1." >&2
+    exit 2
+fi
 
 if [[ "${SPILL_DISABLE_SPARKLE:-0}" == "1" ]]; then
     SPARKLE_PUBLIC_ED_KEY=""
@@ -58,8 +76,12 @@ validate_private_usage_url() {
     local name="$1"
     local value="$2"
 
+    if [[ -z "$value" && "$PRIVATE_USAGE_REQUIRES_CONFIGURATION" != "true" ]]; then
+        return
+    fi
+
     if [[ -z "$value" ]]; then
-        echo "$name is required for SPILL_BUILD_PRIVATE_USAGE_ENVIRONMENT=$PRIVATE_USAGE_ENVIRONMENT." >&2
+        echo "$name is required when SPILL_BUILD_PRIVATE_USAGE_FEATURE_ENABLED=1." >&2
         exit 2
     fi
 

@@ -79,7 +79,6 @@ To create a local `.app` bundle:
 
 ```bash
 cp .env.example .env.local
-# Edit .env.local if the private usage web or relay URL differs.
 ./scripts/build-app.sh
 open .build/Spill.app
 ```
@@ -88,9 +87,10 @@ Use `SPILL_SKIP_ENV_LOCAL=1 ./scripts/build-app.sh` when you need a clean local
 development build that ignores an existing `.env.local`.
 
 The bundled app declares `LSUIElement` and also runs without a Dock icon. If the app appears to do nothing after launch, check the menu bar for the Spill trigger.
-Production app bundles read the private usage web and relay URLs from build-time
-environment values written into `Info.plist`; the app source does not hardcode
-the deployed web portal URL.
+Private usage upload is currently debug-only in app builds. Production app
+bundles can leave private usage web and relay URLs empty while that surface is
+hidden; when it is intentionally enabled, set the build-time values written into
+`Info.plist` instead of hardcoding deployed URLs in source.
 
 Agent-facing details for local app builds, app restarts, release packaging, and
 token-metering adapter resource propagation live in
@@ -127,10 +127,13 @@ Create local release artifacts:
 
 Local builds automatically read `.env.local` when present. Copy `.env.example`
 to `.env.local` and fill telemetry keys before building if analytics should be
-enabled in local app, landing page, or installer artifacts. Keep
+enabled in local app, landing page, or installer artifacts. Current public app
+releases keep private usage upload hidden, so
+`SPILL_BUILD_PRIVATE_USAGE_FEATURE_ENABLED=0` can leave the private usage web
+and relay URLs empty. If a release intentionally exposes private usage upload,
+set `SPILL_BUILD_PRIVATE_USAGE_FEATURE_ENABLED=1` plus
 `SPILL_BUILD_PRIVATE_USAGE_ENVIRONMENT=production`,
-`SPILL_BUILD_PRIVATE_USAGE_WEB_URL` and `SPILL_BUILD_PRIVATE_USAGE_RELAY_URL`
-set explicitly for production artifacts.
+`SPILL_BUILD_PRIVATE_USAGE_WEB_URL` and `SPILL_BUILD_PRIVATE_USAGE_RELAY_URL`.
 
 This writes:
 
