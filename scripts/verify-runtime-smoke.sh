@@ -35,7 +35,12 @@ fi
 rm -f "$LOG_FILE"
 rm -f "$HELPER_LOG_FILE"
 
-SPILL_SMOKE_TEST=1 SPILL_SMOKE_TEST_EXIT_AFTER=1.0 "$APP_EXEC" >"$LOG_FILE" 2>&1 &
+SPILL_SMOKE_TEST=1 \
+SPILL_SMOKE_OPEN_TOKEN_DASHBOARD=1 \
+SPILL_SMOKE_TEST_EXIT_AFTER=1.0 \
+SPILL_TOKEN_USAGE_EVENTS_FILE="$HELPER_TMP_DIR/main-events.json" \
+SPILL_TOKEN_USAGE_INBOX_DIR="$HELPER_TMP_DIR/main-events-inbox" \
+"$APP_EXEC" >"$LOG_FILE" 2>&1 &
 PID="$!"
 
 deadline=$((SECONDS + 8))
@@ -62,6 +67,18 @@ if ! grep -q "SPILL_SMOKE_READY" "$LOG_FILE"; then
     exit 1
 fi
 
+if ! grep -q "SPILL_TOKEN_DASHBOARD_LAUNCH_SMOKE_REQUESTED" "$LOG_FILE"; then
+    echo "FAIL: Spill did not request token dashboard launch in smoke."
+    cat "$LOG_FILE"
+    exit 1
+fi
+
+if ! grep -q "SPILL_TOKEN_DASHBOARD_LAUNCH_SMOKE_DUPLICATE_IGNORED" "$LOG_FILE"; then
+    echo "FAIL: Spill did not ignore a duplicate token dashboard launch in smoke."
+    cat "$LOG_FILE"
+    exit 1
+fi
+
 if ! grep -q "SPILL_SMOKE_EXIT" "$LOG_FILE"; then
     echo "FAIL: Spill did not report smoke shutdown."
     cat "$LOG_FILE"
@@ -75,6 +92,7 @@ fi
 
 SPILL_SMOKE_TEST=1 \
 SPILL_TOKEN_DASHBOARD_STANDALONE=1 \
+SPILL_TOKEN_DASHBOARD_SMOKE_NO_WINDOW=1 \
 SPILL_SMOKE_TEST_EXIT_AFTER=1.0 \
 SPILL_TOKEN_USAGE_EVENTS_FILE="$HELPER_TMP_DIR/events.json" \
 SPILL_TOKEN_USAGE_INBOX_DIR="$HELPER_TMP_DIR/events-inbox" \

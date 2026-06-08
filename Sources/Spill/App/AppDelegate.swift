@@ -81,6 +81,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItemController: StatusItemController?
     private var statusRefreshTask: Task<Void, Never>?
     private var privateUsageUploadTask: Task<Void, Never>?
+    private var isTokenDashboardLaunchInProgress = false
     private var isSpillPanelVisible = false
     private var menuBarAITokenTotal = 0
     private var menuBarAITokenDayStart: Date?
@@ -202,6 +203,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ProcessInfo.processInfo.environment["SPILL_SMOKE_CLICK_STATUS_ITEM"] == "1"
     }
 
+    private var shouldOpenTokenDashboardInSmokeTest: Bool {
+        ProcessInfo.processInfo.environment["SPILL_SMOKE_OPEN_TOKEN_DASHBOARD"] == "1"
+    }
+
     private var shouldValidatePanelLayoutInSmokeTest: Bool {
         ProcessInfo.processInfo.environment["SPILL_SMOKE_VALIDATE_PANEL_LAYOUT"] == "1"
     }
@@ -274,6 +279,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             clickStatusItemForSmokeTest()
         }
 
+        if shouldOpenTokenDashboardInSmokeTest {
+            openTokenDashboardForSmokeTest()
+        }
+
         let configuredDelay = ProcessInfo.processInfo.environment["SPILL_SMOKE_TEST_EXIT_AFTER"]
             .flatMap(TimeInterval.init)
         let exitDelay = max(configuredDelay ?? 1.0, 0.2)
@@ -312,6 +321,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if shouldValidatePanelLayoutInSmokeTest {
             reportPanelLayoutForSmokeTest()
         }
+    }
+
+    private func openTokenDashboardForSmokeTest() {
+        openTokenDashboard(source: "smoke")
+        openTokenDashboard(source: "smoke_duplicate")
+        print("SPILL_TOKEN_DASHBOARD_LAUNCH_SMOKE_REQUESTED")
     }
 
     private func clickStatusItemForSmokeTest() {
@@ -527,8 +542,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func openTokenDashboardProcessOrFallback() {
-        tokenMeteringDashboardLauncher.open { [weak self] in
-            self?.presentTokenDashboardWindow()
+        guard !isTokenDashboardLaunchInProgress else {
+            if isSmokeTest {
+                print("SPILL_TOKEN_DASHBOARD_LAUNCH_SMOKE_DUPLICATE_IGNORED")
+            }
+            return
+        }
+
+        isTokenDashboardLaunchInProgress = true
+        tokenMeteringDashboardLauncher.open(
+            fallback: { [weak self] in
+                self?.presentTokenDashboardWindow()
+            },
+            completion: { [weak self] in
+                self?.scheduleTokenDashboardLaunchReset()
+            }
+        )
+        scheduleTokenDashboardLaunchReset(after: 2.0)
+    }
+
+    private func scheduleTokenDashboardLaunchReset(after delay: TimeInterval = 0.75) {
+        Task { @MainActor [weak self] in
+            let nanoseconds = UInt64(delay * 1_000_000_000)
+            try? await Task.sleep(nanoseconds: nanoseconds)
+            self?.isTokenDashboardLaunchInProgress = false
         }
     }
 

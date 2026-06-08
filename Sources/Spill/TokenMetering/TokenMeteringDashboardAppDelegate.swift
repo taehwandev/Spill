@@ -27,7 +27,9 @@ final class TokenMeteringDashboardAppDelegate: NSObject, NSApplicationDelegate {
         launchMainAppIfNeeded()
         tokenUsageInboxMonitor.start()
         requestTokenUsageCollection(reason: "dashboard_launch")
-        dashboardWindowController().show()
+        if !shouldHideWindowInSmokeTest {
+            dashboardWindowController().show()
+        }
 
         if isSmokeTest {
             startSmokeTestExitTimer()
@@ -66,6 +68,10 @@ final class TokenMeteringDashboardAppDelegate: NSObject, NSApplicationDelegate {
 
     private var isSmokeTest: Bool {
         ProcessInfo.processInfo.environment["SPILL_SMOKE_TEST"] == "1"
+    }
+
+    private var shouldHideWindowInSmokeTest: Bool {
+        isSmokeTest && ProcessInfo.processInfo.environment["SPILL_TOKEN_DASHBOARD_SMOKE_NO_WINDOW"] == "1"
     }
 
     private func dashboardWindowController() -> TokenMeteringDashboardWindowController {
@@ -109,9 +115,8 @@ final class TokenMeteringDashboardAppDelegate: NSObject, NSApplicationDelegate {
 
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.activates = true
-        NSWorkspace.shared.openApplication(at: mainAppURL, configuration: configuration) { _, _ in
-            TokenMeteringDashboardProcess.postOpenPreferencesRequest()
-        }
+        let completion = TokenMeteringWorkspaceOpenCompletion.postOpenPreferencesRequest()
+        NSWorkspace.shared.openApplication(at: mainAppURL, configuration: configuration, completionHandler: completion)
     }
 
     private func launchMainAppIfNeeded() {
