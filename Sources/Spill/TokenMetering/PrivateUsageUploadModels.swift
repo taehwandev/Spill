@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import SystemConfiguration
 
 enum PrivateUsageUploadFeatureAvailability {
     static var isEnabledInCurrentBuild: Bool {
@@ -12,6 +13,9 @@ enum PrivateUsageUploadFeatureAvailability {
 }
 
 enum PrivateUsageUploadEnvironment: String, CaseIterable, Codable, Identifiable, Sendable {
+    static let environmentOverrideEnvironmentKey = "SPILL_PRIVATE_USAGE_ENVIRONMENT"
+    static let environmentInfoDictionaryKey = "SPILLPrivateUsageEnvironment"
+
     case development
     case production
 
@@ -34,15 +38,6 @@ enum PrivateUsageUploadEnvironment: String, CaseIterable, Codable, Identifiable,
             return "Uses the local Supabase relay and separate development credentials."
         case .production:
             return "Uses the live Spill relay and separate production credentials."
-        }
-    }
-
-    var relayURL: URL {
-        switch self {
-        case .development:
-            return URL(string: "http://localhost:54321/functions/v1/private-usage-relay")!
-        case .production:
-            return PrivateUsageRelayClient.defaultRelayURL
         }
     }
 
@@ -73,7 +68,15 @@ enum PrivateUsageUploadEnvironment: String, CaseIterable, Codable, Identifiable,
     static func resolvedFromEnvironment(
         _ processEnvironment: [String: String] = ProcessInfo.processInfo.environment
     ) -> Self? {
-        normalizedExplicit(rawValue: processEnvironment["SPILL_PRIVATE_USAGE_ENVIRONMENT"])
+        normalizedExplicit(rawValue: processEnvironment[environmentOverrideEnvironmentKey])
+    }
+
+    static func resolvedFromConfiguration(
+        processEnvironment: [String: String] = ProcessInfo.processInfo.environment,
+        bundleInfo: [String: Any]? = Bundle.main.infoDictionary
+    ) -> Self? {
+        resolvedFromEnvironment(processEnvironment)
+            ?? normalizedExplicit(rawValue: bundleInfo?[environmentInfoDictionaryKey] as? String)
     }
 
     private static func normalizedExplicit(rawValue: String?) -> Self? {
@@ -82,6 +85,124 @@ enum PrivateUsageUploadEnvironment: String, CaseIterable, Codable, Identifiable,
         }
 
         return Self(rawValue: rawValue.lowercased())
+    }
+}
+
+enum PrivateUsageWebConnection {
+    static let webURLOverrideEnvironmentKey = "SPILL_PRIVATE_USAGE_WEB_URL"
+    static let webURLInfoDictionaryKey = "SPILLPrivateUsageWebURL"
+
+    static func connectDeviceURL(
+        processEnvironment: [String: String] = ProcessInfo.processInfo.environment,
+        bundleInfo: [String: Any]? = Bundle.main.infoDictionary
+    ) -> URL? {
+        if let override = processEnvironment[webURLOverrideEnvironmentKey],
+           let url = sanitizedConnectDeviceURL(override)
+        {
+            return url
+        }
+        if let configuredURL = bundleInfo?[webURLInfoDictionaryKey] as? String,
+           let url = sanitizedConnectDeviceURL(configuredURL)
+        {
+            return url
+        }
+
+        return nil
+    }
+
+    private static func sanitizedConnectDeviceURL(_ rawValue: String) -> URL? {
+        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: trimmed),
+              let scheme = url.scheme,
+              let host = url.host
+        else {
+            return nil
+        }
+
+        if scheme == "https" {
+            return url
+        }
+
+        if scheme == "http", host == "localhost" {
+            return url
+        }
+
+        return nil
+    }
+}
+
+enum PrivateUsageRelayEndpoint {
+    static let relayURLOverrideEnvironmentKey = "SPILL_PRIVATE_USAGE_RELAY_URL"
+    static let relayURLInfoDictionaryKey = "SPILLPrivateUsageRelayURL"
+
+    static func relayURL(
+        environment: PrivateUsageUploadEnvironment,
+        processEnvironment: [String: String] = ProcessInfo.processInfo.environment,
+        bundleInfo: [String: Any]? = Bundle.main.infoDictionary
+    ) -> URL? {
+        if let override = processEnvironment[relayURLOverrideEnvironmentKey],
+           let url = sanitizedRelayURL(override)
+        {
+            return url
+        }
+        if let configuredURL = bundleInfo?[relayURLInfoDictionaryKey] as? String,
+           let url = sanitizedRelayURL(configuredURL)
+        {
+            return url
+        }
+
+        return nil
+    }
+
+    static func isSafeRelayURL(_ url: URL) -> Bool {
+        if url.scheme == "https" {
+            return true
+        }
+
+        if url.scheme == "http", url.host == "localhost" {
+            return true
+        }
+
+        return false
+    }
+
+    private static func sanitizedRelayURL(_ rawValue: String) -> URL? {
+        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: trimmed),
+              isSafeRelayURL(url)
+        else {
+            return nil
+        }
+
+        return url
+    }
+}
+
+enum PrivateUsageDeviceName {
+    static func current(
+        copyComputerName: () -> String? = {
+            SCDynamicStoreCopyComputerName(nil, nil) as String?
+        },
+        fallbackHostName: String? = Host.current().localizedName
+    ) -> String? {
+        sanitize(copyComputerName()) ?? sanitize(fallbackHostName)
+    }
+
+    private static func sanitize(_ value: String?) -> String? {
+        guard let value else {
+            return nil
+        }
+
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed.count <= 80 else {
+            return nil
+        }
+
+        guard trimmed.rangeOfCharacter(from: .controlCharacters) == nil else {
+            return nil
+        }
+
+        return trimmed
     }
 }
 
@@ -255,11 +376,13 @@ struct PrivateUsageEncryptedBucket: Codable, Equatable, Sendable {
 struct PrivateUsageGrantExchangeRequest: Codable, Equatable, Sendable {
     let grantCode: String
     let installID: String
+    let deviceName: String?
     let deviceKeyFingerprint: String?
 
     enum CodingKeys: String, CodingKey {
         case grantCode = "grant_code"
         case installID = "install_id"
+        case deviceName = "device_name"
         case deviceKeyFingerprint = "device_key_fingerprint"
     }
 }
@@ -294,6 +417,10 @@ struct PrivateUsageUploadResponse: Codable, Equatable, Sendable {
         case accepted
         case uploadedAt = "uploaded_at"
     }
+}
+
+struct PrivateUsageDeviceCheckResponse: Codable, Equatable, Sendable {
+    let connected: Bool
 }
 
 struct PrivateUsageUploadStatus: Equatable, Sendable {
@@ -345,6 +472,14 @@ enum PrivateUsageUploadError: Error, Equatable {
 }
 
 extension PrivateUsageUploadError {
+    var isRevokedConnection: Bool {
+        if case let .relay(status, reason) = self {
+            return status == 403 || reason == "device_forbidden" || reason == "connection_required"
+        }
+
+        return false
+    }
+
     var safeUserMessage: String {
         switch self {
         case .invalidConnectionCode:

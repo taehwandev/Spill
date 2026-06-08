@@ -24,6 +24,7 @@ final class TokenMeteringDashboardAppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.regular)
         configureMainMenu()
         observeSettingsChanges()
+        launchMainAppIfNeeded()
         tokenUsageInboxMonitor.start()
         requestTokenUsageCollection(reason: "dashboard_launch")
         dashboardWindowController().show()
@@ -111,6 +112,26 @@ final class TokenMeteringDashboardAppDelegate: NSObject, NSApplicationDelegate {
         NSWorkspace.shared.openApplication(at: mainAppURL, configuration: configuration) { _, _ in
             TokenMeteringDashboardProcess.postOpenPreferencesRequest()
         }
+    }
+
+    private func launchMainAppIfNeeded() {
+        guard !isSmokeTest,
+              let mainAppURL = TokenMeteringDashboardProcess.mainAppURLForDashboardHelper(),
+              let mainBundleIdentifier = TokenMeteringDashboardProcess.mainBundleIdentifierForDashboardHelper()
+        else {
+            return
+        }
+
+        let isRunning = NSWorkspace.shared.runningApplications.contains {
+            $0.bundleIdentifier == mainBundleIdentifier
+        }
+        guard !isRunning else {
+            return
+        }
+
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = false
+        NSWorkspace.shared.openApplication(at: mainAppURL, configuration: configuration)
     }
 
     private func observeSettingsChanges() {

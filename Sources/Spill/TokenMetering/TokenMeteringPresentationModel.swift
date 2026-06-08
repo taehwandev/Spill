@@ -42,6 +42,10 @@ struct TokenUsageDashboardBarRow: Identifiable, Equatable {
     let ratio: Double
 }
 
+struct TokenUsageDashboardWorkflowUsage: Equatable {
+    let rows: [TokenUsageDashboardBarRow]
+}
+
 struct TokenUsagePanelSummarySnapshot: Equatable {
     let eventCount: Int
     let totalTokens: Int
@@ -234,6 +238,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
     let toolFilters: [TokenUsageDashboardToolFilter]
     let toolRows: [TokenUsageDashboardBarRow]
     let modelRows: [TokenUsageDashboardBarRow]
+    let workflowUsage: TokenUsageDashboardWorkflowUsage
     let taskRows: [TokenUsageDashboardBarRow]
     let stageRows: [TokenUsageDashboardBarRow]
     let sourceRows: [TokenUsageDashboardBarRow]
@@ -450,6 +455,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
         let capturedTotalTokens = focusedEvents.reduce(0) { $0 + $1.event.totalTokens }
         totalTokens = capturedTotalTokens
         let visibleCapturedToolTokens = Self.toolTotals(events: focusedEvents)
+        workflowUsage = Self.workflowUsage(events: focusedEvents, totalTokens: capturedTotalTokens, language: language)
 
         periodFilters = TokenUsageDashboardPeriod.allCases.map { period in
             let periodCapturedEvents = Self.filteredParsedEvents(
@@ -813,6 +819,38 @@ struct TokenUsageDashboardSnapshot: Equatable {
 
     private static func toolTotals(events: [TokenUsageDashboardParsedEvent]) -> [TokenUsageAITool: Int] {
         tokenTotals(events: events) { $0.event.aiTool }
+    }
+
+    private static func workflowUsage(
+        events: [TokenUsageDashboardParsedEvent],
+        totalTokens: Int,
+        language: TokenMeteringLanguage
+    ) -> TokenUsageDashboardWorkflowUsage {
+        guard !events.isEmpty else {
+            return TokenUsageDashboardWorkflowUsage(rows: [])
+        }
+
+        let assistedEvents = events.filter { event in
+            TokenUsageWorkflowAssistance.isAssisted(event.event)
+        }
+        let assistedTokens = assistedEvents.reduce(0) { $0 + $1.event.totalTokens }
+        let workRatio = Double(assistedEvents.count) / Double(events.count)
+        let tokenRatio = totalTokens > 0 ? Double(assistedTokens) / Double(totalTokens) : 0.0
+
+        return TokenUsageDashboardWorkflowUsage(rows: [
+            TokenUsageDashboardBarRow(
+                id: "work",
+                title: TokenMeteringL10n.text(.workflowAssistedWork, language: language),
+                value: formatPercentage(workRatio * 100.0),
+                ratio: workRatio
+            ),
+            TokenUsageDashboardBarRow(
+                id: "tokens",
+                title: TokenMeteringL10n.text(.workflowAssistedTokens, language: language),
+                value: formatPercentage(tokenRatio * 100.0),
+                ratio: tokenRatio
+            )
+        ])
     }
 
     private static func toolFilters(

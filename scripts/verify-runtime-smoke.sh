@@ -4,6 +4,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_EXEC="$ROOT_DIR/.build/Spill.app/Contents/MacOS/Spill"
 HELPER_EXEC="$ROOT_DIR/.build/Spill.app/Contents/Applications/Spill Token Dashboard.app/Contents/MacOS/Spill"
+APP_RESOURCE_BUNDLE="$ROOT_DIR/.build/Spill.app/Contents/Resources/Spill_Spill.bundle"
+HELPER_RESOURCE_BUNDLE="$ROOT_DIR/.build/Spill.app/Contents/Applications/Spill Token Dashboard.app/Contents/Resources/Spill_Spill.bundle"
 LOG_FILE="${TMPDIR:-/tmp}/spill-runtime-smoke.log"
 HELPER_LOG_FILE="${TMPDIR:-/tmp}/spill-token-dashboard-runtime-smoke.log"
 HELPER_TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/spill-token-dashboard-smoke.XXXXXX")"
@@ -19,6 +21,16 @@ cleanup() {
 trap cleanup EXIT
 
 "$ROOT_DIR/scripts/build-app.sh"
+
+if [[ ! -d "$APP_RESOURCE_BUNDLE" ]]; then
+    echo "FAIL: Spill SwiftPM resource bundle is missing from app resources."
+    exit 1
+fi
+
+if [[ ! -d "$HELPER_RESOURCE_BUNDLE" ]]; then
+    echo "FAIL: Spill token dashboard SwiftPM resource bundle is missing from helper app resources."
+    exit 1
+fi
 
 rm -f "$LOG_FILE"
 rm -f "$HELPER_LOG_FILE"

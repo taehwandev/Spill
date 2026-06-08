@@ -56,6 +56,17 @@ final class PrivateUsageUploadTests: XCTestCase {
                     createdAt: yesterdayNoon
                 ),
                 makeEvent(
+                    spanID: "span_c1",
+                    runID: "run_c1",
+                    aiTool: .codex,
+                    taskType: .uncategorized,
+                    stage: .summarize,
+                    model: "gpt-5",
+                    input: 9,
+                    output: 1,
+                    createdAt: yesterdayNoon
+                ),
+                makeEvent(
                     spanID: "span_today",
                     runID: "run_today",
                     aiTool: .codex,
@@ -79,19 +90,54 @@ final class PrivateUsageUploadTests: XCTestCase {
 
         let plaintext = try XCTUnwrap(sealer.plaintexts.first)
         let aggregate = try JSONDecoder().decode(PrivateUsageDailyAggregate.self, from: plaintext)
-        XCTAssertEqual(aggregate.totals.eventCount, 2)
-        XCTAssertEqual(aggregate.totals.totalTokens, 275)
-        XCTAssertEqual(aggregate.toolTotals["codex"]?.totalTokens, 200)
+        XCTAssertEqual(aggregate.totals.eventCount, 3)
+        XCTAssertEqual(aggregate.totals.totalTokens, 285)
+        XCTAssertEqual(aggregate.toolTotals["codex"]?.totalTokens, 210)
         XCTAssertEqual(aggregate.toolTotals["claude"]?.totalTokens, 75)
-        XCTAssertEqual(aggregate.modelTotals["gpt-5"]?.totalTokens, 200)
+        XCTAssertEqual(aggregate.modelTotals["gpt-5"]?.totalTokens, 210)
         XCTAssertEqual(aggregate.taskTypeTotals["testing"]?.totalTokens, 75)
         XCTAssertEqual(aggregate.stageTotals["implement"]?.totalTokens, 200)
-        XCTAssertEqual(aggregate.sourceTotals["unknown"], 275)
+        XCTAssertEqual(aggregate.workflowUsageTotals.assisted.eventCount, 2)
+        XCTAssertEqual(aggregate.workflowUsageTotals.assisted.totalTokens, 275)
+        XCTAssertEqual(aggregate.workflowUsageTotals.untracked.eventCount, 1)
+        XCTAssertEqual(aggregate.workflowUsageTotals.untracked.totalTokens, 10)
+        XCTAssertEqual(aggregate.sourceTotals["unknown"], 285)
 
         let plaintextString = try XCTUnwrap(String(data: plaintext, encoding: .utf8))
         XCTAssertFalse(plaintextString.contains("span_a1"))
         XCTAssertFalse(plaintextString.contains("run_a1"))
+        XCTAssertFalse(plaintextString.contains("span_c1"))
         XCTAssertFalse(plaintextString.contains("span_today"))
+    }
+
+    func testDailyAggregateDecodesLegacyPayloadWithoutWorkflowUsageTotals() throws {
+        let payload = Data("""
+        {
+          "schema_version": 1,
+          "bucket_kind": "daily",
+          "bucket_key": "2026-06-07:daily",
+          "bucket_start_at": "2026-06-07T00:00:00.000Z",
+          "bucket_end_at": "2026-06-08T00:00:00.000Z",
+          "timezone": "UTC",
+          "generated_at": "2026-06-08T00:00:00.000Z",
+          "totals": {
+            "event_count": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "latency_ms": 0
+          },
+          "source_totals": {},
+          "tool_totals": {},
+          "model_totals": {},
+          "task_type_totals": {},
+          "stage_totals": {}
+        }
+        """.utf8)
+
+        let aggregate = try JSONDecoder().decode(PrivateUsageDailyAggregate.self, from: payload)
+
+        XCTAssertEqual(aggregate.workflowUsageTotals, .zero)
     }
 
     func testDailyBucketBuilderSkipsAcknowledgedUnchangedBucket() throws {
@@ -161,6 +207,7 @@ final class PrivateUsageUploadTests: XCTestCase {
         let credential = try await client.exchangeDeviceGrant(
             grantCode: "grant_secret",
             installID: "install-safe",
+            deviceName: "Work MacBook",
             deviceKeyFingerprint: "fingerprint"
         )
         let upload = try await client.uploadBuckets(
@@ -199,6 +246,7 @@ final class PrivateUsageUploadTests: XCTestCase {
         let exchangeJSON = try JSONSerialization.jsonObject(with: exchangeBody) as? [String: Any]
         XCTAssertEqual(exchangeJSON?["grant_code"] as? String, "grant_secret")
         XCTAssertEqual(exchangeJSON?["install_id"] as? String, "install-safe")
+        XCTAssertEqual(exchangeJSON?["device_name"] as? String, "Work MacBook")
         XCTAssertEqual(exchangeJSON?["device_key_fingerprint"] as? String, "fingerprint")
 
         let uploadBody = try XCTUnwrap(requests[1].httpBody)
@@ -494,9 +542,235 @@ final class PrivateUsageUploadTests: XCTestCase {
             PrivateUsageUploadEnvironment.production.keychainService,
             PrivateUsageUploadEnvironment.development.keychainService
         )
-        XCTAssertNotEqual(
-            PrivateUsageUploadEnvironment.production.relayURL,
-            PrivateUsageUploadEnvironment.development.relayURL
+    }
+
+    func testStatusCheckClearsRevokedDeviceCredential() async throws {
+        let now = try XCTUnwrap(ISO8601DateFormatter.parseTokenUsageDate(from: "2026-06-08T10:00:00.000Z"))
+        let credentialStore = InMemoryPrivateUsageCredentialStore()
+        try credentialStore.saveCredential(
+            PrivateUsageDeviceCredential(
+                deviceID: "device_server",
+                credential: "spill_device_v1_secret",
+                tokenType: "spill_device_v1",
+                createdAt: now
+            )
+        )
+        try credentialStore.saveKeyWrappingSecret(
+            PrivateUsageKeyWrappingSecret(rawValue: testWrappingSecret)
+        )
+        let relayClient = FakePrivateUsageRelayClient()
+        relayClient.connectionCheckError = PrivateUsageUploadError.relay(
+            status: 403,
+            reason: "device_forbidden"
+        )
+        let sealer = RecordingPrivateUsageSealer()
+        let coordinator = PrivateUsageUploadCoordinator(
+            usageStore: makeUsageStore(),
+            credentialStore: credentialStore,
+            stateStore: PrivateUsageUploadStateStore(defaults: makeDefaults()),
+            relayClient: relayClient,
+            bucketBuilder: PrivateUsageDailyBucketBuilder(sealer: sealer),
+            sealer: sealer
+        )
+
+        let status = await coordinator.statusAsync(isEnabled: true, now: now)
+
+        XCTAssertFalse(status.isConnected)
+        XCTAssertNil(try credentialStore.loadCredential())
+        XCTAssertNil(try credentialStore.loadKeyWrappingSecret())
+    }
+
+    func testSyncNowChecksRevokedDeviceEvenWhenNoBucketsAreQueued() async throws {
+        let now = try XCTUnwrap(ISO8601DateFormatter.parseTokenUsageDate(from: "2026-06-08T10:00:00.000Z"))
+        let credentialStore = InMemoryPrivateUsageCredentialStore()
+        try credentialStore.saveCredential(
+            PrivateUsageDeviceCredential(
+                deviceID: "device_server",
+                credential: "spill_device_v1_secret",
+                tokenType: "spill_device_v1",
+                createdAt: now
+            )
+        )
+        try credentialStore.saveKeyWrappingSecret(
+            PrivateUsageKeyWrappingSecret(rawValue: testWrappingSecret)
+        )
+        let relayClient = FakePrivateUsageRelayClient()
+        relayClient.connectionCheckError = PrivateUsageUploadError.relay(
+            status: 403,
+            reason: "device_forbidden"
+        )
+        let sealer = RecordingPrivateUsageSealer()
+        let coordinator = PrivateUsageUploadCoordinator(
+            usageStore: makeUsageStore(),
+            credentialStore: credentialStore,
+            stateStore: PrivateUsageUploadStateStore(defaults: makeDefaults()),
+            relayClient: relayClient,
+            bucketBuilder: PrivateUsageDailyBucketBuilder(sealer: sealer),
+            sealer: sealer
+        )
+
+        do {
+            _ = try await coordinator.syncNow(isEnabled: true, now: now)
+            XCTFail("Expected revoked device check to fail")
+        } catch {
+            XCTAssertEqual(error as? PrivateUsageUploadError, .relay(status: 403, reason: "device_forbidden"))
+        }
+
+        XCTAssertEqual(relayClient.checkedConnectionDeviceIDs, ["device_server"])
+        XCTAssertTrue(relayClient.uploadedBucketCounts.isEmpty)
+        XCTAssertNil(try credentialStore.loadCredential())
+        XCTAssertNil(try credentialStore.loadKeyWrappingSecret())
+    }
+
+    func testWebConnectionURLRequiresConfiguredSafeURL() {
+        XCTAssertNil(PrivateUsageWebConnection.connectDeviceURL(processEnvironment: [:], bundleInfo: nil))
+        XCTAssertEqual(
+            PrivateUsageWebConnection.connectDeviceURL(
+                processEnvironment: [
+                    PrivateUsageWebConnection.webURLOverrideEnvironmentKey: "http://localhost/#/connect-device"
+                ]
+            )?.absoluteString,
+            Optional("http://localhost/#/connect-device")
+        )
+        XCTAssertEqual(
+            PrivateUsageWebConnection.connectDeviceURL(
+                processEnvironment: [:],
+                bundleInfo: [
+                    PrivateUsageWebConnection.webURLInfoDictionaryKey: "https://web.example.test/#/connect-device"
+                ]
+            )?.absoluteString,
+            Optional("https://web.example.test/#/connect-device")
+        )
+        XCTAssertNil(
+            PrivateUsageWebConnection.connectDeviceURL(
+                processEnvironment: [
+                    PrivateUsageWebConnection.webURLOverrideEnvironmentKey: "file:///tmp/unsafe"
+                ]
+            )
+        )
+        XCTAssertNil(
+            PrivateUsageWebConnection.connectDeviceURL(
+                processEnvironment: [
+                    PrivateUsageWebConnection.webURLOverrideEnvironmentKey: "http://example.com/#/connect-device"
+                ]
+            )
+        )
+        XCTAssertNil(
+            PrivateUsageWebConnection.connectDeviceURL(
+                processEnvironment: [
+                    PrivateUsageWebConnection.webURLOverrideEnvironmentKey: "ftp://localhost/#/connect-device"
+                ]
+            )
+        )
+    }
+
+    func testPrivateUsageEnvironmentUsesRuntimeEnvBeforeBundleInfo() {
+        XCTAssertEqual(
+            PrivateUsageUploadEnvironment.resolvedFromConfiguration(
+                processEnvironment: [
+                    PrivateUsageUploadEnvironment.environmentOverrideEnvironmentKey: "development"
+                ],
+                bundleInfo: [
+                    PrivateUsageUploadEnvironment.environmentInfoDictionaryKey: "production"
+                ]
+            ),
+            .development
+        )
+        XCTAssertEqual(
+            PrivateUsageUploadEnvironment.resolvedFromConfiguration(
+                processEnvironment: [:],
+                bundleInfo: [
+                    PrivateUsageUploadEnvironment.environmentInfoDictionaryKey: "production"
+                ]
+            ),
+            .production
+        )
+        XCTAssertNil(
+            PrivateUsageUploadEnvironment.resolvedFromConfiguration(
+                processEnvironment: [:],
+                bundleInfo: [
+                    PrivateUsageUploadEnvironment.environmentInfoDictionaryKey: "preview"
+                ]
+            )
+        )
+    }
+
+    func testPrivateUsageURLsUseBundleInfoAfterRuntimeEnv() {
+        let bundleInfo: [String: Any] = [
+            PrivateUsageWebConnection.webURLInfoDictionaryKey: "https://preview.example.com/#/connect-device",
+            PrivateUsageRelayEndpoint.relayURLInfoDictionaryKey: "https://relay.example.com/functions/v1/private-usage-relay"
+        ]
+
+        XCTAssertEqual(
+            PrivateUsageWebConnection.connectDeviceURL(
+                processEnvironment: [:],
+                bundleInfo: bundleInfo
+            )?.absoluteString,
+            Optional("https://preview.example.com/#/connect-device")
+        )
+        XCTAssertEqual(
+            PrivateUsageRelayEndpoint.relayURL(
+                environment: .production,
+                processEnvironment: [:],
+                bundleInfo: bundleInfo
+            )?.absoluteString,
+            Optional("https://relay.example.com/functions/v1/private-usage-relay")
+        )
+        XCTAssertEqual(
+            PrivateUsageWebConnection.connectDeviceURL(
+                processEnvironment: [
+                    PrivateUsageWebConnection.webURLOverrideEnvironmentKey: "http://localhost/#/connect-device"
+                ],
+                bundleInfo: bundleInfo
+            )?.absoluteString,
+            Optional("http://localhost/#/connect-device")
+        )
+        XCTAssertEqual(
+            PrivateUsageRelayEndpoint.relayURL(
+                environment: .production,
+                processEnvironment: [
+                    PrivateUsageRelayEndpoint.relayURLOverrideEnvironmentKey: "http://localhost:54321/functions/v1/private-usage-relay"
+                ],
+                bundleInfo: bundleInfo
+            )?.absoluteString,
+            Optional("http://localhost:54321/functions/v1/private-usage-relay")
+        )
+    }
+
+    func testPrivateUsageDeviceNameUsesComputerNameWhenSafe() {
+        XCTAssertEqual(
+            PrivateUsageDeviceName.current(
+                copyComputerName: { "Work MacBook" },
+                fallbackHostName: "fallback"
+            ),
+            "Work MacBook"
+        )
+        XCTAssertEqual(
+            PrivateUsageDeviceName.current(
+                copyComputerName: { "  " },
+                fallbackHostName: "Fallback Mac"
+            ),
+            "Fallback Mac"
+        )
+        XCTAssertNil(
+            PrivateUsageDeviceName.current(
+                copyComputerName: { "Bad\nName" },
+                fallbackHostName: nil
+            )
+        )
+    }
+
+    func testPrivateUsageRelayURLRejectsUnsafeOverrides() {
+        XCTAssertNil(
+            PrivateUsageRelayEndpoint.relayURL(
+                environment: .production,
+                processEnvironment: [
+                    PrivateUsageRelayEndpoint.relayURLOverrideEnvironmentKey: "http://example.com/functions/v1/private-usage-relay"
+                ],
+                bundleInfo: [
+                    PrivateUsageRelayEndpoint.relayURLInfoDictionaryKey: "ftp://localhost/functions/v1/private-usage-relay"
+                ]
+            )
         )
     }
 
@@ -755,17 +1029,22 @@ private final class FakePrivateUsageRelayClient: PrivateUsageRelayClienting, @un
     private(set) var uploadedBucketCounts = [Int]()
     private(set) var uploadedKeyEnvelopeCounts = [Int]()
     private(set) var exchangedGrantCodes = [String]()
+    private(set) var exchangedDeviceNames = [String?]()
     private(set) var exchangedKeyFingerprints = [String?]()
+    private(set) var checkedConnectionDeviceIDs = [String]()
     var uploadError: Error?
+    var connectionCheckError: Error?
     var acceptedOverride: Int?
 
     func exchangeDeviceGrant(
         grantCode: String,
         installID: String,
+        deviceName: String?,
         deviceKeyFingerprint: String?
     ) async throws -> PrivateUsageDeviceCredential {
         lock.withLock {
             exchangedGrantCodes.append(grantCode)
+            exchangedDeviceNames.append(deviceName)
             exchangedKeyFingerprints.append(deviceKeyFingerprint)
         }
         return PrivateUsageDeviceCredential(
@@ -792,5 +1071,16 @@ private final class FakePrivateUsageRelayClient: PrivateUsageRelayClienting, @un
             accepted: acceptedOverride ?? buckets.count,
             uploadedAt: "2026-06-08T00:00:00.000Z"
         )
+    }
+
+    func checkDeviceConnection(
+        credential: PrivateUsageDeviceCredential
+    ) async throws {
+        lock.withLock {
+            checkedConnectionDeviceIDs.append(credential.deviceID)
+        }
+        if let connectionCheckError {
+            throw connectionCheckError
+        }
     }
 }

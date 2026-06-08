@@ -43,6 +43,9 @@ enum TokenMeteringTextKey: String {
     case clearCurrentScope
     case clearSelectedWorkItem
     case clearAllLocalData
+    case localDataDeleteOptions
+    case reviewLocalDataDelete
+    case localDataManagementDetail
     case clearSelection
     case recentMonth
     case pickDate
@@ -69,6 +72,12 @@ enum TokenMeteringTextKey: String {
     case modelBreakdown
     case noModelData
     case modelUnavailable
+    case workflowUsage
+    case workflowUsageInfoTitle
+    case workflowUsageInfoDetail
+    case workflowAssistedWork
+    case workflowAssistedTokens
+    case noWorkflowUsageData
     case workflowBreakdown
     case workflowBreakdownSubtitle
     case stageBreakdown
@@ -207,9 +216,8 @@ enum TokenMeteringTextKey: String {
     case privateUsageUploadEnvironmentDevelopmentDetail
     case privateUsageUploadEnvironmentProduction
     case privateUsageUploadEnvironmentProductionDetail
-    case privateUsageUploadConnectionCode
-    case privateUsageUploadConnecting
-    case privateUsageUploadConnectMac
+    case privateUsageUploadOpenWeb
+    case privateUsageUploadOpenWebDetail
     case privateUsageUploadToggleTitle
     case privateUsageUploadToggleDetail
     case privateUsageUploadQueued
@@ -421,24 +429,58 @@ enum TokenMeteringL10n {
     }
 
     private static func localized(_ key: String, language: TokenMeteringLanguage) -> String {
-        let bundle = localizedBundle(for: language)
-        let value = bundle.localizedString(forKey: key, value: nil, table: tableName)
-        if value != key {
-            return value
+        if let bundle = localizedBundle(for: language) {
+            let value = bundle.localizedString(forKey: key, value: nil, table: tableName)
+            if value != key {
+                return value
+            }
         }
         if let catalogValue = stringCatalogValue(for: key, language: language) {
             return catalogValue
         }
-        return Bundle.module.localizedString(forKey: key, value: key, table: tableName)
+        return resourceBundle()?.localizedString(forKey: key, value: key, table: tableName) ?? key
     }
 
-    private static func localizedBundle(for language: TokenMeteringLanguage) -> Bundle {
-        guard let path = Bundle.module.path(forResource: language.localizationResourceName, ofType: "lproj"),
+    private static func localizedBundle(for language: TokenMeteringLanguage) -> Bundle? {
+        guard let path = resourceBundle()?.path(forResource: language.localizationResourceName, ofType: "lproj"),
               let bundle = Bundle(path: path)
         else {
-            return .module
+            return resourceBundle()
         }
         return bundle
+    }
+
+    private static func resourceBundle() -> Bundle? {
+        if let packagedBundle = packagedResourceBundle() {
+            return packagedBundle
+        }
+
+        #if DEBUG
+        return .module
+        #else
+        return nil
+        #endif
+    }
+
+    private static func packagedResourceBundle(
+        mainBundleURL: URL = Bundle.main.bundleURL,
+        mainResourceURL: URL? = Bundle.main.resourceURL,
+        fileExists: (String) -> Bool = { FileManager.default.fileExists(atPath: $0) }
+    ) -> Bundle? {
+        let candidateURLs = [
+            mainResourceURL?.appendingPathComponent("Spill_Spill.bundle", isDirectory: true),
+            mainBundleURL
+                .appendingPathComponent("Contents", isDirectory: true)
+                .appendingPathComponent("Resources", isDirectory: true)
+                .appendingPathComponent("Spill_Spill.bundle", isDirectory: true)
+        ].compactMap(\.self)
+
+        for candidateURL in candidateURLs where fileExists(candidateURL.path) {
+            if let bundle = Bundle(url: candidateURL) {
+                return bundle
+            }
+        }
+        return nil
     }
 
     private static func stringCatalogValue(for key: String, language: TokenMeteringLanguage) -> String? {
@@ -450,9 +492,13 @@ enum TokenMeteringL10n {
     }
 
     private static let stringCatalog: StringCatalog? = {
+        guard let bundle = resourceBundle() else {
+            return nil
+        }
+
         let candidateURLs = [
-            Bundle.module.url(forResource: tableName, withExtension: "xcstrings"),
-            Bundle.module.url(
+            bundle.url(forResource: tableName, withExtension: "xcstrings"),
+            bundle.url(
                 forResource: tableName,
                 withExtension: "xcstrings",
                 subdirectory: "Localization"

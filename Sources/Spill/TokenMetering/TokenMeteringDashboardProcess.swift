@@ -24,6 +24,24 @@ enum TokenMeteringDashboardProcess {
         identifier?.hasSuffix(helperBundleIdentifierSuffix) == true
     }
 
+    static func mainBundleIdentifierForDashboardHelper(
+        helperBundleIdentifier: String? = Bundle.main.bundleIdentifier,
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> String? {
+        if let mainBundleIdentifier = environment[mainBundleIdentifierEnvironmentKey],
+           !mainBundleIdentifier.isEmpty {
+            return mainBundleIdentifier
+        }
+
+        guard let helperBundleIdentifier,
+              isDashboardBundleIdentifier(helperBundleIdentifier)
+        else {
+            return nil
+        }
+
+        return String(helperBundleIdentifier.dropLast(helperBundleIdentifierSuffix.count))
+    }
+
     static func helperAppURL(
         mainBundleURL: URL = Bundle.main.bundleURL,
         fileExists: (String) -> Bool = { FileManager.default.fileExists(atPath: $0) }

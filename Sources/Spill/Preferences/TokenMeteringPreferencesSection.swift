@@ -7,7 +7,7 @@ struct TokenMeteringPreferencesSection: View {
     let openDashboardAction: () -> Void
     @StateObject private var privateUsageUploadStore: PrivateUsageUploadStore
     @State private var copiedTarget: String?
-    @State private var privateUsageGrantCode = ""
+    @State private var showsLocalDataDeleteControls = false
     @State private var adapterStatuses: [String: TokenMeteringAdapterConnectionStatus] = [:]
     @State private var localDataPreview = TokenUsageClearPreview(scopeTitle: "", eventCount: 0, totalTokens: 0)
     @State private var pendingClearAllPreview: TokenUsageClearPreview?
@@ -196,9 +196,6 @@ struct TokenMeteringPreferencesSection: View {
         .onChange(of: settings.privateUsageUploadEnabled) { _, _ in
             refreshPrivateUsageUploadIfAvailable()
         }
-        .onChange(of: settings.privateUsageUploadEnvironment) { _, _ in
-            refreshPrivateUsageUploadIfAvailable()
-        }
         .alert(
             t(.deleteTokenDataTitle),
             isPresented: Binding(
@@ -283,42 +280,23 @@ struct TokenMeteringPreferencesSection: View {
                 .lineSpacing(2)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Picker(t(.privateUsageUploadEnvironment), selection: $settings.privateUsageUploadEnvironment) {
-                ForEach(PrivateUsageUploadEnvironment.allCases) { environment in
-                    Text(TokenMeteringL10n.privateUsageEnvironmentTitle(environment, language: currentLanguage))
-                        .tag(environment)
-                }
-            }
-            .pickerStyle(.segmented)
-
-            Text(TokenMeteringL10n.privateUsageEnvironmentDetail(settings.privateUsageUploadEnvironment, language: currentLanguage))
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            HStack(spacing: 8) {
-                SecureField(t(.privateUsageUploadConnectionCode), text: $privateUsageGrantCode)
-                    .textFieldStyle(.roundedBorder)
-                    .font(.system(size: 12, weight: .medium, design: .monospaced))
-                    .disabled(privateUsageUploadStore.isConnecting)
-
-                Button {
-                    Task { @MainActor in
-                        await privateUsageUploadStore.connect(grantCode: privateUsageGrantCode)
-                        if privateUsageUploadStore.status.isConnected {
-                            privateUsageGrantCode = ""
-                        }
+            if !status.isConnected {
+                HStack(alignment: .top, spacing: 10) {
+                    Button {
+                        openPrivateUsageWebConnection()
+                    } label: {
+                        Label(t(.privateUsageUploadOpenWeb), systemImage: "safari")
                     }
-                } label: {
-                    if privateUsageUploadStore.isConnecting {
-                        Label(t(.privateUsageUploadConnecting), systemImage: "hourglass")
-                    } else {
-                        Label(t(.privateUsageUploadConnectMac), systemImage: "link")
-                    }
+                    .buttonStyle(.borderedProminent)
+                    .font(.system(size: 12, weight: .semibold))
+                    .disabled(privateUsageWebConnectionURL == nil)
+
+                    Text(t(.privateUsageUploadOpenWebDetail))
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .lineSpacing(2)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .buttonStyle(.bordered)
-                .font(.system(size: 12, weight: .semibold))
-                .disabled(privateUsageUploadStore.isConnecting || privateUsageGrantCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
 
             Toggle(isOn: $settings.privateUsageUploadEnabled) {
@@ -443,6 +421,18 @@ struct TokenMeteringPreferencesSection: View {
         privateUsageUploadStore.refresh()
     }
 
+    private func openPrivateUsageWebConnection() {
+        guard let url = privateUsageWebConnectionURL else {
+            return
+        }
+
+        NSWorkspace.shared.open(url)
+    }
+
+    private var privateUsageWebConnectionURL: URL? {
+        PrivateUsageWebConnection.connectDeviceURL()
+    }
+
     private func status(for adapter: TokenMeteringAdapter) -> TokenMeteringAdapterConnectionStatus {
         adapterStatuses[adapter.id] ?? .missing
     }
@@ -472,18 +462,40 @@ struct TokenMeteringPreferencesSection: View {
             .font(.system(size: 11, weight: .semibold, design: .monospaced))
             .foregroundStyle(.secondary)
 
-            Button(role: .destructive) {
-                let preview = makeAllLocalDataPreview()
-                localDataPreview = preview
-                if preview.hasEvents {
-                    pendingClearAllPreview = preview
+            if localDataPreview.hasEvents {
+                DisclosureGroup(isExpanded: $showsLocalDataDeleteControls) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(t(.localDataManagementDetail))
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                            .lineSpacing(2)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        Button(role: .destructive) {
+                            let preview = makeAllLocalDataPreview()
+                            localDataPreview = preview
+                            if preview.hasEvents {
+                                pendingClearAllPreview = preview
+                            }
+                        } label: {
+                            Label(t(.reviewLocalDataDelete), systemImage: "trash")
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .font(.system(size: 12, weight: .semibold))
+                        .tint(.red)
+                    }
+                    .padding(.top, 4)
+                } label: {
+                    Label(t(.localDataDeleteOptions), systemImage: "trash")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.secondary)
                 }
-            } label: {
-                Label(t(.clearAllLocalData), systemImage: "trash")
+            } else {
+                Label(t(.noLocalTokenEvents), systemImage: "checkmark.circle")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
             }
-            .buttonStyle(.bordered)
-            .font(.system(size: 12, weight: .semibold))
-            .disabled(!localDataPreview.hasEvents)
 
             if let clearAllError {
                 Text(clearAllError)
@@ -497,7 +509,11 @@ struct TokenMeteringPreferencesSection: View {
     }
 
     private func refreshLocalDataPreview() {
-        localDataPreview = makeAllLocalDataPreview()
+        let preview = makeAllLocalDataPreview()
+        localDataPreview = preview
+        if !preview.hasEvents {
+            showsLocalDataDeleteControls = false
+        }
     }
 
     private func makeAllLocalDataPreview() -> TokenUsageClearPreview {
@@ -514,6 +530,7 @@ struct TokenMeteringPreferencesSection: View {
             try tokenUsageStore.clearEvents()
             clearAllError = nil
             pendingClearAllPreview = nil
+            showsLocalDataDeleteControls = false
             refreshLocalDataPreview()
         } catch {
             clearAllError = TokenMeteringL10n.text(.clearFailed, language: currentLanguage)

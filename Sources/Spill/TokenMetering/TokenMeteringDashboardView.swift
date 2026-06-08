@@ -321,43 +321,15 @@ struct TokenMeteringDashboardView: View {
     }
 
     private var serviceStatusButton: some View {
-        Button {
+        CloudServiceStatusButton(
+            state: serviceStatusControlState,
+            appLanguage: settings.appLanguage
+        ) {
             openServiceStatusDetails()
-        } label: {
-            HStack(spacing: 5) {
-                Circle()
-                    .fill(serviceStatusTint)
-                    .frame(width: 5, height: 5)
-
-                Image(systemName: serviceStatusSymbolName)
-                    .font(.system(size: 9, weight: .bold))
-
-                Text(serviceStatusButtonTitle)
-                    .font(.system(size: 10, weight: .bold))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.82)
-            }
-            .padding(.horizontal, 9)
-            .frame(height: 26)
-            .foregroundStyle(serviceStatusTint)
-            .background(serviceStatusTint.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(serviceStatusTint.opacity(0.13), lineWidth: 0.5)
-            }
         }
-        .buttonStyle(.plain)
-        .focusEffectDisabled()
         .popover(isPresented: $isServiceStatusPresented, arrowEdge: .top) {
             CloudServiceStatusDashboardView(store: cloudServiceStatusStore)
         }
-        .help(serviceStatusHelpText)
-        .accessibilityLabel(
-            AppL10n.serviceStatusAccessibility(
-                status: serviceStatusButtonTitle,
-                appLanguage: settings.appLanguage
-            )
-        )
     }
 
     private func refreshLocalTokenData() {
@@ -374,99 +346,12 @@ struct TokenMeteringDashboardView: View {
         cloudServiceStatusStore.refreshIfNeeded(force: force)
     }
 
-    private var serviceStatusButtonTitle: String {
-        if cloudServiceStatusStore.isLoading {
-            return AppL10n.text(.checking, appLanguage: settings.appLanguage)
-        }
-
-        guard let aggregateHealth = aggregateServiceHealth else {
-            return AppL10n.text(.serverStatus, appLanguage: settings.appLanguage)
-        }
-
-        return aggregateHealth.serverStatusHeaderTitle(appLanguage: settings.appLanguage)
-    }
-
-    private var serviceStatusHelpText: String {
-        guard let snapshot = cloudServiceStatusStore.snapshot else {
-            return AppL10n.text(.fetchOfficialServiceStatus, appLanguage: settings.appLanguage)
-        }
-
-        let aggregateHealth = CloudServiceStatusPresentation.aggregateHealth(for: snapshot.items)
-        let issueCount = serviceStatusIssueItems.count
-        let statusText = issueCount == 0
-            ? String(
-                format: AppL10n.text(.serverStatusNoIssues, appLanguage: settings.appLanguage),
-                aggregateHealth.serverStatusHeaderTitle(appLanguage: settings.appLanguage).lowercased()
-            )
-            : AppL10n.serverStatusWithIssues(
-                status: aggregateHealth.serverStatusHeaderTitle(appLanguage: settings.appLanguage).lowercased(),
-                issueCount: issueCount,
-                appLanguage: settings.appLanguage
-            )
-
-        return "\(statusText). \(AppL10n.lastChecked(fullServiceCheckTime(snapshot.fetchedAt), age: relativeServiceAge(from: snapshot.fetchedAt), appLanguage: settings.appLanguage)) \(AppL10n.text(.clickForPerServiceDetails, appLanguage: settings.appLanguage))"
-    }
-
-    private var serviceStatusSymbolName: String {
-        if cloudServiceStatusStore.isLoading {
-            return "arrow.triangle.2.circlepath"
-        }
-
-        guard let aggregateHealth = aggregateServiceHealth else {
-            return "cloud.fill"
-        }
-
-        return aggregateHealth.serverStatusSymbolName
-    }
-
-    private var serviceStatusTint: Color {
-        if cloudServiceStatusStore.isLoading {
-            return .blue
-        }
-
-        guard let aggregateHealth = aggregateServiceHealth else {
-            return .secondary
-        }
-
-        return aggregateHealth.serverStatusTint
-    }
-
-    private var serviceStatusIssueItems: [CloudServiceStatusItem] {
-        cloudServiceStatusStore.snapshot?.items.filter { $0.health.isServerIssue } ?? []
-    }
-
-    private var aggregateServiceHealth: CloudServiceHealth? {
-        cloudServiceStatusStore.snapshot.map {
-            CloudServiceStatusPresentation.aggregateHealth(for: $0.items)
-        }
-    }
-
-    private func fullServiceCheckTime(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = .current
-        formatter.timeZone = .current
-
-        if Calendar.current.isDateInToday(date) {
-            formatter.setLocalizedDateFormatFromTemplate("jm")
-        } else {
-            formatter.setLocalizedDateFormatFromTemplate("MMM d, jm")
-        }
-
-        return formatter.string(from: date)
-    }
-
-    private func relativeServiceAge(from date: Date) -> String {
-        let elapsed = max(0, Date().timeIntervalSince(date))
-        if elapsed < 60 {
-            return AppL10n.text(.justNow, appLanguage: settings.appLanguage)
-        }
-
-        let minutes = Int(elapsed / 60)
-        if minutes < 60 {
-            return AppL10n.minutesAgo(minutes, appLanguage: settings.appLanguage)
-        }
-
-        return AppL10n.hoursAgo(max(1, minutes / 60), appLanguage: settings.appLanguage)
+    private var serviceStatusControlState: CloudServiceStatusControlState {
+        CloudServiceStatusPresentation.controlState(
+            snapshot: cloudServiceStatusStore.snapshot,
+            isLoading: cloudServiceStatusStore.isLoading,
+            appLanguage: settings.appLanguage
+        )
     }
 
     private var calendarPickerPanel: some View {
@@ -711,6 +596,7 @@ struct TokenMeteringDashboardView: View {
         ScrollView(.vertical, showsIndicators: false) {
             VStack(alignment: .leading, spacing: 14) {
                 modelPanel
+                workflowUsagePanel
                 sourcePanel
                 receiverPanel
                 privacyPanel
@@ -727,6 +613,22 @@ struct TokenMeteringDashboardView: View {
         ) {
             VStack(spacing: 8) {
                 compactSummaryRows(store.snapshot.modelRows.prefix(5), emptyText: t(.noModelData), idPrefix: "model")
+            }
+        }
+    }
+
+    private var workflowUsagePanel: some View {
+        railPanel(
+            title: t(.workflowUsage),
+            infoTitle: t(.workflowUsageInfoTitle),
+            infoDetail: t(.workflowUsageInfoDetail)
+        ) {
+            VStack(spacing: 8) {
+                compactSummaryRows(
+                    store.snapshot.workflowUsage.rows,
+                    emptyText: t(.noWorkflowUsageData),
+                    idPrefix: "workflow_usage"
+                )
             }
         }
     }
@@ -1207,13 +1109,16 @@ struct TokenMeteringDashboardView: View {
         } else {
             serviceStatus = nil
         }
+        let hasServerIssue = serviceStatus?.health.isServerIssue ?? false
+        let statusTint = serviceStatus?.health.serverStatusTint ?? Color.teal
+        let tabAccent = hasServerIssue ? statusTint : Color.teal
 
         return Button {
             store.setSelectedTool(filter.tool)
         } label: {
             HStack(spacing: 9) {
                 Circle()
-                    .fill(filter.isSelected ? .white : Color.teal.opacity(0.75))
+                    .fill(filter.isSelected ? .white : tabAccent.opacity(0.82))
                     .frame(width: 7, height: 7)
 
                 topToolTabLabel(
@@ -1233,20 +1138,26 @@ struct TokenMeteringDashboardView: View {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .fill(
                             LinearGradient(
-                                colors: [selectedControlAccentHighlight, selectedControlAccent],
+                                colors: [
+                                    hasServerIssue ? tabAccent.opacity(0.86) : selectedControlAccentHighlight,
+                                    hasServerIssue ? tabAccent.opacity(0.68) : selectedControlAccent
+                                ],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             )
                         )
-                        .shadow(color: selectedControlAccent.opacity(0.16), radius: 4, x: 0, y: 1.5)
+                        .shadow(color: tabAccent.opacity(hasServerIssue ? 0.18 : 0.16), radius: 4, x: 0, y: 1.5)
                 } else {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(Color.primary.opacity(0.035))
+                        .fill(hasServerIssue ? tabAccent.opacity(0.12) : Color.primary.opacity(0.035))
                 }
             }
             .overlay {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(Color.primary.opacity(0.055), lineWidth: 0.5)
+                    .stroke(
+                        hasServerIssue ? tabAccent.opacity(0.36) : Color.primary.opacity(0.055),
+                        lineWidth: hasServerIssue ? 0.8 : 0.5
+                    )
             }
             .modifier(TokenMeteringLiveUpdateEffect(isActive: isLiveUpdated && !filter.isSelected, marker: store.liveUpdateMarker, cornerRadius: 8))
         }

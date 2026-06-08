@@ -30,19 +30,22 @@ final class PrivateUsageUploadCoordinator: @unchecked Sendable {
         usageStore: TokenUsageStore,
         environment: PrivateUsageUploadEnvironment = .defaultValue
     ) -> PrivateUsageUploadCoordinator {
-        let resolvedEnvironment = PrivateUsageUploadEnvironment.resolvedFromEnvironment() ?? environment
+        let resolvedEnvironment = PrivateUsageUploadEnvironment.resolvedFromConfiguration() ?? environment
         let credentialStore = PrivateUsageKeychainCredentialStore(
             service: resolvedEnvironment.keychainService
         )
         let sealer = PrivateUsageAESGCMBucketSealer(credentialStore: credentialStore)
-        let relayURL = ProcessInfo.processInfo.environment["SPILL_PRIVATE_USAGE_RELAY_URL"]
-            .flatMap { $0.isEmpty ? nil : URL(string: $0) }
-            ?? resolvedEnvironment.relayURL
+        let relayClient: PrivateUsageRelayClienting
+        if let relayURL = PrivateUsageRelayEndpoint.relayURL(environment: resolvedEnvironment) {
+            relayClient = PrivateUsageRelayClient(relayURL: relayURL)
+        } else {
+            relayClient = PrivateUsageUnavailableRelayClient()
+        }
         return PrivateUsageUploadCoordinator(
             usageStore: usageStore,
             credentialStore: credentialStore,
             stateStore: PrivateUsageUploadStateStore(environment: resolvedEnvironment),
-            relayClient: PrivateUsageRelayClient(relayURL: relayURL),
+            relayClient: relayClient,
             bucketBuilder: PrivateUsageDailyBucketBuilder(sealer: sealer),
             sealer: sealer
         )
@@ -58,6 +61,7 @@ final class PrivateUsageUploadCoordinator: @unchecked Sendable {
         let credential = try await relayClient.exchangeDeviceGrant(
             grantCode: connectionCode.grantCode,
             installID: stateStore.installID(),
+            deviceName: PrivateUsageDeviceName.current(),
             deviceKeyFingerprint: connectionCode.keyWrappingSecret.keyID
         )
         try credentialStore.saveKeyWrappingSecret(connectionCode.keyWrappingSecret)
@@ -99,16 +103,40 @@ final class PrivateUsageUploadCoordinator: @unchecked Sendable {
         isEnabled: Bool,
         now: Date = Date()
     ) async -> PrivateUsageUploadStatus {
-        await Task.detached(priority: .utility) {
+        let localStatus = await Task.detached(priority: .utility) {
             self.status(isEnabled: isEnabled, now: now)
         }.value
+
+        guard localStatus.isConnected,
+              let credential = try? credentialStore.loadCredential()
+        else {
+            return localStatus
+        }
+
+        do {
+            try await verifyDeviceConnection(credential)
+            return localStatus
+        } catch let error as PrivateUsageUploadError where error.isRevokedConnection {
+            return .disconnected
+        } catch {
+            return localStatus
+        }
     }
 
     func syncNow(
         isEnabled: Bool,
         now: Date = Date()
     ) async throws -> PrivateUsageUploadRunResult {
-        try await performUpload(isEnabled: isEnabled, now: now)
+        guard isEnabled else {
+            throw PrivateUsageUploadError.uploadDisabled
+        }
+
+        guard let credential = try credentialStore.loadCredential() else {
+            throw PrivateUsageUploadError.missingCredential
+        }
+
+        try await verifyDeviceConnection(credential)
+        return try await performUpload(isEnabled: isEnabled, now: now)
     }
 
     func runAutomaticUploadIfNeeded(
@@ -179,7 +207,21 @@ final class PrivateUsageUploadCoordinator: @unchecked Sendable {
                 uploadedAt: uploadedAt
             )
         } catch {
+            if let uploadError = error as? PrivateUsageUploadError,
+               uploadError.isRevokedConnection
+            {
+                try? clearConnection()
+            }
             recordFailure(error, at: now)
+            throw error
+        }
+    }
+
+    private func verifyDeviceConnection(_ credential: PrivateUsageDeviceCredential) async throws {
+        do {
+            try await relayClient.checkDeviceConnection(credential: credential)
+        } catch let error as PrivateUsageUploadError where error.isRevokedConnection {
+            try? clearConnection()
             throw error
         }
     }
@@ -304,7 +346,10 @@ final class PrivateUsageUploadStore: ObservableObject {
                 else {
                     return
                 }
-                self.status = status
+                if !status.isConnected, self.settings.privateUsageUploadEnabled {
+                    self.settings.privateUsageUploadEnabled = false
+                }
+                self.status = status.isConnected ? status : .disconnected
             }
         }
     }
@@ -348,6 +393,9 @@ final class PrivateUsageUploadStore: ObservableObject {
                 message = TokenMeteringL10n.text(.privateUsageUploadNoQueuedMessage)
             }
         } catch {
+            if Self.isRevokedConnection(error) {
+                settings.privateUsageUploadEnabled = false
+            }
             errorMessage = Self.safeMessage(for: error)
         }
     }
@@ -363,6 +411,10 @@ final class PrivateUsageUploadStore: ObservableObject {
             errorMessage = Self.safeMessage(for: error)
         }
         refresh()
+    }
+
+    private static func isRevokedConnection(_ error: Error) -> Bool {
+        (error as? PrivateUsageUploadError)?.isRevokedConnection == true
     }
 
     private static func safeMessage(for error: Error) -> String {

@@ -47,6 +47,12 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(TokenMeteringL10n.text(.previewBadge, language: .english), "ALPHA")
         XCTAssertEqual(TokenMeteringL10n.text(.privateUsageUploadTitle, language: .korean), "비공개 사용량 업로드")
         XCTAssertEqual(TokenMeteringL10n.text(.privateUsageUploadSyncNow, language: .japanese), "今すぐ同期")
+        XCTAssertEqual(TokenMeteringL10n.text(.localDataDeleteOptions, language: .korean), "로컬 데이터 삭제")
+        XCTAssertEqual(TokenMeteringL10n.text(.reviewLocalDataDelete, language: .korean), "삭제 전 확인")
+        XCTAssertTrue(TokenMeteringL10n.text(.localDataManagementDetail, language: .korean).contains("연결 해제"))
+        XCTAssertEqual(TokenMeteringL10n.text(.workflowUsage, language: .korean), "워크플로우 사용")
+        XCTAssertEqual(TokenMeteringL10n.text(.workflowAssistedWork, language: .english), "Assisted work")
+        XCTAssertTrue(TokenMeteringL10n.text(.workflowUsageInfoDetail, language: .korean).contains("준수 여부"))
         XCTAssertEqual(
             TokenMeteringL10n.deleteTokenDataMessage(
                 scope: "All",
@@ -79,6 +85,12 @@ final class TokenUsageStoreTests: XCTestCase {
             .modelBreakdown,
             .modelInfoTitle,
             .modelInfoDetail,
+            .workflowUsage,
+            .workflowUsageInfoTitle,
+            .workflowUsageInfoDetail,
+            .workflowAssistedWork,
+            .workflowAssistedTokens,
+            .noWorkflowUsageData,
             .workflowBreakdown,
             .workflowBreakdownSubtitle,
             .stageBreakdown,
@@ -176,7 +188,12 @@ final class TokenUsageStoreTests: XCTestCase {
 
         XCTAssertFalse(localizationSource.contains("private static let table: [TokenMeteringLanguage"))
         XCTAssertFalse(localizationSource.contains("private static let taskLabels"))
-        XCTAssertTrue(localizationSource.contains("Bundle.module"))
+        XCTAssertTrue(localizationSource.contains("#if DEBUG"))
+        XCTAssertTrue(localizationSource.contains("return .module"))
+        XCTAssertTrue(localizationSource.contains("packagedResourceBundle"))
+        XCTAssertTrue(localizationSource.contains("Bundle.main.resourceURL"))
+        XCTAssertTrue(localizationSource.contains("Contents\", isDirectory: true"))
+        XCTAssertTrue(localizationSource.contains("Resources\", isDirectory: true"))
         XCTAssertTrue(packageSource.contains("defaultLocalization: \"en\""))
         XCTAssertTrue(packageSource.contains(".process(\"Resources/Localization\")"))
         XCTAssertNotNil(strings["token_metering.sourceBreakdown"])
@@ -257,6 +274,8 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(script.contains("Spill_Spill.bundle"))
         XCTAssertTrue(script.contains("ditto \"$RESOURCE_BUNDLE\" \"$RESOURCES_DIR/Spill_Spill.bundle\""))
         XCTAssertTrue(script.contains("ditto \"$RESOURCES_DIR/Spill_Spill.bundle\" \"$HELPER_RESOURCES_DIR/Spill_Spill.bundle\""))
+        XCTAssertFalse(script.contains("ditto \"$RESOURCE_BUNDLE\" \"$APP_DIR/Spill_Spill.bundle\""))
+        XCTAssertFalse(script.contains("ditto \"$RESOURCES_DIR/Spill_Spill.bundle\" \"$HELPER_APP_DIR/Spill_Spill.bundle\""))
     }
 
     private static func copy(_ copy: String, containsBlockedTerm term: String, wholeWord: Bool) -> Bool {
@@ -509,7 +528,11 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertFalse(dashboardView.contains("runLocalQueueSelfTest()"))
         XCTAssertFalse(dashboardView.contains("t(.avgLatency)"))
         XCTAssertTrue(preferencesSection.contains("localDataManagementSection"))
-        XCTAssertTrue(preferencesSection.contains("Label(t(.clearAllLocalData), systemImage: \"trash\")"))
+        XCTAssertTrue(preferencesSection.contains("Text(t(.localDataManagementDetail))"))
+        XCTAssertTrue(preferencesSection.contains("DisclosureGroup(isExpanded: $showsLocalDataDeleteControls)"))
+        XCTAssertTrue(preferencesSection.contains("Label(t(.localDataDeleteOptions), systemImage: \"trash\")"))
+        XCTAssertTrue(preferencesSection.contains("Label(t(.reviewLocalDataDelete), systemImage: \"trash\")"))
+        XCTAssertFalse(preferencesSection.contains("Label(t(.clearAllLocalData), systemImage: \"trash\")"))
         XCTAssertTrue(preferencesSection.contains("try tokenUsageStore.clearEvents()"))
     }
 
@@ -523,7 +546,12 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(preferencesSection.contains("t(.setupApplyWhereTitle)"))
         XCTAssertTrue(preferencesSection.contains("localEventQueueSection"))
         XCTAssertTrue(preferencesSection.contains("privacyBoundarySection"))
-        XCTAssertFalse(preferencesSection.contains("DisclosureGroup"))
+        XCTAssertFalse(preferencesSection.contains("showsPrivateUsageManualConnection"))
+        XCTAssertFalse(preferencesSection.contains("privateUsageGrantCode"))
+        XCTAssertFalse(preferencesSection.contains("privateUsageUploadManualConnection"))
+        XCTAssertFalse(preferencesSection.contains("privateUsageUploadManualCodeFallback"))
+        XCTAssertFalse(preferencesSection.contains("privateUsageUploadConnectionCode"))
+        XCTAssertFalse(preferencesSection.contains("connect(grantCode:"))
         XCTAssertFalse(preferencesSection.contains("advancedVisible"))
     }
 
@@ -536,6 +564,7 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertFalse(dashboardView.contains("store.snapshotForWorkItem(session.id)"))
         XCTAssertTrue(dashboardView.contains("title: t(.aiTool)"))
         XCTAssertTrue(dashboardView.contains("title: t(.modelBreakdown)"))
+        XCTAssertTrue(dashboardView.contains("title: t(.workflowUsage)"))
         XCTAssertTrue(dashboardView.contains("title: t(.workflowBreakdown)"))
         XCTAssertTrue(dashboardView.contains("title: t(.stageBreakdown)"))
         XCTAssertTrue(dashboardView.contains("title: t(.sourceBreakdown)"))
@@ -775,6 +804,7 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(main.contains("application.setActivationPolicy(.accessory)"))
         XCTAssertTrue(process.contains(#"static let helperBundleName = "Spill Token Dashboard.app""#))
         XCTAssertTrue(process.contains(#"static let helperBundleIdentifierSuffix = ".TokenDashboard""#))
+        XCTAssertTrue(process.contains("mainBundleIdentifierForDashboardHelper"))
         XCTAssertTrue(process.contains("settingsDidChangeNotification"))
         XCTAssertTrue(process.contains("postAppLanguageDidChange"))
         XCTAssertTrue(launcher.contains("NSWorkspace.OpenConfiguration"))
@@ -789,6 +819,8 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(helperDelegate.contains("SPILL_TOKEN_DASHBOARD_SMOKE_READY"))
         XCTAssertTrue(helperDelegate.contains("SPILL_TOKEN_DASHBOARD_SMOKE_EXIT"))
         XCTAssertTrue(helperDelegate.contains("openMainAppTokenMeteringSettings"))
+        XCTAssertTrue(helperDelegate.contains("launchMainAppIfNeeded()"))
+        XCTAssertTrue(helperDelegate.contains("NSWorkspace.shared.runningApplications"))
         XCTAssertTrue(helperDelegate.contains("TokenMeteringDashboardProcess.postOpenPreferencesRequest()"))
         XCTAssertTrue(helperDelegate.contains("observeSettingsChanges()"))
         XCTAssertTrue(helperDelegate.contains("settingsDidChangeFromMainApp"))
@@ -805,7 +837,11 @@ final class TokenUsageStoreTests: XCTestCase {
 
         XCTAssertTrue(buildScript.contains(#"HELPER_APP_NAME="Spill Token Dashboard.app""#))
         XCTAssertTrue(buildScript.contains(#"HELPER_BUNDLE_ID="${BUNDLE_ID}.TokenDashboard""#))
+        XCTAssertFalse(buildScript.contains(#"ditto "$RESOURCE_BUNDLE" "$APP_DIR/Spill_Spill.bundle""#))
+        XCTAssertFalse(buildScript.contains(#"ditto "$RESOURCES_DIR/Spill_Spill.bundle" "$HELPER_APP_DIR/Spill_Spill.bundle""#))
         XCTAssertTrue(buildScript.contains(#"sign_app_bundle "$HELPER_APP_DIR" "$HELPER_BUNDLE_ID""#))
+        XCTAssertTrue(smokeScript.contains("APP_RESOURCE_BUNDLE"))
+        XCTAssertTrue(smokeScript.contains("HELPER_RESOURCE_BUNDLE"))
         XCTAssertTrue(smokeScript.contains("SPILL_TOKEN_DASHBOARD_STANDALONE=1"))
         XCTAssertTrue(smokeScript.contains("SPILL_TOKEN_DASHBOARD_SMOKE_READY"))
         XCTAssertTrue(smokeScript.contains("SPILL_TOKEN_DASHBOARD_SMOKE_EXIT"))
@@ -834,6 +870,24 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertNil(TokenMeteringDashboardProcess.mainAppURLForDashboardHelper(
             helperBundleURL: mainBundleURL,
             fileExists: { _ in true }
+        ))
+        XCTAssertEqual(
+            TokenMeteringDashboardProcess.mainBundleIdentifierForDashboardHelper(
+                helperBundleIdentifier: "dev.spill.Spill.TokenDashboard",
+                environment: [:]
+            ),
+            "dev.spill.Spill"
+        )
+        XCTAssertEqual(
+            TokenMeteringDashboardProcess.mainBundleIdentifierForDashboardHelper(
+                helperBundleIdentifier: nil,
+                environment: [TokenMeteringDashboardProcess.mainBundleIdentifierEnvironmentKey: "dev.custom.Spill"]
+            ),
+            "dev.custom.Spill"
+        )
+        XCTAssertNil(TokenMeteringDashboardProcess.mainBundleIdentifierForDashboardHelper(
+            helperBundleIdentifier: "dev.spill.Spill",
+            environment: [:]
         ))
         XCTAssertTrue(TokenMeteringDashboardProcess.isDashboardBundleIdentifier("dev.spill.Spill.TokenDashboard"))
         XCTAssertFalse(TokenMeteringDashboardProcess.isDashboardBundleIdentifier("dev.spill.Spill"))
@@ -2404,6 +2458,43 @@ final class TokenUsageStoreTests: XCTestCase {
 
         let emptyPercentageSnapshot = TokenUsageDashboardSnapshot(events: [], displayMode: .percentage)
         XCTAssertEqual(emptyPercentageSnapshot.kpis.first(where: { $0.id == "total" })?.value, "0.0%")
+    }
+
+    func testDashboardSnapshotShowsWorkflowUsageRatios() {
+        let assisted = Self.safeEvent(
+            runID: "run_workflow_assisted",
+            spanID: "span_workflow_assisted",
+            inputTokens: 80,
+            outputTokens: 20,
+            taskType: .codeGeneration,
+            stage: .implement
+        )
+        let untracked = Self.safeEvent(
+            runID: "run_untracked",
+            spanID: "span_untracked",
+            inputTokens: 300,
+            outputTokens: 100,
+            taskType: .uncategorized,
+            stage: .summarize
+        )
+
+        let snapshot = TokenUsageDashboardSnapshot(events: [assisted, untracked], language: .english)
+        let rowsByID = Dictionary(uniqueKeysWithValues: snapshot.workflowUsage.rows.map { ($0.id, $0) })
+        let workRow = rowsByID["work"]
+        let tokensRow = rowsByID["tokens"]
+
+        XCTAssertEqual(workRow?.title, "Assisted work")
+        XCTAssertEqual(workRow?.value, "50.0%")
+        XCTAssertEqual(workRow?.ratio ?? -1, 0.5, accuracy: 0.0001)
+        XCTAssertEqual(tokensRow?.title, "Assisted tokens")
+        XCTAssertEqual(tokensRow?.value, "20.0%")
+        XCTAssertEqual(tokensRow?.ratio ?? -1, 0.2, accuracy: 0.0001)
+    }
+
+    func testDashboardSnapshotLeavesWorkflowUsageEmptyWithoutEvents() {
+        let snapshot = TokenUsageDashboardSnapshot(events: [])
+
+        XCTAssertTrue(snapshot.workflowUsage.rows.isEmpty)
     }
 
     func testDashboardTokenFormattingCompactsLargeValuesAndKeepsSmallValues() {

@@ -12,6 +12,7 @@ protocol PrivateUsageRelayClienting: Sendable {
     func exchangeDeviceGrant(
         grantCode: String,
         installID: String,
+        deviceName: String?,
         deviceKeyFingerprint: String?
     ) async throws -> PrivateUsageDeviceCredential
 
@@ -20,20 +21,45 @@ protocol PrivateUsageRelayClienting: Sendable {
         buckets: [PrivateUsageEncryptedBucket],
         keyEnvelopes: [PrivateUsageKeyEnvelope]
     ) async throws -> PrivateUsageUploadResponse
+
+    func checkDeviceConnection(
+        credential: PrivateUsageDeviceCredential
+    ) async throws
+}
+
+struct PrivateUsageUnavailableRelayClient: PrivateUsageRelayClienting {
+    func exchangeDeviceGrant(
+        grantCode: String,
+        installID: String,
+        deviceName: String?,
+        deviceKeyFingerprint: String?
+    ) async throws -> PrivateUsageDeviceCredential {
+        throw PrivateUsageUploadError.invalidRelayURL
+    }
+
+    func uploadBuckets(
+        credential: PrivateUsageDeviceCredential,
+        buckets: [PrivateUsageEncryptedBucket],
+        keyEnvelopes: [PrivateUsageKeyEnvelope]
+    ) async throws -> PrivateUsageUploadResponse {
+        throw PrivateUsageUploadError.invalidRelayURL
+    }
+
+    func checkDeviceConnection(
+        credential: PrivateUsageDeviceCredential
+    ) async throws {
+        throw PrivateUsageUploadError.invalidRelayURL
+    }
 }
 
 final class PrivateUsageRelayClient: PrivateUsageRelayClienting, @unchecked Sendable {
-    static let defaultRelayURL = URL(
-        string: "https://otggbleddlmzamgpqxjm.supabase.co/functions/v1/private-usage-relay"
-    )!
-
     private let relayURL: URL
     private let transport: PrivateUsageRelayTransport
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
 
     init(
-        relayURL: URL = PrivateUsageRelayClient.defaultRelayURL,
+        relayURL: URL,
         transport: PrivateUsageRelayTransport = .live
     ) {
         self.relayURL = relayURL
@@ -45,11 +71,13 @@ final class PrivateUsageRelayClient: PrivateUsageRelayClienting, @unchecked Send
     func exchangeDeviceGrant(
         grantCode: String,
         installID: String,
+        deviceName: String?,
         deviceKeyFingerprint: String?
     ) async throws -> PrivateUsageDeviceCredential {
         let requestBody = PrivateUsageGrantExchangeRequest(
             grantCode: grantCode,
             installID: installID,
+            deviceName: deviceName,
             deviceKeyFingerprint: deviceKeyFingerprint
         )
         var request = try makeJSONRequest(path: "exchange-device-grant")
@@ -81,9 +109,19 @@ final class PrivateUsageRelayClient: PrivateUsageRelayClienting, @unchecked Send
         return try await send(request)
     }
 
+    func checkDeviceConnection(
+        credential: PrivateUsageDeviceCredential
+    ) async throws {
+        var request = try makeJSONRequest(path: "check-device")
+        request.setValue("Bearer \(credential.authorizationToken)", forHTTPHeaderField: "Authorization")
+        request.httpBody = try encoder.encode([String: String]())
+
+        let _: PrivateUsageDeviceCheckResponse = try await send(request)
+    }
+
     private func makeJSONRequest(path: String) throws -> URLRequest {
         let endpoint = relayURL.appendingPathComponent(path)
-        guard endpoint.scheme == "https" || endpoint.host == "localhost" || endpoint.host == "127.0.0.1" else {
+        guard PrivateUsageRelayEndpoint.isSafeRelayURL(endpoint) else {
             throw PrivateUsageUploadError.invalidRelayURL
         }
 

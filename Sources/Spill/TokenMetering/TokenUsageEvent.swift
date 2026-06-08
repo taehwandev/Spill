@@ -374,6 +374,12 @@ struct TokenUsageEvent: Codable, Equatable, Identifiable, Sendable {
     }
 }
 
+enum TokenUsageWorkflowAssistance {
+    static func isAssisted(_ event: TokenUsageEvent) -> Bool {
+        event.taskType != .uncategorized || event.stage != .summarize
+    }
+}
+
 struct TokenUsageEventEnvelope: Codable, Equatable, Sendable {
     let schemaVersion: Int
     let source: String

@@ -438,9 +438,10 @@ final class SpillSettings: ObservableObject {
         tokenMeteringPromptAllowsLocalDisplayNames = defaults.object(forKey: Keys.tokenMeteringPromptAllowsLocalDisplayNames) as? Bool ?? false
         tokenUsageLocalAliases = defaults.dictionary(forKey: Keys.tokenUsageLocalAliases) as? [String: String] ?? [:]
         tokenUsageShowAdvancedTools = defaults.object(forKey: Keys.tokenUsageShowAdvancedTools) as? Bool ?? false
-        let privateUsageEnvironment = PrivateUsageUploadEnvironment.normalized(
-            rawValue: defaults.string(forKey: Keys.privateUsageUploadEnvironment)
-        )
+        let privateUsageEnvironment = PrivateUsageUploadEnvironment.resolvedFromConfiguration()
+            ?? defaults.string(forKey: Keys.privateUsageUploadEnvironment)
+                .flatMap(PrivateUsageUploadEnvironment.init(rawValue:))
+            ?? .defaultValue
         privateUsageUploadEnvironment = privateUsageEnvironment
         privateUsageUploadEnabled = Self.privateUsageUploadEnabled(
             defaults: defaults,
