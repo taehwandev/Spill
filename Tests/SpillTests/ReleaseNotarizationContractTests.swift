@@ -16,6 +16,8 @@ final class ReleaseNotarizationContractTests: XCTestCase {
         XCTAssertTrue(workflow.contains("APPLE_NOTARYTOOL_API_KEY: ${{ secrets.APPLE_NOTARYTOOL_API_KEY }}"))
         XCTAssertTrue(workflow.contains("APPLE_NOTARYTOOL_API_KEY_ID: ${{ secrets.APPLE_NOTARYTOOL_API_KEY_ID }}"))
         XCTAssertTrue(workflow.contains("APPLE_NOTARYTOOL_API_ISSUER: ${{ secrets.APPLE_NOTARYTOOL_API_ISSUER }}"))
+        XCTAssertTrue(workflow.contains("SPILL_BUILD_PRIVATE_USAGE_RELAY_URL: ${{ vars.SPILL_BUILD_PRIVATE_USAGE_RELAY_URL }}"))
+        XCTAssertTrue(workflow.contains("SPILL_BUILD_PRIVATE_USAGE_WEB_URL: ${{ vars.SPILL_BUILD_PRIVATE_USAGE_WEB_URL }}"))
         XCTAssertTrue(workflow.contains(".build/release-artifacts/notarytool-logs/**"))
 
         XCTAssertFalse(workflow.contains("APPLE_ID"))
@@ -37,6 +39,49 @@ final class ReleaseNotarizationContractTests: XCTestCase {
         XCTAssertFalse(packageScript.contains("stapler staple"))
         XCTAssertFalse(packageScript.contains("SPILL_NOTARY_KEYCHAIN_PROFILE"))
         XCTAssertFalse(packageScript.contains("--keychain-profile"))
+    }
+
+    func testReleaseBuildUsesProductionWebConnectionAndRegistersURLScheme() throws {
+        let buildScript = try read("scripts/build-app.sh")
+        let envExample = try read(".env.example")
+        let uploadModels = try read("Sources/Spill/TokenMetering/PrivateUsageUploadModels.swift")
+
+        XCTAssertTrue(buildScript.contains("swift build -c release --package-path \"$ROOT_DIR\""))
+        XCTAssertTrue(buildScript.contains("<key>CFBundleURLSchemes</key>"))
+        XCTAssertTrue(buildScript.contains("<string>spill</string>"))
+        XCTAssertTrue(buildScript.contains("SPILL_BUILD_PRIVATE_USAGE_ENVIRONMENT"))
+        XCTAssertTrue(buildScript.contains("SPILL_BUILD_PRIVATE_USAGE_RELAY_URL"))
+        XCTAssertTrue(buildScript.contains("SPILL_BUILD_PRIVATE_USAGE_WEB_URL"))
+        XCTAssertTrue(buildScript.contains("<key>SPILLPrivateUsageEnvironment</key>"))
+        XCTAssertTrue(buildScript.contains("<key>SPILLPrivateUsageRelayURL</key>"))
+        XCTAssertTrue(buildScript.contains("<key>SPILLPrivateUsageWebURL</key>"))
+        XCTAssertTrue(buildScript.contains("is required for SPILL_BUILD_PRIVATE_USAGE_ENVIRONMENT"))
+        XCTAssertTrue(buildScript.contains("PRIVATE_USAGE_RELAY_URL=\"${SPILL_BUILD_PRIVATE_USAGE_RELAY_URL:-}\""))
+        XCTAssertTrue(buildScript.contains("PRIVATE_USAGE_WEB_URL=\"${SPILL_BUILD_PRIVATE_USAGE_WEB_URL:-}\""))
+        XCTAssertFalse(buildScript.contains("DEFAULT_PRIVATE_USAGE_WEB_URL"))
+        XCTAssertFalse(buildScript.contains("DEFAULT_PRIVATE_USAGE_RELAY_URL"))
+        XCTAssertTrue(envExample.contains("SPILL_BUILD_PRIVATE_USAGE_ENVIRONMENT="))
+        XCTAssertTrue(envExample.contains("SPILL_BUILD_PRIVATE_USAGE_WEB_URL="))
+        XCTAssertTrue(envExample.contains("SPILL_BUILD_PRIVATE_USAGE_RELAY_URL="))
+        XCTAssertFalse(envExample.contains("SPILL_BUILD_PRIVATE_USAGE_WEB_URL=http"))
+        XCTAssertFalse(envExample.contains("SPILL_BUILD_PRIVATE_USAGE_RELAY_URL=http"))
+        XCTAssertTrue(uploadModels.contains("#else\n        return .production\n        #endif"))
+        XCTAssertTrue(uploadModels.contains("SPILL_PRIVATE_USAGE_WEB_URL"))
+        XCTAssertTrue(uploadModels.contains("SPILLPrivateUsageWebURL"))
+        XCTAssertTrue(uploadModels.contains("SPILLPrivateUsageRelayURL"))
+        XCTAssertFalse(uploadModels.contains("#/connect-device"))
+        XCTAssertFalse(uploadModels.contains("functions/v1/private-usage-relay"))
+    }
+
+    func testReleaseBuildKeepsPrivateUsageUploadDebugOnly() throws {
+        let uploadModels = try read("Sources/Spill/TokenMetering/PrivateUsageUploadModels.swift")
+        let preferencesSection = try read("Sources/Spill/Preferences/TokenMeteringPreferencesSection.swift")
+        let appDelegate = try read("Sources/Spill/App/AppDelegate.swift")
+
+        XCTAssertTrue(uploadModels.contains("enum PrivateUsageUploadFeatureAvailability"))
+        XCTAssertTrue(uploadModels.contains("#if DEBUG\n        return true\n        #else\n        return false\n        #endif"))
+        XCTAssertTrue(preferencesSection.contains("if PrivateUsageUploadFeatureAvailability.isEnabledInCurrentBuild"))
+        XCTAssertTrue(appDelegate.contains("guard PrivateUsageUploadFeatureAvailability.isEnabledInCurrentBuild else"))
     }
 
     func testNotarizationScriptProtectsInlineApiKeyAndValidatesJsonStatus() throws {

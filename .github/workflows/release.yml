@@ -197,6 +197,9 @@ jobs:
           SPILL_SIGN_IDENTITY: ${{ steps.signing.outputs.sign_identity }}
           SPILL_APTABASE_APP_KEY: ${{ secrets.SPILL_APTABASE_APP_KEY }}
           SPILL_SPARKLE_PUBLIC_ED_KEY: ${{ secrets.SPARKLE_PUBLIC_ED_KEY }}
+          SPILL_BUILD_PRIVATE_USAGE_ENVIRONMENT: production
+          SPILL_BUILD_PRIVATE_USAGE_RELAY_URL: ${{ vars.SPILL_BUILD_PRIVATE_USAGE_RELAY_URL }}
+          SPILL_BUILD_PRIVATE_USAGE_WEB_URL: ${{ vars.SPILL_BUILD_PRIVATE_USAGE_WEB_URL }}
         run: ./scripts/build-app.sh
 
       - name: Notarize signed app bundle
@@ -219,6 +222,9 @@ jobs:
           SPILL_APTABASE_APP_KEY: ${{ secrets.SPILL_APTABASE_APP_KEY }}
           SPILL_SPARKLE_PUBLIC_ED_KEY: ${{ secrets.SPARKLE_PUBLIC_ED_KEY }}
           SPILL_SPARKLE_PRIVATE_KEY_FILE: ${{ steps.sparkle.outputs.private_key_file }}
+          SPILL_BUILD_PRIVATE_USAGE_ENVIRONMENT: production
+          SPILL_BUILD_PRIVATE_USAGE_RELAY_URL: ${{ vars.SPILL_BUILD_PRIVATE_USAGE_RELAY_URL }}
+          SPILL_BUILD_PRIVATE_USAGE_WEB_URL: ${{ vars.SPILL_BUILD_PRIVATE_USAGE_WEB_URL }}
         run: ./scripts/package-release.sh
 
       - name: Notarize packaged artifacts

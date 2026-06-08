@@ -78,11 +78,19 @@ swift build
 To create a local `.app` bundle:
 
 ```bash
+cp .env.example .env.local
+# Edit .env.local if the private usage web or relay URL differs.
 ./scripts/build-app.sh
 open .build/Spill.app
 ```
 
+Use `SPILL_SKIP_ENV_LOCAL=1 ./scripts/build-app.sh` when you need a clean local
+development build that ignores an existing `.env.local`.
+
 The bundled app declares `LSUIElement` and also runs without a Dock icon. If the app appears to do nothing after launch, check the menu bar for the Spill trigger.
+Production app bundles read the private usage web and relay URLs from build-time
+environment values written into `Info.plist`; the app source does not hardcode
+the deployed web portal URL.
 
 Agent-facing details for local app builds, app restarts, release packaging, and
 token-metering adapter resource propagation live in
@@ -119,7 +127,10 @@ Create local release artifacts:
 
 Local builds automatically read `.env.local` when present. Copy `.env.example`
 to `.env.local` and fill telemetry keys before building if analytics should be
-enabled in local app, landing page, or installer artifacts.
+enabled in local app, landing page, or installer artifacts. Keep
+`SPILL_BUILD_PRIVATE_USAGE_ENVIRONMENT=production`,
+`SPILL_BUILD_PRIVATE_USAGE_WEB_URL` and `SPILL_BUILD_PRIVATE_USAGE_RELAY_URL`
+set explicitly for production artifacts.
 
 This writes:
 
@@ -153,6 +164,9 @@ Developer ID release example:
 
 ```bash
 SPILL_VERSION=2026.21.2 \
+SPILL_BUILD_PRIVATE_USAGE_ENVIRONMENT=production \
+SPILL_BUILD_PRIVATE_USAGE_RELAY_URL=<private-usage-relay-url> \
+SPILL_BUILD_PRIVATE_USAGE_WEB_URL=<web-connect-device-url> \
 SPILL_SIGN_IDENTITY="Developer ID Application: Example Name (TEAMID)" \
 SPILL_INSTALLER_SIGN_IDENTITY="Developer ID Installer: Example Name (TEAMID)" \
 ./scripts/package-release.sh
@@ -166,6 +180,9 @@ script:
 
 ```bash
 SPILL_VERSION=2026.21.2 \
+SPILL_BUILD_PRIVATE_USAGE_ENVIRONMENT=production \
+SPILL_BUILD_PRIVATE_USAGE_RELAY_URL=<private-usage-relay-url> \
+SPILL_BUILD_PRIVATE_USAGE_WEB_URL=<web-connect-device-url> \
 SPILL_SIGN_IDENTITY="Developer ID Application: Example Name (TEAMID)" \
 SPILL_INSTALLER_SIGN_IDENTITY="Developer ID Installer: Example Name (TEAMID)" \
 ./scripts/build-app.sh
