@@ -80,21 +80,12 @@ jobs:
           CERTIFICATE_BASE64: ${{ secrets.MACOS_DEVELOPER_ID_CERTIFICATE_BASE64 }}
           CERTIFICATE_PASSWORD: ${{ secrets.MACOS_DEVELOPER_ID_CERTIFICATE_PASSWORD }}
           CODESIGN_IDENTITY: ${{ secrets.MACOS_CODESIGN_IDENTITY }}
-          INSTALLER_CERTIFICATE_BASE64: ${{ secrets.MACOS_DEVELOPER_ID_INSTALLER_CERTIFICATE_BASE64 }}
-          INSTALLER_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_DEVELOPER_ID_INSTALLER_CERTIFICATE_PASSWORD }}
-          INSTALLER_SIGN_IDENTITY: ${{ secrets.MACOS_INSTALLER_SIGN_IDENTITY }}
           KEYCHAIN_PASSWORD: ${{ secrets.MACOS_SIGNING_KEYCHAIN_PASSWORD }}
         run: |
           set -euo pipefail
 
           if [[ -z "$CERTIFICATE_BASE64" && -z "$CERTIFICATE_PASSWORD" && -z "$CODESIGN_IDENTITY" ]]; then
-            if [[ -n "$INSTALLER_CERTIFICATE_BASE64" || -n "$INSTALLER_CERTIFICATE_PASSWORD" || -n "$INSTALLER_SIGN_IDENTITY" ]]; then
-              echo "Installer package signing requires Developer ID app signing secrets too." >&2
-              exit 2
-            fi
-
             echo "sign_identity=-" >> "$GITHUB_OUTPUT"
-            echo "installer_sign_identity=" >> "$GITHUB_OUTPUT"
             echo "signing_note=Ad-hoc signed. Gatekeeper warnings can appear." >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -123,27 +114,6 @@ jobs:
             -f pkcs12 \
             -k "$keychain_path"
 
-          if [[ -n "$INSTALLER_CERTIFICATE_BASE64" || -n "$INSTALLER_CERTIFICATE_PASSWORD" || -n "$INSTALLER_SIGN_IDENTITY" ]]; then
-            if [[ -z "$INSTALLER_CERTIFICATE_BASE64" || -z "$INSTALLER_CERTIFICATE_PASSWORD" || -z "$INSTALLER_SIGN_IDENTITY" ]]; then
-              echo "Installer package signing requires MACOS_DEVELOPER_ID_INSTALLER_CERTIFICATE_BASE64, MACOS_DEVELOPER_ID_INSTALLER_CERTIFICATE_PASSWORD, and MACOS_INSTALLER_SIGN_IDENTITY." >&2
-              exit 2
-            fi
-
-            installer_certificate_path="$RUNNER_TEMP/developer-id-installer.p12"
-            printf "%s" "$INSTALLER_CERTIFICATE_BASE64" | base64 -D > "$installer_certificate_path"
-
-            security import "$installer_certificate_path" \
-              -P "$INSTALLER_CERTIFICATE_PASSWORD" \
-              -A \
-              -t cert \
-              -f pkcs12 \
-              -k "$keychain_path"
-
-            echo "installer_sign_identity=$INSTALLER_SIGN_IDENTITY" >> "$GITHUB_OUTPUT"
-          else
-            echo "installer_sign_identity=" >> "$GITHUB_OUTPUT"
-          fi
-
           security set-key-partition-list \
             -S apple-tool:,apple: \
             -s \
@@ -159,9 +129,6 @@ jobs:
           MACOS_DEVELOPER_ID_CERTIFICATE_BASE64: ${{ secrets.MACOS_DEVELOPER_ID_CERTIFICATE_BASE64 }}
           MACOS_DEVELOPER_ID_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_DEVELOPER_ID_CERTIFICATE_PASSWORD }}
           MACOS_CODESIGN_IDENTITY: ${{ secrets.MACOS_CODESIGN_IDENTITY }}
-          MACOS_DEVELOPER_ID_INSTALLER_CERTIFICATE_BASE64: ${{ secrets.MACOS_DEVELOPER_ID_INSTALLER_CERTIFICATE_BASE64 }}
-          MACOS_DEVELOPER_ID_INSTALLER_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_DEVELOPER_ID_INSTALLER_CERTIFICATE_PASSWORD }}
-          MACOS_INSTALLER_SIGN_IDENTITY: ${{ secrets.MACOS_INSTALLER_SIGN_IDENTITY }}
           APPLE_NOTARYTOOL_API_KEY: ${{ secrets.APPLE_NOTARYTOOL_API_KEY }}
           APPLE_NOTARYTOOL_API_KEY_ID: ${{ secrets.APPLE_NOTARYTOOL_API_KEY_ID }}
           APPLE_NOTARYTOOL_API_ISSUER: ${{ secrets.APPLE_NOTARYTOOL_API_ISSUER }}
@@ -218,11 +185,9 @@ jobs:
           SPILL_BUILD: ${{ steps.version.outputs.build }}
           SPILL_BUNDLE_ID: ${{ env.SPILL_BUNDLE_ID }}
           SPILL_SIGN_IDENTITY: ${{ steps.signing.outputs.sign_identity }}
-          SPILL_INSTALLER_SIGN_IDENTITY: ${{ steps.signing.outputs.installer_sign_identity }}
           SPILL_SKIP_BUILD: "1"
           SPILL_APTABASE_APP_KEY: ${{ secrets.SPILL_APTABASE_APP_KEY }}
           SPILL_SPARKLE_PUBLIC_ED_KEY: ${{ secrets.SPARKLE_PUBLIC_ED_KEY }}
-          SPILL_SPARKLE_PRIVATE_KEY_FILE: ${{ steps.sparkle.outputs.private_key_file }}
           SPILL_BUILD_PRIVATE_USAGE_FEATURE_ENABLED: "0"
           SPILL_BUILD_PRIVATE_USAGE_ENVIRONMENT: production
           SPILL_BUILD_PRIVATE_USAGE_RELAY_URL: ${{ vars.SPILL_BUILD_PRIVATE_USAGE_RELAY_URL }}
@@ -237,29 +202,42 @@ jobs:
           APPLE_NOTARYTOOL_API_ISSUER: ${{ secrets.APPLE_NOTARYTOOL_API_ISSUER }}
         run: ./scripts/notarize-release-artifacts.sh --artifacts .build/release-artifacts
 
-      - name: Add stable website asset names
+      - name: Prepare public release assets
         shell: bash
+        env:
+          SPARKLE_PRIVATE_KEY_FILE: ${{ steps.sparkle.outputs.private_key_file }}
         run: |
           set -euo pipefail
           version="${{ steps.version.outputs.version }}"
           artifacts_dir=".build/release-artifacts"
+          appcast_input_dir="$artifacts_dir/appcast-input"
+          download_base_url="https://github.com/taehwandev/Spill/releases/latest/download"
+          release_notes_url="https://github.com/taehwandev/Spill/releases/latest"
 
           cp "$artifacts_dir/Spill-$version-macos.dmg" "$artifacts_dir/Spill-macos.dmg"
-          cp "$artifacts_dir/Spill-$version-macos.zip" "$artifacts_dir/Spill-macos.zip"
-          if [[ -f "$artifacts_dir/Spill-$version-macos.pkg" ]]; then
-            cp "$artifacts_dir/Spill-$version-macos.pkg" "$artifacts_dir/Spill-macos.pkg"
+
+          generate_appcast="$(find .build/artifacts/sparkle -path "*/bin/generate_appcast" -type f -print -quit)"
+          if [[ -z "$generate_appcast" || ! -x "$generate_appcast" ]]; then
+            echo "Sparkle generate_appcast was not found." >&2
+            exit 2
           fi
+
+          rm -rf "$appcast_input_dir"
+          mkdir -p "$appcast_input_dir"
+          cp "$artifacts_dir/Spill-macos.dmg" "$appcast_input_dir/"
+
+          "$generate_appcast" \
+            --ed-key-file "$SPARKLE_PRIVATE_KEY_FILE" \
+            --download-url-prefix "$download_base_url/" \
+            --full-release-notes-url "$release_notes_url" \
+            --maximum-versions 1 \
+            "$appcast_input_dir"
+
+          cp "$appcast_input_dir/appcast.xml" "$artifacts_dir/appcast.xml"
 
           (
             cd "$artifacts_dir"
-            checksum_files=(Spill-*.dmg Spill-*.zip)
-            if compgen -G "Spill-*.pkg" > /dev/null; then
-              checksum_files+=(Spill-*.pkg)
-            fi
-            checksum_files+=(update.json)
-            if [[ -f appcast.xml ]]; then
-              checksum_files+=(appcast.xml)
-            fi
+            checksum_files=(Spill-macos.dmg update.json appcast.xml)
             shasum -a 256 "${checksum_files[@]}" > checksums.txt
           )
 
@@ -271,10 +249,7 @@ jobs:
 
           codesign --verify --deep --strict --verbose=2 .build/Spill.app
           hdiutil verify ".build/release-artifacts/Spill-$version-macos.dmg"
-          unzip -t ".build/release-artifacts/Spill-$version-macos.zip"
-          if [[ -f ".build/release-artifacts/Spill-$version-macos.pkg" ]]; then
-            pkgutil --check-signature ".build/release-artifacts/Spill-$version-macos.pkg"
-          fi
+          hdiutil verify ".build/release-artifacts/Spill-macos.dmg"
           if [[ -f ".build/release-artifacts/appcast.xml" ]]; then
             test -s ".build/release-artifacts/appcast.xml"
             grep -q "<rss" ".build/release-artifacts/appcast.xml"
@@ -282,22 +257,14 @@ jobs:
 
           spctl --assess --type execute --verbose=4 .build/Spill.app
           xcrun stapler validate ".build/release-artifacts/Spill-$version-macos.dmg"
-          if [[ -f ".build/release-artifacts/Spill-$version-macos.pkg" ]]; then
-            xcrun stapler validate ".build/release-artifacts/Spill-$version-macos.pkg"
-            spctl --assess --type install --verbose=4 ".build/release-artifacts/Spill-$version-macos.pkg"
-          fi
+          xcrun stapler validate ".build/release-artifacts/Spill-macos.dmg"
 
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v7.0.1
         with:
           name: Spill-${{ steps.version.outputs.version }}-macos
           path: |
-            .build/release-artifacts/Spill-${{ steps.version.outputs.version }}-macos.dmg
-            .build/release-artifacts/Spill-${{ steps.version.outputs.version }}-macos.zip
-            .build/release-artifacts/Spill-${{ steps.version.outputs.version }}-macos.pkg
             .build/release-artifacts/Spill-macos.dmg
-            .build/release-artifacts/Spill-macos.zip
-            .build/release-artifacts/Spill-macos.pkg
             .build/release-artifacts/update.json
             .build/release-artifacts/appcast.xml
             .build/release-artifacts/checksums.txt
@@ -317,21 +284,6 @@ jobs:
           artifacts_dir=".build/release-artifacts"
           notes_file="$RUNNER_TEMP/release-notes.md"
           draft="${PUBLISH_DRAFT:-false}"
-          install_note=""
-
-          if [[ "$SIGNING_NOTE" != "Developer ID signed and notarized." ]]; then
-            install_note='
-          Install ad-hoc or non-notarized builds:
-          ```bash
-          /bin/bash -c "$(curl -fsSL https://spill.thdev.app/install.sh)"
-          ```
-
-          If Spill is already in Applications:
-          ```bash
-          sudo xattr -dr com.apple.quarantine /Applications/Spill.app
-          open /Applications/Spill.app
-          ```'
-          fi
 
           cat > "$notes_file" <<NOTES
           Spill $version for macOS.
@@ -342,23 +294,13 @@ jobs:
           Download \`Spill-macos.dmg\` for standard installation.
           Signing: $SIGNING_NOTE
           Updates: $SPARKLE_NOTE
-          $install_note
           NOTES
 
           assets=(
-            "$artifacts_dir/Spill-$version-macos.dmg"
-            "$artifacts_dir/Spill-$version-macos.zip"
             "$artifacts_dir/Spill-macos.dmg"
-            "$artifacts_dir/Spill-macos.zip"
             "$artifacts_dir/update.json"
             "$artifacts_dir/checksums.txt"
           )
-          if [[ -f "$artifacts_dir/Spill-$version-macos.pkg" ]]; then
-            assets+=(
-              "$artifacts_dir/Spill-$version-macos.pkg"
-              "$artifacts_dir/Spill-macos.pkg"
-            )
-          fi
           if [[ -f "$artifacts_dir/appcast.xml" ]]; then
             assets+=("$artifacts_dir/appcast.xml")
           fi

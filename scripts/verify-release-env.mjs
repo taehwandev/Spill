@@ -6,12 +6,6 @@ const requiredSigningEnv = [
   'MACOS_CODESIGN_IDENTITY',
 ];
 
-const optionalInstallerEnv = [
-  'MACOS_DEVELOPER_ID_INSTALLER_CERTIFICATE_BASE64',
-  'MACOS_DEVELOPER_ID_INSTALLER_CERTIFICATE_PASSWORD',
-  'MACOS_INSTALLER_SIGN_IDENTITY',
-];
-
 const requiredApiKeyEnv = [
   'APPLE_NOTARYTOOL_API_KEY_ID',
   'APPLE_NOTARYTOOL_API_ISSUER',
@@ -29,11 +23,6 @@ const invalid = [];
 
 for (const name of requiredSigningEnv) {
   if (!isPresent(name)) missing.push(name);
-}
-
-const installerPresent = optionalInstallerEnv.filter(isPresent);
-if (installerPresent.length > 0 && installerPresent.length !== optionalInstallerEnv.length) {
-  missing.push(...optionalInstallerEnv.filter((name) => !isPresent(name)));
 }
 
 const hasInlineApiKey = isPresent('APPLE_NOTARYTOOL_API_KEY');
@@ -65,10 +54,6 @@ if (hasApiKeyMaterial) {
 
 if (isPresent('MACOS_CODESIGN_IDENTITY') && !process.env.MACOS_CODESIGN_IDENTITY.trim().startsWith('Developer ID Application:')) {
   invalid.push('MACOS_CODESIGN_IDENTITY must be a Developer ID Application identity for notarized macOS distribution.');
-}
-
-if (isPresent('MACOS_INSTALLER_SIGN_IDENTITY') && !process.env.MACOS_INSTALLER_SIGN_IDENTITY.trim().startsWith('Developer ID Installer:')) {
-  invalid.push('MACOS_INSTALLER_SIGN_IDENTITY must be a Developer ID Installer identity when installer signing is configured.');
 }
 
 if (missing.length > 0 || invalid.length > 0) {

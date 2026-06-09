@@ -13,7 +13,6 @@ fi
 SOURCE_DIR="$ROOT_DIR/docs"
 OUTPUT_DIR="${SPILL_DOCS_OUTPUT_DIR:-$ROOT_DIR/.build/docs}"
 WEB_APTABASE_APP_KEY="${SPILL_WEB_APTABASE_APP_KEY:-${SPILL_APTABASE_APP_KEY:-}}"
-INSTALLER_APTABASE_APP_KEY="${SPILL_INSTALLER_APTABASE_APP_KEY:-${SPILL_APTABASE_APP_KEY:-}}"
 
 validate_app_key() {
     local name="$1"
@@ -37,7 +36,6 @@ replace_placeholder() {
 }
 
 validate_app_key "SPILL_WEB_APTABASE_APP_KEY" "$WEB_APTABASE_APP_KEY"
-validate_app_key "SPILL_INSTALLER_APTABASE_APP_KEY" "$INSTALLER_APTABASE_APP_KEY"
 
 rm -rf "$OUTPUT_DIR"
 mkdir -p "$OUTPUT_DIR"
@@ -50,7 +48,5 @@ cp "$ROOT_DIR/scripts/spill-token-metering-stats.mjs" "$OUTPUT_DIR/token-meterin
 cp "$ROOT_DIR/scripts/spill-codex-session-importer.mjs" "$OUTPUT_DIR/token-metering/adapters/codex/spill-importer.mjs"
 
 replace_placeholder "$OUTPUT_DIR/index.html" "__SPILL_WEB_APTABASE_APP_KEY__" "$WEB_APTABASE_APP_KEY"
-
-replace_placeholder "$OUTPUT_DIR/install.sh" "__SPILL_INSTALLER_APTABASE_APP_KEY__" "$INSTALLER_APTABASE_APP_KEY"
 
 echo "Prepared docs at $OUTPUT_DIR"

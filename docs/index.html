@@ -773,32 +773,27 @@
                     <span class="text-label-caps text-primary font-black">Download</span>
                     <h2 class="text-display-lg-mobile md:text-5xl font-extrabold leading-tight">Get Spill for macOS.</h2>
                     <p class="text-body-lg text-on-surface-variant max-w-xl">
-                        Choose the installation method that fits your workflow. Paste the terminal command for automated setup, or download the direct installer bundle.
+                        Download the signed and notarized DMG, then move Spill.app into Applications.
                     </p>
                     <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-xl">
                         <div class="rounded-2xl bg-white/80 border border-outline-variant/30 p-4">
                             <div class="text-[10px] font-black text-primary uppercase">Step 1</div>
-                            <div class="mt-1 text-sm font-black">Open Terminal</div>
+                            <div class="mt-1 text-sm font-black">Download DMG</div>
                         </div>
                         <div class="rounded-2xl bg-white/80 border border-outline-variant/30 p-4">
                             <div class="text-[10px] font-black text-primary uppercase">Step 2</div>
-                            <div class="mt-1 text-sm font-black">Paste command</div>
+                            <div class="mt-1 text-sm font-black">Open disk image</div>
                         </div>
                         <div class="rounded-2xl bg-white/80 border border-outline-variant/30 p-4">
                             <div class="text-[10px] font-black text-primary uppercase">Step 3</div>
-                            <div class="mt-1 text-sm font-black">Launch Spill</div>
+                            <div class="mt-1 text-sm font-black">Move to Applications</div>
                         </div>
                     </div>
                     <div class="pt-6 border-t border-outline-variant/30 flex flex-wrap gap-4 items-center max-w-xl">
-                        <span class="text-sm font-black text-on-surface/60">Preferred direct install?</span>
+                        <span class="text-sm font-black text-on-surface/60">Official installer</span>
                         <a class="inline-flex items-center gap-1.5 text-sm font-bold text-primary hover:underline hover:scale-[1.01] transition-transform" href="https://github.com/taehwandev/Spill/releases/latest/download/Spill-macos.dmg" data-analytics-event="download_direct" data-analytics-location="download_section">
                             <span class="material-symbols-outlined text-[18px]">download</span>
                             Download DMG
-                        </a>
-                        <span class="text-on-surface/20">|</span>
-                        <a class="inline-flex items-center gap-1.5 text-sm font-bold text-primary hover:underline hover:scale-[1.01] transition-transform" href="https://github.com/taehwandev/Spill/releases/latest/download/Spill-macos.zip" data-analytics-event="download_zip" data-analytics-location="download_section">
-                            <span class="material-symbols-outlined text-[18px]">compress</span>
-                            Download ZIP
                         </a>
                     </div>
                 </div>
@@ -815,22 +810,22 @@
                         </div>
                         <div id="terminal-body" class="transition-all duration-500">
                             <div class="mt-7 rounded-2xl bg-white/5 border border-white/10 p-4">
-                                <div class="text-[11px] font-black uppercase tracking-[0.16em] text-inverse-on-surface/45">Install command</div>
+                                <div class="text-[11px] font-black uppercase tracking-[0.16em] text-inverse-on-surface/45">Official release</div>
                                 <div class="mt-4 flex items-start gap-4">
-                                    <code id="install-command" class="font-mono text-sm md:text-base leading-relaxed break-all text-inverse-on-surface">/bin/bash -c "$(curl -fsSL https://spill.thdev.app/install.sh)"</code>
-                                    <button id="copy-installer-btn" class="shrink-0 rounded-xl bg-white/10 px-3 py-2 text-xs font-black text-inverse-on-surface hover:bg-white/15 transition-colors" type="button" data-copy='/bin/bash -c "$(curl -fsSL https://spill.thdev.app/install.sh)"'>
-                                        Copy
-                                    </button>
+                                    <code class="font-mono text-sm md:text-base leading-relaxed break-all text-inverse-on-surface">Spill-macos.dmg</code>
+                                    <a class="shrink-0 rounded-xl bg-white/10 px-3 py-2 text-xs font-black text-inverse-on-surface hover:bg-white/15 transition-colors" href="https://github.com/taehwandev/Spill/releases/latest/download/Spill-macos.dmg" data-analytics-event="download_direct" data-analytics-location="install_panel">
+                                        Download
+                                    </a>
                                 </div>
                             </div>
                             <div class="mt-6 space-y-3 text-sm font-semibold text-inverse-on-surface/70">
                                 <div class="flex items-center gap-3">
                                     <span class="h-2 w-2 rounded-full bg-emerald-400"></span>
-                                    <span>Fetch latest installer script</span>
+                                    <span>Developer ID signed and notarized</span>
                                 </div>
                                 <div class="flex items-center gap-3">
                                     <span class="h-2 w-2 rounded-full bg-primary-fixed-dim"></span>
-                                    <span>Install Spill for macOS</span>
+                                    <span>Sparkle updates enabled</span>
                                 </div>
                                 <div class="flex items-center gap-3">
                                     <span class="h-2 w-2 rounded-full bg-secondary-fixed-dim"></span>
@@ -1012,71 +1007,6 @@
 
             }, 250); // Frequent updates for fluid visual matching
         }
-
-        // Interactive terminal installation simulation
-        function triggerTerminalSimulation() {
-            const terminalBody = document.getElementById("terminal-body");
-            if (!terminalBody) return;
-
-            terminalBody.style.opacity = "0";
-
-            setTimeout(() => {
-                terminalBody.innerHTML = `
-                    <div class="mt-7 font-mono text-[11px] md:text-[13px] space-y-2.5 text-inverse-on-surface/90">
-                        <div class="text-inverse-on-surface/40 flex items-center gap-1.5">
-                            <span class="animate-pulse">●</span> /bin/bash -c "$(curl -fsSL https://spill.thdev.app/install.sh)"
-                        </div>
-                        <div id="sim-line-1" class="opacity-0 transition-opacity duration-300">📡 Fetching latest Spill release version...</div>
-                        <div id="sim-line-2" class="opacity-0 transition-opacity duration-300">⚡ Download complete: Spill-macos.zip (100%)</div>
-                        <div id="sim-line-3" class="opacity-0 transition-opacity duration-300">📂 Moving Spill.app to /Applications folder...</div>
-                        <div id="sim-line-4" class="opacity-0 transition-opacity duration-300">✓ Setting up autostart & launch configurations...</div>
-                        <div id="sim-line-5" class="opacity-0 transition-opacity duration-500 text-emerald-400 font-bold mt-4 flex items-center gap-2">
-                            🚀 Spill is successfully installed and running!
-                        </div>
-                        <div id="sim-line-6" class="opacity-0 transition-opacity duration-500 mt-4 pt-3 border-t border-white/5 text-[11px] text-inverse-on-surface/40 font-sans flex items-center justify-between">
-                            <span>Check Spill under your Mac's notch!</span>
-                            <a class="text-primary-fixed-dim hover:underline font-bold" href="https://github.com/taehwandev/Spill/releases/latest/download/Spill-macos.dmg">Need DMG instead?</a>
-                        </div>
-                    </div>
-                `;
-                terminalBody.style.opacity = "1";
-
-                setTimeout(() => document.getElementById("sim-line-1").classList.remove("opacity-0"), 400);
-                setTimeout(() => document.getElementById("sim-line-2").classList.remove("opacity-0"), 1000);
-                setTimeout(() => document.getElementById("sim-line-3").classList.remove("opacity-0"), 1600);
-                setTimeout(() => document.getElementById("sim-line-4").classList.remove("opacity-0"), 2200);
-                setTimeout(() => document.getElementById("sim-line-5").classList.remove("opacity-0"), 2800);
-                setTimeout(() => document.getElementById("sim-line-6").classList.remove("opacity-0"), 3400);
-            }, 300);
-        }
-
-        // Setup copy buttons
-        document.querySelectorAll("[data-copy]").forEach((copyBtn) => {
-            copyBtn.addEventListener("click", async () => {
-                const value = copyBtn.getAttribute("data-copy") || "";
-                const originalText = copyBtn.textContent.trim() || "Copy";
-
-                try {
-                    await navigator.clipboard.writeText(value);
-                    copyBtn.textContent = "Copied";
-                } catch {
-                    copyBtn.textContent = "Select";
-                }
-
-                trackAptabaseEvent("install_command_copy", {
-                    source: "landing",
-                    status: copyBtn.textContent === "Copied" ? "copied" : "select"
-                });
-
-                if (copyBtn.id === "copy-installer-btn") {
-                    triggerTerminalSimulation();
-                }
-
-                window.setTimeout(() => {
-                    copyBtn.textContent = originalText;
-                }, 1400);
-            });
-        });
 
         // Initialize scripts
         window.addEventListener("DOMContentLoaded", () => {

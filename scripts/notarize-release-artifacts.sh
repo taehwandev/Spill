@@ -217,7 +217,6 @@ done
 shopt -s nullglob
 for dir in "${artifact_dirs[@]}"; do
     artifact_args+=("$dir"/Spill-*-macos.dmg)
-    artifact_args+=("$dir"/Spill-*-macos.pkg)
 done
 
 if [[ ${#artifact_args[@]} -eq 0 ]]; then
