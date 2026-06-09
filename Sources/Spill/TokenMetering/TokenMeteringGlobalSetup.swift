@@ -41,10 +41,15 @@ enum TokenMeteringGlobalSetup {
     The runtime instruction must make every user-visible AI task write a safe per-turn label context when the setup helper exists. Workflow integration is only for better labels; it must not be required for recording usage. If no workflow exists, agents still classify the current task with safe reusable labels such as code_review/verify, review_response/implement, code_generation/implement, testing/verify, or uncategorized/summarize. Workflow-provided labels must win: agent per-turn fallback labels must use --if-absent, while workflow step labels must omit --if-absent so they can replace older fallback labels. This is a two-layer design, not a choice between modes: keep the agent fallback layer active and add workflow labels on top when the user chooses workflow-aware labels. The setup helper must preserve existing UserPromptSubmit or workflow label hooks; never remove a workflow label hook to force agent-only fallback. Agents should always attempt the per-turn fallback label with --if-absent after request classification, even when workflow integration exists. The helper will skip the fallback when an active workflow label is already present, and will write the fallback when the workflow did not label that task.
     Do not configure agents or workflows to send conversation titles, work item titles, local aliases, task text, or display names. Usage events carry only safe reusable labels; Spill generates default work item names locally from ai_tool, task_type, stage, model id, and timestamp buckets.
 
-    Then ask only whether the user wants workflow-aware labels connected:
-      Do you want Spill token usage to follow your workflow steps?
+    Then ask one explicit workflow-label decision question. Match the user's current conversation language; if the user has been speaking Korean, ask in Korean. The question must be visibly a decision request, not a completion summary or a casual trailing "would you like" sentence.
+    Use this decision shape, translated to the user's conversation language:
+      Decision needed:
+      Spill can already record usage with fallback labels. Connecting workflow labels is more effective for meaningful stats because each workflow step can write the task and stage before the AI run starts.
+      - Connect workflow labels (recommended): discover safe workflow entry points and ask before editing them.
+      - Skip workflow labels: keep fallback labels only; usage still works, but task/stage stats are less precise.
+      Question: Should I connect workflow-aware labels now?
 
-    Do not ask for a hook path in that first question.
+    Do not ask for a hook path in that first decision question.
     If the answer is no, do not modify workflow files; installed hooks must still record usage when exact counts are available, and per-turn labels must still come from the runtime instruction.
     If the answer is yes, discover candidate workflow integration points yourself.
     Do not remove existing workflow label hooks during discovery, install, or repair.

@@ -210,13 +210,28 @@ titles, local aliases, task text, or display names. Usage events carry only safe
 reusable labels; Spill generates default work item names locally from
 `ai_tool`, `task_type`, `stage`, model id, and timestamp buckets.
 
-Then ask only whether the user wants workflow-aware labels connected:
+Then ask one explicit workflow-label decision question. Match the user's current
+conversation language; if the user has been speaking Korean, ask in Korean. The
+question must be visibly a decision request, not a completion summary or a
+casual trailing "would you like" sentence.
+
+Use this decision shape, translated to the user's conversation language:
 
 ```text
-Do you want Spill token usage to follow your workflow steps?
+Decision needed:
+Spill can already record usage with fallback labels. Connecting workflow labels
+is more effective for meaningful stats because each workflow step can write the
+task and stage before the AI run starts.
+
+- Connect workflow labels (recommended): discover safe workflow entry points and
+  ask before editing them.
+- Skip workflow labels: keep fallback labels only; usage still works, but
+  task/stage stats are less precise.
+
+Question: Should I connect workflow-aware labels now?
 ```
 
-Do not ask for a hook path in that first question.
+Do not ask for a hook path in that first decision question.
 If the answer is no, do not modify workflow files; installed hooks must still
 record usage when exact counts are available, and per-turn labels must still
 come from the runtime instruction.
