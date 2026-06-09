@@ -241,6 +241,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
     let workflowUsage: TokenUsageDashboardWorkflowUsage
     let taskRows: [TokenUsageDashboardBarRow]
     let stageRows: [TokenUsageDashboardBarRow]
+    let detailQualityRows: [TokenUsageDashboardBarRow]
     let sourceRows: [TokenUsageDashboardBarRow]
     let sessions: [TokenUsageDashboardSessionRow]
     let selectedSession: TokenUsageDashboardSessionRow?
@@ -262,6 +263,11 @@ struct TokenUsageDashboardSnapshot: Equatable {
     let antigravityLastUpdatedString: String?
     let overallLastUpdatedString: String?
     let comparisonTotalTokens: Int?
+
+    var isDetailAttributionMostlyUnavailable: Bool {
+        guard totalTokens > 0 else { return false }
+        return detailQualityRows.first { $0.id == TokenUsageSource.unknown.rawValue }?.ratio ?? 0 >= 0.5
+    }
 
     static func buildPair(
         events: [TokenUsageEvent],
@@ -569,6 +575,12 @@ struct TokenUsageDashboardSnapshot: Equatable {
         )
 
         let sourceTokens = Self.sourceTotals(events: focusedEvents)
+        detailQualityRows = Self.detailQualityRows(
+            sourceTokens: sourceTokens,
+            totalTokens: totalTokens,
+            displayMode: displayMode,
+            language: language
+        )
         sourceRows = Self.rows(
             tokenValues: sourceTokens,
             totalTokens: totalTokens,
@@ -899,6 +911,52 @@ struct TokenUsageDashboardSnapshot: Equatable {
             totals[.unknown, default: 0] += event.tokenBreakdown.unknown
         }
         return totals
+    }
+
+    private static func detailQualityRows(
+        sourceTokens: [TokenUsageSource: Int],
+        totalTokens: Int,
+        displayMode: TokenUsageDisplayMode,
+        language: TokenMeteringLanguage
+    ) -> [TokenUsageDashboardBarRow] {
+        guard totalTokens > 0 else {
+            return []
+        }
+
+        let unknownTokens = sourceTokens[.unknown, default: 0]
+        let exactTokens = max(0, sourceTokens.values.reduce(0, +) - unknownTokens)
+        let candidates: [(id: String, title: String, tokens: Int)] = [
+            (
+                id: "exact",
+                title: TokenMeteringL10n.text(.sourceExactDetail, language: language),
+                tokens: exactTokens
+            ),
+            (
+                id: TokenUsageSource.unknown.rawValue,
+                title: TokenMeteringL10n.text(.sourceUnavailable, language: language),
+                tokens: unknownTokens
+            )
+        ]
+
+        return candidates.compactMap { candidate in
+            guard candidate.tokens > 0 else {
+                return nil
+            }
+            let ratio = Double(candidate.tokens) / Double(totalTokens)
+            let value: String
+            switch displayMode {
+            case .tokens:
+                value = Self.formatTokens(candidate.tokens)
+            case .percentage:
+                value = Self.formatPercentage(ratio * 100.0)
+            }
+            return TokenUsageDashboardBarRow(
+                id: candidate.id,
+                title: candidate.title,
+                value: value,
+                ratio: ratio
+            )
+        }
     }
 
     private static func sessionRows(

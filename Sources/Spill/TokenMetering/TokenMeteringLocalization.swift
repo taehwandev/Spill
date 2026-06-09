@@ -163,9 +163,13 @@ enum TokenMeteringTextKey: String {
     case diagnosticsCodes
     case diagnosticsSessionID
     case diagnosticsRunID
+    case detailQualityAvailableGuidance
+    case detailQualityUnavailableGuidance
+    case runtimeCategories
     case selectedWorkItemHeader
     case previewBadge
 
+    case sourceExactDetail
     case sourceSystem
     case sourceUser
     case sourceHistory

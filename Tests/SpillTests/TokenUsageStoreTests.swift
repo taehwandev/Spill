@@ -39,6 +39,7 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(TokenMeteringL10n.hookConfigTarget("~/.claude/settings.json", language: .korean), "연결 설정 -> ~/.claude/settings.json")
         XCTAssertEqual(TokenMeteringL10n.text(.sourceBreakdown, language: .english), "Detail Quality")
         XCTAssertEqual(TokenMeteringL10n.text(.sourceBreakdown, language: .korean), "세부 측정 품질")
+        XCTAssertEqual(TokenMeteringL10n.text(.sourceExactDetail, language: .english), "Exact detail")
         XCTAssertEqual(TokenMeteringL10n.text(.sourceUnavailable, language: .korean), "세부 미분류")
         XCTAssertEqual(TokenMeteringL10n.text(.cumulativeOnlyBadge, language: .japanese), "合計のみ")
         XCTAssertEqual(TokenMeteringL10n.text(.clearAlias, language: .korean), "삭제")
@@ -119,6 +120,10 @@ final class TokenUsageStoreTests: XCTestCase {
             .cumulativeOnlyBadge,
             .cumulativeOnlyInfoTitle,
             .cumulativeOnlyInfoDetail,
+            .detailQualityAvailableGuidance,
+            .detailQualityUnavailableGuidance,
+            .runtimeCategories,
+            .sourceExactDetail,
             .sourceSystem,
             .sourceUser,
             .sourceHistory,
@@ -485,6 +490,8 @@ final class TokenUsageStoreTests: XCTestCase {
 
         XCTAssertEqual(snapshot.totalTokens, 33)
         XCTAssertTrue(snapshot.sourceRows.contains { $0.title == TokenMeteringL10n.text(.sourceUnavailable) && $0.value == "33" })
+        XCTAssertEqual(snapshot.detailQualityRows.map(\.id), ["unknown"])
+        XCTAssertTrue(snapshot.isDetailAttributionMostlyUnavailable)
     }
 
     func testDashboardSnapshotOmitsLatencyKPIAndMissingLatencyCopy() {
@@ -505,6 +512,9 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(snapshot.totalTokens, 33)
         XCTAssertTrue(snapshot.sourceRows.contains { $0.title == TokenMeteringL10n.text(.sourceGeneratedOutput) && $0.value == "11" })
         XCTAssertTrue(snapshot.sourceRows.contains { $0.title == TokenMeteringL10n.text(.sourceUnavailable) && $0.value == "22" })
+        XCTAssertEqual(snapshot.detailQualityRows.map(\.id), ["exact", "unknown"])
+        XCTAssertEqual(snapshot.detailQualityRows.map(\.value), ["11", "22"])
+        XCTAssertTrue(snapshot.isDetailAttributionMostlyUnavailable)
     }
 
     func testDashboardViewSimplifiesClearActions() throws {
@@ -568,6 +578,9 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(dashboardView.contains("title: t(.workflowBreakdown)"))
         XCTAssertTrue(dashboardView.contains("title: t(.stageBreakdown)"))
         XCTAssertTrue(dashboardView.contains("title: t(.sourceBreakdown)"))
+        XCTAssertTrue(dashboardView.contains("detailQualityContent("))
+        XCTAssertTrue(dashboardView.contains("Text(t(.runtimeCategories))"))
+        XCTAssertFalse(dashboardView.contains("barRows(store.snapshot.sourceRows"))
     }
 
     func testDashboardViewUsesTopToolTabsAndOptionalCalendarPicker() throws {

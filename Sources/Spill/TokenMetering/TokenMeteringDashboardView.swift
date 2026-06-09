@@ -586,7 +586,12 @@ struct TokenMeteringDashboardView: View {
                     infoTitle: t(.sourceInfoTitle),
                     infoDetail: t(.sourceInfoDetail)
                 ) {
-                    barRows(store.snapshot.sourceRows, emptyText: t(.noSourceBreakdown), idPrefix: "source", tint: .orange)
+                    detailQualityContent(
+                        snapshot: store.snapshot,
+                        emptyText: t(.noSourceBreakdown),
+                        idPrefix: "detail_quality",
+                        showsRuntimeCategories: true
+                    )
                 }
             }
         }
@@ -649,7 +654,12 @@ struct TokenMeteringDashboardView: View {
             infoDetail: t(.sourceInfoDetail)
         ) {
             VStack(spacing: 8) {
-                compactSummaryRows(store.snapshot.sourceRows.prefix(5), emptyText: t(.noSourceBuckets), idPrefix: "source")
+                detailQualityContent(
+                    snapshot: store.snapshot,
+                    emptyText: t(.noSourceBuckets),
+                    idPrefix: "detail_quality_rail",
+                    showsRuntimeCategories: true
+                )
             }
         }
     }
@@ -966,7 +976,12 @@ struct TokenMeteringDashboardView: View {
                         }
                     }
 
-                    compactSummaryRows(detailSnapshot.sourceRows.prefix(4), emptyText: t(.noSourceBreakdown), idPrefix: "source")
+                    detailQualityContent(
+                        snapshot: detailSnapshot,
+                        emptyText: t(.noSourceBreakdown),
+                        idPrefix: "detail_quality_selected",
+                        showsRuntimeCategories: true
+                    )
                 }
                 .padding(10)
                 .background(Color.primary.opacity(0.025), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -1005,6 +1020,91 @@ struct TokenMeteringDashboardView: View {
             .padding(.vertical, 18)
         }
         .frame(maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private func detailQualityContent(
+        snapshot: TokenUsageDashboardSnapshot,
+        emptyText: String,
+        idPrefix: String,
+        showsRuntimeCategories: Bool
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 11) {
+            if snapshot.detailQualityRows.isEmpty {
+                emptyMessage(title: emptyText, detail: t(.waitingForEvents))
+            } else {
+                detailQualityGuidance(snapshot)
+                detailQualityRows(snapshot.detailQualityRows, idPrefix: idPrefix)
+
+                if showsRuntimeCategories, !snapshot.sourceRows.isEmpty {
+                    DisclosureGroup {
+                        compactSummaryRows(snapshot.sourceRows.prefix(6), emptyText: t(.noSourceBuckets), idPrefix: "source")
+                            .padding(.top, 4)
+                    } label: {
+                        Text(t(.runtimeCategories))
+                            .font(.system(size: 10, weight: .bold))
+                    }
+                    .font(.system(size: 10, weight: .medium))
+                    .tint(.secondary)
+                }
+            }
+        }
+    }
+
+    private func detailQualityGuidance(_ snapshot: TokenUsageDashboardSnapshot) -> some View {
+        HStack(alignment: .top, spacing: 7) {
+            Image(systemName: snapshot.isDetailAttributionMostlyUnavailable ? "exclamationmark.circle" : "checkmark.circle")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(snapshot.isDetailAttributionMostlyUnavailable ? .orange : .green)
+                .frame(width: 14)
+
+            Text(snapshot.isDetailAttributionMostlyUnavailable ? t(.detailQualityUnavailableGuidance) : t(.detailQualityAvailableGuidance))
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func detailQualityRows(
+        _ rows: [TokenUsageDashboardBarRow],
+        idPrefix: String
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ForEach(rows) { row in
+                let liveUpdateID = "\(idPrefix):\(row.id)"
+                let isLiveUpdated = store.isLiveUpdated(liveUpdateID)
+                let tint = row.id == "unknown" ? Color.orange : Color.green
+
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack(spacing: 8) {
+                        HStack(spacing: 6) {
+                            TokenMeteringLiveUpdateDot(isActive: isLiveUpdated, marker: store.liveUpdateMarker)
+                            Text(row.title)
+                                .font(.system(size: 11, weight: .semibold))
+                                .lineLimit(1)
+                        }
+                        Spacer(minLength: 8)
+                        Text(row.value)
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .contentTransition(.numericText())
+                            .animation(.snappy(duration: 0.35), value: row.value)
+                    }
+
+                    GeometryReader { geometry in
+                        ZStack(alignment: .leading) {
+                            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                .fill(Color.primary.opacity(0.06))
+                            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                .fill(tint.opacity(0.76))
+                                .frame(width: max(8, geometry.size.width * row.ratio))
+                                .animation(.snappy(duration: 0.35), value: row.ratio)
+                        }
+                    }
+                    .frame(height: 9)
+                }
+                .modifier(TokenMeteringLiveUpdateEffect(isActive: isLiveUpdated, marker: store.liveUpdateMarker, cornerRadius: 7))
+            }
+        }
     }
 
     private func workItemPopoverSection<T: Collection>(
