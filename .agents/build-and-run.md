@@ -177,9 +177,11 @@ node ~/Library/Application\ Support/Spill/adapters/setup/spill-token-metering-st
 ```
 
 This command reads the local `token_usage_events` store and prints a self-scoped
-aggregate summary with totals, model/task/stage breakdowns, token detail categories, and
-recent activity. It is not a usage event, label handoff, hook, importer, or
-proof that the current turn was recorded.
+aggregate summary with totals, input/output tokens, event count, average and
+peak event size, workflow label coverage, model/task/stage breakdowns, token
+detail categories, and recent activity. Token detail `unknown` means unavailable
+detail attribution, not a guessed input category. It is not a usage event, label
+handoff, hook, importer, or proof that the current turn was recorded.
 
 Important tool labels:
 

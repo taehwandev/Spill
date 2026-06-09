@@ -21,6 +21,9 @@ for Antigravity:
 node ~/Library/Application\ Support/Spill/adapters/setup/spill-token-metering-stats.mjs --tool antigravity
 ```
 
-Return the full aggregate summary, not only input/output totals. This helper is
+Return the full aggregate summary: total, input, output, event count, average
+event size, peak event size, workflow label coverage, model/task/stage
+breakdowns, token detail categories, and recent activity. Treat `unknown` as
+unavailable detail attribution, not as a guessed input category. This helper is
 read-only and is not a usage event, hook, importer, label handoff, or proof that
 the current turn was recorded.

@@ -215,6 +215,18 @@ Requirements:
   totals: event count, total tokens, average event size, peak event size,
   model/task/stage breakdowns, token detail categories, and recent activity should be
   available in the response.
+- Token usage surfaces should treat total tokens, input tokens, output tokens,
+  event count, average event size, peak event size, model breakdown, task
+  breakdown, stage breakdown, and workflow label coverage as the primary
+  analytical statistics.
+- Token detail categories such as system, user, history, repo context, tool
+  output, generated output, and unknown are secondary measurement-quality
+  statistics. They are useful only when the runtime or adapter supplies exact
+  category counts. The dashboard must not imply that Spill or the agent guessed
+  these categories from private content.
+- The `unknown` token detail bucket means that exact detail attribution was
+  unavailable. It is not an AI judgment, not a semantic classification, and not
+  proof that the user input alone consumed those tokens.
 - Agent-facing status reads are a secondary reporting surface, not a metering
   source. They must not create usage events, write labels, run hooks, infer
   counts, inspect private content, or be reported as proof that the current turn
@@ -260,6 +272,15 @@ Dashboard UX requirements:
 - Default agent filter includes first-class local agent tools such as Codex,
   Claude Code, and Antigravity/AGY. Legacy `unknown` and optional direct OpenAI
   SDK events belong behind diagnostics or an advanced filter.
+- The first dashboard read should answer whether usage was large, whether the
+  cost came mostly from input or output, which model/tool/work type/stage
+  dominated, and whether workflow labels covered the selected records.
+- Summary cards should prioritize total, input, output, event count, average
+  event size, and peak event size before token detail categories.
+- The dashboard should show workflow label coverage as a measurement-quality
+  signal. When workflow labels are absent or fallback to
+  `uncategorized/summarize`, the usage is still valid and should remain useful
+  through total/input/output, model, tool, and time-range statistics.
 - Work item rows are selectable and update a detail panel with safe aggregates:
   total/input/output tokens, event count, agent tool, model breakdown, stage
   breakdown, token detail split, time range, label source, and optional local
@@ -268,6 +289,10 @@ Dashboard UX requirements:
   technical detail panel has a short info affordance explaining what is counted,
   what is inferred from safe labels, and what is unavailable due to the privacy
   boundary.
+- Token detail charts should be labeled as optional detail quality, not as the
+  primary usage explanation. If most detail is `unknown`, the UI should direct
+  users back to input/output totals and label coverage instead of presenting the
+  detail split as meaningful attribution.
 
 Acceptance:
 
@@ -283,6 +308,11 @@ Acceptance:
   aggregate summary from the app-owned store without exposing prompts,
   responses, commands, file paths, logs, diffs, source content, environment
   values, transcripts, shell history, or secrets.
+- Dashboard and agent-facing summaries explain token usage primarily through
+  total/input/output, event size, model, task, stage, and workflow-label
+  coverage. Token detail buckets are presented as optional exact detail, and
+  `unknown` is explained as unavailable attribution rather than a guessed input
+  category.
 - Work item rows are clickable and update a safe detail panel.
 - UI copy states that exact counts are required and estimates should not be
   sent.

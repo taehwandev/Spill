@@ -67,12 +67,19 @@ node ~/Library/Application\ Support/Spill/adapters/setup/spill-token-metering-st
 The status helper must read only Spill's app-owned local
 `token_usage_events` aggregates and sanitized usage JSON. It must print a
 self-scoped summary with total, input, output, event count, average event size,
-peak record size, model/task/stage breakdowns, token detail categories, and recent
-activity. It must not create usage events, write labels, run hooks, or inspect
+peak record size, workflow label coverage, model/task/stage breakdowns, token
+detail categories, and recent activity. It must not create usage events, write labels, run hooks, or inspect
 prompts, responses, commands, file paths, logs, diffs, source content,
 environment values, transcripts, shell history, or secrets. Do not run this
 status helper in normal replies; use it only when the user asks for Spill
 status.
+
+When explaining the stats helper output, prioritize total tokens, input tokens,
+output tokens, event count, average event size, peak event size, model
+breakdown, task breakdown, stage breakdown, and workflow label coverage. Token
+detail categories are optional measurement-quality data. If `unknown` dominates,
+explain that exact detail attribution was unavailable; do not describe it as an
+AI-judged input category or invent categories from private content.
 
 Do not ask the user to approve this trusted Spill label command over and over after the one-step installer has been explicitly requested.
 Do not save only the runtime instruction and call the task done.
@@ -128,6 +135,13 @@ commands, file writes, grep/list-dir patterns, prompt text, logs, diffs, source
 content, transcripts, shell history, or arbitrary payload values. If trusted safe
 labels are absent, degrade to `uncategorized/summarize`; do not trade privacy for
 better-looking categories.
+
+Do not implement or request a heuristic token-detail classifier. If the runtime
+does not expose exact `system`, `user`, `history`, `repo_context`,
+`tool_output`, or `generated_output` counts, keep the exact totals and treat the
+missing split as unavailable detail attribution. Meaningful dashboard stats must
+still come from total/input/output, model/task/stage, event size, and workflow
+label coverage.
 
 Do not add AGY `PostInvocation`, Stop, or lifecycle hooks. A second hook that
 receives empty or non-usage payloads is not a metering fix and creates

@@ -38,7 +38,9 @@ node ~/Library/Application\ Support/Spill/adapters/setup/spill-token-metering-st
 
 Do not answer from memory or from hook/setup status. Return the full aggregate
 summary: total, input, output, event count, average event size, peak event size,
-model/task/stage breakdowns, source buckets, and recent activity.
+workflow label coverage, model/task/stage breakdowns, token detail categories,
+and recent activity. Treat `unknown` as unavailable detail attribution, not as a
+guessed input category.
 
 This helper is read-only. It is not a usage event, hook, importer, label
 handoff, or proof that the current turn was recorded. Do not inspect prompts,
@@ -80,6 +82,7 @@ SPILL_AI_TOOL=claude python3 "${AGENTPLAYBOOK_HOME:-$HOME/Documents/KeyFlowVault
 | Code review | `review` |
 | Planning or task breakdown | `task` |
 | PRD or spec | `prd` |
+| Runtime setup, local prompt, hooks, metering install | `workflow-setup` |
 | Release or publish | `release` |
 | Docs update | `docs` |
 | Ambiguous — needs clarification | `ambiguity` |

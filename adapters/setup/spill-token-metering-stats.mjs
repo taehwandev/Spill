@@ -103,6 +103,16 @@ function summarySQL(where) {
       COALESCE(SUM(source_tool_output), 0) AS source_tool_output,
       COALESCE(SUM(source_generated_output), 0) AS source_generated_output,
       COALESCE(SUM(source_unknown), 0) AS source_unknown,
+      COALESCE(SUM(CASE
+        WHEN COALESCE(task_type, '') != 'uncategorized'
+          OR COALESCE(stage, '') != 'summarize'
+        THEN 1 ELSE 0
+      END), 0) AS workflow_labeled_events,
+      COALESCE(SUM(CASE
+        WHEN COALESCE(task_type, '') != 'uncategorized'
+          OR COALESCE(stage, '') != 'summarize'
+        THEN total_tokens ELSE 0
+      END), 0) AS workflow_labeled_tokens,
       MIN(created_at) AS first_event_at,
       MAX(created_at) AS last_event_at
     FROM token_usage_events
@@ -183,13 +193,22 @@ function sourceRows(summary) {
 }
 
 function normalizeSummary(summary) {
+  const events = numeric(summary.events);
+  const totalTokens = numeric(summary.total_tokens);
+  const workflowLabeledEvents = numeric(summary.workflow_labeled_events);
+  const workflowLabeledTokens = numeric(summary.workflow_labeled_tokens);
+
   return {
-    events: numeric(summary.events),
-    total_tokens: numeric(summary.total_tokens),
+    events,
+    total_tokens: totalTokens,
     input_tokens: numeric(summary.input_tokens),
     output_tokens: numeric(summary.output_tokens),
     avg_tokens: numeric(summary.avg_tokens),
     peak_event_tokens: numeric(summary.peak_event_tokens),
+    workflow_labeled_events: workflowLabeledEvents,
+    workflow_labeled_tokens: workflowLabeledTokens,
+    workflow_label_event_coverage: events > 0 ? workflowLabeledEvents / events : 0,
+    workflow_label_token_coverage: totalTokens > 0 ? workflowLabeledTokens / totalTokens : 0,
     first_event_at: summary.first_event_at ?? null,
     last_event_at: summary.last_event_at ?? null,
   };
@@ -212,6 +231,9 @@ function formatReport(report) {
   );
   lines.push(
     `Average ${compact(summary.avg_tokens)} / event | Peak ${compact(summary.peak_event_tokens)} | Last ${formatWhen(summary.last_event_at)}`
+  );
+  lines.push(
+    `Label Coverage ${percent(summary.workflow_label_event_coverage)} records | ${percent(summary.workflow_label_token_coverage)} tokens`
   );
 
   appendSection(lines, "Models", report.models);
@@ -240,7 +262,7 @@ function appendSection(lines, title, rows) {
 
 function appendSourceSection(lines, rows) {
   lines.push("");
-  lines.push("Token Details");
+  lines.push("Detail Quality");
   if (rows.length === 0) {
     lines.push("  none");
     return;
@@ -367,8 +389,8 @@ Options:
   --json             Print JSON instead of a compact text report.
 
 This command is read-only. It reads Spill's app-owned local usage store and
-prints aggregate token counts, model/task/stage breakdowns, token detail
-categories, and recent activity. It does not create usage events and does not read prompts,
+prints aggregate token counts, model/task/stage breakdowns, workflow label coverage,
+token detail quality categories, and recent activity. It does not create usage events and does not read prompts,
 responses, commands, file paths, logs, diffs, code content, environment
 values, or secrets.
 `);
@@ -420,6 +442,12 @@ function compact(value) {
   if (Math.abs(number) >= 1_000_000) return `${(number / 1_000_000).toFixed(1)}M`;
   if (Math.abs(number) >= 1_000) return `${(number / 1_000).toFixed(1)}K`;
   return new Intl.NumberFormat("en-US").format(Math.round(number));
+}
+
+function percent(value) {
+  const ratio = numeric(value);
+  if (ratio > 0 && ratio < 0.001) return "<0.1%";
+  return `${(ratio * 100).toFixed(1)}%`;
 }
 
 function bar(value, max) {

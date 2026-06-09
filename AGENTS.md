@@ -49,8 +49,10 @@ Explicit Spill local status commands:
 - Antigravity/AGY command:
   `node ~/Library/Application\ Support/Spill/adapters/setup/spill-token-metering-stats.mjs --tool antigravity`
 - Answer with the full aggregate summary: total, input, output, event count,
-  average event size, peak event size, model/task/stage breakdowns, source
-  buckets, and recent activity. Do not answer only with input/output totals.
+  average event size, peak event size, workflow label coverage,
+  model/task/stage breakdowns, token detail categories, and recent activity.
+  Do not answer only with input/output totals. Treat `unknown` as unavailable
+  detail attribution, not as a guessed input category.
 - This helper is read-only and is not a usage event, hook, importer, label
   handoff, or proof that the current turn was recorded.
 
