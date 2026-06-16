@@ -15,6 +15,8 @@ const installRoot = expandHome(args.installDir ?? join(homedir(), "Library/Appli
 const setupHelperPath = join(installRoot, "setup", "spill-token-metering-setup.mjs");
 const statsHelperPath = join(installRoot, "setup", "spill-token-metering-stats.mjs");
 const defaultAdapters = "codex,claude,antigravity";
+const managedRuntimeRulesBegin = "# spill-token-metering:begin";
+const managedRuntimeRulesEnd = "# spill-token-metering:end";
 const alwaysInstallAdapters = new Set(defaultAdapters.split(","));
 const include = new Set((args.include ?? defaultAdapters).split(",").map((item) => item.trim()).filter(Boolean));
 
@@ -318,8 +320,8 @@ async function configureCodexRuntimeRules() {
 
   await writeManagedTextBlock({
     path: target,
-    begin: "# spill-token-metering:begin",
-    end: "# spill-token-metering:end",
+    begin: managedRuntimeRulesBegin,
+    end: managedRuntimeRulesEnd,
     block,
   });
   results.push({ tool: "codex", action: "configured_agent_runtime", path: target });
@@ -344,10 +346,10 @@ function codexRuntimeRulesBlock() {
     }));
   }
   return [
-    "# spill-token-metering:begin",
+    managedRuntimeRulesBegin,
     "# Managed by Spill token metering setup. Keep narrow; do not replace with broad python3/node allow rules.",
     ...rules,
-    "# spill-token-metering:end",
+    managedRuntimeRulesEnd,
   ].join("\n");
 }
 
@@ -492,7 +494,7 @@ async function writeJSONObject(path, value) {
 async function writeManagedTextBlock({ path, begin, end, block }) {
   await mkdir(dirname(path), { recursive: true });
   const before = await exists(path) ? await readFile(path, "utf8") : "";
-  const pattern = new RegExp(`${escapeRegExp(begin)}[\\s\\S]*?${escapeRegExp(end)}\\n?`, "m");
+  const pattern = managedTextBlockPattern(begin, end);
   const normalizedBlock = `${block}\n`;
   const after = pattern.test(before)
     ? before.replace(pattern, normalizedBlock)
@@ -504,6 +506,14 @@ async function writeManagedTextBlock({ path, begin, end, block }) {
   const temporary = `${path}.tmp-${process.pid}`;
   await writeFile(temporary, after, { mode: 0o600 });
   await rename(temporary, path);
+}
+
+function managedTextBlockPattern(begin, end) {
+  if (begin !== managedRuntimeRulesBegin || end !== managedRuntimeRulesEnd) {
+    throw new Error("Invalid managed text block markers");
+  }
+
+  return new RegExp(`${escapeRegExp(begin)}[\\s\\S]*?${escapeRegExp(end)}\\n?`, "m");
 }
 
 async function writeRuntimeLabel({ tool, taskType, stage, labelFile, ttlMinutes, ifAbsent }) {
@@ -807,8 +817,5 @@ function safeTTLMinutes(value) {
 }
 
 function shellQuote(value) {
-  if (value.includes(" ") || value.includes("'") || value.includes('"') || value.includes("$") || value.includes("\\")) {
-    return `'${value.replaceAll("'", "'\\''")}'`;
-  }
-  return value;
+  return `'${String(value).replaceAll("'", "'\\''")}'`;
 }

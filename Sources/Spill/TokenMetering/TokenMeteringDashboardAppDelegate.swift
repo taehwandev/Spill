@@ -26,7 +26,6 @@ final class TokenMeteringDashboardAppDelegate: NSObject, NSApplicationDelegate {
         observeSettingsChanges()
         launchMainAppIfNeeded()
         tokenUsageInboxMonitor.start()
-        requestTokenUsageCollection(reason: "dashboard_launch")
         if !shouldHideWindowInSmokeTest {
             dashboardWindowController().show()
         }
@@ -50,20 +49,7 @@ final class TokenMeteringDashboardAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private static func makeTokenUsageStore() -> TokenUsageStore {
-        let environment = ProcessInfo.processInfo.environment
-        guard environment["SPILL_SMOKE_TEST"] == "1",
-              let eventsFile = environment["SPILL_TOKEN_USAGE_EVENTS_FILE"],
-              !eventsFile.isEmpty
-        else {
-            return TokenUsageStore.live()
-        }
-
-        let inboxURL = environment["SPILL_TOKEN_USAGE_INBOX_DIR"]
-            .flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0) }
-        return TokenUsageStore(
-            fileURL: URL(fileURLWithPath: eventsFile),
-            inboxURL: inboxURL
-        )
+        TokenUsageStoreEnvironment.store() ?? TokenUsageStore.live()
     }
 
     private var isSmokeTest: Bool {

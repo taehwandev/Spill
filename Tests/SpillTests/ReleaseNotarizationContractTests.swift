@@ -79,12 +79,12 @@ final class ReleaseNotarizationContractTests: XCTestCase {
     func testReleaseBuildKeepsPrivateUsageUploadDebugOnly() throws {
         let uploadModels = try read("Sources/Spill/TokenMetering/PrivateUsageUploadModels.swift")
         let preferencesSection = try read("Sources/Spill/Preferences/TokenMeteringPreferencesSection.swift")
-        let appDelegate = try read("Sources/Spill/App/AppDelegate.swift")
+        let tokenMeteringCoordinator = try read("Sources/Spill/TokenMetering/TokenMeteringCoordinator.swift")
 
         XCTAssertTrue(uploadModels.contains("enum PrivateUsageUploadFeatureAvailability"))
         XCTAssertTrue(uploadModels.contains("#if DEBUG\n        return true\n        #else\n        return false\n        #endif"))
         XCTAssertTrue(preferencesSection.contains("if PrivateUsageUploadFeatureAvailability.isEnabledInCurrentBuild"))
-        XCTAssertTrue(appDelegate.contains("guard PrivateUsageUploadFeatureAvailability.isEnabledInCurrentBuild else"))
+        XCTAssertTrue(tokenMeteringCoordinator.contains("guard PrivateUsageUploadFeatureAvailability.isEnabledInCurrentBuild else"))
     }
 
     func testNotarizationScriptProtectsInlineApiKeyAndValidatesJsonStatus() throws {

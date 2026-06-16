@@ -72,6 +72,7 @@ const rawArgs = process.argv.slice(2);
 const args = new Set(rawArgs);
 const strict = args.has("--strict") || process.env.SPILL_TOKEN_USAGE_HOOK_STRICT === "1";
 const dryRun = args.has("--dry-run");
+const maxStdinBytes = 128 * 1024;
 const port = process.env.SPILL_TOKEN_USAGE_PORT || "48731";
 const endpoint =
   optionValue("--endpoint") ||
@@ -122,12 +123,15 @@ try {
 function readStdin() {
   return new Promise((resolve, reject) => {
     let data = "";
+    let byteLength = 0;
     process.stdin.setEncoding("utf8");
     process.stdin.on("data", (chunk) => {
-      data += chunk;
-      if (data.length > 128 * 1024) {
-        reject(new Error("stdin_too_large"));
+      byteLength += Buffer.byteLength(chunk, "utf8");
+      if (byteLength > maxStdinBytes) {
+        process.stdin.pause();
+        fail("stdin_too_large", true);
       }
+      data += chunk;
     });
     process.stdin.on("end", () => resolve(data));
     process.stdin.on("error", reject);

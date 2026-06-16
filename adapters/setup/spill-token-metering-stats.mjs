@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
 import { execFileSync } from "node:child_process";
-import { existsSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { existsSync, realpathSync, statSync } from "node:fs";
+import { join, relative, resolve } from "node:path";
 import { homedir } from "node:os";
 
 const args = parseArgs(process.argv.slice(2));
@@ -44,6 +44,10 @@ function buildReport({ databasePath, tool, range, limit }) {
 
   if (!existsSync(databasePath)) {
     return emptyReport({ scope, rangeInfo, reason: "store_not_found" });
+  }
+  const databaseValidation = validateDatabasePath(databasePath);
+  if (!databaseValidation.ok) {
+    return emptyReport({ scope, rangeInfo, reason: databaseValidation.reason });
   }
   if (!tableExists(databasePath)) {
     return emptyReport({ scope, rangeInfo, reason: "events_table_not_found" });
@@ -162,6 +166,7 @@ function tableExists(databasePath) {
 }
 
 function sqliteJSON(databasePath, sql) {
+  if (!validateDatabasePath(databasePath).ok) return [];
   const output = execFileSync("sqlite3", ["-readonly", "-json", databasePath, sql], {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
@@ -397,7 +402,31 @@ values, or secrets.
 }
 
 function defaultDatabasePath() {
-  return join(homedir(), "Library/Application Support/Spill/token-metering/events.sqlite3");
+  return join(defaultAppDataRoot(), "token-metering/events.sqlite3");
+}
+
+function defaultAppDataRoot() {
+  return join(homedir(), "Library/Application Support/Spill");
+}
+
+function validateDatabasePath(databasePath) {
+  try {
+    const rootPath = realpathSync(defaultAppDataRoot());
+    const resolvedDatabasePath = realpathSync(databasePath);
+    const databaseStat = statSync(resolvedDatabasePath);
+    if (!databaseStat.isFile()) {
+      return { ok: false, reason: "database_not_file" };
+    }
+
+    const relativePath = relative(rootPath, resolvedDatabasePath);
+    if (relativePath === "" || relativePath.startsWith("..") || resolve(rootPath, relativePath) !== resolvedDatabasePath) {
+      return { ok: false, reason: "database_outside_app_data" };
+    }
+
+    return { ok: true };
+  } catch {
+    return { ok: false, reason: "invalid_database_path" };
+  }
 }
 
 function assertKnownColumn(column) {

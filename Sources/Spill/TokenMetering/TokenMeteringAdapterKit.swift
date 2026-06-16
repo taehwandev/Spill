@@ -38,7 +38,10 @@ struct TokenMeteringAdapter: Identifiable {
     /// Renders the hook config with the actual installed script path substituted in.
     func hookConfig(installedAt scriptPath: URL) -> String? {
         guard let template = hookConfigTemplate else { return nil }
-        return template.replacingOccurrences(of: "<script_path>", with: scriptPath.path)
+        return template.replacingOccurrences(
+            of: "<script_path>",
+            with: ShellQuoting.singleQuoted(scriptPath.path)
+        )
     }
 
     func install(to destination: URL) throws {
@@ -99,7 +102,7 @@ enum TokenMeteringAdapterKit {
           "hooks": [
             {
               "type": "command",
-              "command": "python3 '<script_path>'",
+              "command": "python3 <script_path>",
               "timeout": 5
             }
           ]
@@ -125,7 +128,7 @@ enum TokenMeteringAdapterKit {
                 "hooks": [
                   {
                     "type": "command",
-                    "command": "node '<script_path>' --since-hours 6",
+                    "command": "node <script_path> --since-hours 6",
                     "timeout": 30
                   }
                 ]
@@ -162,10 +165,7 @@ enum TokenMeteringAdapterKit {
     )
 
     static func defaultInstallURL(for adapter: TokenMeteringAdapter) -> URL {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
-            .first ?? URL(fileURLWithPath: NSTemporaryDirectory())
-        return base
-            .appendingPathComponent("Spill", isDirectory: true)
+        AppDirectories.spillApplicationSupportDirectory()
             .appendingPathComponent("adapters", isDirectory: true)
             .appendingPathComponent(adapter.directoryName, isDirectory: true)
             .appendingPathComponent(adapter.scriptFileName)
@@ -195,10 +195,7 @@ enum TokenMeteringSetupInstaller {
     }
 
     static func defaultInstallURL() -> URL {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
-            .first ?? URL(fileURLWithPath: NSTemporaryDirectory())
-        return base
-            .appendingPathComponent("Spill", isDirectory: true)
+        AppDirectories.spillApplicationSupportDirectory()
             .appendingPathComponent("adapters", isDirectory: true)
             .appendingPathComponent("setup", isDirectory: true)
             .appendingPathComponent(scriptFileName)
@@ -254,7 +251,10 @@ enum TokenMeteringSetupInstaller {
         publicSetupCommand
     }
 
-    private static func shellQuote(_ value: String) -> String {
+}
+
+private enum ShellQuoting {
+    static func singleQuoted(_ value: String) -> String {
         "'\(value.replacingOccurrences(of: "'", with: "'\\''"))'"
     }
 }

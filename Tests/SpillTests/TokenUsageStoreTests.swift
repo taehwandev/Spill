@@ -617,27 +617,28 @@ final class TokenUsageStoreTests: XCTestCase {
         let appDelegate = try String(contentsOf: root.appendingPathComponent("Sources/Spill/App/AppDelegate.swift"))
         let dashboardView = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardView.swift"))
         let dashboardProcess = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardProcess.swift"))
+        let tokenMeteringCoordinator = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringCoordinator.swift"))
         let collector = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenUsageCollectorCoordinator.swift"))
 
         XCTAssertTrue(appDelegate.contains("let wasPanelVisible = spillPanelController.isVisible"))
         XCTAssertTrue(appDelegate.contains("spillPanelController.hide(animated: false)"))
-        XCTAssertTrue(appDelegate.contains("Task { @MainActor [weak self] in"))
-        XCTAssertTrue(appDelegate.contains("self?.openTokenDashboardProcessOrFallback()"))
-        XCTAssertTrue(appDelegate.contains("tokenMeteringDashboardLauncher.open"))
-        XCTAssertTrue(appDelegate.contains("isTokenDashboardLaunchInProgress"))
-        XCTAssertTrue(appDelegate.contains("scheduleTokenDashboardLaunchReset"))
-        XCTAssertTrue(appDelegate.contains("self?.presentTokenDashboardWindow()"))
-        XCTAssertTrue(appDelegate.contains("dashboardWindowController().show()"))
-        XCTAssertTrue(appDelegate.contains("TokenUsageCollectorCoordinator("))
-        XCTAssertTrue(appDelegate.contains("requestTokenUsageCollection(reason: \"panel_open\")"))
-        XCTAssertTrue(appDelegate.contains("requestTokenUsageCollection(reason: \"dashboard_refresh\")"))
-        XCTAssertTrue(appDelegate.contains("requestTokenUsageCollection(reason: \"manual_refresh\")"))
-        XCTAssertTrue(appDelegate.contains("selectedTab: TokenMeteringDashboardProcess.tokenMeteringPreferencesTab"))
+        XCTAssertTrue(appDelegate.contains("tokenMeteringCoordinator.openDashboard"))
+        XCTAssertTrue(tokenMeteringCoordinator.contains("Task { @MainActor in"))
+        XCTAssertTrue(tokenMeteringCoordinator.contains("dashboardLauncher.open"))
+        XCTAssertTrue(tokenMeteringCoordinator.contains("isDashboardLaunchInProgress"))
+        XCTAssertTrue(tokenMeteringCoordinator.contains("scheduleDashboardLaunchReset"))
+        XCTAssertTrue(tokenMeteringCoordinator.contains("self?.presentDashboardWindow"))
+        XCTAssertTrue(tokenMeteringCoordinator.contains("dashboardWindowController(showPreferences: showPreferences).show()"))
+        XCTAssertTrue(tokenMeteringCoordinator.contains("TokenUsageCollectorCoordinator(store: usageStore)"))
+        XCTAssertTrue(appDelegate.contains("tokenMeteringCoordinator.requestCollection(reason: \"panel_open\")"))
+        XCTAssertTrue(tokenMeteringCoordinator.contains("self?.requestCollection(reason: \"dashboard_refresh\")"))
+        XCTAssertTrue(appDelegate.contains("tokenMeteringCoordinator.requestCollection(reason: \"manual_refresh\")"))
+        XCTAssertTrue(tokenMeteringCoordinator.contains("TokenMeteringDashboardProcess.tokenMeteringPreferencesTab"))
         XCTAssertTrue(appDelegate.contains("observeDashboardPreferenceRequests()"))
         XCTAssertTrue(appDelegate.contains("showPreferencesFromDashboardRequest"))
         XCTAssertTrue(dashboardProcess.contains("openPreferencesNotification"))
         XCTAssertTrue(dashboardProcess.contains("postOpenPreferencesRequest"))
-        XCTAssertTrue(appDelegate.contains("SPILL_SMOKE_ENABLE_TOKEN_COLLECTORS"))
+        XCTAssertTrue(tokenMeteringCoordinator.contains("SPILL_SMOKE_ENABLE_TOKEN_COLLECTORS"))
         XCTAssertTrue(dashboardView.contains("private let refreshAction: () -> Void"))
         XCTAssertTrue(dashboardView.contains("private let settingsAction: () -> Void"))
         XCTAssertTrue(dashboardView.contains("settingsAction: @escaping () -> Void = {}"))
@@ -781,21 +782,22 @@ final class TokenUsageStoreTests: XCTestCase {
     func testMenuBarAITokenStatusRefreshesFromSharedStoreChanges() throws {
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let appDelegate = try String(contentsOf: root.appendingPathComponent("Sources/Spill/App/AppDelegate.swift"))
+        let tokenMeteringCoordinator = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringCoordinator.swift"))
         let usageStore = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenUsageStore.swift"))
         let dashboardStore = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenUsageDashboardStore.swift"))
 
         XCTAssertTrue(usageStore.contains("distributedEventsDidChangeNotification"))
         XCTAssertTrue(usageStore.contains("DistributedNotificationCenter.default().postNotificationName"))
-        XCTAssertTrue(appDelegate.contains("TokenUsageStore.distributedEventsDidChangeNotification"))
-        XCTAssertTrue(appDelegate.contains("tokenUsageEventsDidChangeFromDistributedNotification"))
-        XCTAssertTrue(appDelegate.contains("private var shouldRefreshMenuBarAITokenTotal"))
-        XCTAssertTrue(appDelegate.contains("settings.enabledMenuBarStatusItems.contains(.ai)"))
-        XCTAssertTrue(appDelegate.contains("tokenUsageStore.totalTokens("))
-        XCTAssertTrue(appDelegate.contains("startingAt: dayStart"))
-        XCTAssertTrue(appDelegate.contains("menuBarTokenCollectionInterval"))
+        XCTAssertTrue(tokenMeteringCoordinator.contains("TokenUsageStore.distributedEventsDidChangeNotification"))
+        XCTAssertTrue(tokenMeteringCoordinator.contains("tokenUsageEventsDidChangeFromDistributedNotification"))
+        XCTAssertTrue(tokenMeteringCoordinator.contains("private var shouldRefreshMenuBarTokenTotal"))
+        XCTAssertTrue(tokenMeteringCoordinator.contains("settings.enabledMenuBarStatusItems.contains(.ai)"))
+        XCTAssertTrue(tokenMeteringCoordinator.contains("usageStore.totalTokens("))
+        XCTAssertTrue(tokenMeteringCoordinator.contains("startingAt: dayStart"))
+        XCTAssertTrue(tokenMeteringCoordinator.contains("menuBarTokenCollectionInterval"))
         XCTAssertTrue(appDelegate.contains("requestMenuBarTokenUsageCollectionIfNeeded()"))
-        XCTAssertTrue(appDelegate.contains("requestTokenUsageCollection(reason: \"menu_bar_status\")"))
-        XCTAssertFalse(appDelegate.contains("guard force || menuBarAITokenDayStart != dayStart else"))
+        XCTAssertTrue(tokenMeteringCoordinator.contains("requestCollection(reason: \"menu_bar_status\")"))
+        XCTAssertFalse(tokenMeteringCoordinator.contains("guard force || menuBarTokenDayStart != dayStart else"))
         XCTAssertTrue(dashboardStore.contains("distributedEventsDidChangeObserver"))
         XCTAssertTrue(dashboardStore.contains("TokenUsageStore.distributedEventsDidChangeNotification"))
         XCTAssertTrue(dashboardStore.contains("private var scheduledRefreshTask"))
@@ -808,6 +810,7 @@ final class TokenUsageStoreTests: XCTestCase {
         let appDelegate = try String(contentsOf: root.appendingPathComponent("Sources/Spill/App/AppDelegate.swift"))
         let process = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardProcess.swift"))
         let launcher = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardLauncher.swift"))
+        let tokenMeteringCoordinator = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringCoordinator.swift"))
         let helperDelegate = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardAppDelegate.swift"))
         let windowController = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardWindowController.swift"))
         let buildScript = try String(contentsOf: root.appendingPathComponent("scripts/build-app.sh"))
@@ -836,11 +839,11 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(launcher.contains("mergeSmokeTestEnvironment"))
         XCTAssertTrue(launcher.contains("\"SPILL_TOKEN_USAGE_EVENTS_FILE\""))
         XCTAssertTrue(launcher.contains("mainBundleIdentifierEnvironmentKey"))
-        XCTAssertTrue(appDelegate.contains("private lazy var tokenMeteringDashboardLauncher"))
-        XCTAssertTrue(appDelegate.contains("tokenMeteringDashboardLauncher.open"))
+        XCTAssertTrue(tokenMeteringCoordinator.contains("private lazy var dashboardLauncher"))
+        XCTAssertTrue(tokenMeteringCoordinator.contains("dashboardLauncher.open"))
         XCTAssertTrue(appDelegate.contains("SPILL_SMOKE_OPEN_TOKEN_DASHBOARD"))
         XCTAssertTrue(appDelegate.contains("SPILL_TOKEN_DASHBOARD_LAUNCH_SMOKE_REQUESTED"))
-        XCTAssertTrue(appDelegate.contains("SPILL_TOKEN_DASHBOARD_LAUNCH_SMOKE_DUPLICATE_IGNORED"))
+        XCTAssertTrue(tokenMeteringCoordinator.contains("SPILL_TOKEN_DASHBOARD_LAUNCH_SMOKE_DUPLICATE_IGNORED"))
         XCTAssertTrue(appDelegate.contains("DispatchQueue.main.async { [weak self] in"))
         XCTAssertTrue(appDelegate.contains("TokenMeteringDashboardProcess.postAppLanguageDidChange()"))
 
@@ -862,10 +865,13 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertFalse(helperDelegate.contains("HotKeyController("))
         XCTAssertFalse(helperDelegate.contains("TokenUsageBridgeServer("))
         XCTAssertFalse(helperDelegate.contains("SpillPanelController("))
+        XCTAssertFalse(helperDelegate.contains("requestTokenUsageCollection(reason: \"dashboard_launch\")"))
         XCTAssertTrue(windowController.contains("closeAction"))
         XCTAssertTrue(windowController.contains("settingsAction"))
         XCTAssertTrue(windowController.contains("window.delegate = self"))
         XCTAssertTrue(windowController.contains("windowWillClose"))
+        XCTAssertTrue(windowController.contains("scheduleDeferredRefreshAction()"))
+        XCTAssertTrue(windowController.contains("Task.sleep(nanoseconds: 350_000_000)"))
 
         XCTAssertTrue(buildScript.contains(#"HELPER_APP_NAME="Spill Token Dashboard.app""#))
         XCTAssertTrue(buildScript.contains(#"HELPER_BUNDLE_ID="${BUNDLE_ID}.TokenDashboard""#))
@@ -935,25 +941,29 @@ final class TokenUsageStoreTests: XCTestCase {
                 "SPILL_TOKEN_USAGE_NODE": "/custom/bin/node",
                 "NODE_BINARY": "/ignored/node",
             ],
-            isExecutableFile: { $0 == "/custom/bin/node" }
+            isExecutableFile: { $0 == "/custom/bin/node" },
+            isRegularFile: { $0 == "/custom/bin/node" }
         )
         XCTAssertEqual(explicit?.path, "/custom/bin/node")
 
         let nodeBinary = TokenUsageCollectorCoordinator.nodeExecutableURL(
             environment: ["NODE_BINARY": "/configured/node"],
-            isExecutableFile: { $0 == "/configured/node" }
+            isExecutableFile: { $0 == "/configured/node" },
+            isRegularFile: { $0 == "/configured/node" }
         )
         XCTAssertEqual(nodeBinary?.path, "/configured/node")
 
         let homebrew = TokenUsageCollectorCoordinator.nodeExecutableURL(
             environment: [:],
-            isExecutableFile: { $0 == "/opt/homebrew/bin/node" }
+            isExecutableFile: { $0 == "/opt/homebrew/bin/node" },
+            isRegularFile: { $0 == "/opt/homebrew/bin/node" }
         )
         XCTAssertEqual(homebrew?.path, "/opt/homebrew/bin/node")
 
         let missing = TokenUsageCollectorCoordinator.nodeExecutableURL(
             environment: [:],
-            isExecutableFile: { _ in false }
+            isExecutableFile: { _ in false },
+            isRegularFile: { _ in false }
         )
         XCTAssertNil(missing)
     }

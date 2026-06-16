@@ -14,6 +14,7 @@ final class TokenMeteringDashboardWindowController: NSObject, NSWindowDelegate {
     private let settingsAction: () -> Void
     private let closeAction: () -> Void
     private var window: NSWindow?
+    private var deferredRefreshTask: Task<Void, Never>?
 
     init(
         store: TokenUsageDashboardStore,
@@ -33,7 +34,6 @@ final class TokenMeteringDashboardWindowController: NSObject, NSWindowDelegate {
     }
 
     func show() {
-        refreshAction()
         store.refresh()
         let window = ensureWindow()
         updateWindowTitle(window)
@@ -42,6 +42,19 @@ final class TokenMeteringDashboardWindowController: NSObject, NSWindowDelegate {
         window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless()
         window.makeKey()
+        scheduleDeferredRefreshAction()
+    }
+
+    private func scheduleDeferredRefreshAction() {
+        deferredRefreshTask?.cancel()
+        deferredRefreshTask = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(nanoseconds: 350_000_000)
+            } catch {
+                return
+            }
+            self?.refreshAction()
+        }
     }
 
     private func ensureWindow() -> NSWindow {

@@ -209,6 +209,7 @@ struct TokenUsageBreakdown: Codable, Equatable, Sendable {
         toolOutput = try container.decode(Int.self, forKey: .toolOutput)
         generatedOutput = try container.decode(Int.self, forKey: .generatedOutput)
         unknown = try container.decodeIfPresent(Int.self, forKey: .unknown) ?? 0
+        try validate()
     }
 
     var total: Int {
@@ -317,6 +318,7 @@ struct TokenUsageEvent: Codable, Equatable, Identifiable, Sendable {
         tokenBreakdown = try container.decode(TokenUsageBreakdown.self, forKey: .tokenBreakdown)
         latencyMS = try container.decode(Int.self, forKey: .latencyMS)
         createdAt = try container.decode(String.self, forKey: .createdAt)
+        try validate()
     }
 
     func encode(to encoder: Encoder) throws {
@@ -435,9 +437,7 @@ enum TokenUsageSanitizer {
         try rejectUnsafeFields(in: object)
 
         let decoder = JSONDecoder()
-        let event = try decoder.decode(TokenUsageEvent.self, from: data)
-        try event.validate()
-        return event
+        return try decoder.decode(TokenUsageEvent.self, from: data)
     }
 
     static func eventData(_ event: TokenUsageEvent) throws -> Data {

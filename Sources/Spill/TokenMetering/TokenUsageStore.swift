@@ -219,10 +219,7 @@ final class TokenUsageStore: @unchecked Sendable {
     }
 
     static func defaultEventsURL() -> URL {
-        let baseURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
-            .first ?? URL(fileURLWithPath: NSTemporaryDirectory())
-        return baseURL
-            .appendingPathComponent("Spill", isDirectory: true)
+        AppDirectories.spillApplicationSupportDirectory()
             .appendingPathComponent("token-metering", isDirectory: true)
             .appendingPathComponent("events.json")
     }
@@ -232,10 +229,7 @@ final class TokenUsageStore: @unchecked Sendable {
     }
 
     static func defaultInboxURL() -> URL {
-        let baseURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
-            .first ?? URL(fileURLWithPath: NSTemporaryDirectory())
-        return baseURL
-            .appendingPathComponent("Spill", isDirectory: true)
+        AppDirectories.spillApplicationSupportDirectory()
             .appendingPathComponent("token-metering", isDirectory: true)
             .appendingPathComponent("events-inbox", isDirectory: true)
     }
@@ -295,14 +289,7 @@ final class TokenUsageStore: @unchecked Sendable {
             return []
         }
 
-        return events.filter { event in
-            do {
-                try event.validate()
-                return true
-            } catch {
-                return false
-            }
-        }
+        return events
     }
 
     private func loadInboxEvents() -> InboxReadResult {
@@ -589,8 +576,7 @@ final class TokenUsageStore: @unchecked Sendable {
             }
             let byteCount = Int(sqlite3_column_bytes(statement, 1))
             let data = Data(bytes: blob, count: byteCount)
-            if let event = try? JSONDecoder().decode(TokenUsageEvent.self, from: data),
-               (try? event.validate()) != nil {
+            if let event = try? JSONDecoder().decode(TokenUsageEvent.self, from: data) {
                 events.append(event)
             }
         }
@@ -879,8 +865,7 @@ final class TokenUsageStore: @unchecked Sendable {
             }
             let byteCount = Int(sqlite3_column_bytes(statement, 0))
             let data = Data(bytes: blob, count: byteCount)
-            if let event = try? JSONDecoder().decode(TokenUsageEvent.self, from: data),
-               (try? event.validate()) != nil {
+            if let event = try? JSONDecoder().decode(TokenUsageEvent.self, from: data) {
                 events.append(event)
             }
         }

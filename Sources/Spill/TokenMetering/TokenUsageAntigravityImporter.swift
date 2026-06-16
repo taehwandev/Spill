@@ -347,20 +347,14 @@ final class TokenUsageAntigravityImporter {
     }
 
     private static func defaultLabelTimelineURL() -> URL {
-        let baseURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
-            .first ?? URL(fileURLWithPath: NSTemporaryDirectory())
-        return baseURL
-            .appendingPathComponent("Spill", isDirectory: true)
+        AppDirectories.spillApplicationSupportDirectory()
             .appendingPathComponent("token-metering", isDirectory: true)
             .appendingPathComponent("label-context", isDirectory: true)
             .appendingPathComponent("antigravity-timeline.jsonl")
     }
 
     private static func defaultDiagnosticsURL() -> URL {
-        let baseURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
-            .first ?? URL(fileURLWithPath: NSTemporaryDirectory())
-        return baseURL
-            .appendingPathComponent("Spill", isDirectory: true)
+        AppDirectories.spillApplicationSupportDirectory()
             .appendingPathComponent("token-metering", isDirectory: true)
             .appendingPathComponent("diagnostics", isDirectory: true)
             .appendingPathComponent("antigravity-active-importer-last.json")

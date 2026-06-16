@@ -5,7 +5,6 @@ import Combine
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private static let statusRefreshDelayNanoseconds: UInt64 = 1_000_000_000
-    private static let menuBarTokenCollectionInterval: TimeInterval = 60
 
     private let settings = SpillSettings.shared
     private let scanner = AXMenuBarItemScanner()
@@ -13,8 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let statusStore = SystemStatusStore(cpuInitialSampleIntervalNanoseconds: 250_000_000)
     private let aiStatusStore = AIStatusStore()
     private let cloudServiceStatusStore = CloudServiceStatusStore()
-    private let tokenUsageStore: TokenUsageStore
-    private let tokenUsageBridgePort: UInt16
+    private let tokenMeteringCoordinator: TokenMeteringCoordinator
     private let windowActionStore = WindowActionStore()
     private let sparkleUpdateController: SparkleUpdateController
     private let updateCheckStore: UpdateCheckStore
@@ -26,20 +24,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     )
     private lazy var scanCoordinator = MenuBarScanCoordinator(scanner: scanner, settings: settings)
-    private lazy var tokenUsageBridgeServer = TokenUsageBridgeServer(
-        store: tokenUsageStore,
-        port: tokenUsageBridgePort
-    )
-    private lazy var tokenUsageInboxMonitor = TokenUsageInboxMonitor(store: tokenUsageStore)
-    private lazy var tokenUsageCollectorCoordinator = TokenUsageCollectorCoordinator(
-        store: tokenUsageStore
-    )
-    private lazy var tokenMeteringDashboardLauncher = TokenMeteringDashboardLauncher()
-    private lazy var tokenUsageDashboardStore = TokenUsageDashboardStore(
-        usageStore: tokenUsageStore,
-        collectionCoordinator: tokenUsageCollectorCoordinator
-    )
-    private var tokenMeteringDashboardWindowController: TokenMeteringDashboardWindowController?
     private lazy var hotKeyController = HotKeyController(
         registrations: makeHotKeyRegistrations()
     )
@@ -50,12 +34,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusStore: statusStore,
         aiStatusStore: aiStatusStore,
         cloudServiceStatusStore: cloudServiceStatusStore,
-        tokenUsageDashboardStore: tokenUsageDashboardStore,
+        tokenUsageDashboardStore: tokenMeteringCoordinator.dashboardStore,
         windowActionStore: windowActionStore,
         updateStore: updateCheckStore,
         sleepGuard: sleepGuard,
         visibilityChanged: { [weak self] isVisible in
             self?.isSpillPanelVisible = isVisible
+            self?.tokenMeteringCoordinator.setSpillPanelVisible(isVisible)
             self?.statusItemController?.refresh(isSpillBarVisible: isVisible)
             self?.configureStatusRefreshLoop()
         },
@@ -70,7 +55,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settings: settings,
         scanner: scanner,
         updateStore: updateCheckStore,
-        tokenUsageStore: tokenUsageStore,
+        tokenUsageStore: tokenMeteringCoordinator.usageStore,
         showPanelAction: { [weak self] in
             self?.showSpillBar(source: "preferences")
         },
@@ -80,17 +65,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     )
     private var statusItemController: StatusItemController?
     private var statusRefreshTask: Task<Void, Never>?
-    private var privateUsageUploadTask: Task<Void, Never>?
-    private var isTokenDashboardLaunchInProgress = false
     private var isSpillPanelVisible = false
-    private var menuBarAITokenTotal = 0
-    private var menuBarAITokenDayStart: Date?
-    private var lastMenuBarTokenCollectionAt: Date?
     private var cancellables = Set<AnyCancellable>()
 
     override init() {
-        tokenUsageStore = Self.makeTokenUsageStore()
-        tokenUsageBridgePort = Self.makeTokenUsageBridgePort()
+        tokenMeteringCoordinator = TokenMeteringCoordinator(
+            settings: settings,
+            cloudServiceStatusStore: cloudServiceStatusStore
+        )
 
         let sparkleUpdateController = SparkleUpdateController()
         self.sparkleUpdateController = sparkleUpdateController
@@ -105,39 +87,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         super.init()
     }
 
-    private static func makeTokenUsageStore() -> TokenUsageStore {
-        let environment = ProcessInfo.processInfo.environment
-        guard environment["SPILL_SMOKE_TEST"] == "1",
-              let eventsFile = environment["SPILL_TOKEN_USAGE_EVENTS_FILE"],
-              !eventsFile.isEmpty
-        else {
-            return TokenUsageStore.live()
-        }
-
-        let inboxURL = environment["SPILL_TOKEN_USAGE_INBOX_DIR"]
-            .flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0) }
-        return TokenUsageStore(
-            fileURL: URL(fileURLWithPath: eventsFile),
-            inboxURL: inboxURL
-        )
-    }
-
-    private static func makeTokenUsageBridgePort() -> UInt16 {
-        let environment = ProcessInfo.processInfo.environment
-        guard environment["SPILL_SMOKE_TEST"] == "1",
-              let rawPort = environment["SPILL_TOKEN_USAGE_BRIDGE_PORT"],
-              let port = UInt16(rawPort)
-        else {
-            return TokenUsageBridgeServer.defaultPort
-        }
-
-        return port
-    }
-
     func applicationDidFinishLaunching(_ notification: Notification) {
         configureMainMenu()
         SpillTelemetry.shared.track("app_started", props: ["source": "mac_app"])
-        refreshMenuBarAITokenTotal(force: true)
+        tokenMeteringCoordinator.refreshMenuBarTokenTotal(force: true)
 
         statusItemController = StatusItemController(
             settings: settings,
@@ -148,10 +101,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return SpillDisplayMode.notchCandidateItems(from: scanner, settings: SpillSettings.shared).count
             },
             aiTokenCountProvider: { [weak self] in
-                self?.menuBarAITokenTotal ?? 0
+                self?.tokenMeteringCoordinator.menuBarTokenTotal ?? 0
             },
             aiServerHealthProvider: { [weak self] in
-                self?.menuBarAIServerHealth
+                self?.tokenMeteringCoordinator.menuBarServerHealth
             },
             toggleAction: { [weak self] in
                 self?.toggleSpillBar()
@@ -175,12 +128,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         observeStateChanges()
         observeDashboardPreferenceRequests()
-        tokenUsageInboxMonitor.start()
-        requestTokenUsageCollection(reason: "app_launch")
-        configureTokenUsageBridge()
-        registerPrivateUsageConnectionURLHandler()
+        tokenMeteringCoordinator.start(isSmokeTest: isSmokeTest) { [weak self] in
+            self?.statusItemController?.refresh()
+        }
         configureStatusRefreshLoop()
-        schedulePrivateUsageUploadIfNeeded()
 
         if isSmokeTest {
             startSmokeTestExitTimer()
@@ -213,55 +164,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var shouldStartSleepGuardInSmokeTest: Bool {
         ProcessInfo.processInfo.environment["SPILL_SMOKE_START_SLEEP_GUARD"] == "1"
-    }
-
-    private func registerPrivateUsageConnectionURLHandler() {
-        guard PrivateUsageUploadFeatureAvailability.isEnabledInCurrentBuild else {
-            return
-        }
-
-        NSAppleEventManager.shared().setEventHandler(
-            self,
-            andSelector: #selector(handlePrivateUsageConnectionURLEvent(_:withReplyEvent:)),
-            forEventClass: AEEventClass(kInternetEventClass),
-            andEventID: AEEventID(kAEGetURL)
-        )
-    }
-
-    @objc private func handlePrivateUsageConnectionURLEvent(
-        _ event: NSAppleEventDescriptor,
-        withReplyEvent replyEvent: NSAppleEventDescriptor
-    ) {
-        guard PrivateUsageUploadFeatureAvailability.isEnabledInCurrentBuild,
-              let rawURL = event.paramDescriptor(forKeyword: AEKeyword(keyDirectObject))?.stringValue,
-              let url = URL(string: rawURL),
-              let connectionCode = PrivateUsageConnectionDeepLink.connectionCode(from: url)
-        else {
-            return
-        }
-
-        Task { @MainActor [weak self] in
-            await self?.connectPrivateUsageFromDeepLink(connectionCode: connectionCode)
-        }
-    }
-
-    private func connectPrivateUsageFromDeepLink(connectionCode: String) async {
-        guard PrivateUsageUploadFeatureAvailability.isEnabledInCurrentBuild else {
-            return
-        }
-
-        let coordinator = PrivateUsageUploadCoordinator.live(
-            usageStore: tokenUsageStore,
-            environment: settings.privateUsageUploadEnvironment
-        )
-
-        do {
-            _ = try await coordinator.exchangeGrantCode(connectionCode)
-            settings.privateUsageUploadEnabled = true
-            schedulePrivateUsageUploadIfNeeded()
-        } catch {
-            return
-        }
     }
 
     private func startSmokeTestExitTimer() {
@@ -402,20 +304,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         hotKeyController.stop()
         scanCoordinator.stop()
-        tokenUsageInboxMonitor.stop()
-        tokenUsageBridgeServer.stop()
+        tokenMeteringCoordinator.stop()
         DistributedNotificationCenter.default().removeObserver(
             self,
             name: TokenMeteringDashboardProcess.openPreferencesNotification,
             object: nil
         )
-        DistributedNotificationCenter.default().removeObserver(
-            self,
-            name: TokenUsageStore.distributedEventsDidChangeNotification,
-            object: nil
-        )
         statusRefreshTask?.cancel()
-        privateUsageUploadTask?.cancel()
         sleepGuard.stop()
         spillPanelController.hide(animated: false)
     }
@@ -432,8 +327,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func showSpillBar(source: String = "unknown") {
-        requestTokenUsageCollection(reason: "panel_open")
-        tokenUsageDashboardStore.refreshPanelSummary()
+        tokenMeteringCoordinator.requestCollection(reason: "panel_open")
+        tokenMeteringCoordinator.refreshPanelSummary()
         spillPanelController.show(
             anchorFrame: statusItemController?.buttonScreenFrame,
             tokenUsageAlreadyRefreshed: true
@@ -458,65 +353,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func refreshMenuBarItems(source: String = "status_menu") {
         SpillTelemetry.shared.track("menu_bar_scan_requested", props: ["source": source])
-        requestTokenUsageCollection(reason: "manual_refresh")
+        tokenMeteringCoordinator.requestCollection(reason: "manual_refresh")
         scanCoordinator.refreshNow()
         statusItemController?.refresh()
         Task { @MainActor [weak self] in
             await self?.refreshStatusData()
-        }
-    }
-
-    private var isTokenUsageBridgeEnabled: Bool {
-        guard ProcessInfo.processInfo.environment["SPILL_TOKEN_USAGE_BRIDGE_DISABLED"] != "1" else {
-            return false
-        }
-
-        return isSmokeTest
-    }
-
-    private func configureTokenUsageBridge() {
-        guard isTokenUsageBridgeEnabled else {
-            tokenUsageBridgeServer.stop()
-            return
-        }
-
-        do {
-            try tokenUsageBridgeServer.start()
-        } catch {
-            // The native app dashboard reads the app-owned store directly.
-            return
-        }
-    }
-
-    private func schedulePrivateUsageUploadIfNeeded() {
-        guard !isSmokeTest else {
-            return
-        }
-        guard PrivateUsageUploadFeatureAvailability.isEnabledInCurrentBuild else {
-            privateUsageUploadTask?.cancel()
-            privateUsageUploadTask = nil
-            return
-        }
-
-        privateUsageUploadTask?.cancel()
-        privateUsageUploadTask = Task { @MainActor [weak self] in
-            do {
-                try await Task.sleep(nanoseconds: 2_000_000_000)
-            } catch {
-                return
-            }
-
-            guard let self else {
-                return
-            }
-
-            let coordinator = PrivateUsageUploadCoordinator.live(
-                usageStore: tokenUsageStore,
-                environment: settings.privateUsageUploadEnvironment
-            )
-            _ = await coordinator.runAutomaticUploadIfNeeded(
-                isEnabled: settings.privateUsageUploadEnabled
-            )
         }
     }
 
@@ -532,123 +373,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             SpillTelemetry.shared.track("panel_closed", props: ["source": "token_dashboard_\(source)"])
         }
 
-        if wasPanelVisible {
-            Task { @MainActor [weak self] in
-                self?.openTokenDashboardProcessOrFallback()
-            }
-        } else {
-            openTokenDashboardProcessOrFallback()
-        }
-    }
-
-    private func openTokenDashboardProcessOrFallback() {
-        guard !isTokenDashboardLaunchInProgress else {
-            if isSmokeTest {
-                print("SPILL_TOKEN_DASHBOARD_LAUNCH_SMOKE_DUPLICATE_IGNORED")
-            }
-            return
-        }
-
-        isTokenDashboardLaunchInProgress = true
-        tokenMeteringDashboardLauncher.open(
-            fallback: { [weak self] in
-                self?.presentTokenDashboardWindow()
+        tokenMeteringCoordinator.openDashboard(
+            deferLaunch: wasPanelVisible,
+            refreshStatusItem: { [weak self] in
+                self?.statusItemController?.refresh()
             },
-            completion: { [weak self] in
-                self?.scheduleTokenDashboardLaunchReset()
+            showPreferences: { [weak self] source, selectedTab in
+                self?.showPreferences(source: source, selectedTab: selectedTab)
             }
         )
-        scheduleTokenDashboardLaunchReset(after: 2.0)
-    }
-
-    private func scheduleTokenDashboardLaunchReset(after delay: TimeInterval = 0.75) {
-        Task { @MainActor [weak self] in
-            let nanoseconds = UInt64(delay * 1_000_000_000)
-            try? await Task.sleep(nanoseconds: nanoseconds)
-            self?.isTokenDashboardLaunchInProgress = false
-        }
-    }
-
-    private func presentTokenDashboardWindow() {
-        refreshMenuBarAITokenTotal(force: true)
-        statusItemController?.refresh()
-        dashboardWindowController().show()
-    }
-
-    private func dashboardWindowController() -> TokenMeteringDashboardWindowController {
-        if let tokenMeteringDashboardWindowController {
-            return tokenMeteringDashboardWindowController
-        }
-
-        let controller = TokenMeteringDashboardWindowController(
-            store: tokenUsageDashboardStore,
-            cloudServiceStatusStore: cloudServiceStatusStore,
-            refreshAction: { [weak self] in
-                self?.requestTokenUsageCollection(reason: "dashboard_refresh")
-            },
-            settingsAction: { [weak self] in
-                self?.showPreferences(source: "token_dashboard", selectedTab: TokenMeteringDashboardProcess.tokenMeteringPreferencesTab)
-            }
-        )
-        tokenMeteringDashboardWindowController = controller
-        return controller
-    }
-
-    private func requestTokenUsageCollection(reason: String) {
-        if isSmokeTest,
-           ProcessInfo.processInfo.environment["SPILL_SMOKE_ENABLE_TOKEN_COLLECTORS"] != "1" {
-            return
-        }
-
-        tokenUsageCollectorCoordinator.requestCollection(reason: reason)
-    }
-
-    private func refreshMenuBarAITokenTotal(now: Date = Date(), force: Bool = false) {
-        let calendar = Calendar.autoupdatingCurrent
-        let dayStart = calendar.startOfDay(for: now)
-        guard force || shouldRefreshMenuBarAITokenTotal || menuBarAITokenDayStart != dayStart else {
-            return
-        }
-
-        menuBarAITokenDayStart = dayStart
-        let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? now
-        menuBarAITokenTotal = tokenUsageStore.totalTokens(
-            startingAt: dayStart,
-            endingBefore: dayEnd
-        )
-    }
-
-    private func requestMenuBarTokenUsageCollectionIfNeeded(now: Date = Date()) {
-        guard shouldRefreshMenuBarAITokenTotal else {
-            return
-        }
-
-        if let lastMenuBarTokenCollectionAt,
-           now.timeIntervalSince(lastMenuBarTokenCollectionAt) < Self.menuBarTokenCollectionInterval {
-            return
-        }
-
-        lastMenuBarTokenCollectionAt = now
-        requestTokenUsageCollection(reason: "menu_bar_status")
-    }
-
-    private var shouldRefreshMenuBarAITokenTotal: Bool {
-        isSpillPanelVisible || settings.enabledMenuBarStatusItems.contains(.ai)
-    }
-
-    private var menuBarAIServerHealth: CloudServiceHealth? {
-        guard let snapshot = cloudServiceStatusStore.snapshot else {
-            return nil
-        }
-
-        let dashboardToolStatuses = TokenUsageAITool.dashboardTools.compactMap { tool in
-            CloudServiceStatusPresentation.serviceStatus(for: tool, in: snapshot)
-        }
-        guard !dashboardToolStatuses.isEmpty else {
-            return nil
-        }
-
-        return CloudServiceStatusPresentation.aggregateHealth(for: dashboardToolStatuses)
     }
 
     private func showPreferencesFromPanel() {
@@ -769,17 +502,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
             .store(in: &cancellables)
-
-        NotificationCenter.default.publisher(
-            for: TokenUsageStore.eventsDidChangeNotification,
-            object: tokenUsageStore
-        )
-        .receive(on: RunLoop.main)
-        .sink { [weak self] _ in
-            self?.refreshMenuBarAITokenTotal(force: true)
-            self?.statusItemController?.refresh()
-        }
-        .store(in: &cancellables)
 
         settings.$hotKeyEnabled
             .dropFirst()
@@ -915,22 +637,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             name: TokenMeteringDashboardProcess.openPreferencesNotification,
             object: nil
         )
-        DistributedNotificationCenter.default().addObserver(
-            self,
-            selector: #selector(tokenUsageEventsDidChangeFromDistributedNotification(_:)),
-            name: TokenUsageStore.distributedEventsDidChangeNotification,
-            object: nil
-        )
     }
 
     @objc private func showPreferencesFromDashboardRequest(_ notification: Notification) {
         let selectedTab = notification.userInfo?[TokenMeteringDashboardProcess.preferencesTabUserInfoKey] as? String
         showPreferences(source: "token_dashboard", selectedTab: selectedTab)
-    }
-
-    @objc private func tokenUsageEventsDidChangeFromDistributedNotification(_ notification: Notification) {
-        refreshMenuBarAITokenTotal(force: true)
-        statusItemController?.refresh()
     }
 
     private func configureStatusRefreshLoop() {
@@ -968,8 +679,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             enabledModules: enabledModules,
             readsPower: readsPower
         )
-        requestMenuBarTokenUsageCollectionIfNeeded()
-        refreshMenuBarAITokenTotal()
+        tokenMeteringCoordinator.requestMenuBarTokenUsageCollectionIfNeeded()
+        tokenMeteringCoordinator.refreshMenuBarTokenTotal()
         statusItemController?.refresh()
     }
 
@@ -982,8 +693,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             enabledModules: isSpillPanelVisible ? settings.statusModulesRequiredForRefresh : menuBarStatusModules,
             readsPower: isSpillPanelVisible
         )
-        requestMenuBarTokenUsageCollectionIfNeeded()
-        refreshMenuBarAITokenTotal()
+        tokenMeteringCoordinator.requestMenuBarTokenUsageCollectionIfNeeded()
+        tokenMeteringCoordinator.refreshMenuBarTokenTotal()
         statusItemController?.refresh()
     }
 
