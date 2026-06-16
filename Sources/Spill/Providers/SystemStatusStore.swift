@@ -163,12 +163,7 @@ final class SystemStatusStore: ObservableObject {
             return
         }
 
-        var values = metricHistory[module] ?? []
-        values.append(value.clamped(to: 0...1))
-        if values.count > maximumHistoryCount {
-            values.removeFirst(values.count - maximumHistoryCount)
-        }
-        metricHistory[module] = values
+        metricHistory[module] = appendedHistoryValue(value, to: metricHistory[module] ?? [])
     }
 
     private func appendNetworkTrafficHistory(_ status: SystemNetworkStatus) {

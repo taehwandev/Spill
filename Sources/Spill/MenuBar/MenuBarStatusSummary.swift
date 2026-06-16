@@ -140,46 +140,26 @@ struct MenuBarStatusSummary: Equatable {
     ) -> MenuBarStatusEntry? {
         switch item {
         case .cpu:
-            let value = compactCPUValue(cpu, precision: precision)
-            let displayText = displayText(label: item.shortTitle, value: value)
-            let usageRatio = normalizedRatio(cpu.usageRatio, state: cpu.state)
-            let segment = MenuBarStatusSegment(
+            return metricEntry(
+                item: item,
                 kind: .cpu,
-                title: item.title,
-                shortTitle: item.shortTitle,
-                value: value,
-                displayText: displayText,
-                usageRatio: usageRatio,
-                state: displayState(baseState: cpu.state, ratio: usageRatio, highlightThreshold: highlightThreshold),
-                symbolName: item.symbolName
-            )
-            return MenuBarStatusEntry(
-                title: displayText,
-                tooltip: details(title: item.title, value: cpu.value, subtitle: cpu.subtitle),
-                segment: segment
+                value: compactCPUValue(cpu, precision: precision),
+                detailValue: cpu.value,
+                subtitle: cpu.subtitle,
+                usageRatio: cpu.usageRatio,
+                state: cpu.state,
+                highlightThreshold: highlightThreshold
             )
         case .memory:
-            let value = compactMemoryValue(memory, precision: precision)
-            let displayText = displayText(label: item.shortTitle, value: value)
-            let usageRatio = normalizedRatio(memory.usageRatio, state: memory.state)
-            let segment = MenuBarStatusSegment(
+            return metricEntry(
+                item: item,
                 kind: .memory,
-                title: item.title,
-                shortTitle: item.shortTitle,
-                value: value,
-                displayText: displayText,
-                usageRatio: usageRatio,
-                state: displayState(
-                    baseState: memory.state,
-                    ratio: usageRatio,
-                    highlightThreshold: highlightThreshold
-                ),
-                symbolName: item.symbolName
-            )
-            return MenuBarStatusEntry(
-                title: displayText,
-                tooltip: details(title: item.title, value: memory.value, subtitle: memory.subtitle),
-                segment: segment
+                value: compactMemoryValue(memory, precision: precision),
+                detailValue: memory.value,
+                subtitle: memory.subtitle,
+                usageRatio: memory.usageRatio,
+                state: memory.state,
+                highlightThreshold: highlightThreshold
             )
         case .ai:
             let value = TokenUsageDashboardSnapshot.formatTokens(aiTokenCount)
@@ -210,6 +190,39 @@ struct MenuBarStatusSummary: Equatable {
         case .caffeine, .gpu, .network:
             return nil
         }
+    }
+
+    private static func metricEntry(
+        item: SpillMenuBarStatusItem,
+        kind: MenuBarStatusSegment.Kind,
+        value: String,
+        detailValue: String,
+        subtitle: String?,
+        usageRatio: Double,
+        state: SpillStatusState,
+        highlightThreshold: MenuBarStatusHighlightThreshold
+    ) -> MenuBarStatusEntry {
+        let displayText = displayText(label: item.shortTitle, value: value)
+        let normalizedUsageRatio = normalizedRatio(usageRatio, state: state)
+        let segment = MenuBarStatusSegment(
+            kind: kind,
+            title: item.title,
+            shortTitle: item.shortTitle,
+            value: value,
+            displayText: displayText,
+            usageRatio: normalizedUsageRatio,
+            state: displayState(
+                baseState: state,
+                ratio: normalizedUsageRatio,
+                highlightThreshold: highlightThreshold
+            ),
+            symbolName: item.symbolName
+        )
+        return MenuBarStatusEntry(
+            title: displayText,
+            tooltip: details(title: item.title, value: detailValue, subtitle: subtitle),
+            segment: segment
+        )
     }
 
     private static func displayText(label: String, value: String) -> String {

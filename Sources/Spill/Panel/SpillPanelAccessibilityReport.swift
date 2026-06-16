@@ -210,13 +210,7 @@ struct SpillPanelAccessibilityReport: Equatable {
             return nil
         }
 
-        return array.compactMap { object in
-            guard CFGetTypeID(object) == AXUIElementGetTypeID() else {
-                return nil
-            }
-
-            return (object as! AXUIElement)
-        }
+        return array.compactMap(axElement)
     }
 
     @MainActor private static func collectLabelsIfPossible(
@@ -238,6 +232,14 @@ struct SpillPanelAccessibilityReport: Equatable {
         }
 
         labels.append(normalized)
+    }
+
+    private static func axElement(from object: AnyObject) -> AXUIElement? {
+        guard CFGetTypeID(object) == AXUIElementGetTypeID() else {
+            return nil
+        }
+
+        return unsafeDowncast(object, to: AXUIElement.self)
     }
 
     private static func uniqueLabels(_ labels: [String]) -> [String] {

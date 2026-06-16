@@ -74,10 +74,7 @@ final class CloudServiceStatusStore: ObservableObject {
     }
 
     private static func defaultCacheURL() -> URL {
-        let baseURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
-            .first ?? URL(fileURLWithPath: NSTemporaryDirectory())
-        return baseURL
-            .appendingPathComponent("Spill", isDirectory: true)
+        AppDirectories.spillApplicationSupportDirectory()
             .appendingPathComponent("cloud-service-status-cache.json")
     }
 

@@ -95,13 +95,13 @@ struct AXElementReader: Sendable {
         var value: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success,
               let value,
-              CFGetTypeID(value) == AXValueGetTypeID()
+              let axValue = axValue(from: value)
         else {
             return nil
         }
 
         var point = CGPoint.zero
-        guard AXValueGetValue(value as! AXValue, .cgPoint, &point) else {
+        guard AXValueGetValue(axValue, .cgPoint, &point) else {
             return nil
         }
 
@@ -114,13 +114,13 @@ struct AXElementReader: Sendable {
         var value: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success,
               let value,
-              CFGetTypeID(value) == AXValueGetTypeID()
+              let axValue = axValue(from: value)
         else {
             return nil
         }
 
         var size = CGSize.zero
-        guard AXValueGetValue(value as! AXValue, .cgSize, &size) else {
+        guard AXValueGetValue(axValue, .cgSize, &size) else {
             return nil
         }
 
@@ -147,6 +147,14 @@ struct AXElementReader: Sendable {
         }
 
         return AXUIElementSetAttributeValue(element, attribute as CFString, value) == .success
+    }
+
+    private func axValue(from value: CFTypeRef) -> AXValue? {
+        guard CFGetTypeID(value) == AXValueGetTypeID() else {
+            return nil
+        }
+
+        return unsafeDowncast(value, to: AXValue.self)
     }
 
     private func prepare(_ element: AXUIElement) {

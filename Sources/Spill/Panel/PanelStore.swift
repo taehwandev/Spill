@@ -27,8 +27,19 @@ struct PanelState: Equatable {
     }
 
     var actionItems: [SpillDisplayedActionItem] {
-        pinnedItems.map { Self.displayedActionItem(from: $0, selectedItemKeys: selectedItemKeys) }
-            + displayActionItems.map { Self.displayedActionItem(from: $0, selectedItemKeys: selectedItemKeys) }
+        var pinnedActionItems: [SpillDisplayedActionItem] = []
+        var displayActionItems: [SpillDisplayedActionItem] = []
+
+        for item in displayItems {
+            let actionItem = Self.displayedActionItem(from: item, selectedItemKeys: selectedItemKeys)
+            if actionItem.isPinned {
+                pinnedActionItems.append(actionItem)
+            } else {
+                displayActionItems.append(actionItem)
+            }
+        }
+
+        return pinnedActionItems + displayActionItems
     }
 
     @MainActor

@@ -34,15 +34,15 @@ enum CloudServiceKind: String, CaseIterable, Codable, Identifiable, Sendable {
         case .codex:
             return "terminal.fill"
         case .openAI:
-            return "key.fill"
+            return "circle.hexagonpath"
         case .claudeCode:
             return "curlybraces.square.fill"
         case .claudeAPI:
-            return "network"
+            return "brain.fill"
         case .geminiAPI:
             return "sparkles"
         case .antigravity:
-            return "app.dashed"
+            return "gyroscope"
         }
     }
 }
@@ -241,12 +241,9 @@ struct CloudServiceStatusProvider: Sendable {
         return try JSONDecoder().decode(StatusPageSummary.self, from: data)
     }
 
-    private func components(named names: Set<String>, in summary: StatusPageSummary) -> [StatusPageComponent] {
-        summary.components.filter { names.contains($0.name) }
-    }
-
     private func components(named names: [String], in summary: StatusPageSummary) -> [StatusPageComponent] {
-        components(named: Set(names), in: summary)
+        let names = Set(names)
+        return summary.components.filter { names.contains($0.name) }
     }
 
     private func item(

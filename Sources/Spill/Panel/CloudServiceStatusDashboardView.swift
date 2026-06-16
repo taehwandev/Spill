@@ -5,42 +5,61 @@ struct CloudServiceStatusDashboardView: View {
     @ObservedObject var store: CloudServiceStatusStore
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             header
 
             if store.isLoading {
                 ProgressView()
                     .controlSize(.small)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 4)
             }
 
-            VStack(spacing: 7) {
+            VStack(spacing: 8) {
                 ForEach(items) { item in
                     serviceRow(item)
                 }
             }
 
+            Divider()
+                .background(Color.primary.opacity(0.06))
+                .padding(.vertical, 2)
+
             Text(footerText)
-                .font(.system(size: 9.5, weight: .medium))
-                .foregroundStyle(.secondary)
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(.secondary.opacity(0.8))
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(12)
-        .frame(width: 292)
+        .padding(14)
+        .frame(width: 310)
+        .background {
+            ZStack {
+                VisualEffectView(material: .popover, blendingMode: .withinWindow)
+                LinearGradient(
+                    colors: [
+                        Color.teal.opacity(0.04),
+                        Color.blue.opacity(0.03)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            }
+        }
         .onAppear {
             store.refreshIfNeeded()
         }
     }
 
     private var header: some View {
-        HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .center, spacing: 8) {
             VStack(alignment: .leading, spacing: 2) {
-                Label(AppL10n.text(.statusDetails), systemImage: "cloud.fill")
-                    .font(.system(size: 13, weight: .semibold))
+                Label(AppL10n.text(.statusDetails), systemImage: "server.rack")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.primary)
 
                 Text(headerSubtitle)
-                    .font(.system(size: 9.5, weight: .medium))
+                    .font(.system(size: 9.5, weight: .semibold))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
@@ -51,14 +70,15 @@ struct CloudServiceStatusDashboardView: View {
                 store.refreshIfNeeded(force: true)
             } label: {
                 Image(systemName: "arrow.clockwise")
-                    .font(.system(size: 11, weight: .bold))
-                    .frame(width: 24, height: 24)
-                    .background(.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .font(.system(size: 10, weight: .bold))
+                    .frame(width: 22, height: 22)
+                    .background(.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
             }
             .buttonStyle(.plain)
             .disabled(store.isLoading)
             .help(AppL10n.text(.refreshForceHelp))
         }
+        .padding(.bottom, 4)
     }
 
     private var headerSubtitle: String {
@@ -85,13 +105,13 @@ struct CloudServiceStatusDashboardView: View {
     }
 
     private func serviceRow(_ item: CloudServiceStatusItem) -> some View {
-        HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .center, spacing: 10) {
             ZStack {
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(item.health.serverStatusTint.opacity(0.14))
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(item.health.serverStatusTint.opacity(0.12))
 
                 Image(systemName: item.symbolName)
-                    .font(.system(size: 13, weight: .bold))
+                    .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(item.health.serverStatusTint)
             }
             .frame(width: 26, height: 26)
@@ -99,13 +119,13 @@ struct CloudServiceStatusDashboardView: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(item.title)
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.system(size: 11, weight: .bold))
                         .lineLimit(1)
 
                     Spacer(minLength: 6)
 
                     Text(item.health.serverStatusHeaderTitle)
-                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .font(.system(size: 9.5, weight: .bold, design: .rounded))
                         .foregroundStyle(item.health.serverStatusTint)
                         .lineLimit(1)
                 }
@@ -117,9 +137,16 @@ struct CloudServiceStatusDashboardView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 7)
-        .background(.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(
+            Color.primary.opacity(0.03),
+            in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(Color.primary.opacity(0.04), lineWidth: 0.5)
+        }
     }
 
     private var footerText: String {
