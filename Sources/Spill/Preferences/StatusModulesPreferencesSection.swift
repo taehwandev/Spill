@@ -421,15 +421,3 @@ struct ClockAreaStatusPreferencesSection: View {
         }
     }
 }
-
-struct StatusModulesPreferencesSection: View {
-    @ObservedObject var settings: SpillSettings
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            PanelStatusPreferencesSection(settings: settings)
-            Divider()
-            ClockAreaStatusPreferencesSection(settings: settings)
-        }
-    }
-}

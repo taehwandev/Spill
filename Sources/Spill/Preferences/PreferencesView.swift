@@ -415,6 +415,10 @@ struct PreferencesView: View {
                 }
             }
 
+            PreferenceCard(title: t(.clockAreaStatus), symbolName: "menubar.rectangle", iconColor: .teal) {
+                ClockAreaStatusPreferencesSection(settings: settings)
+            }
+
             PreferenceCard(title: t(.advancedNotchScan), symbolName: "menubar.rectangle", iconColor: .secondary) {
                 advancedDetectionSection
             }
@@ -480,10 +484,6 @@ struct PreferencesView: View {
         VStack(alignment: .leading, spacing: 16) {
             PreferenceCard(title: t(.panelStatus), symbolName: "waveform.path.ecg", iconColor: .purple) {
                 PanelStatusPreferencesSection(settings: settings)
-            }
-
-            PreferenceCard(title: t(.clockAreaStatus), symbolName: "menubar.rectangle", iconColor: .teal) {
-                ClockAreaStatusPreferencesSection(settings: settings)
             }
 
             PreferenceCard(title: t(.caffeineSettings), symbolName: "cup.and.saucer.fill", iconColor: .orange) {
