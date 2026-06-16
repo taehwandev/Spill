@@ -10,7 +10,7 @@ enum SpillDisplayMode: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .notchCandidates:
-            return "Notch Candidates"
+            return "Suggested"
         case .selectedItems:
             return "Selected"
         case .allDetected:

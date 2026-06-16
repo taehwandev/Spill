@@ -418,10 +418,6 @@ struct PreferencesView: View {
             PreferenceCard(title: t(.clockAreaStatus), symbolName: "menubar.rectangle", iconColor: .teal) {
                 ClockAreaStatusPreferencesSection(settings: settings)
             }
-
-            PreferenceCard(title: t(.advancedNotchScan), symbolName: "menubar.rectangle", iconColor: .secondary) {
-                advancedDetectionSection
-            }
         }
     }
 
@@ -489,22 +485,6 @@ struct PreferencesView: View {
             PreferenceCard(title: t(.caffeineSettings), symbolName: "cup.and.saucer.fill", iconColor: .orange) {
                 PowerPreferencesSection(settings: settings)
             }
-        }
-    }
-
-    private var advancedDetectionSection: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text(t(.advancedNotchScanDetail))
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-
-            DetectionPreferencesSection(
-                settings: settings,
-                scanner: scanner,
-                accessibilityTrusted: $accessibilityTrusted
-            )
-
-            DetectedItemsListView(items: scanner.items, settings: settings)
         }
     }
 

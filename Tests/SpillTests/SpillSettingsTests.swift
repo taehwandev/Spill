@@ -426,7 +426,7 @@ final class SpillSettingsTests: XCTestCase {
             "Spill Preferences"
         )
         XCTAssertEqual(PreferencesL10n.text(.general, appLanguage: .korean), "일반")
-        XCTAssertEqual(PreferencesL10n.text(.menuBarAndNotch, appLanguage: .japanese), "メニューバーとノッチ")
+        XCTAssertEqual(PreferencesL10n.text(.menuBarAndNotch, appLanguage: .japanese), "メニューバー")
         XCTAssertEqual(
             PreferencesL10n.languageDetail(.automatic, appLanguage: .korean),
             "macOS 언어를 따릅니다"

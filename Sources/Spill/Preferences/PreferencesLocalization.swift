@@ -22,8 +22,6 @@ enum PreferencesTextKey: String {
     case useSpillAnimation
     case menuBarTriggerIcon
     case menuBarIconSpacing
-    case advancedNotchScan
-    case advancedNotchScanDetail
     case globalShortcut
     case keyboardShortcut
     case windowSnapShortcuts
@@ -65,10 +63,6 @@ enum PreferencesTextKey: String {
     case relaunch
     case permissionDiagnostics
     case itemCount
-    case detectedItems
-    case panelItems
-    case autoRefresh
-    case refreshInterval
     case caffeine
     case defaultDuration
     case keepDisplayAwakeDuringCaffeine
@@ -240,7 +234,7 @@ enum PreferencesL10n {
             .preferencesWindowTitle: "Spill Preferences",
             .general: "General",
             .menuBar: "Menu Bar",
-            .menuBarAndNotch: "Menu Bar & Notch",
+            .menuBarAndNotch: "Menu Bar",
             .tokenMetering: "Token Metering",
             .windowManagement: "Window Management",
             .statusAndCaffeine: "Status & Caffeine",
@@ -258,8 +252,6 @@ enum PreferencesL10n {
             .useSpillAnimation: "Use spill animation",
             .menuBarTriggerIcon: "Menu bar trigger icon",
             .menuBarIconSpacing: "Menu bar icon spacing",
-            .advancedNotchScan: "Advanced Notch Scan",
-            .advancedNotchScanDetail: "Best-effort menu bar scanning is an advanced pinning and diagnostics tool. It is not required for normal panel use.",
             .globalShortcut: "Global Shortcut",
             .keyboardShortcut: "Keyboard shortcut",
             .windowSnapShortcuts: "Window Snap Shortcuts",
@@ -301,10 +293,6 @@ enum PreferencesL10n {
             .relaunch: "Relaunch",
             .permissionDiagnostics: "Permission Diagnostics",
             .itemCount: "Items",
-            .detectedItems: "Detected Items",
-            .panelItems: "Panel items",
-            .autoRefresh: "Auto refresh",
-            .refreshInterval: "Refresh interval",
             .caffeine: "Caffeine",
             .defaultDuration: "Default duration",
             .keepDisplayAwakeDuringCaffeine: "Keep display awake during Caffeine",
@@ -344,7 +332,7 @@ enum PreferencesL10n {
             .preferencesWindowTitle: "Spill 설정",
             .general: "일반",
             .menuBar: "메뉴 막대",
-            .menuBarAndNotch: "메뉴 막대 및 노치",
+            .menuBarAndNotch: "메뉴 막대",
             .tokenMetering: "토큰 미터링",
             .windowManagement: "윈도우 관리",
             .statusAndCaffeine: "상태 및 카페인",
@@ -362,8 +350,6 @@ enum PreferencesL10n {
             .useSpillAnimation: "Spill 애니메이션 사용",
             .menuBarTriggerIcon: "메뉴 막대 트리거 아이콘",
             .menuBarIconSpacing: "메뉴 막대 아이콘 간격",
-            .advancedNotchScan: "고급 노치 스캔",
-            .advancedNotchScanDetail: "메뉴 막대 스캔은 고급 고정 및 진단 도구입니다. 일반 패널 사용에는 필요하지 않습니다.",
             .globalShortcut: "전역 단축키",
             .keyboardShortcut: "키보드 단축키",
             .windowSnapShortcuts: "윈도우 스냅 단축키",
@@ -405,10 +391,6 @@ enum PreferencesL10n {
             .relaunch: "다시 실행",
             .permissionDiagnostics: "권한 진단",
             .itemCount: "항목",
-            .detectedItems: "감지된 항목",
-            .panelItems: "패널 항목",
-            .autoRefresh: "자동 새로고침",
-            .refreshInterval: "새로고침 간격",
             .caffeine: "카페인",
             .defaultDuration: "기본 지속 시간",
             .keepDisplayAwakeDuringCaffeine: "카페인 중 디스플레이 깨우기 유지",
@@ -448,7 +430,7 @@ enum PreferencesL10n {
             .preferencesWindowTitle: "Spill 設定",
             .general: "一般",
             .menuBar: "メニューバー",
-            .menuBarAndNotch: "メニューバーとノッチ",
+            .menuBarAndNotch: "メニューバー",
             .tokenMetering: "トークン計測",
             .windowManagement: "ウィンドウ管理",
             .statusAndCaffeine: "状態とカフェイン",
@@ -466,8 +448,6 @@ enum PreferencesL10n {
             .useSpillAnimation: "Spill アニメーションを使用",
             .menuBarTriggerIcon: "メニューバートリガーアイコン",
             .menuBarIconSpacing: "メニューバーアイコン間隔",
-            .advancedNotchScan: "高度なノッチスキャン",
-            .advancedNotchScanDetail: "メニューバースキャンは高度な固定と診断のためのツールです。通常のパネル利用には不要です。",
             .globalShortcut: "グローバルショートカット",
             .keyboardShortcut: "キーボードショートカット",
             .windowSnapShortcuts: "ウィンドウスナップショートカット",
@@ -509,10 +489,6 @@ enum PreferencesL10n {
             .relaunch: "再起動",
             .permissionDiagnostics: "権限診断",
             .itemCount: "項目",
-            .detectedItems: "検出項目",
-            .panelItems: "パネル項目",
-            .autoRefresh: "自動更新",
-            .refreshInterval: "更新間隔",
             .caffeine: "カフェイン",
             .defaultDuration: "既定の時間",
             .keepDisplayAwakeDuringCaffeine: "カフェイン中はディスプレイを起動したままにする",
