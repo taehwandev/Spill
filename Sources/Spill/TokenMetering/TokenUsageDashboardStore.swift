@@ -95,6 +95,13 @@ final class TokenUsageDashboardStore: ObservableObject {
         refreshPanelSummary()
     }
 
+    var hasDashboardEvents: Bool {
+        let showAdvancedTools = SpillSettings.shared.tokenUsageShowAdvancedTools
+        return events.contains { event in
+            showAdvancedTools || event.aiTool.isDashboardTool
+        }
+    }
+
     deinit {
         if let eventsDidChangeObserver {
             NotificationCenter.default.removeObserver(eventsDidChangeObserver)

@@ -529,6 +529,10 @@ struct TokenMeteringDashboardView: View {
         }
     }
 
+    private var hasAnyDashboardEvents: Bool {
+        store.hasDashboardEvents
+    }
+
     private var comparisonPeriodLabel: String {
         switch store.selectedPeriod {
         case .today:
@@ -581,76 +585,108 @@ struct TokenMeteringDashboardView: View {
 
     private var analyticsGrid: some View {
         VStack(alignment: .leading, spacing: 14) {
-            if shouldShowTrendChart {
-                trendChart
+            if !hasAnyDashboardEvents {
+                emptyDashboardGuide
+            } else {
+                if shouldShowTrendChart {
+                    trendChart
+                }
+
+                HStack(alignment: .top, spacing: 14) {
+                    dashboardPanel(
+                        title: t(.aiToolDistribution),
+                        subtitle: t(.aiToolDistributionSubtitle),
+                        infoTitle: t(.aiToolInfoTitle),
+                        infoDetail: t(.aiToolInfoDetail)
+                    ) {
+                        let rows = store.snapshot.toolRows
+                        let totalRatio = rows.reduce(0.0) { $0 + $1.ratio }
+                        if rows.isEmpty || totalRatio == 0 {
+                            emptyMessage(title: t(.noAIToolData), detail: t(.waitingForEvents))
+                        } else {
+                            compactChartRows(rows, idPrefix: "tool_chart", tint: .teal)
+                            .frame(height: 160)
+                        }
+                    }
+
+                    dashboardPanel(
+                        title: t(.workflowBreakdown),
+                        subtitle: t(.workflowBreakdownSubtitle),
+                        infoTitle: t(.workflowInfoTitle),
+                        infoDetail: t(.workflowInfoDetail)
+                    ) {
+                        let rows = store.snapshot.taskRows
+                        let totalRatio = rows.reduce(0.0) { $0 + $1.ratio }
+                        if rows.isEmpty || totalRatio == 0 {
+                            emptyMessage(title: t(.noWorkflowData), detail: t(.waitingForEvents))
+                        } else {
+                            compactChartRows(rows, idPrefix: "task_chart", tint: .blue)
+                            .frame(height: 160)
+                        }
+                    }
+                }
+
+                HStack(alignment: .top, spacing: 14) {
+                    dashboardPanel(
+                        title: t(.stageBreakdown),
+                        subtitle: t(.stageBreakdownSubtitle),
+                        infoTitle: t(.stageInfoTitle),
+                        infoDetail: t(.stageInfoDetail)
+                    ) {
+                        let rows = store.snapshot.stageRows
+                        let totalRatio = rows.reduce(0.0) { $0 + $1.ratio }
+                        if rows.isEmpty || totalRatio == 0 {
+                            emptyMessage(title: t(.noStageData), detail: t(.waitingForEvents))
+                        } else {
+                            compactChartRows(rows, idPrefix: "stage_chart", tint: .purple)
+                            .frame(height: 160)
+                        }
+                    }
+
+                    dashboardPanel(
+                        title: t(.sourceBreakdown),
+                        subtitle: t(.sourceBreakdownSubtitle),
+                        infoTitle: t(.sourceInfoTitle),
+                        infoDetail: t(.sourceInfoDetail)
+                    ) {
+                        let rows = store.snapshot.sourceRows.filter { $0.id != "unknown" }
+                        let totalRatio = rows.reduce(0.0) { $0 + $1.ratio }
+                        if rows.isEmpty || totalRatio == 0 {
+                            emptyMessage(title: t(.noSourceBreakdown), detail: t(.waitingForEvents))
+                        } else {
+                            compactChartRows(rows, idPrefix: "source_chart", tint: .orange)
+                            .frame(height: 160)
+                        }
+                    }
+                }
             }
+        }
+    }
 
-            HStack(alignment: .top, spacing: 14) {
-                dashboardPanel(
-                    title: t(.aiToolDistribution),
-                    subtitle: t(.aiToolDistributionSubtitle),
-                    infoTitle: t(.aiToolInfoTitle),
-                    infoDetail: t(.aiToolInfoDetail)
-                ) {
-                    let rows = store.snapshot.toolRows
-                    let totalRatio = rows.reduce(0.0) { $0 + $1.ratio }
-                    if rows.isEmpty || totalRatio == 0 {
-                        emptyMessage(title: t(.noAIToolData), detail: t(.waitingForEvents))
-                    } else {
-                        compactChartRows(rows, idPrefix: "tool_chart", tint: .teal)
-                        .frame(height: 160)
-                    }
-                }
-
-                dashboardPanel(
-                    title: t(.workflowBreakdown),
-                    subtitle: t(.workflowBreakdownSubtitle),
-                    infoTitle: t(.workflowInfoTitle),
-                    infoDetail: t(.workflowInfoDetail)
-                ) {
-                    let rows = store.snapshot.taskRows
-                    let totalRatio = rows.reduce(0.0) { $0 + $1.ratio }
-                    if rows.isEmpty || totalRatio == 0 {
-                        emptyMessage(title: t(.noWorkflowData), detail: t(.waitingForEvents))
-                    } else {
-                        compactChartRows(rows, idPrefix: "task_chart", tint: .blue)
-                        .frame(height: 160)
-                    }
-                }
-            }
-
-            HStack(alignment: .top, spacing: 14) {
-                dashboardPanel(
-                    title: t(.stageBreakdown),
-                    subtitle: t(.stageBreakdownSubtitle),
-                    infoTitle: t(.stageInfoTitle),
-                    infoDetail: t(.stageInfoDetail)
-                ) {
-                    let rows = store.snapshot.stageRows
-                    let totalRatio = rows.reduce(0.0) { $0 + $1.ratio }
-                    if rows.isEmpty || totalRatio == 0 {
-                        emptyMessage(title: t(.noStageData), detail: t(.waitingForEvents))
-                    } else {
-                        compactChartRows(rows, idPrefix: "stage_chart", tint: .purple)
-                        .frame(height: 160)
-                    }
-                }
-
-                dashboardPanel(
-                    title: t(.sourceBreakdown),
-                    subtitle: t(.sourceBreakdownSubtitle),
-                    infoTitle: t(.sourceInfoTitle),
-                    infoDetail: t(.sourceInfoDetail)
-                ) {
-                    let rows = store.snapshot.sourceRows.filter { $0.id != "unknown" }
-                    let totalRatio = rows.reduce(0.0) { $0 + $1.ratio }
-                    if rows.isEmpty || totalRatio == 0 {
-                        emptyMessage(title: t(.noSourceBreakdown), detail: t(.waitingForEvents))
-                    } else {
-                        compactChartRows(rows, idPrefix: "source_chart", tint: .orange)
-                        .frame(height: 160)
-                    }
-                }
+    private var emptyDashboardGuide: some View {
+        dashboardPanel(
+            title: t(.dashboardEmptyGuideTitle),
+            subtitle: t(.dashboardEmptyGuideDetail)
+        ) {
+            HStack(alignment: .top, spacing: 10) {
+                dashboardGuideTile(
+                    systemImage: "bolt.horizontal.circle.fill",
+                    title: t(.dashboardEmptyAutomaticTitle),
+                    detail: t(.dashboardEmptyAutomaticDetail),
+                    tint: .teal
+                )
+                dashboardGuideTile(
+                    systemImage: "gearshape.fill",
+                    title: t(.dashboardEmptySetupTitle),
+                    detail: t(.dashboardEmptySetupDetail),
+                    tint: .blue
+                )
+                dashboardGuideTile(
+                    systemImage: "lock.shield.fill",
+                    title: t(.dashboardEmptyPrivacyTitle),
+                    detail: t(.dashboardEmptyPrivacyDetail),
+                    tint: .indigo
+                )
             }
         }
     }
@@ -1225,6 +1261,43 @@ struct TokenMeteringDashboardView: View {
         .overlay {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .stroke(Color.primary.opacity(0.07), lineWidth: 0.5)
+        }
+    }
+
+    private func dashboardGuideTile(
+        systemImage: String,
+        title: String,
+        detail: String,
+        tint: Color
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(tint.opacity(0.12))
+
+                Image(systemName: systemImage)
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(tint)
+            }
+            .frame(width: 30, height: 30)
+
+            Text(title)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text(detail)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(.secondary)
+                .lineSpacing(2)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, minHeight: 136, alignment: .topLeading)
+        .padding(12)
+        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .stroke(Color.primary.opacity(0.05), lineWidth: 0.5)
         }
     }
 

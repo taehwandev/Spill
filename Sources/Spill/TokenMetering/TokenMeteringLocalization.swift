@@ -93,6 +93,14 @@ enum TokenMeteringTextKey: String {
     case events
     case noRunSelected
     case noRunSelectedDetail
+    case dashboardEmptyGuideTitle
+    case dashboardEmptyGuideDetail
+    case dashboardEmptyAutomaticTitle
+    case dashboardEmptyAutomaticDetail
+    case dashboardEmptySetupTitle
+    case dashboardEmptySetupDetail
+    case dashboardEmptyPrivacyTitle
+    case dashboardEmptyPrivacyDetail
     case privacyBoundary
     case privacyBoundaryDetail
     case runs
@@ -180,6 +188,8 @@ enum TokenMeteringTextKey: String {
     case installPromptTitle
     case recommended
     case installPromptDetail
+    case setupQuickStartTitle
+    case setupQuickStartDetail
     case setupGlobalInstructionTitle
     case setupGlobalInstructionDetail
     case setupWorkflowLabelsTitle

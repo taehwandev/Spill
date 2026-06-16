@@ -32,7 +32,7 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(TokenMeteringL10n.text(.dashboardTitle, language: .japanese), "ローカルトークン計測")
         XCTAssertEqual(TokenMeteringL10n.text(.displayModeShare, language: .korean), "비중 %")
         XCTAssertEqual(TokenMeteringL10n.text(.agentConnectionStatus, language: .korean), "에이전트 연결 상태")
-        XCTAssertEqual(TokenMeteringL10n.text(.setupWorkflowLabelsTitle, language: .english), "Workflow labels are more accurate")
+        XCTAssertEqual(TokenMeteringL10n.text(.setupWorkflowLabelsTitle, language: .english), "2. Work labels are optional")
         XCTAssertEqual(TokenMeteringL10n.text(.copyWebSetup, language: .korean), "설치 명령 복사")
         XCTAssertEqual(TokenMeteringL10n.text(.adapterSetupRequired, language: .japanese), "ローカル追跡の設定が必要")
         XCTAssertEqual(TokenMeteringL10n.adapterInstalled("spill-hook.py", language: .english), "Installed: spill-hook.py")
@@ -116,6 +116,14 @@ final class TokenUsageStoreTests: XCTestCase {
             .runsInfoDetail,
             .noLocalTokenEvents,
             .noLocalTokenEventsDetail,
+            .dashboardEmptyGuideTitle,
+            .dashboardEmptyGuideDetail,
+            .dashboardEmptyAutomaticTitle,
+            .dashboardEmptyAutomaticDetail,
+            .dashboardEmptySetupTitle,
+            .dashboardEmptySetupDetail,
+            .dashboardEmptyPrivacyTitle,
+            .dashboardEmptyPrivacyDetail,
             .cumulativeOnlyBadge,
             .cumulativeOnlyInfoTitle,
             .cumulativeOnlyInfoDetail,
@@ -592,6 +600,9 @@ final class TokenUsageStoreTests: XCTestCase {
         let preferencesSection = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Preferences/TokenMeteringPreferencesSection.swift"))
 
         XCTAssertTrue(preferencesSection.contains("TokenMeteringSetupGuidanceRow"))
+        XCTAssertTrue(preferencesSection.contains("TokenMeteringSetupSummary"))
+        XCTAssertTrue(preferencesSection.contains("t(.setupQuickStartTitle)"))
+        XCTAssertFalse(preferencesSection.contains("Text(TokenMeteringSetupInstaller.setupCommand())"))
         XCTAssertTrue(preferencesSection.contains("t(.setupGlobalInstructionTitle)"))
         XCTAssertTrue(preferencesSection.contains("t(.setupWorkflowLabelsTitle)"))
         XCTAssertTrue(preferencesSection.contains("t(.setupApplyWhereTitle)"))
