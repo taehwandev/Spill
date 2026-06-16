@@ -119,9 +119,11 @@ enum TokenMeteringWorkspaceOpenCompletion {
         }
     }
 
-    nonisolated static func postOpenPreferencesRequest() -> @Sendable (NSRunningApplication?, Error?) -> Void {
+    nonisolated static func postOpenPreferencesRequest(
+        tab: String = TokenMeteringDashboardProcess.tokenMeteringPreferencesTab
+    ) -> @Sendable (NSRunningApplication?, Error?) -> Void {
         { _, _ in
-            TokenMeteringDashboardProcess.postOpenPreferencesRequest()
+            TokenMeteringDashboardProcess.postOpenPreferencesRequest(tab: tab)
         }
     }
 }

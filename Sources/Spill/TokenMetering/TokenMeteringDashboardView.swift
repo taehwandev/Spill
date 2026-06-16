@@ -18,6 +18,7 @@ struct TokenMeteringDashboardView: View {
     @State private var resolvedLanguage: TokenMeteringLanguage
     private let refreshAction: () -> Void
     private let settingsAction: () -> Void
+    private let developerOptionsAction: () -> Void
     private let titleDidChange: () -> Void
 
     init(
@@ -26,6 +27,7 @@ struct TokenMeteringDashboardView: View {
         settings: SpillSettings = .shared,
         refreshAction: @escaping () -> Void = {},
         settingsAction: @escaping () -> Void = {},
+        developerOptionsAction: @escaping () -> Void = {},
         titleDidChange: @escaping () -> Void = {}
     ) {
         self.store = store
@@ -34,6 +36,7 @@ struct TokenMeteringDashboardView: View {
         _resolvedLanguage = State(initialValue: TokenMeteringLanguage.current(appLanguage: settings.appLanguage))
         self.refreshAction = refreshAction
         self.settingsAction = settingsAction
+        self.developerOptionsAction = developerOptionsAction
         self.titleDidChange = titleDidChange
     }
 
@@ -68,27 +71,7 @@ struct TokenMeteringDashboardView: View {
             Divider()
                 .background(Color.primary.opacity(0.05))
 
-            HStack(alignment: .top, spacing: 16) {
-                ScrollView(.vertical, showsIndicators: true) {
-                    VStack(alignment: .leading, spacing: 16) {
-                        kpiStrip
-                        analyticsGrid
-                        sessionsTable
-                    }
-                    .padding(.vertical, 18)
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
-                }
-
-                if let selectedSession = store.snapshot.selectedSession {
-                    detailPanel(for: selectedSession, snapshot: store.snapshot)
-                        .frame(width: 320)
-                } else {
-                    rightRail
-                        .frame(width: 286)
-                }
-            }
-            .padding(.horizontal, 18)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            dashboardBody
         }
         .background {
             ZStack {
@@ -110,13 +93,17 @@ struct TokenMeteringDashboardView: View {
             resolvedLanguage = language
             titleDidChange()
             store.setLanguage(language)
-            store.refresh()
+            syncOnboardingPreviewFromSettings()
+            store.refreshAsync()
         }
         .onChange(of: settings.appLanguage) { _, appLanguage in
             let language = TokenMeteringLanguage.current(appLanguage: appLanguage)
             resolvedLanguage = language
             titleDidChange()
             store.setLanguage(language)
+        }
+        .onChange(of: settings.tokenUsageDashboardOnboardingPreviewEnabled) { _, _ in
+            syncOnboardingPreviewFromSettings()
         }
         .onChange(of: store.selectedSessionID) { _, newID in
             if let newID {
@@ -152,6 +139,46 @@ struct TokenMeteringDashboardView: View {
                 language: currentLanguage
             ))
         }
+    }
+
+    private var dashboardBody: some View {
+        ZStack(alignment: .top) {
+            HStack(alignment: .top, spacing: 16) {
+                ScrollView(.vertical, showsIndicators: true) {
+                    VStack(alignment: .leading, spacing: 16) {
+                        kpiStrip
+                        analyticsGrid
+                        sessionsTable
+                    }
+                    .padding(.vertical, 18)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                }
+
+                if let selectedSession = store.snapshot.selectedSession {
+                    detailPanel(for: selectedSession, snapshot: store.snapshot)
+                        .frame(width: 320)
+                } else {
+                    rightRail
+                        .frame(width: 286)
+                }
+            }
+            .opacity(showsEmptyDashboardOverlay ? 0.58 : 1)
+            .saturation(showsEmptyDashboardOverlay ? 0.55 : 1)
+            .blur(radius: showsEmptyDashboardOverlay ? 0.4 : 0)
+            .disabled(showsEmptyDashboardOverlay)
+            .accessibilityHidden(showsEmptyDashboardOverlay)
+
+            if showsEmptyDashboardOverlay {
+                emptyDashboardGuide
+                    .frame(maxWidth: 680)
+                    .padding(.top, 42)
+                    .padding(.horizontal, 48)
+                    .shadow(color: Color.black.opacity(0.18), radius: 20, x: 0, y: 12)
+                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
+            }
+        }
+        .padding(.horizontal, 18)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
     private var topHeader: some View {
@@ -230,8 +257,9 @@ struct TokenMeteringDashboardView: View {
                 Button {
                     refreshLocalTokenData()
                 } label: {
-                    Label(t(.refresh), systemImage: "arrow.clockwise")
+                    Label(t(.refresh), systemImage: store.loadState == .loading ? "arrow.triangle.2.circlepath" : "arrow.clockwise")
                 }
+                .disabled(store.loadState == .loading)
 
                 Button {
                     settingsAction()
@@ -245,6 +273,13 @@ struct TokenMeteringDashboardView: View {
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 14)
+    }
+
+    private func syncOnboardingPreviewFromSettings() {
+        store.setOnboardingPreviewEnabled(
+            SpillBuildOptions.developerOptionsEnabled
+                && settings.tokenUsageDashboardOnboardingPreviewEnabled
+        )
     }
 
     private var topFilterBar: some View {
@@ -334,7 +369,7 @@ struct TokenMeteringDashboardView: View {
 
     private func refreshLocalTokenData() {
         refreshAction()
-        store.refresh()
+        store.refreshAsync()
     }
 
     private func openServiceStatusDetails() {
@@ -527,10 +562,32 @@ struct TokenMeteringDashboardView: View {
                 .modifier(TokenMeteringLiveUpdateEffect(isActive: isLiveUpdated, marker: store.liveUpdateMarker, cornerRadius: 12))
             }
         }
+        .redacted(reason: showsDashboardPlaceholder ? .placeholder : [])
     }
 
     private var hasAnyDashboardEvents: Bool {
         store.hasDashboardEvents
+    }
+
+    private var isDashboardLoading: Bool {
+        store.loadState == .idle || store.loadState == .loading
+    }
+
+    private var showsEmptyDashboardOverlay: Bool {
+        guard !hasAnyDashboardEvents else {
+            return false
+        }
+
+        switch store.loadState {
+        case .loaded, .previewingEmpty:
+            return true
+        case .idle, .loading:
+            return false
+        }
+    }
+
+    private var showsDashboardPlaceholder: Bool {
+        isDashboardLoading || showsEmptyDashboardOverlay
     }
 
     private var comparisonPeriodLabel: String {
@@ -585,7 +642,9 @@ struct TokenMeteringDashboardView: View {
 
     private var analyticsGrid: some View {
         VStack(alignment: .leading, spacing: 14) {
-            if !hasAnyDashboardEvents {
+            if showsDashboardPlaceholder {
+                loadingAnalyticsGrid
+            } else if !hasAnyDashboardEvents {
                 emptyDashboardGuide
             } else {
                 if shouldShowTrendChart {
@@ -663,6 +722,75 @@ struct TokenMeteringDashboardView: View {
         }
     }
 
+    private var loadingAnalyticsGrid: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            if shouldShowTrendChart {
+                dashboardPanel(
+                    title: trendTitle,
+                    subtitle: trendSubtitle
+                ) {
+                    chartPlaceholder(tint: .teal)
+                        .frame(height: 160)
+                }
+            }
+
+            HStack(alignment: .top, spacing: 14) {
+                loadingDistributionPanel(
+                    title: t(.aiToolDistribution),
+                    subtitle: t(.aiToolDistributionSubtitle),
+                    infoTitle: t(.aiToolInfoTitle),
+                    infoDetail: t(.aiToolInfoDetail),
+                    tint: .teal
+                )
+
+                loadingDistributionPanel(
+                    title: t(.workflowBreakdown),
+                    subtitle: t(.workflowBreakdownSubtitle),
+                    infoTitle: t(.workflowInfoTitle),
+                    infoDetail: t(.workflowInfoDetail),
+                    tint: .blue
+                )
+            }
+
+            HStack(alignment: .top, spacing: 14) {
+                loadingDistributionPanel(
+                    title: t(.stageBreakdown),
+                    subtitle: t(.stageBreakdownSubtitle),
+                    infoTitle: t(.stageInfoTitle),
+                    infoDetail: t(.stageInfoDetail),
+                    tint: .purple
+                )
+
+                loadingDistributionPanel(
+                    title: t(.sourceBreakdown),
+                    subtitle: t(.sourceBreakdownSubtitle),
+                    infoTitle: t(.sourceInfoTitle),
+                    infoDetail: t(.sourceInfoDetail),
+                    tint: .orange
+                )
+            }
+        }
+        .accessibilityHidden(true)
+    }
+
+    private func loadingDistributionPanel(
+        title: String,
+        subtitle: String,
+        infoTitle: String,
+        infoDetail: String,
+        tint: Color
+    ) -> some View {
+        dashboardPanel(
+            title: title,
+            subtitle: subtitle,
+            infoTitle: infoTitle,
+            infoDetail: infoDetail
+        ) {
+            chartPlaceholder(tint: tint)
+                .frame(height: 160)
+        }
+    }
+
     private var emptyDashboardGuide: some View {
         dashboardPanel(
             title: t(.dashboardEmptyGuideTitle),
@@ -688,6 +816,37 @@ struct TokenMeteringDashboardView: View {
                     tint: .indigo
                 )
             }
+
+            Divider()
+                .opacity(0.45)
+
+            HStack(spacing: 10) {
+                Button {
+                    settingsAction()
+                } label: {
+                    Label(t(.dashboardEmptyOpenSettings), systemImage: "gearshape.fill")
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.regular)
+
+                if store.isOnboardingPreviewEnabled && SpillBuildOptions.developerOptionsEnabled {
+                    Button {
+                        developerOptionsAction()
+                    } label: {
+                        Label(t(.developerOptions), systemImage: "hammer.fill")
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.regular)
+                }
+
+                Spacer(minLength: 0)
+            }
+
+            if store.isOnboardingPreviewEnabled && SpillBuildOptions.developerOptionsEnabled {
+                Text(t(.dashboardEmptyPreviewDetail))
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 
@@ -710,7 +869,11 @@ struct TokenMeteringDashboardView: View {
             infoDetail: t(.modelInfoDetail)
         ) {
             VStack(spacing: 8) {
-                compactSummaryRows(store.snapshot.modelRows.prefix(5), emptyText: t(.noModelData), idPrefix: "model")
+                if showsDashboardPlaceholder {
+                    compactLoadingRows()
+                } else {
+                    compactSummaryRows(store.snapshot.modelRows.prefix(5), emptyText: t(.noModelData), idPrefix: "model")
+                }
             }
         }
     }
@@ -722,11 +885,15 @@ struct TokenMeteringDashboardView: View {
             infoDetail: t(.workflowUsageInfoDetail)
         ) {
             VStack(spacing: 8) {
-                compactSummaryRows(
-                    store.snapshot.workflowUsage.rows,
-                    emptyText: t(.noWorkflowUsageData),
-                    idPrefix: "workflow_usage"
-                )
+                if showsDashboardPlaceholder {
+                    compactLoadingRows()
+                } else {
+                    compactSummaryRows(
+                        store.snapshot.workflowUsage.rows,
+                        emptyText: t(.noWorkflowUsageData),
+                        idPrefix: "workflow_usage"
+                    )
+                }
             }
         }
     }
@@ -762,7 +929,9 @@ struct TokenMeteringDashboardView: View {
             infoTitle: t(.runsInfoTitle),
             infoDetail: t(.runsInfoDetail)
         ) {
-            if store.snapshot.sessions.isEmpty {
+            if showsDashboardPlaceholder {
+                loadingSessionsTableRows
+            } else if store.snapshot.sessions.isEmpty {
                 emptyMessage(
                     title: t(.noLocalTokenEvents),
                     detail: t(.noLocalTokenEventsDetail)
@@ -850,6 +1019,49 @@ struct TokenMeteringDashboardView: View {
                     }
                 }
             }
+        }
+    }
+
+    private var loadingSessionsTableRows: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 12) {
+                tableHeader(t(.run))
+                tableHeader(t(.events))
+                    .frame(width: 150, alignment: .leading)
+                tableHeader(t(.tokens))
+                    .frame(width: 96, alignment: .trailing)
+            }
+            .padding(.horizontal, 12)
+            .padding(.bottom, 8)
+
+            ForEach(0..<5, id: \.self) { index in
+                loadingSessionRow(index: index)
+                    .padding(.top, 6)
+            }
+        }
+        .accessibilityHidden(true)
+    }
+
+    private func loadingSessionRow(index: Int) -> some View {
+        let primaryWidths: [CGFloat] = [0.52, 0.64, 0.46, 0.58, 0.42]
+        let secondaryWidths: [CGFloat] = [0.28, 0.36, 0.32, 0.44, 0.30]
+        return HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 7) {
+                placeholderCapsule(widthRatio: primaryWidths[index % primaryWidths.count], height: 12)
+                placeholderCapsule(widthRatio: secondaryWidths[index % secondaryWidths.count], height: 9)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            placeholderCapsule(widthRatio: 0.72, height: 10)
+                .frame(width: 150, alignment: .leading)
+            placeholderCapsule(widthRatio: 0.68, height: 11)
+                .frame(width: 96, alignment: .trailing)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(Color.primary.opacity(0.025), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.primary.opacity(0.04), lineWidth: 0.5)
         }
     }
 
@@ -1696,6 +1908,69 @@ struct TokenMeteringDashboardView: View {
                 }
             }
         }
+    }
+
+    private func chartPlaceholder(tint: Color) -> some View {
+        let ratios: [CGFloat] = [0.84, 0.62, 0.76, 0.48, 0.68]
+
+        return VStack(alignment: .leading, spacing: 13) {
+            ForEach(Array(ratios.enumerated()), id: \.offset) { index, ratio in
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 8) {
+                        placeholderCapsule(widthRatio: index.isMultiple(of: 2) ? 0.34 : 0.46, height: 10)
+                        Spacer(minLength: 8)
+                        placeholderCapsule(widthRatio: 0.28, height: 9)
+                            .frame(width: 74)
+                    }
+
+                    GeometryReader { geometry in
+                        ZStack(alignment: .leading) {
+                            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                .fill(Color.primary.opacity(0.06))
+                            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                .fill(
+                                    LinearGradient(
+                                        colors: [tint.opacity(0.5), tint.opacity(0.22)],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                )
+                                .frame(width: Swift.max(CGFloat(10), geometry.size.width * ratio))
+                        }
+                    }
+                    .frame(height: 9)
+                }
+            }
+        }
+    }
+
+    private func compactLoadingRows() -> some View {
+        let ratios: [CGFloat] = [0.72, 0.54, 0.66, 0.46]
+
+        return VStack(alignment: .leading, spacing: 9) {
+            ForEach(Array(ratios.enumerated()), id: \.offset) { index, ratio in
+                HStack(spacing: 8) {
+                    placeholderCapsule(widthRatio: ratio, height: 10)
+                    Spacer(minLength: 4)
+                    placeholderCapsule(widthRatio: 0.56, height: 9)
+                        .frame(width: index.isMultiple(of: 2) ? 58 : 46)
+                }
+            }
+        }
+        .accessibilityHidden(true)
+    }
+
+    private func placeholderCapsule(widthRatio: CGFloat, height: CGFloat) -> some View {
+        GeometryReader { geometry in
+            RoundedRectangle(cornerRadius: height / 2, style: .continuous)
+                .fill(Color.primary.opacity(0.095))
+                .frame(
+                    width: Swift.max(height * 2, geometry.size.width * widthRatio),
+                    height: height,
+                    alignment: .leading
+                )
+        }
+        .frame(height: height)
     }
 
     private func chartColor(at index: Int) -> Color {

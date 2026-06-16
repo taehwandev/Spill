@@ -67,6 +67,10 @@ enum TokenMeteringTextKey: String {
     case defaultState
     case adapters
     case onDemand
+    case developerOptions
+    case debugOnly
+    case tokenDashboardOnboardingPreview
+    case tokenDashboardOnboardingPreviewDetail
     case aiToolDistribution
     case aiToolDistributionSubtitle
     case modelBreakdown
@@ -95,12 +99,15 @@ enum TokenMeteringTextKey: String {
     case noRunSelectedDetail
     case dashboardEmptyGuideTitle
     case dashboardEmptyGuideDetail
+    case dashboardEmptyOpenSettings
     case dashboardEmptyAutomaticTitle
     case dashboardEmptyAutomaticDetail
     case dashboardEmptySetupTitle
     case dashboardEmptySetupDetail
     case dashboardEmptyPrivacyTitle
     case dashboardEmptyPrivacyDetail
+    case dashboardEmptyPreview
+    case dashboardEmptyPreviewDetail
     case privacyBoundary
     case privacyBoundaryDetail
     case runs

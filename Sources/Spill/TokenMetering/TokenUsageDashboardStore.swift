@@ -10,6 +10,17 @@ struct TokenUsageClearPreview: Equatable {
     }
 }
 
+enum TokenUsageDashboardLoadState: Equatable {
+    case idle
+    case loading
+    case loaded
+    case previewingEmpty
+}
+
+private enum TokenUsageDashboardPreviewDataSource {
+    static let onboardingEvents: [TokenUsageEvent] = []
+}
+
 enum TokenUsageClearScope: Equatable, Identifiable {
     case all
     case currentScope
@@ -39,6 +50,8 @@ final class TokenUsageDashboardStore: ObservableObject {
     @Published private(set) var unfilteredSnapshot = TokenUsageDashboardSnapshot.empty
     @Published private(set) var panelSummary = TokenUsagePanelSummarySnapshot.empty
     @Published private(set) var liveUpdateMarker = TokenUsageLiveUpdateMarker.empty
+    @Published private(set) var loadState: TokenUsageDashboardLoadState = .idle
+    @Published private(set) var isOnboardingPreviewEnabled = false
     @Published private(set) var selectedTool: TokenUsageAITool?
     @Published private(set) var selectedPeriod: TokenUsageDashboardPeriod = .today
     @Published private(set) var selectedCalendarDayID: String?
@@ -59,6 +72,7 @@ final class TokenUsageDashboardStore: ObservableObject {
     private var hasRebuiltSnapshot = false
     private var clearLiveUpdateTask: Task<Void, Never>?
     private var scheduledRefreshTask: Task<Void, Never>?
+    private var asyncRefreshGeneration = 0
 
     init(
         usageStore: TokenUsageStore,
@@ -97,7 +111,7 @@ final class TokenUsageDashboardStore: ObservableObject {
 
     var hasDashboardEvents: Bool {
         let showAdvancedTools = SpillSettings.shared.tokenUsageShowAdvancedTools
-        return events.contains { event in
+        return displayEvents(for: events).contains { event in
             showAdvancedTools || event.aiTool.isDashboardTool
         }
     }
@@ -119,6 +133,7 @@ final class TokenUsageDashboardStore: ObservableObject {
     func refresh(trackLiveUpdates: Bool = true) {
         scheduledRefreshTask?.cancel()
         scheduledRefreshTask = nil
+        asyncRefreshGeneration += 1
         let previousEvents = events
         let shouldTrackLiveUpdates = trackLiveUpdates && (
             hasRebuiltSnapshot || (previousEvents.isEmpty && panelSummary.eventCount == 0)
@@ -128,6 +143,44 @@ final class TokenUsageDashboardStore: ObservableObject {
             trackLiveUpdates: shouldTrackLiveUpdates,
             previousEvents: previousEvents
         )
+    }
+
+    func refreshAsync(trackLiveUpdates: Bool = true) {
+        scheduledRefreshTask?.cancel()
+        scheduledRefreshTask = nil
+        asyncRefreshGeneration += 1
+        let generation = asyncRefreshGeneration
+        let previousEvents = events
+        let previousSnapshot = snapshot
+        let previousUnfilteredSnapshot = unfilteredSnapshot
+        let shouldTrackLiveUpdates = trackLiveUpdates && !isOnboardingPreviewEnabled && (
+            hasRebuiltSnapshot || (previousEvents.isEmpty && panelSummary.eventCount == 0)
+        )
+        let request = snapshotBuildRequest()
+        let usesPreviewDataSource = isOnboardingPreviewEnabled
+        let usageStore = usageStore
+        loadState = usesPreviewDataSource ? .previewingEmpty : .loading
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            let loadedEvents = usageStore.loadEvents()
+            let displayEvents = usesPreviewDataSource ? TokenUsageDashboardPreviewDataSource.onboardingEvents : loadedEvents
+            let snapshotPair = Self.buildSnapshotPair(events: displayEvents, request: request)
+
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.asyncRefreshGeneration == generation else {
+                    return
+                }
+
+                self.applySnapshotPair(
+                    snapshotPair,
+                    loadedEvents: loadedEvents,
+                    trackLiveUpdates: shouldTrackLiveUpdates,
+                    previousEvents: previousEvents,
+                    previousSnapshot: previousSnapshot,
+                    previousUnfilteredSnapshot: previousUnfilteredSnapshot
+                )
+            }
+        }
     }
 
     func refreshPanelSummary() {
@@ -155,7 +208,7 @@ final class TokenUsageDashboardStore: ObservableObject {
             guard !Task.isCancelled else {
                 return
             }
-            self?.refresh(trackLiveUpdates: trackLiveUpdates)
+            self?.refreshAsync(trackLiveUpdates: trackLiveUpdates)
         }
     }
 
@@ -163,26 +216,33 @@ final class TokenUsageDashboardStore: ObservableObject {
         trackLiveUpdates: Bool = false,
         previousEvents: [TokenUsageEvent]? = nil
     ) {
-        let now = Date()
-        var calendar = Calendar.autoupdatingCurrent
-        calendar.firstWeekday = 1
+        asyncRefreshGeneration += 1
         let previousSnapshot = snapshot
         let previousUnfilteredSnapshot = unfilteredSnapshot
-        let snapshotPair = TokenUsageDashboardSnapshot.buildPair(
-            events: events,
-            selectedTool: selectedTool,
-            selectedPeriod: selectedPeriod,
-            selectedCalendarDayID: selectedCalendarDayID,
-            selectedProjectID: selectedProjectID,
-            selectedSessionID: selectedSessionID,
-            displayMode: displayMode,
-            language: language,
-            localAliases: SpillSettings.shared.tokenUsageLocalAliases,
-            showAdvancedTools: SpillSettings.shared.tokenUsageShowAdvancedTools,
-            now: now,
-            proposedCalendarMonthStart: calendarMonthStart,
-            calendar: calendar
+        let displayEvents = displayEvents(for: events)
+        let snapshotPair = Self.buildSnapshotPair(
+            events: displayEvents,
+            request: snapshotBuildRequest()
         )
+        applySnapshotPair(
+            snapshotPair,
+            loadedEvents: events,
+            trackLiveUpdates: trackLiveUpdates && !isOnboardingPreviewEnabled,
+            previousEvents: previousEvents,
+            previousSnapshot: previousSnapshot,
+            previousUnfilteredSnapshot: previousUnfilteredSnapshot
+        )
+    }
+
+    private func applySnapshotPair(
+        _ snapshotPair: TokenUsageDashboardSnapshotPair,
+        loadedEvents: [TokenUsageEvent],
+        trackLiveUpdates: Bool,
+        previousEvents: [TokenUsageEvent]?,
+        previousSnapshot: TokenUsageDashboardSnapshot,
+        previousUnfilteredSnapshot: TokenUsageDashboardSnapshot
+    ) {
+        events = loadedEvents
         calendarMonthStart = snapshotPair.calendarMonthStart
         let filteredSnapshot = snapshotPair.filtered
         selectedProjectID = filteredSnapshot.selectedProjectID
@@ -191,6 +251,7 @@ final class TokenUsageDashboardStore: ObservableObject {
         unfilteredSnapshot = snapshotPair.unfiltered
         panelSummary = TokenUsagePanelSummarySnapshot(snapshot: unfilteredSnapshot)
         lastError = nil
+        loadState = isOnboardingPreviewEnabled ? .previewingEmpty : .loaded
         if trackLiveUpdates, let previousEvents {
             publishLiveUpdates(
                 previousEvents: previousEvents,
@@ -202,6 +263,65 @@ final class TokenUsageDashboardStore: ObservableObject {
             )
         }
         hasRebuiltSnapshot = true
+    }
+
+    private func displayEvents(for loadedEvents: [TokenUsageEvent]) -> [TokenUsageEvent] {
+        isOnboardingPreviewEnabled ? TokenUsageDashboardPreviewDataSource.onboardingEvents : loadedEvents
+    }
+
+    private func snapshotBuildRequest() -> TokenUsageDashboardBuildRequest {
+        var calendar = Calendar.autoupdatingCurrent
+        calendar.firstWeekday = 1
+        return TokenUsageDashboardBuildRequest(
+            selectedTool: selectedTool,
+            selectedPeriod: selectedPeriod,
+            selectedCalendarDayID: selectedCalendarDayID,
+            selectedProjectID: selectedProjectID,
+            selectedSessionID: selectedSessionID,
+            displayMode: displayMode,
+            language: language,
+            localAliases: SpillSettings.shared.tokenUsageLocalAliases,
+            showAdvancedTools: SpillSettings.shared.tokenUsageShowAdvancedTools,
+            now: Date(),
+            proposedCalendarMonthStart: calendarMonthStart,
+            calendar: calendar
+        )
+    }
+
+    nonisolated private static func buildSnapshotPair(
+        events: [TokenUsageEvent],
+        request: TokenUsageDashboardBuildRequest
+    ) -> TokenUsageDashboardSnapshotPair {
+        TokenUsageDashboardSnapshot.buildPair(
+            events: events,
+            selectedTool: request.selectedTool,
+            selectedPeriod: request.selectedPeriod,
+            selectedCalendarDayID: request.selectedCalendarDayID,
+            selectedProjectID: request.selectedProjectID,
+            selectedSessionID: request.selectedSessionID,
+            displayMode: request.displayMode,
+            language: request.language,
+            localAliases: request.localAliases,
+            showAdvancedTools: request.showAdvancedTools,
+            now: request.now,
+            proposedCalendarMonthStart: request.proposedCalendarMonthStart,
+            calendar: request.calendar
+        )
+    }
+
+    func setOnboardingPreviewEnabled(_ enabled: Bool) {
+        guard isOnboardingPreviewEnabled != enabled else {
+            return
+        }
+
+        isOnboardingPreviewEnabled = enabled
+        selectedSessionID = nil
+        liveUpdateMarker = .empty
+        if enabled {
+            rebuildSnapshot(trackLiveUpdates: false)
+        } else {
+            refreshAsync(trackLiveUpdates: false)
+        }
     }
 
     func setSelectedTool(_ tool: TokenUsageAITool?) {
@@ -345,6 +465,7 @@ final class TokenUsageDashboardStore: ObservableObject {
             try usageStore.clearEvents()
             selfTestMessage = nil
             liveUpdateMarker = .empty
+            isOnboardingPreviewEnabled = false
             refresh(trackLiveUpdates: false)
         } catch {
             lastError = TokenMeteringL10n.text(.clearFailed, language: language)
@@ -372,6 +493,7 @@ final class TokenUsageDashboardStore: ObservableObject {
             }
             selfTestMessage = nil
             liveUpdateMarker = .empty
+            isOnboardingPreviewEnabled = false
             if selectedSessionID != nil,
                snapshot.selectedSession == nil || scope.id.contains(selectedSessionID ?? "") {
                 selectedSessionID = nil
@@ -536,6 +658,7 @@ final class TokenUsageDashboardStore: ObservableObject {
     func addLocalTestEvent() {
         do {
             try usageStore.appendEvent(Self.makeLocalTestEvent(index: snapshot.eventCount))
+            isOnboardingPreviewEnabled = false
             refresh()
         } catch {
             lastError = TokenMeteringL10n.text(.saveTestFailed, language: language)
@@ -828,6 +951,21 @@ final class TokenUsageDashboardStore: ObservableObject {
             createdAt: ISO8601DateFormatter.tokenUsage.string(from: Date())
         )
     }
+}
+
+private struct TokenUsageDashboardBuildRequest {
+    let selectedTool: TokenUsageAITool?
+    let selectedPeriod: TokenUsageDashboardPeriod
+    let selectedCalendarDayID: String?
+    let selectedProjectID: String?
+    let selectedSessionID: String?
+    let displayMode: TokenUsageDisplayMode
+    let language: TokenMeteringLanguage
+    let localAliases: [String: String]
+    let showAdvancedTools: Bool
+    let now: Date
+    let proposedCalendarMonthStart: Date?
+    let calendar: Calendar
 }
 
 struct TokenUsageLiveUpdateMarker: Equatable {

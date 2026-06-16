@@ -75,6 +75,9 @@ final class TokenMeteringDashboardAppDelegate: NSObject, NSApplicationDelegate {
             settingsAction: { [weak self] in
                 self?.openMainAppTokenMeteringSettings()
             },
+            developerOptionsAction: { [weak self] in
+                self?.openMainAppDeveloperOptions()
+            },
             closeAction: {
                 NSApp.terminate(nil)
             }
@@ -93,7 +96,15 @@ final class TokenMeteringDashboardAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func openMainAppTokenMeteringSettings() {
-        TokenMeteringDashboardProcess.postOpenPreferencesRequest()
+        openMainAppPreferences(tab: TokenMeteringDashboardProcess.tokenMeteringPreferencesTab)
+    }
+
+    private func openMainAppDeveloperOptions() {
+        openMainAppPreferences(tab: TokenMeteringDashboardProcess.developerOptionsPreferencesTab)
+    }
+
+    private func openMainAppPreferences(tab: String) {
+        TokenMeteringDashboardProcess.postOpenPreferencesRequest(tab: tab)
 
         guard let mainAppURL = TokenMeteringDashboardProcess.mainAppURLForDashboardHelper() else {
             return
@@ -101,7 +112,7 @@ final class TokenMeteringDashboardAppDelegate: NSObject, NSApplicationDelegate {
 
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.activates = true
-        let completion = TokenMeteringWorkspaceOpenCompletion.postOpenPreferencesRequest()
+        let completion = TokenMeteringWorkspaceOpenCompletion.postOpenPreferencesRequest(tab: tab)
         NSWorkspace.shared.openApplication(at: mainAppURL, configuration: configuration, completionHandler: completion)
     }
 
@@ -136,11 +147,25 @@ final class TokenMeteringDashboardAppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func settingsDidChangeFromMainApp(_ notification: Notification) {
         let settingsKey = notification.userInfo?[TokenMeteringDashboardProcess.settingsKeyUserInfoKey] as? String
-        guard settingsKey == nil || settingsKey == TokenMeteringDashboardProcess.appLanguageSettingsKey else {
+        let supportedSettingsKeys = [
+            TokenMeteringDashboardProcess.appLanguageSettingsKey,
+            TokenMeteringDashboardProcess.tokenUsageDashboardOnboardingPreviewSettingsKey
+        ]
+        guard settingsKey == nil || supportedSettingsKeys.contains(settingsKey ?? "") else {
             return
         }
 
-        settings.reloadAppLanguageFromDefaults()
+        if settingsKey == nil || settingsKey == TokenMeteringDashboardProcess.appLanguageSettingsKey {
+            settings.reloadAppLanguageFromDefaults()
+        }
+
+        if SpillBuildOptions.developerOptionsEnabled,
+           settingsKey == nil || settingsKey == TokenMeteringDashboardProcess.tokenUsageDashboardOnboardingPreviewSettingsKey {
+            settings.reloadTokenUsageDashboardOnboardingPreviewFromDefaults()
+            tokenUsageDashboardStore.setOnboardingPreviewEnabled(
+                settings.tokenUsageDashboardOnboardingPreviewEnabled
+            )
+        }
     }
 
     private func startSmokeTestExitTimer() {

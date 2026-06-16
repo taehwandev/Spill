@@ -118,12 +118,15 @@ final class TokenUsageStoreTests: XCTestCase {
             .noLocalTokenEventsDetail,
             .dashboardEmptyGuideTitle,
             .dashboardEmptyGuideDetail,
+            .dashboardEmptyOpenSettings,
             .dashboardEmptyAutomaticTitle,
             .dashboardEmptyAutomaticDetail,
             .dashboardEmptySetupTitle,
             .dashboardEmptySetupDetail,
             .dashboardEmptyPrivacyTitle,
             .dashboardEmptyPrivacyDetail,
+            .dashboardEmptyPreview,
+            .dashboardEmptyPreviewDetail,
             .cumulativeOnlyBadge,
             .cumulativeOnlyInfoTitle,
             .cumulativeOnlyInfoDetail,
@@ -646,6 +649,7 @@ final class TokenUsageStoreTests: XCTestCase {
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let dashboardView = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardView.swift"))
         let preferencesView = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Preferences/PreferencesView.swift"))
+        let tokenMeteringPreferencesSection = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Preferences/TokenMeteringPreferencesSection.swift"))
         let dashboardStore = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenUsageDashboardStore.swift"))
 
         XCTAssertFalse(dashboardView.contains("private var leftRail"))
@@ -654,6 +658,33 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(dashboardView.contains("topFilterBar"))
         XCTAssertTrue(dashboardView.contains("topToolTab(filter)"))
         XCTAssertTrue(dashboardView.contains("store.setSelectedTool(filter.tool)"))
+        XCTAssertTrue(dashboardView.contains("store.refreshAsync()"))
+        XCTAssertTrue(dashboardView.contains("syncOnboardingPreviewFromSettings()"))
+        XCTAssertTrue(dashboardView.contains("settings.tokenUsageDashboardOnboardingPreviewEnabled"))
+        XCTAssertTrue(dashboardView.contains("SpillBuildOptions.developerOptionsEnabled"))
+        XCTAssertTrue(dashboardView.contains("developerOptionsAction()"))
+        XCTAssertTrue(dashboardView.contains("private var dashboardBody"))
+        XCTAssertTrue(dashboardView.contains("showsEmptyDashboardOverlay"))
+        XCTAssertTrue(dashboardView.contains("showsDashboardPlaceholder"))
+        XCTAssertTrue(dashboardView.contains(".disabled(showsEmptyDashboardOverlay)"))
+        XCTAssertTrue(dashboardView.contains("Label(t(.dashboardEmptyOpenSettings), systemImage: \"gearshape.fill\")"))
+        XCTAssertTrue(dashboardView.contains("settingsAction()"))
+        XCTAssertFalse(dashboardView.contains("store.setOnboardingPreviewEnabled(!store.isOnboardingPreviewEnabled)"))
+        XCTAssertFalse(tokenMeteringPreferencesSection.contains("debugDeveloperOptionsSection"))
+        XCTAssertFalse(tokenMeteringPreferencesSection.contains("$settings.tokenUsageDashboardOnboardingPreviewEnabled"))
+        XCTAssertTrue(preferencesView.contains("if SpillBuildOptions.developerOptionsEnabled"))
+        XCTAssertTrue(preferencesView.contains("sidebarItem(title: t(.developerOptions)"))
+        XCTAssertTrue(preferencesView.contains("private var developerOptionsTab"))
+        XCTAssertTrue(preferencesView.contains("$settings.panelOnboardingPreviewEnabled"))
+        XCTAssertTrue(preferencesView.contains("$settings.tokenUsageDashboardOnboardingPreviewEnabled"))
+        XCTAssertTrue(preferencesView.contains("t(.aiDashboardOnboardingPreview)"))
+        XCTAssertTrue(dashboardStore.contains("func refreshAsync(trackLiveUpdates: Bool = true)"))
+        XCTAssertTrue(dashboardStore.contains("@Published private(set) var loadState"))
+        XCTAssertTrue(dashboardStore.contains("@Published private(set) var isOnboardingPreviewEnabled"))
+        XCTAssertTrue(dashboardStore.contains("TokenUsageDashboardPreviewDataSource.onboardingEvents"))
+        XCTAssertTrue(dashboardView.contains("loadingAnalyticsGrid"))
+        XCTAssertTrue(dashboardView.contains("loadingSessionsTableRows"))
+        XCTAssertTrue(dashboardView.contains("store.loadState == .loading"))
         XCTAssertTrue(dashboardView.contains("calendarPickerPanel"))
         XCTAssertTrue(dashboardView.contains(".popover(isPresented: $isCalendarPickerPresented"))
         XCTAssertTrue(dashboardView.contains("store.clearSelectedCalendarDay()"))
@@ -716,6 +747,8 @@ final class TokenUsageStoreTests: XCTestCase {
         let dashboardView = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardView.swift"))
         let panelController = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Panel/SpillPanelController.swift"))
         let spillBarView = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Panel/SpillBarView.swift"))
+        let panelSizer = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Panel/SpillPanelContentSizer.swift"))
+        let appDelegate = try String(contentsOf: root.appendingPathComponent("Sources/Spill/App/AppDelegate.swift"))
         let cloudStatusView = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Panel/CloudServiceStatusDashboardView.swift"))
 
         XCTAssertTrue(dashboardView.contains("private func refreshLocalTokenData()"))
@@ -726,6 +759,27 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertFalse(panelController.contains("cloudServiceStatusStore.refreshIfNeeded()"))
         XCTAssertTrue(spillBarView.contains("cloudServiceStatusStore.refreshIfNeeded()"))
         XCTAssertTrue(cloudStatusView.contains("store.refreshIfNeeded(force: true)"))
+        XCTAssertTrue(spillBarView.contains("panelState.onboardingPreviewEnabled"))
+        XCTAssertTrue(spillBarView.contains("tokenMeteringSetupPreview"))
+        XCTAssertTrue(spillBarView.contains("tokenMeteringSettingsAction()"))
+        XCTAssertFalse(spillBarView.contains("onboardingPreviewBanner"))
+        XCTAssertFalse(spillBarView.contains("private var aiProcessSummary"))
+        XCTAssertTrue(spillBarView.contains("aiProcessStateChip(status)"))
+        XCTAssertTrue(panelController.contains("tokenMeteringSettingsAction"))
+        XCTAssertTrue(appDelegate.contains("showTokenMeteringPreferencesFromPanel()"))
+        XCTAssertTrue(appDelegate.contains("TokenMeteringDashboardProcess.tokenMeteringPreferencesTab"))
+        XCTAssertFalse(panelSizer.contains("aiProcessSummaryHeight"))
+        XCTAssertFalse(panelSizer.contains("onboardingPreviewHeight"))
+    }
+
+    func testMenuBarScannerPublishesItemsBeforeLoadingIcons() throws {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let scanner = try String(contentsOf: root.appendingPathComponent("Sources/Spill/MenuBar/AXMenuBarItemScanner.swift"))
+
+        XCTAssertTrue(scanner.contains("refreshMissingIcons(for: enrichedItems, generation: iconGeneration)"))
+        XCTAssertTrue(scanner.contains("Task.detached(priority: .utility)"))
+        XCTAssertTrue(scanner.contains("cachedImageDataIfAvailable(for: snapshot)"))
+        XCTAssertFalse(scanner.contains("cachedImageData(for: snapshot)"))
     }
 
     func testCodexImporterStreamsInboxWhileImporterRuns() throws {
@@ -890,6 +944,8 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(process.contains("mainBundleIdentifierForDashboardHelper"))
         XCTAssertTrue(process.contains("settingsDidChangeNotification"))
         XCTAssertTrue(process.contains("postAppLanguageDidChange"))
+        XCTAssertTrue(process.contains("postTokenUsageDashboardOnboardingPreviewDidChange"))
+        XCTAssertTrue(process.contains(#"static let developerOptionsPreferencesTab = "developer""#))
         XCTAssertTrue(launcher.contains("NSWorkspace.OpenConfiguration"))
         XCTAssertTrue(launcher.contains("workspace.openApplication(at: helperURL"))
         XCTAssertTrue(launcher.contains("runningApplicationsProvider"))
@@ -911,6 +967,7 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(tokenMeteringCoordinator.contains("SPILL_TOKEN_DASHBOARD_LAUNCH_SMOKE_DUPLICATE_IGNORED"))
         XCTAssertTrue(appDelegate.contains("DispatchQueue.main.async { [weak self] in"))
         XCTAssertTrue(appDelegate.contains("TokenMeteringDashboardProcess.postAppLanguageDidChange()"))
+        XCTAssertTrue(appDelegate.contains("TokenMeteringDashboardProcess.postTokenUsageDashboardOnboardingPreviewDidChange()"))
 
         XCTAssertTrue(helperDelegate.contains("applicationShouldTerminateAfterLastWindowClosed"))
         XCTAssertTrue(helperDelegate.contains("SPILL_TOKEN_DASHBOARD_SMOKE_READY"))
@@ -920,11 +977,14 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(helperDelegate.contains("openMainAppTokenMeteringSettings"))
         XCTAssertTrue(helperDelegate.contains("launchMainAppIfNeeded()"))
         XCTAssertTrue(helperDelegate.contains("NSWorkspace.shared.runningApplications"))
-        XCTAssertTrue(helperDelegate.contains("TokenMeteringDashboardProcess.postOpenPreferencesRequest()"))
-        XCTAssertTrue(helperDelegate.contains("TokenMeteringWorkspaceOpenCompletion.postOpenPreferencesRequest()"))
+        XCTAssertTrue(helperDelegate.contains("openMainAppDeveloperOptions"))
+        XCTAssertTrue(helperDelegate.contains("TokenMeteringDashboardProcess.postOpenPreferencesRequest(tab: tab)"))
+        XCTAssertTrue(helperDelegate.contains("TokenMeteringWorkspaceOpenCompletion.postOpenPreferencesRequest(tab: tab)"))
         XCTAssertTrue(helperDelegate.contains("observeSettingsChanges()"))
         XCTAssertTrue(helperDelegate.contains("settingsDidChangeFromMainApp"))
         XCTAssertTrue(helperDelegate.contains("settings.reloadAppLanguageFromDefaults()"))
+        XCTAssertTrue(helperDelegate.contains("settings.reloadTokenUsageDashboardOnboardingPreviewFromDefaults()"))
+        XCTAssertTrue(helperDelegate.contains("tokenUsageDashboardStore.setOnboardingPreviewEnabled"))
         XCTAssertFalse(helperDelegate.contains("StatusItemController("))
         XCTAssertFalse(helperDelegate.contains("AXMenuBarItemScanner("))
         XCTAssertFalse(helperDelegate.contains("HotKeyController("))
@@ -933,6 +993,7 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertFalse(helperDelegate.contains("requestTokenUsageCollection(reason: \"dashboard_launch\")"))
         XCTAssertTrue(windowController.contains("closeAction"))
         XCTAssertTrue(windowController.contains("settingsAction"))
+        XCTAssertTrue(windowController.contains("developerOptionsAction"))
         XCTAssertTrue(windowController.contains("window.delegate = self"))
         XCTAssertTrue(windowController.contains("windowWillClose"))
         XCTAssertTrue(windowController.contains("scheduleDeferredRefreshAction()"))
@@ -940,6 +1001,8 @@ final class TokenUsageStoreTests: XCTestCase {
 
         XCTAssertTrue(buildScript.contains(#"HELPER_APP_NAME="Spill Token Dashboard.app""#))
         XCTAssertTrue(buildScript.contains(#"HELPER_BUNDLE_ID="${BUNDLE_ID}.TokenDashboard""#))
+        XCTAssertTrue(buildScript.contains("SPILL_DEVELOPER_OPTIONS_ENABLED"))
+        XCTAssertTrue(buildScript.contains("<key>SPILLDeveloperOptionsEnabled</key>"))
         XCTAssertFalse(buildScript.contains(#"ditto "$RESOURCE_BUNDLE" "$APP_DIR/Spill_Spill.bundle""#))
         XCTAssertFalse(buildScript.contains(#"ditto "$RESOURCES_DIR/Spill_Spill.bundle" "$HELPER_APP_DIR/Spill_Spill.bundle""#))
         XCTAssertTrue(buildScript.contains(#"sign_app_bundle "$HELPER_APP_DIR" "$HELPER_BUNDLE_ID""#))
@@ -1339,6 +1402,51 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(event.tokenBreakdown.repoContext, 18)
         XCTAssertEqual(event.tokenBreakdown.toolOutput, 12)
         XCTAssertEqual(event.tokenBreakdown.unknown, 0)
+    }
+
+    @MainActor
+    func testDashboardStoreOnboardingPreviewDoesNotDeleteEvents() async throws {
+        let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
+        let dashboardStore = dashboardStore(usageStore: usageStore)
+        try usageStore.appendEvent(Self.safeEvent(spanID: "span_onboarding_preview"))
+
+        dashboardStore.refresh()
+        XCTAssertEqual(dashboardStore.snapshot.eventCount, 1)
+        XCTAssertEqual(usageStore.loadEvents().count, 1)
+
+        dashboardStore.setOnboardingPreviewEnabled(true)
+
+        XCTAssertTrue(dashboardStore.isOnboardingPreviewEnabled)
+        XCTAssertEqual(dashboardStore.loadState, .previewingEmpty)
+        XCTAssertEqual(dashboardStore.snapshot.eventCount, 0)
+        XCTAssertFalse(dashboardStore.hasDashboardEvents)
+        XCTAssertEqual(usageStore.loadEvents().count, 1)
+
+        dashboardStore.setOnboardingPreviewEnabled(false)
+        try await Task.sleep(nanoseconds: 350_000_000)
+
+        XCTAssertFalse(dashboardStore.isOnboardingPreviewEnabled)
+        XCTAssertEqual(dashboardStore.loadState, .loaded)
+        XCTAssertEqual(dashboardStore.snapshot.eventCount, 1)
+        XCTAssertEqual(usageStore.loadEvents().count, 1)
+    }
+
+    @MainActor
+    func testDashboardStoreAsyncRefreshKeepsExistingLayoutWhileLoading() async throws {
+        let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
+        let dashboardStore = dashboardStore(usageStore: usageStore)
+        try usageStore.appendEvent(Self.safeEvent(spanID: "span_async_dashboard_refresh"))
+
+        XCTAssertEqual(dashboardStore.snapshot.eventCount, 0)
+        dashboardStore.refreshAsync()
+
+        XCTAssertEqual(dashboardStore.loadState, .loading)
+        XCTAssertEqual(dashboardStore.snapshot.eventCount, 0)
+
+        try await Task.sleep(nanoseconds: 350_000_000)
+
+        XCTAssertEqual(dashboardStore.loadState, .loaded)
+        XCTAssertEqual(dashboardStore.snapshot.eventCount, 1)
     }
 
     @MainActor

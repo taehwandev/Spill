@@ -12,6 +12,7 @@ final class TokenMeteringDashboardWindowController: NSObject, NSWindowDelegate {
     private let settings: SpillSettings
     private let refreshAction: () -> Void
     private let settingsAction: () -> Void
+    private let developerOptionsAction: () -> Void
     private let closeAction: () -> Void
     private var window: NSWindow?
     private var deferredRefreshTask: Task<Void, Never>?
@@ -22,6 +23,7 @@ final class TokenMeteringDashboardWindowController: NSObject, NSWindowDelegate {
         settings: SpillSettings = .shared,
         refreshAction: @escaping () -> Void = {},
         settingsAction: @escaping () -> Void = {},
+        developerOptionsAction: @escaping () -> Void = {},
         closeAction: @escaping () -> Void = {}
     ) {
         self.store = store
@@ -29,12 +31,12 @@ final class TokenMeteringDashboardWindowController: NSObject, NSWindowDelegate {
         self.settings = settings
         self.refreshAction = refreshAction
         self.settingsAction = settingsAction
+        self.developerOptionsAction = developerOptionsAction
         self.closeAction = closeAction
         super.init()
     }
 
     func show() {
-        store.refresh()
         let window = ensureWindow()
         updateWindowTitle(window)
         constrainToVisibleScreen(window)
@@ -42,6 +44,7 @@ final class TokenMeteringDashboardWindowController: NSObject, NSWindowDelegate {
         window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless()
         window.makeKey()
+        store.refreshAsync()
         scheduleDeferredRefreshAction()
     }
 
@@ -68,6 +71,7 @@ final class TokenMeteringDashboardWindowController: NSObject, NSWindowDelegate {
             settings: settings,
             refreshAction: refreshAction,
             settingsAction: settingsAction,
+            developerOptionsAction: developerOptionsAction,
             titleDidChange: { [weak self] in
                 self?.updateWindowTitle()
             }
