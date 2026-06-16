@@ -338,7 +338,8 @@ def _load_session_state(run_id: str) -> tuple[int, int, int]:
     try:
         data = json.loads(state_path.read_text())
         if isinstance(data, dict):
-            return _state_int(data, "fresh"), _state_int(data, "output"), _state_int(data, "byte_offset")
+            fresh = _state_int(data, "fresh") or _state_int(data, "input")
+            return fresh, _state_int(data, "output"), _state_int(data, "byte_offset")
     except Exception:
         pass
     return 0, 0, 0
@@ -467,6 +468,10 @@ def main() -> None:
         _write_diagnostic_file(MISMATCH_DIAGNOSTIC_FILE_NAME, "runtime_payload_mismatch", "non_object_payload")
         return
 
+    _run_for_payload(payload)
+
+
+def _run_for_payload(payload: dict) -> None:
     transcript_path = payload.get("transcript_path", "")
     session_id = payload.get("session_id", "")
     run_id = _opaque(session_id, "run-" + uuid.uuid4().hex[:12])
@@ -618,8 +623,49 @@ def main() -> None:
     _consume_label_file()
 
 
+def scan_main(scan_dir: str, since_hours: int) -> None:
+    """Scan *.jsonl transcripts under scan_dir modified within since_hours and enqueue usage events."""
+    import time
+    global _USED_LABEL_FILE
+    scan_path = pathlib.Path(scan_dir)
+    if not scan_path.is_dir():
+        return
+    cutoff_mtime = time.time() - since_hours * 3600
+    for jsonl_file in sorted(scan_path.rglob("*.jsonl")):
+        try:
+            if jsonl_file.stat().st_mtime < cutoff_mtime:
+                continue
+            _USED_LABEL_FILE = False  # don't consume the live label file for historical transcripts
+            stem = jsonl_file.stem
+            session_id = stem if _OPAQUE_ID.match(stem) else ""
+            _run_for_payload({
+                "transcript_path": str(jsonl_file),
+                "session_id": session_id,
+            })
+        except Exception:
+            pass
+        finally:
+            _USED_LABEL_FILE = False
+
+
 if __name__ == "__main__":
-    try:
-        main()
-    except Exception:
-        pass
+    _args = sys.argv[1:]
+    if "--scan-dir" in _args:
+        _idx = _args.index("--scan-dir")
+        _scan_dir = _args[_idx + 1] if _idx + 1 < len(_args) else ""
+        _since_hours = 24
+        if "--since-hours" in _args:
+            _h = _args.index("--since-hours")
+            try:
+                _since_hours = int(_args[_h + 1])
+            except Exception:
+                pass
+        try:
+            scan_main(_scan_dir, _since_hours)
+        except Exception:
+            pass
+    else:
+        try:
+            main()
+        except Exception:
+            pass

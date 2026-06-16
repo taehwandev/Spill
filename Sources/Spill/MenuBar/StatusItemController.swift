@@ -11,7 +11,7 @@ final class StatusItemController: NSObject {
     private let statusStore: SystemStatusStore
     private let sleepGuard: SleepGuardController
     private let hiddenItemCountProvider: () -> Int
-    private let aiTokenCountProvider: () -> Int
+    private let aiTokenCountProvider: () -> (daily: Int, total: Int)
     private let aiServerHealthProvider: () -> CloudServiceHealth?
     private let toggleAction: () -> Void
     private let refreshAction: () -> Void
@@ -32,7 +32,7 @@ final class StatusItemController: NSObject {
         statusStore: SystemStatusStore,
         sleepGuard: SleepGuardController,
         hiddenItemCountProvider: @escaping () -> Int,
-        aiTokenCountProvider: @escaping () -> Int,
+        aiTokenCountProvider: @escaping () -> (daily: Int, total: Int),
         aiServerHealthProvider: @escaping () -> CloudServiceHealth? = { nil },
         toggleAction: @escaping () -> Void,
         refreshAction: @escaping () -> Void,
@@ -74,11 +74,14 @@ final class StatusItemController: NSObject {
         }
 
         let hiddenCount = hiddenItemCountProvider()
+        let tokenCounts = aiTokenCountProvider()
         let summary = MenuBarStatusSummary.make(
             enabledItems: settings.enabledMenuBarStatusItems,
             cpu: statusStore.cpu,
             memory: statusStore.memory,
-            aiTokenCount: aiTokenCountProvider(),
+            aiTokenCount: tokenCounts.daily,
+            aiAllTimeTokenCount: tokenCounts.total,
+            displayMode: settings.menuBarTokenDisplayMode,
             aiServerHealth: aiServerHealthProvider(),
             precision: settings.menuBarStatusPrecision,
             highlightThreshold: settings.menuBarStatusHighlightThreshold

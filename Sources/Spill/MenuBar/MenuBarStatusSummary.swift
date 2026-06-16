@@ -100,6 +100,8 @@ struct MenuBarStatusSummary: Equatable {
         cpu: SystemCPUStatus,
         memory: SystemMemoryStatus,
         aiTokenCount: Int = 0,
+        aiAllTimeTokenCount: Int = 0,
+        displayMode: MenuBarTokenDisplayMode = .daily,
         aiServerHealth: CloudServiceHealth? = nil,
         precision: MenuBarStatusPrecision = .tenths,
         highlightThreshold: MenuBarStatusHighlightThreshold = .seventy
@@ -113,6 +115,8 @@ struct MenuBarStatusSummary: Equatable {
                 cpu: cpu,
                 memory: memory,
                 aiTokenCount: aiTokenCount,
+                aiAllTimeTokenCount: aiAllTimeTokenCount,
+                displayMode: displayMode,
                 aiServerHealth: aiServerHealth,
                 precision: precision,
                 highlightThreshold: highlightThreshold
@@ -134,6 +138,8 @@ struct MenuBarStatusSummary: Equatable {
         cpu: SystemCPUStatus,
         memory: SystemMemoryStatus,
         aiTokenCount: Int,
+        aiAllTimeTokenCount: Int,
+        displayMode: MenuBarTokenDisplayMode,
         aiServerHealth: CloudServiceHealth?,
         precision: MenuBarStatusPrecision,
         highlightThreshold: MenuBarStatusHighlightThreshold
@@ -162,7 +168,21 @@ struct MenuBarStatusSummary: Equatable {
                 highlightThreshold: highlightThreshold
             )
         case .ai:
-            let value = TokenUsageDashboardSnapshot.formatTokens(aiTokenCount)
+            let value: String
+            switch displayMode {
+            case .daily:
+                value = TokenUsageDashboardSnapshot.formatTokens(aiTokenCount)
+            case .total:
+                value = TokenUsageDashboardSnapshot.formatTokens(aiAllTimeTokenCount)
+            case .dailyAndTotal:
+                let dailyStr = TokenUsageDashboardSnapshot.formatTokens(aiTokenCount)
+                let totalStr = TokenUsageDashboardSnapshot.formatTokens(aiAllTimeTokenCount)
+                value = "\(dailyStr)/\(totalStr)"
+            case .cycle:
+                let showDaily = Int(Date().timeIntervalSince1970) / 4 % 2 == 0
+                let count = showDaily ? aiTokenCount : aiAllTimeTokenCount
+                value = TokenUsageDashboardSnapshot.formatTokens(count)
+            }
             let displayText = displayText(label: item.shortTitle, value: value)
             let state = aiStatusState(for: aiServerHealth)
             let segment = MenuBarStatusSegment(

@@ -63,6 +63,7 @@ final class TokenUsageDashboardStore: ObservableObject {
     @Published private(set) var lastError: String?
     @Published private(set) var isRunningSelfTest = false
     @Published private(set) var selfTestMessage: TokenUsageSelfTestMessage?
+    @Published private(set) var isRefreshing = false
 
     private let usageStore: TokenUsageStore
     private var events: [TokenUsageEvent] = []
@@ -159,7 +160,11 @@ final class TokenUsageDashboardStore: ObservableObject {
         let request = snapshotBuildRequest()
         let usesPreviewDataSource = isOnboardingPreviewEnabled
         let usageStore = usageStore
-        loadState = usesPreviewDataSource ? .previewingEmpty : .loading
+        let isAlreadyLoaded = loadState == .loaded
+        if !isAlreadyLoaded {
+            loadState = usesPreviewDataSource ? .previewingEmpty : .loading
+        }
+        isRefreshing = true
 
         DispatchQueue.global(qos: .userInitiated).async {
             let loadedEvents = usageStore.loadEvents()
@@ -252,6 +257,7 @@ final class TokenUsageDashboardStore: ObservableObject {
         panelSummary = TokenUsagePanelSummarySnapshot(snapshot: unfilteredSnapshot)
         lastError = nil
         loadState = isOnboardingPreviewEnabled ? .previewingEmpty : .loaded
+        isRefreshing = false
         if trackLiveUpdates, let previousEvents {
             publishLiveUpdates(
                 previousEvents: previousEvents,

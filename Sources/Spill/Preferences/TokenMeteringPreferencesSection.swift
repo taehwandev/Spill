@@ -51,80 +51,23 @@ struct TokenMeteringPreferencesSection: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            VStack(alignment: .leading, spacing: 9) {
-                TokenMeteringOptionHeader(
-                    title: t(.installPromptTitle),
-                    state: t(.recommended),
-                    systemImage: "wand.and.stars",
-                    tint: .teal
-                )
-
-                Text(t(.installPromptDetail))
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-                    .lineSpacing(2)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                TokenMeteringSetupSummary(
-                    title: t(.setupQuickStartTitle),
-                    detail: t(.setupQuickStartDetail)
-                )
-
-                VStack(alignment: .leading, spacing: 7) {
-                    TokenMeteringSetupGuidanceRow(
-                        systemImage: "globe",
-                        title: t(.setupGlobalInstructionTitle),
-                        detail: t(.setupGlobalInstructionDetail),
-                        tint: .teal
-                    )
-
-                    TokenMeteringSetupGuidanceRow(
-                        systemImage: "point.3.connected.trianglepath.dotted",
-                        title: t(.setupWorkflowLabelsTitle),
-                        detail: t(.setupWorkflowLabelsDetail),
-                        tint: .blue
-                    )
-
-                    TokenMeteringSetupGuidanceRow(
-                        systemImage: "scope",
-                        title: t(.setupApplyWhereTitle),
-                        detail: t(.setupApplyWhereDetail),
-                        tint: .purple
-                    )
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(spacing: 8) {
+                    Image(systemName: "wand.and.stars")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(.teal)
+                    Text(t(.installPromptTitle))
+                        .font(.system(size: 13, weight: .bold))
+                    Spacer()
+                    Text(t(.recommended))
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(.teal)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(.teal.opacity(0.12), in: Capsule())
                 }
 
-                HStack(spacing: 6) {
-                    Button {
-                        copyToClipboard(
-                            TokenMeteringGlobalSetup.prompt(
-                                allowsLocalDisplayNames: settings.tokenMeteringPromptAllowsLocalDisplayNames
-                            ),
-                            target: "prompt"
-                        )
-                    } label: {
-                        Label(
-                            copiedTarget == "prompt" ? t(.copied) : t(.copyInstallPrompt),
-                            systemImage: copiedTarget == "prompt" ? "checkmark" : "doc.on.doc"
-                        )
-                    }
-
-                    Button {
-                        copyToClipboard(TokenMeteringSetupInstaller.setupCommand(), target: "setup_command_primary")
-                    } label: {
-                        Label(
-                            copiedTarget == "setup_command_primary" ? t(.copied) : t(.copyWebSetup),
-                            systemImage: copiedTarget == "setup_command_primary" ? "checkmark" : "terminal"
-                        )
-                    }
-
-                    Button {
-                        openDashboardAction()
-                    } label: {
-                        Label(t(.dashboard), systemImage: "chart.bar.xaxis")
-                    }
-                }
-                .buttonStyle(.bordered)
-                .font(.system(size: 12, weight: .semibold))
+                promptInstructionCard
 
                 Divider().opacity(0.45)
 
@@ -157,6 +100,29 @@ struct TokenMeteringPreferencesSection: View {
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(.orange)
                         .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Divider().opacity(0.45)
+
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(t(.menuBarTokenDisplayModeTitle))
+                            .font(.system(size: 12, weight: .bold))
+                        Text(t(.menuBarTokenDisplayModeDetail))
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                            .lineSpacing(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer()
+                    Picker("", selection: $settings.menuBarTokenDisplayMode) {
+                        ForEach(MenuBarTokenDisplayMode.allCases) { mode in
+                            Text(mode.title(appLanguage: settings.appLanguage)).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .labelsHidden()
+                    .frame(width: 140)
                 }
 
             }
@@ -442,6 +408,71 @@ struct TokenMeteringPreferencesSection: View {
                 (adapter.id, TokenMeteringAdapterConnectionDiagnostics.status(for: adapter))
             }
         )
+    }
+
+    private var promptInstructionCard: some View {
+        HStack(spacing: 12) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.teal.opacity(0.15), Color.blue.opacity(0.1)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 32, height: 32)
+
+                Image(systemName: "sparkles")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [Color.teal, Color.blue],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            }
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(t(.promptInstructionCardTitle))
+                    .font(.system(size: 11.5, weight: .bold))
+                    .foregroundStyle(.primary)
+                Text(t(.promptInstructionCardDetail))
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 8)
+
+            Button {
+                copyToClipboard(
+                    TokenMeteringGlobalSetup.prompt(
+                        allowsLocalDisplayNames: settings.tokenMeteringPromptAllowsLocalDisplayNames
+                    ),
+                    target: "prompt"
+                )
+            } label: {
+                Label(
+                    copiedTarget == "prompt" ? t(.copied) : t(.copyInstallPrompt),
+                    systemImage: copiedTarget == "prompt" ? "checkmark" : "doc.on.doc"
+                )
+            }
+            .buttonStyle(.bordered)
+            .font(.system(size: 11, weight: .semibold))
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 10)
+        .background(
+            Color.primary.opacity(0.015),
+            in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(Color.primary.opacity(0.04), lineWidth: 0.5)
+        }
     }
 
     private var localDataManagementSection: some View {

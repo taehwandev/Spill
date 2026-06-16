@@ -104,7 +104,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return SpillDisplayMode.notchCandidateItems(from: scanner, settings: SpillSettings.shared).count
             },
             aiTokenCountProvider: { [weak self] in
-                self?.tokenMeteringCoordinator.menuBarTokenTotal ?? 0
+                guard let coordinator = self?.tokenMeteringCoordinator else { return (0, 0) }
+                return (coordinator.menuBarTokenTotal, coordinator.menuBarAllTimeTokenTotal)
             },
             aiServerHealthProvider: { [weak self] in
                 self?.tokenMeteringCoordinator.menuBarServerHealth
@@ -618,6 +619,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 SpillTelemetry.shared.track("preference_changed", props: ["name": "menu_bar_trigger_icon_style"])
                 self?.statusItemController?.refresh()
                 self?.configureStatusRefreshLoop()
+            }
+            .store(in: &cancellables)
+
+        settings.$menuBarTokenDisplayMode
+            .dropFirst()
+            .sink { [weak self] _ in
+                SpillTelemetry.shared.track("preference_changed", props: ["name": "menu_bar_token_display_mode"])
+                self?.tokenMeteringCoordinator.refreshMenuBarTokenTotal(force: true)
+                self?.statusItemController?.refresh()
             }
             .store(in: &cancellables)
 

@@ -1,6 +1,32 @@
 import Foundation
 import SwiftUI
 
+enum MenuBarTokenDisplayMode: String, CaseIterable, Identifiable, Sendable {
+    case daily
+    case total
+    case dailyAndTotal
+    case cycle
+
+    var id: String { rawValue }
+
+    var title: String {
+        title(appLanguage: .persisted())
+    }
+
+    func title(appLanguage: SpillAppLanguage) -> String {
+        switch self {
+        case .daily:
+            return AppL10n.text(.menuBarTokenDisplayModeDaily, appLanguage: appLanguage)
+        case .total:
+            return AppL10n.text(.menuBarTokenDisplayModeTotal, appLanguage: appLanguage)
+        case .dailyAndTotal:
+            return AppL10n.text(.menuBarTokenDisplayModeDailyAndTotal, appLanguage: appLanguage)
+        case .cycle:
+            return AppL10n.text(.menuBarTokenDisplayModeCycle, appLanguage: appLanguage)
+        }
+    }
+}
+
 enum SpillStatusFontDesign: String, CaseIterable, Identifiable {
     case `default`
     case rounded
@@ -314,6 +340,10 @@ final class SpillSettings: ObservableObject {
         didSet { defaults.set(tokenUsageShowAdvancedTools, forKey: Keys.tokenUsageShowAdvancedTools) }
     }
 
+    @Published var menuBarTokenDisplayMode: MenuBarTokenDisplayMode {
+        didSet { defaults.set(menuBarTokenDisplayMode.rawValue, forKey: Keys.menuBarTokenDisplayMode) }
+    }
+
     @Published var privateUsageUploadEnvironment: PrivateUsageUploadEnvironment {
         didSet {
             defaults.set(privateUsageUploadEnvironment.rawValue, forKey: Keys.privateUsageUploadEnvironment)
@@ -459,6 +489,8 @@ final class SpillSettings: ObservableObject {
         tokenMeteringPromptAllowsLocalDisplayNames = defaults.object(forKey: Keys.tokenMeteringPromptAllowsLocalDisplayNames) as? Bool ?? false
         tokenUsageLocalAliases = defaults.dictionary(forKey: Keys.tokenUsageLocalAliases) as? [String: String] ?? [:]
         tokenUsageShowAdvancedTools = defaults.object(forKey: Keys.tokenUsageShowAdvancedTools) as? Bool ?? false
+        let menuBarTokenDisplayModeRaw = defaults.string(forKey: Keys.menuBarTokenDisplayMode) ?? MenuBarTokenDisplayMode.daily.rawValue
+        menuBarTokenDisplayMode = MenuBarTokenDisplayMode(rawValue: menuBarTokenDisplayModeRaw) ?? .daily
         let privateUsageEnvironment = PrivateUsageUploadEnvironment.resolvedFromConfiguration()
             ?? defaults.string(forKey: Keys.privateUsageUploadEnvironment)
                 .flatMap(PrivateUsageUploadEnvironment.init(rawValue:))
@@ -780,6 +812,7 @@ private enum Keys {
     static let tokenMeteringPromptAllowsLocalDisplayNames = "tokenMeteringPromptAllowsLocalDisplayNames"
     static let tokenUsageLocalAliases = "tokenUsageLocalAliases"
     static let tokenUsageShowAdvancedTools = "tokenUsageShowAdvancedTools"
+    static let menuBarTokenDisplayMode = "menuBarTokenDisplayMode"
     static let privateUsageUploadEnvironment = "privateUsageUploadEnvironment"
     static let privateUsageUploadEnabled = "privateUsageUploadEnabled"
     static let statusValueBold = "statusValueBold"

@@ -33,6 +33,7 @@ final class TokenMeteringCoordinator: NSObject {
     private var cancellables = Set<AnyCancellable>()
 
     private(set) var menuBarTokenTotal = 0
+    private(set) var menuBarAllTimeTokenTotal = 0
 
     init(
         settings: SpillSettings,
@@ -108,6 +109,7 @@ final class TokenMeteringCoordinator: NSObject {
             startingAt: dayStart,
             endingBefore: dayEnd
         )
+        menuBarAllTimeTokenTotal = usageStore.allTimeTotalTokens()
     }
 
     func requestMenuBarTokenUsageCollectionIfNeeded(now: Date = Date()) {

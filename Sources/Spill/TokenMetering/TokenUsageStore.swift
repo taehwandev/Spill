@@ -89,6 +89,23 @@ final class TokenUsageStore: @unchecked Sendable {
         }
     }
 
+    func allTimeTotalTokens(dashboardToolsOnly: Bool = true) -> Int {
+        lock.withLock {
+            let database: OpaquePointer
+            do {
+                database = try openDatabase()
+            } catch {
+                return 0
+            }
+            defer { sqlite3_close(database) }
+
+            return loadDashboardCountAndTotal(
+                dashboardToolsOnly: dashboardToolsOnly,
+                database: database
+            ).totalTokens
+        }
+    }
+
     func dashboardSummary(dashboardToolsOnly: Bool = true) -> TokenUsageDashboardSummary {
         lock.withLock {
             let database: OpaquePointer

@@ -162,6 +162,55 @@ final class MenuBarStatusSummaryTests: XCTestCase {
         XCTAssertEqual(summary.segments.map(\.usageRatio), [0.9, 0.9])
     }
 
+    func testSummaryAIModes() {
+        let cpu = SystemCPUProvider.status(previous: nil, current: nil)
+        let memory = SystemMemoryProvider.status(from: nil)
+
+        // Daily Mode
+        let dailySummary = MenuBarStatusSummary.make(
+            enabledItems: [.ai],
+            cpu: cpu,
+            memory: memory,
+            aiTokenCount: 1200,
+            aiAllTimeTokenCount: 24000,
+            displayMode: .daily
+        )
+        XCTAssertEqual(dailySummary.title, "AI 1,200")
+
+        // Total Mode
+        let totalSummary = MenuBarStatusSummary.make(
+            enabledItems: [.ai],
+            cpu: cpu,
+            memory: memory,
+            aiTokenCount: 1200,
+            aiAllTimeTokenCount: 24000,
+            displayMode: .total
+        )
+        XCTAssertEqual(totalSummary.title, "AI 24K")
+
+        // Daily & Total Mode
+        let dailyAndTotalSummary = MenuBarStatusSummary.make(
+            enabledItems: [.ai],
+            cpu: cpu,
+            memory: memory,
+            aiTokenCount: 1200,
+            aiAllTimeTokenCount: 24000,
+            displayMode: .dailyAndTotal
+        )
+        XCTAssertEqual(dailyAndTotalSummary.title, "AI 1,200/24K")
+
+        // Cycle Mode
+        let cycleSummary = MenuBarStatusSummary.make(
+            enabledItems: [.ai],
+            cpu: cpu,
+            memory: memory,
+            aiTokenCount: 1200,
+            aiAllTimeTokenCount: 24000,
+            displayMode: .cycle
+        )
+        XCTAssertTrue(cycleSummary.title == "AI 1,200" || cycleSummary.title == "AI 24K")
+    }
+
     private func gib(_ value: UInt64) -> UInt64 {
         value * 1_073_741_824
     }

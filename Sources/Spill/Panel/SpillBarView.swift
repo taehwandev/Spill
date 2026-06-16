@@ -18,7 +18,6 @@ struct SpillBarView: View {
     @State private var pendingDismissWorkItem: DispatchWorkItem?
     @State private var hoveredStatusModule: SpillStatusModule? = nil
     @State private var didCopyUpdateInstallCommand = false
-    @State private var showsServiceStatusDashboard = false
 
     private var panelState: PanelState {
         panelStore.state
@@ -362,15 +361,39 @@ struct SpillBarView: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 7)
             .frame(minHeight: 64)
+            .scaleEffect(hoveredStatusModule == module ? 1.012 : 1.0)
+            .offset(y: hoveredStatusModule == module ? -1.0 : 0)
             .background(
-                hoveredStatusModule == module ? Color.primary.opacity(0.07) : Color.primary.opacity(0.04),
-                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                ZStack {
+                    VisualEffectView(material: .sidebar, blendingMode: .withinWindow)
+                        .opacity(0.3)
+                    if hoveredStatusModule == module {
+                        Color.primary.opacity(0.06)
+                    } else {
+                        Color.primary.opacity(0.03)
+                    }
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             )
             .overlay {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(Color.primary.opacity(hoveredStatusModule == module ? 0.08 : 0.05), lineWidth: 0.5)
+                    .stroke(
+                        LinearGradient(
+                            colors: hoveredStatusModule == module
+                                ? [Color.primary.opacity(0.12), Color.primary.opacity(0.06)]
+                                : [Color.primary.opacity(0.06), Color.primary.opacity(0.02)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 0.8
+                    )
             }
-            .animation(.easeOut(duration: 0.12), value: hoveredStatusModule)
+            .shadow(
+                color: Color.black.opacity(hoveredStatusModule == module ? 0.06 : 0.01),
+                radius: hoveredStatusModule == module ? 5 : 2,
+                y: hoveredStatusModule == module ? 2.5 : 1
+            )
+            .animation(.spring(response: 0.25, dampingFraction: 0.75), value: hoveredStatusModule)
         }
         .buttonStyle(.plain)
         .onHover { isHovered in
@@ -401,241 +424,15 @@ struct SpillBarView: View {
     }
 
     private var aiSection: some View {
-        VStack(spacing: 7) {
-            aiSectionHeader
-
-            tokenMeteringSummary
-
-            if !aiStatusStore.statuses.isEmpty {
-                LazyVGrid(columns: aiToolColumns, alignment: .leading, spacing: 7) {
-                    ForEach(aiStatusStore.statuses) { status in
-                        let serviceStatus = serviceStatus(for: status.kind)
-                        let helpText = aiToolHelpText(status, serviceStatus: serviceStatus)
-
-                        Button {
-                            panelStore.send(.setStatusDetailTarget(.ai(status.kind)))
-                        } label: {
-                            compactAIToolPill(status, serviceStatus: serviceStatus)
-                        }
-                        .buttonStyle(.plain)
-                        .popover(isPresented: detailBinding(for: .ai(status.kind)), arrowEdge: .top) {
-                            statusDetailPopover(for: .ai(status.kind))
-                        }
-                        .help(helpText)
-                        .accessibilityLabel(helpText)
-                    }
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var tokenMeteringSummary: some View {
-        if panelState.onboardingPreviewEnabled {
-            tokenMeteringSetupPreview
-        } else {
-            let snapshot = tokenUsageDashboardStore.panelSummary
-            let displayTotalTokens = snapshot.totalTokens
-            let topTask = snapshot.taskRows.first
-            let topSource = snapshot.sourceRows.first
-
-            Button {
-                tokenMeteringDetailAction()
-            } label: {
-                HStack(spacing: 10) {
-                    statusIconBadge(symbolName: "chart.bar.xaxis", tint: .teal)
-
-                    VStack(alignment: .leading, spacing: 5) {
-                        HStack(spacing: 6) {
-                            Text(AppL10n.text(.tokenMetering, appLanguage: settings.appLanguage))
-                                .font(.system(size: 11.5, weight: .semibold))
-                                .lineLimit(1)
-
-                            Text(AppL10n.text(.local, appLanguage: settings.appLanguage))
-                                .font(.system(size: 8.5, weight: .bold))
-                                .padding(.horizontal, 5)
-                                .frame(height: 17)
-                                .foregroundStyle(.teal)
-                                .background(.teal.opacity(0.12), in: Capsule())
-                        }
-
-                        HStack(alignment: .firstTextBaseline, spacing: 6) {
-                            Text(TokenUsageDashboardSnapshot.formatTokens(displayTotalTokens))
-                                .font(.system(size: 18, weight: .bold, design: .rounded))
-                                .monospacedDigit()
-
-                            Text(AppL10n.text(.tokens, appLanguage: settings.appLanguage))
-                                .font(.system(size: 9.5, weight: .semibold, design: .rounded))
-                                .foregroundStyle(.secondary)
-                        }
-
-                        Text(tokenMeteringSubtitle(topTask: topTask, topSource: topSource, eventCount: snapshot.eventCount))
-                            .font(.system(size: 10, weight: .medium, design: .rounded))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.72)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Spacer(minLength: 8)
-
-                    Label(AppL10n.text(.details, appLanguage: settings.appLanguage), systemImage: "chevron.right")
-                        .labelStyle(.iconOnly)
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
-                .frame(minHeight: 74)
-                .frame(maxWidth: .infinity)
-                .background(.teal.opacity(0.06), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(.teal.opacity(0.10), lineWidth: 0.6)
-                }
-            }
-            .buttonStyle(.plain)
-            .onAppear {
-                tokenUsageDashboardStore.refreshPanelSummary()
-            }
-            .help(AppL10n.text(.openLocalTokenMeteringDetails, appLanguage: settings.appLanguage))
-            .accessibilityLabel(
-                AppL10n.tokenMeteringAccessibility(
-                    tokenCount: TokenUsageDashboardSnapshot.formatTokens(displayTotalTokens),
-                    appLanguage: settings.appLanguage
-                )
-            )
-        }
-    }
-
-    private var tokenMeteringSetupPreview: some View {
-        Button {
-            tokenMeteringSettingsAction()
-        } label: {
-            HStack(spacing: 10) {
-                statusIconBadge(symbolName: "wand.and.stars", tint: .orange)
-
-                VStack(alignment: .leading, spacing: 5) {
-                    HStack(spacing: 6) {
-                        Text(AppL10n.text(.tokenMeteringSetupTitle, appLanguage: settings.appLanguage))
-                            .font(.system(size: 11.5, weight: .semibold))
-                            .lineLimit(1)
-
-                        Text(AppL10n.text(.need, appLanguage: settings.appLanguage))
-                            .font(.system(size: 8.5, weight: .bold))
-                            .padding(.horizontal, 5)
-                            .frame(height: 17)
-                            .foregroundStyle(.orange)
-                            .background(.orange.opacity(0.12), in: Capsule())
-                    }
-
-                    Text(AppL10n.text(.tokenMeteringSetupDetail, appLanguage: settings.appLanguage))
-                        .font(.system(size: 10, weight: .medium, design: .rounded))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                Spacer(minLength: 8)
-
-                Label(AppL10n.text(.tokenMeteringSettings, appLanguage: settings.appLanguage), systemImage: "gearshape.fill")
-                    .font(.system(size: 10, weight: .bold))
-                    .labelStyle(.titleAndIcon)
-                    .lineLimit(1)
-                    .padding(.horizontal, 8)
-                    .frame(height: 24)
-                    .foregroundStyle(.orange)
-                    .background(.orange.opacity(0.12), in: Capsule())
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .frame(minHeight: 74)
-            .frame(maxWidth: .infinity)
-            .background(.orange.opacity(0.07), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(.orange.opacity(0.14), lineWidth: 0.6)
-            }
-        }
-        .buttonStyle(.plain)
-        .help(AppL10n.text(.tokenMeteringSettings, appLanguage: settings.appLanguage))
-        .accessibilityLabel(AppL10n.text(.tokenMeteringSetupTitle, appLanguage: settings.appLanguage))
-    }
-
-    private func tokenMeteringSubtitle(
-        topTask: TokenUsageDashboardBarRow?,
-        topSource: TokenUsageDashboardBarRow?,
-        eventCount: Int
-    ) -> String {
-        guard eventCount > 0 else {
-            return AppL10n.text(.openSetupPrompt, appLanguage: settings.appLanguage)
-        }
-
-        let task = topTask.map { "\($0.title) \($0.value)" }
-            ?? AppL10n.text(.noTaskSplit, appLanguage: settings.appLanguage)
-        let source = topSource.map { "\($0.title) \($0.value)" }
-            ?? AppL10n.text(.noSourceSplit, appLanguage: settings.appLanguage)
-        return AppL10n.eventsSummary(eventCount: eventCount, task: task, source: source, appLanguage: settings.appLanguage)
-    }
-
-    private var aiToolColumns: [GridItem] {
-        [
-            GridItem(.flexible(minimum: 0), spacing: 7),
-            GridItem(.flexible(minimum: 0), spacing: 7)
-        ]
-    }
-
-    private var aiSectionHeader: some View {
-        HStack(spacing: 8) {
-            Text("AI")
-                .font(.system(size: 9.5, weight: .bold))
-                .tracking(1.2)
-                .foregroundStyle(.secondary.opacity(0.7))
-
-            if !aiStatusStore.statuses.isEmpty {
-                Text(AppL10n.aiProcessSummary(
-                    activeCount: aiStatusStore.statuses.filter { $0.state == .active }.count,
-                    totalCount: aiStatusStore.statuses.count,
-                    appLanguage: settings.appLanguage
-                ))
-                .font(.system(size: 9.5, weight: .semibold, design: .rounded))
-                .foregroundStyle(.secondary.opacity(0.7))
-                .monospacedDigit()
-            }
-
-            Spacer()
-
-            CloudServiceStatusButton(
-                state: serviceStatusControlState,
-                appLanguage: settings.appLanguage,
-                height: 22,
-                fontSize: 9.5,
-                horizontalPadding: 7
-            ) {
-                showsServiceStatusDashboard = true
-                cloudServiceStatusStore.refreshIfNeeded()
-            }
-            .popover(isPresented: $showsServiceStatusDashboard, arrowEdge: .top) {
-                CloudServiceStatusDashboardView(store: cloudServiceStatusStore)
-            }
-
-            Image(systemName: "sparkles")
-                .font(.system(size: 10.5, weight: .bold))
-                .foregroundStyle(.secondary.opacity(0.7))
-        }
-    }
-
-    private var serviceStatusControlState: CloudServiceStatusControlState {
-        CloudServiceStatusPresentation.controlState(
-            snapshot: cloudServiceStatusStore.snapshot,
-            isLoading: cloudServiceStatusStore.isLoading,
-            appLanguage: settings.appLanguage
-        )
-    }
-
-    private func serviceStatus(for kind: LocalAIToolKind) -> CloudServiceStatusItem? {
-        CloudServiceStatusPresentation.serviceStatus(
-            for: kind,
-            in: cloudServiceStatusStore.snapshot
+        SpillBarAISection(
+            panelStore: panelStore,
+            settings: settings,
+            aiStatusStore: aiStatusStore,
+            cloudServiceStatusStore: cloudServiceStatusStore,
+            tokenUsageDashboardStore: tokenUsageDashboardStore,
+            onboardingPreviewEnabled: panelState.onboardingPreviewEnabled,
+            tokenMeteringSettingsAction: tokenMeteringSettingsAction,
+            tokenMeteringDetailAction: tokenMeteringDetailAction
         )
     }
 
@@ -723,224 +520,6 @@ struct SpillBarView: View {
         .frame(minHeight: detailRows.isEmpty ? 60 : 92)
         .frame(maxWidth: .infinity)
         .background(.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-    }
-
-    private func compactAIToolPill(
-        _ status: LocalAIToolStatus,
-        serviceStatus: CloudServiceStatusItem?
-    ) -> some View {
-        let tint = status.state.panelTint
-        let isActive = status.state == .active
-        let isUnavailable = status.state == .unavailable
-        let hasServerIssue = serviceStatus?.health.isServerIssue ?? false
-        let cardTint = hasServerIssue ? serviceStatus?.health.serverStatusTint ?? tint : tint
-        let tokenUsage = toolTokenUsage(for: status.kind)
-
-        return VStack(alignment: .leading, spacing: 5) {
-            HStack(alignment: .center, spacing: 6) {
-                aiToolIconBadge(symbolName: status.symbolName, tint: tint)
-
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(status.title)
-                        .font(.system(size: 10.5, weight: .bold))
-                        .lineLimit(1)
-                        .foregroundStyle(isUnavailable ? .secondary : .primary)
-
-                    Text(subtitleText(status.subtitle))
-                        .font(.system(size: 8.5, weight: .bold, design: .rounded))
-                        .lineLimit(1)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer(minLength: 4)
-
-                aiStatusBadge(for: status, serviceStatus: serviceStatus)
-            }
-
-            Divider()
-                .opacity(0.4)
-
-            HStack(alignment: .center, spacing: 4) {
-                Image(systemName: "chart.bar.xaxis")
-                    .font(.system(size: 8))
-                    .foregroundStyle(.secondary)
-
-                HStack(alignment: .firstTextBaseline, spacing: 1) {
-                    Text(tokenUsage.value)
-                        .font(.system(size: 10, weight: .bold, design: .rounded))
-                        .monospacedDigit()
-                        .foregroundStyle(Color.primary)
-                    Text(AppL10n.text(.tokens, appLanguage: settings.appLanguage))
-                        .font(.system(size: 7.5, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer(minLength: 4)
-
-                aiProcessStateChip(status)
-
-                Spacer(minLength: 3)
-
-                let percentage = Int((tokenUsage.ratio * 100).rounded())
-                Text("\(percentage)%")
-                    .font(.system(size: 8.5, weight: .bold, design: .rounded))
-                    .monospacedDigit()
-                    .foregroundStyle(.teal)
-                    .padding(.horizontal, 4)
-                    .frame(height: 14)
-                    .background(.teal.opacity(0.12), in: RoundedRectangle(cornerRadius: 3, style: .continuous))
-            }
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 7)
-        .frame(height: 72)
-        .frame(maxWidth: .infinity)
-        .background(
-            hasServerIssue ? cardTint.opacity(0.12) : isActive ? tint.opacity(0.06) : Color.primary.opacity(0.03),
-            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(
-                    hasServerIssue ? cardTint.opacity(0.36) : isActive ? tint.opacity(0.12) : Color.primary.opacity(0.04),
-                    lineWidth: hasServerIssue ? 0.8 : 0.5
-                )
-        }
-    }
-
-    private func aiProcessStateChip(_ status: LocalAIToolStatus) -> some View {
-        let tint = status.state.panelTint
-        return HStack(spacing: 3) {
-            Circle()
-                .fill(tint)
-                .frame(width: 4.5, height: 4.5)
-
-            Text(aiProcessStateTitle(status.state))
-                .font(.system(size: 7.8, weight: .bold, design: .rounded))
-                .lineLimit(1)
-                .minimumScaleFactor(0.72)
-        }
-        .foregroundStyle(tint)
-        .padding(.horizontal, 4)
-        .frame(height: 14)
-        .background(tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 3, style: .continuous))
-    }
-
-    private func aiProcessStateTitle(_ state: SpillStatusState) -> String {
-        switch state {
-        case .active:
-            return AppL10n.text(.active, appLanguage: settings.appLanguage)
-        case .normal:
-            return AppL10n.text(.normal, appLanguage: settings.appLanguage)
-        case .warning:
-            return AppL10n.text(.warning, appLanguage: settings.appLanguage)
-        case .unavailable:
-            return AppL10n.text(.unavailable, appLanguage: settings.appLanguage)
-        case .refreshing:
-            return AppL10n.text(.checking, appLanguage: settings.appLanguage)
-        }
-    }
-
-    private func toolTokenUsage(for kind: LocalAIToolKind) -> (value: String, ratio: Double) {
-        let snapshot = tokenUsageDashboardStore.panelSummary
-        let rawValue = tokenUsageRawValue(for: kind)
-
-        if let row = snapshot.toolRows.first(where: { $0.id == rawValue }) {
-            return (row.value, row.ratio)
-        }
-        return ("0", 0.0)
-    }
-
-    private func tokenUsageRawValue(for kind: LocalAIToolKind) -> String {
-        switch kind {
-        case .codex:
-            return TokenUsageAITool.codex.rawValue
-        case .claude:
-            return TokenUsageAITool.claude.rawValue
-        case .antigravity:
-            return TokenUsageAITool.antigravity.rawValue
-        case .openAI:
-            return TokenUsageAITool.openAI.rawValue
-        case .ollama:
-            return "ollama"
-        }
-    }
-
-    private func aiToolIconBadge(symbolName: String, tint: Color) -> some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(tint.opacity(0.14))
-
-            Image(systemName: symbolName)
-                .font(.system(size: 11, weight: .bold))
-                .symbolRenderingMode(.hierarchical)
-                .foregroundStyle(tint)
-        }
-        .frame(width: 24, height: 24)
-    }
-
-    @ViewBuilder
-    private func aiStatusBadge(
-        for status: LocalAIToolStatus,
-        serviceStatus: CloudServiceStatusItem?
-    ) -> some View {
-        if let serviceStatus {
-            aiServerStatusBadge(serviceStatus)
-        } else if CloudServiceStatusPresentation.serviceKinds(for: status.kind).isEmpty {
-            aiLocalStatusBadge(status)
-        } else {
-            aiServerPendingBadge()
-        }
-    }
-
-    private func aiLocalStatusBadge(_ status: LocalAIToolStatus) -> some View {
-        let tint = status.state.panelTint
-        let isRunning = status.state == .active
-        let value = isRunning ? status.value : AppL10n.text(.local, appLanguage: settings.appLanguage)
-
-        return HStack(spacing: 4) {
-            Circle()
-                .fill(tint)
-                .frame(width: 5, height: 5)
-
-            Text(value)
-                .font(.system(size: 9.5, weight: .bold, design: .rounded))
-                .lineLimit(1)
-                .monospacedDigit()
-        }
-        .padding(.horizontal, 6)
-        .frame(height: 18)
-        .fixedSize(horizontal: true, vertical: false)
-        .foregroundStyle(isRunning ? tint : .secondary)
-        .background(
-            tint.opacity(isRunning ? 0.13 : 0.07),
-            in: Capsule()
-        )
-    }
-
-    private func aiServerPendingBadge() -> some View {
-        let tint = cloudServiceStatusStore.isLoading ? Color.blue : Color.secondary
-        let value = cloudServiceStatusStore.isLoading
-            ? AppL10n.text(.checking, appLanguage: settings.appLanguage)
-            : AppL10n.text(.server, appLanguage: settings.appLanguage)
-
-        return HStack(spacing: 4) {
-            Image(systemName: cloudServiceStatusStore.isLoading ? "arrow.triangle.2.circlepath" : "cloud.fill")
-                .font(.system(size: 8, weight: .bold))
-
-            Text(value)
-                .font(.system(size: 8.5, weight: .bold, design: .rounded))
-                .lineLimit(1)
-        }
-        .padding(.horizontal, 5)
-        .frame(height: 18)
-        .foregroundStyle(tint)
-        .background(tint.opacity(0.10), in: Capsule())
-        .help(AppL10n.text(.serverStatusPendingHelp, appLanguage: settings.appLanguage))
-    }
-
-    private func aiServerStatusBadge(_ item: CloudServiceStatusItem) -> some View {
-        CloudServiceStatusBadge(item: item, appLanguage: settings.appLanguage)
     }
 
     private func statusIconBadge(symbolName: String, tint: Color) -> some View {

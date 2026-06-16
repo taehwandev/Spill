@@ -88,6 +88,10 @@ enum TokenMeteringTextKey: String {
     case stageBreakdownSubtitle
     case sourceBreakdown
     case sourceBreakdownSubtitle
+    case trendTitle
+    case trendSubtitle
+    case noTrendData
+    case trendHoverGuide
     case noAIToolData
     case noWorkflowData
     case noStageData
@@ -208,6 +212,10 @@ enum TokenMeteringTextKey: String {
     case promptDisplayNamesEnabled
     case promptDisplayNamesDetail
     case promptDisplayNamesReapplyWarning
+    case promptInstructionCardTitle
+    case promptInstructionCardDetail
+    case menuBarTokenDisplayModeTitle
+    case menuBarTokenDisplayModeDetail
     case copyInstallPrompt
     case copyWebSetup
     case dashboard

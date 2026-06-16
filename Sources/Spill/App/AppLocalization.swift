@@ -85,11 +85,14 @@ enum AppTextKey: String {
     case tokenMeteringSetupTitle
     case tokenMeteringSetupDetail
     case tokenMeteringSettings
+    case menuBarTokenDisplayModeDaily
+    case menuBarTokenDisplayModeTotal
+    case menuBarTokenDisplayModeDailyAndTotal
+    case menuBarTokenDisplayModeCycle
     case openSetupPrompt
     case noTaskSplit
     case noSourceSplit
     case eventsSummary
-    case aiProcesses
     case aiProcessSummary
     case windows
     case menuBar
@@ -650,11 +653,14 @@ enum AppL10n {
             .tokenMeteringSetupTitle: "Set up Token Metering",
             .tokenMeteringSetupDetail: "Open Settings > Token Metering and follow the setup steps. This preview keeps local data intact.",
             .tokenMeteringSettings: "Token Metering Settings",
+            .menuBarTokenDisplayModeDaily: "Daily Only",
+            .menuBarTokenDisplayModeTotal: "Total Only",
+            .menuBarTokenDisplayModeDailyAndTotal: "Daily & Total",
+            .menuBarTokenDisplayModeCycle: "Auto-Cycle",
             .openSetupPrompt: "Open to copy global setup prompt",
             .noTaskSplit: "No task split",
             .noSourceSplit: "No source split",
             .eventsSummary: "%d events / %@ / %@",
-            .aiProcesses: "AI Processes",
             .aiProcessSummary: "%d of %d active",
             .windows: "WINDOWS",
             .menuBar: "MENU BAR",
@@ -862,11 +868,14 @@ enum AppL10n {
             .tokenMeteringSetupTitle: "토큰 미터링 설정",
             .tokenMeteringSetupDetail: "설정 > 토큰 미터링에서 안내를 따라 연결하세요. 이 미리보기는 로컬 데이터를 유지합니다.",
             .tokenMeteringSettings: "토큰 미터링 설정",
+            .menuBarTokenDisplayModeDaily: "일간만 표시",
+            .menuBarTokenDisplayModeTotal: "토탈만 표시",
+            .menuBarTokenDisplayModeDailyAndTotal: "일간/토탈 모두 표시",
+            .menuBarTokenDisplayModeCycle: "자동 전환",
             .openSetupPrompt: "열어서 전역 설정 프롬프트 복사",
             .noTaskSplit: "작업 분류 없음",
             .noSourceSplit: "소스 분류 없음",
             .eventsSummary: "이벤트 %d개 / %@ / %@",
-            .aiProcesses: "AI 프로세스",
             .aiProcessSummary: "%d/%d 활성",
             .windows: "윈도우",
             .menuBar: "메뉴 막대",
@@ -1074,11 +1083,14 @@ enum AppL10n {
             .tokenMeteringSetupTitle: "トークン計測を設定",
             .tokenMeteringSetupDetail: "設定 > トークン計測を開き、手順に従って接続します。このプレビューはローカルデータを保持します。",
             .tokenMeteringSettings: "トークン計測設定",
+            .menuBarTokenDisplayModeDaily: "日間のみ表示",
+            .menuBarTokenDisplayModeTotal: "合計のみ表示",
+            .menuBarTokenDisplayModeDailyAndTotal: "日間と合計両方表示",
+            .menuBarTokenDisplayModeCycle: "自動切り替え",
             .openSetupPrompt: "開いてグローバル設定プロンプトをコピー",
             .noTaskSplit: "タスク分類なし",
             .noSourceSplit: "ソース分類なし",
             .eventsSummary: "イベント %d件 / %@ / %@",
-            .aiProcesses: "AI プロセス",
             .aiProcessSummary: "%d/%d アクティブ",
             .windows: "ウィンドウ",
             .menuBar: "メニューバー",
