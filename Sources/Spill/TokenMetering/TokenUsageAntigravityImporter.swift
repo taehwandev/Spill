@@ -8,23 +8,28 @@ struct TokenUsageAntigravityImportSummary: Equatable {
     let parsedUsageEvents: Int
     let importedEvents: Int
     let skippedDuplicateEvents: Int
+    let splitOutputFallbackEvents: Int
+    let cursorAdvancedDatabases: Int
 }
 
 final class TokenUsageAntigravityImporter {
     private let conversationsDirectory: URL
     private let labelTimelineURL: URL
     private let diagnosticsURL: URL?
+    private let stateURL: URL?
     private let fileManager: FileManager
 
     init(
         conversationsDirectory: URL = TokenUsageAntigravityImporter.defaultConversationsDirectory(),
         labelTimelineURL: URL = TokenUsageAntigravityImporter.defaultLabelTimelineURL(),
         diagnosticsURL: URL? = TokenUsageAntigravityImporter.defaultDiagnosticsURL(),
+        stateURL: URL? = TokenUsageAntigravityImporter.defaultStateURL(),
         fileManager: FileManager = .default
     ) {
         self.conversationsDirectory = conversationsDirectory
         self.labelTimelineURL = labelTimelineURL
         self.diagnosticsURL = diagnosticsURL
+        self.stateURL = stateURL
         self.fileManager = fileManager
     }
 
@@ -32,17 +37,27 @@ final class TokenUsageAntigravityImporter {
     func importRecentEvents(into store: TokenUsageStore, since startDate: Date) -> TokenUsageAntigravityImportSummary {
         let sources = discoverConversationDatabases(modifiedSince: startDate)
         let labelTimeline = readLabelTimeline()
+        var importState = readImportState()
         var knownSpanIDs = store.existingSpanIDs()
         var scannedRows = 0
         var parsedEvents = 0
         var candidateEvents = [TokenUsageEvent]()
         var skippedDuplicates = 0
+        var splitOutputFallbackEvents = 0
+        var cursorAdvancedDatabases = Set<String>()
 
         for source in sources {
-            let records = readGenerationRecords(from: source)
+            let sourceKey = Self.sourceStateKey(for: source)
+            let previousMaxIndex = importState.maxGenerationIndexBySource[sourceKey]
+            let records = readGenerationRecords(from: source, after: previousMaxIndex)
             scannedRows += records.count
+            var maxParsedIndex = previousMaxIndex ?? Int.min
 
             for record in records {
+                maxParsedIndex = max(maxParsedIndex, record.index)
+                if record.usage.usedSplitOutputFallback {
+                    splitOutputFallbackEvents += 1
+                }
                 guard let event = event(from: record, source: source, labelTimeline: labelTimeline) else {
                     continue
                 }
@@ -56,17 +71,27 @@ final class TokenUsageAntigravityImporter {
                 knownSpanIDs.insert(event.spanID)
                 candidateEvents.append(event)
             }
+
+            if maxParsedIndex != (previousMaxIndex ?? Int.min), maxParsedIndex >= 0 {
+                importState.maxGenerationIndexBySource[sourceKey] = maxParsedIndex
+                cursorAdvancedDatabases.insert(sourceKey)
+            }
         }
 
         let importedEvents = (try? store.appendEventsWithoutLoading(candidateEvents)) ?? 0
         skippedDuplicates += candidateEvents.count - importedEvents
+        if candidateEvents.count == importedEvents {
+            writeImportState(importState)
+        }
 
         let summary = TokenUsageAntigravityImportSummary(
             scannedDatabases: sources.count,
             scannedGenerationRows: scannedRows,
             parsedUsageEvents: parsedEvents,
             importedEvents: importedEvents,
-            skippedDuplicateEvents: skippedDuplicates
+            skippedDuplicateEvents: skippedDuplicates,
+            splitOutputFallbackEvents: splitOutputFallbackEvents,
+            cursorAdvancedDatabases: cursorAdvancedDatabases.count
         )
         writeDiagnostic(summary)
         return summary
@@ -97,7 +122,7 @@ final class TokenUsageAntigravityImporter {
         .sorted { $0.url.lastPathComponent < $1.url.lastPathComponent }
     }
 
-    private func readGenerationRecords(from source: ConversationDatabase) -> [GenerationRecord] {
+    private func readGenerationRecords(from source: ConversationDatabase, after previousMaxIndex: Int?) -> [GenerationRecord] {
         var database: OpaquePointer?
         let flags = SQLITE_OPEN_READONLY | SQLITE_OPEN_FULLMUTEX
         guard sqlite3_open_v2(source.url.path, &database, flags, nil) == SQLITE_OK,
@@ -108,7 +133,12 @@ final class TokenUsageAntigravityImporter {
         }
         defer { sqlite3_close(database) }
 
-        let sql = "SELECT idx, data FROM gen_metadata ORDER BY idx"
+        let sql: String
+        if previousMaxIndex != nil {
+            sql = "SELECT idx, data FROM gen_metadata WHERE idx > ? ORDER BY idx"
+        } else {
+            sql = "SELECT idx, data FROM gen_metadata ORDER BY idx"
+        }
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
               let statement
@@ -116,6 +146,9 @@ final class TokenUsageAntigravityImporter {
             return []
         }
         defer { sqlite3_finalize(statement) }
+        if let previousMaxIndex {
+            sqlite3_bind_int64(statement, 1, sqlite3_int64(previousMaxIndex))
+        }
 
         var records = [GenerationRecord]()
         while sqlite3_step(statement) == SQLITE_ROW {
@@ -193,10 +226,17 @@ final class TokenUsageAntigravityImporter {
 
         let usageFields = varintFieldTotals(in: usage)
         // Observed AGY gen_metadata usage fields: 2 = uncached input,
-        // 5 = cached input, 3 = aggregate output.
+        // 5 = cached input, 3 = aggregate output. Some records also expose
+        // split output components in 9/10; use those only when aggregate
+        // output is absent so known aggregate totals remain the source of truth.
         let uncachedInput = safeToken(usageFields[2])
         let cachedInput = safeToken(usageFields[5])
-        let output = safeToken(usageFields[3])
+        let aggregateOutput = safeToken(usageFields[3])
+        guard let splitOutput = safeAdd(safeToken(usageFields[9]), safeToken(usageFields[10])) else {
+            return nil
+        }
+        let output = aggregateOutput > 0 ? aggregateOutput : splitOutput
+        let usedSplitOutputFallback = aggregateOutput == 0 && splitOutput > 0
         guard let input = safeAdd(uncachedInput, cachedInput) else {
             return nil
         }
@@ -210,7 +250,12 @@ final class TokenUsageAntigravityImporter {
         let model = firstUTF8Field(19, in: generation)
             ?? request.flatMap { firstUTF8Field(28, in: $0) }
             ?? "antigravity-unknown"
-        return UsageRecord(inputTokens: input, outputTokens: output, model: model)
+        return UsageRecord(
+            inputTokens: input,
+            outputTokens: output,
+            model: model,
+            usedSplitOutputFallback: usedSplitOutputFallback
+        )
     }
 
     private func readLabelTimeline() -> LabelTimeline {
@@ -266,6 +311,8 @@ final class TokenUsageAntigravityImporter {
             "parsed_usage_events": summary.parsedUsageEvents,
             "imported_events": summary.importedEvents,
             "skipped_duplicate_events": summary.skippedDuplicateEvents,
+            "split_output_fallback_events": summary.splitOutputFallbackEvents,
+            "cursor_advanced_databases": summary.cursorAdvancedDatabases,
             "timestamp_source": "conversation_database_mtime",
             "timestamp_limitation": "AGY gen_metadata rows observed by this importer expose no trusted per-row timestamp.",
             "privacy": "No payload values, prompts, responses, commands, file paths, logs, diffs, source, environment values, or secrets are stored."
@@ -350,6 +397,10 @@ final class TokenUsageAntigravityImporter {
         return digest.map { String(format: "%02x", $0) }.joined().prefix(24).description
     }
 
+    private static func sourceStateKey(for source: ConversationDatabase) -> String {
+        opaqueHash(source.url.deletingPathExtension().lastPathComponent)
+    }
+
     private static func defaultConversationsDirectory() -> URL {
         URL(fileURLWithPath: NSHomeDirectory())
             .appendingPathComponent(".gemini", isDirectory: true)
@@ -370,6 +421,60 @@ final class TokenUsageAntigravityImporter {
             .appendingPathComponent("diagnostics", isDirectory: true)
             .appendingPathComponent("antigravity-active-importer-last.json")
     }
+
+    private static func defaultStateURL() -> URL {
+        AppDirectories.spillApplicationSupportDirectory()
+            .appendingPathComponent("token-metering", isDirectory: true)
+            .appendingPathComponent("session-state", isDirectory: true)
+            .appendingPathComponent("antigravity-active-importer-state.json")
+    }
+
+    private func readImportState() -> ImportState {
+        guard let stateURL,
+              let data = try? Data(contentsOf: stateURL),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let rawCursors = object["max_generation_index_by_source"] as? [String: Any]
+        else {
+            return ImportState(maxGenerationIndexBySource: [:])
+        }
+
+        var cursors = [String: Int]()
+        for (key, value) in rawCursors {
+            guard key.range(of: #"^[a-f0-9]{24}$"#, options: .regularExpression) != nil else {
+                continue
+            }
+            if let intValue = value as? Int, intValue >= 0 {
+                cursors[key] = intValue
+            } else if let number = value as? NSNumber, number.intValue >= 0 {
+                cursors[key] = number.intValue
+            }
+        }
+        return ImportState(maxGenerationIndexBySource: cursors)
+    }
+
+    private func writeImportState(_ state: ImportState) {
+        guard let stateURL else {
+            return
+        }
+
+        let object: [String: Any] = [
+            "schema_version": 1,
+            "ai_tool": "antigravity",
+            "max_generation_index_by_source": state.maxGenerationIndexBySource,
+            "privacy": "Contains only opaque conversation hashes and numeric generation cursors; no paths, prompts, responses, commands, logs, diffs, source, environment values, or secrets."
+        ]
+
+        do {
+            try fileManager.createDirectory(
+                at: stateURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            let data = try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
+            try data.write(to: stateURL, options: [.atomic])
+        } catch {
+            return
+        }
+    }
 }
 
 private struct ConversationDatabase {
@@ -386,6 +491,11 @@ private struct UsageRecord {
     let inputTokens: Int
     let outputTokens: Int
     let model: String
+    let usedSplitOutputFallback: Bool
+}
+
+private struct ImportState {
+    var maxGenerationIndexBySource: [String: Int]
 }
 
 private struct LabelTimeline {

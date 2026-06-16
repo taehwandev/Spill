@@ -35,7 +35,8 @@ final class TokenUsageAntigravityImporterTests: XCTestCase {
         let importer = TokenUsageAntigravityImporter(
             conversationsDirectory: conversationsURL,
             labelTimelineURL: labelURL,
-            diagnosticsURL: diagnosticsURL
+            diagnosticsURL: diagnosticsURL,
+            stateURL: nil
         )
 
         let firstSummary = importer.importRecentEvents(into: store, since: Date(timeIntervalSince1970: 0))
@@ -99,7 +100,8 @@ final class TokenUsageAntigravityImporterTests: XCTestCase {
         let importer = TokenUsageAntigravityImporter(
             conversationsDirectory: conversationsURL,
             labelTimelineURL: labelURL,
-            diagnosticsURL: diagnosticsURL
+            diagnosticsURL: diagnosticsURL,
+            stateURL: rootURL.appendingPathComponent("state/antigravity-active-importer-state.json")
         )
 
         let summary = importer.importRecentEvents(into: store, since: Date(timeIntervalSince1970: 0))
@@ -113,8 +115,133 @@ final class TokenUsageAntigravityImporterTests: XCTestCase {
 
         let diagnostic = try String(contentsOf: diagnosticsURL)
         XCTAssertTrue(diagnostic.contains(#""timestamp_source":"conversation_database_mtime""#))
+        XCTAssertTrue(diagnostic.contains(#""split_output_fallback_events":0"#))
         XCTAssertTrue(diagnostic.contains("no trusted per-row timestamp"))
         XCTAssertFalse(diagnostic.contains(databaseURL.path))
+    }
+
+    func testSplitOutputFieldsAreUsedWhenAggregateOutputIsMissing() throws {
+        let rootURL = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: rootURL) }
+
+        let conversationsURL = rootURL.appendingPathComponent("conversations", isDirectory: true)
+        let databaseURL = conversationsURL.appendingPathComponent("conversation-a.db")
+        let labelURL = rootURL.appendingPathComponent("labels/antigravity-timeline.jsonl")
+        let diagnosticsURL = rootURL.appendingPathComponent("diagnostics/antigravity-active-importer-last.json")
+        try writeAlwaysActiveLabel(at: labelURL)
+
+        try writeAntigravityConversationDatabase(
+            at: databaseURL,
+            rows: [
+                (
+                    2,
+                    antigravityGenerationMetadataBlob(
+                        inputTokenChunks: [50],
+                        outputTokenChunks: [],
+                        cachedInputTokenChunks: [10],
+                        splitOutputTokenChunks: [4, 8, 3],
+                        model: "gemini-3.5-flash-low"
+                    )
+                )
+            ]
+        )
+
+        let store = TokenUsageStore(fileURL: rootURL.appendingPathComponent("events.json"))
+        let importer = TokenUsageAntigravityImporter(
+            conversationsDirectory: conversationsURL,
+            labelTimelineURL: labelURL,
+            diagnosticsURL: diagnosticsURL,
+            stateURL: rootURL.appendingPathComponent("state/antigravity-active-importer-state.json")
+        )
+
+        let summary = importer.importRecentEvents(into: store, since: Date(timeIntervalSince1970: 0))
+        let event = try XCTUnwrap(store.loadEvents().first)
+
+        XCTAssertEqual(summary.importedEvents, 1)
+        XCTAssertEqual(summary.splitOutputFallbackEvents, 1)
+        XCTAssertEqual(event.inputTokens, 60)
+        XCTAssertEqual(event.outputTokens, 15)
+        XCTAssertEqual(event.totalTokens, 75)
+
+        let diagnostic = try String(contentsOf: diagnosticsURL)
+        XCTAssertTrue(diagnostic.contains(#""split_output_fallback_events":1"#))
+        XCTAssertFalse(diagnostic.contains(databaseURL.path))
+    }
+
+    func testImporterSkipsRowsAtOrBeforeOpaqueCursor() throws {
+        let rootURL = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: rootURL) }
+
+        let conversationsURL = rootURL.appendingPathComponent("conversations", isDirectory: true)
+        let databaseURL = conversationsURL.appendingPathComponent("conversation-a.db")
+        let labelURL = rootURL.appendingPathComponent("labels/antigravity-timeline.jsonl")
+        let diagnosticsURL = rootURL.appendingPathComponent("diagnostics/antigravity-active-importer-last.json")
+        let stateURL = rootURL.appendingPathComponent("state/antigravity-active-importer-state.json")
+        try writeAlwaysActiveLabel(at: labelURL)
+
+        try writeAntigravityConversationDatabase(
+            at: databaseURL,
+            rows: [
+                (
+                    1,
+                    antigravityGenerationMetadataBlob(
+                        inputTokenChunks: [10],
+                        outputTokenChunks: [5],
+                        cachedInputTokenChunks: [],
+                        model: "gemini-3.5-flash-low"
+                    )
+                )
+            ]
+        )
+
+        let store = TokenUsageStore(fileURL: rootURL.appendingPathComponent("events.json"))
+        let importer = TokenUsageAntigravityImporter(
+            conversationsDirectory: conversationsURL,
+            labelTimelineURL: labelURL,
+            diagnosticsURL: diagnosticsURL,
+            stateURL: stateURL
+        )
+
+        let firstSummary = importer.importRecentEvents(into: store, since: Date(timeIntervalSince1970: 0))
+        XCTAssertEqual(firstSummary.scannedGenerationRows, 1)
+        XCTAssertEqual(firstSummary.cursorAdvancedDatabases, 1)
+        XCTAssertEqual(store.loadEvents().count, 1)
+
+        try writeAntigravityConversationDatabase(
+            at: databaseURL,
+            rows: [
+                (
+                    1,
+                    antigravityGenerationMetadataBlob(
+                        inputTokenChunks: [10],
+                        outputTokenChunks: [5],
+                        cachedInputTokenChunks: [],
+                        model: "gemini-3.5-flash-low"
+                    )
+                ),
+                (
+                    2,
+                    antigravityGenerationMetadataBlob(
+                        inputTokenChunks: [20],
+                        outputTokenChunks: [6],
+                        cachedInputTokenChunks: [4],
+                        model: "gemini-3.5-flash-low"
+                    )
+                )
+            ]
+        )
+
+        let secondSummary = importer.importRecentEvents(into: store, since: Date(timeIntervalSince1970: 0))
+        XCTAssertEqual(secondSummary.scannedGenerationRows, 1)
+        XCTAssertEqual(secondSummary.parsedUsageEvents, 1)
+        XCTAssertEqual(secondSummary.importedEvents, 1)
+        XCTAssertEqual(secondSummary.cursorAdvancedDatabases, 1)
+        XCTAssertEqual(store.loadEvents().map(\.totalTokens).sorted(), [15, 30])
+
+        let state = try String(contentsOf: stateURL)
+        XCTAssertFalse(state.contains(databaseURL.path))
+        XCTAssertFalse(state.contains("conversation-a"))
+        XCTAssertTrue(state.contains(#""max_generation_index_by_source""#))
     }
 
     func testImporterUsesBatchAppendInsteadOfPerEventStoreAppend() throws {
@@ -190,6 +317,7 @@ final class TokenUsageAntigravityImporterTests: XCTestCase {
         inputTokenChunks: [Int],
         outputTokenChunks: [Int],
         cachedInputTokenChunks: [Int],
+        splitOutputTokenChunks: [Int] = [],
         model: String
     ) -> Data {
         var usage = Data()
@@ -197,6 +325,10 @@ final class TokenUsageAntigravityImporterTests: XCTestCase {
         inputTokenChunks.forEach { usage.append(protoVarintField(2, $0)) }
         outputTokenChunks.forEach { usage.append(protoVarintField(3, $0)) }
         cachedInputTokenChunks.forEach { usage.append(protoVarintField(5, $0)) }
+        if let firstSplitOutput = splitOutputTokenChunks.first {
+            usage.append(protoVarintField(9, firstSplitOutput))
+            splitOutputTokenChunks.dropFirst().forEach { usage.append(protoVarintField(10, $0)) }
+        }
 
         var generation = Data()
         generation.append(protoBytesField(4, usage))

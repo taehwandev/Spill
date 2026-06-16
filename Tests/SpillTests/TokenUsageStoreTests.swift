@@ -777,6 +777,9 @@ final class TokenUsageStoreTests: XCTestCase {
         let diagnosticsURL = rootURL
             .appendingPathComponent("diagnostics", isDirectory: true)
             .appendingPathComponent("antigravity-active-importer-last.json")
+        let stateURL = rootURL
+            .appendingPathComponent("state", isDirectory: true)
+            .appendingPathComponent("antigravity-active-importer-state.json")
 
         try writeAntigravityConversationDatabase(
             at: databaseURL,
@@ -806,7 +809,8 @@ final class TokenUsageStoreTests: XCTestCase {
         let importer = TokenUsageAntigravityImporter(
             conversationsDirectory: conversationsURL,
             labelTimelineURL: labelURL,
-            diagnosticsURL: diagnosticsURL
+            diagnosticsURL: diagnosticsURL,
+            stateURL: stateURL
         )
 
         let summary = importer.importRecentEvents(into: store, since: Date(timeIntervalSince1970: 0))
@@ -829,8 +833,9 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(event.tokenBreakdown.generatedOutput, 34)
 
         let duplicateSummary = importer.importRecentEvents(into: store, since: Date(timeIntervalSince1970: 0))
+        XCTAssertEqual(duplicateSummary.scannedGenerationRows, 0)
         XCTAssertEqual(duplicateSummary.importedEvents, 0)
-        XCTAssertEqual(duplicateSummary.skippedDuplicateEvents, 1)
+        XCTAssertEqual(duplicateSummary.skippedDuplicateEvents, 0)
         XCTAssertEqual(store.loadEvents().count, 1)
 
         let diagnostic = try String(contentsOf: diagnosticsURL)
