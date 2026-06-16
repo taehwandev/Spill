@@ -76,15 +76,18 @@ final class ReleaseNotarizationContractTests: XCTestCase {
         XCTAssertFalse(uploadModels.contains("functions/v1/private-usage-relay"))
     }
 
-    func testReleaseBuildKeepsPrivateUsageUploadDebugOnly() throws {
+    func testReleaseBuildExposesConfiguredPrivateUsageUploadSurface() throws {
         let uploadModels = try read("Sources/Spill/TokenMetering/PrivateUsageUploadModels.swift")
         let preferencesSection = try read("Sources/Spill/Preferences/TokenMeteringPreferencesSection.swift")
         let tokenMeteringCoordinator = try read("Sources/Spill/TokenMetering/TokenMeteringCoordinator.swift")
 
         XCTAssertTrue(uploadModels.contains("enum PrivateUsageUploadFeatureAvailability"))
-        XCTAssertTrue(uploadModels.contains("#if DEBUG\n        return true\n        #else\n        return false\n        #endif"))
+        XCTAssertTrue(uploadModels.contains("static var isEnabledInCurrentBuild: Bool {\n        return true\n    }"))
+        XCTAssertFalse(uploadModels.contains("#if DEBUG\n        return true\n        #else\n        return false\n        #endif"))
         XCTAssertTrue(preferencesSection.contains("if PrivateUsageUploadFeatureAvailability.isEnabledInCurrentBuild"))
+        XCTAssertTrue(preferencesSection.contains(".disabled(privateUsageWebConnectionURL == nil)"))
         XCTAssertTrue(tokenMeteringCoordinator.contains("guard PrivateUsageUploadFeatureAvailability.isEnabledInCurrentBuild else"))
+        XCTAssertTrue(tokenMeteringCoordinator.contains("isEnabled: settings.privateUsageUploadEnabled"))
     }
 
     func testNotarizationScriptProtectsInlineApiKeyAndValidatesJsonStatus() throws {

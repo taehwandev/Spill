@@ -4,11 +4,7 @@ import SystemConfiguration
 
 enum PrivateUsageUploadFeatureAvailability {
     static var isEnabledInCurrentBuild: Bool {
-        #if DEBUG
         return true
-        #else
-        return false
-        #endif
     }
 }
 
