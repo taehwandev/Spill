@@ -13,6 +13,7 @@ struct SpillBarView: View {
     @ObservedObject var updateStore: UpdateCheckStore
     let dismissAction: () -> Void
     let settingsAction: () -> Void
+    let tokenMeteringSettingsAction: () -> Void
     let tokenMeteringDetailAction: () -> Void
     @State private var pendingDismissWorkItem: DispatchWorkItem?
     @State private var hoveredStatusModule: SpillStatusModule? = nil
@@ -301,10 +302,11 @@ struct SpillBarView: View {
             return actionFeedback.message
         }
 
-        return panelState.readiness.subtitle(
-            count: panelState.itemCount,
-            pinnedCount: panelState.pinnedItemCount
-        )
+        if panelState.onboardingPreviewEnabled {
+            return AppL10n.text(.onboardingPreviewTitle, appLanguage: settings.appLanguage)
+        }
+
+        return panelState.readiness.subtitle(appLanguage: settings.appLanguage)
     }
 
     private var statusSection: some View {
@@ -427,77 +429,136 @@ struct SpillBarView: View {
         }
     }
 
+    @ViewBuilder
     private var tokenMeteringSummary: some View {
-        let snapshot = tokenUsageDashboardStore.panelSummary
-        let displayTotalTokens = snapshot.totalTokens
-        let topTask = snapshot.taskRows.first
-        let topSource = snapshot.sourceRows.first
+        if panelState.onboardingPreviewEnabled {
+            tokenMeteringSetupPreview
+        } else {
+            let snapshot = tokenUsageDashboardStore.panelSummary
+            let displayTotalTokens = snapshot.totalTokens
+            let topTask = snapshot.taskRows.first
+            let topSource = snapshot.sourceRows.first
 
-        return Button {
-            tokenMeteringDetailAction()
-        } label: {
-            HStack(spacing: 10) {
-                statusIconBadge(symbolName: "chart.bar.xaxis", tint: .teal)
+            Button {
+                tokenMeteringDetailAction()
+            } label: {
+                HStack(spacing: 10) {
+                    statusIconBadge(symbolName: "chart.bar.xaxis", tint: .teal)
 
-                VStack(alignment: .leading, spacing: 5) {
-                    HStack(spacing: 6) {
-                        Text(AppL10n.text(.tokenMetering, appLanguage: settings.appLanguage))
-                            .font(.system(size: 11.5, weight: .semibold))
+                    VStack(alignment: .leading, spacing: 5) {
+                        HStack(spacing: 6) {
+                            Text(AppL10n.text(.tokenMetering, appLanguage: settings.appLanguage))
+                                .font(.system(size: 11.5, weight: .semibold))
+                                .lineLimit(1)
+
+                            Text(AppL10n.text(.local, appLanguage: settings.appLanguage))
+                                .font(.system(size: 8.5, weight: .bold))
+                                .padding(.horizontal, 5)
+                                .frame(height: 17)
+                                .foregroundStyle(.teal)
+                                .background(.teal.opacity(0.12), in: Capsule())
+                        }
+
+                        HStack(alignment: .firstTextBaseline, spacing: 6) {
+                            Text(TokenUsageDashboardSnapshot.formatTokens(displayTotalTokens))
+                                .font(.system(size: 18, weight: .bold, design: .rounded))
+                                .monospacedDigit()
+
+                            Text(AppL10n.text(.tokens, appLanguage: settings.appLanguage))
+                                .font(.system(size: 9.5, weight: .semibold, design: .rounded))
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Text(tokenMeteringSubtitle(topTask: topTask, topSource: topSource, eventCount: snapshot.eventCount))
+                            .font(.system(size: 10, weight: .medium, design: .rounded))
                             .lineLimit(1)
-
-                        Text(AppL10n.text(.local, appLanguage: settings.appLanguage))
-                            .font(.system(size: 8.5, weight: .bold))
-                            .padding(.horizontal, 5)
-                            .frame(height: 17)
-                            .foregroundStyle(.teal)
-                            .background(.teal.opacity(0.12), in: Capsule())
-                    }
-
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text(TokenUsageDashboardSnapshot.formatTokens(displayTotalTokens))
-                            .font(.system(size: 18, weight: .bold, design: .rounded))
-                            .monospacedDigit()
-
-                        Text(AppL10n.text(.tokens, appLanguage: settings.appLanguage))
-                            .font(.system(size: 9.5, weight: .semibold, design: .rounded))
+                            .minimumScaleFactor(0.72)
                             .foregroundStyle(.secondary)
                     }
 
-                    Text(tokenMeteringSubtitle(topTask: topTask, topSource: topSource, eventCount: snapshot.eventCount))
-                        .font(.system(size: 10, weight: .medium, design: .rounded))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.72)
+                    Spacer(minLength: 8)
+
+                    Label(AppL10n.text(.details, appLanguage: settings.appLanguage), systemImage: "chevron.right")
+                        .labelStyle(.iconOnly)
+                        .font(.system(size: 11, weight: .bold))
                         .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .frame(minHeight: 74)
+                .frame(maxWidth: .infinity)
+                .background(.teal.opacity(0.06), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(.teal.opacity(0.10), lineWidth: 0.6)
+                }
+            }
+            .buttonStyle(.plain)
+            .onAppear {
+                tokenUsageDashboardStore.refreshPanelSummary()
+            }
+            .help(AppL10n.text(.openLocalTokenMeteringDetails, appLanguage: settings.appLanguage))
+            .accessibilityLabel(
+                AppL10n.tokenMeteringAccessibility(
+                    tokenCount: TokenUsageDashboardSnapshot.formatTokens(displayTotalTokens),
+                    appLanguage: settings.appLanguage
+                )
+            )
+        }
+    }
+
+    private var tokenMeteringSetupPreview: some View {
+        Button {
+            tokenMeteringSettingsAction()
+        } label: {
+            HStack(spacing: 10) {
+                statusIconBadge(symbolName: "wand.and.stars", tint: .orange)
+
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack(spacing: 6) {
+                        Text(AppL10n.text(.tokenMeteringSetupTitle, appLanguage: settings.appLanguage))
+                            .font(.system(size: 11.5, weight: .semibold))
+                            .lineLimit(1)
+
+                        Text(AppL10n.text(.need, appLanguage: settings.appLanguage))
+                            .font(.system(size: 8.5, weight: .bold))
+                            .padding(.horizontal, 5)
+                            .frame(height: 17)
+                            .foregroundStyle(.orange)
+                            .background(.orange.opacity(0.12), in: Capsule())
+                    }
+
+                    Text(AppL10n.text(.tokenMeteringSetupDetail, appLanguage: settings.appLanguage))
+                        .font(.system(size: 10, weight: .medium, design: .rounded))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Spacer(minLength: 8)
 
-                Label(AppL10n.text(.details, appLanguage: settings.appLanguage), systemImage: "chevron.right")
-                    .labelStyle(.iconOnly)
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(.secondary)
+                Label(AppL10n.text(.tokenMeteringSettings, appLanguage: settings.appLanguage), systemImage: "gearshape.fill")
+                    .font(.system(size: 10, weight: .bold))
+                    .labelStyle(.titleAndIcon)
+                    .lineLimit(1)
+                    .padding(.horizontal, 8)
+                    .frame(height: 24)
+                    .foregroundStyle(.orange)
+                    .background(.orange.opacity(0.12), in: Capsule())
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
             .frame(minHeight: 74)
             .frame(maxWidth: .infinity)
-            .background(.teal.opacity(0.06), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .background(.orange.opacity(0.07), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(.teal.opacity(0.10), lineWidth: 0.6)
+                    .stroke(.orange.opacity(0.14), lineWidth: 0.6)
             }
         }
         .buttonStyle(.plain)
-        .onAppear {
-            tokenUsageDashboardStore.refreshPanelSummary()
-        }
-        .help(AppL10n.text(.openLocalTokenMeteringDetails, appLanguage: settings.appLanguage))
-        .accessibilityLabel(
-            AppL10n.tokenMeteringAccessibility(
-                tokenCount: TokenUsageDashboardSnapshot.formatTokens(displayTotalTokens),
-                appLanguage: settings.appLanguage
-            )
-        )
+        .help(AppL10n.text(.tokenMeteringSettings, appLanguage: settings.appLanguage))
+        .accessibilityLabel(AppL10n.text(.tokenMeteringSetupTitle, appLanguage: settings.appLanguage))
     }
 
     private func tokenMeteringSubtitle(
@@ -529,6 +590,17 @@ struct SpillBarView: View {
                 .font(.system(size: 9.5, weight: .bold))
                 .tracking(1.2)
                 .foregroundStyle(.secondary.opacity(0.7))
+
+            if !aiStatusStore.statuses.isEmpty {
+                Text(AppL10n.aiProcessSummary(
+                    activeCount: aiStatusStore.statuses.filter { $0.state == .active }.count,
+                    totalCount: aiStatusStore.statuses.count,
+                    appLanguage: settings.appLanguage
+                ))
+                .font(.system(size: 9.5, weight: .semibold, design: .rounded))
+                .foregroundStyle(.secondary.opacity(0.7))
+                .monospacedDigit()
+            }
 
             Spacer()
 
@@ -705,6 +777,10 @@ struct SpillBarView: View {
 
                 Spacer(minLength: 4)
 
+                aiProcessStateChip(status)
+
+                Spacer(minLength: 3)
+
                 let percentage = Int((tokenUsage.ratio * 100).rounded())
                 Text("\(percentage)%")
                     .font(.system(size: 8.5, weight: .bold, design: .rounded))
@@ -729,6 +805,39 @@ struct SpillBarView: View {
                     hasServerIssue ? cardTint.opacity(0.36) : isActive ? tint.opacity(0.12) : Color.primary.opacity(0.04),
                     lineWidth: hasServerIssue ? 0.8 : 0.5
                 )
+        }
+    }
+
+    private func aiProcessStateChip(_ status: LocalAIToolStatus) -> some View {
+        let tint = status.state.panelTint
+        return HStack(spacing: 3) {
+            Circle()
+                .fill(tint)
+                .frame(width: 4.5, height: 4.5)
+
+            Text(aiProcessStateTitle(status.state))
+                .font(.system(size: 7.8, weight: .bold, design: .rounded))
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+        }
+        .foregroundStyle(tint)
+        .padding(.horizontal, 4)
+        .frame(height: 14)
+        .background(tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 3, style: .continuous))
+    }
+
+    private func aiProcessStateTitle(_ state: SpillStatusState) -> String {
+        switch state {
+        case .active:
+            return AppL10n.text(.active, appLanguage: settings.appLanguage)
+        case .normal:
+            return AppL10n.text(.normal, appLanguage: settings.appLanguage)
+        case .warning:
+            return AppL10n.text(.warning, appLanguage: settings.appLanguage)
+        case .unavailable:
+            return AppL10n.text(.unavailable, appLanguage: settings.appLanguage)
+        case .refreshing:
+            return AppL10n.text(.checking, appLanguage: settings.appLanguage)
         }
     }
 
@@ -906,9 +1015,7 @@ struct SpillBarView: View {
     private func metricChart(for module: SpillStatusModule, status: SpillStatusMeterSnapshot) -> some View {
         switch module {
         case .cpu:
-            let currentCoreValues = settings.showsCPUCoreChart
-                ? statusStore.cpuCoreHistory.map { $0.last ?? 0 }
-                : []
+            let currentCoreValues = statusStore.cpuCoreHistory.map { $0.last ?? 0 }
             ResourceLoadChartView(
                 primaryTitle: "Active",
                 secondaryTitle: "Idle",

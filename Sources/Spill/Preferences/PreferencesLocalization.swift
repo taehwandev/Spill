@@ -8,11 +8,18 @@ enum PreferencesTextKey: String {
     case tokenMetering
     case windowManagement
     case statusAndCaffeine
+    case developerOptions
+    case developerOptionsDetail
+    case debugOnly
     case checking
     case checkForUpdates
     case launchSettings
     case launchAtLogin
     case launchAtLoginUnavailable
+    case dashboardOnboardingPreview
+    case dashboardOnboardingPreviewDetail
+    case aiDashboardOnboardingPreview
+    case aiDashboardOnboardingPreviewDetail
     case languageSettings
     case appLanguage
     case language
@@ -71,9 +78,7 @@ enum PreferencesTextKey: String {
     case neverCaffeineWarning
     case panelStatus
     case panelStatusDetail
-    case coreBars
     case aggregate
-    case cpuCoreBars
     case statusValueBold
     case statusFontDesign
     case statusValueSize
@@ -238,11 +243,18 @@ enum PreferencesL10n {
             .tokenMetering: "Token Metering",
             .windowManagement: "Window Management",
             .statusAndCaffeine: "Status & Caffeine",
+            .developerOptions: "Developer Options",
+            .developerOptionsDetail: "Debug-only preview switches for checking first-run states without changing saved data.",
+            .debugOnly: "Debug only",
             .checking: "Checking",
             .checkForUpdates: "Check for Updates",
             .launchSettings: "Launch Settings",
             .launchAtLogin: "Launch at Login",
             .launchAtLoginUnavailable: "Launch at Login is available after packaging Spill as a .app bundle.",
+            .dashboardOnboardingPreview: "Dashboard onboarding preview",
+            .dashboardOnboardingPreviewDetail: "Shows the panel as a first-run preview without changing local actions or token usage data.",
+            .aiDashboardOnboardingPreview: "AI dashboard onboarding preview",
+            .aiDashboardOnboardingPreviewDetail: "Shows the local token dashboard and panel token card as the setup preview without deleting token records.",
             .languageSettings: "Language Settings",
             .appLanguage: "App Language",
             .language: "Language",
@@ -301,9 +313,7 @@ enum PreferencesL10n {
             .neverCaffeineWarning: "Never keeps Caffeine active until you stop it manually.",
             .panelStatus: "Panel Status",
             .panelStatusDetail: "Controls the status cards inside the Spill panel.",
-            .coreBars: "Core Bars",
             .aggregate: "Aggregate",
-            .cpuCoreBars: "CPU Core Bars",
             .statusValueBold: "Bold Values",
             .statusFontDesign: "Value Font",
             .statusValueSize: "Value Size",
@@ -336,11 +346,18 @@ enum PreferencesL10n {
             .tokenMetering: "토큰 미터링",
             .windowManagement: "윈도우 관리",
             .statusAndCaffeine: "상태 및 카페인",
+            .developerOptions: "개발옵션",
+            .developerOptionsDetail: "저장된 데이터는 유지한 채 첫 실행 상태를 확인하는 디버그 전용 옵션입니다.",
+            .debugOnly: "디버그 전용",
             .checking: "확인 중",
             .checkForUpdates: "업데이트 확인",
             .launchSettings: "실행 설정",
             .launchAtLogin: "로그인 시 실행",
             .launchAtLoginUnavailable: "Spill이 .app 번들로 패키징된 뒤 로그인 시 실행을 사용할 수 있습니다.",
+            .dashboardOnboardingPreview: "대시보드 온보딩 미리보기",
+            .dashboardOnboardingPreviewDetail: "로컬 액션과 토큰 사용량 데이터는 유지한 채 패널을 첫 실행 상태로 보여줍니다.",
+            .aiDashboardOnboardingPreview: "AI 대시보드 온보딩 미리보기",
+            .aiDashboardOnboardingPreviewDetail: "토큰 기록을 삭제하지 않고 로컬 토큰 대시보드와 패널 토큰 카드를 설정 미리보기 상태로 보여줍니다.",
             .languageSettings: "언어 설정",
             .appLanguage: "앱 언어",
             .language: "언어",
@@ -399,9 +416,7 @@ enum PreferencesL10n {
             .neverCaffeineWarning: "Never는 수동으로 중지할 때까지 카페인을 활성 상태로 유지합니다.",
             .panelStatus: "패널 상태",
             .panelStatusDetail: "Spill 패널 안의 상태 카드 표시를 조정합니다.",
-            .coreBars: "코어 바",
             .aggregate: "집계",
-            .cpuCoreBars: "CPU 코어 바",
             .statusValueBold: "값 굵게",
             .statusFontDesign: "값 글꼴",
             .statusValueSize: "값 크기",
@@ -434,11 +449,18 @@ enum PreferencesL10n {
             .tokenMetering: "トークン計測",
             .windowManagement: "ウィンドウ管理",
             .statusAndCaffeine: "状態とカフェイン",
+            .developerOptions: "開発者オプション",
+            .developerOptionsDetail: "保存データを変えずに初回状態を確認するデバッグ専用オプションです。",
+            .debugOnly: "デバッグのみ",
             .checking: "確認中",
             .checkForUpdates: "アップデートを確認",
             .launchSettings: "起動設定",
             .launchAtLogin: "ログイン時に起動",
             .launchAtLoginUnavailable: "Spill を .app バンドルとしてパッケージ化すると、ログイン時起動を使用できます。",
+            .dashboardOnboardingPreview: "ダッシュボードオンボーディングプレビュー",
+            .dashboardOnboardingPreviewDetail: "ローカルのアクションとトークン使用量データを変えずに、パネルを初回状態で表示します。",
+            .aiDashboardOnboardingPreview: "AI ダッシュボードのオンボーディングプレビュー",
+            .aiDashboardOnboardingPreviewDetail: "トークン記録を削除せず、ローカルトークンダッシュボードとパネルのトークンカードを設定プレビュー状態で表示します。",
             .languageSettings: "言語設定",
             .appLanguage: "アプリの言語",
             .language: "言語",
@@ -497,9 +519,7 @@ enum PreferencesL10n {
             .neverCaffeineWarning: "Never は手動で停止するまでカフェインを有効にします。",
             .panelStatus: "パネル状態",
             .panelStatusDetail: "Spill パネル内の状態カード表示を調整します。",
-            .coreBars: "コアバー",
             .aggregate: "集計",
-            .cpuCoreBars: "CPU コアバー",
             .statusValueBold: "値を太字",
             .statusFontDesign: "値のフォント",
             .statusValueSize: "値のサイズ",

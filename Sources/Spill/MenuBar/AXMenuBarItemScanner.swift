@@ -45,7 +45,6 @@ final class AXMenuBarItemScanner: ObservableObject {
     @Published private(set) var isScanning = false
 
     private let applicationProvider = MenuBarApplicationProvider()
-    private let imageProvider = MenuBarItemImageProvider()
     private let reader = AXElementReader()
     private var elementsByID: [MenuBarItemSnapshot.ID: MenuBarElementReference] = [:]
     private var imageDataCache: [String: Data] = [:]
@@ -53,6 +52,8 @@ final class AXMenuBarItemScanner: ObservableObject {
     private var pendingRefresh = false
     private var pendingRefreshReason = MenuBarScanRefreshReason.manual
     private var refreshTask: Task<Void, Never>?
+    private var iconRefreshTask: Task<Void, Never>?
+    private var iconRefreshGeneration = 0
     private let refreshPolicy: MenuBarScanRefreshPolicy
     private let dateProvider: () -> Date
 
@@ -74,7 +75,9 @@ final class AXMenuBarItemScanner: ObservableObject {
 
     func clearForMissingPermission() {
         refreshTask?.cancel()
+        iconRefreshTask?.cancel()
         refreshTask = nil
+        iconRefreshTask = nil
         isScanning = false
         pendingRefresh = false
         pendingRefreshReason = .manual
@@ -166,12 +169,15 @@ final class AXMenuBarItemScanner: ObservableObject {
         }
 
         let enrichedItems = result.items.map { snapshot in
-            guard snapshot.isNotchCandidate else {
+            guard snapshot.isNotchCandidate,
+                  let imageData = cachedImageDataIfAvailable(for: snapshot)
+            else {
                 return snapshot
             }
 
-            return snapshot.withImageData(cachedImageData(for: snapshot))
+            return snapshot.withImageData(imageData)
         }
+        let iconGeneration = nextIconRefreshGeneration()
         let hadPreviousScan = lastScannedAt != nil
         let didChangeItems = enrichedItems != items
         if didChangeItems {
@@ -187,6 +193,7 @@ final class AXMenuBarItemScanner: ObservableObject {
             didChangeItems: didChangeItems
         )
         refreshTask = nil
+        refreshMissingIcons(for: enrichedItems, generation: iconGeneration)
 
         if pendingRefresh {
             let queuedReason = pendingRefreshReason
@@ -239,26 +246,111 @@ final class AXMenuBarItemScanner: ObservableObject {
         }
     }
 
-    private func cachedImageData(for item: MenuBarItemSnapshot) -> Data? {
-        let key = item.bundleIdentifier ?? "pid:\(item.processIdentifier)"
-
-        if let cached = imageDataCache[key] {
-            return cached
-        }
-
-        if missingImageKeys.contains(key) {
-            return nil
-        }
-
-        guard let imageData = imageProvider.imageData(
-            bundleIdentifier: item.bundleIdentifier,
-            processIdentifier: item.processIdentifier
-        ) else {
-            missingImageKeys.insert(key)
-            return nil
-        }
-
-        imageDataCache[key] = imageData
-        return imageData
+    private func cachedImageDataIfAvailable(for item: MenuBarItemSnapshot) -> Data? {
+        imageDataCache[iconCacheKey(for: item)]
     }
+
+    private func iconCacheKey(for item: MenuBarItemSnapshot) -> String {
+        item.bundleIdentifier ?? "pid:\(item.processIdentifier)"
+    }
+
+    private func nextIconRefreshGeneration() -> Int {
+        iconRefreshTask?.cancel()
+        iconRefreshGeneration += 1
+        return iconRefreshGeneration
+    }
+
+    private func refreshMissingIcons(for items: [MenuBarItemSnapshot], generation: Int) {
+        let requests = items.compactMap { item -> MenuBarIconLoadRequest? in
+            guard item.isNotchCandidate, item.imageData == nil else {
+                return nil
+            }
+
+            let key = iconCacheKey(for: item)
+            guard !missingImageKeys.contains(key) else {
+                return nil
+            }
+
+            return MenuBarIconLoadRequest(
+                id: item.id,
+                key: key,
+                bundleIdentifier: item.bundleIdentifier,
+                processIdentifier: item.processIdentifier
+            )
+        }
+
+        guard !requests.isEmpty else {
+            return
+        }
+
+        iconRefreshTask = Task.detached(priority: .utility) {
+            let provider = MenuBarItemImageProvider()
+            var loaded = [String: (key: String, data: Data)]()
+            var missingKeys = Set<String>()
+
+            for request in requests {
+                guard !Task.isCancelled else {
+                    return
+                }
+
+                if let imageData = provider.imageData(
+                    bundleIdentifier: request.bundleIdentifier,
+                    processIdentifier: request.processIdentifier
+                ) {
+                    loaded[request.id] = (request.key, imageData)
+                } else {
+                    missingKeys.insert(request.key)
+                }
+            }
+
+            await MainActor.run { [weak self] in
+                self?.applyLoadedIcons(
+                    loaded,
+                    missingKeys: missingKeys,
+                    generation: generation
+                )
+            }
+        }
+    }
+
+    private func applyLoadedIcons(
+        _ loaded: [String: (key: String, data: Data)],
+        missingKeys: Set<String>,
+        generation: Int
+    ) {
+        guard generation == iconRefreshGeneration else {
+            return
+        }
+
+        missingImageKeys.formUnion(missingKeys)
+        guard !loaded.isEmpty else {
+            return
+        }
+
+        for value in loaded.values {
+            imageDataCache[value.key] = value.data
+        }
+
+        let updatedItems = items.map { item in
+            guard item.isNotchCandidate,
+                  item.imageData == nil,
+                  let loadedIcon = loaded[item.id]
+            else {
+                return item
+            }
+
+            return item.withImageData(loadedIcon.data)
+        }
+
+        if updatedItems != items {
+            items = updatedItems
+        }
+    }
+}
+
+private struct MenuBarIconLoadRequest: Sendable {
+    let id: String
+    let key: String
+    let bundleIdentifier: String?
+    let processIdentifier: pid_t
 }

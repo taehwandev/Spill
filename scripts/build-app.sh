@@ -51,6 +51,7 @@ esac
 PRIVATE_USAGE_ENVIRONMENT="${SPILL_BUILD_PRIVATE_USAGE_ENVIRONMENT:-}"
 PRIVATE_USAGE_RELAY_URL="${SPILL_BUILD_PRIVATE_USAGE_RELAY_URL:-}"
 PRIVATE_USAGE_WEB_URL="${SPILL_BUILD_PRIVATE_USAGE_WEB_URL:-}"
+DEVELOPER_OPTIONS_ENABLED="${SPILL_DEVELOPER_OPTIONS_ENABLED:-}"
 
 if [[ -n "$PRIVATE_USAGE_ENVIRONMENT" ]]; then
     case "$PRIVATE_USAGE_ENVIRONMENT" in
@@ -150,6 +151,27 @@ fi
 validate_private_usage_url "SPILL_BUILD_PRIVATE_USAGE_RELAY_URL" "$PRIVATE_USAGE_RELAY_URL"
 validate_private_usage_url "SPILL_BUILD_PRIVATE_USAGE_WEB_URL" "$PRIVATE_USAGE_WEB_URL"
 
+if [[ -z "$DEVELOPER_OPTIONS_ENABLED" ]]; then
+    if [[ "$SIGN_IDENTITY" == "-" ]]; then
+        DEVELOPER_OPTIONS_ENABLED=true
+    else
+        DEVELOPER_OPTIONS_ENABLED=false
+    fi
+fi
+
+case "$DEVELOPER_OPTIONS_ENABLED" in
+    1|true|TRUE|True|yes|YES|Yes|on|ON|On)
+        DEVELOPER_OPTIONS_ENABLED=true
+        ;;
+    0|false|FALSE|False|no|NO|No|off|OFF|Off)
+        DEVELOPER_OPTIONS_ENABLED=false
+        ;;
+    *)
+        echo "SPILL_DEVELOPER_OPTIONS_ENABLED must be 1/0, true/false, yes/no, or on/off." >&2
+        exit 2
+        ;;
+esac
+
 if [[ "$SIGN_IDENTITY" == "-" ]]; then
     cat > "$ENTITLEMENTS_PATH" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -242,6 +264,8 @@ cat > "$CONTENTS_DIR/Info.plist" <<PLIST
     <string>$PRIVATE_USAGE_RELAY_URL</string>
     <key>SPILLPrivateUsageWebURL</key>
     <string>$PRIVATE_USAGE_WEB_URL</string>
+    <key>SPILLDeveloperOptionsEnabled</key>
+    <$DEVELOPER_OPTIONS_ENABLED/>
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.utilities</string>
     <key>LSMinimumSystemVersion</key>
@@ -288,6 +312,8 @@ cat > "$HELPER_CONTENTS_DIR/Info.plist" <<PLIST
     <string>$VERSION</string>
     <key>CFBundleVersion</key>
     <string>$BUILD_NUMBER</string>
+    <key>SPILLDeveloperOptionsEnabled</key>
+    <$DEVELOPER_OPTIONS_ENABLED/>
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.utilities</string>
     <key>LSMinimumSystemVersion</key>

@@ -21,6 +21,8 @@ enum AppTextKey: String {
     case accessibilityRequired
     case scanning
     case noActionsReady
+    case onboardingPreviewTitle
+    case onboardingPreviewDetail
     case ready
     case permissionNeeded
     case refreshingActions
@@ -80,10 +82,15 @@ enum AppTextKey: String {
     case details
     case openLocalTokenMeteringDetails
     case tokenMeteringAccessibility
+    case tokenMeteringSetupTitle
+    case tokenMeteringSetupDetail
+    case tokenMeteringSettings
     case openSetupPrompt
     case noTaskSplit
     case noSourceSplit
     case eventsSummary
+    case aiProcesses
+    case aiProcessSummary
     case windows
     case menuBar
     case noFocusedWindow
@@ -320,6 +327,14 @@ enum AppL10n {
         appLanguage: SpillAppLanguage = .persisted()
     ) -> String {
         String(format: text(.eventsSummary, appLanguage: appLanguage), eventCount, task, source)
+    }
+
+    static func aiProcessSummary(
+        activeCount: Int,
+        totalCount: Int,
+        appLanguage: SpillAppLanguage = .persisted()
+    ) -> String {
+        String(format: text(.aiProcessSummary, appLanguage: appLanguage), activeCount, totalCount)
     }
 
     static func tokenMeteringAccessibility(
@@ -571,6 +586,8 @@ enum AppL10n {
             .accessibilityRequired: "Accessibility required",
             .scanning: "Scanning",
             .noActionsReady: "No actions ready",
+            .onboardingPreviewTitle: "Onboarding preview",
+            .onboardingPreviewDetail: "Preview the first-run dashboard without changing local actions or usage data.",
             .ready: "Ready",
             .permissionNeeded: "Permission needed",
             .refreshingActions: "Refreshing actions",
@@ -630,10 +647,15 @@ enum AppL10n {
             .details: "Details",
             .openLocalTokenMeteringDetails: "Open local token metering details",
             .tokenMeteringAccessibility: "Token Metering, %@ local tokens",
+            .tokenMeteringSetupTitle: "Set up Token Metering",
+            .tokenMeteringSetupDetail: "Open Settings > Token Metering and follow the setup steps. This preview keeps local data intact.",
+            .tokenMeteringSettings: "Token Metering Settings",
             .openSetupPrompt: "Open to copy global setup prompt",
             .noTaskSplit: "No task split",
             .noSourceSplit: "No source split",
             .eventsSummary: "%d events / %@ / %@",
+            .aiProcesses: "AI Processes",
+            .aiProcessSummary: "%d of %d active",
             .windows: "WINDOWS",
             .menuBar: "MENU BAR",
             .noFocusedWindow: "No Focused Window",
@@ -776,6 +798,8 @@ enum AppL10n {
             .accessibilityRequired: "손쉬운 사용 필요",
             .scanning: "스캔 중",
             .noActionsReady: "준비된 액션 없음",
+            .onboardingPreviewTitle: "온보딩 미리보기",
+            .onboardingPreviewDetail: "로컬 액션과 사용량 데이터는 유지한 채 첫 실행 대시보드를 확인합니다.",
             .ready: "준비됨",
             .permissionNeeded: "권한 필요",
             .refreshingActions: "액션 새로고침 중",
@@ -835,10 +859,15 @@ enum AppL10n {
             .details: "상세",
             .openLocalTokenMeteringDetails: "로컬 토큰 미터링 상세 열기",
             .tokenMeteringAccessibility: "토큰 미터링, 로컬 토큰 %@개",
+            .tokenMeteringSetupTitle: "토큰 미터링 설정",
+            .tokenMeteringSetupDetail: "설정 > 토큰 미터링에서 안내를 따라 연결하세요. 이 미리보기는 로컬 데이터를 유지합니다.",
+            .tokenMeteringSettings: "토큰 미터링 설정",
             .openSetupPrompt: "열어서 전역 설정 프롬프트 복사",
             .noTaskSplit: "작업 분류 없음",
             .noSourceSplit: "소스 분류 없음",
             .eventsSummary: "이벤트 %d개 / %@ / %@",
+            .aiProcesses: "AI 프로세스",
+            .aiProcessSummary: "%d/%d 활성",
             .windows: "윈도우",
             .menuBar: "메뉴 막대",
             .noFocusedWindow: "포커스된 윈도우 없음",
@@ -981,6 +1010,8 @@ enum AppL10n {
             .accessibilityRequired: "アクセシビリティが必要",
             .scanning: "スキャン中",
             .noActionsReady: "準備済みアクションなし",
+            .onboardingPreviewTitle: "オンボーディングプレビュー",
+            .onboardingPreviewDetail: "ローカルのアクションと使用量データを変えずに初回ダッシュボードを確認します。",
             .ready: "準備完了",
             .permissionNeeded: "権限が必要",
             .refreshingActions: "アクションを更新中",
@@ -1040,10 +1071,15 @@ enum AppL10n {
             .details: "詳細",
             .openLocalTokenMeteringDetails: "ローカルトークン計測の詳細を開く",
             .tokenMeteringAccessibility: "トークン計測、ローカルトークン %@",
+            .tokenMeteringSetupTitle: "トークン計測を設定",
+            .tokenMeteringSetupDetail: "設定 > トークン計測を開き、手順に従って接続します。このプレビューはローカルデータを保持します。",
+            .tokenMeteringSettings: "トークン計測設定",
             .openSetupPrompt: "開いてグローバル設定プロンプトをコピー",
             .noTaskSplit: "タスク分類なし",
             .noSourceSplit: "ソース分類なし",
             .eventsSummary: "イベント %d件 / %@ / %@",
+            .aiProcesses: "AI プロセス",
+            .aiProcessSummary: "%d/%d アクティブ",
             .windows: "ウィンドウ",
             .menuBar: "メニューバー",
             .noFocusedWindow: "フォーカス中のウィンドウなし",

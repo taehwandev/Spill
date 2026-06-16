@@ -65,6 +65,24 @@ final class PanelStoreTests: XCTestCase {
         XCTAssertEqual(state.pinnedItemCount, 0)
     }
 
+    @MainActor
+    func testPanelStateUsesOnboardingPreviewWhenEnabled() {
+        let settings = makeSettings()
+        settings.panelOnboardingPreviewEnabled = true
+        let scanner = AXMenuBarItemScanner()
+
+        let state = PanelState.derived(
+            settings: settings,
+            scanner: scanner,
+            isAccessibilityTrusted: true
+        )
+
+        XCTAssertTrue(state.onboardingPreviewEnabled)
+        XCTAssertEqual(state.readiness, .empty)
+        XCTAssertTrue(state.actionItems.isEmpty)
+        XCTAssertEqual(state.visibleStatusModules, settings.visiblePanelStatusModules)
+    }
+
     func testHiddenItemsAreExcludedFromDisplayedAndPinnedActions() {
         let hiddenPinned = Self.item(stableKey: "hidden-pinned", title: "Hidden")
         let visible = Self.item(stableKey: "visible", title: "Visible")
@@ -124,6 +142,34 @@ final class PanelStoreTests: XCTestCase {
         )
 
         XCTAssertEqual(store.state.visibleStatusModules, [.storage, .cpu, .network])
+    }
+
+    @MainActor
+    func testPanelStoreRefreshesWhenOnboardingPreviewSettingChanges() async {
+        let settings = makeSettings()
+        let scanner = AXMenuBarItemScanner()
+        let store = PanelStore(
+            settings: settings,
+            scanner: scanner,
+            isAccessibilityTrusted: { true }
+        )
+        let refreshed = expectation(description: "Onboarding preview refreshes panel state")
+        var cancellable: AnyCancellable?
+
+        XCTAssertFalse(store.state.onboardingPreviewEnabled)
+
+        cancellable = store.$state
+            .dropFirst()
+            .sink { state in
+                if state.onboardingPreviewEnabled {
+                    refreshed.fulfill()
+                }
+            }
+
+        settings.panelOnboardingPreviewEnabled = true
+
+        await fulfillment(of: [refreshed], timeout: 1.0)
+        cancellable?.cancel()
     }
 
     @MainActor

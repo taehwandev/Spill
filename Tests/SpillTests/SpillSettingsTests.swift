@@ -12,7 +12,8 @@ final class SpillSettingsTests: XCTestCase {
         XCTAssertEqual(settings.statusModuleOrder, [.cpu, .memory, .storage, .network])
         XCTAssertEqual(settings.enabledStatusModules, [.cpu, .memory, .storage, .network])
         XCTAssertEqual(settings.enabledMenuBarStatusItems, [.cpu, .memory])
-        XCTAssertFalse(settings.showsCPUCoreChart)
+        XCTAssertFalse(settings.panelOnboardingPreviewEnabled)
+        XCTAssertFalse(settings.tokenUsageDashboardOnboardingPreviewEnabled)
         XCTAssertEqual(settings.menuBarStatusLayoutStyle, .inline)
         XCTAssertEqual(settings.menuBarStatusPrecision, .tenths)
         XCTAssertEqual(settings.menuBarStatusHighlightThreshold, .seventy)
@@ -460,16 +461,19 @@ final class SpillSettingsTests: XCTestCase {
         XCTAssertEqual(AppL10n.pinned("Raycast", appLanguage: .korean), "Raycast 고정됨")
     }
 
-    func testCPUCoreChartSettingPersists() {
+    func testPanelOnboardingPreviewSettingPersists() {
         let defaults = makeDefaults()
         let settings = SpillSettings(defaults: defaults)
 
-        settings.showsCPUCoreChart = true
+        settings.panelOnboardingPreviewEnabled = true
+        settings.tokenUsageDashboardOnboardingPreviewEnabled = true
 
-        XCTAssertTrue(defaults.bool(forKey: "showsCPUCoreChart"))
+        XCTAssertTrue(defaults.bool(forKey: "panelOnboardingPreviewEnabled"))
+        XCTAssertTrue(defaults.bool(forKey: "tokenUsageDashboardOnboardingPreviewEnabled"))
 
         let reloadedSettings = SpillSettings(defaults: defaults)
-        XCTAssertTrue(reloadedSettings.showsCPUCoreChart)
+        XCTAssertTrue(reloadedSettings.panelOnboardingPreviewEnabled)
+        XCTAssertTrue(reloadedSettings.tokenUsageDashboardOnboardingPreviewEnabled)
     }
 
     func testMenuBarStatusOptionsNormalizeUnknownValues() {

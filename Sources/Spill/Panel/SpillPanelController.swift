@@ -19,6 +19,7 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
     private let updateStore: UpdateCheckStore
     private let visibilityChanged: (Bool) -> Void
     private let settingsAction: () -> Void
+    private let tokenMeteringSettingsAction: () -> Void
     private let tokenMeteringDetailAction: () -> Void
     private var panel: NSPanel?
     private var anchorFrame: NSRect?
@@ -43,6 +44,7 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
         sleepGuard: SleepGuardController,
         visibilityChanged: @escaping (Bool) -> Void = { _ in },
         settingsAction: @escaping () -> Void = {},
+        tokenMeteringSettingsAction: @escaping () -> Void = {},
         tokenMeteringDetailAction: @escaping () -> Void = {}
     ) {
         self.settings = settings
@@ -57,6 +59,7 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
         self.sleepGuard = sleepGuard
         self.visibilityChanged = visibilityChanged
         self.settingsAction = settingsAction
+        self.tokenMeteringSettingsAction = tokenMeteringSettingsAction
         self.tokenMeteringDetailAction = tokenMeteringDetailAction
         super.init()
         observeLayoutChanges()
@@ -244,6 +247,8 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
                 self?.hide(animated: true)
             } settingsAction: { [weak self] in
                 self?.settingsAction()
+            } tokenMeteringSettingsAction: { [weak self] in
+                self?.tokenMeteringSettingsAction()
             } tokenMeteringDetailAction: { [weak self] in
                 self?.tokenMeteringDetailAction()
             }
@@ -289,7 +294,8 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
             menuBarActionCount: menuBarActionCount,
             iconSpacing: CGFloat(settings.iconSpacing),
             visibleFrame: visibleFrame,
-            showsUpdateBanner: updateStore.showsDashboardUpdateStatus
+            showsUpdateBanner: updateStore.showsDashboardUpdateStatus,
+            showsOnboardingPreview: state.onboardingPreviewEnabled
         )
     }
 

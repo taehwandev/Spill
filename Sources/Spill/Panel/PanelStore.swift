@@ -9,6 +9,7 @@ struct PanelState: Equatable {
     let actionFeedback: SpillActionFeedback?
     let statusDetailTarget: SpillStatusDetailTarget?
     let pendingDismiss: Bool
+    let onboardingPreviewEnabled: Bool
 
     var itemCount: Int {
         displayItems.count
@@ -48,6 +49,10 @@ struct PanelState: Equatable {
         scanner: AXMenuBarItemScanner,
         isAccessibilityTrusted: Bool
     ) -> PanelState {
+        if settings.panelOnboardingPreviewEnabled {
+            return onboardingPreview(visibleStatusModules: settings.visiblePanelStatusModules)
+        }
+
         let displayItems = settings.displayMode.items(from: scanner, settings: settings)
 
         return derived(
@@ -96,7 +101,23 @@ struct PanelState: Equatable {
             ),
             actionFeedback: nil,
             statusDetailTarget: nil,
-            pendingDismiss: false
+            pendingDismiss: false,
+            onboardingPreviewEnabled: false
+        )
+    }
+
+    static func onboardingPreview(
+        visibleStatusModules: [SpillStatusModule] = SpillStatusModule.primaryPanelModules
+    ) -> PanelState {
+        PanelState(
+            displayItems: [],
+            selectedItemKeys: [],
+            visibleStatusModules: visibleStatusModules,
+            readiness: .empty,
+            actionFeedback: nil,
+            statusDetailTarget: nil,
+            pendingDismiss: false,
+            onboardingPreviewEnabled: true
         )
     }
 
@@ -112,7 +133,8 @@ struct PanelState: Equatable {
             readiness: readiness,
             actionFeedback: actionFeedback,
             statusDetailTarget: statusDetailTarget,
-            pendingDismiss: pendingDismiss
+            pendingDismiss: pendingDismiss,
+            onboardingPreviewEnabled: onboardingPreviewEnabled
         )
     }
 
@@ -216,7 +238,8 @@ final class PanelStore: ObservableObject {
             settings.$selectedItemKeys.map { _ in () }.eraseToAnyPublisher(),
             settings.$hiddenItemKeys.map { _ in () }.eraseToAnyPublisher(),
             settings.$statusModuleOrder.map { _ in () }.eraseToAnyPublisher(),
-            settings.$enabledStatusModules.map { _ in () }.eraseToAnyPublisher()
+            settings.$enabledStatusModules.map { _ in () }.eraseToAnyPublisher(),
+            settings.$panelOnboardingPreviewEnabled.map { _ in () }.eraseToAnyPublisher()
         ]
 
         Publishers.MergeMany(publishers)

@@ -123,6 +123,9 @@ struct PreferencesView: View {
                     sidebarItem(title: t(.tokenMetering), imageName: "chart.bar.xaxis", tag: "tokens")
                     sidebarItem(title: t(.windowManagement), imageName: "macwindow", tag: "windows")
                     sidebarItem(title: t(.statusAndCaffeine), imageName: "cup.and.saucer.fill", tag: "status_caffeine")
+                    if SpillBuildOptions.developerOptionsEnabled {
+                        sidebarItem(title: t(.developerOptions), imageName: "hammer.fill", tag: "developer")
+                    }
                 }
                 .padding(.horizontal, 8)
 
@@ -267,6 +270,8 @@ struct PreferencesView: View {
         case "tokens": return t(.tokenMetering)
         case "windows": return t(.windowManagement)
         case "status_caffeine": return t(.statusAndCaffeine)
+        case "developer" where SpillBuildOptions.developerOptionsEnabled:
+            return t(.developerOptions)
         default: return ""
         }
     }
@@ -284,6 +289,8 @@ struct PreferencesView: View {
             windowsTab
         case "status_caffeine":
             statusCaffeineTab
+        case "developer" where SpillBuildOptions.developerOptionsEnabled:
+            developerOptionsTab
         default:
             EmptyView()
         }
@@ -310,6 +317,7 @@ struct PreferencesView: View {
                            .font(.system(size: 12))
                            .foregroundStyle(.red)
                     }
+
                 }
             }
 
@@ -431,6 +439,62 @@ struct PreferencesView: View {
                 )
             }
         }
+    }
+
+    private var developerOptionsTab: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            PreferenceCard(title: t(.developerOptions), symbolName: "hammer.fill", iconColor: .orange) {
+                VStack(alignment: .leading, spacing: 12) {
+                    Label(t(.debugOnly), systemImage: "ladybug.fill")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(.orange)
+
+                    Text(t(.developerOptionsDetail))
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .lineSpacing(2)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Divider()
+                        .background(Color.primary.opacity(0.04))
+
+                    developerToggle(
+                        title: t(.dashboardOnboardingPreview),
+                        detail: t(.dashboardOnboardingPreviewDetail),
+                        isOn: $settings.panelOnboardingPreviewEnabled
+                    )
+
+                    Divider()
+                        .background(Color.primary.opacity(0.04))
+
+                    developerToggle(
+                        title: t(.aiDashboardOnboardingPreview),
+                        detail: t(.aiDashboardOnboardingPreviewDetail),
+                        isOn: $settings.tokenUsageDashboardOnboardingPreviewEnabled
+                    )
+                }
+            }
+        }
+    }
+
+    private func developerToggle(
+        title: String,
+        detail: String,
+        isOn: Binding<Bool>
+    ) -> some View {
+        Toggle(isOn: isOn) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.system(size: 13, weight: .semibold))
+
+                Text(detail)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .lineSpacing(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .toggleStyle(.switch)
     }
 
     private var windowsTab: some View {

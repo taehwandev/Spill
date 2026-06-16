@@ -78,20 +78,16 @@ enum SpillPanelState: Equatable {
         }
     }
 
-    func subtitle(count: Int, pinnedCount: Int) -> String {
+    func subtitle(appLanguage: SpillAppLanguage = .persisted()) -> String {
         switch self {
         case .permissionRequired:
-            return AppL10n.text(.permissionNeeded)
+            return AppL10n.text(.permissionNeeded, appLanguage: appLanguage)
         case .scanning:
-            return AppL10n.text(.refreshingActions)
+            return AppL10n.text(.refreshingActions, appLanguage: appLanguage)
         case .empty:
-            return pinnedCount > 0 ? AppL10n.pinnedCount(pinnedCount) : AppL10n.text(.noActionsReady)
+            return AppL10n.text(.noActionsReady, appLanguage: appLanguage)
         case .ready:
-            if pinnedCount > 0 {
-                return "\(AppL10n.pinnedCount(pinnedCount)), \(AppL10n.actionsReady(count))"
-            }
-
-            return AppL10n.actionsReady(count)
+            return AppL10n.text(.ready, appLanguage: appLanguage)
         }
     }
 }

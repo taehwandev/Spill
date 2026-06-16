@@ -209,6 +209,19 @@ final class SpillSettings: ObservableObject {
         didSet { defaults.set(displayMode.rawValue, forKey: Keys.displayMode) }
     }
 
+    @Published var panelOnboardingPreviewEnabled: Bool {
+        didSet { defaults.set(panelOnboardingPreviewEnabled, forKey: Keys.panelOnboardingPreviewEnabled) }
+    }
+
+    @Published var tokenUsageDashboardOnboardingPreviewEnabled: Bool {
+        didSet {
+            defaults.set(
+                tokenUsageDashboardOnboardingPreviewEnabled,
+                forKey: Keys.tokenUsageDashboardOnboardingPreviewEnabled
+            )
+        }
+    }
+
     @Published private(set) var statusModuleOrder: [SpillStatusModule] {
         didSet { defaults.set(statusModuleOrder.map(\.rawValue), forKey: Keys.statusModuleOrder) }
     }
@@ -226,10 +239,6 @@ final class SpillSettings: ObservableObject {
                 .map(\.rawValue)
             defaults.set(orderedEnabledItems, forKey: Keys.enabledMenuBarStatusItems)
         }
-    }
-
-    @Published var showsCPUCoreChart: Bool {
-        didSet { defaults.set(showsCPUCoreChart, forKey: Keys.showsCPUCoreChart) }
     }
 
     @Published var menuBarStatusLayoutStyle: MenuBarStatusLayoutStyle {
@@ -334,6 +343,16 @@ final class SpillSettings: ObservableObject {
         appLanguage = persistedLanguage
     }
 
+    func reloadTokenUsageDashboardOnboardingPreviewFromDefaults() {
+        defaults.synchronize()
+        let persistedValue = defaults.object(forKey: Keys.tokenUsageDashboardOnboardingPreviewEnabled) as? Bool ?? false
+        guard tokenUsageDashboardOnboardingPreviewEnabled != persistedValue else {
+            return
+        }
+
+        tokenUsageDashboardOnboardingPreviewEnabled = persistedValue
+    }
+
     @Published var statusValueBold: Bool {
         didSet { defaults.set(statusValueBold, forKey: Keys.statusValueBold) }
     }
@@ -410,7 +429,9 @@ final class SpillSettings: ObservableObject {
         enabledMenuBarStatusItems = SpillMenuBarStatusItem.normalizedEnabled(
             from: defaults.stringArray(forKey: Keys.enabledMenuBarStatusItems)
         )
-        showsCPUCoreChart = defaults.object(forKey: Keys.showsCPUCoreChart) as? Bool ?? false
+        panelOnboardingPreviewEnabled = defaults.object(forKey: Keys.panelOnboardingPreviewEnabled) as? Bool ?? false
+        tokenUsageDashboardOnboardingPreviewEnabled =
+            defaults.object(forKey: Keys.tokenUsageDashboardOnboardingPreviewEnabled) as? Bool ?? false
         let layoutRawValue = defaults.string(forKey: Keys.menuBarStatusLayoutStyle)
             ?? MenuBarStatusLayoutStyle.inline.rawValue
         menuBarStatusLayoutStyle = MenuBarStatusLayoutStyle(rawValue: layoutRawValue) ?? .inline
@@ -742,7 +763,8 @@ private enum Keys {
     static let enabledStatusModules = "enabledStatusModules"
     static let statusModuleNetworkDefaultEnabledMigrated = "statusModuleNetworkDefaultEnabledMigrated"
     static let enabledMenuBarStatusItems = "enabledMenuBarStatusItems"
-    static let showsCPUCoreChart = "showsCPUCoreChart"
+    static let panelOnboardingPreviewEnabled = "panelOnboardingPreviewEnabled"
+    static let tokenUsageDashboardOnboardingPreviewEnabled = "tokenUsageDashboardOnboardingPreviewEnabled"
     static let menuBarStatusLayoutStyle = "menuBarStatusLayoutStyle"
     static let menuBarStatusPrecision = "menuBarStatusPrecision"
     static let menuBarStatusHighlightThreshold = "menuBarStatusHighlightThreshold"

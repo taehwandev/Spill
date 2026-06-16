@@ -15,17 +15,6 @@ struct PanelStatusPreferencesSection: View {
 
             panelStatusPreview
 
-            HStack {
-                Label(t(.cpuCoreBars), systemImage: "cpu")
-                    .font(.callout)
-                Spacer()
-                Toggle(t(.cpuCoreBars), isOn: $settings.showsCPUCoreChart)
-                    .labelsHidden()
-                    .toggleStyle(.switch)
-            }
-
-            Divider()
-
             // Status value bold
             HStack {
                 Label(t(.statusValueBold), systemImage: "bold")

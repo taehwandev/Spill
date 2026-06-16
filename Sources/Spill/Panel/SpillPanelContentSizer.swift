@@ -14,7 +14,7 @@ enum SpillPanelContentSizer {
     private static let tokenMeteringSpacing: CGFloat = 7
     private static let statusRowHeight: CGFloat = 64
     private static let statusRowSpacing: CGFloat = 7
-    private static let aiCardHeight: CGFloat = 54
+    private static let aiCardHeight: CGFloat = 72
     private static let aiCardRowSpacing: CGFloat = 7
     private static let aiCardColumnCount = 2
     private static let windowActionHeight: CGFloat = 58
@@ -34,7 +34,8 @@ enum SpillPanelContentSizer {
         menuBarActionCount: Int,
         iconSpacing: CGFloat,
         visibleFrame: NSRect,
-        showsUpdateBanner: Bool = false
+        showsUpdateBanner: Bool = false,
+        showsOnboardingPreview _: Bool = false
     ) -> NSSize {
         let width = preferredWidth(visibleFrame: visibleFrame)
         let contentWidth = max(0, width - horizontalPadding)

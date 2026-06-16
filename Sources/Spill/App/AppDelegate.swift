@@ -47,6 +47,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settingsAction: { [weak self] in
             self?.showPreferencesFromPanel()
         },
+        tokenMeteringSettingsAction: { [weak self] in
+            self?.showTokenMeteringPreferencesFromPanel()
+        },
         tokenMeteringDetailAction: { [weak self] in
             self?.openTokenDashboard(source: "panel_ai_section")
         }
@@ -393,6 +396,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         showPreferences(source: "panel")
     }
 
+    private func showTokenMeteringPreferencesFromPanel() {
+        if spillPanelController.isVisible {
+            spillPanelController.hide(animated: true)
+            SpillTelemetry.shared.track("panel_closed", props: ["source": "token_metering_settings_from_panel"])
+        }
+
+        showPreferences(source: "panel_token_metering", selectedTab: TokenMeteringDashboardProcess.tokenMeteringPreferencesTab)
+    }
+
     private func checkForUpdates(source: String = "unknown") {
         if updateCheckStore.usesInAppUpdater {
             updateCheckStore.checkForUpdates(source: source)
@@ -628,6 +640,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
             .store(in: &cancellables)
+
+        if SpillBuildOptions.developerOptionsEnabled {
+            settings.$tokenUsageDashboardOnboardingPreviewEnabled
+                .dropFirst()
+                .sink { _ in
+                    DispatchQueue.main.async {
+                        TokenMeteringDashboardProcess.postTokenUsageDashboardOnboardingPreviewDidChange()
+                    }
+                }
+                .store(in: &cancellables)
+        }
     }
 
     private func observeDashboardPreferenceRequests() {
