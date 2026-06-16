@@ -101,10 +101,20 @@ struct SpillBarAISection: View {
 
     private var serviceStatusControlState: CloudServiceStatusControlState {
         CloudServiceStatusPresentation.controlState(
-            snapshot: cloudServiceStatusStore.snapshot,
+            snapshot: activeToolsCloudSnapshot,
             isLoading: cloudServiceStatusStore.isLoading,
             appLanguage: settings.appLanguage
         )
+    }
+
+    private var activeToolsCloudSnapshot: CloudServiceStatusSnapshot? {
+        guard let snapshot = cloudServiceStatusStore.snapshot else { return nil }
+        let activeKinds = Set(aiStatusStore.statuses.flatMap {
+            CloudServiceStatusPresentation.serviceKinds(for: $0.kind)
+        })
+        guard !activeKinds.isEmpty else { return snapshot }
+        let filtered = snapshot.items.filter { activeKinds.contains($0.kind) }
+        return CloudServiceStatusSnapshot(fetchedAt: snapshot.fetchedAt, items: filtered)
     }
 
     private var runningToolCount: Int {

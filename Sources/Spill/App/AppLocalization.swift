@@ -76,6 +76,7 @@ enum AppTextKey: String {
     case serverStatusNoIssues
     case serverStatusWithIssues
     case clickForPerServiceDetails
+    case openStatusPage
     case tokenMetering
     case local
     case tokens
@@ -325,6 +326,13 @@ enum AppL10n {
         appLanguage: SpillAppLanguage = .persisted()
     ) -> String {
         String(format: text(.serverStatusWithIssues, appLanguage: appLanguage), status, issueCount)
+    }
+
+    static func openStatusPage(
+        _ service: String,
+        appLanguage: SpillAppLanguage = .persisted()
+    ) -> String {
+        String(format: text(.openStatusPage, appLanguage: appLanguage), service)
     }
 
     static func eventsSummary(
@@ -648,6 +656,7 @@ enum AppL10n {
             .serverStatusNoIssues: "Server status %@",
             .serverStatusWithIssues: "Server status %@ with %d issue(s)",
             .clickForPerServiceDetails: "Click for per-service details.",
+            .openStatusPage: "Open %@ status page",
             .tokenMetering: "Token Metering",
             .local: "Local",
             .tokens: "tokens",
@@ -867,6 +876,7 @@ enum AppL10n {
             .serverStatusNoIssues: "서버 상태 %@",
             .serverStatusWithIssues: "서버 상태 %@, 이슈 %d개",
             .clickForPerServiceDetails: "서비스별 상세를 보려면 클릭하세요.",
+            .openStatusPage: "%@ 상태 페이지 열기",
             .tokenMetering: "토큰 미터링",
             .local: "로컬",
             .tokens: "토큰",
@@ -1086,6 +1096,7 @@ enum AppL10n {
             .serverStatusNoIssues: "サーバー状態 %@",
             .serverStatusWithIssues: "サーバー状態 %@、問題 %d件",
             .clickForPerServiceDetails: "サービス別詳細を見るにはクリックしてください。",
+            .openStatusPage: "%@ のステータスページを開く",
             .tokenMetering: "トークン計測",
             .local: "ローカル",
             .tokens: "トークン",

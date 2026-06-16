@@ -45,6 +45,17 @@ enum CloudServiceKind: String, CaseIterable, Codable, Identifiable, Sendable {
             return "gyroscope"
         }
     }
+
+    var statusPageURL: URL {
+        switch self {
+        case .codex, .openAI:
+            return URL(string: "https://status.openai.com/")!
+        case .claudeCode, .claudeAPI:
+            return URL(string: "https://status.claude.com/")!
+        case .geminiAPI, .antigravity:
+            return URL(string: "https://status.cloud.google.com/")!
+        }
+    }
 }
 
 enum CloudServiceHealth: String, Codable, Sendable {
@@ -86,6 +97,10 @@ struct CloudServiceStatusItem: Identifiable, Codable, Equatable, Sendable {
 
     var symbolName: String {
         kind.symbolName
+    }
+
+    var statusPageURL: URL {
+        kind.statusPageURL
     }
 }
 

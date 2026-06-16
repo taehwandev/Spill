@@ -2,6 +2,15 @@ import XCTest
 @testable import Spill
 
 final class CloudServiceStatusPresentationTests: XCTestCase {
+    func testCloudServiceKindsExposeStatusPageURLs() {
+        XCTAssertEqual(CloudServiceKind.codex.statusPageURL.absoluteString, "https://status.openai.com/")
+        XCTAssertEqual(CloudServiceKind.openAI.statusPageURL.absoluteString, "https://status.openai.com/")
+        XCTAssertEqual(CloudServiceKind.claudeCode.statusPageURL.absoluteString, "https://status.claude.com/")
+        XCTAssertEqual(CloudServiceKind.claudeAPI.statusPageURL.absoluteString, "https://status.claude.com/")
+        XCTAssertEqual(CloudServiceKind.geminiAPI.statusPageURL.absoluteString, "https://status.cloud.google.com/")
+        XCTAssertEqual(CloudServiceKind.antigravity.statusPageURL.absoluteString, "https://status.cloud.google.com/")
+    }
+
     func testAggregateHealthIgnoresAntigravityUnknownWhenOfficialSourcesAreHealthy() {
         let health = CloudServiceStatusPresentation.aggregateHealth(for: [
             item(kind: .openAI, health: .operational),

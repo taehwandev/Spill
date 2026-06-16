@@ -136,6 +136,8 @@ struct CloudServiceStatusDashboardView: View {
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
             }
+
+            statusPageButton(item)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
@@ -147,6 +149,21 @@ struct CloudServiceStatusDashboardView: View {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .stroke(Color.primary.opacity(0.04), lineWidth: 0.5)
         }
+    }
+
+    private func statusPageButton(_ item: CloudServiceStatusItem) -> some View {
+        Button {
+            NSWorkspace.shared.open(item.statusPageURL)
+        } label: {
+            Image(systemName: "arrow.up.right.square")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(.secondary)
+                .frame(width: 24, height: 24)
+                .background(.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .help(AppL10n.openStatusPage(item.title))
+        .accessibilityLabel(AppL10n.openStatusPage(item.title))
     }
 
     private var footerText: String {
