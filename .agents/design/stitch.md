@@ -48,14 +48,16 @@ Do not render CPU, battery details beyond compact power state, AI, or window-man
 the local token metering dashboard.
 
 - Top header maps to `TokenMeteringDashboardView.header`.
-- Left filter rail maps to the period/tool filters and future task, stage, and
-  source filters in `TokenUsageDashboardStore`.
+- Left filter rail maps to the period/tool filters, stable opaque folder
+  filters, and future task, stage, and source filters in
+  `TokenUsageDashboardStore`.
 - Central analytics canvas maps to KPI, AI tool, task, stage, and source rows in
   `TokenUsageDashboardSnapshot`.
-- Right detail rail maps to selected session/run detail and recent event rows.
+- Right detail rail maps to selected Work Item detail and recent event rows.
 - Local receiver status tiles map to local inbox, optional HTTP bridge, and
   on-demand adapter state in Preferences and dashboard diagnostics.
 
-Preserve the existing Spill theme. Future implementation work should change
-structure, scan order, and grouping before changing color, typography, or brand
-treatment.
+Preferences should keep menu bar scanning out of primary settings unless it
+becomes a clear user workflow. Preserve the existing Spill theme. Future
+implementation work should change structure, scan order, and grouping before
+changing color, typography, or brand treatment.

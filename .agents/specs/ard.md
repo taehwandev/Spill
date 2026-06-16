@@ -219,6 +219,28 @@ Rules:
   adapters may define custom reusable categories that match
   `^[a-z][a-z0-9_]{1,40}$`.
 
+### ARD-005E: Private Usage Upload Uses Optional Runtime Configuration
+
+Decision:
+
+Expose the Private Usage Upload preferences surface as an optional token
+monitoring action in app builds, while keeping web and relay endpoints supplied
+through the existing environment and `Info.plist` configuration path.
+
+Rules:
+
+- Local token metering remains active without login, web connection, cloud
+  upload, telemetry, or a running web app.
+- The Sign In and Connect button opens only a configured safe web URL. If the
+  web URL is absent or invalid, the button is disabled instead of falling back
+  to a hardcoded production URL.
+- Deep-link connection handling may be registered in app builds, but it stores
+  only the write-only device credential returned by the configured relay.
+- Automatic and manual uploads still require a saved connection and explicit
+  `privateUsageUploadEnabled` setting.
+- Missing relay configuration fails closed through the unavailable relay client.
+  It must not trigger local data loss, prompt inspection, or raw event upload.
+
 ### ARD-005D: Agent-Facing Status Uses A Read-Only Local Stats Helper
 
 Decision:
@@ -364,6 +386,12 @@ Rules:
   usage.
 - The local app always reads the app-owned local store. UI must not imply that
   metering starts only after pressing a local check button.
+- The dashboard may filter Work Items by opaque `project_id` values so local
+  work can be grouped without exposing paths or names. `project_global` is the
+  unassigned bucket. Display labels must be derived from short opaque ids only.
+- Dashboard filters must be deterministic navigation controls. Period, tool,
+  and folder filters apply before charts and Work Items are built; folder
+  filters sort by their safe display labels, not token volume.
 - A local dashboard self-test may enqueue one synthetic `local_only` event
   through the local queue. The event must be clearly identifiable as self-test
   data with opaque ids, safe enum labels, and numeric buckets only. It must be
@@ -390,6 +418,9 @@ Rules:
 
 - Never request permissions before the user reaches a feature that needs them unless first-run onboarding explicitly explains why.
 - Preferences must show permission diagnostics.
+- Preferences should not expose menu bar scanning as a primary settings surface
+  unless it becomes a clear user-facing workflow. Scanner cadence, icon scope,
+  and detected-item diagnostics remain internal or contextual controls.
 - UI should show disabled/fallback states, not crashes.
 
 ### ARD-006A: Web Portal Roles And Admin Authorization

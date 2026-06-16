@@ -194,6 +194,12 @@ Requirements:
   snippets.
 - The local dashboard should group usage into human-readable Work Items derived
   from safe labels, not raw run ids.
+- Work Items may be scoped by opaque local folder/project ids. UI labels should
+  use short opaque labels such as `Folder abcd1234`, never real folder paths,
+  repository names, project names, or command-derived names.
+- Dashboard period, tool, and folder filters must apply to both charts and Work
+  Items. Folder filters should have a stable label-based order, not move around
+  as token totals change.
 - Raw `run_id` and `span_id` values may appear only in diagnostics or collapsed
   technical details.
 - Local aliases, if supported, are local-only display metadata. They do not
@@ -391,11 +397,9 @@ Requirements:
 - Pinned actions show app icon and short label.
 - MVP compact panel shows up to 8 pinned actions.
 - Pin/unpin is available directly from visible detected action tiles.
-- Preferences provides a Pin Management view for:
-  - removing pinned actions;
-  - reordering pinned actions;
-  - refreshing stale detected items;
-  - explaining fallback behavior.
+- Preferences should not expose a separate detected-icon management surface
+  unless it becomes a clear user-facing workflow. Pin/unpin should remain
+  available directly from visible detected action tiles.
 - Click order:
   1. Try stored Accessibility action if available.
   2. Try app activation/open fallback.
@@ -405,9 +409,10 @@ Acceptance:
 
 - Clicking an action never silently fails.
 - Users can remove pinned actions.
-- Users can reorder pinned actions in Preferences.
+- Users can remove pinned actions from the direct action surface.
 - If more than 8 actions are pinned, the compact panel shows the first 8 and
-  directs overflow management to Preferences.
+  keeps overflow behavior predictable without requiring a separate Settings
+  workflow.
 
 ### 8. Detected Menu Bar Items
 
@@ -457,6 +462,10 @@ Requirements:
   `taehwandev/Spill-web` repository. The public app repo documents only shared
   contracts and privacy guarantees that affect the open-source app.
 - Local app remains fully usable when the user never signs in.
+- Token monitoring Preferences may show a Sign In and Connect action for this
+  optional web connection. The action must be disabled or unavailable when the
+  build has no configured web connection URL, and local metering must still be
+  presented as active without login.
 - Web login completes in the browser and returns to the app through a callback
   or deep link.
 - The app receives a write-only device upload credential, not OAuth access or
@@ -494,6 +503,8 @@ Requirements:
 Acceptance:
 
 - Web portal requirements are documented before implementation work continues.
+- The native token monitoring UI can expose optional sign-in without implying
+  login is required for local metering.
 - Cloud upload can be disabled without affecting local metering.
 - No raw events or content-like data are uploaded.
 - Server-side plaintext token totals are not required for the web dashboard.
