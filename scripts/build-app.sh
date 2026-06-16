@@ -39,8 +39,10 @@ PRIVATE_USAGE_REQUIRES_CONFIGURATION=false
 case "$PRIVATE_USAGE_FEATURE_ENABLED" in
     1|true|TRUE|True|yes|YES|Yes)
         PRIVATE_USAGE_REQUIRES_CONFIGURATION=true
+        PRIVATE_USAGE_FEATURE_ENABLED=true
         ;;
     0|false|FALSE|False|no|NO|No|"")
+        PRIVATE_USAGE_FEATURE_ENABLED=false
         ;;
     *)
         echo "SPILL_BUILD_PRIVATE_USAGE_FEATURE_ENABLED must be 1/0, true/false, or yes/no." >&2
@@ -264,6 +266,8 @@ cat > "$CONTENTS_DIR/Info.plist" <<PLIST
     <string>$PRIVATE_USAGE_RELAY_URL</string>
     <key>SPILLPrivateUsageWebURL</key>
     <string>$PRIVATE_USAGE_WEB_URL</string>
+    <key>SPILLPrivateUsageFeatureEnabled</key>
+    <$PRIVATE_USAGE_FEATURE_ENABLED/>
     <key>SPILLDeveloperOptionsEnabled</key>
     <$DEVELOPER_OPTIONS_ENABLED/>
     <key>LSApplicationCategoryType</key>

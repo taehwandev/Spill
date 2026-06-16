@@ -55,6 +55,8 @@ final class ReleaseNotarizationContractTests: XCTestCase {
         XCTAssertTrue(buildScript.contains("<key>SPILLPrivateUsageEnvironment</key>"))
         XCTAssertTrue(buildScript.contains("<key>SPILLPrivateUsageRelayURL</key>"))
         XCTAssertTrue(buildScript.contains("<key>SPILLPrivateUsageWebURL</key>"))
+        XCTAssertTrue(buildScript.contains("<key>SPILLPrivateUsageFeatureEnabled</key>"))
+        XCTAssertTrue(buildScript.contains("<$PRIVATE_USAGE_FEATURE_ENABLED/>"))
         XCTAssertTrue(buildScript.contains("SPILL_BUILD_PRIVATE_USAGE_FEATURE_ENABLED"))
         XCTAssertTrue(buildScript.contains("PRIVATE_USAGE_REQUIRES_CONFIGURATION=false"))
         XCTAssertTrue(buildScript.contains("is required when SPILL_BUILD_PRIVATE_USAGE_FEATURE_ENABLED=1"))
@@ -76,14 +78,15 @@ final class ReleaseNotarizationContractTests: XCTestCase {
         XCTAssertFalse(uploadModels.contains("functions/v1/private-usage-relay"))
     }
 
-    func testReleaseBuildExposesConfiguredPrivateUsageUploadSurface() throws {
+    func testReleaseBuildCanHideConfiguredPrivateUsageUploadSurface() throws {
         let uploadModels = try read("Sources/Spill/TokenMetering/PrivateUsageUploadModels.swift")
         let preferencesSection = try read("Sources/Spill/Preferences/TokenMeteringPreferencesSection.swift")
         let tokenMeteringCoordinator = try read("Sources/Spill/TokenMetering/TokenMeteringCoordinator.swift")
 
         XCTAssertTrue(uploadModels.contains("enum PrivateUsageUploadFeatureAvailability"))
-        XCTAssertTrue(uploadModels.contains("static var isEnabledInCurrentBuild: Bool {\n        return true\n    }"))
-        XCTAssertFalse(uploadModels.contains("#if DEBUG\n        return true\n        #else\n        return false\n        #endif"))
+        XCTAssertTrue(uploadModels.contains("SPILL_PRIVATE_USAGE_FEATURE_ENABLED"))
+        XCTAssertTrue(uploadModels.contains("SPILLPrivateUsageFeatureEnabled"))
+        XCTAssertTrue(uploadModels.contains("return false"))
         XCTAssertTrue(preferencesSection.contains("if PrivateUsageUploadFeatureAvailability.isEnabledInCurrentBuild"))
         XCTAssertTrue(preferencesSection.contains(".disabled(privateUsageWebConnectionURL == nil)"))
         XCTAssertTrue(tokenMeteringCoordinator.contains("guard PrivateUsageUploadFeatureAvailability.isEnabledInCurrentBuild else"))

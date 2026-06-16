@@ -4,6 +4,41 @@ import XCTest
 final class PrivateUsageUploadTests: XCTestCase {
     private let testWrappingSecret = String(repeating: "A", count: 43)
 
+    func testPrivateUsageFeatureAvailabilityReadsExplicitBuildFlag() {
+        XCTAssertFalse(
+            PrivateUsageUploadFeatureAvailability.isEnabled(
+                processEnvironment: [:],
+                bundleInfo: [:]
+            )
+        )
+        XCTAssertTrue(
+            PrivateUsageUploadFeatureAvailability.isEnabled(
+                processEnvironment: [
+                    PrivateUsageUploadFeatureAvailability.featureEnabledEnvironmentKey: "1"
+                ],
+                bundleInfo: [:]
+            )
+        )
+        XCTAssertTrue(
+            PrivateUsageUploadFeatureAvailability.isEnabled(
+                processEnvironment: [:],
+                bundleInfo: [
+                    PrivateUsageUploadFeatureAvailability.featureEnabledInfoDictionaryKey: true
+                ]
+            )
+        )
+        XCTAssertFalse(
+            PrivateUsageUploadFeatureAvailability.isEnabled(
+                processEnvironment: [
+                    PrivateUsageUploadFeatureAvailability.featureEnabledEnvironmentKey: "0"
+                ],
+                bundleInfo: [
+                    PrivateUsageUploadFeatureAvailability.featureEnabledInfoDictionaryKey: true
+                ]
+            )
+        )
+    }
+
     func testConnectionDeepLinkExtractsConnectionCode() throws {
         let url = try XCTUnwrap(URL(string: "spill://private-usage/connect?code=spill-v1%3Agrant_opaque%3A\(testWrappingSecret)"))
 

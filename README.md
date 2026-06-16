@@ -88,10 +88,10 @@ development build that ignores an existing `.env.local`.
 
 The bundled app declares `LSUIElement` and also runs without a Dock icon. If the app appears to do nothing after launch, check the menu bar for the Spill trigger.
 Private usage upload is an optional token monitoring surface. Production app
-bundles can leave private usage web and relay URLs empty; the Sign In and
-Connect action stays disabled until a safe web URL is written into `Info.plist`.
-A completed connection and upload also require the configured relay URL. Do not
-hardcode deployed URLs in source.
+bundles can leave `SPILL_BUILD_PRIVATE_USAGE_FEATURE_ENABLED=0` to hide the
+login/sync UI and disable upload handlers while local metering continues to
+work. A bundle that exposes Sign In and Connect must write safe web and relay
+URLs into `Info.plist`. Do not hardcode deployed URLs in source.
 
 Agent-facing details for local app builds, app restarts, release packaging, and
 token-metering adapter resource propagation live in
@@ -134,8 +134,8 @@ support Sign In and Connect should set
 `SPILL_BUILD_PRIVATE_USAGE_FEATURE_ENABLED=1` so packaging validates
 `SPILL_BUILD_PRIVATE_USAGE_ENVIRONMENT=production`,
 `SPILL_BUILD_PRIVATE_USAGE_WEB_URL`, and `SPILL_BUILD_PRIVATE_USAGE_RELAY_URL`.
-Bundles that do not support the web connection can leave the flag at `0` and
-the web/relay URLs empty.
+Bundles that do not support the web connection can leave the flag at `0`; the
+login/sync UI is hidden and the web/relay URLs can remain empty.
 
 This writes:
 
