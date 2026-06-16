@@ -2494,7 +2494,7 @@ final class TokenUsageStoreTests: XCTestCase {
 
         let success = try decodedJSONObject(from: Data(contentsOf: successURL))
         XCTAssertEqual(success["kind"] as? String, "success")
-        XCTAssertEqual(success["total_tokens"] as? Int, 32)
+        XCTAssertEqual(success["total_tokens"] as? Int, 132)
         XCTAssertNil(success["run_id"])
         XCTAssertNil(success["span_id"])
         XCTAssertFalse(FileManager.default.fileExists(atPath: mismatchURL.path))
@@ -2502,6 +2502,12 @@ final class TokenUsageStoreTests: XCTestCase {
         let events = try antigravityEventObjects(in: inboxURL)
         XCTAssertEqual(events.count, 1)
         XCTAssertEqual(events.first?["ai_tool"] as? String, "claude")
+        XCTAssertEqual(events.first?["input_tokens"] as? Int, 125)
+        XCTAssertEqual(events.first?["output_tokens"] as? Int, 7)
+        let stateURL = sessionStateURL.appendingPathComponent("claudeDiag01.json")
+        let state = try String(contentsOf: stateURL)
+        XCTAssertTrue(state.contains(#""byte_offset""#))
+        XCTAssertFalse(state.contains(transcriptURL.path))
 
         try runClaudeHook(
             rawInput: payload,
@@ -2518,6 +2524,7 @@ final class TokenUsageStoreTests: XCTestCase {
             transcript,
             #"{"message":{"role":"user"}}"#,
             #"{"message":{"role":"assistant","model":"claude-sonnet-4","usage":{"input_tokens":3,"cache_creation_input_tokens":4,"output_tokens":2},"content":[{"type":"tool_use","name":"Edit"}]}}"#,
+            #"{"message":{"role":"assistant","model":"claude-sonnet-4","usage":{"iterations":[{"usage":{"input_tokens":6,"cache_creation":{"ephemeral_1h_input_tokens":2},"cache_read_input_tokens":1,"output_tokens":3}}]},"content":[{"type":"tool_use","name":"Edit"}]}}"#,
         ].joined(separator: "\n")
         try "\(updatedTranscript)\n".write(to: transcriptURL, atomically: true, encoding: .utf8)
 
@@ -2530,7 +2537,7 @@ final class TokenUsageStoreTests: XCTestCase {
 
         let refreshedEvents = try antigravityEventObjects(in: inboxURL)
         XCTAssertEqual(refreshedEvents.count, 2)
-        XCTAssertEqual(refreshedEvents.compactMap { $0["total_tokens"] as? Int }.sorted(), [9, 32])
+        XCTAssertEqual(refreshedEvents.compactMap { $0["total_tokens"] as? Int }.sorted(), [21, 132])
         XCTAssertFalse(FileManager.default.fileExists(atPath: emptyURL.path))
     }
 

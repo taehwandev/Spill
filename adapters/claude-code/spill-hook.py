@@ -6,9 +6,11 @@ Reads the Stop hook payload from stdin, extracts all turns' token usage
 from the Claude Code transcript, and enqueues one JSON event file in the
 Spill local queue.
 
-Token counting: sums input_tokens + cache_creation_input_tokens + output_tokens
-across all turns. cache_read_input_tokens is excluded — it is the accumulated
-cached context re-read each turn and would massively overcount if included.
+Token counting: sums exact input token categories exposed by Claude Code:
+input_tokens, cache_creation_input_tokens, cache_read_input_tokens, and
+output_tokens across all turns. When a runtime omits top-level usage totals but
+exposes exact per-iteration usage, the hook falls back to those iteration
+totals.
 
 Install: add to ~/.claude/settings.json (or .claude/settings.json) Stop hooks:
   {
@@ -191,6 +193,58 @@ def _safe_payload_shape(payload: dict = None) -> dict:
     }
 
 
+def _safe_usage_token(value) -> int:
+    if isinstance(value, bool):
+        return 0
+    if isinstance(value, int):
+        return max(0, value)
+    if isinstance(value, float) and value.is_integer():
+        return max(0, int(value))
+    return 0
+
+
+def _cache_creation_tokens(usage: dict) -> int:
+    direct = _safe_usage_token(usage.get("cache_creation_input_tokens"))
+    if direct > 0:
+        return direct
+
+    detail = usage.get("cache_creation")
+    if not isinstance(detail, dict):
+        return 0
+    return sum(_safe_usage_token(value) for value in detail.values())
+
+
+def _usage_totals(usage: dict, include_iterations: bool = True) -> tuple[int, int]:
+    if not isinstance(usage, dict):
+        return 0, 0
+
+    input_tokens = _safe_usage_token(usage.get("input_tokens"))
+    cache_creation_tokens = _cache_creation_tokens(usage)
+    cache_read_tokens = _safe_usage_token(usage.get("cache_read_input_tokens"))
+    output_tokens = _safe_usage_token(usage.get("output_tokens"))
+
+    if input_tokens > 0 or cache_creation_tokens > 0 or cache_read_tokens > 0 or output_tokens > 0:
+        return input_tokens + cache_creation_tokens + cache_read_tokens, output_tokens
+
+    if not include_iterations:
+        return 0, 0
+
+    iterations = usage.get("iterations")
+    if not isinstance(iterations, list):
+        return 0, 0
+
+    total_input = 0
+    total_output = 0
+    for item in iterations:
+        if not isinstance(item, dict):
+            continue
+        nested_usage = item.get("usage") if isinstance(item.get("usage"), dict) else item
+        nested_input, nested_output = _usage_totals(nested_usage, include_iterations=False)
+        total_input += nested_input
+        total_output += nested_output
+    return total_input, total_output
+
+
 def _write_diagnostic_file(filename: str, kind: str, reason: str, payload: dict = None, meaning: str = "") -> None:
     if os.environ.get("SPILL_TOKEN_USAGE_DISABLE_DIAGNOSTICS") == "1":
         return
@@ -270,24 +324,36 @@ def _stable_span_id(*parts: str) -> str:
     return "span-" + hashlib.sha256(source.encode("utf-8")).hexdigest()[:12]
 
 
-def _load_session_state(run_id: str) -> tuple[int, int]:
-    """Return (prev_fresh, prev_output) recorded for this run, or (0, 0)."""
+def _state_int(data: dict, key: str) -> int:
+    try:
+        value = int(data.get(key, 0))
+    except Exception:
+        return 0
+    return max(0, value)
+
+
+def _load_session_state(run_id: str) -> tuple[int, int, int]:
+    """Return (prev_fresh, prev_output, byte_offset) for this run."""
     state_path = SESSION_STATE_DIR / f"{run_id}.json"
     try:
         data = json.loads(state_path.read_text())
         if isinstance(data, dict):
-            return int(data.get("fresh", 0)), int(data.get("output", 0))
+            return _state_int(data, "fresh"), _state_int(data, "output"), _state_int(data, "byte_offset")
     except Exception:
         pass
-    return 0, 0
+    return 0, 0, 0
 
 
-def _save_session_state(run_id: str, fresh: int, output: int) -> None:
+def _save_session_state(run_id: str, fresh: int, output: int, byte_offset: int) -> None:
     try:
         SESSION_STATE_DIR.mkdir(parents=True, exist_ok=True)
         state_path = SESSION_STATE_DIR / f"{run_id}.json"
         tmp_path = SESSION_STATE_DIR / f".{run_id}.tmp"
-        tmp_path.write_text(json.dumps({"fresh": fresh, "output": output}))
+        tmp_path.write_text(json.dumps({
+            "fresh": max(0, fresh),
+            "output": max(0, output),
+            "byte_offset": max(0, byte_offset),
+        }))
         os.replace(tmp_path, state_path)
     except Exception:
         pass
@@ -322,6 +388,59 @@ def _infer_stage(tool_names: set) -> str:
     return 'summarize'
 
 
+def _turn_from_record(obj: dict):
+    msg = obj.get("message", {})
+    if not isinstance(msg, dict) or msg.get("role", "") != "assistant":
+        return None
+    if isinstance(msg.get("usage"), dict):
+        return msg
+    if isinstance(obj.get("usage"), dict):
+        return {
+            "model": msg.get("model", ""),
+            "usage": obj.get("usage", {}),
+            "content": msg.get("content", []),
+        }
+    return None
+
+
+def _read_transcript_turns(transcript_path: str, byte_offset: int) -> tuple[list[dict], int, int]:
+    start_offset = max(0, byte_offset)
+    try:
+        file_size = pathlib.Path(transcript_path).stat().st_size
+    except Exception:
+        file_size = 0
+    if start_offset > file_size:
+        start_offset = 0
+
+    all_turns: list[dict] = []
+    current_group: list[dict] = []
+    end_offset = start_offset
+
+    with open(transcript_path, "rb") as f:
+        f.seek(start_offset)
+        while True:
+            raw = f.readline()
+            if not raw:
+                break
+            end_offset = f.tell()
+            try:
+                obj = json.loads(raw.decode("utf-8").strip())
+                msg = obj.get("message", {})
+                role = msg.get("role", "") if isinstance(msg, dict) else ""
+                if role in {"human", "user"}:
+                    all_turns.extend(current_group)
+                    current_group = []
+                else:
+                    turn = _turn_from_record(obj)
+                    if turn is not None:
+                        current_group.append(turn)
+            except Exception:
+                pass
+
+    all_turns.extend(current_group)
+    return all_turns, end_offset, start_offset
+
+
 def main() -> None:
     try:
         raw_payload = sys.stdin.read()
@@ -350,6 +469,7 @@ def main() -> None:
 
     transcript_path = payload.get("transcript_path", "")
     session_id = payload.get("session_id", "")
+    run_id = _opaque(session_id, "run-" + uuid.uuid4().hex[:12])
 
     if not transcript_path:
         _write_diagnostic_file(MISMATCH_DIAGNOSTIC_FILE_NAME, "runtime_payload_mismatch", "missing_transcript_path", payload)
@@ -359,40 +479,25 @@ def main() -> None:
         _write_diagnostic_file(MISMATCH_DIAGNOSTIC_FILE_NAME, "runtime_payload_mismatch", "transcript_unavailable", payload)
         return
 
-    # Collect all assistant messages across the entire session.
-    # cache_read grows cumulatively — exclude it to avoid double-counting.
-    all_turns: list[dict] = []
-    current_group: list[dict] = []
+    prev_fresh, prev_output, previous_byte_offset = _load_session_state(run_id)
     try:
-        with open(transcript_path) as f:
-            for raw in f:
-                raw = raw.strip()
-                if not raw:
-                    continue
-                try:
-                    obj = json.loads(raw)
-                    msg = obj.get("message", {})
-                    role = msg.get("role", "")
-                    if role in {"human", "user"}:
-                        all_turns.extend(current_group)
-                        current_group = []
-                    elif role == "assistant" and "usage" in msg:
-                        current_group.append(msg)
-                except Exception:
-                    pass
-        # Include any trailing assistant messages (current turn in progress).
-        all_turns.extend(current_group)
+        all_turns, transcript_byte_offset, read_start_offset = _read_transcript_turns(
+            transcript_path,
+            previous_byte_offset,
+        )
     except Exception:
         _write_diagnostic_file(MISMATCH_DIAGNOSTIC_FILE_NAME, "runtime_payload_mismatch", "transcript_read_failed", payload)
         return
 
     if not all_turns:
+        if transcript_byte_offset > previous_byte_offset:
+            _save_session_state(run_id, prev_fresh, prev_output, transcript_byte_offset)
         _write_diagnostic_file(
             EMPTY_DIAGNOSTIC_FILE_NAME,
             "no_usage_hook_call",
-            "no_assistant_usage",
+            "no_new_token_delta" if previous_byte_offset > 0 else "no_assistant_usage",
             payload,
-            meaning="Claude Stop hook ran, but the transcript did not expose assistant usage records for this stop.",
+            meaning="Claude Stop hook ran, but no new assistant usage records were available for this stop.",
         )
         return
 
@@ -405,14 +510,15 @@ def main() -> None:
                 if name:
                     tool_names.add(name)
 
-    # fresh = new tokens actually sent this session (input + cache_creation per turn).
-    # cache_read_input_tokens is excluded: it is the re-read accumulated context and
-    # grows with every turn, causing massive overcounting if included.
-    session_fresh = sum(
-        t["usage"].get("input_tokens", 0) + t["usage"].get("cache_creation_input_tokens", 0)
-        for t in all_turns
-    )
-    session_output = sum(t["usage"].get("output_tokens", 0) for t in all_turns)
+    # Input total includes Claude's exact uncached, cache-write, and cache-read
+    # token categories when present. cache_read is a lower-cost input category,
+    # but it is still exact runtime usage and should not disappear from totals.
+    session_fresh = 0
+    session_output = 0
+    for turn in all_turns:
+        turn_input, turn_output = _usage_totals(turn.get("usage", {}))
+        session_fresh += turn_input
+        session_output += turn_output
 
     if session_fresh == 0 and session_output == 0:
         _write_diagnostic_file(
@@ -429,13 +535,22 @@ def main() -> None:
 
     run_id = _opaque(session_id, "run-" + uuid.uuid4().hex[:12])
 
-    # Delta tracking: emit only NEW tokens since the last Stop fire for this session.
-    prev_fresh, prev_output = _load_session_state(run_id)
-    fresh = session_fresh - prev_fresh
-    output = session_output - prev_output
+    is_incremental_read = read_start_offset > 0
+    if is_incremental_read:
+        fresh = session_fresh
+        output = session_output
+        next_fresh = prev_fresh + fresh
+        next_output = prev_output + output
+    else:
+        # Full-scan fallback for first run, old state files, or transcript truncation.
+        fresh = session_fresh - prev_fresh
+        output = session_output - prev_output
+        next_fresh = session_fresh
+        next_output = session_output
     total = fresh + output
 
     if total <= 0:
+        _save_session_state(run_id, next_fresh, next_output, transcript_byte_offset)
         _write_diagnostic_file(
             EMPTY_DIAGNOSTIC_FILE_NAME,
             "no_usage_hook_call",
@@ -451,8 +566,8 @@ def main() -> None:
         model,
         str(prev_fresh),
         str(prev_output),
-        str(session_fresh),
-        str(session_output),
+        str(next_fresh),
+        str(next_output),
     )
     now = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.000Z")
     inferred_task_type = _infer_task_type(tool_names)
@@ -498,7 +613,7 @@ def main() -> None:
     }
 
     _enqueue_event(event)
-    _save_session_state(run_id, session_fresh, session_output)
+    _save_session_state(run_id, next_fresh, next_output, transcript_byte_offset)
     _write_success_diagnostic(event)
     _consume_label_file()
 
