@@ -86,13 +86,25 @@ Routing and executable evidence:
   `python3 "${AGENTPLAYBOOK_HOME:-$HOME/Documents/KeyFlowVault/AgentPlaybook}/scripts/workflow.py" route <command> --request "<USER_REQUEST>"`
   before selecting shared docs, editing, reviewing, committing, or reporting
   completion. If the current request is a direct question, answer it first, then
-  route with `--request-classified` and record that evidence.
+  route with `--request-classified --classification-evidence "<evidence>"` and
+  record that evidence.
+- Use only two cat signal badges in human-visible reports: 🐱🟢 SUCCESS means
+  executed with evidence, and 🐱🔴 FAIL means blocked, failed, missed, or
+  missing evidence. 🐱🔴 FAIL triggers missed-gate recovery: stop finalization,
+  roll back only dependent agent-made changes after the missed gate when safe,
+  return to the first missed gate only, and run the retrospective workflow. The
+  missed gate gets one recovery retry; do not restart the whole route. Do not
+  report any third gate state.
 - When the wrappers are available, run `agent-preflight.py` before editing,
   reviewing, committing, or reporting completion, and run `agent-finish-check.py`
   before final report, commit, release, or handoff. Pass evidence for every
   required route gate.
+- VibeGuard `Needs review` must be reported explicitly and can pass the finish
+  check only with an `--allow-vibeguard-review` reason.
+- `--request-classified` must include `--classification-evidence`; if a request
+  asks for a question drill, missing drill evidence is 🐱🔴 FAIL and requires
+  missed-gate recovery.
 - Wrapper evidence under `.agentplaybook/` is local runtime evidence, not source.
-- Use human-visible gate signals: 🐱🔵 PENDING, 🐱🟢 GREEN, 🐱🟡 YELLOW, 🐱🔴 RED.
 
 Before PRD, ARD, task breakdown, or implementation work:
 
