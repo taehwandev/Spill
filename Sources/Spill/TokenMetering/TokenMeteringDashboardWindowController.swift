@@ -10,6 +10,7 @@ final class TokenMeteringDashboardWindowController: NSObject, NSWindowDelegate {
     private let store: TokenUsageDashboardStore
     private let cloudServiceStatusStore: CloudServiceStatusStore
     private let settings: SpillSettings
+    private let deferredRefreshDelayNanoseconds: UInt64 = 1_500_000_000
     private let refreshAction: () -> Void
     private let settingsAction: () -> Void
     private let developerOptionsAction: () -> Void
@@ -37,6 +38,7 @@ final class TokenMeteringDashboardWindowController: NSObject, NSWindowDelegate {
     }
 
     func show() {
+        let isReusingWindow = window != nil
         let window = ensureWindow()
         updateWindowTitle(window)
         constrainToVisibleScreen(window)
@@ -44,19 +46,25 @@ final class TokenMeteringDashboardWindowController: NSObject, NSWindowDelegate {
         window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless()
         window.makeKey()
-        store.refreshAsync()
+        if isReusingWindow {
+            store.refreshAsyncIfIdle()
+        }
         scheduleDeferredRefreshAction()
     }
 
     private func scheduleDeferredRefreshAction() {
         deferredRefreshTask?.cancel()
         deferredRefreshTask = Task { @MainActor [weak self] in
+            let delay = self?.deferredRefreshDelayNanoseconds ?? 1_500_000_000
             do {
-                try await Task.sleep(nanoseconds: 350_000_000)
+                try await Task.sleep(nanoseconds: delay)
             } catch {
                 return
             }
-            self?.refreshAction()
+            guard let self, !self.store.isDashboardRefreshInProgress else {
+                return
+            }
+            self.refreshAction()
         }
     }
 

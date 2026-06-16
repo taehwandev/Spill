@@ -77,7 +77,8 @@ final class TokenUsageDashboardStore: ObservableObject {
 
     init(
         usageStore: TokenUsageStore,
-        collectionCoordinator: AnyObject? = nil
+        collectionCoordinator: AnyObject? = nil,
+        loadsInitialPanelSummary: Bool = true
     ) {
         self.usageStore = usageStore
         eventsDidChangeObserver = NotificationCenter.default.addObserver(
@@ -107,7 +108,9 @@ final class TokenUsageDashboardStore: ObservableObject {
                 self?.scheduleRefresh()
             }
         }
-        refreshPanelSummary()
+        if loadsInitialPanelSummary {
+            refreshPanelSummary()
+        }
     }
 
     var hasDashboardEvents: Bool {
@@ -115,6 +118,10 @@ final class TokenUsageDashboardStore: ObservableObject {
         return displayEvents(for: events).contains { event in
             showAdvancedTools || event.aiTool.isDashboardTool
         }
+    }
+
+    var isDashboardRefreshInProgress: Bool {
+        loadState == .loading || isRefreshing
     }
 
     deinit {
@@ -186,6 +193,13 @@ final class TokenUsageDashboardStore: ObservableObject {
                 )
             }
         }
+    }
+
+    func refreshAsyncIfIdle(trackLiveUpdates: Bool = true) {
+        guard loadState == .idle, !isRefreshing else {
+            return
+        }
+        refreshAsync(trackLiveUpdates: trackLiveUpdates)
     }
 
     func refreshPanelSummary() {

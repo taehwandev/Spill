@@ -653,6 +653,8 @@ final class TokenUsageStoreTests: XCTestCase {
     func testDashboardViewUsesTopToolTabsAndOptionalCalendarPicker() throws {
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let dashboardView = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardView.swift"))
+        let dashboardWindowController = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardWindowController.swift"))
+        let dashboardAppDelegate = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardAppDelegate.swift"))
         let analyticsGrid = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardAnalyticsGrid.swift"))
         let filterBar = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardFilterBar.swift"))
         let calendarControl = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardCalendarControl.swift"))
@@ -673,6 +675,12 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(filterBar.contains("TokenMeteringDashboardCalendarControl("))
         XCTAssertTrue(toolTab.contains("store.setSelectedTool(filter.tool)"))
         XCTAssertTrue(dashboardView.contains("store.refreshAsync()"))
+        XCTAssertTrue(dashboardView.contains("store.refreshAsyncIfIdle()"))
+        XCTAssertTrue(dashboardWindowController.contains("store.refreshAsyncIfIdle()"))
+        XCTAssertFalse(dashboardWindowController.contains("store.refreshAsync()"))
+        XCTAssertTrue(dashboardWindowController.contains("deferredRefreshDelayNanoseconds"))
+        XCTAssertTrue(dashboardWindowController.contains("!self.store.isDashboardRefreshInProgress"))
+        XCTAssertTrue(dashboardAppDelegate.contains("loadsInitialPanelSummary: false"))
         XCTAssertTrue(dashboardView.contains("syncOnboardingPreviewFromSettings()"))
         XCTAssertTrue(dashboardView.contains("settings.tokenUsageDashboardOnboardingPreviewEnabled"))
         XCTAssertTrue(dashboardView.contains("SpillBuildOptions.developerOptionsEnabled"))
@@ -693,6 +701,8 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(preferencesView.contains("$settings.tokenUsageDashboardOnboardingPreviewEnabled"))
         XCTAssertTrue(preferencesView.contains("t(.aiDashboardOnboardingPreview)"))
         XCTAssertTrue(dashboardStore.contains("func refreshAsync(trackLiveUpdates: Bool = true)"))
+        XCTAssertTrue(dashboardStore.contains("func refreshAsyncIfIdle(trackLiveUpdates: Bool = true)"))
+        XCTAssertTrue(dashboardStore.contains("loadsInitialPanelSummary: Bool = true"))
         XCTAssertTrue(dashboardStore.contains("@Published private(set) var loadState"))
         XCTAssertTrue(dashboardStore.contains("@Published private(set) var isOnboardingPreviewEnabled"))
         XCTAssertTrue(dashboardStore.contains("TokenUsageDashboardPreviewDataSource.onboardingEvents"))
@@ -1020,7 +1030,9 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(windowController.contains("window.delegate = self"))
         XCTAssertTrue(windowController.contains("windowWillClose"))
         XCTAssertTrue(windowController.contains("scheduleDeferredRefreshAction()"))
-        XCTAssertTrue(windowController.contains("Task.sleep(nanoseconds: 350_000_000)"))
+        XCTAssertTrue(windowController.contains("deferredRefreshDelayNanoseconds: UInt64 = 1_500_000_000"))
+        XCTAssertTrue(windowController.contains("Task.sleep(nanoseconds: delay)"))
+        XCTAssertTrue(windowController.contains("!self.store.isDashboardRefreshInProgress"))
 
         XCTAssertTrue(buildScript.contains(#"HELPER_APP_NAME="Spill Token Dashboard.app""#))
         XCTAssertTrue(buildScript.contains(#"HELPER_BUNDLE_ID="${BUNDLE_ID}.TokenDashboard""#))
@@ -1470,6 +1482,26 @@ final class TokenUsageStoreTests: XCTestCase {
 
         XCTAssertEqual(dashboardStore.loadState, .loaded)
         XCTAssertEqual(dashboardStore.snapshot.eventCount, 1)
+    }
+
+    @MainActor
+    func testDashboardStoreCanSkipInitialPanelSummaryForHelperFirstLoad() async throws {
+        let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
+        try usageStore.appendEvent(Self.safeEvent(spanID: "span_helper_initial_dashboard_load"))
+        let dashboardStore = TokenUsageDashboardStore(
+            usageStore: usageStore,
+            loadsInitialPanelSummary: false
+        )
+
+        XCTAssertEqual(dashboardStore.panelSummary.eventCount, 0)
+        dashboardStore.refreshAsyncIfIdle()
+        XCTAssertEqual(dashboardStore.loadState, .loading)
+
+        try await Task.sleep(nanoseconds: 350_000_000)
+
+        XCTAssertEqual(dashboardStore.loadState, .loaded)
+        XCTAssertEqual(dashboardStore.snapshot.eventCount, 1)
+        XCTAssertEqual(dashboardStore.panelSummary.eventCount, 1)
     }
 
     @MainActor

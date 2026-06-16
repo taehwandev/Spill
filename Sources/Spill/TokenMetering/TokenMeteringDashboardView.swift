@@ -95,7 +95,7 @@ struct TokenMeteringDashboardView: View {
             titleDidChange()
             store.setLanguage(language)
             syncOnboardingPreviewFromSettings()
-            store.refreshAsync()
+            store.refreshAsyncIfIdle()
         }
         .onChange(of: settings.appLanguage) { _, appLanguage in
             let language = TokenMeteringLanguage.current(appLanguage: appLanguage)
