@@ -365,7 +365,7 @@ final class TokenUsageStoreTests: XCTestCase {
 
         XCTAssertEqual(snapshot.eventCount, 1)
         XCTAssertEqual(snapshot.totalTokens, 150)
-        XCTAssertEqual(snapshot.sessions.map(\.id), ["work_analysis_plan_2026_06_05"])
+        XCTAssertEqual(snapshot.sessions.map(\.id), ["work_project_local_analysis_plan_2026_06_05"])
         XCTAssertEqual(
             snapshot.periodFilters.first { $0.period == .today }?.detail,
             "150"
@@ -2741,6 +2741,40 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(selected.modelRows.map(\.title), ["codex-model", "claude-model"])
     }
 
+    func testDashboardSnapshotSeparatesWorkItemsByProjectID() {
+        let first = Self.safeEvent(
+            spanID: "span_project_first",
+            inputTokens: 80,
+            outputTokens: 20,
+            projectID: "project_aaaaaaaaaaaa5aaaaaaa9aaaaaaaaaaa",
+            taskType: .codeGeneration,
+            stage: .implement,
+            model: "project-first-model",
+            createdAt: "2026-06-05T00:00:00.000Z"
+        )
+        let second = Self.safeEvent(
+            spanID: "span_project_second",
+            inputTokens: 30,
+            outputTokens: 20,
+            projectID: "project_bbbbbbbbbbbb5bbbbbbb9bbbbbbbbbbb",
+            taskType: .codeGeneration,
+            stage: .implement,
+            model: "project-second-model",
+            createdAt: "2026-06-05T00:01:00.000Z"
+        )
+        let initial = TokenUsageDashboardSnapshot(events: [first, second])
+
+        XCTAssertEqual(initial.sessions.count, 2)
+        XCTAssertEqual(Set(initial.sessions.map { $0.id }).count, 2)
+        XCTAssertEqual(Set(initial.sessions.map { $0.title }), ["Code generation - Implement"])
+
+        let selectedID = try! XCTUnwrap(initial.sessions.first?.id)
+        let selected = TokenUsageDashboardSnapshot(events: [first, second], selectedSessionID: selectedID)
+
+        XCTAssertEqual(selected.eventCount, 1)
+        XCTAssertEqual(selected.totalTokens, 50)
+    }
+
     func testDashboardSnapshotUsesLocalLocaleAndTimeZoneForEventTimes() throws {
         let timeZone = try XCTUnwrap(TimeZone(identifier: "Asia/Seoul"))
         var calendar = Calendar(identifier: .gregorian)
@@ -2959,6 +2993,7 @@ final class TokenUsageStoreTests: XCTestCase {
         outputTokens: Int = 50,
         generatedOutput: Int? = nil,
         tokenBreakdown overrideTokenBreakdown: TokenUsageBreakdown? = nil,
+        projectID: String = "project_local",
         taskType: TokenUsageTaskType = .analysis,
         stage: TokenUsageStage = .plan,
         model: String = "local-manual",
@@ -3003,7 +3038,7 @@ final class TokenUsageStoreTests: XCTestCase {
         return TokenUsageEvent(
             schemaVersion: 1,
             deviceID: "device_local",
-            projectID: "project_local",
+            projectID: projectID,
             artifactID: "artifact_one",
             runID: runID,
             spanID: spanID,

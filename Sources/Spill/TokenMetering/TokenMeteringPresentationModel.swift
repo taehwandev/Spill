@@ -1063,6 +1063,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
         calendar: Calendar
     ) -> TokenUsageDashboardWorkItemKey {
         TokenUsageDashboardWorkItemKey(
+            projectID: event.projectID,
             taskType: event.taskType,
             stage: event.stage,
             dayBucket: localDayBucket(for: event.createdAt, calendar: calendar)
@@ -1080,6 +1081,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
         for event: TokenUsageDashboardParsedEvent
     ) -> TokenUsageDashboardWorkItemKey {
         TokenUsageDashboardWorkItemKey(
+            projectID: event.event.projectID,
             taskType: event.event.taskType,
             stage: event.event.stage,
             dayBucket: event.dayBucket
@@ -1393,6 +1395,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
 }
 
 private struct TokenUsageDashboardWorkItemKey: Hashable {
+    let projectID: String
     let taskType: TokenUsageTaskType
     let stage: TokenUsageStage
     let dayBucket: String
@@ -1400,6 +1403,7 @@ private struct TokenUsageDashboardWorkItemKey: Hashable {
     var id: String {
         [
             "work",
+            projectID,
             taskType.rawValue,
             stage.rawValue,
             dayBucket
