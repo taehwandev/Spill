@@ -5,9 +5,10 @@ repository commands, verification, and local constraints.
 
 Repo-local Spill docs define product direction, paths, commands, release policy,
 and macOS-specific constraints. Platform-neutral agent behavior lives in the
-shared AgentPlaybook checkout at
-`~/Documents/KeyFlowVault/AgentPlaybook` by default. If the checkout lives
-elsewhere, set `AGENTPLAYBOOK_HOME` to that root.
+shared AgentPlaybook checkout selected by `AGENTPLAYBOOK_HOME`. Keep personal
+absolute checkout paths out of committed repo-local docs. If a future team
+pinned checkout is approved, use a repo-relative root such as
+`.agents/AgentPlaybook`.
 
 Use AgentPlaybook `index.md` to load only the smallest relevant common,
 workflow, platform, or review cards. This repo does not keep local workflow
@@ -29,16 +30,16 @@ helpers here.
 
 Use the shared AgentPlaybook workflow cards directly:
 
-- `${AGENTPLAYBOOK_HOME:-$HOME/Documents/KeyFlowVault/AgentPlaybook}/workflows/agent-task-lifecycle.md`
-- `${AGENTPLAYBOOK_HOME:-$HOME/Documents/KeyFlowVault/AgentPlaybook}/workflows/request-triage.md`
-- `${AGENTPLAYBOOK_HOME:-$HOME/Documents/KeyFlowVault/AgentPlaybook}/workflows/ambiguity-gate.md`
-- `${AGENTPLAYBOOK_HOME:-$HOME/Documents/KeyFlowVault/AgentPlaybook}/workflows/product-architecture-delivery.md`
-- `${AGENTPLAYBOOK_HOME:-$HOME/Documents/KeyFlowVault/AgentPlaybook}/workflows/feature-implementation.md`
-- `${AGENTPLAYBOOK_HOME:-$HOME/Documents/KeyFlowVault/AgentPlaybook}/workflows/development-cycle.md`
-- `${AGENTPLAYBOOK_HOME:-$HOME/Documents/KeyFlowVault/AgentPlaybook}/workflows/multi-agent-collaboration.md`
-- `${AGENTPLAYBOOK_HOME:-$HOME/Documents/KeyFlowVault/AgentPlaybook}/workflows/multi-perspective-review.md`
-- `${AGENTPLAYBOOK_HOME:-$HOME/Documents/KeyFlowVault/AgentPlaybook}/workflows/release-readiness.md`
-- `${AGENTPLAYBOOK_HOME:-$HOME/Documents/KeyFlowVault/AgentPlaybook}/workflows/documentation-update.md`
+- `${AGENTPLAYBOOK_HOME}/workflows/agent-task-lifecycle.md`
+- `${AGENTPLAYBOOK_HOME}/workflows/request-triage.md`
+- `${AGENTPLAYBOOK_HOME}/workflows/ambiguity-gate.md`
+- `${AGENTPLAYBOOK_HOME}/workflows/product-architecture-delivery.md`
+- `${AGENTPLAYBOOK_HOME}/workflows/feature-implementation.md`
+- `${AGENTPLAYBOOK_HOME}/workflows/development-cycle.md`
+- `${AGENTPLAYBOOK_HOME}/workflows/multi-agent-collaboration.md`
+- `${AGENTPLAYBOOK_HOME}/workflows/multi-perspective-review.md`
+- `${AGENTPLAYBOOK_HOME}/workflows/release-readiness.md`
+- `${AGENTPLAYBOOK_HOME}/workflows/documentation-update.md`
 
 ## Current Product Direction
 
@@ -138,7 +139,7 @@ python3 .agents/scripts/workflow.py status-click-smoke
 Release from the current repository state:
 
 ```bash
-sed -n '1,220p' "${AGENTPLAYBOOK_HOME:-$HOME/Documents/KeyFlowVault/AgentPlaybook}/workflows/release-readiness.md"
+sed -n '1,220p' "${AGENTPLAYBOOK_HOME}/workflows/release-readiness.md"
 ```
 
 Use `README.md` distribution notes, `VIBEGUARD.md`, and

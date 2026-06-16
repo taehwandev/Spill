@@ -132,6 +132,12 @@ Requirements:
 
 - First launch opens the compact panel or a lightweight welcome state that
   explains the tray trigger, compact panel, and local-first privacy model.
+- The compact panel and any local dashboard entry point must have an onboarding
+  preview path. The preview should make the app behave as if optional local
+  integrations are not installed, without deleting or hiding real user data.
+- Onboarding previews must use a deterministic app-owned fixture or preview
+  data source, not a destructive reset, not a real token event write, and not a
+  forced empty rendering of the production store.
 - Users can continue without account creation.
 - Accessibility permission is requested only when the user enables or invokes a
   feature that needs it, such as window actions or best-effort menu bar item
@@ -147,6 +153,8 @@ Acceptance:
 
 - A new user can understand the tray and open Preferences without granting
   Accessibility permission.
+- The general dashboard/panel entry and the local token dashboard can both be
+  tested in onboarding mode while preserving the real local stores.
 - Token metering setup is discoverable without being mandatory.
 - Permission prompts are tied to the feature that requires them.
 - The onboarding copy does not imply cloud upload, prompt collection, or
@@ -295,6 +303,9 @@ Dashboard UX requirements:
   technical detail panel has a short info affordance explaining what is counted,
   what is inferred from safe labels, and what is unavailable due to the privacy
   boundary.
+- Dashboard headers should avoid secondary lines that repeat counts already
+  shown in metric cards, tables, or status pills. Count, token, and activity
+  totals belong in dedicated metric components where they can be compared.
 - Token detail charts should be labeled as optional detail quality, not as the
   primary usage explanation. If most detail is `unknown`, the UI should direct
   users back to input/output totals and label coverage instead of presenting the
@@ -320,6 +331,8 @@ Acceptance:
   `unknown` is explained as unavailable attribution rather than a guessed input
   category.
 - Work item rows are clickable and update a safe detail panel.
+- Loading, empty, onboarding, and normal dashboard states keep the same major
+  layout regions so the UI does not jump during refresh.
 - UI copy states that exact counts are required and estimates should not be
   sent.
 - Pre-release local metering data can be reset or reimported without a
@@ -341,12 +354,17 @@ Requirements:
 - Read-only pills.
 - Compact labels.
 - Refresh interval configurable later; use a conservative default.
+- CPU usage defaults to a multicore/system-wide interpretation. Preferences
+  should not expose a separate option to choose among multiple CPU calculation
+  modes unless a later PRD defines a real user workflow for that distinction.
 - Avoid high CPU overhead.
 
 Acceptance:
 
 - Metrics update without blocking UI.
 - Missing metrics show a quiet unavailable state.
+- Redundant CPU mode settings are removed from Preferences and no longer affect
+  status display.
 
 ### 6. AI Status Strip
 
@@ -366,6 +384,9 @@ Layout requirements:
 
 - The strip is a compact cluster of AI tool status pills plus one token usage
   summary pill.
+- The AI area may include a small process-state visualization that shows how
+  many supported AI tools are currently detected and how they are distributed by
+  safe local status such as running, configured, or unavailable.
 - The token summary appears in the same AI strip, after local tool status, and
   may wrap to a second compact line only when the panel width requires it.
 - Clicking the token summary opens the local token dashboard helper.
@@ -378,6 +399,10 @@ Behavior requirements:
 - Never display API keys.
 - Treat AI providers as pluggable.
 - Show only locally detected or configured tools in the compact panel.
+- The process-state visualization must be derived from existing local process
+  and configuration status. It must not inspect prompts, transcripts, commands,
+  file paths, repository names, shell history, logs, diffs, source content, or
+  secret-bearing config values.
 - Hide the AI strip only when no local AI tool, OpenAI configuration, or token
   metering state exists.
 - Treat model and version labels as best-effort hints, not guaranteed session
@@ -386,6 +411,8 @@ Behavior requirements:
 Acceptance:
 
 - AI strip shows useful local state.
+- AI status can be understood at a glance through both status pills and a small
+  process-state chart/count summary.
 - Token metering placement is visually and conceptually part of AI status.
 - Missing tools do not create errors, noise, or placeholder panel rows.
 

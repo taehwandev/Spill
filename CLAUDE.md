@@ -61,14 +61,14 @@ If you skip the route, the Stop hook records every event as `analysis/classify`.
 ### Route command shape
 
 ```bash
-SPILL_AI_TOOL=claude python3 "${AGENTPLAYBOOK_HOME:-$HOME/Documents/KeyFlowVault/AgentPlaybook}/scripts/workflow.py" route <command> --request "<USER_REQUEST>"
+SPILL_AI_TOOL=claude python3 "${AGENTPLAYBOOK_HOME}/scripts/workflow.py" route <command> --request "<USER_REQUEST>"
 ```
 
 For already-classified requests (second pass, follow-up, or any turn where the
 intent is unambiguous without further clarification):
 
 ```bash
-SPILL_AI_TOOL=claude python3 "${AGENTPLAYBOOK_HOME:-$HOME/Documents/KeyFlowVault/AgentPlaybook}/scripts/workflow.py" route <command> --request-classified
+SPILL_AI_TOOL=claude python3 "${AGENTPLAYBOOK_HOME}/scripts/workflow.py" route <command> --request-classified
 ```
 
 ### Command mapping

@@ -119,6 +119,32 @@ Constraints:
 - Use grouped pills and icon buttons.
 - Prefer icons and concise labels.
 
+### ARD-0050: Onboarding Preview Uses Fixture Data Sources
+
+Decision:
+
+General dashboard/panel onboarding and local token dashboard onboarding previews
+use deterministic app-owned fixture data sources. They must not delete,
+truncate, overwrite, or reinterpret the user's production stores.
+
+Rationale:
+
+The panel and dashboards are entry points. Testing onboarding by forcing a real
+store into an empty state is fragile and can hide regressions in the actual
+empty, loading, and content paths. A fixture data source lets the UI behave like
+optional integrations are not installed while keeping local token, settings,
+menu bar, and process state intact.
+
+Rules:
+
+- Preview mode is UI state owned by the relevant store or screen state owner.
+- Fixture records are deterministic, local-only, and clearly synthetic.
+- Production stores remain the source of truth when preview mode is off.
+- Preview mode must not enqueue token events, run setup hooks, alter adapter
+  diagnostics, reset importer cursors, or request permissions.
+- Empty onboarding copy should be rendered from preview state, not by special
+  casing a real database as empty.
+
 ### ARD-005A: Token Metering Lives Inside The AI Strip
 
 Decision:
@@ -141,8 +167,37 @@ Constraints:
 - Left click continues to toggle the compact Spill Panel.
 - The token summary must stay compact and must not turn the panel into a large
   dashboard.
+- Secondary header lines in dashboard surfaces should not repeat counts already
+  represented by metric cards, status pills, or rows.
 - Detail actions must not start cloud sync, auth, network upload, or content
   collection.
+
+### ARD-005A1: AI Process Visualization Is Derived Display State
+
+Decision:
+
+The AI area may show a compact process-state visualization derived from the
+existing local AI status provider. It is display state, not a new data
+collection channel.
+
+Rationale:
+
+Users need a quick answer to "how many AI tools are active?" without opening the
+token dashboard. The existing local process/configuration status already has
+enough safe information to render a small chart or count summary.
+
+Rules:
+
+- The visualization reads only normalized AI status display models already
+  produced by the local AI status provider.
+- Status buckets may include running, configured/ready, unavailable, and
+  warning/error when those states already exist.
+- The visualization must not inspect prompts, transcripts, commands, file
+  paths, repository names, shell history, logs, diffs, source content, process
+  argument values beyond existing safe labels, or secret-bearing config values.
+- It must not execute new network calls or paid model/API calls.
+- It should degrade to the existing AI status pills when no chartable state is
+  available.
 
 ### ARD-005C: Local Token Dashboard Uses A Separate Helper App
 
@@ -774,11 +829,14 @@ enum SpillActionKind: Hashable {
 Likely APIs:
 
 - Memory: `host_statistics64`
-- CPU: `host_processor_info` or sampled process/system counters
+- CPU: `host_processor_info` or sampled process/system counters, presented by
+  default as a multicore/system-wide value
 - Battery: `IOPSCopyPowerSourcesInfo`
 - Network: `NWPathMonitor` plus optional byte counters later
 
 Keep sampling cheap and cache snapshots.
+Do not expose user-facing CPU calculation mode selection until a future PRD
+defines why users need to choose a different mode.
 
 ### AI Status
 

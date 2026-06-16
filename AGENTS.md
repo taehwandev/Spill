@@ -7,16 +7,17 @@ workflow overlays when a shared AgentPlaybook card covers the same behavior.
 
 Shared AgentPlaybook library:
 
-- Default root: `~/Documents/KeyFlowVault/AgentPlaybook`
-- If the checkout lives elsewhere, set `AGENTPLAYBOOK_HOME` to that root.
-- `${AGENTPLAYBOOK_HOME:-$HOME/Documents/KeyFlowVault/AgentPlaybook}/AGENTS.md`
-- `${AGENTPLAYBOOK_HOME:-$HOME/Documents/KeyFlowVault/AgentPlaybook}/index.md`
-- `${AGENTPLAYBOOK_HOME:-$HOME/Documents/KeyFlowVault/AgentPlaybook}/scripts/workflow.py`
-- `${AGENTPLAYBOOK_HOME:-$HOME/Documents/KeyFlowVault/AgentPlaybook}/scripts/agent-preflight.py`
-- `${AGENTPLAYBOOK_HOME:-$HOME/Documents/KeyFlowVault/AgentPlaybook}/scripts/agent-finish-check.py`
-
-`~/Documents/KeyFlowVault/agent` may be a symlink to the same AgentPlaybook
-checkout.
+- Use the existing local checkout via `AGENTPLAYBOOK_HOME`.
+- Do not commit a personal absolute AgentPlaybook path into repo-local docs.
+- For personal shared installs, set `AGENTPLAYBOOK_HOME` in the runtime
+  environment.
+- For a future team-pinned install, use a repo-relative checkout such as
+  `.agents/AgentPlaybook` only after explicit approval.
+- `${AGENTPLAYBOOK_HOME}/AGENTS.md`
+- `${AGENTPLAYBOOK_HOME}/index.md`
+- `${AGENTPLAYBOOK_HOME}/scripts/workflow.py`
+- `${AGENTPLAYBOOK_HOME}/scripts/agent-preflight.py`
+- `${AGENTPLAYBOOK_HOME}/scripts/agent-finish-check.py`
 
 Use repo-local Spill instructions for product and command details. Use
 AgentPlaybook for common, workflow, platform, and review cards. Load the
@@ -83,7 +84,7 @@ Runtime hook evidence and privacy:
 Routing and executable evidence:
 
 - For multi-step tasks, run
-  `python3 "${AGENTPLAYBOOK_HOME:-$HOME/Documents/KeyFlowVault/AgentPlaybook}/scripts/workflow.py" route <command> --request "<USER_REQUEST>"`
+  `python3 "${AGENTPLAYBOOK_HOME}/scripts/workflow.py" route <command> --request "<USER_REQUEST>"`
   before selecting shared docs, editing, reviewing, committing, or reporting
   completion. If the current request is a direct question, answer it first, then
   route with `--request-classified --classification-evidence "<evidence>"` and
@@ -111,7 +112,7 @@ Before PRD, ARD, task breakdown, or implementation work:
 1. Read `.agents/README.md`.
 2. Read `.agents/specs/prd.md` and `.agents/specs/ard.md`.
 3. Follow the relevant AgentPlaybook workflow cards, starting from
-   `${AGENTPLAYBOOK_HOME:-$HOME/Documents/KeyFlowVault/AgentPlaybook}/workflows/agent-task-lifecycle.md`.
+   `${AGENTPLAYBOOK_HOME}/workflows/agent-task-lifecycle.md`.
 4. Apply the shared AgentPlaybook ambiguity gate before PRD, ARD, task
    breakdown, implementation planning, or code work when scope or intent is
    unclear.
@@ -119,7 +120,7 @@ Before PRD, ARD, task breakdown, or implementation work:
 
 VibeGuard gate:
 
-- Run `npx --yes @taehwandev/vibeguard audit . --rules "${AGENTPLAYBOOK_HOME:-$HOME/Documents/KeyFlowVault/AgentPlaybook}"` before and after documentation, code, config, dependency, data, deployment, or credential changes.
+- Run `npx --yes @taehwandev/vibeguard audit . --rules "${AGENTPLAYBOOK_HOME}"` before and after documentation, code, config, dependency, data, deployment, or credential changes.
 - Use `--fix` only for low-risk VibeGuard fixes, then inspect the diff.
 - Never print secret values. Ask before destructive data actions, production deploys, signing/notarization credential changes, paid-service/model usage increases, or recurring infrastructure.
 
