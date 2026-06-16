@@ -158,7 +158,7 @@ final class TokenUsageAntigravityImporter {
         return TokenUsageEvent(
             schemaVersion: 1,
             deviceID: "device_local",
-            projectID: "project_global",
+            projectID: label.projectID,
             artifactID: "artifact_global",
             runID: "run_\(runHash)",
             spanID: "span_\(spanHash)",
@@ -233,6 +233,7 @@ final class TokenUsageAntigravityImporter {
 
                 let taskType = (object["task_type"] as? String).flatMap(TokenUsageTaskType.init(rawValue:))
                 let stage = (object["stage"] as? String).flatMap(TokenUsageStage.init(rawValue:))
+                let projectID = Self.safeOpaqueID(object["project_id"] as? String) ?? "project_global"
                 guard taskType != nil || stage != nil else { return nil }
 
                 let updatedAt = (object["updated_at"] as? String).flatMap(ISO8601DateFormatter.parseTokenUsageDate(from:))
@@ -242,6 +243,7 @@ final class TokenUsageAntigravityImporter {
                 return LabelTimeline.Entry(
                     taskType: taskType,
                     stage: stage,
+                    projectID: projectID,
                     updatedAt: updatedAt,
                     expiresAt: expiresAt
                 )
@@ -334,6 +336,15 @@ final class TokenUsageAntigravityImporter {
         return cleaned.count >= 2 ? cleaned : "antigravity-unknown"
     }
 
+    private static func safeOpaqueID(_ value: String?) -> String? {
+        guard let value,
+              value.range(of: #"^[A-Za-z0-9_-]{6,64}$"#, options: .regularExpression) != nil
+        else {
+            return nil
+        }
+        return value
+    }
+
     private static func opaqueHash(_ value: String) -> String {
         let digest = SHA256.hash(data: Data(value.utf8))
         return digest.map { String(format: "%02x", $0) }.joined().prefix(24).description
@@ -381,6 +392,7 @@ private struct LabelTimeline {
     struct Entry {
         let taskType: TokenUsageTaskType?
         let stage: TokenUsageStage?
+        let projectID: String
         let updatedAt: Date
         let expiresAt: Date
     }
@@ -396,7 +408,8 @@ private struct LabelTimeline {
             .max(by: { $0.updatedAt < $1.updatedAt })
         return RuntimeEventLabel(
             taskType: match?.taskType ?? .uncategorized,
-            stage: match?.stage ?? .summarize
+            stage: match?.stage ?? .summarize,
+            projectID: match?.projectID ?? "project_global"
         )
     }
 }
@@ -404,6 +417,7 @@ private struct LabelTimeline {
 private struct RuntimeEventLabel {
     let taskType: TokenUsageTaskType
     let stage: TokenUsageStage
+    let projectID: String
 }
 
 private struct ProtoReader {

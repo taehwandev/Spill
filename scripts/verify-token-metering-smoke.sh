@@ -199,6 +199,15 @@ node "$ROOT_DIR/scripts/spill-token-metering-setup.mjs" \
     --ttl-minutes 5 \
     --json >/dev/null
 
+CODEX_LABEL_FILE="$CODEX_LABEL_FILE" node --input-type=module <<'NODE'
+import { readFile, writeFile } from 'node:fs/promises';
+
+const label = JSON.parse(await readFile(process.env.CODEX_LABEL_FILE, "utf8"));
+label.updated_at = "1970-01-01T00:00:00.000Z";
+label.expires_at = "2999-01-01T00:00:00.000Z";
+await writeFile(process.env.CODEX_LABEL_FILE, `${JSON.stringify(label, null, 2)}\n`);
+NODE
+
 PRESERVED_LABEL_FILE="$ADAPTER_TMP_DIR/codex-preserved-label.json"
 node "$ROOT_DIR/scripts/spill-token-metering-setup.mjs" \
     --label codex \
@@ -214,6 +223,9 @@ import { readFile } from 'node:fs/promises';
 const label = JSON.parse(await readFile(process.env.PRESERVED_LABEL_FILE, "utf8"));
 if (label.task_type !== "code_generation" || label.stage !== "verify") {
   throw new Error(`expected code_generation/verify label, found ${label.task_type}/${label.stage}`);
+}
+if (!/^project_[a-f0-9]{32}$/.test(label.project_id)) {
+  throw new Error(`expected opaque project UUID label, found ${label.project_id}`);
 }
 NODE
 
@@ -431,6 +443,10 @@ if (files.length !== 3) {
 
 const events = await Promise.all(files.map(async (file) => JSON.parse(await readFile(join(process.env.INBOX_DIR, file), "utf8"))));
 const keys = new Set(events.map((event) => `${event.ai_tool}:${event.task_type}:${event.stage}`));
+const codexEvent = events.find((event) => event.ai_tool === "codex" && event.task_type === "review_response" && event.stage === "revise");
+if (!codexEvent || !/^project_[a-f0-9]{32}$/.test(codexEvent.project_id)) {
+  throw new Error(`expected Codex event to carry an opaque project UUID, found ${codexEvent?.project_id}`);
+}
 for (const expected of [
   "claude:debugging:verify",
   "claude:git_commit:summarize",

@@ -106,6 +106,7 @@ final class TokenUsageAntigravityImporterTests: XCTestCase {
         let event = try XCTUnwrap(store.loadEvents().first)
 
         XCTAssertEqual(summary.importedEvents, 1)
+        XCTAssertEqual(event.projectID, "project_11111111111151119111111111111111")
         XCTAssertEqual(event.inputTokens, 115)
         XCTAssertEqual(event.outputTokens, 10)
         XCTAssertEqual(event.totalTokens, 125)
@@ -133,7 +134,7 @@ final class TokenUsageAntigravityImporterTests: XCTestCase {
         )
         try Data(
             """
-            {"ai_tool":"antigravity","task_type":"debugging","stage":"implement","updated_at":"1970-01-01T00:00:00.000Z","expires_at":"2999-01-01T00:00:00.000Z"}
+            {"ai_tool":"antigravity","task_type":"debugging","stage":"implement","project_id":"project_11111111111151119111111111111111","updated_at":"1970-01-01T00:00:00.000Z","expires_at":"2999-01-01T00:00:00.000Z"}
             """.utf8
         ).write(to: url)
     }

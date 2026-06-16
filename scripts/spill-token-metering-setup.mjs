@@ -2,6 +2,7 @@
 
 import { access, appendFile, chmod, copyFile, mkdir, readFile, rename, stat, writeFile, unlink } from "node:fs/promises";
 import { constants } from "node:fs";
+import { createHmac, randomBytes } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
@@ -520,6 +521,7 @@ async function writeRuntimeLabel({ tool, taskType, stage, labelFile, ttlMinutes,
   const safeTool = safeToolLabel(tool);
   const safeTaskType = safeWorkflowSlug(taskType, "task_type");
   const safeStage = safeWorkflowSlug(stage, "stage");
+  const projectID = await resolveLocalProjectID();
   const ttl = safeTTLMinutes(ttlMinutes);
   const now = new Date();
   const expiresAt = new Date(now.getTime() + ttl * 60 * 1000);
@@ -528,26 +530,32 @@ async function writeRuntimeLabel({ tool, taskType, stage, labelFile, ttlMinutes,
     "Library/Application Support/Spill/token-metering/label-context",
     `${safeTool}.json`,
   ));
+  let activeLabel = null;
   if (ifAbsent) {
-    const existing = await readActiveRuntimeLabel(target, safeTool, now);
-    if (existing) {
+    activeLabel = await readActiveRuntimeLabel(target, safeTool, now);
+    if (activeLabel?.project_id) {
       return {
         tool: safeTool,
-        task_type: existing.task_type,
-        stage: existing.stage,
+        task_type: activeLabel.task_type,
+        stage: activeLabel.stage,
+        project_id: activeLabel.project_id,
         label_file: target,
-        expires_at: existing.expires_at,
+        expires_at: activeLabel.expires_at,
         skipped: true,
       };
     }
   }
+  const nextTaskType = activeLabel?.task_type ?? safeTaskType;
+  const nextStage = activeLabel?.stage ?? safeStage;
+  const nextExpiresAt = activeLabel?.expires_at ?? expiresAt.toISOString();
 
   const value = {
     ai_tool: safeTool,
-    task_type: safeTaskType,
-    stage: safeStage,
+    task_type: nextTaskType,
+    stage: nextStage,
+    project_id: projectID,
     updated_at: now.toISOString(),
-    expires_at: expiresAt.toISOString(),
+    expires_at: nextExpiresAt,
   };
 
   await mkdir(dirname(target), { recursive: true });
@@ -560,8 +568,9 @@ async function writeRuntimeLabel({ tool, taskType, stage, labelFile, ttlMinutes,
   const timelineFile = target.replace(/\.json$/, "-timeline.jsonl");
   const timelineLine = `${JSON.stringify({
     ai_tool: safeTool,
-    task_type: safeTaskType,
-    stage: safeStage,
+    task_type: nextTaskType,
+    stage: nextStage,
+    project_id: projectID,
     updated_at: value.updated_at,
     expires_at: value.expires_at,
   })}\n`;
@@ -573,11 +582,12 @@ async function writeRuntimeLabel({ tool, taskType, stage, labelFile, ttlMinutes,
 
   return {
     tool: safeTool,
-    task_type: safeTaskType,
-    stage: safeStage,
+    task_type: nextTaskType,
+    stage: nextStage,
+    project_id: projectID,
     label_file: target,
     expires_at: value.expires_at,
-    skipped: false,
+    skipped: Boolean(activeLabel),
   };
 }
 
@@ -595,11 +605,75 @@ async function readActiveRuntimeLabel(path, expectedTool, now) {
     return {
       task_type: data.task_type,
       stage: data.stage,
+      project_id: optionalOpaqueID(data.project_id),
       expires_at: data.expires_at,
     };
   } catch {
     return null;
   }
+}
+
+async function resolveLocalProjectID() {
+  const root = await detectProjectIdentityRoot(process.cwd());
+  const salt = await readOrCreateProjectIDSalt();
+  const bytes = createHmac("sha256", salt)
+    .update(normalizeProjectIdentityRoot(root))
+    .digest()
+    .subarray(0, 16);
+  bytes[6] = (bytes[6] & 0x0f) | 0x50;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  return `project_${Buffer.from(bytes).toString("hex")}`;
+}
+
+async function detectProjectIdentityRoot(start) {
+  const original = resolve(start);
+  let current = original;
+  const markers = [
+    ".git",
+    ".agents",
+    "AGENTS.md",
+    "Package.swift",
+    "package.json",
+    "Cargo.toml",
+    "go.mod",
+    "pyproject.toml",
+  ];
+
+  while (true) {
+    for (const marker of markers) {
+      if (await exists(join(current, marker))) return current;
+    }
+    const parent = dirname(current);
+    if (parent === current) return original;
+    current = parent;
+  }
+}
+
+function normalizeProjectIdentityRoot(root) {
+  return resolve(root)
+    .replace(/\\/g, "/")
+    .replace(/\/+$/g, "")
+    .normalize("NFC");
+}
+
+async function readOrCreateProjectIDSalt() {
+  const saltFile = join(
+    homedir(),
+    "Library/Application Support/Spill/token-metering/project-identity-salt",
+  );
+  try {
+    const existing = (await readFile(saltFile, "utf8")).trim();
+    if (/^[a-f0-9]{64}$/i.test(existing)) return existing;
+  } catch {
+    // Missing salt is expected on first use.
+  }
+
+  await mkdir(dirname(saltFile), { recursive: true, mode: 0o700 });
+  const value = randomBytes(32).toString("hex");
+  const temporary = `${saltFile}.tmp-${process.pid}`;
+  await writeFile(temporary, `${value}\n`, { mode: 0o600, flag: "wx" });
+  await rename(temporary, saltFile);
+  return value;
 }
 
 async function resolveSourceRoot(option) {
@@ -805,6 +879,12 @@ function safeWorkflowSlug(value, name) {
 
 function safeWorkflowSlugOrEmpty(value) {
   return typeof value === "string" && /^[a-z][a-z0-9_]{1,40}$/.test(value);
+}
+
+function optionalOpaqueID(value) {
+  return typeof value === "string" && /^[A-Za-z0-9_-]{6,64}$/.test(value)
+    ? value
+    : "";
 }
 
 function safeTTLMinutes(value) {

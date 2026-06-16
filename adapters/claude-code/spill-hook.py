@@ -105,6 +105,25 @@ def _safe_label(payload: dict, keys: tuple[str, ...], env_keys: tuple[str, ...],
     return fallback
 
 
+def _safe_project_id(payload: dict) -> str:
+    global _USED_LABEL_FILE
+    payload_project_id = _payload_value(payload, "project_id", "projectID")
+    if _OPAQUE_ID.match(payload_project_id):
+        return payload_project_id
+
+    for env_key in ("SPILL_TOKEN_USAGE_PROJECT_ID", "SPILL_PROJECT_ID"):
+        env_project_id = os.environ.get(env_key, "")
+        if _OPAQUE_ID.match(env_project_id):
+            return env_project_id
+
+    file_project_id = _label_file_value("project_id", "projectID")
+    if _OPAQUE_ID.match(file_project_id):
+        _USED_LABEL_FILE = True
+        return file_project_id
+
+    return "project_global"
+
+
 def _label_file_value(*keys: str) -> str:
     try:
         data = json.loads(LABEL_FILE.read_text())
@@ -454,7 +473,7 @@ def main() -> None:
     event = {
         "schema_version": 1,
         "device_id": "device_local",
-        "project_id": "project_global",
+        "project_id": _safe_project_id(payload),
         "artifact_id": "artifact_global",
         "run_id": run_id,
         "span_id": span_id,

@@ -322,6 +322,7 @@ async function parseSessionFile(path, after, state) {
         inputTokens: delta.inputTokens,
         outputTokens: delta.outputTokens,
         cumulativeTotal: latest.usage.total.totalTokens,
+        projectID: eventLabel.projectID,
         taskType: taskTypeOverride ?? eventLabel.taskType ?? fallbackLabel.taskType,
         stage: stageOverride ?? eventLabel.stage ?? fallbackLabel.stage,
       }),
@@ -481,6 +482,7 @@ function toSpillEvent({
   inputTokens,
   outputTokens,
   cumulativeTotal,
+  projectID,
   taskType,
   stage,
 }) {
@@ -493,7 +495,7 @@ function toSpillEvent({
   return {
     schema_version: 1,
     device_id: "device_local",
-    project_id: "project_global",
+    project_id: optionalOpaqueID(projectID) ?? "project_global",
     artifact_id: "artifact_codex",
     run_id: `run_${runHash}`,
     span_id: `span_${spanHash}`,
@@ -670,6 +672,7 @@ async function readRuntimeLabel(path, expectedTool) {
   return {
     taskType: optionalWorkflowSlug(parsed.task_type),
     stage: optionalWorkflowSlug(parsed.stage),
+    projectID: optionalOpaqueID(parsed.project_id),
     hasLabel: Boolean(optionalWorkflowSlug(parsed.task_type) || optionalWorkflowSlug(parsed.stage)),
     updatedAt,
     expiresAt,
@@ -684,6 +687,7 @@ function labelForTimestamp(label, timestamp) {
   return {
     taskType: label.taskType,
     stage: label.stage,
+    projectID: label.projectID,
   };
 }
 
@@ -691,6 +695,12 @@ function optionalDate(value) {
   if (typeof value !== "string" || value.length === 0) return null;
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function optionalOpaqueID(value) {
+  return typeof value === "string" && /^[A-Za-z0-9_-]{6,64}$/.test(value)
+    ? value
+    : null;
 }
 
 async function writeState(path, state) {

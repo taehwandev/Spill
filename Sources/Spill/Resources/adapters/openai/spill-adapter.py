@@ -24,6 +24,7 @@ import re
 import uuid
 
 INBOX_DIR = pathlib.Path.home() / "Library/Application Support/Spill/token-metering/events-inbox"
+_OPAQUE_ID = re.compile(r'^[A-Za-z0-9_-]{6,64}$')
 _MODEL_ID = re.compile(r'^[A-Za-z0-9_.:-]{2,80}$')
 
 
@@ -51,7 +52,7 @@ def _append_event(model: str, input_tokens: int, output_tokens: int, run_id: str
     event = {
         "schema_version": 1,
         "device_id": "device_local",
-        "project_id": "project_global",
+        "project_id": _safe_project_id(),
         "artifact_id": "artifact_global",
         "run_id": run_id,
         "span_id": span_id,
@@ -76,6 +77,14 @@ def _append_event(model: str, input_tokens: int, output_tokens: int, run_id: str
     }
 
     _enqueue_event(event)
+
+
+def _safe_project_id() -> str:
+    for env_key in ("SPILL_TOKEN_USAGE_PROJECT_ID", "SPILL_PROJECT_ID"):
+        value = os.environ.get(env_key, "")
+        if _OPAQUE_ID.match(value):
+            return value
+    return "project_global"
 
 
 class _SpillCompletions:

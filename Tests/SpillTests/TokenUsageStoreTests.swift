@@ -787,7 +787,7 @@ final class TokenUsageStoreTests: XCTestCase {
         )
         try Data(
             """
-            {"ai_tool":"antigravity","task_type":"debugging","stage":"implement","updated_at":"1970-01-01T00:00:00.000Z","expires_at":"2999-01-01T00:00:00.000Z"}
+            {"ai_tool":"antigravity","task_type":"debugging","stage":"implement","project_id":"project_2222222222225222a222222222222222","updated_at":"1970-01-01T00:00:00.000Z","expires_at":"2999-01-01T00:00:00.000Z"}
             """.utf8
         ).write(to: labelURL)
 
@@ -807,6 +807,7 @@ final class TokenUsageStoreTests: XCTestCase {
 
         let event = try XCTUnwrap(store.loadEvents().first)
         XCTAssertEqual(event.aiTool, .antigravity)
+        XCTAssertEqual(event.projectID, "project_2222222222225222a222222222222222")
         XCTAssertEqual(event.taskType, .debugging)
         XCTAssertEqual(event.stage, .implement)
         XCTAssertEqual(event.model, "gemini-3.5-flash-low")
@@ -2368,6 +2369,8 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertFalse(helper.contains("--agent-playbook-home"))
         XCTAssertTrue(helper.contains("--if-absent"))
         XCTAssertTrue(helper.contains("readActiveRuntimeLabel"))
+        XCTAssertTrue(helper.contains("project_id"))
+        XCTAssertTrue(helper.contains("project-identity-salt"))
         XCTAssertTrue(helper.contains(#""label_exists""#))
         XCTAssertFalse(helper.contains("dominantStageForTask"))
         XCTAssertFalse(helper.contains("implementationDominantTaskTypes"))
