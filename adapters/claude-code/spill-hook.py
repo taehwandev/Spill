@@ -538,8 +538,6 @@ def _run_for_payload(payload: dict) -> None:
     raw_model = all_turns[-1].get("model", "")
     model = raw_model if _MODEL_ID.match(raw_model) else "claude-unknown"
 
-    run_id = _opaque(session_id, "run-" + uuid.uuid4().hex[:12])
-
     is_incremental_read = read_start_offset > 0
     if is_incremental_read:
         fresh = session_fresh
