@@ -37,9 +37,10 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(TokenMeteringL10n.text(.adapterSetupRequired, language: .japanese), "ローカル追跡の設定が必要")
         XCTAssertEqual(TokenMeteringL10n.adapterInstalled("spill-hook.py", language: .english), "Installed: spill-hook.py")
         XCTAssertEqual(TokenMeteringL10n.hookConfigTarget("~/.claude/settings.json", language: .korean), "연결 설정 -> ~/.claude/settings.json")
-        XCTAssertEqual(TokenMeteringL10n.text(.sourceBreakdown, language: .english), "Detail Quality")
-        XCTAssertEqual(TokenMeteringL10n.text(.sourceBreakdown, language: .korean), "세부 측정 품질")
-        XCTAssertEqual(TokenMeteringL10n.text(.sourceExactDetail, language: .english), "Exact detail")
+        XCTAssertEqual(TokenMeteringL10n.text(.sourceBreakdown, language: .english), "Runtime Detail")
+        XCTAssertEqual(TokenMeteringL10n.text(.sourceBreakdown, language: .korean), "런타임 세부")
+        XCTAssertEqual(TokenMeteringL10n.text(.folderFilterHeader, language: .korean), "폴더 필터")
+        XCTAssertEqual(TokenMeteringL10n.folderTitle("abcd1234", language: .english), "Folder abcd1234")
         XCTAssertEqual(TokenMeteringL10n.text(.sourceUnavailable, language: .korean), "세부 미분류")
         XCTAssertEqual(TokenMeteringL10n.text(.cumulativeOnlyBadge, language: .japanese), "合計のみ")
         XCTAssertEqual(TokenMeteringL10n.text(.clearAlias, language: .korean), "삭제")
@@ -99,8 +100,6 @@ final class TokenUsageStoreTests: XCTestCase {
             .sourceBreakdown,
             .sourceBreakdownSubtitle,
             .noSourceBreakdown,
-            .sourceDetail,
-            .noSourceBuckets,
             .workflowInfoTitle,
             .workflowInfoDetail,
             .stageInfoTitle,
@@ -120,10 +119,9 @@ final class TokenUsageStoreTests: XCTestCase {
             .cumulativeOnlyBadge,
             .cumulativeOnlyInfoTitle,
             .cumulativeOnlyInfoDetail,
-            .detailQualityAvailableGuidance,
-            .detailQualityUnavailableGuidance,
-            .runtimeCategories,
-            .sourceExactDetail,
+            .folderFilterHeader,
+            .allFolders,
+            .folderUnassigned,
             .sourceSystem,
             .sourceUser,
             .sourceHistory,
@@ -490,8 +488,7 @@ final class TokenUsageStoreTests: XCTestCase {
 
         XCTAssertEqual(snapshot.totalTokens, 33)
         XCTAssertTrue(snapshot.sourceRows.contains { $0.title == TokenMeteringL10n.text(.sourceUnavailable) && $0.value == "33" })
-        XCTAssertEqual(snapshot.detailQualityRows.map(\.id), ["unknown"])
-        XCTAssertTrue(snapshot.isDetailAttributionMostlyUnavailable)
+        XCTAssertEqual(snapshot.sourceRows.map(\.id), ["unknown"])
     }
 
     func testDashboardSnapshotOmitsLatencyKPIAndMissingLatencyCopy() {
@@ -512,9 +509,8 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(snapshot.totalTokens, 33)
         XCTAssertTrue(snapshot.sourceRows.contains { $0.title == TokenMeteringL10n.text(.sourceGeneratedOutput) && $0.value == "11" })
         XCTAssertTrue(snapshot.sourceRows.contains { $0.title == TokenMeteringL10n.text(.sourceUnavailable) && $0.value == "22" })
-        XCTAssertEqual(snapshot.detailQualityRows.map(\.id), ["exact", "unknown"])
-        XCTAssertEqual(snapshot.detailQualityRows.map(\.value), ["11", "22"])
-        XCTAssertTrue(snapshot.isDetailAttributionMostlyUnavailable)
+        XCTAssertEqual(snapshot.sourceRows.map(\.id), ["unknown", "generated_output"])
+        XCTAssertEqual(snapshot.sourceRows.map(\.value), ["22", "11"])
     }
 
     func testDashboardSnapshotClampsChartRatiosWhenBreakdownExceedsTotal() {
@@ -541,9 +537,6 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(systemRow?.value, "60")
         XCTAssertEqual(systemRow?.ratio, 1.0)
         XCTAssertTrue(snapshot.sourceRows.allSatisfy { row in
-            row.ratio.isFinite && row.ratio >= 0.0 && row.ratio <= 1.0
-        })
-        XCTAssertTrue(snapshot.detailQualityRows.allSatisfy { row in
             row.ratio.isFinite && row.ratio >= 0.0 && row.ratio <= 1.0
         })
     }
@@ -626,9 +619,16 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(dashboardView.contains("title: t(.workflowBreakdown)"))
         XCTAssertTrue(dashboardView.contains("title: t(.stageBreakdown)"))
         XCTAssertTrue(dashboardView.contains("title: t(.sourceBreakdown)"))
-        XCTAssertTrue(dashboardView.contains("detailQualityContent("))
-        XCTAssertTrue(dashboardView.contains("Text(t(.runtimeCategories))"))
+        XCTAssertTrue(dashboardView.contains("projectFilterBar"))
+        XCTAssertTrue(dashboardView.contains("projectFilterPill(filter)"))
+        XCTAssertTrue(dashboardView.contains("store.setSelectedProjectID(filter.projectID)"))
+        XCTAssertTrue(dashboardView.contains("Text(session.projectTitle)"))
+        XCTAssertTrue(dashboardView.contains("Text(detailSession.projectTitle)"))
+        XCTAssertFalse(dashboardView.contains("detailQualityContent("))
+        XCTAssertFalse(dashboardView.contains("Text(t(.runtimeCategories))"))
         XCTAssertFalse(dashboardView.contains("barRows(store.snapshot.sourceRows"))
+        XCTAssertTrue(dashboardView.contains(".frame(maxHeight: .infinity, alignment: .topLeading)"))
+        XCTAssertFalse(dashboardView.contains(".frame(maxHeight: .infinity, alignment: .center)"))
     }
 
     func testDashboardViewUsesTopToolTabsAndOptionalCalendarPicker() throws {
@@ -1087,18 +1087,31 @@ final class TokenUsageStoreTests: XCTestCase {
     }
 
     @MainActor
-    func testDashboardStoreUnfilteredSnapshotBypassesSelectedToolFilter() throws {
+    func testDashboardStoreUnfilteredSnapshotBypassesSelectedToolAndProjectFilters() throws {
         let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
         let dashboardStore = dashboardStore(usageStore: usageStore)
 
-        try usageStore.appendEvent(Self.safeEvent(aiTool: .codex, spanID: "span_codex"))
-        try usageStore.appendEvent(Self.safeEvent(aiTool: .claude, spanID: "span_claude"))
+        try usageStore.appendEvent(Self.safeEvent(
+            aiTool: .codex,
+            spanID: "span_codex",
+            projectID: "project_aaaaaaaaaaaa5aaaaaaa9aaaaaaaaaaa"
+        ))
+        try usageStore.appendEvent(Self.safeEvent(
+            aiTool: .claude,
+            spanID: "span_claude",
+            projectID: "project_bbbbbbbbbbbb5bbbbbbb9bbbbbbbbbbb"
+        ))
         dashboardStore.refresh()
 
         XCTAssertEqual(dashboardStore.snapshot.eventCount, 2)
         XCTAssertEqual(dashboardStore.unfilteredSnapshot.eventCount, 2)
 
+        dashboardStore.setSelectedProjectID("project_aaaaaaaaaaaa5aaaaaaa9aaaaaaaaaaa")
+        XCTAssertEqual(dashboardStore.snapshot.eventCount, 1)
+        XCTAssertEqual(dashboardStore.unfilteredSnapshot.eventCount, 2)
+
         dashboardStore.setSelectedTool(.claude)
+        XCTAssertNil(dashboardStore.selectedProjectID)
         XCTAssertEqual(dashboardStore.snapshot.eventCount, 1)
         XCTAssertEqual(dashboardStore.unfilteredSnapshot.eventCount, 2)
     }
@@ -2773,6 +2786,46 @@ final class TokenUsageStoreTests: XCTestCase {
 
         XCTAssertEqual(selected.eventCount, 1)
         XCTAssertEqual(selected.totalTokens, 50)
+    }
+
+    func testDashboardSnapshotFiltersWorkItemsByProjectID() {
+        let first = Self.safeEvent(
+            spanID: "span_project_filter_first",
+            inputTokens: 20,
+            outputTokens: 5,
+            projectID: "project_aaaaaaaaaaaa5aaaaaaa9aaaaaaaaaaa",
+            taskType: .codeGeneration,
+            stage: .implement,
+            model: "project-filter-first-model",
+            createdAt: "2026-06-05T00:00:00.000Z"
+        )
+        let second = Self.safeEvent(
+            spanID: "span_project_filter_second",
+            inputTokens: 300,
+            outputTokens: 200,
+            projectID: "project_bbbbbbbbbbbb5bbbbbbb9bbbbbbbbbbb",
+            taskType: .codeGeneration,
+            stage: .implement,
+            model: "project-filter-second-model",
+            createdAt: "2026-06-05T00:01:00.000Z"
+        )
+
+        let initial = TokenUsageDashboardSnapshot(events: [first, second], language: .english)
+        XCTAssertEqual(initial.projectFilters.map(\.title), ["All folders", "Folder aaaaaaaa", "Folder bbbbbbbb"])
+        XCTAssertEqual(initial.projectFilters.first?.isSelected, true)
+        XCTAssertEqual(Set(initial.sessions.map(\.projectTitle)), ["Folder aaaaaaaa", "Folder bbbbbbbb"])
+
+        let filtered = TokenUsageDashboardSnapshot(
+            events: [first, second],
+            selectedProjectID: "project_aaaaaaaaaaaa5aaaaaaa9aaaaaaaaaaa",
+            language: .english
+        )
+
+        XCTAssertEqual(filtered.selectedProjectID, "project_aaaaaaaaaaaa5aaaaaaa9aaaaaaaaaaa")
+        XCTAssertEqual(filtered.sessions.count, 1)
+        XCTAssertEqual(filtered.sessions.first?.projectTitle, "Folder aaaaaaaa")
+        XCTAssertEqual(filtered.totalTokens, 25)
+        XCTAssertEqual(filtered.projectFilters.first { $0.projectID == "project_aaaaaaaaaaaa5aaaaaaa9aaaaaaaaaaa" }?.isSelected, true)
     }
 
     func testDashboardSnapshotUsesLocalLocaleAndTimeZoneForEventTimes() throws {

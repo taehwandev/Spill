@@ -647,20 +647,7 @@ struct TokenMeteringDashboardView: View {
                     if rows.isEmpty || totalRatio == 0 {
                         emptyMessage(title: t(.noSourceBreakdown), detail: t(.waitingForEvents))
                     } else {
-                        VStack(alignment: .leading, spacing: 12) {
-                            segmentedRatioBar(rows)
-                                .frame(height: 38)
-
-                            Divider()
-                                .background(Color.primary.opacity(0.05))
-
-                            detailQualityContent(
-                                snapshot: store.snapshot,
-                                emptyText: t(.noSourceBreakdown),
-                                idPrefix: "detail_quality",
-                                showsRuntimeCategories: false
-                            )
-                        }
+                        compactChartRows(rows, idPrefix: "source_chart", tint: .orange)
                         .frame(height: 160)
                     }
                 }
@@ -673,7 +660,6 @@ struct TokenMeteringDashboardView: View {
             VStack(alignment: .leading, spacing: 14) {
                 modelPanel
                 workflowUsagePanel
-                sourcePanel
                 receiverPanel
                 privacyPanel
             }
@@ -718,23 +704,6 @@ struct TokenMeteringDashboardView: View {
         }
     }
 
-    private var sourcePanel: some View {
-        railPanel(
-            title: t(.sourceDetail),
-            infoTitle: t(.sourceInfoTitle),
-            infoDetail: t(.sourceInfoDetail)
-        ) {
-            VStack(spacing: 8) {
-                detailQualityContent(
-                    snapshot: store.snapshot,
-                    emptyText: t(.noSourceBuckets),
-                    idPrefix: "detail_quality_rail",
-                    showsRuntimeCategories: true
-                )
-            }
-        }
-    }
-
     private var privacyPanel: some View {
         railPanel(title: t(.privacyBoundary)) {
             VStack(alignment: .leading, spacing: 9) {
@@ -763,7 +732,10 @@ struct TokenMeteringDashboardView: View {
                     detail: t(.noLocalTokenEventsDetail)
                 )
             } else {
-                VStack(spacing: 0) {
+                VStack(alignment: .leading, spacing: 0) {
+                    projectFilterBar
+                        .padding(.bottom, 10)
+
                     HStack(spacing: 12) {
                         tableHeader(t(.run))
                         tableHeader(t(.events))
@@ -786,12 +758,23 @@ struct TokenMeteringDashboardView: View {
                             }
                         } label: {
                             HStack(spacing: 12) {
-                                HStack(spacing: 6) {
-                                    TokenMeteringLiveUpdateDot(isActive: isLiveUpdated, marker: store.liveUpdateMarker)
-                                    Text(session.title)
-                                        .font(.system(size: 11, weight: .bold))
-                                        .lineLimit(1)
+                                VStack(alignment: .leading, spacing: 3) {
+                                    HStack(spacing: 6) {
+                                        TokenMeteringLiveUpdateDot(isActive: isLiveUpdated, marker: store.liveUpdateMarker)
+                                        Text(session.title)
+                                            .font(.system(size: 11, weight: .bold))
+                                            .lineLimit(1)
+                                    }
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "folder.fill")
+                                            .font(.system(size: 8, weight: .bold))
+                                        Text(session.projectTitle)
+                                            .font(.system(size: 9, weight: .medium))
+                                            .lineLimit(1)
+                                    }
+                                    .foregroundStyle(isSelected ? .white.opacity(0.72) : .secondary)
                                 }
+                                .frame(maxWidth: .infinity, alignment: .leading)
                                 Text(session.detail)
                                     .font(.system(size: 10, weight: .medium))
                                     .foregroundStyle(isSelected ? .white.opacity(0.82) : .secondary)
@@ -832,6 +815,58 @@ struct TokenMeteringDashboardView: View {
                 }
             }
         }
+    }
+
+    @ViewBuilder
+    private var projectFilterBar: some View {
+        if store.snapshot.projectFilters.count > 2 {
+            VStack(alignment: .leading, spacing: 7) {
+                Text(t(.folderFilterHeader).uppercased())
+                    .font(.system(size: 8.5, weight: .black))
+                    .tracking(0.9)
+                    .foregroundStyle(.secondary)
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 7) {
+                        ForEach(store.snapshot.projectFilters) { filter in
+                            projectFilterPill(filter)
+                        }
+                    }
+                    .padding(.vertical, 1)
+                }
+            }
+            .padding(.horizontal, 2)
+        }
+    }
+
+    private func projectFilterPill(_ filter: TokenUsageDashboardProjectFilter) -> some View {
+        Button {
+            store.setSelectedProjectID(filter.projectID)
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: filter.projectID == nil ? "folder" : "folder.fill")
+                    .font(.system(size: 9, weight: .bold))
+                Text(filter.title)
+                    .font(.system(size: 10, weight: .bold))
+                    .lineLimit(1)
+                Text(filter.detail)
+                    .font(.system(size: 9, weight: .medium, design: .monospaced))
+                    .foregroundStyle(filter.isSelected ? .white.opacity(0.82) : .secondary)
+                    .lineLimit(1)
+            }
+            .foregroundStyle(filter.isSelected ? .white : .primary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(
+                filter.isSelected ? selectedControlAccent : Color.primary.opacity(0.035),
+                in: Capsule()
+            )
+            .overlay {
+                Capsule()
+                    .stroke(filter.isSelected ? selectedControlAccent.opacity(0.32) : Color.primary.opacity(0.05), lineWidth: 0.5)
+            }
+        }
+        .buttonStyle(.plain)
     }
 
     private var activeAccumulationWindowText: String {
@@ -913,6 +948,13 @@ struct TokenMeteringDashboardView: View {
                 Text(detailSession.title)
                     .font(.system(size: 14, weight: .bold))
                     .lineLimit(2)
+                HStack(spacing: 4) {
+                    Image(systemName: "folder.fill")
+                        .font(.system(size: 8.5, weight: .bold))
+                    Text(detailSession.projectTitle)
+                        .font(.system(size: 9.5, weight: .semibold))
+                }
+                .foregroundStyle(.secondary)
                 Text(detailSession.detail)
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(.secondary)
@@ -1076,17 +1118,18 @@ struct TokenMeteringDashboardView: View {
             let rows = detailSnapshot.sourceRows.filter { $0.id != "unknown" }
             let totalRatio = rows.reduce(0.0) { $0 + $1.ratio }
             if !rows.isEmpty && totalRatio > 0 {
-                segmentedRatioBar(rows, showsLegend: false)
-                    .frame(height: 20)
-                    .padding(.vertical, 2)
+                VStack(spacing: 8) {
+                    segmentedRatioBar(rows, showsLegend: false)
+                        .frame(height: 20)
+                        .padding(.vertical, 2)
+                    compactSummaryRows(rows.prefix(5), emptyText: t(.noSourceBreakdown), idPrefix: "source")
+                }
+            } else {
+                emptyMessage(
+                    title: t(.noSourceBreakdown),
+                    detail: isRuntimeTotalOnly ? t(.cumulativeOnlyInfoDetail) : t(.waitingForEvents)
+                )
             }
-
-            detailQualityContent(
-                snapshot: detailSnapshot,
-                emptyText: t(.noSourceBreakdown),
-                idPrefix: "detail_quality_selected",
-                showsRuntimeCategories: false
-            )
         }
         .padding(10)
         .background(Color.primary.opacity(0.025), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -1125,91 +1168,6 @@ struct TokenMeteringDashboardView: View {
         }
         .padding(10)
         .background(Color.primary.opacity(0.02), in: RoundedRectangle(cornerRadius: 8))
-    }
-
-    private func detailQualityContent(
-        snapshot: TokenUsageDashboardSnapshot,
-        emptyText: String,
-        idPrefix: String,
-        showsRuntimeCategories: Bool
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 11) {
-            if snapshot.detailQualityRows.isEmpty {
-                emptyMessage(title: emptyText, detail: t(.waitingForEvents))
-            } else {
-                detailQualityGuidance(snapshot)
-                detailQualityRows(snapshot.detailQualityRows, idPrefix: idPrefix)
-
-                if showsRuntimeCategories, !snapshot.sourceRows.isEmpty {
-                    DisclosureGroup {
-                        compactSummaryRows(snapshot.sourceRows.prefix(6), emptyText: t(.noSourceBuckets), idPrefix: "source")
-                            .padding(.top, 4)
-                    } label: {
-                        Text(t(.runtimeCategories))
-                            .font(.system(size: 10, weight: .bold))
-                    }
-                    .font(.system(size: 10, weight: .medium))
-                    .tint(.secondary)
-                }
-            }
-        }
-    }
-
-    private func detailQualityGuidance(_ snapshot: TokenUsageDashboardSnapshot) -> some View {
-        HStack(alignment: .top, spacing: 7) {
-            Image(systemName: snapshot.isDetailAttributionMostlyUnavailable ? "exclamationmark.circle" : "checkmark.circle")
-                .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(snapshot.isDetailAttributionMostlyUnavailable ? .orange : .green)
-                .frame(width: 14)
-
-            Text(snapshot.isDetailAttributionMostlyUnavailable ? t(.detailQualityUnavailableGuidance) : t(.detailQualityAvailableGuidance))
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-
-    private func detailQualityRows(
-        _ rows: [TokenUsageDashboardBarRow],
-        idPrefix: String
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            ForEach(rows) { row in
-                let liveUpdateID = "\(idPrefix):\(row.id)"
-                let isLiveUpdated = store.isLiveUpdated(liveUpdateID)
-                let tint = row.id == "unknown" ? Color.orange : Color.green
-
-                VStack(alignment: .leading, spacing: 5) {
-                    HStack(spacing: 8) {
-                        HStack(spacing: 6) {
-                            TokenMeteringLiveUpdateDot(isActive: isLiveUpdated, marker: store.liveUpdateMarker)
-                            Text(row.title)
-                                .font(.system(size: 11, weight: .semibold))
-                                .lineLimit(1)
-                        }
-                        Spacer(minLength: 8)
-                        Text(row.value)
-                            .font(.system(size: 10, weight: .bold, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                            .contentTransition(.numericText())
-                            .animation(.snappy(duration: 0.35), value: row.value)
-                    }
-
-                    GeometryReader { geometry in
-                        ZStack(alignment: .leading) {
-                            RoundedRectangle(cornerRadius: 5, style: .continuous)
-                                .fill(Color.primary.opacity(0.06))
-                            RoundedRectangle(cornerRadius: 5, style: .continuous)
-                                .fill(tint.opacity(0.76))
-                                .frame(width: max(8, geometry.size.width * row.ratio))
-                                .animation(.snappy(duration: 0.35), value: row.ratio)
-                        }
-                    }
-                    .frame(height: 9)
-                }
-                .modifier(TokenMeteringLiveUpdateEffect(isActive: isLiveUpdated, marker: store.liveUpdateMarker, cornerRadius: 7))
-            }
-        }
     }
 
     private func workItemPopoverSection<T: Collection>(
@@ -1622,7 +1580,7 @@ struct TokenMeteringDashboardView: View {
                 .modifier(TokenMeteringLiveUpdateEffect(isActive: isLiveUpdated, marker: store.liveUpdateMarker, cornerRadius: 7))
             }
         }
-        .frame(maxHeight: .infinity, alignment: .center)
+        .frame(maxHeight: .infinity, alignment: .topLeading)
     }
 
     private func segmentedRatioBar(

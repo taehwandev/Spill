@@ -187,6 +187,8 @@ struct TokenUsagePanelSummarySnapshot: Equatable {
 struct TokenUsageDashboardSessionRow: Identifiable, Equatable {
     let id: String
     let runID: String
+    let projectID: String
+    let projectTitle: String
     let title: String
     let value: String
     let detail: String
@@ -214,6 +216,17 @@ struct TokenUsageDashboardToolFilter: Identifiable, Equatable {
 
     var id: String {
         tool?.rawValue ?? "all"
+    }
+}
+
+struct TokenUsageDashboardProjectFilter: Identifiable, Equatable {
+    let projectID: String?
+    let title: String
+    let detail: String
+    let isSelected: Bool
+
+    var id: String {
+        projectID ?? "all"
     }
 }
 
@@ -264,12 +277,13 @@ struct TokenUsageDashboardSnapshot: Equatable {
     let kpis: [TokenUsageDashboardKPI]
     let periodFilters: [TokenUsageDashboardPeriodFilter]
     let toolFilters: [TokenUsageDashboardToolFilter]
+    let projectFilters: [TokenUsageDashboardProjectFilter]
+    let selectedProjectID: String?
     let toolRows: [TokenUsageDashboardBarRow]
     let modelRows: [TokenUsageDashboardBarRow]
     let workflowUsage: TokenUsageDashboardWorkflowUsage
     let taskRows: [TokenUsageDashboardBarRow]
     let stageRows: [TokenUsageDashboardBarRow]
-    let detailQualityRows: [TokenUsageDashboardBarRow]
     let sourceRows: [TokenUsageDashboardBarRow]
     let sessions: [TokenUsageDashboardSessionRow]
     let selectedSession: TokenUsageDashboardSessionRow?
@@ -293,16 +307,12 @@ struct TokenUsageDashboardSnapshot: Equatable {
     let overallLastUpdatedString: String?
     let comparisonTotalTokens: Int?
 
-    var isDetailAttributionMostlyUnavailable: Bool {
-        guard totalTokens > 0 else { return false }
-        return detailQualityRows.first { $0.id == TokenUsageSource.unknown.rawValue }?.ratio ?? 0 >= 0.5
-    }
-
     static func buildPair(
         events: [TokenUsageEvent],
         selectedTool: TokenUsageAITool?,
         selectedPeriod: TokenUsageDashboardPeriod,
         selectedCalendarDayID: String?,
+        selectedProjectID: String?,
         selectedSessionID: String?,
         displayMode: TokenUsageDisplayMode,
         language: TokenMeteringLanguage,
@@ -333,6 +343,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
             selectedTool: selectedTool,
             selectedPeriod: selectedPeriod,
             selectedCalendarDayID: selectedCalendarDayID,
+            selectedProjectID: selectedProjectID,
             selectedSessionID: selectedSessionID,
             displayMode: displayMode,
             language: language,
@@ -345,13 +356,14 @@ struct TokenUsageDashboardSnapshot: Equatable {
             locale: locale,
             timeZone: timeZone
         )
-        let unfiltered = selectedTool == nil
+        let unfiltered = selectedTool == nil && selectedProjectID == nil
             ? filtered
             : TokenUsageDashboardSnapshot(
                 context: context,
                 selectedTool: nil,
                 selectedPeriod: selectedPeriod,
                 selectedCalendarDayID: selectedCalendarDayID,
+                selectedProjectID: nil,
                 selectedSessionID: nil,
                 displayMode: displayMode,
                 language: language,
@@ -377,6 +389,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
         selectedTool: TokenUsageAITool? = nil,
         selectedPeriod: TokenUsageDashboardPeriod = .all,
         selectedCalendarDayID: String? = nil,
+        selectedProjectID: String? = nil,
         selectedSessionID: String? = nil,
         displayMode: TokenUsageDisplayMode = .tokens,
         language: TokenMeteringLanguage = .current(),
@@ -397,6 +410,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
             selectedTool: selectedTool,
             selectedPeriod: selectedPeriod,
             selectedCalendarDayID: selectedCalendarDayID,
+            selectedProjectID: selectedProjectID,
             selectedSessionID: selectedSessionID,
             displayMode: displayMode,
             language: language,
@@ -415,6 +429,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
         selectedTool: TokenUsageAITool? = nil,
         selectedPeriod: TokenUsageDashboardPeriod = .all,
         selectedCalendarDayID: String? = nil,
+        selectedProjectID: String? = nil,
         selectedSessionID: String? = nil,
         displayMode: TokenUsageDisplayMode = .tokens,
         language: TokenMeteringLanguage = .current(),
@@ -453,9 +468,22 @@ struct TokenUsageDashboardSnapshot: Equatable {
             now: now,
             calendar: calendar
         )
-        let visibleEvents = selectedDashboardTool.map { tool in
+        let toolVisibleEvents = selectedDashboardTool.map { tool in
             periodEvents.filter { $0.event.aiTool == tool }
         } ?? periodEvents
+        let validSelectedProjectID = selectedProjectID.flatMap { projectID in
+            toolVisibleEvents.contains { $0.event.projectID == projectID } ? projectID : nil
+        }
+        self.selectedProjectID = validSelectedProjectID
+        projectFilters = Self.projectFilters(
+            events: toolVisibleEvents,
+            selectedProjectID: validSelectedProjectID,
+            displayMode: displayMode,
+            language: language
+        )
+        let visibleEvents = validSelectedProjectID.map { projectID in
+            toolVisibleEvents.filter { $0.event.projectID == projectID }
+        } ?? toolVisibleEvents
         let sessionRows = Self.sessionRows(
             events: visibleEvents,
             displayMode: displayMode,
@@ -594,12 +622,6 @@ struct TokenUsageDashboardSnapshot: Equatable {
         )
 
         let sourceTokens = Self.sourceTotals(events: focusedEvents)
-        detailQualityRows = Self.detailQualityRows(
-            sourceTokens: sourceTokens,
-            totalTokens: totalTokens,
-            displayMode: displayMode,
-            language: language
-        )
         sourceRows = TokenUsageDashboardRowBuilder.rows(
             tokenValues: sourceTokens,
             totalTokens: totalTokens,
@@ -932,6 +954,63 @@ struct TokenUsageDashboardSnapshot: Equatable {
         return [allFilter] + toolFilters
     }
 
+    private static func projectFilters(
+        events: [TokenUsageDashboardParsedEvent],
+        selectedProjectID: String?,
+        displayMode: TokenUsageDisplayMode,
+        language: TokenMeteringLanguage
+    ) -> [TokenUsageDashboardProjectFilter] {
+        let totalTokens = events.reduce(0) { $0 + $1.event.totalTokens }
+        let allFilter = TokenUsageDashboardProjectFilter(
+            projectID: nil,
+            title: TokenMeteringL10n.text(.allFolders, language: language),
+            detail: TokenMeteringL10n.eventsTokensDetail(
+                eventCount: events.count,
+                tokens: formatTokens(totalTokens),
+                language: language
+            ),
+            isSelected: selectedProjectID == nil
+        )
+        let projectRows = Dictionary(grouping: events) { $0.event.projectID }
+            .map { projectID, groupedEvents in
+                let tokens = groupedEvents.reduce(0) { $0 + $1.event.totalTokens }
+                let ratio = chartRatio(tokens: tokens, totalTokens: totalTokens)
+                let value: String
+                switch displayMode {
+                case .tokens:
+                    value = formatTokens(tokens)
+                case .percentage:
+                    value = formatPercentage(ratio * 100.0)
+                }
+                return TokenUsageDashboardProjectFilter(
+                    projectID: projectID,
+                    title: projectTitle(projectID, language: language),
+                    detail: value,
+                    isSelected: selectedProjectID == projectID
+                )
+            }
+            .sorted { lhs, rhs in
+                projectFilterPrecedes(lhs, rhs)
+            }
+
+        return [allFilter] + projectRows
+    }
+
+    private static func projectFilterPrecedes(
+        _ lhs: TokenUsageDashboardProjectFilter,
+        _ rhs: TokenUsageDashboardProjectFilter
+    ) -> Bool {
+        let lhsRank = lhs.projectID == "project_global" ? 0 : 1
+        let rhsRank = rhs.projectID == "project_global" ? 0 : 1
+        if lhsRank != rhsRank {
+            return lhsRank < rhsRank
+        }
+        if lhs.title != rhs.title {
+            return lhs.title < rhs.title
+        }
+        return (lhs.projectID ?? "") < (rhs.projectID ?? "")
+    }
+
     private static func sourceTotals(events: [TokenUsageDashboardParsedEvent]) -> [TokenUsageSource: Int] {
         var totals: [TokenUsageSource: Int] = [:]
         for parsedEvent in events {
@@ -945,42 +1024,6 @@ struct TokenUsageDashboardSnapshot: Equatable {
             totals[.unknown, default: 0] += event.tokenBreakdown.unknown
         }
         return totals
-    }
-
-    private static func detailQualityRows(
-        sourceTokens: [TokenUsageSource: Int],
-        totalTokens: Int,
-        displayMode: TokenUsageDisplayMode,
-        language: TokenMeteringLanguage
-    ) -> [TokenUsageDashboardBarRow] {
-        guard totalTokens > 0 else {
-            return []
-        }
-
-        let unknownTokens = sourceTokens[.unknown, default: 0]
-        let exactTokens = max(0, sourceTokens.values.reduce(0, +) - unknownTokens)
-        let candidates: [(id: String, title: String, tokens: Int)] = [
-            (
-                id: "exact",
-                title: TokenMeteringL10n.text(.sourceExactDetail, language: language),
-                tokens: exactTokens
-            ),
-            (
-                id: TokenUsageSource.unknown.rawValue,
-                title: TokenMeteringL10n.text(.sourceUnavailable, language: language),
-                tokens: unknownTokens
-            )
-        ]
-
-        return TokenUsageDashboardRowBuilder.rows(
-            candidates: candidates,
-            totalTokens: totalTokens,
-            displayMode: displayMode,
-            tokens: { $0.tokens },
-            id: { $0.id },
-            label: { $0.title },
-            sorted: false
-        )
     }
 
     private static func sessionRows(
@@ -1024,6 +1067,8 @@ struct TokenUsageDashboardSnapshot: Equatable {
                     row: TokenUsageDashboardSessionRow(
                         id: key.id,
                         runID: key.id,
+                        projectID: key.projectID,
+                        projectTitle: Self.projectTitle(key.projectID, language: language),
                         title: localAliases[key.id] ?? Self.workItemTitle(key: key, language: language),
                         value: valueStr,
                         detail: TokenMeteringL10n.spansDetail(
@@ -1056,6 +1101,21 @@ struct TokenUsageDashboardSnapshot: Equatable {
                 return lhs.row.title < rhs.row.title
             }
             .map(\.row)
+    }
+
+    static func projectTitle(_ projectID: String, language: TokenMeteringLanguage = .current()) -> String {
+        guard projectID != "project_global" else {
+            return TokenMeteringL10n.text(.folderUnassigned, language: language)
+        }
+
+        let rawID = projectID.hasPrefix("project_")
+            ? String(projectID.dropFirst("project_".count))
+            : projectID
+        let shortID = String(rawID.prefix(8))
+        guard !shortID.isEmpty else {
+            return TokenMeteringL10n.text(.folderUnassigned, language: language)
+        }
+        return TokenMeteringL10n.folderTitle(shortID, language: language)
     }
 
     private static func workItemKey(

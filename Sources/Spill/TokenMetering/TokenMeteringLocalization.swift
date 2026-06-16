@@ -93,8 +93,6 @@ enum TokenMeteringTextKey: String {
     case events
     case noRunSelected
     case noRunSelectedDetail
-    case sourceDetail
-    case noSourceBuckets
     case privacyBoundary
     case privacyBoundaryDetail
     case runs
@@ -121,6 +119,9 @@ enum TokenMeteringTextKey: String {
     case relativePreviousMonth
     case activeWindowLabel
     case allTools
+    case allFolders
+    case folderFilterHeader
+    case folderUnassigned
     case unknownAITool
     case aiToolHeader
     case displayModeTokens
@@ -163,13 +164,9 @@ enum TokenMeteringTextKey: String {
     case diagnosticsCodes
     case diagnosticsSessionID
     case diagnosticsRunID
-    case detailQualityAvailableGuidance
-    case detailQualityUnavailableGuidance
-    case runtimeCategories
     case selectedWorkItemHeader
     case previewBadge
 
-    case sourceExactDetail
     case sourceSystem
     case sourceUser
     case sourceHistory
@@ -317,6 +314,10 @@ enum TokenMeteringL10n {
 
     static func tokenCountDetail(_ tokens: String, language: TokenMeteringLanguage = .current()) -> String {
         localizedFormat("format.token_count_detail", language: language, tokens)
+    }
+
+    static func folderTitle(_ shortID: String, language: TokenMeteringLanguage = .current()) -> String {
+        localizedFormat("format.folder_title", language: language, shortID)
     }
 
     static func clearToolData(_ tool: String, language: TokenMeteringLanguage = .current()) -> String {

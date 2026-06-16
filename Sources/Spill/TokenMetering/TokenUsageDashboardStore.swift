@@ -42,6 +42,7 @@ final class TokenUsageDashboardStore: ObservableObject {
     @Published private(set) var selectedTool: TokenUsageAITool?
     @Published private(set) var selectedPeriod: TokenUsageDashboardPeriod = .today
     @Published private(set) var selectedCalendarDayID: String?
+    @Published private(set) var selectedProjectID: String?
     @Published private(set) var selectedSessionID: String?
     @Published private(set) var calendarMonthStart: Date?
     @Published private(set) var displayMode: TokenUsageDisplayMode = .tokens
@@ -165,6 +166,7 @@ final class TokenUsageDashboardStore: ObservableObject {
             selectedTool: selectedTool,
             selectedPeriod: selectedPeriod,
             selectedCalendarDayID: selectedCalendarDayID,
+            selectedProjectID: selectedProjectID,
             selectedSessionID: selectedSessionID,
             displayMode: displayMode,
             language: language,
@@ -176,6 +178,7 @@ final class TokenUsageDashboardStore: ObservableObject {
         )
         calendarMonthStart = snapshotPair.calendarMonthStart
         let filteredSnapshot = snapshotPair.filtered
+        selectedProjectID = filteredSnapshot.selectedProjectID
         selectedSessionID = filteredSnapshot.selectedSession?.id
         snapshot = filteredSnapshot
         unfilteredSnapshot = snapshotPair.unfiltered
@@ -196,6 +199,12 @@ final class TokenUsageDashboardStore: ObservableObject {
 
     func setSelectedTool(_ tool: TokenUsageAITool?) {
         selectedTool = tool?.isDashboardTool == true ? tool : nil
+        rebuildSnapshot()
+    }
+
+    func setSelectedProjectID(_ projectID: String?) {
+        selectedProjectID = projectID
+        selectedSessionID = nil
         rebuildSnapshot()
     }
 
@@ -283,6 +292,7 @@ final class TokenUsageDashboardStore: ObservableObject {
             selectedTool: selectedTool,
             selectedPeriod: selectedPeriod,
             selectedCalendarDayID: selectedCalendarDayID,
+            selectedProjectID: selectedProjectID,
             selectedSessionID: sessionID,
             displayMode: displayMode,
             language: language,
@@ -385,10 +395,13 @@ final class TokenUsageDashboardStore: ObservableObject {
             let visibleEvents = selectedTool.map { tool in
                 periodEvents.filter { $0.aiTool == tool }
             } ?? periodEvents
+            let projectEvents = selectedProjectID.map { projectID in
+                visibleEvents.filter { $0.projectID == projectID }
+            } ?? visibleEvents
             guard let selectedSessionID else {
-                return visibleEvents
+                return projectEvents
             }
-            return visibleEvents.filter {
+            return projectEvents.filter {
                 TokenUsageDashboardSnapshot.workItemID(for: $0, calendar: calendar) == selectedSessionID
             }
         case let .tool(tool):
@@ -543,7 +556,8 @@ final class TokenUsageDashboardStore: ObservableObject {
             nextUnfilteredSnapshot: nextUnfilteredSnapshot,
             selectedTool: selectedTool,
             selectedPeriod: selectedPeriod,
-            selectedCalendarDayID: selectedCalendarDayID
+            selectedCalendarDayID: selectedCalendarDayID,
+            selectedProjectID: selectedProjectID
         )
         guard !ids.isEmpty else {
             return
@@ -572,7 +586,8 @@ final class TokenUsageDashboardStore: ObservableObject {
         nextUnfilteredSnapshot: TokenUsageDashboardSnapshot,
         selectedTool: TokenUsageAITool?,
         selectedPeriod: TokenUsageDashboardPeriod,
-        selectedCalendarDayID: String?
+        selectedCalendarDayID: String?,
+        selectedProjectID: String?
     ) -> Set<String> {
         let previousPeriodEvents = dashboardEvents(
             previousEvents,
@@ -592,6 +607,12 @@ final class TokenUsageDashboardStore: ObservableObject {
         let nextVisibleEvents = selectedTool.map { tool in
             nextPeriodEvents.filter { $0.aiTool == tool }
         } ?? nextPeriodEvents
+        let previousProjectEvents = selectedProjectID.map { projectID in
+            previousVisibleEvents.filter { $0.projectID == projectID }
+        } ?? previousVisibleEvents
+        let nextProjectEvents = selectedProjectID.map { projectID in
+            nextVisibleEvents.filter { $0.projectID == projectID }
+        } ?? nextVisibleEvents
 
         var ids = Set<String>()
 
@@ -607,26 +628,26 @@ final class TokenUsageDashboardStore: ObservableObject {
 
         appendChangedTotals(
             to: &ids,
-            previous: tokenTotals(previousVisibleEvents, by: { $0.taskType.rawValue }),
-            next: tokenTotals(nextVisibleEvents, by: { $0.taskType.rawValue }),
+            previous: tokenTotals(previousProjectEvents, by: { $0.taskType.rawValue }),
+            next: tokenTotals(nextProjectEvents, by: { $0.taskType.rawValue }),
             prefixes: ["task"]
         )
         appendChangedTotals(
             to: &ids,
-            previous: tokenTotals(previousVisibleEvents, by: { $0.stage.rawValue }),
-            next: tokenTotals(nextVisibleEvents, by: { $0.stage.rawValue }),
+            previous: tokenTotals(previousProjectEvents, by: { $0.stage.rawValue }),
+            next: tokenTotals(nextProjectEvents, by: { $0.stage.rawValue }),
             prefixes: ["stage"]
         )
         appendChangedTotals(
             to: &ids,
-            previous: tokenTotals(previousVisibleEvents, by: { modelKey($0.model) }),
-            next: tokenTotals(nextVisibleEvents, by: { modelKey($0.model) }),
+            previous: tokenTotals(previousProjectEvents, by: { modelKey($0.model) }),
+            next: tokenTotals(nextProjectEvents, by: { modelKey($0.model) }),
             prefixes: ["model"]
         )
         appendChangedTotals(
             to: &ids,
-            previous: sourceTotals(previousVisibleEvents),
-            next: sourceTotals(nextVisibleEvents),
+            previous: sourceTotals(previousProjectEvents),
+            next: sourceTotals(nextProjectEvents),
             prefixes: ["source"]
         )
 
@@ -636,7 +657,6 @@ final class TokenUsageDashboardStore: ObservableObject {
         appendChangedRows(to: &ids, previous: previousSnapshot.workflowUsage.rows, next: nextSnapshot.workflowUsage.rows, prefix: "workflow_usage")
         appendChangedRows(to: &ids, previous: previousSnapshot.taskRows, next: nextSnapshot.taskRows, prefix: "task")
         appendChangedRows(to: &ids, previous: previousSnapshot.stageRows, next: nextSnapshot.stageRows, prefix: "stage")
-        appendChangedRows(to: &ids, previous: previousSnapshot.detailQualityRows, next: nextSnapshot.detailQualityRows, prefix: "detail_quality")
         appendChangedRows(to: &ids, previous: previousSnapshot.sourceRows, next: nextSnapshot.sourceRows, prefix: "source")
         appendChangedRows(to: &ids, previous: previousSnapshot.sessions, next: nextSnapshot.sessions, prefix: "session")
         appendChangedRows(to: &ids, previous: previousUnfilteredSnapshot.toolRows, next: nextUnfilteredSnapshot.toolRows, prefix: "tool")
