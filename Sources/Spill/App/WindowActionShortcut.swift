@@ -207,13 +207,13 @@ extension WindowActionKind {
         case .maximize:
             return .returnKey
         case .topLeft:
-            return .off
+            return .u
         case .topRight:
-            return .off
+            return .i
         case .bottomLeft:
-            return .off
+            return .j
         case .bottomRight:
-            return .off
+            return .k
         case .previousDisplay:
             return .leftArrow
         case .nextDisplay:

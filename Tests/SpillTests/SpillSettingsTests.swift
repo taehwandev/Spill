@@ -31,10 +31,10 @@ final class SpillSettingsTests: XCTestCase {
         XCTAssertEqual(settings.shortcutKey(for: .bottomHalf), .downArrow)
         XCTAssertEqual(settings.shortcutKey(for: .center), .c)
         XCTAssertEqual(settings.shortcutKey(for: .maximize), .returnKey)
-        XCTAssertEqual(settings.shortcutKey(for: .topLeft), .off)
-        XCTAssertEqual(settings.shortcutKey(for: .topRight), .off)
-        XCTAssertEqual(settings.shortcutKey(for: .bottomLeft), .off)
-        XCTAssertEqual(settings.shortcutKey(for: .bottomRight), .off)
+        XCTAssertEqual(settings.shortcutKey(for: .topLeft), .u)
+        XCTAssertEqual(settings.shortcutKey(for: .topRight), .i)
+        XCTAssertEqual(settings.shortcutKey(for: .bottomLeft), .j)
+        XCTAssertEqual(settings.shortcutKey(for: .bottomRight), .k)
         XCTAssertEqual(settings.shortcutKey(for: .previousDisplay), .leftArrow)
         XCTAssertEqual(settings.shortcutKey(for: .nextDisplay), .rightArrow)
         XCTAssertEqual(settings.shortcutKey(for: .restore), .deleteKey)
@@ -48,7 +48,7 @@ final class SpillSettingsTests: XCTestCase {
             settings.shortcutKey(for: .previousDisplay).shortcutLabel(with: .display),
             "⌃⌥⌘←"
         )
-        XCTAssertEqual(settings.shortcutKey(for: .bottomLeft).pickerTitle, "Off")
+        XCTAssertEqual(settings.shortcutKey(for: .bottomLeft).pickerTitle, "J")
     }
 
     func testTokenMeteringPromptDisplayNameOptionPersists() {
@@ -528,10 +528,10 @@ final class SpillSettingsTests: XCTestCase {
                 "bottomHalf=downArrow",
                 "center=c",
                 "maximize=returnKey",
-                "topLeft=off",
-                "topRight=off",
-                "bottomLeft=off",
-                "bottomRight=off",
+                "topLeft=u",
+                "topRight=i",
+                "bottomLeft=j",
+                "bottomRight=k",
                 "previousDisplay=leftArrow",
                 "nextDisplay=rightArrow",
                 "restore=off"
@@ -564,10 +564,10 @@ final class SpillSettingsTests: XCTestCase {
         XCTAssertEqual(settings.shortcutKey(for: .bottomHalf), .downArrow)
         XCTAssertEqual(settings.shortcutKey(for: .center), .c)
         XCTAssertEqual(settings.shortcutKey(for: .maximize), .returnKey)
-        XCTAssertEqual(settings.shortcutKey(for: .topLeft), .off)
-        XCTAssertEqual(settings.shortcutKey(for: .topRight), .off)
-        XCTAssertEqual(settings.shortcutKey(for: .bottomLeft), .off)
-        XCTAssertEqual(settings.shortcutKey(for: .bottomRight), .off)
+        XCTAssertEqual(settings.shortcutKey(for: .topLeft), .u)
+        XCTAssertEqual(settings.shortcutKey(for: .topRight), .i)
+        XCTAssertEqual(settings.shortcutKey(for: .bottomLeft), .j)
+        XCTAssertEqual(settings.shortcutKey(for: .bottomRight), .k)
         XCTAssertEqual(settings.shortcutKey(for: .previousDisplay), .leftArrow)
         XCTAssertEqual(settings.shortcutKey(for: .nextDisplay), .rightArrow)
     }
@@ -594,10 +594,10 @@ final class SpillSettingsTests: XCTestCase {
 
         XCTAssertEqual(settings.shortcutKey(for: .topHalf), .upArrow)
         XCTAssertEqual(settings.shortcutKey(for: .bottomHalf), .downArrow)
-        XCTAssertEqual(settings.shortcutKey(for: .topLeft), .off)
-        XCTAssertEqual(settings.shortcutKey(for: .topRight), .off)
-        XCTAssertEqual(settings.shortcutKey(for: .bottomLeft), .off)
-        XCTAssertEqual(settings.shortcutKey(for: .bottomRight), .off)
+        XCTAssertEqual(settings.shortcutKey(for: .topLeft), .u)
+        XCTAssertEqual(settings.shortcutKey(for: .topRight), .i)
+        XCTAssertEqual(settings.shortcutKey(for: .bottomLeft), .j)
+        XCTAssertEqual(settings.shortcutKey(for: .bottomRight), .k)
         XCTAssertEqual(settings.shortcutKey(for: .previousDisplay), .leftArrow)
         XCTAssertEqual(settings.shortcutKey(for: .nextDisplay), .rightArrow)
         XCTAssertEqual(settings.shortcutKey(for: .restore), .deleteKey)
@@ -628,10 +628,10 @@ final class SpillSettingsTests: XCTestCase {
         XCTAssertEqual(settings.shortcutKey(for: .rightHalf), .rightArrow)
         XCTAssertEqual(settings.shortcutKey(for: .topHalf), .upArrow)
         XCTAssertEqual(settings.shortcutKey(for: .bottomHalf), .downArrow)
-        XCTAssertEqual(settings.shortcutKey(for: .topLeft), .off)
-        XCTAssertEqual(settings.shortcutKey(for: .topRight), .off)
-        XCTAssertEqual(settings.shortcutKey(for: .bottomLeft), .off)
-        XCTAssertEqual(settings.shortcutKey(for: .bottomRight), .off)
+        XCTAssertEqual(settings.shortcutKey(for: .topLeft), .u)
+        XCTAssertEqual(settings.shortcutKey(for: .topRight), .i)
+        XCTAssertEqual(settings.shortcutKey(for: .bottomLeft), .j)
+        XCTAssertEqual(settings.shortcutKey(for: .bottomRight), .k)
         XCTAssertEqual(settings.shortcutKey(for: .previousDisplay), .leftArrow)
         XCTAssertEqual(settings.shortcutKey(for: .nextDisplay), .rightArrow)
         XCTAssertEqual(settings.shortcutKey(for: .restore), .deleteKey)

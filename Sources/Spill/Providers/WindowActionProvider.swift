@@ -416,7 +416,7 @@ final class FocusedWindowController: FocusedWindowControlling {
 
         let snapshot = WindowFrameSnapshot(
             windowFrame: currentFrame,
-            visibleFrames: NSScreen.screens.map(\.visibleFrame)
+            visibleFrames: NSScreen.screens.map(\.cgCoordinateVisibleFrame)
         )
         let restoreFrame = kind == .restore ? restoreHistory.nextRestoreFrame : nil
         guard let targetFrame = WindowFramePlanner.targetFrame(
@@ -601,6 +601,21 @@ extension WindowActionKind {
              .restore:
             return false
         }
+    }
+}
+
+private extension NSScreen {
+    // NSScreen.visibleFrame is in Cocoa coordinates (Y=0 at bottom, increasing upward).
+    // AXUIElement position uses CG coordinates (Y=0 at top-left of primary screen, increasing downward).
+    // WindowFramePlanner expects CG coordinates, so convert before building a snapshot.
+    var cgCoordinateVisibleFrame: CGRect {
+        let primaryHeight = NSScreen.screens.first?.frame.height ?? frame.height
+        return CGRect(
+            x: visibleFrame.origin.x,
+            y: primaryHeight - visibleFrame.origin.y - visibleFrame.height,
+            width: visibleFrame.width,
+            height: visibleFrame.height
+        )
     }
 }
 
