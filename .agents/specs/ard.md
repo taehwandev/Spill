@@ -178,7 +178,8 @@ Decision:
 
 The AI area may show a compact process-state visualization derived from the
 existing local AI status provider. It is display state, not a new data
-collection channel.
+collection channel. Tool status is based on process presence and aggregate
+local resource metrics, not a threshold-based "active" classifier.
 
 Rationale:
 
@@ -191,7 +192,18 @@ Rules:
 - The visualization reads only normalized AI status display models already
   produced by the local AI status provider.
 - Status buckets may include running, configured/ready, unavailable, and
-  warning/error when those states already exist.
+  warning/error when those states already exist. `Running` means one or more
+  matching local processes exist. `Ready` means the tool appears installed but
+  no matching local process is running.
+- The UI must not present a separate `Active` count derived from process
+  presence or arbitrary CPU thresholds. Current activity should be represented
+  by numeric CPU percentage, memory usage, and process count.
+- Process metrics are aggregated per AI tool across every matching process.
+  Multiple processes are expected for terminal sessions, app helpers, language
+  servers, local model servers, and Electron-based tools.
+- The compact card should show aggregate process metrics when available. The
+  detail popover should show aggregate CPU, memory, process count, and a short
+  per-process list using safe executable names, pid, CPU, and memory.
 - The visualization must not inspect prompts, transcripts, commands, file
   paths, repository names, shell history, logs, diffs, source content, process
   argument values beyond existing safe labels, or secret-bearing config values.

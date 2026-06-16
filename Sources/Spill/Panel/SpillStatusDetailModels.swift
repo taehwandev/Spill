@@ -109,6 +109,8 @@ enum SpillStatusDetailRows {
             SpillStatusDetailRow(label: AppL10n.text(.detail), value: status.subtitle ?? "N/A")
         ]
 
+        rows.append(contentsOf: processRows(for: status.processSummary))
+
         if let recommendation = status.actionRecommendation {
             rows.append(SpillStatusDetailRow(label: AppL10n.text(.next), value: recommendation.title))
         }
@@ -124,6 +126,34 @@ enum SpillStatusDetailRows {
         if let source = status.metadata.source, !source.isEmpty {
             rows.append(SpillStatusDetailRow(label: AppL10n.text(.source), value: source))
         }
+
+        return rows
+    }
+
+    private static func processRows(for summary: LocalAIProcessSummary) -> [SpillStatusDetailRow] {
+        var rows = [
+            SpillStatusDetailRow(label: AppL10n.text(.processes), value: "\(summary.processCount)")
+        ]
+
+        guard summary.isRunning else {
+            return rows
+        }
+
+        rows.append(contentsOf: [
+            SpillStatusDetailRow(label: AppL10n.text(.cpu), value: summary.cpuPercentText),
+            SpillStatusDetailRow(label: AppL10n.text(.memory), value: SystemMemoryProvider.formatBytes(summary.memoryBytes))
+        ])
+
+        rows.append(contentsOf: summary.processes.prefix(4).map { process in
+            SpillStatusDetailRow(
+                label: "\(AppL10n.text(.process)) \(process.processID)",
+                value: [
+                    process.executableName,
+                    "CPU \(LocalAIProcessSummary.formatCPUPercent(process.cpuPercent))",
+                    SystemMemoryProvider.formatBytes(process.memoryBytes)
+                ].joined(separator: " / ")
+            )
+        })
 
         return rows
     }

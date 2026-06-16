@@ -13,8 +13,8 @@ struct SpillBarAIToolCard: View {
     let isServerStatusLoading: Bool
 
     var body: some View {
-        let tint = status.state.panelTint
-        let isActive = status.state == .active || status.state == .refreshing
+        let tint = statusTint
+        let isRunning = status.hasRunningProcesses || status.state == .refreshing
         let isUnavailable = status.state == .unavailable
         let hasServerIssue = serviceStatus?.health.isServerIssue ?? false
         let cardTint = hasServerIssue ? serviceStatus?.health.serverStatusTint ?? tint : tint
@@ -81,25 +81,25 @@ struct SpillBarAIToolCard: View {
         .frame(height: 72)
         .frame(maxWidth: .infinity)
         .background(
-            hasServerIssue ? cardTint.opacity(0.12) : isActive ? tint.opacity(0.06) : Color.primary.opacity(0.03),
+            hasServerIssue ? cardTint.opacity(0.12) : isRunning ? tint.opacity(0.06) : Color.primary.opacity(0.03),
             in: RoundedRectangle(cornerRadius: 8, style: .continuous)
         )
         .overlay {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(
-                    hasServerIssue ? cardTint.opacity(0.36) : isActive ? tint.opacity(0.12) : Color.primary.opacity(0.04),
+                    hasServerIssue ? cardTint.opacity(0.36) : isRunning ? tint.opacity(0.12) : Color.primary.opacity(0.04),
                     lineWidth: hasServerIssue ? 0.8 : 0.5
                 )
         }
     }
 
     private var aiProcessStateChip: some View {
-        let tint = status.state.panelTint
-        let isMoving = status.state == .active || status.state == .refreshing
+        let tint = statusTint
         return HStack(spacing: 3) {
-            AgentActivityWaveView(isActive: isMoving, tint: tint)
+            Image(systemName: status.hasRunningProcesses ? "cpu" : "circle")
+                .font(.system(size: 7, weight: .bold))
 
-            Text(aiProcessStateTitle(status.state))
+            Text(aiProcessStateTitle)
                 .font(.system(size: 7.8, weight: .bold, design: .rounded))
                 .lineLimit(1)
                 .minimumScaleFactor(0.72)
@@ -122,8 +122,8 @@ struct SpillBarAIToolCard: View {
     }
 
     private var aiLocalStatusBadge: some View {
-        let tint = status.state.panelTint
-        let isRunning = status.state == .active
+        let tint = statusTint
+        let isRunning = status.hasRunningProcesses
         let value = isRunning ? status.value : AppL10n.text(.local, appLanguage: appLanguage)
 
         return HStack(spacing: 4) {
@@ -180,12 +180,21 @@ struct SpillBarAIToolCard: View {
         .frame(width: 24, height: 24)
     }
 
-    private func aiProcessStateTitle(_ state: SpillStatusState) -> String {
-        switch state {
-        case .active:
-            return AppL10n.text(.active, appLanguage: appLanguage)
-        case .normal:
-            return AppL10n.text(.normal, appLanguage: appLanguage)
+    private var statusTint: Color {
+        status.hasRunningProcesses ? .teal : status.state.panelTint
+    }
+
+    private var aiProcessStateTitle: String {
+        if status.hasRunningProcesses {
+            guard !status.processSummary.processes.isEmpty else {
+                return "\(status.processSummary.processCount) proc"
+            }
+            return status.processSummary.cpuPercentText
+        }
+
+        switch status.state {
+        case .active, .normal:
+            return status.value
         case .warning:
             return AppL10n.text(.warning, appLanguage: appLanguage)
         case .unavailable:

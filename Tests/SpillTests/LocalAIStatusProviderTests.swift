@@ -11,11 +11,49 @@ final class LocalAIStatusProviderTests: XCTestCase {
 
         XCTAssertEqual(statuses.map(\.kind), [.codex, .ollama, .openAI])
         XCTAssertEqual(statuses.first { $0.kind == .codex }?.value, "Running")
-        XCTAssertEqual(statuses.first { $0.kind == .codex }?.state, .active)
+        XCTAssertEqual(statuses.first { $0.kind == .codex }?.state, .normal)
+        XCTAssertEqual(statuses.first { $0.kind == .codex }?.processSummary.processCount, 1)
         XCTAssertEqual(statuses.first { $0.kind == .ollama }?.value, "Running")
-        XCTAssertEqual(statuses.first { $0.kind == .ollama }?.state, .active)
+        XCTAssertEqual(statuses.first { $0.kind == .ollama }?.state, .normal)
+        XCTAssertEqual(statuses.first { $0.kind == .ollama }?.processSummary.processCount, 1)
         XCTAssertEqual(statuses.first { $0.kind == .openAI }?.value, "Configured")
         XCTAssertEqual(statuses.first { $0.kind == .openAI }?.state, .normal)
+    }
+
+    func testRunningProcessesAggregateMetricsWithoutActiveState() throws {
+        let statuses = LocalAIStatusProvider.statuses(
+            environment: [:],
+            processNames: [],
+            processCommands: [
+                "/opt/homebrew/bin/codex --model gpt-5.2",
+                "/opt/homebrew/bin/codex"
+            ],
+            processSnapshots: [
+                LocalAIProcessSnapshot(
+                    processID: 100,
+                    executableName: "codex",
+                    cpuPercent: 12.5,
+                    memoryBytes: 150 * 1024 * 1024,
+                    commandLine: "/opt/homebrew/bin/codex --model gpt-5.2"
+                ),
+                LocalAIProcessSnapshot(
+                    processID: 101,
+                    executableName: "codex",
+                    cpuPercent: 0.4,
+                    memoryBytes: 50 * 1024 * 1024,
+                    commandLine: "/opt/homebrew/bin/codex"
+                )
+            ],
+            installedExecutableNames: ["codex"]
+        )
+
+        let codex = try XCTUnwrap(statuses.first { $0.kind == .codex })
+        XCTAssertEqual(codex.value, "Running")
+        XCTAssertEqual(codex.state, .normal)
+        XCTAssertEqual(codex.processSummary.processCount, 2)
+        XCTAssertEqual(codex.processSummary.cpuPercent, 12.9, accuracy: 0.001)
+        XCTAssertEqual(codex.processSummary.memoryBytes, 200 * 1024 * 1024)
+        XCTAssertEqual(codex.processSummary.processes.map(\.processID), [100, 101])
     }
 
     func testClaudeAntigravityOllamaAndOpenAIModelMetadataMapping() {
@@ -104,7 +142,7 @@ final class LocalAIStatusProviderTests: XCTestCase {
 
         XCTAssertEqual(statuses.map(\.kind), [.antigravity])
         XCTAssertEqual(statuses.first?.value, "Running")
-        XCTAssertEqual(statuses.first?.state, .active)
+        XCTAssertEqual(statuses.first?.state, .normal)
         XCTAssertEqual(statuses.first?.subtitle, "ag-lite")
         XCTAssertEqual(statuses.first?.metadata.model, "ag-lite")
     }
@@ -234,7 +272,17 @@ final class LocalAIStatusProviderTests: XCTestCase {
             kind: .ollama,
             value: "Running",
             subtitle: "Local process",
-            state: .active
+            state: .normal,
+            processSummary: LocalAIProcessSummary(
+                processes: [
+                    LocalAIProcessSnapshot(
+                        processID: 123,
+                        executableName: "ollama",
+                        cpuPercent: 0.2,
+                        memoryBytes: 10 * 1024 * 1024
+                    )
+                ]
+            )
         )
 
         XCTAssertEqual(codex.actionRecommendation?.title, "Start from terminal")

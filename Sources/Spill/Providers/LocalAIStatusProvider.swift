@@ -109,7 +109,7 @@ struct LocalAIToolActionRecommendation: Hashable, Sendable {
                 activeTitle: "Continue in terminal"
             )
         case .ollama:
-            if status.state == .active {
+            if status.hasRunningProcesses {
                 return LocalAIToolActionRecommendation(
                     title: "Inspect local models",
                     detail: "Ollama is running locally."
@@ -134,9 +134,9 @@ struct LocalAIToolActionRecommendation: Hashable, Sendable {
         activeTitle: String
     ) -> LocalAIToolActionRecommendation {
         LocalAIToolActionRecommendation(
-            title: status.state == .active ? activeTitle : readyTitle,
-            detail: status.state == .active
-                ? "A local process is active. Open your terminal session to continue."
+            title: status.hasRunningProcesses ? activeTitle : readyTitle,
+            detail: status.hasRunningProcesses
+                ? "A local process is running. Open your terminal session to continue."
                 : "Launch it from your terminal when you need a new session."
         )
     }
@@ -148,19 +148,22 @@ struct LocalAIToolStatus: Identifiable, Hashable, Sendable {
     let subtitle: String?
     let state: SpillStatusState
     let metadata: LocalAIToolMetadata
+    let processSummary: LocalAIProcessSummary
 
     init(
         kind: LocalAIToolKind,
         value: String,
         subtitle: String?,
         state: SpillStatusState,
-        metadata: LocalAIToolMetadata = .empty
+        metadata: LocalAIToolMetadata = .empty,
+        processSummary: LocalAIProcessSummary = .empty
     ) {
         self.kind = kind
         self.value = value
         self.subtitle = subtitle
         self.state = state
         self.metadata = metadata
+        self.processSummary = processSummary
     }
 
     var id: String {
@@ -177,6 +180,10 @@ struct LocalAIToolStatus: Identifiable, Hashable, Sendable {
 
     var actionRecommendation: LocalAIToolActionRecommendation? {
         LocalAIToolActionRecommendation.recommendation(for: self)
+    }
+
+    var hasRunningProcesses: Bool {
+        processSummary.isRunning || value == "Running"
     }
 
     var statusItem: SpillStatusItem {
@@ -227,11 +234,15 @@ struct LocalAIStatusProvider: SpillStatusProvider {
         let installedApplicationNames = LocalApplicationDetector.installedApplicationNames(
             for: [.antigravity]
         )
+        let processSnapshots = LocalAIProcessSnapshotReader.currentSnapshots()
+        let processCommands = processSnapshots.map(\.commandLine)
+        let processNames = Set(processSnapshots.map(\.executableName))
 
         return statuses(
             environment: environment,
-            processNames: LocalProcessNameReader.currentNames(),
-            processCommands: LocalProcessCommandReader.currentCommands(),
+            processNames: processNames,
+            processCommands: processCommands,
+            processSnapshots: processSnapshots,
             installedExecutableNames: Set(executablePaths.keys),
             installedApplicationNames: installedApplicationNames,
             commandMetadata: LocalAICommandMetadataReader.metadata(for: executablePaths),
@@ -249,6 +260,7 @@ struct LocalAIStatusProvider: SpillStatusProvider {
             environment: environment,
             processNames: processNames,
             processCommands: [],
+            processSnapshots: [],
             installedExecutableNames: [],
             installedApplicationNames: []
         )
@@ -263,6 +275,7 @@ struct LocalAIStatusProvider: SpillStatusProvider {
             environment: environment,
             processNames: processNames,
             processCommands: [],
+            processSnapshots: [],
             installedExecutableNames: installedExecutableNames,
             installedApplicationNames: []
         )
@@ -272,6 +285,7 @@ struct LocalAIStatusProvider: SpillStatusProvider {
         environment: [String: String],
         processNames: Set<String>,
         processCommands: [String],
+        processSnapshots: [LocalAIProcessSnapshot] = [],
         installedExecutableNames: Set<String>,
         installedApplicationNames: Set<String> = [],
         commandMetadata: [LocalAIToolKind: LocalAIToolMetadata] = [:],
@@ -286,6 +300,7 @@ struct LocalAIStatusProvider: SpillStatusProvider {
                 kind: .codex,
                 processNames: normalizedProcessNames,
                 processCommands: processCommands,
+                processSnapshots: processSnapshots,
                 installedExecutableNames: normalizedInstalledExecutableNames,
                 installedApplicationNames: normalizedInstalledApplicationNames,
                 metadata: commandMetadata[.codex]
@@ -294,6 +309,7 @@ struct LocalAIStatusProvider: SpillStatusProvider {
                 kind: .claude,
                 processNames: normalizedProcessNames,
                 processCommands: processCommands,
+                processSnapshots: processSnapshots,
                 installedExecutableNames: normalizedInstalledExecutableNames,
                 installedApplicationNames: normalizedInstalledApplicationNames,
                 metadata: commandMetadata[.claude]
@@ -302,6 +318,7 @@ struct LocalAIStatusProvider: SpillStatusProvider {
                 kind: .antigravity,
                 processNames: normalizedProcessNames,
                 processCommands: processCommands,
+                processSnapshots: processSnapshots,
                 installedExecutableNames: normalizedInstalledExecutableNames,
                 installedApplicationNames: normalizedInstalledApplicationNames,
                 metadata: commandMetadata[.antigravity]
@@ -310,6 +327,7 @@ struct LocalAIStatusProvider: SpillStatusProvider {
                 kind: .ollama,
                 processNames: normalizedProcessNames,
                 processCommands: processCommands,
+                processSnapshots: processSnapshots,
                 installedExecutableNames: normalizedInstalledExecutableNames,
                 installedApplicationNames: normalizedInstalledApplicationNames,
                 metadata: commandMetadata[.ollama],
@@ -323,6 +341,7 @@ struct LocalAIStatusProvider: SpillStatusProvider {
         kind: LocalAIToolKind,
         processNames: Set<String>,
         processCommands: [String],
+        processSnapshots: [LocalAIProcessSnapshot],
         installedExecutableNames: Set<String>,
         installedApplicationNames: Set<String>,
         metadata commandMetadata: LocalAIToolMetadata?,
@@ -343,11 +362,21 @@ struct LocalAIStatusProvider: SpillStatusProvider {
             processMetadata: processMetadata,
             runtimeModel: runtimeModel
         )
-        let isRunning = hasRunningProcess(
+        let matchingProcesses = matchingProcessSnapshots(
+            executableNames: executableNames,
+            applicationNames: applicationNames,
+            processSnapshots: processSnapshots
+        )
+        let fallbackRunning = hasRunningProcess(
             namedAnyOf: executableNames + applicationNames,
             processNames: processNames,
             processCommands: processCommands
         )
+        let processSummary = LocalAIProcessSummary(
+            processes: matchingProcesses,
+            fallbackProcessCount: matchingProcesses.isEmpty && fallbackRunning ? 1 : 0
+        )
+        let isRunning = processSummary.isRunning
         let isInstalled = executableNames.contains { installedExecutableNames.contains($0) }
             || applicationNames.contains { installedApplicationNames.contains($0.lowercased()) }
 
@@ -373,7 +402,8 @@ struct LocalAIStatusProvider: SpillStatusProvider {
             value: value,
             subtitle: subtitle,
             state: state,
-            metadata: enrichedMetadata
+            metadata: enrichedMetadata,
+            processSummary: processSummary
         )
     }
 
@@ -392,7 +422,7 @@ struct LocalAIStatusProvider: SpillStatusProvider {
     }
 
     private static func commandState(isRunning: Bool) -> SpillStatusState {
-        return isRunning ? .active : .normal
+        return .normal
     }
 
     private static func openAIStatus(environment: [String: String]) -> LocalAIToolStatus? {
@@ -474,6 +504,23 @@ struct LocalAIStatusProvider: SpillStatusProvider {
             }
     }
 
+    private static func matchingProcessSnapshots(
+        executableNames: [String],
+        applicationNames: [String],
+        processSnapshots: [LocalAIProcessSnapshot]
+    ) -> [LocalAIProcessSnapshot] {
+        processSnapshots.filter { snapshot in
+            executableNames.contains { executableName in
+                commandLine(snapshot.commandLine, matchesExecutableNamed: executableName)
+                    || snapshot.executableName.matchesExecutable(named: executableName)
+            }
+            || applicationNames.contains { applicationName in
+                commandLine(snapshot.commandLine, matchesApplicationNamed: applicationName)
+                    || snapshot.executableName.caseInsensitiveCompare(applicationName) == .orderedSame
+            }
+        }
+    }
+
     private static func hasNonEmptyValue(_ key: String, in environment: [String: String]) -> Bool {
         guard let value = environment[key] else {
             return false
@@ -503,5 +550,13 @@ struct LocalAIStatusProvider: SpillStatusProvider {
         }
 
         return executableToken.matchesExecutable(named: name)
+    }
+
+    static func commandLine(_ commandLine: String, matchesApplicationNamed name: String) -> Bool {
+        let lowercasedCommandLine = commandLine.lowercased()
+        let lowercasedName = name.lowercased()
+
+        return lowercasedCommandLine.contains("/\(lowercasedName).app/")
+            || lowercasedCommandLine.hasSuffix("/\(lowercasedName).app")
     }
 }

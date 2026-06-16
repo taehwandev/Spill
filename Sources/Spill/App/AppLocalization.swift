@@ -94,6 +94,10 @@ enum AppTextKey: String {
     case noSourceSplit
     case eventsSummary
     case aiProcessSummary
+    case process
+    case processes
+    case cpu
+    case memory
     case windows
     case menuBar
     case noFocusedWindow
@@ -333,11 +337,11 @@ enum AppL10n {
     }
 
     static func aiProcessSummary(
-        activeCount: Int,
-        totalCount: Int,
+        runningToolCount: Int,
+        processCount: Int,
         appLanguage: SpillAppLanguage = .persisted()
     ) -> String {
-        String(format: text(.aiProcessSummary, appLanguage: appLanguage), activeCount, totalCount)
+        String(format: text(.aiProcessSummary, appLanguage: appLanguage), runningToolCount, processCount)
     }
 
     static func tokenMeteringAccessibility(
@@ -661,7 +665,11 @@ enum AppL10n {
             .noTaskSplit: "No task split",
             .noSourceSplit: "No source split",
             .eventsSummary: "%d events / %@ / %@",
-            .aiProcessSummary: "%d of %d active",
+            .aiProcessSummary: "%d running / %d processes",
+            .process: "Process",
+            .processes: "Processes",
+            .cpu: "CPU",
+            .memory: "Memory",
             .windows: "WINDOWS",
             .menuBar: "MENU BAR",
             .noFocusedWindow: "No Focused Window",
@@ -876,7 +884,11 @@ enum AppL10n {
             .noTaskSplit: "작업 분류 없음",
             .noSourceSplit: "소스 분류 없음",
             .eventsSummary: "이벤트 %d개 / %@ / %@",
-            .aiProcessSummary: "%d/%d 활성",
+            .aiProcessSummary: "%d개 실행 / 프로세스 %d개",
+            .process: "프로세스",
+            .processes: "프로세스",
+            .cpu: "CPU",
+            .memory: "메모리",
             .windows: "윈도우",
             .menuBar: "메뉴 막대",
             .noFocusedWindow: "포커스된 윈도우 없음",
@@ -1091,7 +1103,11 @@ enum AppL10n {
             .noTaskSplit: "タスク分類なし",
             .noSourceSplit: "ソース分類なし",
             .eventsSummary: "イベント %d件 / %@ / %@",
-            .aiProcessSummary: "%d/%d アクティブ",
+            .aiProcessSummary: "%d 実行中 / %d プロセス",
+            .process: "プロセス",
+            .processes: "プロセス",
+            .cpu: "CPU",
+            .memory: "メモリ",
             .windows: "ウィンドウ",
             .menuBar: "メニューバー",
             .noFocusedWindow: "フォーカス中のウィンドウなし",

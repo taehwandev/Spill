@@ -8,12 +8,12 @@ final class SpillStatusDetailRowsTests: XCTestCase {
                 kind: .codex,
                 value: "Live",
                 subtitle: "Process Found",
-                state: .active
+                state: .normal
             )
         )
 
-        XCTAssertEqual(rows.map(\.label), ["Status", "Detail", "Next"])
-        XCTAssertEqual(rows.map(\.value), ["Live", "Process Found", "Continue in terminal"])
+        XCTAssertEqual(rows.map(\.label), ["Status", "Detail", "Processes", "Next"])
+        XCTAssertEqual(rows.map(\.value), ["Live", "Process Found", "0", "Start from terminal"])
     }
 
     func testAIRowsIncludeSafeModelAndVersionMetadata() {
@@ -22,19 +22,34 @@ final class SpillStatusDetailRowsTests: XCTestCase {
                 kind: .ollama,
                 value: "Running",
                 subtitle: "llama3.2:latest",
-                state: .active,
+                state: .normal,
                 metadata: LocalAIToolMetadata(
                     model: "llama3.2:latest",
                     version: "0.12.0",
                     source: "Ollama Runtime"
+                ),
+                processSummary: LocalAIProcessSummary(
+                    processes: [
+                        LocalAIProcessSnapshot(
+                            processID: 42,
+                            executableName: "ollama",
+                            cpuPercent: 2.4,
+                            memoryBytes: 64 * 1024 * 1024,
+                            commandLine: "/usr/local/bin/ollama serve --private-path"
+                        )
+                    ]
                 )
             )
         )
 
-        XCTAssertEqual(rows.map(\.label), ["Status", "Detail", "Next", "Model", "Version", "Source"])
+        XCTAssertEqual(rows.map(\.label), ["Status", "Detail", "Processes", "CPU", "Memory", "Process 42", "Next", "Model", "Version", "Source"])
         XCTAssertEqual(rows.map(\.value), [
             "Running",
             "llama3.2:latest",
+            "1",
+            "2.4%",
+            "0.1 GB",
+            "ollama / CPU 2.4% / 0.1 GB",
             "Inspect local models",
             "llama3.2:latest",
             "0.12.0",
@@ -52,7 +67,7 @@ final class SpillStatusDetailRowsTests: XCTestCase {
             )
         )
 
-        XCTAssertEqual(rows.map(\.label), ["Status", "Detail", "Next"])
-        XCTAssertEqual(rows.map(\.value), ["Configured", "API key/base URL", "Use configured API"])
+        XCTAssertEqual(rows.map(\.label), ["Status", "Detail", "Processes", "Next"])
+        XCTAssertEqual(rows.map(\.value), ["Configured", "API key/base URL", "0", "Use configured API"])
     }
 }

@@ -68,8 +68,8 @@ struct SpillBarAISection: View {
 
             if !aiStatusStore.statuses.isEmpty {
                 Text(AppL10n.aiProcessSummary(
-                    activeCount: aiStatusStore.statuses.filter { $0.state == .active }.count,
-                    totalCount: aiStatusStore.statuses.count,
+                    runningToolCount: runningToolCount,
+                    processCount: runningProcessCount,
                     appLanguage: settings.appLanguage
                 ))
                 .font(.system(size: 9.5, weight: .semibold, design: .rounded))
@@ -105,6 +105,14 @@ struct SpillBarAISection: View {
             isLoading: cloudServiceStatusStore.isLoading,
             appLanguage: settings.appLanguage
         )
+    }
+
+    private var runningToolCount: Int {
+        aiStatusStore.statuses.filter(\.hasRunningProcesses).count
+    }
+
+    private var runningProcessCount: Int {
+        aiStatusStore.statuses.reduce(0) { $0 + $1.processSummary.processCount }
     }
 
     private func serviceStatus(for kind: LocalAIToolKind) -> CloudServiceStatusItem? {
@@ -155,7 +163,7 @@ struct SpillBarAISection: View {
         SpillStatusDetailPopover(
             title: status.title,
             symbolName: status.symbolName,
-            tint: status.state.panelTint,
+            tint: status.hasRunningProcesses ? .teal : status.state.panelTint,
             rows: SpillStatusDetailRows.rows(for: status),
             showsInMenuBar: nil
         )

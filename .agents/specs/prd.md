@@ -177,6 +177,14 @@ Requirements:
   - Detected Items, optionally collapsed
 - The AI Strip includes the token metering summary as one compact AI usage
   affordance, not a separate dashboard embedded in the panel.
+- AI process state distinguishes tool availability from process activity:
+  installed tools with no matching process are `Ready`, tools with one or more
+  matching local processes are `Running`, and CPU/memory/process counts explain
+  current activity without a separate threshold-based `Active` judgment.
+- AI process cards aggregate all matching processes for the tool. Detail
+  popovers should show the aggregate process count, CPU percentage, memory, and
+  a short per-process list because Codex, Claude Code, Antigravity/AGY, and
+  Ollama can each involve multiple local processes.
 
 Acceptance:
 
@@ -184,6 +192,9 @@ Acceptance:
 - Text and icons do not overlap.
 - Panel does not feel like a full dashboard.
 - The token summary can open the local token dashboard helper.
+- AI status should not imply that a tool is actively generating solely because
+  a process exists. The UI should show `Running` plus CPU/memory detail instead
+  of a vague active count.
 
 ### 4. Local Token Metering
 
