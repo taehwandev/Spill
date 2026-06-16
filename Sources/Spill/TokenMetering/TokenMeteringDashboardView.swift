@@ -542,8 +542,49 @@ struct TokenMeteringDashboardView: View {
         }
     }
 
+    private var trendTitle: String {
+        currentLanguage == .korean ? "토큰 사용량 트렌드" : "Token Usage Trend"
+    }
+
+    private var trendSubtitle: String {
+        currentLanguage == .korean ? "기간 내 일별 토큰 사용량 변화 추이" : "Daily token usage variation over the period"
+    }
+
+    private var shouldShowTrendChart: Bool {
+        guard store.snapshot.selectedCalendarDayID == nil else {
+            return false
+        }
+
+        switch store.selectedPeriod {
+        case .sevenDays, .thirtyDays, .all:
+            return true
+        case .today:
+            return false
+        }
+    }
+
+    private var trendChart: some View {
+        let trendBuckets = store.snapshot.trendBuckets
+        let hasData = trendBuckets.contains { $0.hasEvents }
+
+        return dashboardPanel(
+            title: trendTitle,
+            subtitle: trendSubtitle
+        ) {
+            if !hasData {
+                emptyMessage(title: currentLanguage == .korean ? "트렌드 데이터 없음" : "No Trend Data", detail: t(.waitingForEvents))
+            } else {
+                TokenMeteringDashboardTrendChart(buckets: trendBuckets)
+            }
+        }
+    }
+
     private var analyticsGrid: some View {
         VStack(alignment: .leading, spacing: 14) {
+            if shouldShowTrendChart {
+                trendChart
+            }
+
             HStack(alignment: .top, spacing: 14) {
                 dashboardPanel(
                     title: t(.aiToolDistribution),
@@ -551,13 +592,14 @@ struct TokenMeteringDashboardView: View {
                     infoTitle: t(.aiToolInfoTitle),
                     infoDetail: t(.aiToolInfoDetail)
                 ) {
-                    barRows(
-                        store.snapshot.toolRows,
-                        emptyText: t(.noAIToolData),
-                        idPrefix: "tool",
-                        tint: .teal,
-                        serviceStatus: { row in serviceStatus(for: row) }
-                    )
+                    let rows = store.snapshot.toolRows
+                    let totalRatio = rows.reduce(0.0) { $0 + $1.ratio }
+                    if rows.isEmpty || totalRatio == 0 {
+                        emptyMessage(title: t(.noAIToolData), detail: t(.waitingForEvents))
+                    } else {
+                        compactChartRows(rows, idPrefix: "tool_chart", tint: .teal)
+                        .frame(height: 160)
+                    }
                 }
 
                 dashboardPanel(
@@ -566,7 +608,14 @@ struct TokenMeteringDashboardView: View {
                     infoTitle: t(.workflowInfoTitle),
                     infoDetail: t(.workflowInfoDetail)
                 ) {
-                    barRows(store.snapshot.taskRows, emptyText: t(.noWorkflowData), idPrefix: "task", tint: .blue)
+                    let rows = store.snapshot.taskRows
+                    let totalRatio = rows.reduce(0.0) { $0 + $1.ratio }
+                    if rows.isEmpty || totalRatio == 0 {
+                        emptyMessage(title: t(.noWorkflowData), detail: t(.waitingForEvents))
+                    } else {
+                        compactChartRows(rows, idPrefix: "task_chart", tint: .blue)
+                        .frame(height: 160)
+                    }
                 }
             }
 
@@ -577,7 +626,14 @@ struct TokenMeteringDashboardView: View {
                     infoTitle: t(.stageInfoTitle),
                     infoDetail: t(.stageInfoDetail)
                 ) {
-                    barRows(store.snapshot.stageRows, emptyText: t(.noStageData), idPrefix: "stage", tint: .purple)
+                    let rows = store.snapshot.stageRows
+                    let totalRatio = rows.reduce(0.0) { $0 + $1.ratio }
+                    if rows.isEmpty || totalRatio == 0 {
+                        emptyMessage(title: t(.noStageData), detail: t(.waitingForEvents))
+                    } else {
+                        compactChartRows(rows, idPrefix: "stage_chart", tint: .purple)
+                        .frame(height: 160)
+                    }
                 }
 
                 dashboardPanel(
@@ -586,12 +642,27 @@ struct TokenMeteringDashboardView: View {
                     infoTitle: t(.sourceInfoTitle),
                     infoDetail: t(.sourceInfoDetail)
                 ) {
-                    detailQualityContent(
-                        snapshot: store.snapshot,
-                        emptyText: t(.noSourceBreakdown),
-                        idPrefix: "detail_quality",
-                        showsRuntimeCategories: true
-                    )
+                    let rows = store.snapshot.sourceRows.filter { $0.id != "unknown" }
+                    let totalRatio = rows.reduce(0.0) { $0 + $1.ratio }
+                    if rows.isEmpty || totalRatio == 0 {
+                        emptyMessage(title: t(.noSourceBreakdown), detail: t(.waitingForEvents))
+                    } else {
+                        VStack(alignment: .leading, spacing: 12) {
+                            segmentedRatioBar(rows)
+                                .frame(height: 38)
+
+                            Divider()
+                                .background(Color.primary.opacity(0.05))
+
+                            detailQualityContent(
+                                snapshot: store.snapshot,
+                                emptyText: t(.noSourceBreakdown),
+                                idPrefix: "detail_quality",
+                                showsRuntimeCategories: false
+                            )
+                        }
+                        .frame(height: 160)
+                    }
                 }
             }
         }
@@ -816,210 +887,244 @@ struct TokenMeteringDashboardView: View {
     ) -> some View {
         let detailSession = detailSnapshot.selectedSession ?? session
         let kpisByID = Dictionary(uniqueKeysWithValues: detailSnapshot.kpis.map { ($0.id, $0) })
-        let sourceRows = detailSnapshot.sourceRows
-        let hasDetailedSources = sourceRows.contains { row in
-            row.id != "unknown" && row.ratio > 0
-        }
-        let isRuntimeTotalOnly = !hasDetailedSources && detailSnapshot.totalTokens > 0
 
         return ScrollView(.vertical, showsIndicators: false) {
             VStack(alignment: .leading, spacing: 14) {
-                HStack(alignment: .top, spacing: 8) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(t(.selectedWorkItemHeader))
-                            .font(.system(size: 9, weight: .black))
-                            .tracking(1.0)
-                            .foregroundStyle(.secondary)
-                        Text(detailSession.title)
-                            .font(.system(size: 14, weight: .bold))
-                            .lineLimit(2)
-                        Text(detailSession.detail)
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-
-                    Spacer(minLength: 8)
-
-                    Button {
-                        store.clearWorkItemSelection()
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                }
-
+                detailPanelHeader(detailSession)
                 Divider()
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(t(.localAlias))
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(.secondary)
-
-                    HStack(spacing: 8) {
-                        TextField(
-                            t(.localAliasPlaceholder),
-                            text: $aliasText
-                        )
-                        .textFieldStyle(.roundedBorder)
-                        .font(.system(size: 11))
-                        .onSubmit {
-                            store.updateAlias(for: session.id, alias: aliasText)
-                        }
-
-                        Button(t(.applyAlias)) {
-                            store.updateAlias(for: session.id, alias: aliasText)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(.teal)
-                        .font(.system(size: 10, weight: .bold))
-
-                        if !aliasText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            Button(t(.clearAlias)) {
-                                aliasText = ""
-                                store.updateAlias(for: session.id, alias: "")
-                            }
-                            .buttonStyle(.bordered)
-                            .font(.system(size: 10, weight: .medium))
-                        }
-                    }
-
-                    Text(t(.localAliasDetail))
-                        .font(.system(size: 8.5, weight: .medium))
-                        .foregroundStyle(.secondary)
-                }
-                .padding(10)
-                .background(Color.primary.opacity(0.02), in: RoundedRectangle(cornerRadius: 8))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(Color.primary.opacity(0.04), lineWidth: 0.5)
-                }
-
-                VStack(spacing: 8) {
-                    HStack {
-                        metricPill(
-                            title: t(.total),
-                            value: kpisByID["total"]?.value ?? detailSession.value,
-                            liveUpdateID: "session:\(detailSession.id)"
-                        )
-                        metricPill(
-                            title: t(.events),
-                            value: "\(detailSession.eventCount)",
-                            liveUpdateID: "session:\(detailSession.id)"
-                        )
-                    }
-                    HStack {
-                        metricPill(
-                            title: t(.input),
-                            value: kpisByID["input"]?.value ?? "-"
-                        )
-                        metricPill(
-                            title: t(.output),
-                            value: kpisByID["output"]?.value ?? "-"
-                        )
-                    }
-                }
-
-                workItemPopoverSection(
-                    title: t(.aiTool),
-                    rows: detailSnapshot.toolRows.prefix(4),
-                    emptyText: t(.noAIToolData),
-                    idPrefix: "tool"
-                )
-
-                workItemPopoverSection(
-                    title: t(.modelBreakdown),
-                    rows: detailSnapshot.modelRows.prefix(4),
-                    emptyText: t(.noModelData),
-                    idPrefix: "model"
-                )
-
-                workItemPopoverSection(
-                    title: t(.workflowBreakdown),
-                    rows: detailSnapshot.taskRows.prefix(4),
-                    emptyText: t(.noWorkflowData),
-                    idPrefix: "task"
-                )
-
-                workItemPopoverSection(
-                    title: t(.stageBreakdown),
-                    rows: detailSnapshot.stageRows.prefix(4),
-                    emptyText: t(.noStageData),
-                    idPrefix: "stage"
-                )
-
-                VStack(alignment: .leading, spacing: 7) {
-                    HStack(spacing: 6) {
-                        Text(t(.sourceBreakdown).uppercased())
-                            .font(.system(size: 8.5, weight: .black))
-                            .tracking(0.9)
-                            .foregroundStyle(.secondary)
-
-                        Spacer()
-
-                        if isRuntimeTotalOnly {
-                            HStack(spacing: 4) {
-                                Text(t(.cumulativeOnlyBadge))
-                                    .font(.system(size: 8, weight: .bold))
-                                    .foregroundStyle(.orange)
-                                    .padding(.horizontal, 5)
-                                    .padding(.vertical, 1.5)
-                                    .background(Color.orange.opacity(0.12), in: Capsule())
-
-                                TokenMeteringInfoButton(
-                                    title: t(.cumulativeOnlyInfoTitle),
-                                    detail: t(.cumulativeOnlyInfoDetail)
-                                )
-                            }
-                        }
-                    }
-
-                    detailQualityContent(
-                        snapshot: detailSnapshot,
-                        emptyText: t(.noSourceBreakdown),
-                        idPrefix: "detail_quality_selected",
-                        showsRuntimeCategories: true
-                    )
-                }
-                .padding(10)
-                .background(Color.primary.opacity(0.025), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .stroke(Color.primary.opacity(0.04), lineWidth: 0.5)
-                }
-
-                DisclosureGroup {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("\(t(.diagnosticsSessionID)): \(session.id)")
-                        Text("\(t(.diagnosticsRunID)): \(session.runID)")
-                    }
-                    .font(.system(size: 9, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 4)
-                } label: {
-                    Text(t(.diagnosticsCodes))
-                        .font(.system(size: 10, weight: .semibold))
-                }
-                .padding(10)
-                .background(Color.primary.opacity(0.02), in: RoundedRectangle(cornerRadius: 8))
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(t(.privacyBoundary))
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(.secondary)
-                    Text(t(.privacyBoundaryDetail))
-                        .font(.system(size: 9, weight: .medium))
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(10)
-                .background(Color.primary.opacity(0.02), in: RoundedRectangle(cornerRadius: 8))
+                detailAliasSection(for: session)
+                detailMetricsSection(detailSession: detailSession, kpisByID: kpisByID)
+                detailBreakdownSections(snapshot: detailSnapshot)
+                detailDiagnosticsSection(session: session)
+                detailPrivacySection()
             }
             .padding(.vertical, 18)
         }
         .frame(maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private func detailPanelHeader(_ detailSession: TokenUsageDashboardSessionRow) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(t(.selectedWorkItemHeader))
+                    .font(.system(size: 9, weight: .black))
+                    .tracking(1.0)
+                    .foregroundStyle(.secondary)
+                Text(detailSession.title)
+                    .font(.system(size: 14, weight: .bold))
+                    .lineLimit(2)
+                Text(detailSession.detail)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 8)
+
+            Button {
+                store.clearWorkItemSelection()
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private func detailAliasSection(for session: TokenUsageDashboardSessionRow) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(t(.localAlias))
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(.secondary)
+
+            HStack(spacing: 8) {
+                TextField(
+                    t(.localAliasPlaceholder),
+                    text: $aliasText
+                )
+                .textFieldStyle(.roundedBorder)
+                .font(.system(size: 11))
+                .onSubmit {
+                    store.updateAlias(for: session.id, alias: aliasText)
+                }
+
+                Button(t(.applyAlias)) {
+                    store.updateAlias(for: session.id, alias: aliasText)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.teal)
+                .font(.system(size: 10, weight: .bold))
+
+                if !aliasText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Button(t(.clearAlias)) {
+                        aliasText = ""
+                        store.updateAlias(for: session.id, alias: "")
+                    }
+                    .buttonStyle(.bordered)
+                    .font(.system(size: 10, weight: .medium))
+                }
+            }
+
+            Text(t(.localAliasDetail))
+                .font(.system(size: 8.5, weight: .medium))
+                .foregroundStyle(.secondary)
+        }
+        .padding(10)
+        .background(Color.primary.opacity(0.02), in: RoundedRectangle(cornerRadius: 8))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.primary.opacity(0.04), lineWidth: 0.5)
+        }
+    }
+
+    private func detailMetricsSection(
+        detailSession: TokenUsageDashboardSessionRow,
+        kpisByID: [String: TokenUsageDashboardKPI]
+    ) -> some View {
+        VStack(spacing: 8) {
+            HStack {
+                metricPill(
+                    title: t(.total),
+                    value: kpisByID["total"]?.value ?? detailSession.value,
+                    liveUpdateID: "session:\(detailSession.id)"
+                )
+                metricPill(
+                    title: t(.events),
+                    value: "\(detailSession.eventCount)",
+                    liveUpdateID: "session:\(detailSession.id)"
+                )
+            }
+            HStack {
+                metricPill(
+                    title: t(.input),
+                    value: kpisByID["input"]?.value ?? "-"
+                )
+                metricPill(
+                    title: t(.output),
+                    value: kpisByID["output"]?.value ?? "-"
+                )
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func detailBreakdownSections(snapshot detailSnapshot: TokenUsageDashboardSnapshot) -> some View {
+        workItemPopoverSection(
+            title: t(.aiTool),
+            rows: detailSnapshot.toolRows.prefix(4),
+            emptyText: t(.noAIToolData),
+            idPrefix: "tool"
+        )
+
+        workItemPopoverSection(
+            title: t(.modelBreakdown),
+            rows: detailSnapshot.modelRows.prefix(4),
+            emptyText: t(.noModelData),
+            idPrefix: "model"
+        )
+
+        workItemPopoverSection(
+            title: t(.workflowBreakdown),
+            rows: detailSnapshot.taskRows.prefix(4),
+            emptyText: t(.noWorkflowData),
+            idPrefix: "task"
+        )
+
+        workItemPopoverSection(
+            title: t(.stageBreakdown),
+            rows: detailSnapshot.stageRows.prefix(4),
+            emptyText: t(.noStageData),
+            idPrefix: "stage"
+        )
+
+        detailSourceBreakdownSection(snapshot: detailSnapshot)
+    }
+
+    private func detailSourceBreakdownSection(snapshot detailSnapshot: TokenUsageDashboardSnapshot) -> some View {
+        let hasDetailedSources = detailSnapshot.sourceRows.contains { row in
+            row.id != "unknown" && row.ratio > 0
+        }
+        let isRuntimeTotalOnly = !hasDetailedSources && detailSnapshot.totalTokens > 0
+
+        return VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 6) {
+                Text(t(.sourceBreakdown).uppercased())
+                    .font(.system(size: 8.5, weight: .black))
+                    .tracking(0.9)
+                    .foregroundStyle(.secondary)
+
+                Spacer()
+
+                if isRuntimeTotalOnly {
+                    HStack(spacing: 4) {
+                        Text(t(.cumulativeOnlyBadge))
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundStyle(.orange)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1.5)
+                            .background(Color.orange.opacity(0.12), in: Capsule())
+
+                        TokenMeteringInfoButton(
+                            title: t(.cumulativeOnlyInfoTitle),
+                            detail: t(.cumulativeOnlyInfoDetail)
+                        )
+                    }
+                }
+            }
+
+            let rows = detailSnapshot.sourceRows.filter { $0.id != "unknown" }
+            let totalRatio = rows.reduce(0.0) { $0 + $1.ratio }
+            if !rows.isEmpty && totalRatio > 0 {
+                segmentedRatioBar(rows, showsLegend: false)
+                    .frame(height: 20)
+                    .padding(.vertical, 2)
+            }
+
+            detailQualityContent(
+                snapshot: detailSnapshot,
+                emptyText: t(.noSourceBreakdown),
+                idPrefix: "detail_quality_selected",
+                showsRuntimeCategories: false
+            )
+        }
+        .padding(10)
+        .background(Color.primary.opacity(0.025), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.primary.opacity(0.04), lineWidth: 0.5)
+        }
+    }
+
+    private func detailDiagnosticsSection(session: TokenUsageDashboardSessionRow) -> some View {
+        DisclosureGroup {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("\(t(.diagnosticsSessionID)): \(session.id)")
+                Text("\(t(.diagnosticsRunID)): \(session.runID)")
+            }
+            .font(.system(size: 9, design: .monospaced))
+            .foregroundStyle(.secondary)
+            .padding(.top, 4)
+        } label: {
+            Text(t(.diagnosticsCodes))
+                .font(.system(size: 10, weight: .semibold))
+        }
+        .padding(10)
+        .background(Color.primary.opacity(0.02), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func detailPrivacySection() -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(t(.privacyBoundary))
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(.secondary)
+            Text(t(.privacyBoundaryDetail))
+                .font(.system(size: 9, weight: .medium))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(10)
+        .background(Color.primary.opacity(0.02), in: RoundedRectangle(cornerRadius: 8))
     }
 
     private func detailQualityContent(
@@ -1470,6 +1575,101 @@ struct TokenMeteringDashboardView: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(Color.primary.opacity(0.04), lineWidth: 0.5)
         }
+    }
+
+    private func compactChartRows(
+        _ rows: [TokenUsageDashboardBarRow],
+        idPrefix: String,
+        tint: Color
+    ) -> some View {
+        let visibleRows = Array(rows.filter { $0.ratio > 0 }.prefix(5))
+
+        return VStack(alignment: .leading, spacing: 10) {
+            ForEach(visibleRows) { row in
+                let liveUpdateID = "\(idPrefix):\(row.id)"
+                let isLiveUpdated = store.isLiveUpdated(liveUpdateID)
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack(spacing: 8) {
+                        TokenMeteringLiveUpdateDot(isActive: isLiveUpdated, marker: store.liveUpdateMarker)
+                        Text(row.title)
+                            .font(.system(size: 11, weight: .semibold))
+                            .lineLimit(1)
+                        Spacer(minLength: 6)
+                        Text(row.value)
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .contentTransition(.numericText())
+                    }
+
+                    GeometryReader { geometry in
+                        ZStack(alignment: .leading) {
+                            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                .fill(Color.primary.opacity(0.06))
+                            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                .fill(
+                                    LinearGradient(
+                                        colors: [tint, tint.opacity(0.62)],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                )
+                                .frame(width: Swift.max(CGFloat(6), geometry.size.width * CGFloat(row.ratio)))
+                                .animation(.snappy(duration: 0.35), value: row.ratio)
+                        }
+                    }
+                    .frame(height: 9)
+                }
+                .modifier(TokenMeteringLiveUpdateEffect(isActive: isLiveUpdated, marker: store.liveUpdateMarker, cornerRadius: 7))
+            }
+        }
+        .frame(maxHeight: .infinity, alignment: .center)
+    }
+
+    private func segmentedRatioBar(
+        _ rows: [TokenUsageDashboardBarRow],
+        showsLegend: Bool = true
+    ) -> some View {
+        let visibleRows = Array(rows.filter { $0.ratio > 0 }.prefix(6))
+        let ratioTotal = visibleRows.reduce(0.0) { $0 + $1.ratio }
+
+        return VStack(alignment: .leading, spacing: 8) {
+            GeometryReader { geometry in
+                HStack(spacing: 2) {
+                    ForEach(Array(visibleRows.enumerated()), id: \.element.id) { index, row in
+                        let normalizedRatio = ratioTotal > 0 ? row.ratio / ratioTotal : 0
+                        RoundedRectangle(cornerRadius: 4, style: .continuous)
+                            .fill(chartColor(at: index))
+                            .frame(width: Swift.max(CGFloat(5), geometry.size.width * CGFloat(normalizedRatio)))
+                            .animation(.snappy(duration: 0.35), value: normalizedRatio)
+                    }
+                }
+            }
+            .frame(height: showsLegend ? 18 : nil)
+
+            if showsLegend {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(Array(visibleRows.enumerated()), id: \.element.id) { index, row in
+                        HStack(spacing: 6) {
+                            Circle()
+                                .fill(chartColor(at: index))
+                                .frame(width: 7, height: 7)
+                            Text(row.title)
+                                .font(.system(size: 9, weight: .semibold))
+                                .lineLimit(1)
+                            Spacer(minLength: 4)
+                            Text(row.value)
+                                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func chartColor(at index: Int) -> Color {
+        let colors: [Color] = [.teal, .blue, .purple, .green, .orange, .red]
+        return colors[index % colors.count]
     }
 
     private func barRows(

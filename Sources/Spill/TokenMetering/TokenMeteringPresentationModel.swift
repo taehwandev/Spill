@@ -42,6 +42,90 @@ struct TokenUsageDashboardBarRow: Identifiable, Equatable {
     let ratio: Double
 }
 
+private enum TokenUsageDashboardRowBuilder {
+    static func rows<Key: Hashable>(
+        tokenValues: [Key: Int],
+        totalTokens: Int,
+        displayMode: TokenUsageDisplayMode,
+        id: (Key) -> String,
+        label: (Key) -> String
+    ) -> [TokenUsageDashboardBarRow] {
+        rows(
+            candidates: Array(tokenValues.keys),
+            totalTokens: totalTokens,
+            displayMode: displayMode,
+            tokens: { tokenValues[$0, default: 0] },
+            id: id,
+            label: label
+        )
+    }
+
+    static func rawRows<Key: Hashable & RawRepresentable>(
+        tokenValues: [String: Int],
+        totalTokens: Int,
+        displayMode: TokenUsageDisplayMode,
+        id: (Key) -> String,
+        label: (Key) -> String
+    ) -> [TokenUsageDashboardBarRow] where Key.RawValue == String {
+        rows(
+            tokenValues: tokenValues.reduce(into: [Key: Int]()) { totals, element in
+                guard let key = Key(rawValue: element.key) else {
+                    return
+                }
+                totals[key] = element.value
+            },
+            totalTokens: totalTokens,
+            displayMode: displayMode,
+            id: id,
+            label: label
+        )
+    }
+
+    static func rows<Candidate>(
+        candidates: [Candidate],
+        totalTokens: Int,
+        displayMode: TokenUsageDisplayMode,
+        tokens: (Candidate) -> Int,
+        id: (Candidate) -> String,
+        label: (Candidate) -> String,
+        sorted: Bool = true
+    ) -> [TokenUsageDashboardBarRow] {
+        let rows = candidates.compactMap { candidate -> TokenUsageDashboardBarRow? in
+            let tokenCount = tokens(candidate)
+            guard tokenCount > 0 else {
+                return nil
+            }
+
+            let ratio = TokenUsageDashboardSnapshot.chartRatio(tokens: tokenCount, totalTokens: totalTokens)
+            let value: String
+            switch displayMode {
+            case .tokens:
+                value = TokenUsageDashboardSnapshot.formatTokens(tokenCount)
+            case .percentage:
+                value = TokenUsageDashboardSnapshot.formatPercentage(ratio * 100.0)
+            }
+
+            return TokenUsageDashboardBarRow(
+                id: id(candidate),
+                title: label(candidate),
+                value: value,
+                ratio: ratio
+            )
+        }
+
+        guard sorted else {
+            return rows
+        }
+
+        return rows.sorted { lhs, rhs in
+            if lhs.ratio == rhs.ratio {
+                return lhs.title < rhs.title
+            }
+            return lhs.ratio > rhs.ratio
+        }
+    }
+}
+
 struct TokenUsageDashboardWorkflowUsage: Equatable {
     let rows: [TokenUsageDashboardBarRow]
 }
@@ -63,46 +147,28 @@ struct TokenUsagePanelSummarySnapshot: Equatable {
         totalTokens = summary.totalTokens
         self.displayMode = displayMode
 
-        let toolTotals = summary.toolTotals.reduce(into: [TokenUsageAITool: Int]()) { totals, element in
-            guard let tool = TokenUsageAITool(rawValue: element.key) else {
-                return
-            }
-            totals[tool] = element.value
-        }
-        toolRows = Self.rows(
-            tokenValues: toolTotals,
+        toolRows = TokenUsageDashboardRowBuilder.rawRows(
+            tokenValues: summary.toolTotals,
             totalTokens: summary.totalTokens,
             displayMode: displayMode,
-            id: { $0.rawValue },
-            label: { $0.dashboardLabel(language: language) }
+            id: { (tool: TokenUsageAITool) in tool.rawValue },
+            label: { (tool: TokenUsageAITool) in tool.dashboardLabel(language: language) }
         )
 
-        let taskTotals = summary.taskTotals.reduce(into: [TokenUsageTaskType: Int]()) { totals, element in
-            guard let taskType = TokenUsageTaskType(rawValue: element.key) else {
-                return
-            }
-            totals[taskType] = element.value
-        }
-        taskRows = Self.rows(
-            tokenValues: taskTotals,
+        taskRows = TokenUsageDashboardRowBuilder.rawRows(
+            tokenValues: summary.taskTotals,
             totalTokens: summary.totalTokens,
             displayMode: displayMode,
-            id: { $0.rawValue },
-            label: { $0.dashboardLabel(language: language) }
+            id: { (taskType: TokenUsageTaskType) in taskType.rawValue },
+            label: { (taskType: TokenUsageTaskType) in taskType.dashboardLabel(language: language) }
         )
 
-        let sourceTotals = summary.sourceTotals.reduce(into: [TokenUsageSource: Int]()) { totals, element in
-            guard let source = TokenUsageSource(rawValue: element.key) else {
-                return
-            }
-            totals[source] = element.value
-        }
-        sourceRows = Self.rows(
-            tokenValues: sourceTotals,
+        sourceRows = TokenUsageDashboardRowBuilder.rawRows(
+            tokenValues: summary.sourceTotals,
             totalTokens: summary.totalTokens,
             displayMode: displayMode,
-            id: { $0.rawValue },
-            label: { $0.label(language: language) }
+            id: { (source: TokenUsageSource) in source.rawValue },
+            label: { (source: TokenUsageSource) in source.label(language: language) }
         )
     }
 
@@ -116,44 +182,6 @@ struct TokenUsagePanelSummarySnapshot: Equatable {
     }
 
     static let empty = TokenUsagePanelSummarySnapshot(summary: .empty)
-
-    private static func rows<Key: Hashable>(
-        tokenValues: [Key: Int],
-        totalTokens: Int,
-        displayMode: TokenUsageDisplayMode,
-        id: (Key) -> String,
-        label: (Key) -> String
-    ) -> [TokenUsageDashboardBarRow] {
-        tokenValues.keys
-            .compactMap { key -> TokenUsageDashboardBarRow? in
-                let tokens = tokenValues[key, default: 0]
-                guard tokens > 0 else {
-                    return nil
-                }
-
-                let value: String
-                let ratio = totalTokens > 0 ? Double(tokens) / Double(totalTokens) : 0.0
-                switch displayMode {
-                case .tokens:
-                    value = TokenUsageDashboardSnapshot.formatTokens(tokens)
-                case .percentage:
-                    value = TokenUsageDashboardSnapshot.formatPercentage(ratio * 100.0)
-                }
-
-                return TokenUsageDashboardBarRow(
-                    id: id(key),
-                    title: label(key),
-                    value: value,
-                    ratio: ratio
-                )
-            }
-            .sorted { lhs, rhs in
-                if lhs.ratio == rhs.ratio {
-                    return lhs.title < rhs.title
-                }
-                return lhs.ratio > rhs.ratio
-            }
-    }
 }
 
 struct TokenUsageDashboardSessionRow: Identifiable, Equatable {
@@ -245,6 +273,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
     let sourceRows: [TokenUsageDashboardBarRow]
     let sessions: [TokenUsageDashboardSessionRow]
     let selectedSession: TokenUsageDashboardSessionRow?
+    let trendBuckets: [TokenUsageDashboardTrendBucket]
     let calendarDays: [TokenUsageDashboardCalendarDay]
     let calendarMonthTitle: String
     let calendarWeekdayTitles: [String]
@@ -408,21 +437,11 @@ struct TokenUsageDashboardSnapshot: Equatable {
         todayCalendarDayID = Self.dayID(for: now, calendar: calendar)
         todayCalendarDayTitle = Self.formatCalendarDayTitle(now, locale: locale, timeZone: timeZone)
 
-        codexLastUpdated = dashboardEvents
-            .filter { $0.event.aiTool == .codex }
-            .compactMap(\.createdAt)
-            .max()
-        claudeLastUpdated = dashboardEvents
-            .filter { $0.event.aiTool == .claude }
-            .compactMap(\.createdAt)
-            .max()
-        antigravityLastUpdated = dashboardEvents
-            .filter { $0.event.aiTool == .antigravity }
-            .compactMap(\.createdAt)
-            .max()
-        overallLastUpdated = dashboardEvents
-            .compactMap(\.createdAt)
-            .max()
+        let lastUpdatedDates = Self.lastUpdatedDates(in: dashboardEvents)
+        codexLastUpdated = lastUpdatedDates.codex
+        claudeLastUpdated = lastUpdatedDates.claude
+        antigravityLastUpdated = lastUpdatedDates.antigravity
+        overallLastUpdated = lastUpdatedDates.overall
 
         let selectedDashboardTool = selectedTool.flatMap { tool in
             tool.isDashboardTool ? tool : nil
@@ -539,7 +558,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
             ]
         }
 
-        toolRows = Self.rows(
+        toolRows = TokenUsageDashboardRowBuilder.rows(
             tokenValues: visibleCapturedToolTokens,
             totalTokens: totalTokens,
             displayMode: displayMode,
@@ -548,7 +567,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
         )
 
         let modelTokens = Self.tokenTotals(events: focusedEvents) { Self.modelKey($0.event.model) }
-        modelRows = Self.rows(
+        modelRows = TokenUsageDashboardRowBuilder.rows(
             tokenValues: modelTokens,
             totalTokens: totalTokens,
             displayMode: displayMode,
@@ -557,7 +576,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
         )
 
         let taskTokens = Self.tokenTotals(events: focusedEvents) { $0.event.taskType }
-        taskRows = Self.rows(
+        taskRows = TokenUsageDashboardRowBuilder.rows(
             tokenValues: taskTokens,
             totalTokens: totalTokens,
             displayMode: displayMode,
@@ -566,7 +585,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
         )
 
         let stageTokens = Self.tokenTotals(events: focusedEvents) { $0.event.stage }
-        stageRows = Self.rows(
+        stageRows = TokenUsageDashboardRowBuilder.rows(
             tokenValues: stageTokens,
             totalTokens: totalTokens,
             displayMode: displayMode,
@@ -581,7 +600,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
             displayMode: displayMode,
             language: language
         )
-        sourceRows = Self.rows(
+        sourceRows = TokenUsageDashboardRowBuilder.rows(
             tokenValues: sourceTokens,
             totalTokens: totalTokens,
             displayMode: displayMode,
@@ -591,6 +610,14 @@ struct TokenUsageDashboardSnapshot: Equatable {
 
         sessions = sessionRows
         selectedSession = selectedSessionRow
+        trendBuckets = TokenUsageDashboardTrendBucketBuilder.buckets(
+            events: focusedEvents.map(\.event),
+            selectedPeriod: selectedPeriod,
+            now: now,
+            calendar: calendar,
+            locale: locale,
+            timeZone: timeZone
+        )
 
         // Comparison period tokens (nil when a work item is selected or period is .all)
         if selectedSessionRow != nil || selectedDayID != nil {
@@ -608,16 +635,16 @@ struct TokenUsageDashboardSnapshot: Equatable {
                 }
                 comparisonTotalTokens = compEvents.isEmpty ? nil : compEvents.reduce(0) { $0 + $1.event.totalTokens }
             case .sevenDays:
-                let sevenDaysAgo = calendar.date(byAdding: .day, value: -7, to: now) ?? now
-                let fourteenDaysAgo = calendar.date(byAdding: .day, value: -7, to: sevenDaysAgo) ?? now
+                let sevenDaysAgo = Self.periodStartDate(dayCount: 7, now: now, calendar: calendar)
+                let fourteenDaysAgo = calendar.date(byAdding: .day, value: -7, to: sevenDaysAgo) ?? sevenDaysAgo
                 let compEvents = toolFilteredEvents.filter { event in
                     guard let date = event.createdAt else { return false }
                     return date >= fourteenDaysAgo && date < sevenDaysAgo
                 }
                 comparisonTotalTokens = compEvents.isEmpty ? nil : compEvents.reduce(0) { $0 + $1.event.totalTokens }
             case .thirtyDays:
-                let thirtyDaysAgo = calendar.date(byAdding: .day, value: -30, to: now) ?? now
-                let sixtyDaysAgo = calendar.date(byAdding: .day, value: -30, to: thirtyDaysAgo) ?? now
+                let thirtyDaysAgo = Self.periodStartDate(dayCount: 30, now: now, calendar: calendar)
+                let sixtyDaysAgo = calendar.date(byAdding: .day, value: -30, to: thirtyDaysAgo) ?? thirtyDaysAgo
                 let compEvents = toolFilteredEvents.filter { event in
                     guard let date = event.createdAt else { return false }
                     return date >= sixtyDaysAgo && date < thirtyDaysAgo
@@ -677,6 +704,45 @@ struct TokenUsageDashboardSnapshot: Equatable {
 
     static let empty = TokenUsageDashboardSnapshot(events: [])
 
+    private struct LastUpdatedDates {
+        var codex: Date?
+        var claude: Date?
+        var antigravity: Date?
+        var overall: Date?
+    }
+
+    private static func lastUpdatedDates(in events: [TokenUsageDashboardParsedEvent]) -> LastUpdatedDates {
+        var dates = LastUpdatedDates()
+
+        for event in events {
+            guard let createdAt = event.createdAt else {
+                continue
+            }
+
+            dates.overall = laterDate(dates.overall, createdAt)
+            switch event.event.aiTool {
+            case .codex:
+                dates.codex = laterDate(dates.codex, createdAt)
+            case .claude:
+                dates.claude = laterDate(dates.claude, createdAt)
+            case .antigravity:
+                dates.antigravity = laterDate(dates.antigravity, createdAt)
+            default:
+                break
+            }
+        }
+
+        return dates
+    }
+
+    private static func laterDate(_ current: Date?, _ candidate: Date) -> Date {
+        guard let current else {
+            return candidate
+        }
+
+        return max(current, candidate)
+    }
+
     static func formatTokens(_ value: Int) -> String {
         let absoluteValue = Swift.abs(Double(value))
         let units: [(threshold: Double, divisor: Double, suffix: String)] = [
@@ -730,12 +796,21 @@ struct TokenUsageDashboardSnapshot: Equatable {
         case .today:
             return calendar.startOfDay(for: now)
         case .sevenDays:
-            return calendar.date(byAdding: .day, value: -7, to: now)
+            return periodStartDate(dayCount: 7, now: now, calendar: calendar)
         case .thirtyDays:
-            return calendar.date(byAdding: .day, value: -30, to: now)
+            return periodStartDate(dayCount: 30, now: now, calendar: calendar)
         case .all:
             return nil
         }
+    }
+
+    static func periodStartDate(
+        dayCount: Int,
+        now: Date,
+        calendar: Calendar
+    ) -> Date {
+        let todayStart = calendar.startOfDay(for: now)
+        return calendar.date(byAdding: .day, value: -(dayCount - 1), to: todayStart) ?? todayStart
     }
 
     static func visibleEvents(events: [TokenUsageEvent], selectedTool: TokenUsageAITool?) -> [TokenUsageEvent] {
@@ -777,47 +852,6 @@ struct TokenUsageDashboardSnapshot: Equatable {
         return "\(number)%"
     }
 
-    private static func rows<Key: Hashable>(
-        tokenValues: [Key: Int],
-        totalTokens: Int,
-        displayMode: TokenUsageDisplayMode,
-        id: (Key) -> String,
-        label: (Key) -> String
-    ) -> [TokenUsageDashboardBarRow] {
-        tokenValues.keys
-            .compactMap { key -> TokenUsageDashboardBarRow? in
-                let tokens = tokenValues[key, default: 0]
-
-                guard tokens > 0 else { return nil }
-
-                let valueStr: String
-                let ratio: Double
-
-                switch displayMode {
-                case .tokens:
-                    valueStr = Self.formatTokens(tokens)
-                    ratio = totalTokens > 0 ? Double(tokens) / Double(totalTokens) : 0.0
-                case .percentage:
-                    let pct = totalTokens > 0 ? (Double(tokens) / Double(totalTokens)) * 100.0 : 0.0
-                    valueStr = Self.formatPercentage(pct)
-                    ratio = totalTokens > 0 ? Double(tokens) / Double(totalTokens) : 0.0
-                }
-
-                return TokenUsageDashboardBarRow(
-                    id: id(key),
-                    title: label(key),
-                    value: valueStr,
-                    ratio: ratio
-                )
-            }
-            .sorted { (row1, row2) -> Bool in
-                if row1.ratio == row2.ratio {
-                    return row1.title < row2.title
-                }
-                return row1.ratio > row2.ratio
-            }
-    }
-
     private static func tokenTotals<Key: Hashable>(
         events: [TokenUsageDashboardParsedEvent],
         by key: (TokenUsageDashboardParsedEvent) -> Key
@@ -846,8 +880,8 @@ struct TokenUsageDashboardSnapshot: Equatable {
             TokenUsageWorkflowAssistance.isAssisted(event.event)
         }
         let assistedTokens = assistedEvents.reduce(0) { $0 + $1.event.totalTokens }
-        let workRatio = Double(assistedEvents.count) / Double(events.count)
-        let tokenRatio = totalTokens > 0 ? Double(assistedTokens) / Double(totalTokens) : 0.0
+        let workRatio = chartRatio(tokens: assistedEvents.count, totalTokens: events.count)
+        let tokenRatio = chartRatio(tokens: assistedTokens, totalTokens: totalTokens)
 
         return TokenUsageDashboardWorkflowUsage(rows: [
             TokenUsageDashboardBarRow(
@@ -938,25 +972,15 @@ struct TokenUsageDashboardSnapshot: Equatable {
             )
         ]
 
-        return candidates.compactMap { candidate in
-            guard candidate.tokens > 0 else {
-                return nil
-            }
-            let ratio = Double(candidate.tokens) / Double(totalTokens)
-            let value: String
-            switch displayMode {
-            case .tokens:
-                value = Self.formatTokens(candidate.tokens)
-            case .percentage:
-                value = Self.formatPercentage(ratio * 100.0)
-            }
-            return TokenUsageDashboardBarRow(
-                id: candidate.id,
-                title: candidate.title,
-                value: value,
-                ratio: ratio
-            )
-        }
+        return TokenUsageDashboardRowBuilder.rows(
+            candidates: candidates,
+            totalTokens: totalTokens,
+            displayMode: displayMode,
+            tokens: { $0.tokens },
+            id: { $0.id },
+            label: { $0.title },
+            sorted: false
+        )
     }
 
     private static func sessionRows(
@@ -992,7 +1016,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
                 case .tokens:
                     valueStr = Self.formatTokens(totalT)
                 case .percentage:
-                    let pct = totalTokens > 0 ? (Double(totalT) / Double(totalTokens)) * 100.0 : 0.0
+                    let pct = Self.chartRatio(tokens: totalT, totalTokens: totalTokens) * 100.0
                     valueStr = Self.formatPercentage(pct)
                 }
 
@@ -1215,7 +1239,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
                 day: day,
                 title: dayFormatter.string(from: cursor),
                 detail: "\(calendarDayTitle) · \(formatTokens(tokens))",
-                ratio: tokens > 0 ? Double(tokens) / Double(maxTokens) : 0.0,
+                ratio: chartRatio(tokens: tokens, totalTokens: maxTokens),
                 isCurrentMonth: true,
                 hasEvents: !groupedEvents.isEmpty,
                 isPlaceholder: false,
@@ -1262,6 +1286,18 @@ struct TokenUsageDashboardSnapshot: Equatable {
             return currentMonth
         }
         return proposed
+    }
+
+    static func chartRatio(tokens: Int, totalTokens: Int) -> Double {
+        guard tokens > 0, totalTokens > 0 else {
+            return 0.0
+        }
+
+        let ratio = Double(tokens) / Double(totalTokens)
+        guard ratio.isFinite else {
+            return 0.0
+        }
+        return min(max(ratio, 0.0), 1.0)
     }
 
     private static func normalizedCalendarMonthStart(

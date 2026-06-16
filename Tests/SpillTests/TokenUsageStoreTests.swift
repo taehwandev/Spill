@@ -517,9 +517,42 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(snapshot.isDetailAttributionMostlyUnavailable)
     }
 
+    func testDashboardSnapshotClampsChartRatiosWhenBreakdownExceedsTotal() {
+        let event = Self.safeEvent(
+            aiTool: .antigravity,
+            spanID: "span_agy_oversized_breakdown",
+            inputTokens: 5,
+            outputTokens: 5,
+            tokenBreakdown: TokenUsageBreakdown(
+                system: 60,
+                user: 20,
+                history: 0,
+                repoContext: 0,
+                toolOutput: 0,
+                generatedOutput: 0,
+                unknown: 0
+            )
+        )
+
+        let snapshot = TokenUsageDashboardSnapshot(events: [event])
+        let systemRow = snapshot.sourceRows.first { $0.id == "system" }
+
+        XCTAssertEqual(snapshot.totalTokens, 10)
+        XCTAssertEqual(systemRow?.value, "60")
+        XCTAssertEqual(systemRow?.ratio, 1.0)
+        XCTAssertTrue(snapshot.sourceRows.allSatisfy { row in
+            row.ratio.isFinite && row.ratio >= 0.0 && row.ratio <= 1.0
+        })
+        XCTAssertTrue(snapshot.detailQualityRows.allSatisfy { row in
+            row.ratio.isFinite && row.ratio >= 0.0 && row.ratio <= 1.0
+        })
+    }
+
     func testDashboardViewSimplifiesClearActions() throws {
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let dashboardView = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardView.swift"))
+        let trendChart = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardTrendChart.swift"))
+        let trendBucketBuilder = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenUsageDashboardTrendBucketBuilder.swift"))
         let preferencesSection = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Preferences/TokenMeteringPreferencesSection.swift"))
 
         XCTAssertFalse(dashboardView.contains("dataManagementPanel"))
@@ -537,6 +570,21 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertFalse(dashboardView.contains("diagnosticsPanel"))
         XCTAssertFalse(dashboardView.contains("runLocalQueueSelfTest()"))
         XCTAssertFalse(dashboardView.contains("t(.avgLatency)"))
+        XCTAssertFalse(dashboardView.contains("import Charts"))
+        XCTAssertFalse(dashboardView.contains("BarMark("))
+        XCTAssertFalse(dashboardView.contains("SectorMark("))
+        XCTAssertTrue(dashboardView.contains("private var shouldShowTrendChart: Bool"))
+        XCTAssertTrue(dashboardView.contains("guard store.snapshot.selectedCalendarDayID == nil else"))
+        XCTAssertTrue(dashboardView.contains("case .sevenDays, .thirtyDays, .all:"))
+        XCTAssertTrue(dashboardView.contains("if shouldShowTrendChart"))
+        XCTAssertTrue(dashboardView.contains("store.snapshot.trendBuckets"))
+        XCTAssertTrue(dashboardView.contains("TokenMeteringDashboardTrendChart(buckets: trendBuckets)"))
+        XCTAssertFalse(dashboardView.contains("private func trendBars"))
+        XCTAssertTrue(trendChart.contains("struct TokenMeteringDashboardTrendChart: View"))
+        XCTAssertTrue(trendBucketBuilder.contains("enum TokenUsageDashboardTrendBucketBuilder"))
+        XCTAssertTrue(trendBucketBuilder.contains("static func buckets("))
+        XCTAssertTrue(trendBucketBuilder.contains("private static func dailyBuckets("))
+        XCTAssertTrue(trendBucketBuilder.contains("private static func monthlyBuckets("))
         XCTAssertTrue(preferencesSection.contains("localDataManagementSection"))
         XCTAssertTrue(preferencesSection.contains("Text(t(.localDataManagementDetail))"))
         XCTAssertTrue(preferencesSection.contains("DisclosureGroup(isExpanded: $showsLocalDataDeleteControls)"))
@@ -2791,6 +2839,115 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(snapshot.calendarDays.contains { $0.id == "2026-06-05" && $0.hasEvents })
     }
 
+    func testDashboardSnapshotBuildsDailyTrendBucketsForPeriodRanges() throws {
+        let timeZone = try XCTUnwrap(TimeZone(identifier: "UTC"))
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let now = try Self.date("2026-06-15T12:00:00.000Z")
+        let events = [
+            Self.safeEvent(
+                spanID: "span_before_30_days",
+                inputTokens: 900,
+                outputTokens: 100,
+                createdAt: "2026-05-01T12:00:00.000Z"
+            ),
+            Self.safeEvent(
+                spanID: "span_inside_30_days",
+                inputTokens: 100,
+                outputTokens: 50,
+                createdAt: "2026-06-01T12:00:00.000Z"
+            ),
+            Self.safeEvent(
+                spanID: "span_before_seven_calendar_days",
+                inputTokens: 1_000,
+                outputTokens: 0,
+                createdAt: "2026-06-08T13:00:00.000Z"
+            ),
+            Self.safeEvent(
+                spanID: "span_seven_days_start",
+                inputTokens: 100,
+                outputTokens: 50,
+                createdAt: "2026-06-09T12:00:00.000Z"
+            ),
+            Self.safeEvent(
+                spanID: "span_seven_days_peak",
+                inputTokens: 250,
+                outputTokens: 50,
+                createdAt: "2026-06-10T12:00:00.000Z"
+            ),
+            Self.safeEvent(
+                spanID: "span_today_trend",
+                inputTokens: 40,
+                outputTokens: 10,
+                createdAt: "2026-06-15T08:00:00.000Z"
+            )
+        ]
+
+        let sevenDays = TokenUsageDashboardSnapshot(
+            events: events,
+            selectedPeriod: .sevenDays,
+            now: now,
+            calendar: calendar,
+            locale: Locale(identifier: "en_US_POSIX"),
+            timeZone: timeZone
+        )
+        XCTAssertEqual(sevenDays.trendBuckets.count, 7)
+        XCTAssertEqual(sevenDays.trendBuckets.first?.id, "2026-06-09")
+        XCTAssertEqual(sevenDays.trendBuckets.last?.id, "2026-06-15")
+        XCTAssertFalse(sevenDays.trendBuckets.contains { $0.id == "2026-06-01" })
+        XCTAssertEqual(sevenDays.totalTokens, 500)
+        XCTAssertEqual(sevenDays.trendBuckets.first { $0.id == "2026-06-10" }?.ratio ?? -1, 1.0, accuracy: 0.0001)
+        XCTAssertTrue(sevenDays.trendBuckets.first { $0.id == "2026-06-15" }?.hasEvents == true)
+
+        let thirtyDays = TokenUsageDashboardSnapshot(
+            events: events,
+            selectedPeriod: .thirtyDays,
+            now: now,
+            calendar: calendar,
+            locale: Locale(identifier: "en_US_POSIX"),
+            timeZone: timeZone
+        )
+        XCTAssertEqual(thirtyDays.trendBuckets.count, 30)
+        XCTAssertEqual(thirtyDays.trendBuckets.first?.id, "2026-05-17")
+        XCTAssertEqual(thirtyDays.trendBuckets.last?.id, "2026-06-15")
+        XCTAssertTrue(thirtyDays.trendBuckets.contains { $0.id == "2026-06-01" && $0.hasEvents })
+    }
+
+    func testDashboardSnapshotBuildsMonthlyTrendBucketsForAllPeriod() throws {
+        let timeZone = try XCTUnwrap(TimeZone(identifier: "UTC"))
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let events = [
+            Self.safeEvent(
+                spanID: "span_january_trend",
+                inputTokens: 100,
+                outputTokens: 0,
+                createdAt: "2026-01-15T12:00:00.000Z"
+            ),
+            Self.safeEvent(
+                spanID: "span_march_trend",
+                inputTokens: 200,
+                outputTokens: 0,
+                createdAt: "2026-03-03T12:00:00.000Z"
+            )
+        ]
+
+        let snapshot = TokenUsageDashboardSnapshot(
+            events: events,
+            selectedPeriod: .all,
+            now: try Self.date("2026-06-15T12:00:00.000Z"),
+            calendar: calendar,
+            locale: Locale(identifier: "en_US_POSIX"),
+            timeZone: timeZone
+        )
+
+        XCTAssertEqual(snapshot.trendBuckets.map(\.id), ["2026-01", "2026-02", "2026-03"])
+        XCTAssertTrue(snapshot.trendBuckets.contains { $0.id == "2026-02" && !$0.hasEvents && $0.ratio == 0 })
+        XCTAssertEqual(snapshot.trendBuckets.first { $0.id == "2026-01" }?.ratio ?? -1, 0.5, accuracy: 0.0001)
+        XCTAssertEqual(snapshot.trendBuckets.first { $0.id == "2026-03" }?.ratio ?? -1, 1.0, accuracy: 0.0001)
+        XCTAssertTrue(snapshot.trendBuckets.first { $0.id == "2026-03" }?.title.contains("Mar") == true)
+    }
+
     private static func safeEvent(
         aiTool: TokenUsageAITool = .codex,
         runID: String = "run_local_01",
@@ -2798,6 +2955,7 @@ final class TokenUsageStoreTests: XCTestCase {
         inputTokens: Int = 100,
         outputTokens: Int = 50,
         generatedOutput: Int? = nil,
+        tokenBreakdown overrideTokenBreakdown: TokenUsageBreakdown? = nil,
         taskType: TokenUsageTaskType = .analysis,
         stage: TokenUsageStage = .plan,
         model: String = "local-manual",
@@ -2807,7 +2965,9 @@ final class TokenUsageStoreTests: XCTestCase {
         let resolvedCreatedAt = createdAt ?? ISO8601DateFormatter.tokenUsage.string(from: Date())
         let totalTokens = inputTokens + outputTokens
         let tokenBreakdown: TokenUsageBreakdown
-        if let generatedOutput {
+        if let overrideTokenBreakdown {
+            tokenBreakdown = overrideTokenBreakdown
+        } else if let generatedOutput {
             tokenBreakdown = TokenUsageBreakdown(
                 system: 0,
                 user: 0,
