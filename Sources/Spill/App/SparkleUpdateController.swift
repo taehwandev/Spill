@@ -46,24 +46,18 @@ final class SparkleUpdateController: NSObject, SPUUpdaterDelegate {
     }
 }
 
-private final class SparkleVersionComparator: NSObject, SUVersionComparison {
+final class SparkleVersionComparator: NSObject, SUVersionComparison {
+    let localBundleVersion: String
+    let localShortVersion: String
+
+    init(bundle: Bundle = .main) {
+        self.localBundleVersion = bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? ""
+        self.localShortVersion = bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
+    }
+
     func compareVersion(_ versionA: String, toVersion versionB: String) -> ComparisonResult {
-        let localVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? ""
-        let localShort = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
-
-        var normalizedA = versionA
-        var normalizedB = versionB
-
-        // If Sparkle passes the build version placeholder (e.g. "1"), substitute with the actual short version
-        if versionA == localVersion {
-            normalizedA = localShort
-        }
-        if versionB == localVersion {
-            normalizedB = localShort
-        }
-
-        let a = DottedVersion(normalizedA) ?? .zero
-        let b = DottedVersion(normalizedB) ?? .zero
+        let a = DottedVersion(normalizing: versionA, bundleVersion: localBundleVersion, shortVersion: localShortVersion) ?? .zero
+        let b = DottedVersion(versionB) ?? .zero
 
         if a < b {
             return .orderedAscending

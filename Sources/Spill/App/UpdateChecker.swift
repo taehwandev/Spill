@@ -246,6 +246,16 @@ struct DottedVersion: Comparable, CustomStringConvertible, Equatable, Sendable {
         components = [version.majorVersion, version.minorVersion, version.patchVersion]
     }
 
+    // Normalizes a Sparkle version string: if it matches the installed bundle version (e.g. a legacy "1"
+    // build number placeholder), substitutes the short version string so cross-week comparisons work.
+    init?(normalizing version: String, bundleVersion: String, shortVersion: String) {
+        let resolved = version == bundleVersion && !shortVersion.isEmpty ? shortVersion : version
+        guard let parsed = DottedVersion(resolved) else {
+            return nil
+        }
+        self = parsed
+    }
+
     private init(components: [Int]) {
         self.components = components
     }
