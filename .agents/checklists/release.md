@@ -77,6 +77,9 @@ procedure. This checklist is the Spill-specific quick gate before closeout.
       `SPILL_INSTALLER_APTABASE_APP_KEY` are optional separate-key overrides.
 - [ ] GitHub Secrets include `SPARKLE_PUBLIC_ED_KEY` and
       `SPARKLE_PRIVATE_ED_KEY`.
+- [ ] GitHub Actions workflow token can publish releases: repository workflow
+      permissions are `write` or the release workflow uses a dedicated
+      write-capable release token.
 - [ ] GitHub `Release` workflow completed successfully.
 - [ ] GitHub Release for `v<version>` exists.
 - [ ] Stable and versioned assets are attached.

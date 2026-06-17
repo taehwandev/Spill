@@ -50,6 +50,8 @@ TEXT_SUFFIXES = {
 }
 TEXT_FILENAMES = {"Package.swift", ".gitignore"}
 EXCLUDED_DIRS = {
+    ".agentplaybook",
+    ".claude",
     ".git",
     ".build",
     ".swiftpm",
