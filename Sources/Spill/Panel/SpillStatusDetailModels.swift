@@ -141,16 +141,21 @@ enum SpillStatusDetailRows {
 
         rows.append(contentsOf: [
             SpillStatusDetailRow(label: AppL10n.text(.cpu), value: summary.cpuPercentText),
-            SpillStatusDetailRow(label: AppL10n.text(.memory), value: SystemMemoryProvider.formatBytes(summary.memoryBytes))
+            SpillStatusDetailRow(label: AppL10n.text(.memory), value: summary.memoryText)
         ])
 
         rows.append(contentsOf: summary.processes.prefix(4).map { process in
-            SpillStatusDetailRow(
+            let cpuText = LocalAIProcessSummary.formatCPUPercent(process.cpuPercent, isAvailable: process.metricsAvailable)
+            let memoryText = process.metricsAvailable
+                ? SystemMemoryProvider.formatBytes(process.memoryBytes)
+                : LocalAIProcessSummary.unavailableMetricText
+
+            return SpillStatusDetailRow(
                 label: "\(AppL10n.text(.process)) \(process.processID)",
                 value: [
                     process.executableName,
-                    "CPU \(LocalAIProcessSummary.formatCPUPercent(process.cpuPercent))",
-                    SystemMemoryProvider.formatBytes(process.memoryBytes)
+                    "CPU \(cpuText)",
+                    memoryText
                 ].joined(separator: " / ")
             )
         })

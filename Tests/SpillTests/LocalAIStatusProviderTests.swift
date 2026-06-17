@@ -2,6 +2,126 @@ import XCTest
 @testable import Spill
 
 final class LocalAIStatusProviderTests: XCTestCase {
+    func testProcessSnapshotReaderParsesCommandOnlyRows() throws {
+        let snapshot = try XCTUnwrap(LocalAIProcessSnapshotReader.parseLine("  123 /opt/homebrew/bin/codex --model gpt-5.2"))
+
+        XCTAssertEqual(snapshot.processID, 123)
+        XCTAssertEqual(snapshot.executableName, "codex")
+        XCTAssertEqual(snapshot.cpuPercent, 0)
+        XCTAssertEqual(snapshot.memoryBytes, 0)
+        XCTAssertEqual(snapshot.commandLine, "/opt/homebrew/bin/codex --model gpt-5.2")
+        XCTAssertEqual(snapshot.executableToken, "/opt/homebrew/bin/codex")
+    }
+
+    func testProcessMetricDeltaCalculatesRecentCPUPercent() {
+        let previous = LocalAIProcessMetricSample(
+            processID: 123,
+            timestamp: Date(timeIntervalSince1970: 10),
+            cpuTimeNanoseconds: 1_000_000_000,
+            processStartTimeNanoseconds: 500_000
+        )
+        let current = LocalAIProcessMetricSample(
+            processID: 123,
+            timestamp: Date(timeIntervalSince1970: 12),
+            cpuTimeNanoseconds: 1_500_000_000,
+            processStartTimeNanoseconds: 500_000
+        )
+
+        XCTAssertEqual(
+            LocalAIProcessSnapshotReader.cpuPercent(previous: previous, current: current),
+            25,
+            accuracy: 0.001
+        )
+    }
+
+    func testProcessMetricDeltaIgnoresReusedPIDWithDifferentStartTime() {
+        let previous = LocalAIProcessMetricSample(
+            processID: 123,
+            timestamp: Date(timeIntervalSince1970: 10),
+            cpuTimeNanoseconds: 3_000_000_000,
+            processStartTimeNanoseconds: 500_000
+        )
+        let current = LocalAIProcessMetricSample(
+            processID: 123,
+            timestamp: Date(timeIntervalSince1970: 12),
+            cpuTimeNanoseconds: 5_000_000_000,
+            processStartTimeNanoseconds: 900_000
+        )
+
+        XCTAssertEqual(LocalAIProcessSnapshotReader.cpuPercent(previous: previous, current: current), 0)
+    }
+
+    func testUnavailableProcessMetricsRenderAsUnavailableInsteadOfZero() {
+        let summary = LocalAIProcessSummary(
+            processes: [
+                LocalAIProcessSnapshot(
+                    processID: 123,
+                    executableName: "codex",
+                    cpuPercent: 42,
+                    memoryBytes: 128 * 1024 * 1024,
+                    metricsAvailable: false,
+                    commandLine: "/opt/homebrew/bin/codex"
+                )
+            ]
+        )
+
+        XCTAssertEqual(summary.cpuPercent, 0)
+        XCTAssertEqual(summary.memoryBytes, 0)
+        XCTAssertEqual(summary.cpuPercentText, "N/A")
+        XCTAssertEqual(summary.memoryText, "N/A")
+    }
+
+    func testCPUPercentTextIsBoundedForCompactDisplay() {
+        XCTAssertEqual(LocalAIProcessSummary.formatCPUPercent(1600), "100%+")
+    }
+
+    func testProcessSnapshotReaderSamplesMetricsOnlyForKnownAIToolCandidates() {
+        XCTAssertTrue(LocalAIProcessSnapshotReader.isKnownAIToolProcess(
+            LocalAIProcessSnapshot(
+                processID: 123,
+                executableName: "env",
+                cpuPercent: 0,
+                memoryBytes: 0,
+                commandLine: "/usr/bin/env PATH=/opt/homebrew/bin /opt/homebrew/bin/codex --model gpt-5.2"
+            )
+        ))
+        XCTAssertTrue(LocalAIProcessSnapshotReader.isKnownAIToolProcess(
+            LocalAIProcessSnapshot(
+                processID: 124,
+                executableName: "Antigravity IDE",
+                cpuPercent: 0,
+                memoryBytes: 0,
+                commandLine: "/Applications/Antigravity IDE.app/Contents/MacOS/Antigravity IDE"
+            )
+        ))
+        XCTAssertFalse(LocalAIProcessSnapshotReader.isKnownAIToolProcess(
+            LocalAIProcessSnapshot(
+                processID: 125,
+                executableName: "Safari",
+                cpuPercent: 0,
+                memoryBytes: 0,
+                commandLine: "/Applications/Safari.app/Contents/MacOS/Safari"
+            )
+        ))
+    }
+
+    func testProcessSnapshotReaderUsesMacOSProcessAPIsForMetrics() throws {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let source = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Providers/LocalAI/LocalAIProcessSnapshotReader.swift"))
+
+        XCTAssertTrue(source.contains("proc_pidinfo"))
+        XCTAssertTrue(source.contains("PROC_PIDTASKINFO"))
+        XCTAssertTrue(source.contains("proc_pid_rusage"))
+        XCTAssertTrue(source.contains("ri_phys_footprint"))
+        XCTAssertTrue(source.contains("candidateSnapshots.map(\\.processID)"))
+        XCTAssertTrue(source.contains("snapshots.filter(isKnownAIToolProcess)"))
+        XCTAssertTrue(source.contains("executableToken: snapshot.executableToken"))
+        XCTAssertTrue(source.contains("LocalAIRawProcessMetrics"))
+        XCTAssertTrue(source.contains("UInt64(taskInfo.pti_total_user) &+ UInt64(taskInfo.pti_total_system)"))
+        XCTAssertFalse(source.contains("pcpu=,rss="))
+        XCTAssertFalse(source.contains("LocalAICommandLineParser.tokens(from: snapshot.commandLine)"))
+    }
+
     func testDetectedProcessAndOpenAIConfigMapping() {
         let statuses = LocalAIStatusProvider.statuses(
             environment: ["OPENAI_API_KEY": "set"],
