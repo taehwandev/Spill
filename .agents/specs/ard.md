@@ -204,6 +204,27 @@ Rules:
 - The compact card should show aggregate process metrics when available. The
   detail popover should show aggregate CPU, memory, process count, and a short
   per-process list using safe executable names, pid, CPU, and memory.
+- AI process metrics should use macOS public process APIs when available rather
+  than parsing lifetime-average `ps` CPU output. Per-process CPU should be
+  derived from the delta of `proc_pidinfo` cumulative user and system CPU time
+  between samples, where 100% means one fully used CPU core. Memory should
+  prefer `proc_pid_rusage` footprint values such as `ri_phys_footprint`, falling
+  back to resident size when footprint is unavailable, so the UI better matches
+  Activity Monitor's default Memory column. The provider should read a broad
+  command list only for candidate discovery, then call expensive per-pid metric
+  APIs only for known local AI tool candidate processes. It must cache only
+  numeric pid, timestamp, and CPU-time sample state needed for delta
+  calculation.
+- The first sample for a new process may report zero or fallback CPU until a
+  later sample exists. Dashboard and panel refresh loops should provide a
+  moderate visible-surface refresh cadence instead of high-frequency polling.
+- First-class AI tool colors are a token metering dashboard presentation
+  contract. Codex, Claude Code, and Antigravity/AGY must resolve through one
+  shared color mapping used by top tool tabs, AI Tool Distribution rows, and
+  agent/process status cards. The shared mapping should use Codex teal, Claude
+  orange/coral, and Antigravity/AGY blue as the product identity colors. Selected
+  and unselected states may vary opacity but must not change the tool identity
+  color.
 - The visualization must not inspect prompts, transcripts, commands, file
   paths, repository names, shell history, logs, diffs, source content, process
   argument values beyond existing safe labels, or secret-bearing config values.
@@ -355,9 +376,8 @@ Rules:
   transcript text, logs, source content, user names, or other private content.
 - Cloud sync must not be triggered by local events.
 - Future account sync must keep token usage data sync and settings sync as
-  separate opt-in scopes. Usage data sync may never imply syncing local prompt
-  preferences, local aliases, adapter setup preferences, or dashboard display
-  preferences.
+  separate opt-in scopes. Usage data sync may never imply syncing local aliases,
+  adapter setup preferences, or dashboard display preferences.
 - Settings sync must support selected-setting sync in addition to all-settings
   sync so sensitive or workflow-specific local preferences can stay local while
   usage aggregates sync.

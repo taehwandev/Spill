@@ -10,6 +10,7 @@ final class TokenMeteringCoordinator: NSObject {
 
     private let settings: SpillSettings
     private let cloudServiceStatusStore: CloudServiceStatusStore
+    private let aiStatusStore: AIStatusStore
     private let bridgePort: UInt16
     private lazy var bridgeServer = TokenUsageBridgeServer(
         store: usageStore,
@@ -38,11 +39,13 @@ final class TokenMeteringCoordinator: NSObject {
     init(
         settings: SpillSettings,
         cloudServiceStatusStore: CloudServiceStatusStore,
+        aiStatusStore: AIStatusStore = AIStatusStore(),
         usageStore: TokenUsageStore = TokenUsageStoreEnvironment.store() ?? TokenUsageStore.live(),
         bridgePort: UInt16 = TokenMeteringCoordinator.makeTokenUsageBridgePort()
     ) {
         self.settings = settings
         self.cloudServiceStatusStore = cloudServiceStatusStore
+        self.aiStatusStore = aiStatusStore
         self.usageStore = usageStore
         self.bridgePort = bridgePort
         super.init()
@@ -359,6 +362,7 @@ final class TokenMeteringCoordinator: NSObject {
         let controller = TokenMeteringDashboardWindowController(
             store: dashboardStore,
             cloudServiceStatusStore: cloudServiceStatusStore,
+            aiStatusStore: aiStatusStore,
             settings: settings,
             refreshAction: { [weak self] in
                 self?.requestCollection(reason: "dashboard_refresh")

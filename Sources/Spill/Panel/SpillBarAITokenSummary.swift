@@ -253,17 +253,6 @@ struct SpillBarAITokenSummary: View {
     }
 
     private func toolColor(for toolID: String) -> Color {
-        switch toolID.lowercased() {
-        case "codex":
-            return .teal
-        case "claude":
-            return .purple
-        case "antigravity":
-            return .orange
-        case "openai":
-            return .blue
-        default:
-            return .secondary
-        }
+        TokenUsageAITool(rawValue: toolID.lowercased())?.dashboardTint ?? .secondary
     }
 }

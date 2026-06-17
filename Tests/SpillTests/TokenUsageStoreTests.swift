@@ -32,6 +32,9 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(TokenMeteringL10n.text(.dashboardTitle, language: .japanese), "ローカルトークン計測")
         XCTAssertEqual(TokenMeteringL10n.text(.displayModeShare, language: .korean), "비중 %")
         XCTAssertEqual(TokenMeteringL10n.text(.agentConnectionStatus, language: .korean), "에이전트 연결 상태")
+        XCTAssertEqual(TokenMeteringL10n.text(.agentStatusDetected, language: .english), "Detected")
+        XCTAssertTrue(TokenMeteringL10n.text(.agentStatusInfoDetail, language: .korean).contains("프롬프트"))
+        XCTAssertEqual(TokenMeteringL10n.text(.noAgentStatusData, language: .japanese), "ローカルエージェントは検出されていません")
         XCTAssertEqual(TokenMeteringL10n.text(.setupWorkflowLabelsTitle, language: .english), "2. Work labels are optional")
         XCTAssertEqual(TokenMeteringL10n.text(.copyWebSetup, language: .korean), "설치 명령 복사")
         XCTAssertEqual(TokenMeteringL10n.text(.adapterSetupRequired, language: .japanese), "ローカル追跡の設定が必要")
@@ -84,6 +87,13 @@ final class TokenUsageStoreTests: XCTestCase {
             .dashboardSubtitle,
             .aiToolDistribution,
             .aiToolDistributionSubtitle,
+            .agentConnectionStatus,
+            .agentStatusSubtitle,
+            .agentStatusInfoTitle,
+            .agentStatusInfoDetail,
+            .agentStatusDetected,
+            .noAgentStatusData,
+            .noAgentStatusDetail,
             .modelBreakdown,
             .modelInfoTitle,
             .modelInfoDetail,
@@ -333,6 +343,9 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(allSnapshot.totalTokens, 180)
         XCTAssertEqual(allSnapshot.toolRows.map(\.title), ["Codex", "Claude"])
         XCTAssertEqual(allSnapshot.toolFilters.first?.title, TokenMeteringL10n.text(.allTools))
+        XCTAssertNil(allSnapshot.toolFilters.first?.shareLabel)
+        XCTAssertEqual(allSnapshot.toolFilters.first { $0.tool == .codex }?.shareLabel, "83.3%")
+        XCTAssertEqual(allSnapshot.toolFilters.first { $0.tool == .claude }?.shareLabel, "16.7%")
         XCTAssertTrue(allSnapshot.toolFilters.first { $0.tool == .claude }?.detail.contains("30") == true)
         XCTAssertEqual(claudeSnapshot.eventCount, 1)
         XCTAssertEqual(claudeSnapshot.totalTokens, 30)
@@ -660,6 +673,7 @@ final class TokenUsageStoreTests: XCTestCase {
         let filterBar = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardFilterBar.swift"))
         let calendarControl = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardCalendarControl.swift"))
         let toolTab = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardToolTab.swift"))
+        let toolColor = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardToolColor.swift"))
         let chrome = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardChrome.swift"))
         let onboardingGuide = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardOnboardingGuide.swift"))
         let sessionsTable = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardSessionsTable.swift"))
@@ -675,11 +689,36 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(filterBar.contains("TokenMeteringDashboardToolTab("))
         XCTAssertTrue(filterBar.contains("TokenMeteringDashboardCalendarControl("))
         XCTAssertTrue(toolTab.contains("store.setSelectedTool(filter.tool)"))
+        XCTAssertTrue(toolTab.contains("let isSelected = store.selectedTool == filter.tool"))
+        XCTAssertTrue(toolTab.contains("filter.shareLabel"))
+        XCTAssertTrue(toolTab.contains("toolShareBadge("))
+        XCTAssertTrue(toolTab.contains("filter.tool?.dashboardTint"))
+        XCTAssertTrue(toolTab.contains("tabAccent.opacity(0.86)"))
+        XCTAssertTrue(toolTab.contains("tabAccent.opacity(0.68)"))
+        let tabDetailRange = try XCTUnwrap(toolTab.range(of: "Text(detail)"))
+        let tabShareRange = try XCTUnwrap(toolTab.range(of: "if let shareLabel = filter.shareLabel"))
+        let tabLiveDotRange = try XCTUnwrap(toolTab.range(of: "TokenMeteringLiveUpdateDot"))
+        XCTAssertLessThan(tabDetailRange.lowerBound, tabShareRange.lowerBound)
+        XCTAssertLessThan(tabShareRange.lowerBound, tabLiveDotRange.lowerBound)
+        XCTAssertTrue(analyticsGrid.contains("rowTint: aiToolTint"))
+        XCTAssertTrue(analyticsGrid.contains("TokenUsageAITool(rawValue: row.id.lowercased())?.dashboardTint ?? .secondary"))
+        XCTAssertTrue(toolColor.contains("extension TokenUsageAITool"))
+        XCTAssertTrue(toolColor.contains("enum TokenMeteringDashboardToolPalette"))
+        XCTAssertTrue(toolColor.contains("static let codex = Color(red: 0.04, green: 0.76, blue: 0.79)"))
+        XCTAssertTrue(toolColor.contains("static let claude = Color(red: 0.86, green: 0.45, blue: 0.28)"))
+        XCTAssertTrue(toolColor.contains("static let antigravity = Color(red: 0.12, green: 0.55, blue: 0.96)"))
+        XCTAssertTrue(toolColor.contains("case .codex:"))
+        XCTAssertTrue(toolColor.contains("case .claude:"))
+        XCTAssertTrue(toolColor.contains("case .antigravity:"))
+        XCTAssertTrue(dashboardStore.contains("rebuildSnapshotFromCurrentEventsAsync()"))
         XCTAssertTrue(dashboardView.contains("store.refreshAsync()"))
         XCTAssertTrue(dashboardView.contains("store.refreshAsyncIfIdle()"))
         XCTAssertTrue(dashboardWindowController.contains("store.refreshAsyncIfIdle()"))
         XCTAssertFalse(dashboardWindowController.contains("store.refreshAsync()"))
         XCTAssertTrue(dashboardWindowController.contains("deferredRefreshDelayNanoseconds"))
+        XCTAssertTrue(dashboardWindowController.contains("aiStatusRefreshIntervalNanoseconds: UInt64 = 8_000_000_000"))
+        XCTAssertTrue(dashboardWindowController.contains("startAIStatusRefreshLoop()"))
+        XCTAssertTrue(dashboardWindowController.contains("self.window?.isVisible == true"))
         XCTAssertTrue(dashboardWindowController.contains("!self.store.isDashboardRefreshInProgress"))
         XCTAssertTrue(dashboardAppDelegate.contains("loadsInitialPanelSummary: false"))
         XCTAssertTrue(dashboardView.contains("syncOnboardingPreviewFromSettings()"))
@@ -687,6 +726,9 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(dashboardView.contains("SpillBuildOptions.developerOptionsEnabled"))
         XCTAssertTrue(onboardingGuide.contains("developerOptionsAction()"))
         XCTAssertTrue(dashboardView.contains("private var dashboardBody"))
+        XCTAssertTrue(dashboardView.contains("private var agentStatusPanel"))
+        XCTAssertTrue(dashboardView.contains("TokenMeteringDashboardAgentStatusPanel("))
+        XCTAssertFalse(analyticsGrid.contains("TokenMeteringDashboardAgentStatusPanel("))
         XCTAssertTrue(dashboardView.contains("showsEmptyDashboardOverlay"))
         XCTAssertTrue(dashboardView.contains("showsDashboardPlaceholder"))
         XCTAssertTrue(dashboardView.contains(".disabled(showsEmptyDashboardOverlay)"))
@@ -794,6 +836,12 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(spillBarView.contains("SpillBarAISection("))
         XCTAssertTrue(spillBarAISection.contains("SpillBarAITokenSummary("))
         XCTAssertTrue(spillBarAISection.contains("SpillBarAIToolCard("))
+        XCTAssertTrue(spillBarAISection.contains("aiStatusDetailTint(for: status)"))
+        XCTAssertTrue(spillBarAISection.contains("status.kind.dashboardTint"))
+        XCTAssertTrue(spillBarAITokenSummary.contains("TokenUsageAITool(rawValue: toolID.lowercased())?.dashboardTint"))
+        XCTAssertFalse(spillBarAITokenSummary.contains("case \"antigravity\":"))
+        XCTAssertTrue(spillBarAIToolCard.contains("status.kind.dashboardTint"))
+        XCTAssertFalse(spillBarAIToolCard.contains("status.hasRunningProcesses ? .teal"))
         XCTAssertTrue(spillBarAITokenSummary.contains("setupPreview"))
         XCTAssertTrue(spillBarAITokenSummary.contains("tokenMeteringSettingsAction()"))
         XCTAssertFalse(spillBarView.contains("onboardingPreviewBanner"))
@@ -1202,7 +1250,7 @@ final class TokenUsageStoreTests: XCTestCase {
     }
 
     @MainActor
-    func testDashboardStoreUnfilteredSnapshotBypassesSelectedToolAndProjectFilters() throws {
+    func testDashboardStoreUnfilteredSnapshotBypassesSelectedToolAndProjectFilters() async throws {
         let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
         let dashboardStore = dashboardStore(usageStore: usageStore)
 
@@ -1227,6 +1275,7 @@ final class TokenUsageStoreTests: XCTestCase {
 
         dashboardStore.setSelectedTool(.claude)
         XCTAssertNil(dashboardStore.selectedProjectID)
+        try await waitForDashboardStoreRefresh(dashboardStore)
         XCTAssertEqual(dashboardStore.snapshot.eventCount, 1)
         XCTAssertEqual(dashboardStore.unfilteredSnapshot.eventCount, 2)
     }
@@ -3536,6 +3585,17 @@ final class TokenUsageStoreTests: XCTestCase {
     @MainActor
     private func dashboardStore(usageStore: TokenUsageStore) -> TokenUsageDashboardStore {
         TokenUsageDashboardStore(usageStore: usageStore)
+    }
+
+    @MainActor
+    private func waitForDashboardStoreRefresh(_ store: TokenUsageDashboardStore) async throws {
+        for _ in 0..<20 {
+            if !store.isDashboardRefreshInProgress {
+                return
+            }
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        XCTFail("Dashboard store refresh did not finish")
     }
 
     private func temporaryInboxURL() -> URL {

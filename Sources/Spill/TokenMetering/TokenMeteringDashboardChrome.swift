@@ -5,6 +5,7 @@ struct TokenMeteringDashboardPanel<Content: View>: View {
     let subtitle: String
     let infoTitle: String?
     let infoDetail: String?
+    let minimumHeight: CGFloat?
     let content: Content
 
     init(
@@ -12,12 +13,14 @@ struct TokenMeteringDashboardPanel<Content: View>: View {
         subtitle: String,
         infoTitle: String? = nil,
         infoDetail: String? = nil,
+        minimumHeight: CGFloat? = 260,
         @ViewBuilder content: () -> Content
     ) {
         self.title = title
         self.subtitle = subtitle
         self.infoTitle = infoTitle
         self.infoDetail = infoDetail
+        self.minimumHeight = minimumHeight
         self.content = content()
     }
 
@@ -39,7 +42,7 @@ struct TokenMeteringDashboardPanel<Content: View>: View {
 
             content
         }
-        .frame(maxWidth: .infinity, minHeight: 260, alignment: .topLeading)
+        .frame(maxWidth: .infinity, minHeight: minimumHeight, alignment: .topLeading)
         .padding(16)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)

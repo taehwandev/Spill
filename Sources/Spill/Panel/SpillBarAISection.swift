@@ -173,10 +173,19 @@ struct SpillBarAISection: View {
         SpillStatusDetailPopover(
             title: status.title,
             symbolName: status.symbolName,
-            tint: status.hasRunningProcesses ? .teal : status.state.panelTint,
+            tint: aiStatusDetailTint(for: status),
             rows: SpillStatusDetailRows.rows(for: status),
             showsInMenuBar: nil
         )
+    }
+
+    private func aiStatusDetailTint(for status: LocalAIToolStatus) -> Color {
+        switch status.state {
+        case .warning, .unavailable:
+            return status.state.panelTint
+        case .active, .normal, .refreshing:
+            return status.kind.dashboardTint
+        }
     }
 
     private func statusHelpText(title: String, value: String, subtitle: String?) -> String {

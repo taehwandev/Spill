@@ -29,7 +29,8 @@ struct TokenMeteringDashboardAnalyticsGrid: View {
                         infoDetail: t(.aiToolInfoDetail),
                         emptyTitle: t(.noAIToolData),
                         idPrefix: "tool_chart",
-                        tint: .teal
+                        tint: .teal,
+                        rowTint: aiToolTint
                     )
 
                     distributionPanel(
@@ -152,7 +153,8 @@ struct TokenMeteringDashboardAnalyticsGrid: View {
         infoDetail: String,
         emptyTitle: String,
         idPrefix: String,
-        tint: Color
+        tint: Color,
+        rowTint: ((TokenUsageDashboardBarRow) -> Color)? = nil
     ) -> some View {
         TokenMeteringDashboardPanel(
             title: title,
@@ -164,7 +166,7 @@ struct TokenMeteringDashboardAnalyticsGrid: View {
             if rows.isEmpty || totalRatio == 0 {
                 TokenMeteringDashboardEmptyMessage(title: emptyTitle, detail: t(.waitingForEvents))
             } else {
-                compactChartRows(rows, idPrefix: idPrefix, tint: tint)
+                compactChartRows(rows, idPrefix: idPrefix, tint: tint, rowTint: rowTint)
                     .frame(height: 160)
             }
         }
@@ -173,7 +175,8 @@ struct TokenMeteringDashboardAnalyticsGrid: View {
     private func compactChartRows(
         _ rows: [TokenUsageDashboardBarRow],
         idPrefix: String,
-        tint: Color
+        tint: Color,
+        rowTint: ((TokenUsageDashboardBarRow) -> Color)?
     ) -> some View {
         let visibleRows = Array(rows.filter { $0.ratio > 0 }.prefix(5))
 
@@ -182,14 +185,15 @@ struct TokenMeteringDashboardAnalyticsGrid: View {
                 let liveUpdateID = "\(idPrefix):\(row.id)"
                 let isLiveUpdated = store.isLiveUpdated(liveUpdateID)
                 let isHovered = hoveredRowID == liveUpdateID
+                let effectiveTint = rowTint?(row) ?? tint
 
                 VStack(alignment: .leading, spacing: 5) {
                     HStack(spacing: 8) {
-                        TokenMeteringLiveUpdateDot(isActive: isLiveUpdated, marker: store.liveUpdateMarker)
+                        TokenMeteringLiveUpdateDot(isActive: isLiveUpdated, marker: store.liveUpdateMarker, tint: effectiveTint)
                         Text(row.title)
                             .font(.system(size: 11, weight: isHovered ? .bold : .semibold))
                             .lineLimit(1)
-                            .foregroundStyle(isHovered ? tint : .primary)
+                            .foregroundStyle(isHovered ? effectiveTint : .primary)
                         Spacer(minLength: 6)
                         Text(row.value)
                             .font(.system(size: 10, weight: isHovered ? .black : .bold, design: .monospaced))
@@ -204,13 +208,13 @@ struct TokenMeteringDashboardAnalyticsGrid: View {
                             RoundedRectangle(cornerRadius: 3, style: .continuous)
                                 .fill(
                                     LinearGradient(
-                                        colors: isHovered ? [tint, tint.opacity(0.7)] : [tint.opacity(0.85), tint.opacity(0.55)],
+                                        colors: isHovered ? [effectiveTint, effectiveTint.opacity(0.7)] : [effectiveTint.opacity(0.85), effectiveTint.opacity(0.55)],
                                         startPoint: .leading,
                                         endPoint: .trailing
                                     )
                                 )
                                 .frame(width: Swift.max(CGFloat(6), geometry.size.width * CGFloat(row.ratio)))
-                                .shadow(color: tint.opacity(isHovered ? 0.35 : 0.0), radius: 3, x: 0, y: 1)
+                                .shadow(color: effectiveTint.opacity(isHovered ? 0.35 : 0.0), radius: 3, x: 0, y: 1)
                                 .animation(.snappy(duration: 0.35), value: row.ratio)
                         }
                     }
@@ -231,6 +235,10 @@ struct TokenMeteringDashboardAnalyticsGrid: View {
             }
         }
         .frame(maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private func aiToolTint(for row: TokenUsageDashboardBarRow) -> Color {
+        TokenUsageAITool(rawValue: row.id.lowercased())?.dashboardTint ?? .secondary
     }
 
     private func t(_ key: TokenMeteringTextKey) -> String {

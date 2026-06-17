@@ -104,7 +104,7 @@ struct TokenMeteringDashboardSegmentedRatioBar: View {
                     ForEach(Array(visibleRows.enumerated()), id: \.element.id) { index, row in
                         let normalizedRatio = ratioTotal > 0 ? row.ratio / ratioTotal : 0
                         RoundedRectangle(cornerRadius: 4, style: .continuous)
-                            .fill(chartColor(at: index))
+                            .fill(chartColor(for: row, at: index))
                             .frame(width: Swift.max(CGFloat(5), geometry.size.width * CGFloat(normalizedRatio)))
                             .animation(.snappy(duration: 0.35), value: normalizedRatio)
                     }
@@ -117,7 +117,7 @@ struct TokenMeteringDashboardSegmentedRatioBar: View {
                     ForEach(Array(visibleRows.enumerated()), id: \.element.id) { index, row in
                         HStack(spacing: 6) {
                             Circle()
-                                .fill(chartColor(at: index))
+                                .fill(chartColor(for: row, at: index))
                                 .frame(width: 7, height: 7)
                             Text(row.title)
                                 .font(.system(size: 9, weight: .semibold))
@@ -133,7 +133,11 @@ struct TokenMeteringDashboardSegmentedRatioBar: View {
         }
     }
 
-    private func chartColor(at index: Int) -> Color {
+    private func chartColor(for row: TokenUsageDashboardBarRow, at index: Int) -> Color {
+        if let aiTool = TokenUsageAITool(rawValue: row.id.lowercased()) {
+            return aiTool.dashboardTint
+        }
+
         let colors: [Color] = [.teal, .blue, .purple, .green, .orange, .red]
         return colors[index % colors.count]
     }

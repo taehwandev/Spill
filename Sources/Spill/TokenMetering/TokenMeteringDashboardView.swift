@@ -10,6 +10,7 @@ private struct TokenUsageClearRequest: Identifiable {
 struct TokenMeteringDashboardView: View {
     @ObservedObject var store: TokenUsageDashboardStore
     @ObservedObject var cloudServiceStatusStore: CloudServiceStatusStore
+    @ObservedObject var aiStatusStore: AIStatusStore
     @ObservedObject private var settings: SpillSettings
     @State private var isCalendarPickerPresented = false
     @State private var isServiceStatusPresented = false
@@ -25,6 +26,7 @@ struct TokenMeteringDashboardView: View {
     init(
         store: TokenUsageDashboardStore,
         cloudServiceStatusStore: CloudServiceStatusStore = CloudServiceStatusStore(),
+        aiStatusStore: AIStatusStore = AIStatusStore(),
         settings: SpillSettings = .shared,
         refreshAction: @escaping () -> Void = {},
         settingsAction: @escaping () -> Void = {},
@@ -33,6 +35,7 @@ struct TokenMeteringDashboardView: View {
     ) {
         self.store = store
         self.cloudServiceStatusStore = cloudServiceStatusStore
+        self.aiStatusStore = aiStatusStore
         _settings = ObservedObject(wrappedValue: settings)
         _resolvedLanguage = State(initialValue: TokenMeteringLanguage.current(appLanguage: settings.appLanguage))
         self.refreshAction = refreshAction
@@ -53,11 +56,11 @@ struct TokenMeteringDashboardView: View {
     }
 
     private var selectedControlAccent: Color {
-        Color(red: 0.08, green: 0.54, blue: 0.57)
+        TokenMeteringDashboardToolPalette.codex
     }
 
     private var selectedControlAccentHighlight: Color {
-        Color(red: 0.11, green: 0.65, blue: 0.68)
+        Color(red: 0.06, green: 0.84, blue: 0.88)
     }
 
     var body: some View {
@@ -95,6 +98,7 @@ struct TokenMeteringDashboardView: View {
             titleDidChange()
             store.setLanguage(language)
             syncOnboardingPreviewFromSettings()
+            aiStatusStore.refreshInBackground()
             store.refreshAsyncIfIdle()
         }
         .onChange(of: settings.appLanguage) { _, appLanguage in
@@ -322,6 +326,7 @@ struct TokenMeteringDashboardView: View {
 
     private func refreshLocalTokenData() {
         refreshAction()
+        aiStatusStore.refreshInBackground()
         store.refreshAsync()
     }
 
@@ -454,6 +459,10 @@ struct TokenMeteringDashboardView: View {
     }
 
     private var showsEmptyDashboardOverlay: Bool {
+        guard aiStatusStore.statuses.isEmpty else {
+            return false
+        }
+
         guard !hasAnyDashboardEvents else {
             return false
         }
@@ -510,9 +519,18 @@ struct TokenMeteringDashboardView: View {
                 workflowUsagePanel
                 receiverPanel
                 privacyPanel
+                agentStatusPanel
             }
             .padding(.vertical, 18)
         }
+    }
+
+    private var agentStatusPanel: some View {
+        TokenMeteringDashboardAgentStatusPanel(
+            aiStatusStore: aiStatusStore,
+            language: currentLanguage,
+            appLanguage: settings.appLanguage
+        )
     }
 
     private var modelPanel: some View {

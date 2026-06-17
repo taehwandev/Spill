@@ -4,6 +4,7 @@ import AppKit
 final class TokenMeteringDashboardAppDelegate: NSObject, NSApplicationDelegate {
     private let settings = SpillSettings.shared
     private let cloudServiceStatusStore = CloudServiceStatusStore()
+    private let aiStatusStore = AIStatusStore()
     private let tokenUsageStore: TokenUsageStore
     private lazy var tokenUsageInboxMonitor = TokenUsageInboxMonitor(store: tokenUsageStore)
     private lazy var tokenUsageCollectorCoordinator = TokenUsageCollectorCoordinator(
@@ -69,6 +70,7 @@ final class TokenMeteringDashboardAppDelegate: NSObject, NSApplicationDelegate {
         let controller = TokenMeteringDashboardWindowController(
             store: tokenUsageDashboardStore,
             cloudServiceStatusStore: cloudServiceStatusStore,
+            aiStatusStore: aiStatusStore,
             settings: settings,
             refreshAction: { [weak self] in
                 self?.requestTokenUsageCollection(reason: "dashboard_refresh")

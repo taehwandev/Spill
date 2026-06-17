@@ -74,7 +74,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     override init() {
         tokenMeteringCoordinator = TokenMeteringCoordinator(
             settings: settings,
-            cloudServiceStatusStore: cloudServiceStatusStore
+            cloudServiceStatusStore: cloudServiceStatusStore,
+            aiStatusStore: aiStatusStore
         )
 
         let sparkleUpdateController = SparkleUpdateController()

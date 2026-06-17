@@ -207,11 +207,6 @@ enum TokenMeteringTextKey: String {
     case setupWorkflowLabelsDetail
     case setupApplyWhereTitle
     case setupApplyWhereDetail
-    case promptDisplayNamesTitle
-    case promptDisplayNamesDisabled
-    case promptDisplayNamesEnabled
-    case promptDisplayNamesDetail
-    case promptDisplayNamesReapplyWarning
     case promptInstructionCardTitle
     case promptInstructionCardDetail
     case menuBarTokenDisplayModeTitle
@@ -229,6 +224,12 @@ enum TokenMeteringTextKey: String {
     case copy
     case hookConfig
     case agentConnectionStatus
+    case agentStatusSubtitle
+    case agentStatusInfoTitle
+    case agentStatusInfoDetail
+    case agentStatusDetected
+    case noAgentStatusData
+    case noAgentStatusDetail
     case adapterSetupRequired
     case adapterHookMissing
     case active

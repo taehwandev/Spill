@@ -70,10 +70,10 @@ struct SpillBarAIToolCard: View {
                 Text("\(percentage)%")
                     .font(.system(size: 8.5, weight: .bold, design: .rounded))
                     .monospacedDigit()
-                    .foregroundStyle(.teal)
+                    .foregroundStyle(tint)
                     .padding(.horizontal, 4)
                     .frame(height: 14)
-                    .background(.teal.opacity(0.12), in: RoundedRectangle(cornerRadius: 3, style: .continuous))
+                    .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 3, style: .continuous))
             }
         }
         .padding(.horizontal, 8)
@@ -181,7 +181,12 @@ struct SpillBarAIToolCard: View {
     }
 
     private var statusTint: Color {
-        status.hasRunningProcesses ? .teal : status.state.panelTint
+        switch status.state {
+        case .warning, .unavailable:
+            return status.state.panelTint
+        case .active, .normal, .refreshing:
+            return status.kind.dashboardTint
+        }
     }
 
     private var aiProcessStateTitle: String {

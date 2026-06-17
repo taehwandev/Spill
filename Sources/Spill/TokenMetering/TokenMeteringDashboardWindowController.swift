@@ -9,18 +9,22 @@ final class TokenMeteringDashboardWindowController: NSObject, NSWindowDelegate {
     private let screenPadding: CGFloat = 32
     private let store: TokenUsageDashboardStore
     private let cloudServiceStatusStore: CloudServiceStatusStore
+    private let aiStatusStore: AIStatusStore
     private let settings: SpillSettings
     private let deferredRefreshDelayNanoseconds: UInt64 = 1_500_000_000
+    private let aiStatusRefreshIntervalNanoseconds: UInt64 = 8_000_000_000
     private let refreshAction: () -> Void
     private let settingsAction: () -> Void
     private let developerOptionsAction: () -> Void
     private let closeAction: () -> Void
     private var window: NSWindow?
     private var deferredRefreshTask: Task<Void, Never>?
+    private var aiStatusRefreshTask: Task<Void, Never>?
 
     init(
         store: TokenUsageDashboardStore,
         cloudServiceStatusStore: CloudServiceStatusStore = CloudServiceStatusStore(),
+        aiStatusStore: AIStatusStore = AIStatusStore(),
         settings: SpillSettings = .shared,
         refreshAction: @escaping () -> Void = {},
         settingsAction: @escaping () -> Void = {},
@@ -29,6 +33,7 @@ final class TokenMeteringDashboardWindowController: NSObject, NSWindowDelegate {
     ) {
         self.store = store
         self.cloudServiceStatusStore = cloudServiceStatusStore
+        self.aiStatusStore = aiStatusStore
         self.settings = settings
         self.refreshAction = refreshAction
         self.settingsAction = settingsAction
@@ -46,6 +51,8 @@ final class TokenMeteringDashboardWindowController: NSObject, NSWindowDelegate {
         window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless()
         window.makeKey()
+        aiStatusStore.refreshInBackground()
+        startAIStatusRefreshLoop()
         if isReusingWindow {
             store.refreshAsyncIfIdle()
         }
@@ -76,6 +83,7 @@ final class TokenMeteringDashboardWindowController: NSObject, NSWindowDelegate {
         let contentView = TokenMeteringDashboardView(
             store: store,
             cloudServiceStatusStore: cloudServiceStatusStore,
+            aiStatusStore: aiStatusStore,
             settings: settings,
             refreshAction: refreshAction,
             settingsAction: settingsAction,
@@ -104,7 +112,32 @@ final class TokenMeteringDashboardWindowController: NSObject, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
+        aiStatusRefreshTask?.cancel()
+        aiStatusRefreshTask = nil
+        deferredRefreshTask?.cancel()
+        deferredRefreshTask = nil
         closeAction()
+    }
+
+    private func startAIStatusRefreshLoop() {
+        aiStatusRefreshTask?.cancel()
+        aiStatusRefreshTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(
+                        nanoseconds: self?.aiStatusRefreshIntervalNanoseconds ?? 8_000_000_000
+                    )
+                } catch {
+                    return
+                }
+
+                guard let self, self.window?.isVisible == true else {
+                    return
+                }
+
+                self.aiStatusStore.refreshInBackground()
+            }
+        }
     }
 
     private func updateWindowTitle(_ window: NSWindow? = nil) {

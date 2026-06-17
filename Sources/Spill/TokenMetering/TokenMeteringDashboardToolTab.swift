@@ -11,39 +11,49 @@ struct TokenMeteringDashboardToolTab: View {
     var body: some View {
         let liveUpdateID = "filter:tool:\(filter.id)"
         let isLiveUpdated = store.isLiveUpdated(liveUpdateID)
+        let isSelected = store.selectedTool == filter.tool
         let toolLastUpdated = lastUpdatedString(for: filter.tool)
         let detail = toolLastUpdated.map { "\(filter.detail) · \($0)" } ?? filter.detail
         let serviceStatus = filter.tool.flatMap(serviceStatus)
         let hasServerIssue = serviceStatus?.health.isServerIssue ?? false
         let statusTint = serviceStatus?.health.serverStatusTint ?? Color.teal
-        let tabAccent = hasServerIssue ? statusTint : Color.teal
+        let toolTint = filter.tool?.dashboardTint ?? selectedControlAccent
+        let tabAccent = hasServerIssue ? statusTint : toolTint
+        let selectedGradientStart = filter.tool == nil && !hasServerIssue
+            ? selectedControlAccentHighlight
+            : tabAccent.opacity(0.86)
+        let selectedGradientEnd = filter.tool == nil && !hasServerIssue
+            ? selectedControlAccent
+            : tabAccent.opacity(0.68)
 
         return Button {
             store.setSelectedTool(filter.tool)
         } label: {
             HStack(spacing: 9) {
                 Circle()
-                    .fill(filter.isSelected ? .white : tabAccent.opacity(0.82))
+                    .fill(isSelected ? .white : tabAccent.opacity(0.82))
                     .frame(width: 7, height: 7)
 
                 tabLabel(
                     detail: detail,
                     serviceStatus: serviceStatus,
-                    isActive: isLiveUpdated
+                    isActive: isLiveUpdated,
+                    isSelected: isSelected,
+                    tint: tabAccent
                 )
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(.horizontal, 11)
             .frame(maxWidth: .infinity, minHeight: 46, alignment: .leading)
-            .foregroundStyle(filter.isSelected ? .white : .primary)
+            .foregroundStyle(isSelected ? .white : .primary)
             .background {
-                if filter.isSelected {
+                if isSelected {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .fill(
                             LinearGradient(
                                 colors: [
-                                    hasServerIssue ? tabAccent.opacity(0.86) : selectedControlAccentHighlight,
-                                    hasServerIssue ? tabAccent.opacity(0.68) : selectedControlAccent
+                                    selectedGradientStart,
+                                    selectedGradientEnd
                                 ],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
@@ -62,7 +72,7 @@ struct TokenMeteringDashboardToolTab: View {
                         lineWidth: hasServerIssue ? 0.8 : 0.5
                     )
             }
-            .modifier(TokenMeteringLiveUpdateEffect(isActive: isLiveUpdated && !filter.isSelected, marker: store.liveUpdateMarker, cornerRadius: 8))
+            .modifier(TokenMeteringLiveUpdateEffect(isActive: isLiveUpdated && !isSelected, marker: store.liveUpdateMarker, cornerRadius: 8))
         }
         .buttonStyle(.plain)
         .focusEffectDisabled()
@@ -71,12 +81,14 @@ struct TokenMeteringDashboardToolTab: View {
     private func tabLabel(
         detail: String,
         serviceStatus: CloudServiceStatusItem?,
-        isActive: Bool
+        isActive: Bool,
+        isSelected: Bool,
+        tint: Color
     ) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 6) {
                 Text(filter.title)
-                    .font(.system(size: 11, weight: filter.isSelected ? .bold : .semibold))
+                    .font(.system(size: 11, weight: isSelected ? .bold : .semibold))
                     .lineLimit(1)
                     .layoutPriority(1)
                     .minimumScaleFactor(0.78)
@@ -91,20 +103,41 @@ struct TokenMeteringDashboardToolTab: View {
             HStack(spacing: 5) {
                 Text(detail)
                     .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(filter.isSelected ? .white.opacity(0.78) : .secondary)
+                    .foregroundStyle(isSelected ? .white.opacity(0.78) : .secondary)
                     .lineLimit(1)
                     .contentTransition(.numericText())
                     .animation(.snappy(duration: 0.35), value: filter.detail)
+                    .layoutPriority(1)
+
+                if let shareLabel = filter.shareLabel {
+                    toolShareBadge(shareLabel, isSelected: isSelected, tint: tint)
+                        .fixedSize(horizontal: true, vertical: false)
+                }
 
                 TokenMeteringLiveUpdateDot(
                     isActive: isActive,
                     marker: store.liveUpdateMarker,
-                    tint: filter.isSelected ? .white : .teal
+                    tint: isSelected ? .white : tint
                 )
 
                 Spacer(minLength: 0)
             }
         }
+    }
+
+    private func toolShareBadge(_ value: String, isSelected: Bool, tint: Color) -> some View {
+        Text(value)
+            .font(.system(size: 8.5, weight: .black, design: .rounded))
+            .lineLimit(1)
+            .minimumScaleFactor(0.78)
+            .padding(.horizontal, 5)
+            .frame(height: 17)
+            .foregroundStyle(isSelected ? .white : tint)
+            .background((isSelected ? Color.white.opacity(0.16) : tint.opacity(0.10)), in: Capsule())
+            .overlay {
+                Capsule()
+                    .stroke(isSelected ? Color.white.opacity(0.14) : tint.opacity(0.12), lineWidth: 0.5)
+            }
     }
 
     private func hasServiceStatusAccessory(

@@ -253,6 +253,40 @@ final class TokenUsageDashboardStore: ObservableObject {
         )
     }
 
+    private func rebuildSnapshotFromCurrentEventsAsync(
+        trackLiveUpdates: Bool = false,
+        previousEvents: [TokenUsageEvent]? = nil
+    ) {
+        asyncRefreshGeneration += 1
+        let generation = asyncRefreshGeneration
+        let currentEvents = events
+        let displayEvents = displayEvents(for: currentEvents)
+        let request = snapshotBuildRequest()
+        let previousSnapshot = snapshot
+        let previousUnfilteredSnapshot = unfilteredSnapshot
+
+        isRefreshing = true
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            let snapshotPair = Self.buildSnapshotPair(events: displayEvents, request: request)
+
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.asyncRefreshGeneration == generation else {
+                    return
+                }
+
+                self.applySnapshotPair(
+                    snapshotPair,
+                    loadedEvents: currentEvents,
+                    trackLiveUpdates: trackLiveUpdates && !self.isOnboardingPreviewEnabled,
+                    previousEvents: previousEvents,
+                    previousSnapshot: previousSnapshot,
+                    previousUnfilteredSnapshot: previousUnfilteredSnapshot
+                )
+            }
+        }
+    }
+
     private func applySnapshotPair(
         _ snapshotPair: TokenUsageDashboardSnapshotPair,
         loadedEvents: [TokenUsageEvent],
@@ -345,8 +379,15 @@ final class TokenUsageDashboardStore: ObservableObject {
     }
 
     func setSelectedTool(_ tool: TokenUsageAITool?) {
-        selectedTool = tool?.isDashboardTool == true ? tool : nil
-        rebuildSnapshot()
+        let nextTool = tool?.isDashboardTool == true ? tool : nil
+        guard selectedTool != nextTool else {
+            return
+        }
+
+        selectedTool = nextTool
+        selectedProjectID = nil
+        selectedSessionID = nil
+        rebuildSnapshotFromCurrentEventsAsync()
     }
 
     func setSelectedProjectID(_ projectID: String?) {

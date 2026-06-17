@@ -667,6 +667,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
                 tokens: formatTokens(allTotal),
                 language: language
             ),
+            shareLabel: nil,
             isSelected: selectedTool == nil
         )
         let toolsToShow: [TokenUsageAITool] = showAdvancedTools
@@ -677,6 +678,12 @@ struct TokenUsageDashboardSnapshot: Equatable {
                 tool: tool,
                 title: tool.dashboardLabel(language: language),
                 detail: formatTokens(totals[tool, default: 0]),
+                shareLabel: formatPercentage(
+                    TokenUsageDashboardSnapshot.chartRatio(
+                        tokens: totals[tool, default: 0],
+                        totalTokens: allTotal
+                    ) * 100.0
+                ),
                 isSelected: selectedTool == tool
             )
         }

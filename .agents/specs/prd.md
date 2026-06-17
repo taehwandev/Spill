@@ -185,6 +185,10 @@ Requirements:
   popovers should show the aggregate process count, CPU percentage, memory, and
   a short per-process list because Codex, Claude Code, Antigravity/AGY, and
   Ollama can each involve multiple local processes.
+- AI process CPU should represent recent activity rather than process-lifetime
+  average CPU. Memory should align with the user-facing Activity Monitor
+  memory footprint concept when the platform exposes it, while still degrading
+  safely when a process disappears or cannot be sampled.
 
 Acceptance:
 
@@ -300,6 +304,16 @@ Dashboard UX requirements:
 - The first dashboard read should answer whether usage was large, whether the
   cost came mostly from input or output, which model/tool/work type/stage
   dominated, and whether workflow labels covered the selected records.
+- Top AI tool filter tabs may show each tool's share of the current All-tool
+  token scope, but the share must be secondary to the tool name. The percentage
+  belongs on the tab's second line with the token detail, not in the primary
+  title row.
+- First-class AI tools must use one consistent color identity across dashboard
+  surfaces. Codex should use the Codex teal identity, Claude Code should use a
+  Claude orange/coral identity, and Antigravity/AGY should use a blue identity.
+  These colors must match between the panel token summary bar, top tool tabs,
+  AI Tool Distribution rows, AI tool cards, and the agent/process status panel,
+  including selected tab states.
 - Summary cards should prioritize total, input, output, event count, average
   event size, and peak event size before token detail categories.
 - The dashboard should show workflow label coverage as a measurement-quality
