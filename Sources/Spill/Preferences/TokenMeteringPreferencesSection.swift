@@ -71,39 +71,6 @@ struct TokenMeteringPreferencesSection: View {
 
                 Divider().opacity(0.45)
 
-                Toggle(isOn: $settings.tokenMeteringPromptAllowsLocalDisplayNames) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        HStack(spacing: 7) {
-                            Text(t(.promptDisplayNamesTitle))
-                                .font(.system(size: 12, weight: .bold))
-                            Text(settings.tokenMeteringPromptAllowsLocalDisplayNames ? t(.promptDisplayNamesEnabled) : t(.promptDisplayNamesDisabled))
-                                .font(.system(size: 11, weight: .bold))
-                                .foregroundStyle(settings.tokenMeteringPromptAllowsLocalDisplayNames ? .orange : .secondary)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(
-                                    Capsule(style: .continuous)
-                                        .fill(settings.tokenMeteringPromptAllowsLocalDisplayNames ? Color.orange.opacity(0.13) : Color.primary.opacity(0.06))
-                                )
-                        }
-                        Text(t(.promptDisplayNamesDetail))
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
-                            .lineSpacing(2)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-                .toggleStyle(.switch)
-
-                if settings.tokenMeteringPromptAllowsLocalDisplayNames {
-                    Label(t(.promptDisplayNamesReapplyWarning), systemImage: "exclamationmark.triangle.fill")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.orange)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                Divider().opacity(0.45)
-
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 3) {
                         Text(t(.menuBarTokenDisplayModeTitle))
@@ -449,9 +416,7 @@ struct TokenMeteringPreferencesSection: View {
 
             Button {
                 copyToClipboard(
-                    TokenMeteringGlobalSetup.prompt(
-                        allowsLocalDisplayNames: settings.tokenMeteringPromptAllowsLocalDisplayNames
-                    ),
+                    TokenMeteringGlobalSetup.globalPrompt,
                     target: "prompt"
                 )
             } label: {

@@ -607,7 +607,8 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(preferencesSection.contains("promptInstructionCard"))
         XCTAssertTrue(preferencesSection.contains("t(.installPromptTitle)"))
         XCTAssertTrue(preferencesSection.contains("t(.copyInstallPrompt)"))
-        XCTAssertTrue(preferencesSection.contains("TokenMeteringGlobalSetup.prompt("))
+        XCTAssertTrue(preferencesSection.contains("TokenMeteringGlobalSetup.globalPrompt"))
+        XCTAssertFalse(preferencesSection.contains("TokenMeteringGlobalSetup.prompt("))
         XCTAssertFalse(preferencesSection.contains("Text(TokenMeteringSetupInstaller.setupCommand())"))
         XCTAssertTrue(preferencesSection.contains("t(.menuBarTokenDisplayModeTitle)"))
         XCTAssertTrue(preferencesSection.contains("t(.menuBarTokenDisplayModeDetail)"))
@@ -2308,21 +2309,6 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertFalse(prompt.contains("workflow-setup-prompt.md"))
         XCTAssertFalse(prompt.contains("Do not nest AGY hooks under \"spill-metering\""))
         XCTAssertFalse(prompt.contains("root-level PostInvocation[] with matcher"))
-    }
-
-    func testGlobalSetupPromptCanOptIntoLocalDisplayNames() {
-        let strictPrompt = TokenMeteringGlobalSetup.prompt(allowsLocalDisplayNames: false)
-        let optInPrompt = TokenMeteringGlobalSetup.prompt(allowsLocalDisplayNames: true)
-
-        XCTAssertEqual(strictPrompt, TokenMeteringGlobalSetup.globalPrompt)
-        XCTAssertFalse(strictPrompt.contains("Optional Local Display Names Enabled"))
-        XCTAssertTrue(optInPrompt.contains("Optional Local Display Names Enabled"))
-        XCTAssertTrue(optInPrompt.contains("not active until the user reapplies this copied prompt"))
-        XCTAssertTrue(optInPrompt.contains("separate from token usage data sync"))
-        XCTAssertTrue(optInPrompt.contains("settings sync for this selected setting"))
-        XCTAssertTrue(optInPrompt.contains("Do not send full commands or command text"))
-        XCTAssertTrue(optInPrompt.contains("Do not add display aliases to the usage event JSON body"))
-        XCTAssertTrue(optInPrompt.contains("Usage events must remain token-only"))
     }
 
     func testHostedTokenMeteringSetupDocsDefineRuntimeContract() throws {

@@ -40,7 +40,6 @@ final class SpillSettingsTests: XCTestCase {
         XCTAssertEqual(settings.shortcutKey(for: .restore), .deleteKey)
         XCTAssertEqual(settings.shortcutKey(for: .topHalf).shortcutLabel, "⌃⌥↑")
         XCTAssertEqual(settings.shortcutKey(for: .bottomHalf).shortcutLabel, "⌃⌥↓")
-        XCTAssertFalse(settings.tokenMeteringPromptAllowsLocalDisplayNames)
         XCTAssertEqual(settings.privateUsageUploadEnvironment, .defaultValue)
         XCTAssertFalse(settings.privateUsageUploadEnabled)
         XCTAssertEqual(settings.shortcutKey(for: .restore).shortcutLabel, "⌃⌥⌫")
@@ -49,18 +48,6 @@ final class SpillSettingsTests: XCTestCase {
             "⌃⌥⌘←"
         )
         XCTAssertEqual(settings.shortcutKey(for: .bottomLeft).pickerTitle, "J")
-    }
-
-    func testTokenMeteringPromptDisplayNameOptionPersists() {
-        let defaults = makeDefaults()
-        let settings = SpillSettings(defaults: defaults)
-
-        XCTAssertFalse(settings.tokenMeteringPromptAllowsLocalDisplayNames)
-
-        settings.tokenMeteringPromptAllowsLocalDisplayNames = true
-
-        let reloadedSettings = SpillSettings(defaults: defaults)
-        XCTAssertTrue(reloadedSettings.tokenMeteringPromptAllowsLocalDisplayNames)
     }
 
     func testPrivateUsageUploadOptionPersists() {

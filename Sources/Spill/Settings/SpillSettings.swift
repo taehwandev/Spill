@@ -328,10 +328,6 @@ final class SpillSettings: ObservableObject {
         didSet { defaults.set(tokenUsageBridgeEnabled, forKey: Keys.tokenUsageBridgeEnabled) }
     }
 
-    @Published var tokenMeteringPromptAllowsLocalDisplayNames: Bool {
-        didSet { defaults.set(tokenMeteringPromptAllowsLocalDisplayNames, forKey: Keys.tokenMeteringPromptAllowsLocalDisplayNames) }
-    }
-
     @Published var tokenUsageLocalAliases: [String: String] {
         didSet { defaults.set(tokenUsageLocalAliases, forKey: Keys.tokenUsageLocalAliases) }
     }
@@ -486,7 +482,6 @@ final class SpillSettings: ObservableObject {
         )
         launchAtLogin = LoginItemController.isEnabled
         tokenUsageBridgeEnabled = defaults.object(forKey: Keys.tokenUsageBridgeEnabled) as? Bool ?? false
-        tokenMeteringPromptAllowsLocalDisplayNames = defaults.object(forKey: Keys.tokenMeteringPromptAllowsLocalDisplayNames) as? Bool ?? false
         tokenUsageLocalAliases = defaults.dictionary(forKey: Keys.tokenUsageLocalAliases) as? [String: String] ?? [:]
         tokenUsageShowAdvancedTools = defaults.object(forKey: Keys.tokenUsageShowAdvancedTools) as? Bool ?? false
         let menuBarTokenDisplayModeRaw = defaults.string(forKey: Keys.menuBarTokenDisplayMode) ?? MenuBarTokenDisplayMode.daily.rawValue
@@ -809,7 +804,6 @@ private enum Keys {
     static let windowActionShortcutKeys = "windowActionShortcutKeys"
     static let launchAtLogin = "launchAtLogin"
     static let tokenUsageBridgeEnabled = "tokenUsageBridgeEnabled"
-    static let tokenMeteringPromptAllowsLocalDisplayNames = "tokenMeteringPromptAllowsLocalDisplayNames"
     static let tokenUsageLocalAliases = "tokenUsageLocalAliases"
     static let tokenUsageShowAdvancedTools = "tokenUsageShowAdvancedTools"
     static let menuBarTokenDisplayMode = "menuBarTokenDisplayMode"

@@ -4,14 +4,6 @@ enum TokenMeteringGlobalSetup {
     static let setupPromptURL = "https://spill.thdev.app/token-metering/setup-prompt.md"
     static let runtimeInstructionURL = "https://spill.thdev.app/token-metering/runtime-instruction.md"
 
-    static func prompt(allowsLocalDisplayNames: Bool) -> String {
-        guard allowsLocalDisplayNames else {
-            return globalPrompt
-        }
-
-        return globalPrompt + localDisplayNamesOptInBlock
-    }
-
     static let globalPrompt = """
     # Spill Token Metering Setup Bootstrap
 
@@ -101,22 +93,5 @@ enum TokenMeteringGlobalSetup {
     - If workflow labels were requested, every workflow edit was approved by the user.
     - If workflow labels were requested, script-based workflows were checked first and used when present.
     - If workflow labels were requested, at least one workflow step can write a safe label context before the AI tool starts.
-    """
-
-    private static let localDisplayNamesOptInBlock = """
-
-    # Optional Local Display Names Enabled
-
-    The user enabled Spill's local display-name prompt option.
-    After installing or repairing token metering, update the saved runtime instruction with this option.
-    This option is not active until the user reapplies this copied prompt to the agent runtime.
-    This prompt preference is separate from token usage data sync and must not be cloud-synced unless the user explicitly enables settings sync for this selected setting.
-
-    You may attach a short local-only display alias when the runtime or workflow exposes a trusted reusable step name or when the user explicitly provides the alias.
-    Do not derive display aliases from prompts, commands, transcripts, logs, files, repository names, branches, tickets, diffs, source content, environment values, or secrets.
-    Do not send full commands or command text.
-    Do not add display aliases to the usage event JSON body.
-    Usage events must remain token-only and must still contain only the allowlisted usage-event keys.
-    Local display aliases may be visible to the agent applying this prompt and may be stored only as local display metadata.
     """
 }
