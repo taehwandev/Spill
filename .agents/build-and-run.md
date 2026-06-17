@@ -4,7 +4,7 @@ audience: Claude Code, Codex, Antigravity/AGY, and local contributors
 purpose: Explain exactly how to build, bundle, restart, package, and verify the Spill macOS app without confusing compiled binaries, app bundles, bundled resources, and installed token-metering hooks.
 status: stable
 source_of_truth: Package.swift, scripts/build-app.sh, scripts/package-release.sh, scripts/prepare-docs.sh, README.md
-last_verified: 2026-06-06
+last_verified: 2026-06-17
 applies_to: repo, macOS app, token metering adapters, release packaging
 related: AGENTS.md, .agents/README.md, .agents/specs/prd.md, .agents/specs/ard.md, README.md
 ---

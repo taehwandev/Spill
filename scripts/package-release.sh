@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEFAULT_VERSION="$(date -u +%G.%V.1)"
 VERSION="${SPILL_VERSION:-$DEFAULT_VERSION}"
-BUILD_NUMBER="${SPILL_BUILD:-${VERSION##*.}}"
+BUILD_NUMBER="${SPILL_BUILD:-$VERSION}"
 APP_DIR="$ROOT_DIR/.build/Spill.app"
 ARTIFACTS_DIR="$ROOT_DIR/.build/release-artifacts"
 DMG_PATH="$ARTIFACTS_DIR/Spill-$VERSION-macos.dmg"

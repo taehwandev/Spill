@@ -13,7 +13,7 @@ procedure. This checklist is the Spill-specific quick gate before closeout.
 ## Version And Tag
 
 - [ ] Version uses `ISO-year.ISO-week.release-count`, for example `2026.20.2`.
-- [ ] Build number is set intentionally.
+- [ ] Build number equals the full version string (`SPILL_BUILD` defaults to `SPILL_VERSION`).
 - [ ] Existing local and remote tags were checked.
 - [ ] Annotated tag `v<version>` points at the release commit.
 - [ ] The release tag is treated as the packaged commit, not as the latest
@@ -35,7 +35,7 @@ procedure. This checklist is the Spill-specific quick gate before closeout.
 
 ## Packaging
 
-- [ ] `SPILL_VERSION=<version> SPILL_BUILD=<build> ./scripts/package-release.sh`
+- [ ] `SPILL_VERSION=<version> ./scripts/package-release.sh` (`SPILL_BUILD` defaults to `<version>`)
 - [ ] Telemetry key source is explicit: shell environment, `.env.local`, GitHub
       Secrets, or intentionally disabled.
 - [ ] Versioned DMG exists.
@@ -54,7 +54,7 @@ procedure. This checklist is the Spill-specific quick gate before closeout.
 - [ ] `xcrun stapler validate .build/release-artifacts/Spill-<version>-macos.dmg`
       when notarized.
 - [ ] `CFBundleShortVersionString` equals `<version>`.
-- [ ] `CFBundleVersion` equals `<build>`.
+- [ ] `CFBundleVersion` equals `<version>` (build number = full version string).
 - [ ] `update.json.latestVersion` equals `<version>`.
 - [ ] `update.json.downloadURL` points at the stable latest DMG URL.
 - [ ] `appcast.xml` points at the versioned ZIP URL.

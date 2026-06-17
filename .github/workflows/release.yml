@@ -67,7 +67,7 @@ jobs:
             exit 2
           fi
 
-          build="${version##*.}"
+          build="$version"
 
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"

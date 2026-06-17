@@ -203,8 +203,8 @@ APPLE_NOTARYTOOL_API_ISSUER=00000000-0000-0000-0000-000000000000 \
 
 Release versions use `ISO-year.ISO-week.release-count`, such as `2026.20.1`.
 The default local version is the current ISO year/week with release count `1`.
-`SPILL_BUILD` defaults to the final version component, so
-`SPILL_VERSION=2026.21.2` uses build `2` unless overridden. Use `SPILL_VERSION`,
+`SPILL_BUILD` defaults to the full version string, so
+`SPILL_VERSION=2026.21.2` uses build `2026.21.2` unless overridden. Use `SPILL_VERSION`,
 `SPILL_BUILD`, and `SPILL_BUNDLE_ID` to override release metadata.
 
 ### GitHub Releases
