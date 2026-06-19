@@ -215,6 +215,11 @@ Requirements:
   environment values, secrets, or arbitrary content-like fields.
 - Setup UI should offer a one-step installer path before exposing per-adapter
   snippets.
+- Token metering settings must offer an explicit local history import action
+  for Codex, Claude Code, and Antigravity/AGY together. The action is
+  user-initiated, not automatic on install, not scoped to the current agent, and
+  separate from cloud or account sync. Detailed requirements live in
+  `specs/token-history-import.md`.
 - The local dashboard should group usage into human-readable Work Items derived
   from safe labels, not raw run ids.
 - Work Items may be scoped by opaque local folder/project ids. UI labels should

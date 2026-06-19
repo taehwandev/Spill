@@ -307,6 +307,38 @@ Rules:
   adapters may define custom reusable categories that match
   `^[a-z][a-z0-9_]{1,40}$`.
 
+### ARD-005B1: Explicit Local History Import Reconciles Known Runtime Stores
+
+Decision:
+
+Token metering settings must expose an explicit "Import Local History" action.
+Each run attempts all first-class local runtime importers together: Codex,
+Claude Code, and Antigravity/AGY. It imports exact historical usage only from
+their known local runtime stores. This is a user-initiated local backfill and
+reconciliation job, not automatic install behavior and not cloud sync.
+
+Rationale:
+
+Long-time users can have useful exact token usage records before installing
+Spill metering. A one-time backfill closes that gap, while repeated explicit
+imports should also recover late same-day records such as Claude Code subagent
+transcripts. The job must be idempotent because users can close Preferences,
+reopen settings, retry after interruption, or run the import multiple times.
+
+Rules:
+
+- The import job is owned by an app-wide coordinator, not by the Preferences
+  view lifecycle.
+- One explicit run must attempt Codex, Claude Code, and Antigravity/AGY and
+  report per-tool results.
+- Importers may parse only exact numeric usage records and safe opaque metadata
+  from known runtime stores.
+- Event identity, cursors, same-day reconciliation, checkpointing, and
+  duplicate handling are specified in `specs/token-history-import.md`.
+- Local history import only writes the app-owned local usage store and local
+  cursor/diagnostic state. Future cloud usage sync is a separate opt-in app
+  policy.
+
 ### ARD-005E: Private Usage Upload Uses Optional Runtime Configuration
 
 Decision:

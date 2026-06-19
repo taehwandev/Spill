@@ -199,9 +199,16 @@ Runtime hook input contracts differ by tool:
 - Codex imports exact token-count records from the Codex session importer.
 - Claude Code Stop hooks receive a safe payload with `transcript_path`; the
   adapter reads exact numeric usage from the transcript and writes safe events.
+  Note: Claude Code subagent runs write their transcripts under a `subagents/`
+  subdirectory. The adapter must check for and parse these subagent transcript
+  files (e.g., `subagents/agent-*.jsonl`) in addition to the main `transcript_path`
+  to prevent subagent token counts from being omitted.
 - Antigravity/AGY uses the local active importer. The setup helper removes
   managed Spill AGY `PostInvocation` entries so hook command logs cannot be
-  mistaken for usage evidence.
+  mistaken for usage evidence. Note: AGY does not suffer from subagent omissions
+  because the background active importer scans the entire `conversations/`
+  directory for all `*.db` files (since AGY subagent databases are written as
+  standard flat files in that folder on any PC).
 
 Never estimate token usage. If exact runtime usage is not available, write no
 usage event. Use local-only diagnostics for support state.

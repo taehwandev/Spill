@@ -81,10 +81,14 @@ Runtime input normalization:
   values, secrets, raw database paths, run ids, or span ids.
 - Claude Code uses a different Stop-hook contract: stdin should contain a safe
   payload with a `transcript_path`, and the adapter reads exact usage from the
-  transcript. Claude diagnostics must be split into `claude-last-empty.json`,
-  `claude-last-mismatch.json`, and `claude-last-success.json` so hook execution,
-  no-event outcomes, and real payload failures can be distinguished without
-  storing transcript paths or transcript content.
+  transcript. Note: Since Claude Code writes subagent transcripts to separate files
+  under a `subagents/` subdirectory (e.g., `subagents/agent-*.jsonl`), the Stop hook
+  must check for and parse these subagent transcript files in addition to the main
+  `transcript_path` to avoid omitting subagent token usage. Claude diagnostics must
+  be split into `claude-last-empty.json`, `claude-last-mismatch.json`, and
+  `claude-last-success.json` so hook execution, no-event outcomes, and real
+  payload failures can be distinguished without storing transcript paths or
+  transcript content.
 
 AGY evidence discipline:
 
@@ -255,8 +259,9 @@ Local receiver:
 
 - Prefer a trusted executable hook or adapter that enqueues one JSON event file in the local Spill queue:
   `~/Library/Application Support/Spill/token-metering/events-inbox/`
-- Write a unique `.tmp` file first, close it, then atomically rename it to `.json` in the same directory.
-- Spill imports complete `.json` files into the app-owned local store and ignores partial `.tmp` files.
+- For a single event, write a unique `.tmp` file first, close it, then atomically rename it to `.json` in the same directory.
+- For large history imports, write newline-delimited safe event JSON to a unique `.tmp` file, then atomically rename it to `.jsonl` in the same directory.
+- Spill imports complete `.json` and `.jsonl` files into the app-owned local store and ignores partial `.tmp` files.
 - Do not run a continuous polling watcher just for Spill metering. Use runtime hooks or final exact usage spans when available.
 
 The JSON event must contain only these keys:
