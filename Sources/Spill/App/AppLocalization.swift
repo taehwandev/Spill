@@ -341,7 +341,11 @@ enum AppL10n {
         source: String,
         appLanguage: SpillAppLanguage = .persisted()
     ) -> String {
-        String(format: text(.eventsSummary, appLanguage: appLanguage), eventCount, task, source)
+        String(format: text(.eventsSummary, appLanguage: appLanguage), formattedCount(eventCount), task, source)
+    }
+
+    private static func formattedCount(_ value: Int) -> String {
+        NumberFormatter.tokenUsageFull.string(from: NSNumber(value: value)) ?? "\(value)"
     }
 
     static func aiProcessSummary(
@@ -673,7 +677,7 @@ enum AppL10n {
             .openSetupPrompt: "Open to copy global setup prompt",
             .noTaskSplit: "No task split",
             .noSourceSplit: "No source split",
-            .eventsSummary: "%d events / %@ / %@",
+            .eventsSummary: "%@ events / %@ / %@",
             .aiProcessSummary: "%d running / %d processes",
             .process: "Process",
             .processes: "Processes",
@@ -893,7 +897,7 @@ enum AppL10n {
             .openSetupPrompt: "열어서 전역 설정 프롬프트 복사",
             .noTaskSplit: "작업 분류 없음",
             .noSourceSplit: "소스 분류 없음",
-            .eventsSummary: "이벤트 %d개 / %@ / %@",
+            .eventsSummary: "이벤트 %@개 / %@ / %@",
             .aiProcessSummary: "%d개 실행 / 프로세스 %d개",
             .process: "프로세스",
             .processes: "프로세스",
@@ -1113,7 +1117,7 @@ enum AppL10n {
             .openSetupPrompt: "開いてグローバル設定プロンプトをコピー",
             .noTaskSplit: "タスク分類なし",
             .noSourceSplit: "ソース分類なし",
-            .eventsSummary: "イベント %d件 / %@ / %@",
+            .eventsSummary: "イベント %@件 / %@ / %@",
             .aiProcessSummary: "%d 実行中 / %d プロセス",
             .process: "プロセス",
             .processes: "プロセス",
