@@ -60,9 +60,9 @@ enum TokenUsageDashboardRowBuilder {
             let value: String
             switch displayMode {
             case .tokens:
-                value = tokensString
+                value = "\(tokensString) (\(pctString))"
             case .percentage:
-                value = pctString
+                value = "\(pctString) (\(tokensString))"
             }
 
             return TokenUsageDashboardBarRow(

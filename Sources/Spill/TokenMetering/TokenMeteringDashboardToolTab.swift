@@ -13,7 +13,6 @@ struct TokenMeteringDashboardToolTab: View {
         let isLiveUpdated = store.isLiveUpdated(liveUpdateID)
         let isSelected = store.selectedTool == filter.tool
         let toolLastUpdated = lastUpdatedString(for: filter.tool)
-        let detail = toolLastUpdated.map { "\(tokenUsageDetail) · \($0)" } ?? tokenUsageDetail
         let serviceStatus = filter.tool.flatMap(serviceStatus)
         let hasServerIssue = serviceStatus?.health.isServerIssue ?? false
         let statusTint = serviceStatus?.health.serverStatusTint ?? Color.teal
@@ -35,7 +34,9 @@ struct TokenMeteringDashboardToolTab: View {
                     .frame(width: 7, height: 7)
 
                 tabLabel(
-                    detail: detail,
+                    detail: filter.detail,
+                    shareLabel: filter.shareLabel,
+                    lastUpdated: toolLastUpdated,
                     serviceStatus: serviceStatus,
                     isActive: isLiveUpdated,
                     isSelected: isSelected,
@@ -80,6 +81,8 @@ struct TokenMeteringDashboardToolTab: View {
 
     private func tabLabel(
         detail: String,
+        shareLabel: String?,
+        lastUpdated: String?,
         serviceStatus: CloudServiceStatusItem?,
         isActive: Bool,
         isSelected: Bool,
@@ -106,8 +109,20 @@ struct TokenMeteringDashboardToolTab: View {
                     .foregroundStyle(isSelected ? .white.opacity(0.78) : .secondary)
                     .lineLimit(1)
                     .contentTransition(.numericText())
-                    .animation(.snappy(duration: 0.35), value: filter.detail)
+                    .animation(.snappy(duration: 0.35), value: detail)
                     .layoutPriority(1)
+
+                if let shareLabel {
+                    toolShareBadge(shareLabel, isSelected: isSelected, tint: tint)
+                }
+
+                if let lastUpdated {
+                    Text("· \(lastUpdated)")
+                        .font(.system(size: 8.5, weight: .semibold, design: .rounded))
+                        .foregroundStyle(isSelected ? .white.opacity(0.72) : .secondary)
+                        .lineLimit(1)
+                        .layoutPriority(0.8)
+                }
 
                 TokenMeteringLiveUpdateDot(
                     isActive: isActive,
@@ -120,11 +135,27 @@ struct TokenMeteringDashboardToolTab: View {
         }
     }
 
-    private var tokenUsageDetail: String {
-        guard let shareLabel = filter.shareLabel else {
-            return filter.detail
-        }
-        return "\(filter.detail) (\(shareLabel))"
+    private func toolShareBadge(
+        _ value: String,
+        isSelected: Bool,
+        tint: Color
+    ) -> some View {
+        Text(value)
+            .font(.system(size: 8.5, weight: .black, design: .rounded))
+            .lineLimit(1)
+            .padding(.horizontal, 5)
+            .frame(height: 16)
+            .foregroundStyle(isSelected ? .white : tint)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(isSelected ? .white.opacity(0.16) : tint.opacity(0.12))
+            )
+            .overlay {
+                Capsule(style: .continuous)
+                    .stroke(isSelected ? .white.opacity(0.16) : tint.opacity(0.2), lineWidth: 0.5)
+            }
+            .contentTransition(.numericText())
+            .animation(.snappy(duration: 0.35), value: value)
     }
 
     private func hasServiceStatusAccessory(

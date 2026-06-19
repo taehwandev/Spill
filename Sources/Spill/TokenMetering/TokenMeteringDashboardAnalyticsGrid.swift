@@ -189,7 +189,8 @@ struct TokenMeteringDashboardAnalyticsGrid: View {
                 TokenMeteringDashboardEmptyMessage(title: emptyTitle, detail: t(.waitingForEvents))
             } else {
                 compactChartRows(rows, idPrefix: idPrefix, tint: tint, rowTint: rowTint)
-                    .frame(height: 160)
+                    .padding(.top, 10)
+                    .frame(minHeight: 210, alignment: .topLeading)
             }
         }
     }
@@ -217,10 +218,7 @@ struct TokenMeteringDashboardAnalyticsGrid: View {
                             .lineLimit(1)
                             .foregroundStyle(isHovered ? effectiveTint : .primary)
                         Spacer(minLength: 6)
-                        Text(row.value)
-                            .font(.system(size: 10, weight: isHovered ? .black : .bold, design: .monospaced))
-                            .foregroundStyle(isHovered ? .primary : .secondary)
-                            .contentTransition(.numericText())
+                        metricValue(row.value, tint: effectiveTint, isHovered: isHovered)
                     }
 
                     GeometryReader { geometry in
@@ -256,7 +254,53 @@ struct TokenMeteringDashboardAnalyticsGrid: View {
                 .modifier(TokenMeteringLiveUpdateEffect(isActive: isLiveUpdated && !isHovered, marker: store.liveUpdateMarker, cornerRadius: 7))
             }
         }
-        .frame(maxHeight: .infinity, alignment: .topLeading)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
+
+    private func metricValue(_ value: String, tint: Color, isHovered: Bool) -> some View {
+        let parts = metricValueParts(from: value)
+        return HStack(spacing: 5) {
+            Text(parts.primary)
+                .font(.system(size: 10, weight: isHovered ? .black : .bold, design: .monospaced))
+                .foregroundStyle(isHovered ? .primary : .secondary)
+                .contentTransition(.numericText())
+
+            if let badge = parts.badge {
+                metricValueBadge(badge, tint: tint, isHovered: isHovered)
+            }
+        }
+    }
+
+    private func metricValueBadge(_ value: String, tint: Color, isHovered: Bool) -> some View {
+        Text(value)
+            .font(.system(size: 8.5, weight: .black, design: .rounded))
+            .lineLimit(1)
+            .contentTransition(.numericText())
+            .padding(.horizontal, 5)
+            .frame(height: 17)
+            .foregroundStyle(isHovered ? tint : tint.opacity(0.92))
+            .background(tint.opacity(isHovered ? 0.16 : 0.10), in: Capsule(style: .continuous))
+            .overlay {
+                Capsule(style: .continuous)
+                    .stroke(tint.opacity(isHovered ? 0.30 : 0.18), lineWidth: 0.6)
+            }
+    }
+
+    private func metricValueParts(from value: String) -> (primary: String, badge: String?) {
+        guard value.hasSuffix(")"),
+              let range = value.range(of: " (", options: .backwards)
+        else {
+            return (value, nil)
+        }
+
+        let primary = String(value[..<range.lowerBound])
+        let badgeStart = value.index(range.lowerBound, offsetBy: 2)
+        let badgeEnd = value.index(before: value.endIndex)
+        guard badgeStart < badgeEnd else {
+            return (value, nil)
+        }
+
+        return (primary, String(value[badgeStart..<badgeEnd]))
     }
 
     private func aiToolTint(for row: TokenUsageDashboardBarRow) -> Color {

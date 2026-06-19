@@ -324,7 +324,7 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(snapshot.toolRows.map(\.title), ["Codex"])
         XCTAssertEqual(snapshot.modelRows.map(\.title), ["local-manual"])
         XCTAssertEqual(snapshot.taskRows.map(\.title), [TokenMeteringL10n.taskLabel("analysis")])
-        XCTAssertTrue(snapshot.sourceRows.contains { $0.title == TokenMeteringL10n.text(.sourceGeneratedOutput) && $0.value == "50" })
+        XCTAssertTrue(snapshot.sourceRows.contains { $0.title == TokenMeteringL10n.text(.sourceGeneratedOutput) && $0.value == "50 (33.3%)" })
         XCTAssertEqual(snapshot.sessions.first?.title, "Analysis - Plan")
         XCTAssertNil(snapshot.selectedSession)
     }
@@ -494,15 +494,15 @@ final class TokenUsageStoreTests: XCTestCase {
 
         let snapshot = TokenUsageDashboardSnapshot(events: [codex, claude])
         XCTAssertEqual(snapshot.modelRows.map(\.title), ["codex-test-model", "claude-test-model"])
-        XCTAssertEqual(snapshot.modelRows.map(\.value), ["100", "50"])
+        XCTAssertEqual(snapshot.modelRows.map(\.value), ["100 (66.7%)", "50 (33.3%)"])
 
         let percentageSnapshot = TokenUsageDashboardSnapshot(events: [codex, claude], displayMode: .percentage)
         XCTAssertEqual(percentageSnapshot.modelRows.first?.title, "codex-test-model")
-        XCTAssertEqual(percentageSnapshot.modelRows.first?.value, "66.7%")
+        XCTAssertEqual(percentageSnapshot.modelRows.first?.value, "66.7% (100)")
 
         let claudeSnapshot = TokenUsageDashboardSnapshot(events: [codex, claude], selectedTool: .claude)
         XCTAssertEqual(claudeSnapshot.modelRows.map(\.title), ["claude-test-model"])
-        XCTAssertEqual(claudeSnapshot.modelRows.map(\.value), ["50"])
+        XCTAssertEqual(claudeSnapshot.modelRows.map(\.value), ["50 (100.0%)"])
     }
 
     func testDashboardSourceRowsShowUnknownOnlyBreakdownAsRuntimeTotal() {
@@ -511,7 +511,7 @@ final class TokenUsageStoreTests: XCTestCase {
         ])
 
         XCTAssertEqual(snapshot.totalTokens, 33)
-        XCTAssertTrue(snapshot.sourceRows.contains { $0.title == TokenMeteringL10n.text(.sourceUnavailable) && $0.value == "33" })
+        XCTAssertTrue(snapshot.sourceRows.contains { $0.title == TokenMeteringL10n.text(.sourceUnavailable) && $0.value == "33 (100.0%)" })
         XCTAssertEqual(snapshot.sourceRows.map(\.id), ["unknown"])
     }
 
@@ -531,10 +531,10 @@ final class TokenUsageStoreTests: XCTestCase {
         ])
 
         XCTAssertEqual(snapshot.totalTokens, 33)
-        XCTAssertTrue(snapshot.sourceRows.contains { $0.title == TokenMeteringL10n.text(.sourceGeneratedOutput) && $0.value == "11" })
-        XCTAssertTrue(snapshot.sourceRows.contains { $0.title == TokenMeteringL10n.text(.sourceUnavailable) && $0.value == "22" })
+        XCTAssertTrue(snapshot.sourceRows.contains { $0.title == TokenMeteringL10n.text(.sourceGeneratedOutput) && $0.value == "11 (33.3%)" })
+        XCTAssertTrue(snapshot.sourceRows.contains { $0.title == TokenMeteringL10n.text(.sourceUnavailable) && $0.value == "22 (66.7%)" })
         XCTAssertEqual(snapshot.sourceRows.map(\.id), ["unknown", "generated_output"])
-        XCTAssertEqual(snapshot.sourceRows.map(\.value), ["22", "11"])
+        XCTAssertEqual(snapshot.sourceRows.map(\.value), ["22 (66.7%)", "11 (33.3%)"])
     }
 
     func testDashboardSnapshotClampsChartRatiosWhenBreakdownExceedsTotal() {
@@ -558,7 +558,7 @@ final class TokenUsageStoreTests: XCTestCase {
         let systemRow = snapshot.sourceRows.first { $0.id == "system" }
 
         XCTAssertEqual(snapshot.totalTokens, 10)
-        XCTAssertEqual(systemRow?.value, "60")
+        XCTAssertEqual(systemRow?.value, "60 (100.0%)")
         XCTAssertEqual(systemRow?.ratio, 1.0)
         XCTAssertTrue(snapshot.sourceRows.allSatisfy { row in
             row.ratio.isFinite && row.ratio >= 0.0 && row.ratio <= 1.0
@@ -701,16 +701,21 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(toolTab.contains("store.setSelectedTool(filter.tool)"))
         XCTAssertTrue(toolTab.contains("let isSelected = store.selectedTool == filter.tool"))
         XCTAssertTrue(toolTab.contains("filter.shareLabel"))
-        XCTAssertTrue(toolTab.contains("tokenUsageDetail"))
-        XCTAssertTrue(toolTab.contains(#"\(filter.detail) (\(shareLabel))"#))
-        XCTAssertFalse(toolTab.contains("toolShareBadge("))
+        XCTAssertTrue(toolTab.contains("toolShareBadge("))
+        XCTAssertFalse(toolTab.contains("tokenUsageDetail"))
+        XCTAssertFalse(toolTab.contains(#"\(filter.detail) (\(shareLabel))"#))
         XCTAssertTrue(toolTab.contains("filter.tool?.dashboardTint"))
         XCTAssertTrue(toolTab.contains("tabAccent.opacity(0.86)"))
         XCTAssertTrue(toolTab.contains("tabAccent.opacity(0.68)"))
         let tabDetailRange = try XCTUnwrap(toolTab.range(of: "Text(detail)"))
+        let tabBadgeRange = try XCTUnwrap(toolTab.range(of: "toolShareBadge("))
         let tabLiveDotRange = try XCTUnwrap(toolTab.range(of: "TokenMeteringLiveUpdateDot"))
-        XCTAssertLessThan(tabDetailRange.lowerBound, tabLiveDotRange.lowerBound)
+        XCTAssertLessThan(tabDetailRange.lowerBound, tabBadgeRange.lowerBound)
+        XCTAssertLessThan(tabBadgeRange.lowerBound, tabLiveDotRange.lowerBound)
         XCTAssertTrue(analyticsGrid.contains("rowTint: aiToolTint"))
+        XCTAssertTrue(analyticsGrid.contains("metricValueBadge("))
+        XCTAssertTrue(analyticsGrid.contains(".padding(.top, 10)"))
+        XCTAssertTrue(analyticsGrid.contains(".frame(minHeight: 210, alignment: .topLeading)"))
         XCTAssertTrue(analyticsGrid.contains("TokenUsageAITool(rawValue: row.id.lowercased())?.dashboardTint ?? .secondary"))
         XCTAssertTrue(toolColor.contains("extension TokenUsageAITool"))
         XCTAssertTrue(toolColor.contains("enum TokenMeteringDashboardToolPalette"))
@@ -3438,14 +3443,14 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(tokensSnapshot.displayMode, .tokens)
         XCTAssertEqual(tokensSnapshot.totalTokens, 150_000)
         XCTAssertEqual(tokensSnapshot.kpis.first(where: { $0.id == "total" })?.value, "150K")
-        XCTAssertEqual(tokensSnapshot.toolRows.first?.value, "150K")
+        XCTAssertEqual(tokensSnapshot.toolRows.first?.value, "150K (100.0%)")
         XCTAssertEqual(tokensSnapshot.sessions.first?.value, "150K")
 
         // 3. Percentage Mode
         let percentageSnapshot = TokenUsageDashboardSnapshot(events: events, displayMode: .percentage)
         XCTAssertEqual(percentageSnapshot.displayMode, .percentage)
         XCTAssertEqual(percentageSnapshot.kpis.first(where: { $0.id == "total" })?.value, "100.0%")
-        XCTAssertEqual(percentageSnapshot.toolRows.first?.value, "100.0%")
+        XCTAssertEqual(percentageSnapshot.toolRows.first?.value, "100.0% (150K)")
         XCTAssertEqual(percentageSnapshot.sessions.first?.value, "100.0%")
 
         let emptyPercentageSnapshot = TokenUsageDashboardSnapshot(events: [], displayMode: .percentage)
