@@ -588,10 +588,7 @@ final class TokenUsageAntigravityImporterTests: XCTestCase {
     }
 
     func testImporterUsesBatchAppendInsteadOfPerEventStoreAppend() throws {
-        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let source = try String(contentsOf: root.appendingPathComponent(
-            "Sources/Spill/TokenMetering/TokenUsageAntigravityImporter.swift"
-        ))
+        let source = try Self.source(named: "TokenUsageAntigravityImporter.swift")
 
         XCTAssertTrue(source.contains("store.appendEventsWithoutLoading(candidateEvents)"))
         XCTAssertFalse(source.contains("store.appendEvent("))
@@ -758,5 +755,19 @@ final class TokenUsageAntigravityImporterTests: XCTestCase {
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         return url
+    }
+
+    private static func source(named fileName: String) throws -> String {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let sourcesURL = root.appendingPathComponent("Sources/Spill", isDirectory: true)
+        let urls = FileManager.default.enumerator(
+            at: sourcesURL,
+            includingPropertiesForKeys: nil
+        )?
+            .compactMap { $0 as? URL }
+            .filter { $0.lastPathComponent == fileName }
+            .sorted { $0.path < $1.path } ?? []
+        let sourceURL = try XCTUnwrap(urls.first, "Missing source file named \(fileName)")
+        return try String(contentsOf: sourceURL)
     }
 }

@@ -1779,22 +1779,6 @@ final class TokenUsageStore: @unchecked Sendable {
     }
 }
 
-struct TokenUsageDashboardSummary: Equatable {
-    let eventCount: Int
-    let totalTokens: Int
-    let toolTotals: [String: Int]
-    let taskTotals: [String: Int]
-    let sourceTotals: [String: Int]
-
-    static let empty = TokenUsageDashboardSummary(
-        eventCount: 0,
-        totalTokens: 0,
-        toolTotals: [:],
-        taskTotals: [:],
-        sourceTotals: [:]
-    )
-}
-
 private enum TokenUsageStoreError: Error {
     case databaseOpenFailed
     case databaseWriteFailed
@@ -1813,24 +1797,4 @@ private struct StoreLoadResult {
 private struct DatabaseSchemaCheckpoint: Equatable {
     let fileIdentity: String?
     let schemaVersion: Int
-}
-
-struct SafeDecodableArray<Element: Decodable>: Decodable {
-    let elements: [Element]
-
-    private struct DummyDecodable: Decodable {}
-
-    init(from decoder: Decoder) throws {
-        var container = try decoder.unkeyedContainer()
-        var elements = [Element]()
-        while !container.isAtEnd {
-            do {
-                let element = try container.decode(Element.self)
-                elements.append(element)
-            } catch {
-                _ = try? container.decode(DummyDecodable.self)
-            }
-        }
-        self.elements = elements
-    }
 }
