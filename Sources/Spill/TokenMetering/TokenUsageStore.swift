@@ -248,6 +248,31 @@ final class TokenUsageStore: @unchecked Sendable {
         }
     }
 
+    func dashboardDayTokenTotals(
+        startingAt startDate: Date,
+        endingBefore endDate: Date,
+        calendar: Calendar,
+        dashboardToolsOnly: Bool = true
+    ) -> [String: Int] {
+        lock.withLock {
+            let database: OpaquePointer
+            do {
+                database = try openDatabase()
+            } catch {
+                return [:]
+            }
+            defer { sqlite3_close(database) }
+
+            return loadDashboardDayTokenTotals(
+                startingAt: startDate,
+                endingBefore: endDate,
+                calendar: calendar,
+                dashboardToolsOnly: dashboardToolsOnly,
+                database: database
+            )
+        }
+    }
+
     @discardableResult
     func replaceEvents(_ events: [TokenUsageEvent]) throws -> [TokenUsageEvent] {
         let replacedEvents = try lock.withLock {
@@ -1517,6 +1542,48 @@ final class TokenUsageStore: @unchecked Sendable {
         }
 
         return Int(sqlite3_column_int64(statement, 0))
+    }
+
+    private func loadDashboardDayTokenTotals(
+        startingAt startDate: Date,
+        endingBefore endDate: Date,
+        calendar: Calendar,
+        dashboardToolsOnly: Bool,
+        database: OpaquePointer
+    ) -> [String: Int] {
+        var sql = """
+        SELECT created_at, total_tokens
+        FROM token_usage_events
+        WHERE created_at >= ? AND created_at < ?
+        """
+        if dashboardToolsOnly {
+            sql += " AND ai_tool IN ('codex', 'claude', 'antigravity')"
+        }
+
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
+              let statement
+        else {
+            return [:]
+        }
+        defer { sqlite3_finalize(statement) }
+
+        let startValue = ISO8601DateFormatter.tokenUsage.string(from: startDate)
+        let endValue = ISO8601DateFormatter.tokenUsage.string(from: endDate)
+        sqlite3_bind_text(statement, 1, startValue, -1, SQLITE_TRANSIENT)
+        sqlite3_bind_text(statement, 2, endValue, -1, SQLITE_TRANSIENT)
+
+        var totals = [String: Int]()
+        while sqlite3_step(statement) == SQLITE_ROW {
+            guard let createdAt = Self.columnString(statement, 0),
+                  let date = ISO8601DateFormatter.parseTokenUsageDate(from: createdAt)
+            else {
+                continue
+            }
+            let dayID = TokenUsageDashboardSnapshot.dayID(for: date, calendar: calendar)
+            totals[dayID, default: 0] += Int(sqlite3_column_int64(statement, 1))
+        }
+        return totals
     }
 
     private static func dashboardToolWhereClause(dashboardToolsOnly: Bool) -> String {

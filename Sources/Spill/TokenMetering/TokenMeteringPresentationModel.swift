@@ -55,6 +55,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
         calendar: Calendar,
         periodFilterTotals: [TokenUsageDashboardPeriod: Int]? = nil,
         availableDateBounds: TokenUsageDashboardDateBounds? = nil,
+        calendarDayTotals: [String: Int]? = nil,
         periodOffset: Int = 0,
         locale: Locale = .autoupdatingCurrent,
         timeZone: TimeZone = .autoupdatingCurrent
@@ -80,6 +81,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
             calendar: calendar,
             periodFilterTotals: periodFilterTotals,
             availableDateBounds: availableDateBounds,
+            calendarDayTotals: calendarDayTotals,
             periodOffset: periodOffset,
             locale: locale,
             timeZone: timeZone
@@ -102,6 +104,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
         calendar: Calendar,
         periodFilterTotals: [TokenUsageDashboardPeriod: Int]? = nil,
         availableDateBounds: TokenUsageDashboardDateBounds? = nil,
+        calendarDayTotals: [String: Int]? = nil,
         periodOffset: Int = 0,
         locale: Locale = .autoupdatingCurrent,
         timeZone: TimeZone = .autoupdatingCurrent
@@ -111,6 +114,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
             .map { monthStart(for: $0, calendar: calendar) }
         let displayCalendarMonth = normalizedCalendarMonthStart(
             events: context.dashboardEvents,
+            availableDateBounds: availableDateBounds,
             now: now,
             proposedMonthStart: proposedCalendarMonthStart ?? selectedDayMonth,
             calendar: calendar
@@ -134,7 +138,8 @@ struct TokenUsageDashboardSnapshot: Equatable {
             periodOffset: periodOffset,
             calendar: calendar,
             locale: locale,
-            timeZone: timeZone
+            timeZone: timeZone,
+            calendarDayTotals: calendarDayTotals
         )
         let unfiltered = selectedTool == nil && selectedProjectID == nil
             ? filtered
@@ -157,7 +162,8 @@ struct TokenUsageDashboardSnapshot: Equatable {
                 periodOffset: periodOffset,
                 calendar: calendar,
                 locale: locale,
-                timeZone: timeZone
+                timeZone: timeZone,
+                calendarDayTotals: calendarDayTotals
             )
 
         return TokenUsageDashboardSnapshotPair(
@@ -185,7 +191,8 @@ struct TokenUsageDashboardSnapshot: Equatable {
         periodOffset: Int = 0,
         calendar: Calendar = .autoupdatingCurrent,
         locale: Locale = .autoupdatingCurrent,
-        timeZone: TimeZone = .autoupdatingCurrent
+        timeZone: TimeZone = .autoupdatingCurrent,
+        calendarDayTotals: [String: Int]? = nil
     ) {
         self.init(
             context: TokenUsageDashboardSnapshotBuildContext(
@@ -210,7 +217,8 @@ struct TokenUsageDashboardSnapshot: Equatable {
             periodOffset: periodOffset,
             calendar: calendar,
             locale: locale,
-            timeZone: timeZone
+            timeZone: timeZone,
+            calendarDayTotals: calendarDayTotals
         )
     }
 
@@ -233,7 +241,8 @@ struct TokenUsageDashboardSnapshot: Equatable {
         periodOffset: Int = 0,
         calendar: Calendar = .autoupdatingCurrent,
         locale: Locale = .autoupdatingCurrent,
-        timeZone: TimeZone = .autoupdatingCurrent
+        timeZone: TimeZone = .autoupdatingCurrent,
+        calendarDayTotals: [String: Int]? = nil
     ) {
         self.displayMode = displayMode
         let dashboardEvents = context.dashboardEvents
@@ -487,15 +496,14 @@ struct TokenUsageDashboardSnapshot: Equatable {
             .map { Self.monthStart(for: $0, calendar: calendar) }
         let calendarMonth = resolvedCalendarMonthStart ?? Self.normalizedCalendarMonthStart(
             events: dashboardEvents,
+            availableDateBounds: availableDateBounds,
             now: now,
             proposedMonthStart: calendarMonthStart ?? selectedDayMonth,
             calendar: calendar
         )
-        let firstDataMonth = Self.firstDataMonthStart(
-            events: dashboardEvents,
-            now: now,
-            calendar: calendar
-        )
+        let firstDataMonth = availableDateBounds?.earliest
+            .map { Self.monthStart(for: $0, calendar: calendar) }
+            ?? Self.firstDataMonthStart(events: dashboardEvents, now: now, calendar: calendar)
         let currentMonth = Self.monthStart(for: now, calendar: calendar)
         calendarMonthTitle = Self.formatCalendarMonth(calendarMonth, locale: locale, timeZone: timeZone)
         calendarWeekdayTitles = Self.weekdayTitles(locale: locale)
@@ -508,7 +516,8 @@ struct TokenUsageDashboardSnapshot: Equatable {
             todayCalendarDayID: todayCalendarDayID,
             calendar: calendar,
             locale: locale,
-            timeZone: timeZone
+            timeZone: timeZone,
+            dayTokenTotals: calendarDayTotals
         )
 
         codexLastUpdatedString = codexLastUpdated.map {
@@ -1220,18 +1229,25 @@ struct TokenUsageDashboardSnapshot: Equatable {
         todayCalendarDayID: String,
         calendar: Calendar,
         locale: Locale,
-        timeZone: TimeZone
+        timeZone: TimeZone,
+        dayTokenTotals: [String: Int]? = nil
     ) -> [TokenUsageDashboardCalendarDay] {
         guard let displayEnd = calendar.date(byAdding: .month, value: 1, to: monthStart) else {
             return []
         }
 
-        let eventsByDay = Dictionary(grouping: events) { event in
-            event.dayBucket
+        let resolvedDayTokenTotals: [String: Int]
+        if let dayTokenTotals {
+            resolvedDayTokenTotals = dayTokenTotals
+        } else {
+            let eventsByDay = Dictionary(grouping: events) { event in
+                event.dayBucket
+            }
+            resolvedDayTokenTotals = eventsByDay.mapValues { groupedEvents in
+                groupedEvents.reduce(0) { $0 + $1.event.totalTokens }
+            }
         }
-        let maxTokens = max(1, eventsByDay.values.map { groupedEvents in
-            groupedEvents.reduce(0) { $0 + $1.event.totalTokens }
-        }.max() ?? 0)
+        let maxTokens = max(1, resolvedDayTokenTotals.values.max() ?? 0)
 
         let dayFormatter = DateFormatter()
         dayFormatter.locale = locale
@@ -1264,8 +1280,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
         var cursor = calendar.startOfDay(for: monthStart)
         while cursor < displayEnd {
             let dayBucket = dayID(for: cursor, calendar: calendar)
-            let groupedEvents = eventsByDay[dayBucket, default: []]
-            let tokens = groupedEvents.reduce(0) { $0 + $1.event.totalTokens }
+            let tokens = resolvedDayTokenTotals[dayBucket, default: 0]
             let day = calendar.component(.day, from: cursor)
             let calendarDayTitle = calendarDayTitleFormatter.string(from: cursor)
             days.append(TokenUsageDashboardCalendarDay(
@@ -1275,7 +1290,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
                 detail: "\(calendarDayTitle) · \(formatTokens(tokens))",
                 ratio: chartRatio(tokens: tokens, totalTokens: maxTokens),
                 isCurrentMonth: true,
-                hasEvents: !groupedEvents.isEmpty,
+                hasEvents: tokens > 0,
                 isPlaceholder: false,
                 isToday: dayBucket == todayCalendarDayID,
                 isSelected: dayBucket == selectedCalendarDayID
@@ -1322,6 +1337,26 @@ struct TokenUsageDashboardSnapshot: Equatable {
         return proposed
     }
 
+    static func normalizedCalendarMonthStart(
+        availableDateBounds: TokenUsageDashboardDateBounds?,
+        now: Date,
+        proposedMonthStart: Date?,
+        calendar: Calendar
+    ) -> Date {
+        let currentMonth = monthStart(for: now, calendar: calendar)
+        let firstDataMonth = availableDateBounds?.earliest
+            .map { monthStart(for: $0, calendar: calendar) }
+            ?? currentMonth
+        let proposed = proposedMonthStart.map { monthStart(for: $0, calendar: calendar) } ?? currentMonth
+        if calendar.compare(proposed, to: firstDataMonth, toGranularity: .month) == .orderedAscending {
+            return firstDataMonth
+        }
+        if calendar.compare(proposed, to: currentMonth, toGranularity: .month) == .orderedDescending {
+            return currentMonth
+        }
+        return proposed
+    }
+
     static func chartRatio(tokens: Int, totalTokens: Int) -> Double {
         guard tokens > 0, totalTokens > 0 else {
             return 0.0
@@ -1336,12 +1371,15 @@ struct TokenUsageDashboardSnapshot: Equatable {
 
     private static func normalizedCalendarMonthStart(
         events: [TokenUsageDashboardParsedEvent],
+        availableDateBounds: TokenUsageDashboardDateBounds?,
         now: Date,
         proposedMonthStart: Date?,
         calendar: Calendar
     ) -> Date {
         let currentMonth = monthStart(for: now, calendar: calendar)
-        let firstDataMonth = firstDataMonthStart(events: events, now: now, calendar: calendar)
+        let firstDataMonth = availableDateBounds?.earliest
+            .map { monthStart(for: $0, calendar: calendar) }
+            ?? firstDataMonthStart(events: events, now: now, calendar: calendar)
         let proposed = proposedMonthStart.map { monthStart(for: $0, calendar: calendar) } ?? currentMonth
         if calendar.compare(proposed, to: firstDataMonth, toGranularity: .month) == .orderedAscending {
             return firstDataMonth

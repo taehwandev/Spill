@@ -26,6 +26,11 @@ private struct TokenUsageDashboardEventLoadScope {
     let cacheCoverageDateRange: TokenUsageDashboardSnapshot.DateRange
 }
 
+private struct TokenUsageDashboardCalendarMonthSummary {
+    let monthStart: Date
+    let dayTokenTotals: [String: Int]
+}
+
 private struct TokenUsageDashboardContextCacheKey: Equatable {
     let eventCount: Int
     let firstSpanID: String?
@@ -279,11 +284,13 @@ final class TokenUsageDashboardStore: ObservableObject {
             let panelSummary = refreshesPanelSummary ? Self.loadPanelSummary(from: usageStore, for: request) : nil
             let dateBounds = Self.loadDateBounds(from: usageStore, for: request)
             let buildRequest = request.replacingAvailableDateBounds(dateBounds)
+            let calendarMonthSummary = Self.loadCalendarMonthSummary(from: usageStore, for: buildRequest)
             let displayEvents = usesPreviewDataSource ? TokenUsageDashboardPreviewDataSource.onboardingEvents : loadedEvents
             let snapshotOutput = Self.buildSnapshotOutput(
                 events: displayEvents,
                 request: buildRequest,
                 periodFilterTotals: periodFilterTotals,
+                calendarDayTotals: calendarMonthSummary.dayTokenTotals,
                 cachedContext: cachedContext,
                 cachedContextKey: cachedContextKey
             )
@@ -365,10 +372,12 @@ final class TokenUsageDashboardStore: ObservableObject {
             dashboardToolsOnly: !SpillSettings.shared.tokenUsageShowAdvancedTools
         )
         let request = snapshotBuildRequest().replacingAvailableDateBounds(nextDateBounds)
+        let calendarMonthSummary = Self.loadCalendarMonthSummary(from: usageStore, for: request)
         let snapshotOutput = Self.buildSnapshotOutput(
             events: displayEvents,
             request: request,
             periodFilterTotals: periodFilterTotals,
+            calendarDayTotals: calendarMonthSummary.dayTokenTotals,
             cachedContext: cachedSnapshotContext,
             cachedContextKey: cachedSnapshotContextKey
         )
@@ -408,10 +417,12 @@ final class TokenUsageDashboardStore: ObservableObject {
         snapshotBuildQueue.async {
             let dateBounds = Self.loadDateBounds(from: usageStore, for: request)
             let buildRequest = request.replacingAvailableDateBounds(dateBounds)
+            let calendarMonthSummary = Self.loadCalendarMonthSummary(from: usageStore, for: buildRequest)
             let snapshotOutput = Self.buildSnapshotOutput(
                 events: displayEvents,
                 request: buildRequest,
                 periodFilterTotals: currentPeriodFilterTotals,
+                calendarDayTotals: calendarMonthSummary.dayTokenTotals,
                 cachedContext: cachedContext,
                 cachedContextKey: cachedContextKey
             )
@@ -521,6 +532,7 @@ final class TokenUsageDashboardStore: ObservableObject {
         events: [TokenUsageEvent],
         request: TokenUsageDashboardBuildRequest,
         periodFilterTotals: [TokenUsageDashboardPeriod: Int],
+        calendarDayTotals: [String: Int],
         cachedContext: TokenUsageDashboardSnapshotBuildContext?,
         cachedContextKey: TokenUsageDashboardContextCacheKey?
     ) -> TokenUsageDashboardSnapshotBuildOutput {
@@ -553,6 +565,7 @@ final class TokenUsageDashboardStore: ObservableObject {
             calendar: request.calendar,
             periodFilterTotals: resolvedPeriodFilterTotals,
             availableDateBounds: request.availableDateBounds,
+            calendarDayTotals: calendarDayTotals,
             periodOffset: request.periodOffset
         )
         return TokenUsageDashboardSnapshotBuildOutput(
@@ -571,6 +584,7 @@ final class TokenUsageDashboardStore: ObservableObject {
             events: events,
             request: request,
             periodFilterTotals: periodFilterTotals,
+            calendarDayTotals: [:],
             cachedContext: nil,
             cachedContextKey: nil
         )
@@ -664,6 +678,27 @@ final class TokenUsageDashboardStore: ObservableObject {
         )
     }
 
+    nonisolated private static func loadCalendarMonthSummary(
+        from usageStore: TokenUsageStore,
+        for request: TokenUsageDashboardBuildRequest
+    ) -> TokenUsageDashboardCalendarMonthSummary {
+        let monthStart = calendarMonthStart(for: request)
+        let monthRange = calendarMonthDateRange(startingAt: monthStart, calendar: request.calendar)
+        let endDate = monthRange.end
+            ?? request.calendar.date(byAdding: .month, value: 1, to: monthStart)
+            ?? monthStart
+        let dayTokenTotals = usageStore.dashboardDayTokenTotals(
+            startingAt: monthStart,
+            endingBefore: endDate,
+            calendar: request.calendar,
+            dashboardToolsOnly: !request.showAdvancedTools
+        )
+        return TokenUsageDashboardCalendarMonthSummary(
+            monthStart: monthStart,
+            dayTokenTotals: dayTokenTotals
+        )
+    }
+
     nonisolated private static func loadPeriodFilterTotals(
         from usageStore: TokenUsageStore,
         for request: TokenUsageDashboardBuildRequest
@@ -746,6 +781,20 @@ final class TokenUsageDashboardStore: ObservableObject {
             return eventLoadRange
         }
         return TokenUsageDashboardSnapshot.DateRange(start: eventLoadRange.start, end: nil)
+    }
+
+    nonisolated private static func calendarMonthStart(
+        for request: TokenUsageDashboardBuildRequest
+    ) -> Date {
+        let selectedDayMonth = request.selectedCalendarDayID
+            .flatMap { TokenUsageDashboardSnapshot.date(forDayID: $0, calendar: request.calendar) }
+            .map { TokenUsageDashboardSnapshot.monthStart(for: $0, calendar: request.calendar) }
+        return TokenUsageDashboardSnapshot.normalizedCalendarMonthStart(
+            availableDateBounds: request.availableDateBounds,
+            now: request.now,
+            proposedMonthStart: request.proposedCalendarMonthStart ?? selectedDayMonth,
+            calendar: request.calendar
+        )
     }
 
     nonisolated private static func dateRange(
@@ -1105,6 +1154,8 @@ final class TokenUsageDashboardStore: ObservableObject {
         let previousSnapshot = snapshot
         let previousUnfilteredSnapshot = unfilteredSnapshot
         let usageStore = usageStore
+        let currentEvents = events
+        let currentLoadedEventsDateRange = loadedEventsDateRange
         let cachedContext = cachedSnapshotContext
         let cachedContextKey = cachedSnapshotContextKey
         let currentPeriodFilterTotals = periodFilterTotals
@@ -1112,19 +1163,21 @@ final class TokenUsageDashboardStore: ObservableObject {
         isRefreshing = true
 
         snapshotBuildQueue.async {
-            let loadedEvents = Self.loadEvents(
+            let loadedEventScope = Self.loadEvents(
                 from: usageStore,
-                ranges: [
-                    Self.eventLoadDateRange(for: request),
-                    Self.calendarMonthDateRange(startingAt: proposedMonth, calendar: request.calendar)
-                ]
+                for: request,
+                cachedEvents: currentEvents,
+                cachedDateRange: currentLoadedEventsDateRange
             )
+            let loadedEvents = loadedEventScope.events
             let dateBounds = Self.loadDateBounds(from: usageStore, for: request)
             let buildRequest = request.replacingAvailableDateBounds(dateBounds)
+            let calendarMonthSummary = Self.loadCalendarMonthSummary(from: usageStore, for: buildRequest)
             let snapshotOutput = Self.buildSnapshotOutput(
                 events: loadedEvents,
                 request: buildRequest,
                 periodFilterTotals: currentPeriodFilterTotals,
+                calendarDayTotals: calendarMonthSummary.dayTokenTotals,
                 cachedContext: cachedContext,
                 cachedContextKey: cachedContextKey
             )
@@ -1141,7 +1194,7 @@ final class TokenUsageDashboardStore: ObservableObject {
                     previousEvents: nil,
                     previousSnapshot: previousSnapshot,
                     previousUnfilteredSnapshot: previousUnfilteredSnapshot,
-                    loadedEventsDateRange: nil,
+                    loadedEventsDateRange: loadedEventScope.cacheCoverageDateRange,
                     periodFilterTotals: nil,
                     panelSummary: nil,
                     availableDateBounds: dateBounds,

@@ -1496,6 +1496,9 @@ final class TokenUsageStoreTests: XCTestCase {
         try await waitForDashboardStoreRefresh(dashboardStore)
         XCTAssertEqual(dashboardStore.snapshot.eventCount, 1)
         XCTAssertEqual(dashboardStore.snapshot.totalTokens, 100)
+        XCTAssertTrue(dashboardStore.snapshot.calendarDays.contains { day in
+            day.id == yesterdayDayID && day.hasEvents
+        })
         XCTAssertEqual(dashboardStore.panelSummary.eventCount, 2)
 
         dashboardStore.selectCalendarDay(yesterdayDayID)
