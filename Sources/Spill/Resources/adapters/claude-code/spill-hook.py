@@ -46,6 +46,7 @@ LABEL_FILE = pathlib.Path(
         pathlib.Path.home() / "Library/Application Support/Spill/token-metering/label-context/claude.json",
     )
 )
+LABEL_TIMELINE_FILE = pathlib.Path(str(LABEL_FILE).removesuffix(".json") + "-timeline.jsonl")
 DIAGNOSTICS_DIR = pathlib.Path(
     os.environ.get(
         "SPILL_TOKEN_USAGE_DIAGNOSTICS_DIR",
@@ -64,6 +65,9 @@ _WRITE_TOOLS = {'Edit', 'Write', 'MultiEdit', 'NotebookEdit'}
 # Tools that read without changing state.
 _READ_TOOLS = {'Read', 'Grep', 'WebFetch', 'WebSearch', 'LS'}
 _USED_LABEL_FILE = False
+_SCAN_IMPORTED = "imported"
+_SCAN_SKIPPED = "skipped"
+_SCAN_UNSUPPORTED = "unsupported"
 
 
 def _opaque(value: str, fallback: str) -> str:
@@ -155,6 +159,66 @@ def _label_file_value(*keys: str) -> str:
     return ""
 
 
+def _parse_token_usage_datetime(value: str):
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        return datetime.datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except Exception:
+        return None
+
+
+def _label_timeline_for_timestamp(timestamp: str) -> dict:
+    event_time = _parse_token_usage_datetime(timestamp)
+    if event_time is None:
+        return {}
+
+    best = None
+    try:
+        lines = LABEL_TIMELINE_FILE.read_text().splitlines()
+    except Exception:
+        return {}
+
+    for line in lines:
+        if not line.strip():
+            continue
+        try:
+            data = json.loads(line)
+        except Exception:
+            continue
+        if not isinstance(data, dict):
+            continue
+        tool = data.get("ai_tool", "")
+        if tool not in ("", "unknown", "claude"):
+            continue
+        task_type = data.get("task_type", "")
+        stage = data.get("stage", "")
+        if not _SAFE_SLUG.match(task_type) and not _SAFE_SLUG.match(stage):
+            continue
+        updated_at = _parse_token_usage_datetime(data.get("updated_at", ""))
+        expires_at = _parse_token_usage_datetime(data.get("expires_at", ""))
+        if updated_at is None or expires_at is None:
+            continue
+        if not (updated_at <= event_time <= expires_at):
+            continue
+        if best is None or updated_at > best["updated_at"]:
+            project_id = data.get("project_id", "")
+            best = {
+                "task_type": task_type if _SAFE_SLUG.match(task_type) else "",
+                "stage": stage if _SAFE_SLUG.match(stage) else "",
+                "project_id": project_id if _OPAQUE_ID.match(project_id) else "",
+                "updated_at": updated_at,
+            }
+
+    if best is None:
+        return {}
+    return {
+        "task_type": best["task_type"],
+        "stage": best["stage"],
+        "project_id": best["project_id"],
+    }
+
+
 def _enqueue_event(event: dict) -> None:
     INBOX_DIR.mkdir(parents=True, exist_ok=True)
     event_id = uuid.uuid4().hex
@@ -163,6 +227,22 @@ def _enqueue_event(event: dict) -> None:
 
     with open(temporary_path, "x") as f:
         f.write(json.dumps(event, separators=(",", ":")))
+    os.chmod(temporary_path, 0o600)
+    os.replace(temporary_path, final_path)
+
+
+def _enqueue_events(events: list[dict]) -> None:
+    if not events:
+        return
+    INBOX_DIR.mkdir(parents=True, exist_ok=True)
+    event_id = uuid.uuid4().hex
+    temporary_path = INBOX_DIR / f".{event_id}.tmp"
+    final_path = INBOX_DIR / f"{event_id}.jsonl"
+
+    with open(temporary_path, "x") as f:
+        for event in events:
+            f.write(json.dumps(event, separators=(",", ":")))
+            f.write("\n")
     os.chmod(temporary_path, 0o600)
     os.replace(temporary_path, final_path)
 
@@ -393,15 +473,61 @@ def _turn_from_record(obj: dict):
     msg = obj.get("message", {})
     if not isinstance(msg, dict) or msg.get("role", "") != "assistant":
         return None
+    ts = obj.get("timestamp", "")
+    request_id = obj.get("requestId", "") or msg.get("id", "") or obj.get("uuid", "")
     if isinstance(msg.get("usage"), dict):
-        return msg
+        turn = dict(msg)
+        if isinstance(request_id, str) and request_id:
+            turn["request_id"] = request_id
+        if ts:
+            turn["timestamp"] = ts
+        return turn
     if isinstance(obj.get("usage"), dict):
-        return {
+        turn = {
             "model": msg.get("model", ""),
             "usage": obj.get("usage", {}),
             "content": msg.get("content", []),
         }
+        if isinstance(request_id, str) and request_id:
+            turn["request_id"] = request_id
+        if ts:
+            turn["timestamp"] = ts
+        return turn
     return None
+
+
+def _history_turn_sort_key(turn: dict) -> tuple[str, int]:
+    timestamp = turn.get("timestamp", "")
+    return (timestamp if isinstance(timestamp, str) else "", int(turn.get("turn_index", 0) or 0))
+
+
+def _deduplicate_transcript_turns(turns: list[dict]) -> list[dict]:
+    keyed: dict[str, dict] = {}
+    passthrough: list[dict] = []
+
+    for turn in turns:
+        request_id = turn.get("request_id", "")
+        if not isinstance(request_id, str) or not request_id:
+            passthrough.append(turn)
+            continue
+
+        existing = keyed.get(request_id)
+        if existing is None:
+            keyed[request_id] = turn
+            continue
+
+        existing_input, existing_output = _usage_totals(existing.get("usage", {}))
+        turn_input, turn_output = _usage_totals(turn.get("usage", {}))
+        existing_total = existing_input + existing_output
+        turn_total = turn_input + turn_output
+        if _history_turn_sort_key(turn) > _history_turn_sort_key(existing) or turn_total > existing_total:
+            keyed[request_id] = turn
+
+    deduplicated = passthrough + list(keyed.values())
+    deduplicated.sort(key=_history_turn_sort_key)
+    for index, turn in enumerate(deduplicated):
+        turn["turn_index"] = index
+    return deduplicated
 
 
 def _read_transcript_turns(transcript_path: str, byte_offset: int) -> tuple[list[dict], int, int]:
@@ -416,6 +542,7 @@ def _read_transcript_turns(transcript_path: str, byte_offset: int) -> tuple[list
     all_turns: list[dict] = []
     current_group: list[dict] = []
     end_offset = start_offset
+    turn_index = 0
 
     with open(transcript_path, "rb") as f:
         f.seek(start_offset)
@@ -434,12 +561,14 @@ def _read_transcript_turns(transcript_path: str, byte_offset: int) -> tuple[list
                 else:
                     turn = _turn_from_record(obj)
                     if turn is not None:
+                        turn["turn_index"] = turn_index
+                        turn_index += 1
                         current_group.append(turn)
             except Exception:
                 pass
 
     all_turns.extend(current_group)
-    return all_turns, end_offset, start_offset
+    return _deduplicate_transcript_turns(all_turns), end_offset, start_offset
 
 
 def main() -> None:
@@ -471,18 +600,123 @@ def main() -> None:
     _run_for_payload(payload)
 
 
-def _run_for_payload(payload: dict) -> None:
+def _run_history_payload(payload: dict, enqueue_event=_enqueue_event, flush_events=None) -> dict:
+    transcript_path = payload.get("transcript_path", "")
+    session_id = payload.get("session_id", "")
+    run_id = _opaque(session_id, "run-" + uuid.uuid4().hex[:12])
+    result = {"imported_events": 0, "skipped_seen": 0, "unsupported_records": 0}
+
+    if not transcript_path or not pathlib.Path(transcript_path).is_file():
+        result["unsupported_records"] += 1
+        return result
+
+    prev_fresh, prev_output, previous_byte_offset = _load_session_state(run_id)
+    try:
+        all_turns, transcript_byte_offset, read_start_offset = _read_transcript_turns(
+            transcript_path,
+            previous_byte_offset,
+        )
+    except Exception:
+        result["unsupported_records"] += 1
+        return result
+
+    if not all_turns:
+        if transcript_byte_offset > previous_byte_offset:
+            _save_session_state(run_id, prev_fresh, prev_output, transcript_byte_offset)
+        if previous_byte_offset > 0:
+            result["skipped_seen"] += 1
+        else:
+            result["unsupported_records"] += 1
+        return result
+
+    session_fresh = 0
+    session_output = 0
+    emitted_any = False
+    for turn in all_turns:
+        turn_input, turn_output = _usage_totals(turn.get("usage", {}))
+        session_fresh += turn_input
+        session_output += turn_output
+        total = turn_input + turn_output
+        if total <= 0:
+            result["unsupported_records"] += 1
+            continue
+
+        timestamp = turn.get("timestamp", "")
+        if not timestamp:
+            result["unsupported_records"] += 1
+            continue
+
+        raw_model = turn.get("model", "")
+        model = raw_model if _MODEL_ID.match(raw_model) else "claude-unknown"
+        label = _label_timeline_for_timestamp(timestamp)
+        task_type = label.get("task_type") if _SAFE_SLUG.match(label.get("task_type", "")) else "uncategorized"
+        stage = label.get("stage") if _SAFE_SLUG.match(label.get("stage", "")) else "summarize"
+        project_id = label.get("project_id") if _OPAQUE_ID.match(label.get("project_id", "")) else "project_global"
+        span_id = _stable_span_id(
+            run_id,
+            model,
+            str(turn.get("turn_index", "")),
+            timestamp,
+            str(turn_input),
+            str(turn_output),
+        )
+
+        enqueue_event({
+            "schema_version": 1,
+            "device_id": "device_local",
+            "project_id": project_id,
+            "artifact_id": "artifact_global",
+            "run_id": run_id,
+            "span_id": span_id,
+            "ai_tool": "claude",
+            "task_type": task_type,
+            "stage": stage,
+            "model": model,
+            "input_tokens": turn_input,
+            "output_tokens": turn_output,
+            "total_tokens": total,
+            "token_breakdown": {
+                "system": 0,
+                "user": 0,
+                "history": 0,
+                "repo_context": 0,
+                "tool_output": 0,
+                "generated_output": turn_output,
+                "unknown": turn_input,
+            },
+            "latency_ms": 0,
+            "created_at": timestamp,
+        })
+        emitted_any = True
+        result["imported_events"] += 1
+
+    if emitted_any:
+        if flush_events is not None:
+            flush_events()
+        _save_session_state(
+            run_id,
+            prev_fresh + session_fresh if read_start_offset > 0 else session_fresh,
+            prev_output + session_output if read_start_offset > 0 else session_output,
+            transcript_byte_offset,
+        )
+    elif transcript_byte_offset > previous_byte_offset:
+        _save_session_state(run_id, prev_fresh, prev_output, transcript_byte_offset)
+
+    return result
+
+
+def _run_for_payload(payload: dict, scan_subagents: bool = True, allow_timestamp_fallback: bool = True) -> str:
     transcript_path = payload.get("transcript_path", "")
     session_id = payload.get("session_id", "")
     run_id = _opaque(session_id, "run-" + uuid.uuid4().hex[:12])
 
     if not transcript_path:
         _write_diagnostic_file(MISMATCH_DIAGNOSTIC_FILE_NAME, "runtime_payload_mismatch", "missing_transcript_path", payload)
-        return
+        return _SCAN_UNSUPPORTED
 
     if not pathlib.Path(transcript_path).is_file():
         _write_diagnostic_file(MISMATCH_DIAGNOSTIC_FILE_NAME, "runtime_payload_mismatch", "transcript_unavailable", payload)
-        return
+        return _SCAN_UNSUPPORTED
 
     prev_fresh, prev_output, previous_byte_offset = _load_session_state(run_id)
     try:
@@ -492,19 +726,20 @@ def _run_for_payload(payload: dict) -> None:
         )
     except Exception:
         _write_diagnostic_file(MISMATCH_DIAGNOSTIC_FILE_NAME, "runtime_payload_mismatch", "transcript_read_failed", payload)
-        return
+        return _SCAN_UNSUPPORTED
 
     if not all_turns:
         if transcript_byte_offset > previous_byte_offset:
             _save_session_state(run_id, prev_fresh, prev_output, transcript_byte_offset)
+        reason = "no_new_token_delta" if previous_byte_offset > 0 else "no_assistant_usage"
         _write_diagnostic_file(
             EMPTY_DIAGNOSTIC_FILE_NAME,
             "no_usage_hook_call",
-            "no_new_token_delta" if previous_byte_offset > 0 else "no_assistant_usage",
+            reason,
             payload,
             meaning="Claude Stop hook ran, but no new assistant usage records were available for this stop.",
         )
-        return
+        return _SCAN_SKIPPED if reason == "no_new_token_delta" else _SCAN_UNSUPPORTED
 
     # Collect tool names from all turns (name field only, not inputs).
     tool_names: set[str] = set()
@@ -533,7 +768,7 @@ def _run_for_payload(payload: dict) -> None:
             payload,
             meaning="Claude Stop hook ran, but exact token usage totals were zero.",
         )
-        return
+        return _SCAN_UNSUPPORTED
 
     raw_model = all_turns[-1].get("model", "")
     model = raw_model if _MODEL_ID.match(raw_model) else "claude-unknown"
@@ -561,7 +796,7 @@ def _run_for_payload(payload: dict) -> None:
             payload,
             meaning="Claude Stop hook ran, but this session checkpoint had no new exact usage delta to enqueue.",
         )
-        return
+        return _SCAN_SKIPPED
 
     # span_id encodes the emitted interval so the event identity matches delta tokens.
     span_id = _stable_span_id(
@@ -572,7 +807,20 @@ def _run_for_payload(payload: dict) -> None:
         str(next_fresh),
         str(next_output),
     )
-    now = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    _last_ts = all_turns[-1].get("timestamp", "")
+    if _last_ts:
+        now = _last_ts
+    elif allow_timestamp_fallback:
+        now = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    else:
+        _write_diagnostic_file(
+            EMPTY_DIAGNOSTIC_FILE_NAME,
+            "no_usage_hook_call",
+            "missing_event_timestamp",
+            payload,
+            meaning="Claude history scan found exact usage but no source timestamp, so the event was not assigned to import time.",
+        )
+        return _SCAN_UNSUPPORTED
     inferred_task_type = _infer_task_type(tool_names)
     inferred_stage = _infer_stage(tool_names)
     task_type = _safe_label(
@@ -619,31 +867,86 @@ def _run_for_payload(payload: dict) -> None:
     _save_session_state(run_id, next_fresh, next_output, transcript_byte_offset)
     _write_success_diagnostic(event)
     _consume_label_file()
+    if scan_subagents:
+        _scan_session_subagents(transcript_path)
+    return _SCAN_IMPORTED
 
 
-def scan_main(scan_dir: str, since_hours: int) -> None:
+def _scan_session_subagents(transcript_path: str) -> None:
+    """Scan likely subagents directories near the main transcript on Stop-hook invocation."""
+    global _USED_LABEL_FILE
+    transcript = pathlib.Path(transcript_path)
+    saved = _USED_LABEL_FILE
+    try:
+        subagents_dir = transcript.parent / "subagents"
+        if subagents_dir.is_dir():
+            scan_main(str(subagents_dir), since_hours=24 * 30)
+    except Exception:
+        pass
+    finally:
+        _USED_LABEL_FILE = saved
+
+
+def scan_main(scan_dir: str, since_hours) -> dict:
     """Scan *.jsonl transcripts under scan_dir modified within since_hours and enqueue usage events."""
     import time
     global _USED_LABEL_FILE
     scan_path = pathlib.Path(scan_dir)
     if not scan_path.is_dir():
-        return
-    cutoff_mtime = time.time() - since_hours * 3600
+        return {
+            "scanned_files": 0,
+            "imported_events": 0,
+            "skipped_seen": 0,
+            "unsupported_records": 0,
+        }
+    cutoff_mtime = None if since_hours is None else time.time() - since_hours * 3600
+    scanned_files = 0
+    imported_events = 0
+    skipped_seen = 0
+    unsupported_records = 0
+    pending_events: list[dict] = []
+
+    def enqueue_history_event(event: dict) -> None:
+        pending_events.append(event)
+        if len(pending_events) >= 5000:
+            _enqueue_events(pending_events)
+            pending_events.clear()
+
+    def flush_history_events() -> None:
+        _enqueue_events(pending_events)
+        pending_events.clear()
+
     for jsonl_file in sorted(scan_path.rglob("*.jsonl")):
         try:
-            if jsonl_file.stat().st_mtime < cutoff_mtime:
+            if cutoff_mtime is not None and jsonl_file.stat().st_mtime < cutoff_mtime:
                 continue
+            scanned_files += 1
             _USED_LABEL_FILE = False  # don't consume the live label file for historical transcripts
             stem = jsonl_file.stem
             session_id = stem if _OPAQUE_ID.match(stem) else ""
-            _run_for_payload({
-                "transcript_path": str(jsonl_file),
-                "session_id": session_id,
-            })
+            result = _run_history_payload(
+                {
+                    "transcript_path": str(jsonl_file),
+                    "session_id": session_id,
+                },
+                enqueue_event=enqueue_history_event,
+                flush_events=flush_history_events,
+            )
+            imported_events += result["imported_events"]
+            skipped_seen += result["skipped_seen"]
+            unsupported_records += result["unsupported_records"]
         except Exception:
+            unsupported_records += 1
             pass
         finally:
             _USED_LABEL_FILE = False
+    flush_history_events()
+    return {
+        "scanned_files": scanned_files,
+        "imported_events": imported_events,
+        "skipped_seen": skipped_seen,
+        "unsupported_records": unsupported_records,
+    }
 
 
 if __name__ == "__main__":
@@ -651,7 +954,7 @@ if __name__ == "__main__":
     if "--scan-dir" in _args:
         _idx = _args.index("--scan-dir")
         _scan_dir = _args[_idx + 1] if _idx + 1 < len(_args) else ""
-        _since_hours = 24
+        _since_hours = None if "--all" in _args else 24
         if "--since-hours" in _args:
             _h = _args.index("--since-hours")
             try:
@@ -659,9 +962,19 @@ if __name__ == "__main__":
             except Exception:
                 pass
         try:
-            scan_main(_scan_dir, _since_hours)
+            _summary = scan_main(_scan_dir, _since_hours)
+            if "--json" in _args:
+                print(json.dumps(_summary, separators=(",", ":")))
         except Exception:
-            pass
+            if "--json" in _args:
+                print(json.dumps({
+                    "scanned_files": 0,
+                    "imported_events": 0,
+                    "skipped_seen": 0,
+                    "unsupported_records": 0,
+                    "error": "scan_failed",
+                }, separators=(",", ":")))
+            sys.exit(1)
     else:
         try:
             main()

@@ -3,11 +3,14 @@
 import { access, appendFile, chmod, copyFile, mkdir, readFile, rename, stat, writeFile, unlink } from "node:fs/promises";
 import { constants } from "node:fs";
 import { createHmac, randomBytes } from "node:crypto";
+import { execFile } from "node:child_process";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
+import { promisify } from "node:util";
 
 const STAMP = new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
+const execFileAsync = promisify(execFile);
 const args = parseArgs(process.argv.slice(2));
 const apply = args.apply === true;
 const force = args.force === true;
@@ -168,6 +171,7 @@ async function configureClaude(scriptPath) {
   const target = join(homedir(), ".claude", "settings.json");
   const stopCommand = `SPILL_AI_TOOL=claude python3 ${shellQuote(scriptPath)}`;
   await mergeStopHookFile(target, stopCommand, 5, "claude", /Spill\/adapters\/claude-code\/spill-hook\.py|claude-code\/spill-hook\.py/);
+  await removeLegacyClaudeScannerLaunchAgent();
 }
 
 async function configureAntigravity(scriptPath) {
@@ -288,6 +292,46 @@ async function removeFileIfExists(path, tool) {
       return;
     }
     results.push({ tool, action: "remove_legacy_hook_file_failed", reason: err.message, path });
+  }
+}
+
+async function removeLegacyClaudeScannerLaunchAgent() {
+  const plist = join(homedir(), "Library", "LaunchAgents", "net.thdev.spill.claude-scanner.plist");
+  if (!apply) {
+    results.push({ tool: "claude", action: "would_remove_legacy_scanner_launchagent", path: plist });
+    return;
+  }
+
+  if (!await exists(plist)) {
+    results.push({ tool: "claude", action: "skip_remove_legacy_scanner_launchagent", reason: "missing_file", path: plist });
+    return;
+  }
+
+  await unloadLegacyLaunchAgent(plist, "claude");
+  try {
+    await unlink(plist);
+    results.push({ tool: "claude", action: "removed_legacy_scanner_launchagent", path: plist });
+  } catch (err) {
+    results.push({ tool: "claude", action: "remove_legacy_scanner_launchagent_failed", reason: err.message, path: plist });
+  }
+}
+
+async function unloadLegacyLaunchAgent(plist, tool) {
+  if (typeof process.getuid !== "function") {
+    results.push({ tool, action: "skip_unload_legacy_scanner_launchagent", reason: "uid_unavailable", path: plist });
+    return;
+  }
+
+  try {
+    await execFileAsync("launchctl", ["bootout", `gui/${process.getuid()}`, plist], { timeout: 5000 });
+    results.push({ tool, action: "unloaded_legacy_scanner_launchagent", path: plist });
+  } catch (err) {
+    results.push({
+      tool,
+      action: "skip_unload_legacy_scanner_launchagent",
+      reason: err.code || err.message,
+      path: plist,
+    });
   }
 }
 
@@ -791,7 +835,7 @@ function printHelp() {
   process.stdout.write(`Usage: spill-token-metering-setup.mjs [options]
 
 Options:
-  --apply                 Copy adapters, configure Codex/Claude hooks, and remove managed AGY hooks in one pass.
+  --apply                 Copy adapters, configure Codex/Claude hooks, remove legacy Claude scanner, and remove managed AGY hooks in one pass.
   --force                 Install every included adapter even when it is not a default adapter or detected.
   --include LIST          Comma list. Default: codex,claude,antigravity. Optional: openai.
   --source-root PATH      Adapter source root. Default: repo or bundled adapters directory.

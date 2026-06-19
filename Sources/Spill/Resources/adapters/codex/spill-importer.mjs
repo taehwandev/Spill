@@ -105,7 +105,7 @@ const labelPath =
     "label-context",
     "codex.json",
   );
-const runtimeLabel = await readRuntimeLabel(labelPath, "codex");
+const runtimeLabel = await readRuntimeLabelTimeline(labelPath, "codex");
 
 const strict = options.strict || process.env.SPILL_TOKEN_USAGE_IMPORT_STRICT === "1";
 const dryRun = options.dryRun;
@@ -122,7 +122,11 @@ const stageOverride = safeWorkflowSlug(
     process.env.SPILL_TOKEN_USAGE_STAGE ??
     process.env.SPILL_WORKFLOW_STAGE,
 );
-const afterDate = options.after ? new Date(options.after) : sinceDate(options.sinceHours ?? DEFAULT_SINCE_HOURS);
+const afterDate = options.all
+  ? new Date(0)
+  : options.after
+    ? new Date(options.after)
+    : sinceDate(options.sinceHours ?? DEFAULT_SINCE_HOURS);
 
 if (Number.isNaN(afterDate.getTime())) {
   fail("invalid_after", true);
@@ -143,6 +147,7 @@ if (watch) {
 
 async function importOnce() {
   const state = await readState(statePath);
+  const sentSpans = new Set(state.sentSpanIDs);
   const storedSpans = dryRun
     ? new Set()
     : transport === "http"
@@ -153,14 +158,23 @@ async function importOnce() {
   let importedEvents = 0;
   let markedExisting = 0;
   let skippedSeen = 0;
+  const unsupportedRecords = { count: 0 };
   let usedRuntimeLabel = false;
+  let pendingFileEvents = [];
+
+  async function flushPendingFileEvents() {
+    if (pendingFileEvents.length === 0) return;
+    const events = pendingFileEvents;
+    pendingFileEvents = [];
+    await appendInboxEvents(inboxPath, events);
+  }
 
   for (const source of sources) {
     scannedFiles += 1;
-    const records = await parseSessionFile(source, afterDate, state);
+    const records = await parseSessionFile(source, afterDate, state, unsupportedRecords);
     for (const record of records) {
       const event = record.event;
-      if (state.sentSpanIDs.includes(event.span_id) || storedSpans.has(event.span_id)) {
+      if (sentSpans.has(event.span_id) || storedSpans.has(event.span_id)) {
         skippedSeen += 1;
         continue;
       }
@@ -173,7 +187,10 @@ async function importOnce() {
         if (transport === "http") {
           await postEvent(endpoint, event);
         } else {
-          await appendInboxEvent(inboxPath, event);
+          pendingFileEvents.push(event);
+          if (pendingFileEvents.length >= 5000) {
+            await flushPendingFileEvents();
+          }
         }
         importedEvents += 1;
         storedSpans.add(event.span_id);
@@ -182,11 +199,15 @@ async function importOnce() {
       if (record.usedRuntimeLabel) {
         usedRuntimeLabel = true;
       }
+      sentSpans.add(event.span_id);
       state.sentSpanIDs.push(event.span_id);
       if (state.sentSpanIDs.length > 5000) {
         state.sentSpanIDs = state.sentSpanIDs.slice(-5000);
       }
     }
+  }
+  if (!dryRun && transport !== "http") {
+    await flushPendingFileEvents();
   }
 
   state.updatedAt = new Date().toISOString();
@@ -203,11 +224,13 @@ async function importOnce() {
       imported_events: importedEvents,
       marked_existing: markedExisting,
       skipped_seen: skippedSeen,
+      unsupported_records: unsupportedRecords.count,
       codex_home: codexHome,
       endpoint,
       transport,
       inbox_path: transport === "file" ? inboxPath : undefined,
       dry_run: dryRun,
+      all: options.all,
     })}\n`);
   }
 }
@@ -239,19 +262,14 @@ async function discoverCodexSessionFiles(root, after) {
   return files.sort();
 }
 
-async function parseSessionFile(path, after, state) {
+async function parseSessionFile(path, after, state, unsupportedRecords = { count: 0 }) {
   const counters = {
     sessionID: "",
     sessionModel: "",
     toolNames: new Set(),
-    previousCumulativeTotal: null,
-    previousInput: 0,
-    previousCached: 0,
-    previousOutput: 0,
-    previousReasoning: 0,
-    eventIndex: 0,
   };
-  let latest = null;
+  const records = [];
+  let tokenCountOrdinal = 0;
 
   const stream = createReadStream(path, { encoding: "utf8" });
   stream.on("error", () => {});
@@ -278,57 +296,78 @@ async function parseSessionFile(path, after, state) {
       if (!parsed || parsed.type !== "event_msg" || parsed.payload?.type !== "token_count") {
         continue;
       }
+      tokenCountOrdinal += 1;
 
-      const timestamp = parsed.timestamp ? new Date(parsed.timestamp) : new Date();
-      if (Number.isNaN(timestamp.getTime()) || timestamp < after) continue;
+      const timestamp = parseEventTimestamp(parsed.timestamp);
+      if (!timestamp) {
+        unsupportedRecords.count += 1;
+        continue;
+      }
 
       const usage = usageRecordFromTokenCount(parsed.payload.info);
-      if (!usage) continue;
+      if (!usage) {
+        unsupportedRecords.count += 1;
+        continue;
+      }
 
-      latest = { timestamp, usage };
+      records.push({ timestamp, usage, eventIndex: tokenCountOrdinal });
     }
   } finally {
     lines.close();
     stream.destroy();
   }
 
-  if (!latest) return [];
+  if (records.length === 0) return [];
 
   const sessionKey = counters.sessionID || path;
   const cursorKey = opaqueHash(sessionKey);
-  const cursor = state.sessionCursors[cursorKey];
-  const delta = usageDelta(latest.usage, cursor);
-  const nextCursor = cursorFromUsage(latest.usage);
-  if (nextCursor) {
-    state.sessionCursors[cursorKey] = nextCursor;
-  }
-  if (!delta) return [];
+  const fallbackLabel = fallbackLabelFromTools();
+  let cursor = state.sessionCursors[cursorKey];
+  const parsedRecords = [];
 
-  counters.eventIndex += 1;
-  const fallbackLabel = fallbackLabelFromTools(counters.toolNames);
-  const eventLabel = labelForTimestamp(runtimeLabel, latest.timestamp);
-  const usedRuntimeLabel = Boolean(
-    (!taskTypeOverride && eventLabel.taskType) ||
-      (!stageOverride && eventLabel.stage),
-  );
-  return [
-    {
+  for (const record of records) {
+    const delta = usageDelta(record.usage, cursor);
+    const nextCursor = cursorFromUsage(record.usage);
+    if (shouldAdvanceCursor(cursor, nextCursor)) {
+      cursor = nextCursor;
+    }
+
+    if (record.timestamp < after || !delta) continue;
+
+    const eventLabel = labelForTimestamp(runtimeLabel, record.timestamp);
+    const usedRuntimeLabel = Boolean(
+      (!taskTypeOverride && eventLabel.taskType) ||
+        (!stageOverride && eventLabel.stage),
+    );
+    parsedRecords.push({
       event: toSpillEvent({
         sourcePath: path,
         sessionID: counters.sessionID,
-        eventIndex: counters.eventIndex,
-        timestamp: latest.timestamp,
-        model: latest.usage.model || counters.sessionModel || "codex-unknown",
+        eventIndex: record.eventIndex,
+        timestamp: record.timestamp,
+        model: record.usage.model || counters.sessionModel || "codex-unknown",
         inputTokens: delta.inputTokens,
         outputTokens: delta.outputTokens,
-        cumulativeTotal: latest.usage.total.totalTokens,
+        cumulativeTotal: record.usage.total.totalTokens,
         projectID: eventLabel.projectID,
         taskType: taskTypeOverride ?? eventLabel.taskType ?? fallbackLabel.taskType,
         stage: stageOverride ?? eventLabel.stage ?? fallbackLabel.stage,
       }),
       usedRuntimeLabel,
-    },
-  ];
+    });
+  }
+
+  if (cursor) {
+    state.sessionCursors[cursorKey] = cursor;
+  }
+
+  return parsedRecords;
+}
+
+function parseEventTimestamp(value) {
+  if (typeof value !== "string" || value.length === 0) return null;
+  const timestamp = new Date(value);
+  return Number.isNaN(timestamp.getTime()) ? null : timestamp;
 }
 
 function captureSessionMeta(line, counters) {
@@ -363,6 +402,9 @@ function usageDelta(record, cursor) {
   } else if (record.last.hasAny) {
     inputTokens = record.last.inputTokens;
     outputTokens = record.last.outputTokens + record.last.reasoningTokens;
+  } else if (record.total.hasAny) {
+    inputTokens = record.total.inputTokens;
+    outputTokens = record.total.outputTokens + record.total.reasoningTokens;
   } else {
     return null;
   }
@@ -379,6 +421,12 @@ function cursorFromUsage(record) {
     reasoningTokens: record.total.reasoningTokens,
     totalTokens: record.total.totalTokens,
   };
+}
+
+function shouldAdvanceCursor(currentCursor, nextCursor) {
+  if (!nextCursor) return false;
+  if (!currentCursor) return true;
+  return nextCursor.totalTokens >= (currentCursor.totalTokens ?? 0);
 }
 
 function tokenUsage(value) {
@@ -443,34 +491,8 @@ function addRecognizedToolName(names, value) {
   }
 }
 
-function fallbackLabelFromTools(toolNames) {
-  if (hasAny(toolNames, WRITE_TOOL_NAMES)) {
-    return { taskType: "code_generation", stage: "implement" };
-  }
-  if (toolNames.size === 0) {
-    return { taskType: "analysis", stage: "summarize" };
-  }
-  if (allKnownReadOrShell(toolNames)) {
-    return {
-      taskType: "analysis",
-      stage: hasAny(toolNames, SHELL_TOOL_NAMES) ? "verify" : "summarize",
-    };
-  }
+function fallbackLabelFromTools() {
   return { taskType: "uncategorized", stage: "summarize" };
-}
-
-function hasAny(values, candidates) {
-  for (const value of values) {
-    if (candidates.has(value)) return true;
-  }
-  return false;
-}
-
-function allKnownReadOrShell(values) {
-  for (const value of values) {
-    if (!READ_TOOL_NAMES.has(value) && !SHELL_TOOL_NAMES.has(value)) return false;
-  }
-  return true;
 }
 
 function toSpillEvent({
@@ -565,12 +587,14 @@ async function postEvent(url, event) {
   }
 }
 
-async function appendInboxEvent(path, event) {
+async function appendInboxEvents(path, events) {
+  if (!Array.isArray(events) || events.length === 0) return;
   await mkdir(path, { recursive: true, mode: 0o700 });
   const id = randomUUID();
   const temporaryPath = join(path, `.${id}.tmp`);
-  const finalPath = join(path, `${id}.json`);
-  await writeFile(temporaryPath, JSON.stringify(event), {
+  const finalPath = join(path, `${id}.jsonl`);
+  const body = `${events.map((event) => JSON.stringify(event)).join("\n")}\n`;
+  await writeFile(temporaryPath, body, {
     encoding: "utf8",
     mode: 0o600,
     flag: "wx",
@@ -627,10 +651,15 @@ async function readQueuedInboxSpanIDs(path) {
 
   const spanIDs = [];
   for (const file of files) {
-    if (!file.endsWith(".json") || file.startsWith(".")) continue;
-    const parsed = safeJSON(await readFile(join(path, file), "utf8").catch(() => ""));
-    if (typeof parsed?.span_id === "string") {
-      spanIDs.push(parsed.span_id);
+    if (file.startsWith(".")) continue;
+    const filePath = join(path, file);
+    if (file.endsWith(".json")) {
+      const parsed = safeJSON(await readFile(filePath, "utf8").catch(() => ""));
+      if (typeof parsed?.span_id === "string") {
+        spanIDs.push(parsed.span_id);
+      }
+    } else if (file.endsWith(".jsonl")) {
+      spanIDs.push(...await readJSONLSpanIDs(filePath));
     }
   }
   return spanIDs;
@@ -652,14 +681,41 @@ async function readState(path) {
   return { updatedAt: "", sentSpanIDs: [], sessionCursors: {} };
 }
 
-async function readRuntimeLabel(path, expectedTool) {
-  let parsed = null;
+async function readRuntimeLabelTimeline(path, expectedTool) {
+  const entries = [];
+  const current = await readRuntimeLabel(path, expectedTool);
+  if (current?.hasLabel) entries.push(current);
+
+  const timelinePath = path.endsWith(".json")
+    ? path.slice(0, -".json".length) + "-timeline.jsonl"
+    : `${path}-timeline.jsonl`;
   try {
-    parsed = JSON.parse(await readFile(path, "utf8"));
+    const raw = await readFile(timelinePath, "utf8");
+    for (const line of raw.split(/\r?\n/)) {
+      if (!line.trim()) continue;
+      try {
+        const entry = parseRuntimeLabel(JSON.parse(line), expectedTool);
+        if (entry?.hasLabel) entries.push(entry);
+      } catch {
+        // Ignore corrupt timeline lines; labels are optional metadata.
+      }
+    }
+  } catch {
+    // Missing timelines are expected on fresh installs.
+  }
+
+  return { hasLabel: entries.length > 0, entries };
+}
+
+async function readRuntimeLabel(path, expectedTool) {
+  try {
+    return parseRuntimeLabel(JSON.parse(await readFile(path, "utf8")), expectedTool) ?? {};
   } catch {
     return {};
   }
+}
 
+function parseRuntimeLabel(parsed, expectedTool) {
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
   const tool = typeof parsed.ai_tool === "string" ? parsed.ai_tool : "";
   if (tool && tool !== "unknown" && tool !== expectedTool) return {};
@@ -679,11 +735,19 @@ async function readRuntimeLabel(path, expectedTool) {
   };
 }
 
-function labelForTimestamp(label, timestamp) {
-  if (!label?.hasLabel) return {};
+function labelForTimestamp(labelTimeline, timestamp) {
+  if (!labelTimeline?.hasLabel || !Array.isArray(labelTimeline.entries)) return {};
   if (!(timestamp instanceof Date) || Number.isNaN(timestamp.getTime())) return {};
-  if (label.updatedAt && timestamp < label.updatedAt) return {};
-  if (label.expiresAt && timestamp > label.expiresAt) return {};
+  let label = null;
+  for (const entry of labelTimeline.entries) {
+    if (!entry.updatedAt || !entry.expiresAt) continue;
+    if (entry.updatedAt && timestamp < entry.updatedAt) continue;
+    if (entry.expiresAt && timestamp > entry.expiresAt) continue;
+    if (!label || (entry.updatedAt && (!label.updatedAt || entry.updatedAt > label.updatedAt))) {
+      label = entry;
+    }
+  }
+  if (!label) return {};
   return {
     taskType: label.taskType,
     stage: label.stage,
@@ -718,12 +782,14 @@ function parseArgs(args) {
     dryRun: false,
     strict: false,
     watch: false,
+    all: false,
   };
 
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
     if (arg === "--json") parsed.json = true;
     else if (arg === "--dry-run") parsed.dryRun = true;
+    else if (arg === "--all") parsed.all = true;
     else if (arg === "--mark-existing") parsed.markExisting = true;
     else if (arg === "--strict") parsed.strict = true;
     else if (arg === "--watch") parsed.watch = true;
@@ -771,6 +837,7 @@ Options:
   --mark-existing        Record parsed span ids in state without storing them.
   --strict               Exit non-zero when the selected transport is unavailable.
   --watch                Poll Codex sessions continuously. Not needed for hook-based metering.
+  --all                  Scan all supported local session history.
   --after ISO            Import token_count events at or after this timestamp.
   --since-hours HOURS    Import recent events. Default: 24.
   --interval-ms MS       Poll interval for --watch. Default: 5000.
