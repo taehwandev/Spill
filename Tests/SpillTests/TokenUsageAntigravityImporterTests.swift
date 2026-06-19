@@ -114,10 +114,161 @@ final class TokenUsageAntigravityImporterTests: XCTestCase {
         XCTAssertEqual(event.totalTokens, 125)
 
         let diagnostic = try String(contentsOf: diagnosticsURL)
-        XCTAssertTrue(diagnostic.contains(#""timestamp_source":"conversation_database_mtime""#))
+        XCTAssertTrue(diagnostic.contains(#""timestamp_source":"generation_metadata_timestamp""#))
         XCTAssertTrue(diagnostic.contains(#""split_output_fallback_events":0"#))
-        XCTAssertTrue(diagnostic.contains("no trusted per-row timestamp"))
+        XCTAssertTrue(diagnostic.contains("without trusted numeric timestamps"))
         XCTAssertFalse(diagnostic.contains(databaseURL.path))
+    }
+
+    func testImporterUsesGenerationTimestampInsteadOfDatabaseModifiedTime() throws {
+        let rootURL = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: rootURL) }
+
+        let conversationsURL = rootURL.appendingPathComponent("conversations", isDirectory: true)
+        let databaseURL = conversationsURL.appendingPathComponent("conversation-a.db")
+        let labelURL = rootURL.appendingPathComponent("labels/antigravity-timeline.jsonl")
+        let diagnosticsURL = rootURL.appendingPathComponent("diagnostics/antigravity-active-importer-last.json")
+        try writeAlwaysActiveLabel(at: labelURL)
+        let eventDate = try XCTUnwrap(ISO8601DateFormatter.parseTokenUsageDate(from: "2026-06-18T09:15:00.000Z"))
+        let syncDate = try XCTUnwrap(ISO8601DateFormatter.parseTokenUsageDate(from: "2026-06-19T02:30:00.000Z"))
+
+        try writeAntigravityConversationDatabase(
+            at: databaseURL,
+            rows: [
+                (
+                    1,
+                    antigravityGenerationMetadataBlob(
+                        inputTokenChunks: [40],
+                        outputTokenChunks: [12],
+                        cachedInputTokenChunks: [],
+                        model: "gemini-3.5-flash-low",
+                        createdAt: eventDate
+                    )
+                )
+            ]
+        )
+        try FileManager.default.setAttributes([.modificationDate: syncDate], ofItemAtPath: databaseURL.path)
+
+        let store = TokenUsageStore(fileURL: rootURL.appendingPathComponent("events.json"))
+        let importer = TokenUsageAntigravityImporter(
+            conversationsDirectory: conversationsURL,
+            labelTimelineURL: labelURL,
+            diagnosticsURL: diagnosticsURL,
+            stateURL: rootURL.appendingPathComponent("state/antigravity-active-importer-state.json")
+        )
+
+        let summary = importer.importRecentEvents(into: store, since: Date(timeIntervalSince1970: 0))
+        let event = try XCTUnwrap(store.loadEvents().first)
+
+        XCTAssertEqual(summary.importedEvents, 1)
+        XCTAssertEqual(event.createdAt, ISO8601DateFormatter.tokenUsage.string(from: eventDate))
+        XCTAssertNotEqual(event.createdAt, ISO8601DateFormatter.tokenUsage.string(from: syncDate))
+    }
+
+    func testImporterUsesTimelineLabelsOnlyInsideCoveredWindow() throws {
+        let rootURL = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: rootURL) }
+
+        let conversationsURL = rootURL.appendingPathComponent("conversations", isDirectory: true)
+        let databaseURL = conversationsURL.appendingPathComponent("conversation-a.db")
+        let labelURL = rootURL.appendingPathComponent("labels/antigravity-timeline.jsonl")
+        let diagnosticsURL = rootURL.appendingPathComponent("diagnostics/antigravity-active-importer-last.json")
+        let coveredDate = try XCTUnwrap(ISO8601DateFormatter.parseTokenUsageDate(from: "2026-06-18T00:00:10.000Z"))
+        let uncoveredDate = try XCTUnwrap(ISO8601DateFormatter.parseTokenUsageDate(from: "2026-06-18T00:01:00.000Z"))
+        try FileManager.default.createDirectory(at: labelURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data(
+            """
+            {"ai_tool":"antigravity","task_type":"code_review","stage":"verify","project_id":"project_11111111111151119111111111111111","updated_at":"2026-06-18T00:00:00.000Z","expires_at":"2026-06-18T00:00:30.000Z"}
+            """.utf8
+        ).write(to: labelURL)
+
+        try writeAntigravityConversationDatabase(
+            at: databaseURL,
+            rows: [
+                (
+                    1,
+                    antigravityGenerationMetadataBlob(
+                        inputTokenChunks: [40],
+                        outputTokenChunks: [12],
+                        cachedInputTokenChunks: [],
+                        model: "gemini-3.5-flash-low",
+                        createdAt: coveredDate
+                    )
+                ),
+                (
+                    2,
+                    antigravityGenerationMetadataBlob(
+                        inputTokenChunks: [30],
+                        outputTokenChunks: [8],
+                        cachedInputTokenChunks: [],
+                        model: "gemini-3.5-flash-low",
+                        createdAt: uncoveredDate
+                    )
+                )
+            ]
+        )
+
+        let store = TokenUsageStore(fileURL: rootURL.appendingPathComponent("events.json"))
+        let importer = TokenUsageAntigravityImporter(
+            conversationsDirectory: conversationsURL,
+            labelTimelineURL: labelURL,
+            diagnosticsURL: diagnosticsURL,
+            stateURL: rootURL.appendingPathComponent("state/antigravity-active-importer-state.json")
+        )
+
+        let summary = importer.importRecentEvents(into: store, since: Date(timeIntervalSince1970: 0))
+        let events = store.loadEvents().sorted { $0.createdAt < $1.createdAt }
+
+        XCTAssertEqual(summary.importedEvents, 2)
+        XCTAssertEqual(events[0].taskType, .codeReview)
+        XCTAssertEqual(events[0].stage, .verify)
+        XCTAssertEqual(events[0].projectID, "project_11111111111151119111111111111111")
+        XCTAssertEqual(events[1].taskType, .uncategorized)
+        XCTAssertEqual(events[1].stage, .summarize)
+        XCTAssertEqual(events[1].projectID, "project_global")
+    }
+
+    func testImporterCanReadTemporaryCopyWhenDirectSQLiteOpenFails() throws {
+        let rootURL = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: rootURL) }
+
+        let conversationsURL = rootURL.appendingPathComponent("conversations", isDirectory: true)
+        let databaseURL = conversationsURL.appendingPathComponent("conversation-a.db")
+        let labelURL = rootURL.appendingPathComponent("labels/antigravity-timeline.jsonl")
+        let diagnosticsURL = rootURL.appendingPathComponent("diagnostics/antigravity-active-importer-last.json")
+        try writeAlwaysActiveLabel(at: labelURL)
+
+        try writeAntigravityConversationDatabase(
+            at: databaseURL,
+            rows: [
+                (
+                    1,
+                    antigravityGenerationMetadataBlob(
+                        inputTokenChunks: [40],
+                        outputTokenChunks: [12],
+                        cachedInputTokenChunks: [8],
+                        model: "gemini-3.5-flash-low"
+                    )
+                )
+            ]
+        )
+
+        let store = TokenUsageStore(fileURL: rootURL.appendingPathComponent("events.json"))
+        let importer = TokenUsageAntigravityImporter(
+            conversationsDirectory: conversationsURL,
+            labelTimelineURL: labelURL,
+            diagnosticsURL: diagnosticsURL,
+            stateURL: rootURL.appendingPathComponent("state/antigravity-active-importer-state.json"),
+            forceTemporaryCopyFallback: true
+        )
+
+        let summary = importer.importRecentEvents(into: store, since: Date(timeIntervalSince1970: 0))
+        let event = try XCTUnwrap(store.loadEvents().first)
+
+        XCTAssertEqual(summary.scannedDatabases, 1)
+        XCTAssertEqual(summary.scannedGenerationRows, 1)
+        XCTAssertEqual(summary.importedEvents, 1)
+        XCTAssertEqual(event.totalTokens, 60)
     }
 
     func testSplitOutputFieldsAreUsedWhenAggregateOutputIsMissing() throws {
@@ -166,6 +317,139 @@ final class TokenUsageAntigravityImporterTests: XCTestCase {
         let diagnostic = try String(contentsOf: diagnosticsURL)
         XCTAssertTrue(diagnostic.contains(#""split_output_fallback_events":1"#))
         XCTAssertFalse(diagnostic.contains(databaseURL.path))
+    }
+
+    func testUnsupportedGenerationRowsAreCountedSeparately() throws {
+        let rootURL = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: rootURL) }
+
+        let conversationsURL = rootURL.appendingPathComponent("conversations", isDirectory: true)
+        let databaseURL = conversationsURL.appendingPathComponent("conversation-a.db")
+        let labelURL = rootURL.appendingPathComponent("labels/antigravity-timeline.jsonl")
+        let diagnosticsURL = rootURL.appendingPathComponent("diagnostics/antigravity-active-importer-last.json")
+        try writeAlwaysActiveLabel(at: labelURL)
+
+        try writeAntigravityConversationDatabase(
+            at: databaseURL,
+            rows: [
+                (
+                    1,
+                    antigravityGenerationMetadataBlob(
+                        inputTokenChunks: [50],
+                        outputTokenChunks: [10],
+                        cachedInputTokenChunks: [],
+                        model: "gemini-3.5-flash-low"
+                    )
+                ),
+                (2, Data([0x08, 0x01]))
+            ]
+        )
+
+        let store = TokenUsageStore(fileURL: rootURL.appendingPathComponent("events.json"))
+        let importer = TokenUsageAntigravityImporter(
+            conversationsDirectory: conversationsURL,
+            labelTimelineURL: labelURL,
+            diagnosticsURL: diagnosticsURL,
+            stateURL: rootURL.appendingPathComponent("state/antigravity-active-importer-state.json")
+        )
+
+        let summary = importer.importRecentEvents(into: store, since: Date(timeIntervalSince1970: 0))
+
+        XCTAssertEqual(summary.scannedGenerationRows, 2)
+        XCTAssertEqual(summary.parsedUsageEvents, 1)
+        XCTAssertEqual(summary.importedEvents, 1)
+        XCTAssertEqual(summary.unsupportedRecords, 1)
+        XCTAssertEqual(summary.cursorAdvancedDatabases, 1)
+
+        let diagnostic = try String(contentsOf: diagnosticsURL)
+        XCTAssertTrue(diagnostic.contains(#""unsupported_records":1"#))
+        XCTAssertFalse(diagnostic.contains(databaseURL.path))
+
+        let secondSummary = importer.importRecentEvents(into: store, since: Date(timeIntervalSince1970: 0))
+        XCTAssertEqual(secondSummary.scannedGenerationRows, 1)
+        XCTAssertEqual(secondSummary.unsupportedRecords, 1)
+        XCTAssertEqual(secondSummary.importedEvents, 0)
+        XCTAssertEqual(secondSummary.cursorAdvancedDatabases, 0)
+
+        try writeAntigravityConversationDatabase(
+            at: databaseURL,
+            rows: [
+                (
+                    1,
+                    antigravityGenerationMetadataBlob(
+                        inputTokenChunks: [50],
+                        outputTokenChunks: [10],
+                        cachedInputTokenChunks: [],
+                        model: "gemini-3.5-flash-low"
+                    )
+                ),
+                (
+                    2,
+                    antigravityGenerationMetadataBlob(
+                        inputTokenChunks: [20],
+                        outputTokenChunks: [5],
+                        cachedInputTokenChunks: [],
+                        model: "gemini-3.5-flash-low"
+                    )
+                )
+            ]
+        )
+
+        let thirdSummary = importer.importRecentEvents(into: store, since: Date(timeIntervalSince1970: 0))
+        XCTAssertEqual(thirdSummary.scannedGenerationRows, 1)
+        XCTAssertEqual(thirdSummary.unsupportedRecords, 0)
+        XCTAssertEqual(thirdSummary.importedEvents, 1)
+        XCTAssertEqual(thirdSummary.cursorAdvancedDatabases, 1)
+        XCTAssertEqual(store.loadEvents().map(\.totalTokens).sorted(), [25, 60])
+    }
+
+    func testCancelledImportDiagnosticDoesNotClaimPersistedCursorAdvance() throws {
+        let rootURL = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: rootURL) }
+
+        let conversationsURL = rootURL.appendingPathComponent("conversations", isDirectory: true)
+        let databaseURL = conversationsURL.appendingPathComponent("conversation-a.db")
+        let labelURL = rootURL.appendingPathComponent("labels/antigravity-timeline.jsonl")
+        let diagnosticsURL = rootURL.appendingPathComponent("diagnostics/antigravity-active-importer-last.json")
+        let stateURL = rootURL.appendingPathComponent("state/antigravity-active-importer-state.json")
+        try writeAlwaysActiveLabel(at: labelURL)
+
+        try writeAntigravityConversationDatabase(
+            at: databaseURL,
+            rows: [
+                (
+                    1,
+                    antigravityGenerationMetadataBlob(
+                        inputTokenChunks: [50],
+                        outputTokenChunks: [10],
+                        cachedInputTokenChunks: [],
+                        model: "gemini-3.5-flash-low"
+                    )
+                )
+            ]
+        )
+
+        let store = TokenUsageStore(fileURL: rootURL.appendingPathComponent("events.json"))
+        let importer = TokenUsageAntigravityImporter(
+            conversationsDirectory: conversationsURL,
+            labelTimelineURL: labelURL,
+            diagnosticsURL: diagnosticsURL,
+            stateURL: stateURL
+        )
+        var cancellationChecks = 0
+
+        let summary = importer.importRecentEvents(into: store, since: Date(timeIntervalSince1970: 0)) {
+            cancellationChecks += 1
+            return cancellationChecks >= 2
+        }
+
+        XCTAssertEqual(summary.scannedDatabases, 1)
+        XCTAssertEqual(summary.importedEvents, 0)
+        XCTAssertEqual(summary.cursorAdvancedDatabases, 0)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: stateURL.path))
+
+        let diagnostic = try String(contentsOf: diagnosticsURL)
+        XCTAssertTrue(diagnostic.contains(#""cursor_advanced_databases":0"#))
     }
 
     func testImporterSkipsRowsAtOrBeforeOpaqueCursor() throws {
@@ -244,6 +528,65 @@ final class TokenUsageAntigravityImporterTests: XCTestCase {
         XCTAssertTrue(state.contains(#""max_generation_index_by_source""#))
     }
 
+    func testRealDatabaseImport() throws {
+        guard ProcessInfo.processInfo.environment["SPILL_RUN_REAL_AGY_IMPORT"] == "1" else {
+            throw XCTSkip("Manual local AGY diagnostic; set SPILL_RUN_REAL_AGY_IMPORT=1 to run.")
+        }
+
+        let rootURL = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: rootURL) }
+
+        let store = TokenUsageStore(fileURL: rootURL.appendingPathComponent("events.json"))
+        let importer = TokenUsageAntigravityImporter(
+            diagnosticsURL: rootURL.appendingPathComponent("diagnostics/antigravity-active-importer-last.json"),
+            stateURL: rootURL.appendingPathComponent("state/antigravity-active-importer-state.json")
+        )
+
+        let summary = importer.importRecentEvents(into: store, since: Date(timeIntervalSince1970: 0))
+        print("REAL DB TEST RUN SUMMARY: \(summary)")
+        let events = store.loadEvents().sorted { $0.createdAt < $1.createdAt }
+        let byDay = Dictionary(grouping: events, by: { String($0.createdAt.prefix(10)) })
+            .mapValues(\.count)
+        let byLabel = Dictionary(
+            grouping: events,
+            by: { "\($0.taskType.rawValue)/\($0.stage.rawValue)" }
+        )
+        .mapValues(\.count)
+        let object: [String: Any] = [
+            "summary": [
+                "scanned_databases": summary.scannedDatabases,
+                "scanned_generation_rows": summary.scannedGenerationRows,
+                "parsed_usage_events": summary.parsedUsageEvents,
+                "imported_events": summary.importedEvents,
+                "skipped_duplicate_events": summary.skippedDuplicateEvents,
+                "unsupported_records": summary.unsupportedRecords,
+                "failed_to_write_events": summary.failedToWriteEvents,
+            ],
+            "event_count": events.count,
+            "first_created_at": events.first?.createdAt ?? NSNull(),
+            "last_created_at": events.last?.createdAt ?? NSNull(),
+            "days": byDay,
+            "labels": byLabel,
+        ]
+
+        if let summaryPath = ProcessInfo.processInfo.environment["SPILL_AGY_REAL_IMPORT_SUMMARY_PATH"],
+           !summaryPath.isEmpty {
+            let summaryURL = URL(fileURLWithPath: summaryPath)
+            try FileManager.default.createDirectory(
+                at: summaryURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            let data = try JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys])
+            try data.write(to: summaryURL, options: [.atomic])
+        }
+
+        XCTAssertGreaterThanOrEqual(summary.scannedDatabases, 0)
+    }
+
+    func testRealDatabaseImportIncremental() throws {
+        throw XCTSkip("Manual local AGY diagnostic; not part of automated tests.")
+    }
+
     func testImporterUsesBatchAppendInsteadOfPerEventStoreAppend() throws {
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let source = try String(contentsOf: root.appendingPathComponent(
@@ -318,7 +661,8 @@ final class TokenUsageAntigravityImporterTests: XCTestCase {
         outputTokenChunks: [Int],
         cachedInputTokenChunks: [Int],
         splitOutputTokenChunks: [Int] = [],
-        model: String
+        model: String,
+        createdAt: Date = Date(timeIntervalSince1970: 1_780_000_000)
     ) -> Data {
         var usage = Data()
         usage.append(protoVarintField(1, 1020))
@@ -332,11 +676,21 @@ final class TokenUsageAntigravityImporterTests: XCTestCase {
 
         var generation = Data()
         generation.append(protoBytesField(4, usage))
+        generation.append(protoBytesField(9, antigravityTimestampBlob(createdAt: createdAt)))
         generation.append(protoBytesField(19, Data(model.utf8)))
 
         var envelope = Data()
         envelope.append(protoBytesField(1, generation))
         return envelope
+    }
+
+    private func antigravityTimestampBlob(createdAt: Date) -> Data {
+        var timestampMessage = Data()
+        timestampMessage.append(protoVarintField(1, Int(createdAt.timeIntervalSince1970)))
+
+        var timestampContainer = Data()
+        timestampContainer.append(protoBytesField(4, timestampMessage))
+        return timestampContainer
     }
 
     private func protoVarintField(_ number: Int, _ value: Int) -> Data {

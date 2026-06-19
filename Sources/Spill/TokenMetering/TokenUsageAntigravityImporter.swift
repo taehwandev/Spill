@@ -8,8 +8,10 @@ struct TokenUsageAntigravityImportSummary: Equatable {
     let parsedUsageEvents: Int
     let importedEvents: Int
     let skippedDuplicateEvents: Int
+    let unsupportedRecords: Int
     let splitOutputFallbackEvents: Int
     let cursorAdvancedDatabases: Int
+    let failedToWriteEvents: Bool
 }
 
 final class TokenUsageAntigravityImporter {
@@ -18,80 +20,125 @@ final class TokenUsageAntigravityImporter {
     private let diagnosticsURL: URL?
     private let stateURL: URL?
     private let fileManager: FileManager
+    private let forceTemporaryCopyFallback: Bool
 
     init(
         conversationsDirectory: URL = TokenUsageAntigravityImporter.defaultConversationsDirectory(),
         labelTimelineURL: URL = TokenUsageAntigravityImporter.defaultLabelTimelineURL(),
         diagnosticsURL: URL? = TokenUsageAntigravityImporter.defaultDiagnosticsURL(),
         stateURL: URL? = TokenUsageAntigravityImporter.defaultStateURL(),
-        fileManager: FileManager = .default
+        fileManager: FileManager = .default,
+        forceTemporaryCopyFallback: Bool = false
     ) {
         self.conversationsDirectory = conversationsDirectory
         self.labelTimelineURL = labelTimelineURL
         self.diagnosticsURL = diagnosticsURL
         self.stateURL = stateURL
         self.fileManager = fileManager
+        self.forceTemporaryCopyFallback = forceTemporaryCopyFallback
     }
 
     @discardableResult
-    func importRecentEvents(into store: TokenUsageStore, since startDate: Date) -> TokenUsageAntigravityImportSummary {
+    func importRecentEvents(
+        into store: TokenUsageStore,
+        since startDate: Date,
+        shouldCancel: () -> Bool = { false }
+    ) -> TokenUsageAntigravityImportSummary {
         let sources = discoverConversationDatabases(modifiedSince: startDate)
         let labelTimeline = readLabelTimeline()
         var importState = readImportState()
-        var knownSpanIDs = store.existingSpanIDs()
         var scannedRows = 0
         var parsedEvents = 0
+        var unsupportedRecords = 0
         var candidateEvents = [TokenUsageEvent]()
         var skippedDuplicates = 0
         var splitOutputFallbackEvents = 0
         var cursorAdvancedDatabases = Set<String>()
+        var scannedDatabases = 0
 
         for source in sources {
+            guard !shouldCancel() else {
+                break
+            }
+
             let sourceKey = Self.sourceStateKey(for: source)
             let previousMaxIndex = importState.maxGenerationIndexBySource[sourceKey]
-            let records = readGenerationRecords(from: source, after: previousMaxIndex)
-            scannedRows += records.count
-            var maxParsedIndex = previousMaxIndex ?? Int.min
+            let readResult = readGenerationRecords(from: source, after: previousMaxIndex)
+            scannedDatabases += 1
+            scannedRows += readResult.scannedRowCount
+            unsupportedRecords += readResult.unsupportedRecordCount
+            var cancelledDuringSource = false
+            var maxEventIndex: Int?
 
-            for record in records {
-                maxParsedIndex = max(maxParsedIndex, record.index)
+            for record in readResult.records {
+                guard !shouldCancel() else {
+                    cancelledDuringSource = true
+                    break
+                }
+
                 if record.usage.usedSplitOutputFallback {
                     splitOutputFallbackEvents += 1
                 }
                 guard let event = event(from: record, source: source, labelTimeline: labelTimeline) else {
+                    unsupportedRecords += 1
                     continue
                 }
                 parsedEvents += 1
-
-                guard !knownSpanIDs.contains(event.spanID) else {
-                    skippedDuplicates += 1
-                    continue
-                }
-
-                knownSpanIDs.insert(event.spanID)
                 candidateEvents.append(event)
+                maxEventIndex = max(maxEventIndex ?? record.index, record.index)
             }
 
-            if maxParsedIndex != (previousMaxIndex ?? Int.min), maxParsedIndex >= 0 {
-                importState.maxGenerationIndexBySource[sourceKey] = maxParsedIndex
+            if cancelledDuringSource {
+                break
+            }
+
+            if let maxEventIndex,
+               maxEventIndex != previousMaxIndex,
+               maxEventIndex >= 0 {
+                importState.maxGenerationIndexBySource[sourceKey] = maxEventIndex
                 cursorAdvancedDatabases.insert(sourceKey)
             }
         }
 
-        let importedEvents = (try? store.appendEventsWithoutLoading(candidateEvents)) ?? 0
-        skippedDuplicates += candidateEvents.count - importedEvents
-        if candidateEvents.count == importedEvents {
+        guard !shouldCancel() else {
+            let summary = TokenUsageAntigravityImportSummary(
+                scannedDatabases: scannedDatabases,
+                scannedGenerationRows: scannedRows,
+                parsedUsageEvents: parsedEvents,
+                importedEvents: 0,
+                skippedDuplicateEvents: skippedDuplicates,
+                unsupportedRecords: unsupportedRecords,
+                splitOutputFallbackEvents: splitOutputFallbackEvents,
+                cursorAdvancedDatabases: 0,
+                failedToWriteEvents: false
+            )
+            writeDiagnostic(summary)
+            return summary
+        }
+
+        let importedEvents: Int
+        var persistedCursorAdvancedDatabases = 0
+        var failedToWriteEvents = false
+        do {
+            importedEvents = try store.appendEventsWithoutLoading(candidateEvents)
+            skippedDuplicates += candidateEvents.count - importedEvents
             writeImportState(importState)
+            persistedCursorAdvancedDatabases = cursorAdvancedDatabases.count
+        } catch {
+            importedEvents = 0
+            failedToWriteEvents = true
         }
 
         let summary = TokenUsageAntigravityImportSummary(
-            scannedDatabases: sources.count,
+            scannedDatabases: scannedDatabases,
             scannedGenerationRows: scannedRows,
             parsedUsageEvents: parsedEvents,
             importedEvents: importedEvents,
             skippedDuplicateEvents: skippedDuplicates,
+            unsupportedRecords: unsupportedRecords,
             splitOutputFallbackEvents: splitOutputFallbackEvents,
-            cursorAdvancedDatabases: cursorAdvancedDatabases.count
+            cursorAdvancedDatabases: persistedCursorAdvancedDatabases,
+            failedToWriteEvents: failedToWriteEvents
         )
         writeDiagnostic(summary)
         return summary
@@ -112,9 +159,20 @@ final class TokenUsageAntigravityImporter {
             }
             let values = try? url.resourceValues(forKeys: [.contentModificationDateKey, .isRegularFileKey])
             guard values?.isRegularFile == true,
-                  let modifiedAt = values?.contentModificationDate,
-                  modifiedAt >= startDate
+                  var modifiedAt = values?.contentModificationDate
             else {
+                return nil
+            }
+
+            // In SQLite WAL mode, transactions update the -wal file, leaving the main .db file's modification time stale.
+            // We check the corresponding -wal file if it exists, taking the maximum of the two dates to determine the true last write time.
+            let walURL = url.deletingLastPathComponent().appendingPathComponent(url.lastPathComponent + "-wal")
+            if let walValues = try? walURL.resourceValues(forKeys: [.contentModificationDateKey]),
+               let walModifiedAt = walValues.contentModificationDate {
+                modifiedAt = max(modifiedAt, walModifiedAt)
+            }
+
+            guard modifiedAt >= startDate else {
                 return nil
             }
             return ConversationDatabase(url: url, modifiedAt: modifiedAt)
@@ -122,16 +180,24 @@ final class TokenUsageAntigravityImporter {
         .sorted { $0.url.lastPathComponent < $1.url.lastPathComponent }
     }
 
-    private func readGenerationRecords(from source: ConversationDatabase, after previousMaxIndex: Int?) -> [GenerationRecord] {
-        var database: OpaquePointer?
-        let flags = SQLITE_OPEN_READONLY | SQLITE_OPEN_FULLMUTEX
-        guard sqlite3_open_v2(source.url.path, &database, flags, nil) == SQLITE_OK,
-              let database
-        else {
-            sqlite3_close(database)
-            return []
+    private func readGenerationRecords(
+        from source: ConversationDatabase,
+        after previousMaxIndex: Int?
+    ) -> GenerationRecordReadResult {
+        guard let openedDatabase = openReadableDatabase(for: source.url) else {
+            return GenerationRecordReadResult(
+                scannedRowCount: 0,
+                unsupportedRecordCount: 0,
+                records: []
+            )
         }
+        let database = openedDatabase.database
         defer { sqlite3_close(database) }
+        defer {
+            if let temporaryCopyURL = openedDatabase.temporaryCopyURL {
+                try? fileManager.removeItem(at: temporaryCopyURL)
+            }
+        }
 
         let sql: String
         if previousMaxIndex != nil {
@@ -143,7 +209,11 @@ final class TokenUsageAntigravityImporter {
         guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
               let statement
         else {
-            return []
+            return GenerationRecordReadResult(
+                scannedRowCount: 0,
+                unsupportedRecordCount: 0,
+                records: []
+            )
         }
         defer { sqlite3_finalize(statement) }
         if let previousMaxIndex {
@@ -151,18 +221,75 @@ final class TokenUsageAntigravityImporter {
         }
 
         var records = [GenerationRecord]()
+        var scannedRows = 0
+        var unsupportedRecords = 0
         while sqlite3_step(statement) == SQLITE_ROW {
+            scannedRows += 1
             let index = Int(sqlite3_column_int64(statement, 0))
             guard let blob = sqlite3_column_blob(statement, 1) else {
+                unsupportedRecords += 1
                 continue
             }
             let byteCount = Int(sqlite3_column_bytes(statement, 1))
             let data = Data(bytes: blob, count: byteCount)
-            if let usage = Self.usageRecord(from: data) {
-                records.append(GenerationRecord(index: index, usage: usage))
+            if let usage = Self.usageRecord(from: data),
+               let createdAt = Self.generationCreatedAt(from: data) {
+                records.append(GenerationRecord(index: index, usage: usage, createdAt: createdAt))
+            } else {
+                unsupportedRecords += 1
             }
         }
-        return records
+        return GenerationRecordReadResult(
+            scannedRowCount: scannedRows,
+            unsupportedRecordCount: unsupportedRecords,
+            records: records
+        )
+    }
+
+    private func openReadableDatabase(for sourceURL: URL) -> OpenedDatabase? {
+        if !forceTemporaryCopyFallback,
+           let database = openSQLiteDatabase(at: sourceURL) {
+            return OpenedDatabase(database: database, temporaryCopyURL: nil)
+        }
+
+        guard let temporaryCopyURL = copyDatabaseToTemporaryFile(sourceURL) else {
+            return nil
+        }
+        guard let database = openSQLiteDatabase(at: temporaryCopyURL) else {
+            try? fileManager.removeItem(at: temporaryCopyURL)
+            return nil
+        }
+        return OpenedDatabase(database: database, temporaryCopyURL: temporaryCopyURL)
+    }
+
+    private func openSQLiteDatabase(at url: URL) -> OpaquePointer? {
+        var database: OpaquePointer?
+        let flags = SQLITE_OPEN_READONLY | SQLITE_OPEN_FULLMUTEX
+        guard sqlite3_open_v2(url.path, &database, flags, nil) == SQLITE_OK,
+              let database
+        else {
+            sqlite3_close(database)
+            return nil
+        }
+        return database
+    }
+
+    private func copyDatabaseToTemporaryFile(_ sourceURL: URL) -> URL? {
+        let directoryURL = fileManager.temporaryDirectory
+            .appendingPathComponent("spill-agy-import", isDirectory: true)
+        let temporaryURL = directoryURL
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("db")
+
+        do {
+            try fileManager.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+            let data = try Data(contentsOf: sourceURL)
+            try data.write(to: temporaryURL, options: [.atomic])
+            return temporaryURL
+        } catch {
+            try? fileManager.removeItem(at: temporaryURL)
+            return nil
+        }
     }
 
     private func event(
@@ -182,11 +309,7 @@ final class TokenUsageAntigravityImporter {
         let sourceID = source.url.deletingPathExtension().lastPathComponent
         let spanHash = Self.opaqueHash("\(sourceID):\(record.index)")
         let runHash = Self.opaqueHash(sourceID)
-        // AGY gen_metadata rows observed so far expose idx/data/size but no
-        // trusted per-row timestamp. Use the database mtime as a coarse
-        // createdAt and label lookup timestamp until AGY exposes a row-level
-        // timestamp in the same token-only metadata source.
-        let label = labelTimeline.label(for: source.modifiedAt)
+        let label = labelTimeline.label(for: record.createdAt)
 
         return TokenUsageEvent(
             schemaVersion: 1,
@@ -212,8 +335,26 @@ final class TokenUsageAntigravityImporter {
                 unknown: inputTokens
             ),
             latencyMS: 0,
-            createdAt: ISO8601DateFormatter.tokenUsage.string(from: source.modifiedAt)
+            createdAt: ISO8601DateFormatter.tokenUsage.string(from: record.createdAt)
         )
+    }
+
+    private static func generationCreatedAt(from data: Data) -> Date? {
+        let envelope = [UInt8](data)
+        guard let generation = firstLengthDelimitedField(1, in: envelope),
+              let timestampContainer = firstLengthDelimitedField(9, in: generation),
+              let timestampMessage = firstLengthDelimitedField(4, in: timestampContainer),
+              let seconds = firstVarintField(1, in: timestampMessage)
+        else {
+            return nil
+        }
+
+        let minimumSeconds: UInt64 = 946_684_800
+        let maximumSeconds: UInt64 = 4_102_444_800
+        guard seconds >= minimumSeconds, seconds < maximumSeconds else {
+            return nil
+        }
+        return Date(timeIntervalSince1970: TimeInterval(seconds))
     }
 
     private static func usageRecord(from data: Data) -> UsageRecord? {
@@ -311,10 +452,12 @@ final class TokenUsageAntigravityImporter {
             "parsed_usage_events": summary.parsedUsageEvents,
             "imported_events": summary.importedEvents,
             "skipped_duplicate_events": summary.skippedDuplicateEvents,
+            "unsupported_records": summary.unsupportedRecords,
             "split_output_fallback_events": summary.splitOutputFallbackEvents,
             "cursor_advanced_databases": summary.cursorAdvancedDatabases,
-            "timestamp_source": "conversation_database_mtime",
-            "timestamp_limitation": "AGY gen_metadata rows observed by this importer expose no trusted per-row timestamp.",
+            "failed_to_write_events": summary.failedToWriteEvents,
+            "timestamp_source": "generation_metadata_timestamp",
+            "timestamp_limitation": "AGY gen_metadata rows without trusted numeric timestamps are counted as unsupported.",
             "privacy": "No payload values, prompts, responses, commands, file paths, logs, diffs, source, environment values, or secrets are stored."
         ]
 
@@ -347,6 +490,16 @@ final class TokenUsageAntigravityImporter {
             return nil
         }
         return string.range(of: #"^[A-Za-z0-9_.:-]{2,80}$"#, options: .regularExpression) != nil ? string : nil
+    }
+
+    private static func firstVarintField(_ number: Int, in bytes: [UInt8]) -> UInt64? {
+        var reader = ProtoReader(bytes)
+        while let field = reader.nextField() {
+            if field.number == number, case .varint(let value) = field.value {
+                return value
+            }
+        }
+        return nil
     }
 
     private static func varintFieldTotals(in bytes: [UInt8]) -> [Int: UInt64] {
@@ -485,6 +638,18 @@ private struct ConversationDatabase {
 private struct GenerationRecord {
     let index: Int
     let usage: UsageRecord
+    let createdAt: Date
+}
+
+private struct GenerationRecordReadResult {
+    let scannedRowCount: Int
+    let unsupportedRecordCount: Int
+    let records: [GenerationRecord]
+}
+
+private struct OpenedDatabase {
+    let database: OpaquePointer
+    let temporaryCopyURL: URL?
 }
 
 private struct UsageRecord {
