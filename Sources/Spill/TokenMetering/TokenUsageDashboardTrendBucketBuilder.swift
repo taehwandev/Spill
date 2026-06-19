@@ -215,7 +215,6 @@ enum TokenUsageDashboardTrendBucketBuilder {
             toolRows = TokenUsageDashboardRowBuilder.rows(
                 tokenValues: toolTotals,
                 totalTokens: totalTokens,
-                displayMode: .tokens,
                 id: { $0.rawValue },
                 label: { $0.dashboardLabel(language: language) }
             )

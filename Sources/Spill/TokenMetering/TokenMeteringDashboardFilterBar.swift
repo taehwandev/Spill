@@ -35,18 +35,6 @@ struct TokenMeteringDashboardFilterBar: View {
 
                 Spacer(minLength: 8)
 
-                Picker("", selection: Binding(
-                    get: { store.displayMode },
-                    set: { store.setDisplayMode($0) }
-                )) {
-                    ForEach(TokenUsageDisplayMode.allCases) { mode in
-                        Text(mode.localizedTitle(language: language)).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .frame(width: 140)
-
                 ForEach(store.snapshot.periodFilters) { filter in
                     periodPill(filter)
                 }

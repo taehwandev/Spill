@@ -4,14 +4,12 @@ enum TokenUsageDashboardRowBuilder {
     static func rows<Key: Hashable>(
         tokenValues: [Key: Int],
         totalTokens: Int,
-        displayMode: TokenUsageDisplayMode,
         id: (Key) -> String,
         label: (Key) -> String
     ) -> [TokenUsageDashboardBarRow] {
         rows(
             candidates: Array(tokenValues.keys),
             totalTokens: totalTokens,
-            displayMode: displayMode,
             tokens: { tokenValues[$0, default: 0] },
             id: id,
             label: label
@@ -21,7 +19,6 @@ enum TokenUsageDashboardRowBuilder {
     static func rawRows<Key: Hashable & RawRepresentable>(
         tokenValues: [String: Int],
         totalTokens: Int,
-        displayMode: TokenUsageDisplayMode,
         id: (Key) -> String,
         label: (Key) -> String
     ) -> [TokenUsageDashboardBarRow] where Key.RawValue == String {
@@ -33,7 +30,6 @@ enum TokenUsageDashboardRowBuilder {
                 totals[key] = element.value
             },
             totalTokens: totalTokens,
-            displayMode: displayMode,
             id: id,
             label: label
         )
@@ -42,7 +38,6 @@ enum TokenUsageDashboardRowBuilder {
     static func rows<Candidate>(
         candidates: [Candidate],
         totalTokens: Int,
-        displayMode: TokenUsageDisplayMode,
         tokens: (Candidate) -> Int,
         id: (Candidate) -> String,
         label: (Candidate) -> String,
@@ -57,13 +52,7 @@ enum TokenUsageDashboardRowBuilder {
             let ratio = TokenUsageDashboardSnapshot.chartRatio(tokens: tokenCount, totalTokens: totalTokens)
             let tokensString = TokenUsageDashboardSnapshot.formatTokens(tokenCount)
             let pctString = TokenUsageDashboardSnapshot.formatPercentage(ratio * 100.0)
-            let value: String
-            switch displayMode {
-            case .tokens:
-                value = "\(tokensString) (\(pctString))"
-            case .percentage:
-                value = "\(pctString) (\(tokensString))"
-            }
+            let value = "\(tokensString) (\(pctString))"
 
             return TokenUsageDashboardBarRow(
                 id: id(candidate),

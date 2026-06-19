@@ -3,7 +3,6 @@ import Foundation
 struct TokenUsageDashboardSnapshot: Equatable {
     let eventCount: Int
     let totalTokens: Int
-    let displayMode: TokenUsageDisplayMode
     let kpis: [TokenUsageDashboardKPI]
     let periodFilters: [TokenUsageDashboardPeriodFilter]
     let toolFilters: [TokenUsageDashboardToolFilter]
@@ -46,7 +45,6 @@ struct TokenUsageDashboardSnapshot: Equatable {
         selectedCalendarDayID: String?,
         selectedProjectID: String?,
         selectedSessionID: String?,
-        displayMode: TokenUsageDisplayMode,
         language: TokenMeteringLanguage,
         localAliases: [String: String],
         showAdvancedTools: Bool,
@@ -72,7 +70,6 @@ struct TokenUsageDashboardSnapshot: Equatable {
             selectedCalendarDayID: selectedCalendarDayID,
             selectedProjectID: selectedProjectID,
             selectedSessionID: selectedSessionID,
-            displayMode: displayMode,
             language: language,
             localAliases: localAliases,
             showAdvancedTools: showAdvancedTools,
@@ -95,7 +92,6 @@ struct TokenUsageDashboardSnapshot: Equatable {
         selectedCalendarDayID: String?,
         selectedProjectID: String?,
         selectedSessionID: String?,
-        displayMode: TokenUsageDisplayMode,
         language: TokenMeteringLanguage,
         localAliases: [String: String],
         showAdvancedTools: Bool,
@@ -126,7 +122,6 @@ struct TokenUsageDashboardSnapshot: Equatable {
             selectedCalendarDayID: selectedCalendarDayID,
             selectedProjectID: selectedProjectID,
             selectedSessionID: selectedSessionID,
-            displayMode: displayMode,
             language: language,
             localAliases: localAliases,
             showAdvancedTools: showAdvancedTools,
@@ -150,7 +145,6 @@ struct TokenUsageDashboardSnapshot: Equatable {
                 selectedCalendarDayID: selectedCalendarDayID,
                 selectedProjectID: nil,
                 selectedSessionID: nil,
-                displayMode: displayMode,
                 language: language,
                 localAliases: localAliases,
                 showAdvancedTools: showAdvancedTools,
@@ -180,7 +174,6 @@ struct TokenUsageDashboardSnapshot: Equatable {
         selectedCalendarDayID: String? = nil,
         selectedProjectID: String? = nil,
         selectedSessionID: String? = nil,
-        displayMode: TokenUsageDisplayMode = .tokens,
         language: TokenMeteringLanguage = .current(),
         localAliases: [String: String] = [:],
         showAdvancedTools: Bool = false,
@@ -205,7 +198,6 @@ struct TokenUsageDashboardSnapshot: Equatable {
             selectedCalendarDayID: selectedCalendarDayID,
             selectedProjectID: selectedProjectID,
             selectedSessionID: selectedSessionID,
-            displayMode: displayMode,
             language: language,
             localAliases: localAliases,
             showAdvancedTools: showAdvancedTools,
@@ -229,7 +221,6 @@ struct TokenUsageDashboardSnapshot: Equatable {
         selectedCalendarDayID: String? = nil,
         selectedProjectID: String? = nil,
         selectedSessionID: String? = nil,
-        displayMode: TokenUsageDisplayMode = .tokens,
         language: TokenMeteringLanguage = .current(),
         localAliases: [String: String] = [:],
         showAdvancedTools: Bool = false,
@@ -244,7 +235,6 @@ struct TokenUsageDashboardSnapshot: Equatable {
         timeZone: TimeZone = .autoupdatingCurrent,
         calendarDayTotals: [String: Int]? = nil
     ) {
-        self.displayMode = displayMode
         let dashboardEvents = context.dashboardEvents
         let selectedDayID = selectedCalendarDayID.flatMap { Self.date(forDayID: $0, calendar: calendar) == nil ? nil : $0 }
         self.selectedCalendarDayID = selectedDayID
@@ -281,7 +271,6 @@ struct TokenUsageDashboardSnapshot: Equatable {
         projectFilters = Self.projectFilters(
             events: toolVisibleEvents,
             selectedProjectID: validSelectedProjectID,
-            displayMode: displayMode,
             language: language
         )
         let visibleEvents = validSelectedProjectID.map { projectID in
@@ -292,8 +281,6 @@ struct TokenUsageDashboardSnapshot: Equatable {
         } ?? periodEvents
         let sessionRows = Self.sessionRows(
             events: visibleEvents,
-            displayMode: displayMode,
-            totalTokens: visibleEvents.reduce(0) { $0 + $1.event.totalTokens },
             language: language,
             localAliases: localAliases,
             calendar: calendar,
@@ -343,65 +330,36 @@ struct TokenUsageDashboardSnapshot: Equatable {
             totals: allToolTotals,
             totalEvents: toolFilterEvents.count,
             showAdvancedTools: showAdvancedTools,
-            displayMode: displayMode,
             language: language
         )
 
         let inputTokens = focusedEvents.reduce(0) { $0 + $1.event.inputTokens }
         let outputTokens = focusedEvents.reduce(0) { $0 + $1.event.outputTokens }
 
-        switch displayMode {
-        case .tokens:
-            kpis = [
-                TokenUsageDashboardKPI(
-                    id: "total",
-                    title: TokenMeteringL10n.text(.totalTokens, language: language),
-                    value: Self.formatTokens(totalTokens),
-                    detail: TokenMeteringL10n.localEventsDetail(eventCount: focusedEvents.count, language: language)
-                ),
-                TokenUsageDashboardKPI(
-                    id: "input",
-                    title: TokenMeteringL10n.text(.input, language: language),
-                    value: Self.formatTokens(inputTokens),
-                    detail: Self.percentageDetail(value: inputTokens, total: totalTokens, language: language)
-                ),
-                TokenUsageDashboardKPI(
-                    id: "output",
-                    title: TokenMeteringL10n.text(.output, language: language),
-                    value: Self.formatTokens(outputTokens),
-                    detail: Self.percentageDetail(value: outputTokens, total: totalTokens, language: language)
-                )
-            ]
-        case .percentage:
-            let totalPercent = totalTokens > 0 ? 100.0 : 0.0
-            let inputPercent = totalTokens > 0 ? (Double(inputTokens) / Double(totalTokens)) * 100.0 : 0.0
-            let outputPercent = totalTokens > 0 ? (Double(outputTokens) / Double(totalTokens)) * 100.0 : 0.0
-            kpis = [
-                TokenUsageDashboardKPI(
-                    id: "total",
-                    title: TokenMeteringL10n.text(.totalShare, language: language),
-                    value: Self.formatPercentage(totalPercent),
-                    detail: TokenMeteringL10n.localEventsDetail(eventCount: focusedEvents.count, language: language)
-                ),
-                TokenUsageDashboardKPI(
-                    id: "input",
-                    title: TokenMeteringL10n.text(.inputShare, language: language),
-                    value: Self.formatPercentage(inputPercent),
-                    detail: TokenMeteringL10n.tokenCountDetail(Self.formatTokens(inputTokens), language: language)
-                ),
-                TokenUsageDashboardKPI(
-                    id: "output",
-                    title: TokenMeteringL10n.text(.outputShare, language: language),
-                    value: Self.formatPercentage(outputPercent),
-                    detail: TokenMeteringL10n.tokenCountDetail(Self.formatTokens(outputTokens), language: language)
-                )
-            ]
-        }
+        kpis = [
+            TokenUsageDashboardKPI(
+                id: "total",
+                title: TokenMeteringL10n.text(.totalTokens, language: language),
+                value: Self.formatTokens(totalTokens),
+                detail: TokenMeteringL10n.localEventsDetail(eventCount: focusedEvents.count, language: language)
+            ),
+            TokenUsageDashboardKPI(
+                id: "input",
+                title: TokenMeteringL10n.text(.input, language: language),
+                value: Self.formatTokens(inputTokens),
+                detail: Self.percentageDetail(value: inputTokens, total: totalTokens, language: language)
+            ),
+            TokenUsageDashboardKPI(
+                id: "output",
+                title: TokenMeteringL10n.text(.output, language: language),
+                value: Self.formatTokens(outputTokens),
+                detail: Self.percentageDetail(value: outputTokens, total: totalTokens, language: language)
+            )
+        ]
 
         toolRows = TokenUsageDashboardRowBuilder.rows(
             tokenValues: visibleCapturedToolTokens,
             totalTokens: totalTokens,
-            displayMode: displayMode,
             id: { $0.rawValue },
             label: { $0.dashboardLabel(language: language) }
         )
@@ -410,7 +368,6 @@ struct TokenUsageDashboardSnapshot: Equatable {
         modelRows = TokenUsageDashboardRowBuilder.rows(
             tokenValues: modelTokens,
             totalTokens: totalTokens,
-            displayMode: displayMode,
             id: { $0 },
             label: { Self.modelLabel($0, language: language) }
         )
@@ -419,7 +376,6 @@ struct TokenUsageDashboardSnapshot: Equatable {
         taskRows = TokenUsageDashboardRowBuilder.rows(
             tokenValues: taskTokens,
             totalTokens: totalTokens,
-            displayMode: displayMode,
             id: { $0.rawValue },
             label: { $0.dashboardLabel(language: language) }
         )
@@ -428,7 +384,6 @@ struct TokenUsageDashboardSnapshot: Equatable {
         stageRows = TokenUsageDashboardRowBuilder.rows(
             tokenValues: stageTokens,
             totalTokens: totalTokens,
-            displayMode: displayMode,
             id: { $0.rawValue },
             label: { $0.dashboardLabel(language: language) }
         )
@@ -437,7 +392,6 @@ struct TokenUsageDashboardSnapshot: Equatable {
         sourceRows = TokenUsageDashboardRowBuilder.rows(
             tokenValues: sourceTokens,
             totalTokens: totalTokens,
-            displayMode: displayMode,
             id: { $0.rawValue },
             label: { $0.label(language: language) }
         )
@@ -565,7 +519,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
     }
 
     private init(events: [TokenUsageEvent], selectedTool legacySelectedTool: TokenUsageAITool?) {
-        self.init(events: events, selectedTool: legacySelectedTool, selectedPeriod: .all, selectedSessionID: nil, displayMode: .tokens)
+        self.init(events: events, selectedTool: legacySelectedTool, selectedPeriod: .all, selectedSessionID: nil)
     }
 
     static let empty = TokenUsageDashboardSnapshot(events: [])
@@ -888,13 +842,12 @@ struct TokenUsageDashboardSnapshot: Equatable {
         totals: [TokenUsageAITool: Int],
         totalEvents: Int,
         showAdvancedTools: Bool,
-        displayMode: TokenUsageDisplayMode,
         language: TokenMeteringLanguage
     ) -> [TokenUsageDashboardToolFilter] {
         let allTotal = totals.values.reduce(0, +)
         let allFilterDetail = TokenMeteringL10n.eventsTokensDetail(
             eventCount: totalEvents,
-            tokens: displayMode == .tokens ? formatTokens(allTotal) : formatPercentage(allTotal > 0 ? 100.0 : 0.0),
+            tokens: formatTokens(allTotal),
             language: language
         )
         let allFilter = TokenUsageDashboardToolFilter(
@@ -913,21 +866,11 @@ struct TokenUsageDashboardSnapshot: Equatable {
                 tokens: tokens,
                 totalTokens: allTotal
             )
-            let detail: String
-            let shareLabel: String?
-            switch displayMode {
-            case .tokens:
-                detail = formatTokens(tokens)
-                shareLabel = formatPercentage(ratio * 100.0)
-            case .percentage:
-                detail = formatPercentage(ratio * 100.0)
-                shareLabel = formatTokens(tokens)
-            }
             return TokenUsageDashboardToolFilter(
                 tool: tool,
                 title: tool.dashboardLabel(language: language),
-                detail: detail,
-                shareLabel: shareLabel,
+                detail: formatTokens(tokens),
+                shareLabel: formatPercentage(ratio * 100.0),
                 isSelected: selectedTool == tool
             )
         }
@@ -938,7 +881,6 @@ struct TokenUsageDashboardSnapshot: Equatable {
     private static func projectFilters(
         events: [TokenUsageDashboardParsedEvent],
         selectedProjectID: String?,
-        displayMode: TokenUsageDisplayMode,
         language: TokenMeteringLanguage
     ) -> [TokenUsageDashboardProjectFilter] {
         let totalTokens = events.reduce(0) { $0 + $1.event.totalTokens }
@@ -955,18 +897,10 @@ struct TokenUsageDashboardSnapshot: Equatable {
         let projectRows = Dictionary(grouping: events) { $0.event.projectID }
             .map { projectID, groupedEvents in
                 let tokens = groupedEvents.reduce(0) { $0 + $1.event.totalTokens }
-                let ratio = chartRatio(tokens: tokens, totalTokens: totalTokens)
-                let value: String
-                switch displayMode {
-                case .tokens:
-                    value = formatTokens(tokens)
-                case .percentage:
-                    value = formatPercentage(ratio * 100.0)
-                }
                 return TokenUsageDashboardProjectFilter(
                     projectID: projectID,
                     title: projectTitle(projectID, language: language),
-                    detail: value,
+                    detail: formatTokens(tokens),
                     isSelected: selectedProjectID == projectID
                 )
             }
@@ -1009,8 +943,6 @@ struct TokenUsageDashboardSnapshot: Equatable {
 
     private static func sessionRows(
         events: [TokenUsageDashboardParsedEvent],
-        displayMode: TokenUsageDisplayMode,
-        totalTokens: Int,
         language: TokenMeteringLanguage,
         localAliases: [String: String],
         calendar: Calendar,
@@ -1035,15 +967,6 @@ struct TokenUsageDashboardSnapshot: Equatable {
                 } ?? latestRaw
                 let runIDs = Set(groupedEvents.map(\.event.runID))
 
-                let valueStr: String
-                switch displayMode {
-                case .tokens:
-                    valueStr = Self.formatTokens(totalT)
-                case .percentage:
-                    let pct = Self.chartRatio(tokens: totalT, totalTokens: totalTokens) * 100.0
-                    valueStr = Self.formatPercentage(pct)
-                }
-
                 return (
                     row: TokenUsageDashboardSessionRow(
                         id: key.id,
@@ -1051,7 +974,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
                         projectID: key.projectID,
                         projectTitle: Self.projectTitle(key.projectID, language: language),
                         title: localAliases[key.id] ?? Self.workItemTitle(key: key, language: language),
-                        value: valueStr,
+                        value: Self.formatTokens(totalT),
                         detail: TokenMeteringL10n.spansDetail(
                             spanCount: groupedEvents.count,
                             latencyMS: latency > 0 ? latency : nil,

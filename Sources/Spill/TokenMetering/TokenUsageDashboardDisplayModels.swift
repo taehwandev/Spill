@@ -1,25 +1,5 @@
 import Foundation
 
-enum TokenUsageDisplayMode: String, CaseIterable, Identifiable {
-    case tokens = "Tokens"
-    case percentage = "Share %"
-
-    var id: String { rawValue }
-
-    var localizedTitle: String {
-        localizedTitle(language: .current())
-    }
-
-    func localizedTitle(language: TokenMeteringLanguage) -> String {
-        switch self {
-        case .tokens:
-            return TokenMeteringL10n.text(.displayModeTokens, language: language)
-        case .percentage:
-            return TokenMeteringL10n.text(.displayModeShare, language: language)
-        }
-    }
-}
-
 struct TokenMeteringModeStatus: Identifiable, Equatable {
     let id: String
     let title: String

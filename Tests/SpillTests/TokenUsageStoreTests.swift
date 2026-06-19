@@ -30,7 +30,6 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(TokenMeteringL10n.text(.dashboardTitle, language: .english), "Local Token Metering")
         XCTAssertEqual(TokenMeteringL10n.text(.dashboardTitle, language: .korean), "로컬 토큰 미터링")
         XCTAssertEqual(TokenMeteringL10n.text(.dashboardTitle, language: .japanese), "ローカルトークン計測")
-        XCTAssertEqual(TokenMeteringL10n.text(.displayModeShare, language: .korean), "비중 %")
         XCTAssertEqual(TokenMeteringL10n.text(.agentConnectionStatus, language: .korean), "에이전트 연결 상태")
         XCTAssertEqual(TokenMeteringL10n.text(.agentStatusDetected, language: .english), "Detected")
         XCTAssertTrue(TokenMeteringL10n.text(.agentStatusInfoDetail, language: .korean).contains("프롬프트"))
@@ -496,10 +495,6 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(snapshot.modelRows.map(\.title), ["codex-test-model", "claude-test-model"])
         XCTAssertEqual(snapshot.modelRows.map(\.value), ["100 (66.7%)", "50 (33.3%)"])
 
-        let percentageSnapshot = TokenUsageDashboardSnapshot(events: [codex, claude], displayMode: .percentage)
-        XCTAssertEqual(percentageSnapshot.modelRows.first?.title, "codex-test-model")
-        XCTAssertEqual(percentageSnapshot.modelRows.first?.value, "66.7% (100)")
-
         let claudeSnapshot = TokenUsageDashboardSnapshot(events: [codex, claude], selectedTool: .claude)
         XCTAssertEqual(claudeSnapshot.modelRows.map(\.title), ["claude-test-model"])
         XCTAssertEqual(claudeSnapshot.modelRows.map(\.value), ["50 (100.0%)"])
@@ -698,6 +693,9 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(dashboardView.contains("TokenMeteringDashboardFilterBar("))
         XCTAssertTrue(filterBar.contains("TokenMeteringDashboardToolTab("))
         XCTAssertTrue(filterBar.contains("TokenMeteringDashboardCalendarControl("))
+        XCTAssertFalse(filterBar.contains("TokenUsageDisplayMode"))
+        XCTAssertFalse(filterBar.contains("store.setDisplayMode"))
+        XCTAssertFalse(filterBar.contains(".pickerStyle(.segmented)"))
         XCTAssertTrue(toolTab.contains("store.setSelectedTool(filter.tool)"))
         XCTAssertTrue(toolTab.contains("let isSelected = store.selectedTool == filter.tool"))
         XCTAssertTrue(toolTab.contains("filter.shareLabel"))
@@ -1630,10 +1628,6 @@ final class TokenUsageStoreTests: XCTestCase {
 
         let sessionID = try XCTUnwrap(dashboardStore.snapshot.sessions.first?.id)
         XCTAssertTrue(dashboardStore.isLiveUpdated("session:\(sessionID)"))
-
-        dashboardStore.setDisplayMode(.percentage)
-        try await waitForDashboardStoreRefresh(dashboardStore)
-        XCTAssertEqual(dashboardStore.liveUpdateMarker.sequence, sequence)
 
         dashboardStore.refresh()
         XCTAssertEqual(dashboardStore.liveUpdateMarker.sequence, sequence)
@@ -3489,7 +3483,7 @@ final class TokenUsageStoreTests: XCTestCase {
         )
     }
 
-    func testDashboardSnapshotDisplayModes() {
+    func testDashboardSnapshotShowsTokensWithShareBadges() {
         let event = Self.safeEvent(
             aiTool: .claude,
             spanID: "span_cost_01",
@@ -3500,23 +3494,14 @@ final class TokenUsageStoreTests: XCTestCase {
         )
         let events = [event]
 
-        // 1. Tokens Mode
-        let tokensSnapshot = TokenUsageDashboardSnapshot(events: events, displayMode: .tokens)
-        XCTAssertEqual(tokensSnapshot.displayMode, .tokens)
+        let tokensSnapshot = TokenUsageDashboardSnapshot(events: events)
         XCTAssertEqual(tokensSnapshot.totalTokens, 150_000)
         XCTAssertEqual(tokensSnapshot.kpis.first(where: { $0.id == "total" })?.value, "150K")
         XCTAssertEqual(tokensSnapshot.toolRows.first?.value, "150K (100.0%)")
         XCTAssertEqual(tokensSnapshot.sessions.first?.value, "150K")
 
-        // 3. Percentage Mode
-        let percentageSnapshot = TokenUsageDashboardSnapshot(events: events, displayMode: .percentage)
-        XCTAssertEqual(percentageSnapshot.displayMode, .percentage)
-        XCTAssertEqual(percentageSnapshot.kpis.first(where: { $0.id == "total" })?.value, "100.0%")
-        XCTAssertEqual(percentageSnapshot.toolRows.first?.value, "100.0% (150K)")
-        XCTAssertEqual(percentageSnapshot.sessions.first?.value, "100.0%")
-
-        let emptyPercentageSnapshot = TokenUsageDashboardSnapshot(events: [], displayMode: .percentage)
-        XCTAssertEqual(emptyPercentageSnapshot.kpis.first(where: { $0.id == "total" })?.value, "0.0%")
+        let emptySnapshot = TokenUsageDashboardSnapshot(events: [])
+        XCTAssertEqual(emptySnapshot.kpis.first(where: { $0.id == "total" })?.value, "0")
     }
 
     func testDashboardSnapshotShowsWorkflowUsageRatios() {

@@ -143,10 +143,6 @@ enum TokenMeteringTextKey: String {
     case folderUnassigned
     case unknownAITool
     case aiToolHeader
-    case displayModeTokens
-    case displayModeShare
-    case displayModeInfoTitle
-    case displayModeInfoDetail
     case aiToolInfoTitle
     case aiToolInfoDetail
     case workflowInfoTitle
@@ -168,9 +164,6 @@ enum TokenMeteringTextKey: String {
     case perLocalSpan
     case zeroPercentOfTotal
     case zeroPointPercentOfTotal
-    case totalShare
-    case inputShare
-    case outputShare
     case lastUpdatedLabel
     case localAlias
     case localAliasPlaceholder
@@ -362,10 +355,6 @@ enum TokenMeteringL10n {
 
     static func percentStringOfTotal(_ percent: String, language: TokenMeteringLanguage = .current()) -> String {
         localizedFormat("format.percent_string_of_total", language: language, percent)
-    }
-
-    static func tokenCountDetail(_ tokens: String, language: TokenMeteringLanguage = .current()) -> String {
-        localizedFormat("format.token_count_detail", language: language, tokens)
     }
 
     static func folderTitle(_ shortID: String, language: TokenMeteringLanguage = .current()) -> String {

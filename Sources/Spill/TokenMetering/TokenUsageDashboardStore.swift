@@ -131,7 +131,6 @@ final class TokenUsageDashboardStore: ObservableObject {
     @Published private(set) var selectedSessionID: String?
     @Published private(set) var calendarMonthStart: Date?
     @Published private(set) var periodOffset = 0
-    @Published private(set) var displayMode: TokenUsageDisplayMode = .tokens
     @Published private(set) var language: TokenMeteringLanguage = .current()
     @Published private(set) var lastError: String?
     @Published private(set) var isRunningSelfTest = false
@@ -335,7 +334,6 @@ final class TokenUsageDashboardStore: ObservableObject {
         )
         panelSummary = TokenUsagePanelSummarySnapshot(
             summary: summary,
-            displayMode: displayMode,
             language: language
         )
         lastError = nil
@@ -518,7 +516,6 @@ final class TokenUsageDashboardStore: ObservableObject {
             selectedCalendarDayID: selectedCalendarDayID,
             selectedProjectID: selectedProjectID,
             selectedSessionID: selectedSessionID,
-            displayMode: displayMode,
             language: language,
             localAliases: SpillSettings.shared.tokenUsageLocalAliases,
             showAdvancedTools: SpillSettings.shared.tokenUsageShowAdvancedTools,
@@ -558,7 +555,6 @@ final class TokenUsageDashboardStore: ObservableObject {
             selectedCalendarDayID: request.selectedCalendarDayID,
             selectedProjectID: request.selectedProjectID,
             selectedSessionID: request.selectedSessionID,
-            displayMode: request.displayMode,
             language: request.language,
             localAliases: request.localAliases,
             showAdvancedTools: request.showAdvancedTools,
@@ -719,7 +715,6 @@ final class TokenUsageDashboardStore: ObservableObject {
         let summary = usageStore.dashboardSummary(dashboardToolsOnly: !request.showAdvancedTools)
         return TokenUsagePanelSummarySnapshot(
             summary: summary,
-            displayMode: request.displayMode,
             language: request.language
         )
     }
@@ -942,7 +937,6 @@ final class TokenUsageDashboardStore: ObservableObject {
             selectedCalendarDayID: selectedCalendarDayID,
             selectedProjectID: selectedProjectID,
             selectedSessionID: sessionID,
-            displayMode: displayMode,
             language: language,
             localAliases: SpillSettings.shared.tokenUsageLocalAliases,
             showAdvancedTools: SpillSettings.shared.tokenUsageShowAdvancedTools,
@@ -980,15 +974,6 @@ final class TokenUsageDashboardStore: ObservableObject {
             reusesLoadedEvents: true,
             reusesPeriodFilterTotals: true
         )
-    }
-
-    func setDisplayMode(_ mode: TokenUsageDisplayMode) {
-        displayMode = mode
-        if hasRebuiltSnapshot {
-            rebuildSnapshot(panelSummary: loadPanelSummary(for: snapshotBuildRequest()))
-        } else {
-            refreshPanelSummary()
-        }
     }
 
     func setLanguage(_ language: TokenMeteringLanguage) {
@@ -1557,7 +1542,6 @@ private struct TokenUsageDashboardBuildRequest {
     let selectedCalendarDayID: String?
     let selectedProjectID: String?
     let selectedSessionID: String?
-    let displayMode: TokenUsageDisplayMode
     let language: TokenMeteringLanguage
     let localAliases: [String: String]
     let showAdvancedTools: Bool
@@ -1589,7 +1573,6 @@ private extension TokenUsageDashboardBuildRequest {
             selectedCalendarDayID: selectedCalendarDayID,
             selectedProjectID: selectedProjectID,
             selectedSessionID: selectedSessionID,
-            displayMode: displayMode,
             language: language,
             localAliases: localAliases,
             showAdvancedTools: showAdvancedTools,
