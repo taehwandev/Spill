@@ -44,7 +44,7 @@ final class ReleaseNotarizationContractTests: XCTestCase {
     func testReleaseBuildUsesProductionWebConnectionAndRegistersURLScheme() throws {
         let buildScript = try read("scripts/build-app.sh")
         let envExample = try read(".env.example")
-        let uploadModels = try read("Sources/Spill/TokenMetering/PrivateUsageUploadModels.swift")
+        let uploadModels = try privateUsageUploadModelSources()
 
         XCTAssertTrue(buildScript.contains("swift build -c release --package-path \"$ROOT_DIR\""))
         XCTAssertTrue(buildScript.contains("<key>CFBundleURLSchemes</key>"))
@@ -79,8 +79,9 @@ final class ReleaseNotarizationContractTests: XCTestCase {
     }
 
     func testReleaseBuildCanHideConfiguredPrivateUsageUploadSurface() throws {
-        let uploadModels = try read("Sources/Spill/TokenMetering/PrivateUsageUploadModels.swift")
+        let uploadModels = try privateUsageUploadModelSources()
         let preferencesSection = try read("Sources/Spill/Preferences/TokenMeteringPreferencesSection.swift")
+        let privateUsageUploadSection = try read("Sources/Spill/Preferences/TokenMetering/Sections/PrivateUsageUploadPreferencesSection.swift")
         let tokenMeteringCoordinator = try read("Sources/Spill/TokenMetering/TokenMeteringCoordinator.swift")
 
         XCTAssertTrue(uploadModels.contains("enum PrivateUsageUploadFeatureAvailability"))
@@ -88,7 +89,7 @@ final class ReleaseNotarizationContractTests: XCTestCase {
         XCTAssertTrue(uploadModels.contains("SPILLPrivateUsageFeatureEnabled"))
         XCTAssertTrue(uploadModels.contains("return false"))
         XCTAssertTrue(preferencesSection.contains("if PrivateUsageUploadFeatureAvailability.isEnabledInCurrentBuild"))
-        XCTAssertTrue(preferencesSection.contains(".disabled(privateUsageWebConnectionURL == nil)"))
+        XCTAssertTrue(privateUsageUploadSection.contains(".disabled(webConnectionURL == nil)"))
         XCTAssertTrue(tokenMeteringCoordinator.contains("guard PrivateUsageUploadFeatureAvailability.isEnabledInCurrentBuild else"))
         XCTAssertTrue(tokenMeteringCoordinator.contains("isEnabled: settings.privateUsageUploadEnabled"))
     }
@@ -218,5 +219,21 @@ final class ReleaseNotarizationContractTests: XCTestCase {
 
     private func read(_ relativePath: String) throws -> String {
         try String(contentsOf: root.appendingPathComponent(relativePath), encoding: .utf8)
+    }
+
+    private func privateUsageUploadModelSources() throws -> String {
+        let modelDirectory = root.appendingPathComponent(
+            "Sources/Spill/TokenMetering/PrivateUsageUpload/Models",
+            isDirectory: true
+        )
+        let urls = try FileManager.default.contentsOfDirectory(
+            at: modelDirectory,
+            includingPropertiesForKeys: nil
+        )
+            .filter { $0.pathExtension == "swift" }
+            .sorted { $0.lastPathComponent < $1.lastPathComponent }
+        return try urls
+            .map { try String(contentsOf: $0, encoding: .utf8) }
+            .joined(separator: "\n")
     }
 }
