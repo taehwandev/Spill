@@ -1523,7 +1523,7 @@ final class TokenUsageStoreTests: XCTestCase {
             dashboardStore.components(
                 separatedBy: "reusesPeriodFilterTotals: true"
             ).count - 1,
-            6
+            7
         )
         XCTAssertTrue(dashboardStore.contains("let cachedPeriodFilterTotals = reusesPeriodFilterTotals ? periodFilterTotals : [:]"))
         XCTAssertTrue(dashboardStore.contains("dateRange(cachedDateRange, contains: requestedRange)"))
@@ -2403,6 +2403,65 @@ final class TokenUsageStoreTests: XCTestCase {
             store.totalTokens(startingAt: start, endingBefore: end, dashboardToolsOnly: false),
             1_330
         )
+    }
+
+    func testStoreReadsAllDashboardPeriodTotalsWithoutLoadingEvents() throws {
+        let store = TokenUsageStore(fileURL: temporaryEventsURL())
+        let now = try Self.date("2026-06-19T12:00:00.000Z")
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+
+        try store.appendEvent(Self.safeEvent(
+            aiTool: .codex,
+            spanID: "span_all_periods_today_codex",
+            inputTokens: 100,
+            outputTokens: 20,
+            createdAt: "2026-06-19T03:00:00.000Z"
+        ))
+        try store.appendEvent(Self.safeEvent(
+            aiTool: .claude,
+            spanID: "span_all_periods_seven_claude",
+            inputTokens: 200,
+            outputTokens: 30,
+            createdAt: "2026-06-13T12:00:00.000Z"
+        ))
+        try store.appendEvent(Self.safeEvent(
+            aiTool: .antigravity,
+            spanID: "span_all_periods_thirty_antigravity",
+            inputTokens: 300,
+            outputTokens: 40,
+            createdAt: "2026-05-30T12:00:00.000Z"
+        ))
+        try store.appendEvent(Self.safeEvent(
+            aiTool: .codex,
+            spanID: "span_all_periods_all_codex",
+            inputTokens: 400,
+            outputTokens: 50,
+            createdAt: "2026-05-10T12:00:00.000Z"
+        ))
+        try store.appendEvent(Self.safeEvent(
+            aiTool: .openAI,
+            spanID: "span_all_periods_today_openai",
+            inputTokens: 500,
+            outputTokens: 60,
+            createdAt: "2026-06-19T04:00:00.000Z"
+        ))
+
+        let dashboardTotals = store.allPeriodTotalTokens(now: now, calendar: calendar)
+        XCTAssertEqual(dashboardTotals[.today], 120)
+        XCTAssertEqual(dashboardTotals[.sevenDays], 350)
+        XCTAssertEqual(dashboardTotals[.thirtyDays], 690)
+        XCTAssertEqual(dashboardTotals[.all], 1_140)
+
+        let allToolTotals = store.allPeriodTotalTokens(
+            now: now,
+            calendar: calendar,
+            dashboardToolsOnly: false
+        )
+        XCTAssertEqual(allToolTotals[.today], 680)
+        XCTAssertEqual(allToolTotals[.sevenDays], 910)
+        XCTAssertEqual(allToolTotals[.thirtyDays], 1_250)
+        XCTAssertEqual(allToolTotals[.all], 1_700)
     }
 
     func testStoreReadsDashboardSummaryWithoutLoadingEvents() throws {

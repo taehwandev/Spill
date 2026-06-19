@@ -50,14 +50,16 @@ private struct TokenUsageDashboardContextCacheKey: Equatable {
         firstCreatedAt = events.first?.createdAt
         lastSpanID = events.last?.spanID
         lastCreatedAt = events.last?.createdAt
-        totalTokens = events.reduce(0) { $0 + $1.totalTokens }
+        var total = 0
         var hasher = Hasher()
         for event in events {
+            total += event.totalTokens
             hasher.combine(event.spanID)
             hasher.combine(event.createdAt)
             hasher.combine(event.aiTool.rawValue)
             hasher.combine(event.totalTokens)
         }
+        totalTokens = total
         eventFingerprint = hasher.finalize()
         showAdvancedTools = request.showAdvancedTools
         calendarIdentifier = String(describing: request.calendar.identifier)
@@ -703,31 +705,11 @@ final class TokenUsageDashboardStore: ObservableObject {
         from usageStore: TokenUsageStore,
         for request: TokenUsageDashboardBuildRequest
     ) -> [TokenUsageDashboardPeriod: Int] {
-        var totals = [TokenUsageDashboardPeriod: Int]()
-        let dashboardToolsOnly = !request.showAdvancedTools
-        for period in TokenUsageDashboardPeriod.allCases {
-            if period == .all {
-                totals[period] = usageStore.allTimeTotalTokens(dashboardToolsOnly: dashboardToolsOnly)
-                continue
-            }
-
-            let range = TokenUsageDashboardSnapshot.cutoffDateRange(
-                for: period,
-                periodOffset: 0,
-                now: request.now,
-                calendar: request.calendar
-            )
-            if let start = range.start, let end = range.end {
-                totals[period] = usageStore.totalTokens(
-                    startingAt: start,
-                    endingBefore: end,
-                    dashboardToolsOnly: dashboardToolsOnly
-                )
-            } else {
-                totals[period] = 0
-            }
-        }
-        return totals
+        usageStore.allPeriodTotalTokens(
+            now: request.now,
+            calendar: request.calendar,
+            dashboardToolsOnly: !request.showAdvancedTools
+        )
     }
 
     nonisolated private static func loadPanelSummary(
@@ -1015,7 +997,7 @@ final class TokenUsageDashboardStore: ObservableObject {
         }
         self.language = language
         if hasRebuiltSnapshot {
-            rebuildSnapshot(panelSummary: loadPanelSummary(for: snapshotBuildRequest()))
+            refreshAsync(reusesLoadedEvents: true, reusesPeriodFilterTotals: true)
         } else {
             refreshPanelSummary()
         }
