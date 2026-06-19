@@ -92,6 +92,7 @@ struct TokenMeteringDashboardView: View {
             }
         }
         .frame(minWidth: 1060, minHeight: 640)
+        .focusEffectDisabled()
         .onAppear {
             let language = TokenMeteringLanguage.current(appLanguage: settings.appLanguage)
             resolvedLanguage = language
@@ -160,21 +161,7 @@ struct TokenMeteringDashboardView: View {
                 }
 
                 if let selectedSession = store.snapshot.selectedSession {
-                    TokenMeteringDashboardDetailPanel(
-                        session: selectedSession,
-                        snapshot: store.snapshot,
-                        aliasText: $aliasText,
-                        language: currentLanguage,
-                        liveUpdateMarker: store.liveUpdateMarker,
-                        isLiveUpdated: { store.isLiveUpdated($0) },
-                        clearSelection: {
-                            store.clearWorkItemSelection()
-                        },
-                        updateAlias: { workItemID, alias in
-                            store.updateAlias(for: workItemID, alias: alias)
-                        }
-                    )
-                        .frame(width: 320)
+                    receiverPanel(selectedSession)
                 } else {
                     rightRail
                         .frame(width: 286)
@@ -197,6 +184,24 @@ struct TokenMeteringDashboardView: View {
         }
         .padding(.horizontal, 18)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    private func receiverPanel(_ selectedSession: TokenUsageDashboardSessionRow) -> some View {
+        TokenMeteringDashboardDetailPanel(
+            session: selectedSession,
+            snapshot: store.snapshot,
+            aliasText: $aliasText,
+            language: currentLanguage,
+            liveUpdateMarker: store.liveUpdateMarker,
+            isLiveUpdated: { store.isLiveUpdated($0) },
+            clearSelection: {
+                store.clearWorkItemSelection()
+            },
+            updateAlias: { workItemID, alias in
+                store.updateAlias(for: workItemID, alias: alias)
+            }
+        )
+        .frame(width: 320)
     }
 
     private var topHeader: some View {
@@ -248,30 +253,8 @@ struct TokenMeteringDashboardView: View {
             Spacer(minLength: 16)
 
             HStack(spacing: 8) {
-                TokenMeteringInfoButton(
-                    title: t(.displayModeInfoTitle),
-                    detail: t(.displayModeInfoDetail)
-                )
-
                 serviceStatusButton
-                    .frame(width: 116)
-            }
-            .frame(height: 30)
 
-            Picker("", selection: Binding(
-                get: { store.displayMode },
-                set: { store.setDisplayMode($0) }
-            )) {
-                ForEach(TokenUsageDisplayMode.allCases) { mode in
-                    Text(mode.localizedTitle(language: currentLanguage)).tag(mode)
-                }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(width: 240)
-            .focusEffectDisabled()
-
-            HStack(spacing: 8) {
                 Button {
                     refreshLocalTokenData()
                 } label: {
@@ -284,7 +267,6 @@ struct TokenMeteringDashboardView: View {
                 } label: {
                     Label(AppL10n.text(.settings, appLanguage: settings.appLanguage), systemImage: "gearshape")
                 }
-
             }
             .buttonStyle(.bordered)
             .font(.system(size: 11, weight: .semibold))
@@ -315,7 +297,10 @@ struct TokenMeteringDashboardView: View {
     private var serviceStatusButton: some View {
         CloudServiceStatusButton(
             state: serviceStatusControlState,
-            appLanguage: settings.appLanguage
+            appLanguage: settings.appLanguage,
+            height: 22,
+            fontSize: 9,
+            horizontalPadding: 7
         ) {
             openServiceStatusDetails()
         }
@@ -427,18 +412,18 @@ struct TokenMeteringDashboardView: View {
                         .stroke(
                             LinearGradient(
                                 colors: isHovered
-                                    ? (kpi.id == "total" ? [Color.teal.opacity(0.42), Color.blue.opacity(0.18)] : [Color.primary.opacity(0.16), Color.primary.opacity(0.06)])
-                                    : [Color.primary.opacity(0.08), Color.primary.opacity(0.03)],
+                                    ? (kpi.id == "total" ? [Color.teal.opacity(0.35), Color.blue.opacity(0.15)] : [Color.primary.opacity(0.12), Color.primary.opacity(0.04)])
+                                    : [Color.primary.opacity(0.04), Color.primary.opacity(0.02)],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             ),
-                            lineWidth: 0.8
+                            lineWidth: 0.6
                         )
                 }
                 .shadow(
-                    color: (kpi.id == "total" ? Color.teal : Color.black).opacity(isHovered ? 0.08 : 0.02),
-                    radius: isHovered ? 8 : 3,
-                    y: isHovered ? 4.5 : 1.5
+                    color: (kpi.id == "total" ? Color.teal : Color.black).opacity(isHovered ? 0.05 : 0.015),
+                    radius: isHovered ? 6 : 2.5,
+                    y: isHovered ? 3.5 : 1.2
                 )
                 .animation(.spring(response: 0.25, dampingFraction: 0.72), value: hoveredKPI)
                 .onHover { hovering in
@@ -515,11 +500,9 @@ struct TokenMeteringDashboardView: View {
     private var rightRail: some View {
         ScrollView(.vertical, showsIndicators: false) {
             VStack(alignment: .leading, spacing: 14) {
+                agentStatusPanel
                 modelPanel
                 workflowUsagePanel
-                receiverPanel
-                privacyPanel
-                agentStatusPanel
             }
             .padding(.vertical, 18)
         }
@@ -577,29 +560,7 @@ struct TokenMeteringDashboardView: View {
         }
     }
 
-    private var receiverPanel: some View {
-        TokenMeteringDashboardRailPanel(title: t(.receivers)) {
-            VStack(spacing: 8) {
-                receiverTile(title: t(.localQueue), state: t(.defaultState), systemImage: "tray.and.arrow.down", tint: .green)
-                receiverTile(title: t(.adapters), state: t(.onDemand), systemImage: "bolt.horizontal", tint: .teal)
-            }
-        }
-    }
 
-    private var privacyPanel: some View {
-        TokenMeteringDashboardRailPanel(title: t(.privacyBoundary)) {
-            VStack(alignment: .leading, spacing: 9) {
-                Text(t(.privacyBoundaryDetail))
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                FlowingTokenMeteringLabels(
-                    labels: Array(TokenMeteringL10n.forbiddenContentLabels(language: currentLanguage).prefix(6))
-                )
-            }
-        }
-    }
 
     private var sessionsTable: some View {
         TokenMeteringDashboardSessionsTable(
@@ -612,6 +573,9 @@ struct TokenMeteringDashboardView: View {
     }
 
     private func requestClear(_ scope: TokenUsageClearScope) {
+        guard SpillBuildOptions.developerOptionsEnabled else {
+            return
+        }
         let preview = store.clearPreview(for: scope)
         guard preview.hasEvents else {
             return
@@ -619,55 +583,40 @@ struct TokenMeteringDashboardView: View {
         pendingClearRequest = TokenUsageClearRequest(scope: scope, preview: preview)
     }
 
-    private func receiverTile(title: String, state: String, systemImage: String, tint: Color) -> some View {
-        HStack(spacing: 10) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(tint.opacity(0.12))
 
-                Image(systemName: systemImage)
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(tint)
-            }
-            .frame(width: 22, height: 22)
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title)
-                    .font(.system(size: 11, weight: .semibold))
-                Text(state)
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(Color.primary.opacity(0.04), lineWidth: 0.5)
-        }
-    }
 
     private var alphaBadge: some View {
-        Text(t(.previewBadge))
-            .font(.system(size: 8.5, weight: .black))
-            .tracking(0.9)
-            .foregroundStyle(.orange)
-            .padding(.horizontal, 8)
-            .frame(height: 21)
-            .background(Color.orange.opacity(0.11), in: Capsule(style: .continuous))
+        Text(t(.previewBadge).uppercased())
+            .font(.system(size: 8, weight: .bold))
+            .tracking(0.8)
+            .foregroundStyle(.orange.opacity(0.85))
+            .padding(.horizontal, 6)
+            .frame(height: 17)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(Color.orange.opacity(0.08))
+            )
+            .overlay {
+                Capsule(style: .continuous)
+                    .stroke(Color.orange.opacity(0.15), lineWidth: 0.5)
+            }
     }
 
     private var localOnlyBadge: some View {
-        Text(t(.localOnly))
-            .font(.system(size: 8.5, weight: .black))
-            .tracking(0.9)
-            .foregroundStyle(.green)
-            .padding(.horizontal, 8)
-            .frame(height: 21)
-            .background(Color.green.opacity(0.11), in: Capsule(style: .continuous))
+        Text(t(.localOnly).uppercased())
+            .font(.system(size: 8, weight: .bold))
+            .tracking(0.8)
+            .foregroundStyle(.green.opacity(0.85))
+            .padding(.horizontal, 6)
+            .frame(height: 17)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(Color.green.opacity(0.08))
+            )
+            .overlay {
+                Capsule(style: .continuous)
+                    .stroke(Color.green.opacity(0.15), lineWidth: 0.5)
+            }
     }
 
     private var dashboardCardBackground: some ShapeStyle {

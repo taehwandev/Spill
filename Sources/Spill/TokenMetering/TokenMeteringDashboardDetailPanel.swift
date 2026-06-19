@@ -27,7 +27,6 @@ struct TokenMeteringDashboardDetailPanel: View {
                 detailMetricsSection(detailSession: detailSession)
                 detailBreakdownSections(snapshot: snapshot)
                 detailDiagnosticsSection(session: session)
-                detailPrivacySection()
             }
             .padding(.vertical, 18)
         }
@@ -38,8 +37,7 @@ struct TokenMeteringDashboardDetailPanel: View {
         HStack(alignment: .top, spacing: 8) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(t(.selectedWorkItemHeader))
-                    .font(.system(size: 9, weight: .black))
-                    .tracking(1.0)
+                    .font(.system(size: 9, weight: .bold))
                     .foregroundStyle(.secondary)
                 Text(detailSession.title)
                     .font(.system(size: 14, weight: .bold))
@@ -126,7 +124,7 @@ struct TokenMeteringDashboardDetailPanel: View {
                 )
                 metricPill(
                     title: t(.events),
-                    value: "\(detailSession.eventCount)",
+                    value: TokenUsageDashboardSnapshot.formatCount(detailSession.eventCount),
                     liveUpdateID: "session:\(detailSession.id)"
                 )
             }
@@ -184,9 +182,8 @@ struct TokenMeteringDashboardDetailPanel: View {
 
         return VStack(alignment: .leading, spacing: 7) {
             HStack(spacing: 6) {
-                Text(t(.sourceBreakdown).uppercased())
-                    .font(.system(size: 8.5, weight: .black))
-                    .tracking(0.9)
+                Text(t(.sourceBreakdown))
+                    .font(.system(size: 9, weight: .semibold))
                     .foregroundStyle(.secondary)
 
                 Spacer()
@@ -249,20 +246,6 @@ struct TokenMeteringDashboardDetailPanel: View {
         .background(Color.primary.opacity(0.02), in: RoundedRectangle(cornerRadius: 8))
     }
 
-    private func detailPrivacySection() -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(t(.privacyBoundary))
-                .font(.system(size: 10, weight: .bold))
-                .foregroundStyle(.secondary)
-            Text(t(.privacyBoundaryDetail))
-                .font(.system(size: 9, weight: .medium))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(10)
-        .background(Color.primary.opacity(0.02), in: RoundedRectangle(cornerRadius: 8))
-    }
-
     private func workItemPopoverSection<Rows: Collection>(
         title: String,
         rows: Rows,
@@ -270,9 +253,8 @@ struct TokenMeteringDashboardDetailPanel: View {
         idPrefix: String
     ) -> some View where Rows.Element == TokenUsageDashboardBarRow {
         VStack(alignment: .leading, spacing: 7) {
-            Text(title.uppercased())
-                .font(.system(size: 8.5, weight: .black))
-                .tracking(0.9)
+            Text(title)
+                .font(.system(size: 9, weight: .semibold))
                 .foregroundStyle(.secondary)
             compactSummaryRows(rows, emptyText: emptyText, idPrefix: idPrefix)
         }

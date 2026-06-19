@@ -35,6 +35,18 @@ struct TokenMeteringDashboardFilterBar: View {
 
                 Spacer(minLength: 8)
 
+                Picker("", selection: Binding(
+                    get: { store.displayMode },
+                    set: { store.setDisplayMode($0) }
+                )) {
+                    ForEach(TokenUsageDisplayMode.allCases) { mode in
+                        Text(mode.localizedTitle(language: language)).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(width: 140)
+
                 ForEach(store.snapshot.periodFilters) { filter in
                     periodPill(filter)
                 }
@@ -63,22 +75,33 @@ struct TokenMeteringDashboardFilterBar: View {
 
         let now = Date()
         let calendar = Calendar.current
+        let offset = store.periodOffset
 
         switch store.selectedPeriod {
         case .today:
-            return formatter.string(from: now)
+            let targetDate = calendar.date(byAdding: .day, value: offset, to: calendar.startOfDay(for: now)) ?? now
+            return formatter.string(from: targetDate)
         case .sevenDays:
-            if let startDate = calendar.date(byAdding: .day, value: -7, to: now) {
-                return "\(formatter.string(from: startDate)) – \(formatter.string(from: now))"
+            let baseStart = TokenUsageDashboardSnapshot.periodStartDate(dayCount: 7, now: now, calendar: calendar)
+            if let start = calendar.date(byAdding: .day, value: offset * 7, to: baseStart),
+               let end = calendar.date(byAdding: .day, value: 6, to: start) {
+                return "\(formatter.string(from: start)) – \(formatter.string(from: end))"
             }
             return t(.periodSevenDays)
         case .thirtyDays:
-            if let startDate = calendar.date(byAdding: .day, value: -30, to: now) {
-                return "\(formatter.string(from: startDate)) – \(formatter.string(from: now))"
+            let baseStart = TokenUsageDashboardSnapshot.periodStartDate(dayCount: 30, now: now, calendar: calendar)
+            if let start = calendar.date(byAdding: .day, value: offset * 30, to: baseStart),
+               let end = calendar.date(byAdding: .day, value: 29, to: start) {
+                return "\(formatter.string(from: start)) – \(formatter.string(from: end))"
             }
             return t(.periodThirtyDays)
         case .all:
-            return t(.periodAllHistory)
+            if offset == 0 {
+                return t(.periodAllHistory)
+            } else {
+                let targetYear = calendar.component(.year, from: now) + offset
+                return "\(targetYear)"
+            }
         }
     }
 
@@ -90,6 +113,37 @@ struct TokenMeteringDashboardFilterBar: View {
             Text("\(t(.activeWindowLabel)): \(activeAccumulationWindowText)")
                 .font(.system(size: 11, weight: .bold))
                 .foregroundStyle(.secondary)
+
+            if store.selectedCalendarDayID == nil {
+                HStack(spacing: 4) {
+                    Button {
+                        store.showPreviousPeriod()
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(store.snapshot.canNavigatePreviousPeriod ? Color.primary : Color.secondary.opacity(0.3))
+                            .frame(width: 18, height: 18)
+                            .background(Color.primary.opacity(store.snapshot.canNavigatePreviousPeriod ? 0.06 : 0.02), in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!store.snapshot.canNavigatePreviousPeriod)
+                    .help("Move to previous period")
+
+                    Button {
+                        store.showNextPeriod()
+                    } label: {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(store.snapshot.canNavigateNextPeriod ? Color.primary : Color.secondary.opacity(0.3))
+                            .frame(width: 18, height: 18)
+                            .background(Color.primary.opacity(store.snapshot.canNavigateNextPeriod ? 0.06 : 0.02), in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!store.snapshot.canNavigateNextPeriod)
+                    .help("Move to next period")
+                }
+                .padding(.leading, 4)
+            }
         }
         .padding(.horizontal, 4)
     }

@@ -313,6 +313,10 @@ Dashboard UX requirements:
   token scope, but the share must be secondary to the tool name. The percentage
   belongs on the tab's second line with the token detail, not in the primary
   title row.
+- The filter bar provides a Segmented Picker (`Tokens` vs `Share %`) to switch the overall dashboard's token unit display mode.
+- Top AI tool filter tabs adapt their layout dynamically based on the selected display mode:
+  - In `Tokens` mode, the primary detail shows the token count and the secondary label shows the share percentage (e.g., `12.5K (35.2%)`).
+  - In `Share %` mode, the primary detail shows the share percentage and the secondary label shows the token count (e.g., `35.2% (12.5K)`).
 - First-class AI tools must use one consistent color identity across dashboard
   surfaces. Codex should use the Codex teal identity, Claude Code should use a
   Claude orange/coral identity, and Antigravity/AGY should use a blue identity.

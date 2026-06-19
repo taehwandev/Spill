@@ -13,7 +13,7 @@ struct TokenMeteringDashboardToolTab: View {
         let isLiveUpdated = store.isLiveUpdated(liveUpdateID)
         let isSelected = store.selectedTool == filter.tool
         let toolLastUpdated = lastUpdatedString(for: filter.tool)
-        let detail = toolLastUpdated.map { "\(filter.detail) · \($0)" } ?? filter.detail
+        let detail = toolLastUpdated.map { "\(tokenUsageDetail) · \($0)" } ?? tokenUsageDetail
         let serviceStatus = filter.tool.flatMap(serviceStatus)
         let hasServerIssue = serviceStatus?.health.isServerIssue ?? false
         let statusTint = serviceStatus?.health.serverStatusTint ?? Color.teal
@@ -109,11 +109,6 @@ struct TokenMeteringDashboardToolTab: View {
                     .animation(.snappy(duration: 0.35), value: filter.detail)
                     .layoutPriority(1)
 
-                if let shareLabel = filter.shareLabel {
-                    toolShareBadge(shareLabel, isSelected: isSelected, tint: tint)
-                        .fixedSize(horizontal: true, vertical: false)
-                }
-
                 TokenMeteringLiveUpdateDot(
                     isActive: isActive,
                     marker: store.liveUpdateMarker,
@@ -125,19 +120,11 @@ struct TokenMeteringDashboardToolTab: View {
         }
     }
 
-    private func toolShareBadge(_ value: String, isSelected: Bool, tint: Color) -> some View {
-        Text(value)
-            .font(.system(size: 8.5, weight: .black, design: .rounded))
-            .lineLimit(1)
-            .minimumScaleFactor(0.78)
-            .padding(.horizontal, 5)
-            .frame(height: 17)
-            .foregroundStyle(isSelected ? .white : tint)
-            .background((isSelected ? Color.white.opacity(0.16) : tint.opacity(0.10)), in: Capsule())
-            .overlay {
-                Capsule()
-                    .stroke(isSelected ? Color.white.opacity(0.14) : tint.opacity(0.12), lineWidth: 0.5)
-            }
+    private var tokenUsageDetail: String {
+        guard let shareLabel = filter.shareLabel else {
+            return filter.detail
+        }
+        return "\(filter.detail) (\(shareLabel))"
     }
 
     private func hasServiceStatusAccessory(

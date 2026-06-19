@@ -55,12 +55,14 @@ enum TokenUsageDashboardRowBuilder {
             }
 
             let ratio = TokenUsageDashboardSnapshot.chartRatio(tokens: tokenCount, totalTokens: totalTokens)
+            let tokensString = TokenUsageDashboardSnapshot.formatTokens(tokenCount)
+            let pctString = TokenUsageDashboardSnapshot.formatPercentage(ratio * 100.0)
             let value: String
             switch displayMode {
             case .tokens:
-                value = TokenUsageDashboardSnapshot.formatTokens(tokenCount)
+                value = tokensString
             case .percentage:
-                value = TokenUsageDashboardSnapshot.formatPercentage(ratio * 100.0)
+                value = pctString
             }
 
             return TokenUsageDashboardBarRow(

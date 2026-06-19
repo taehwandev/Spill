@@ -8,6 +8,7 @@ struct TokenMeteringDashboardAnalyticsGrid: View {
     let settingsAction: () -> Void
     let developerOptionsAction: () -> Void
     @State private var hoveredRowID: String? = nil
+    @State private var selectedTrendBucketID: String? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -96,6 +97,7 @@ struct TokenMeteringDashboardAnalyticsGrid: View {
     private var trendChart: some View {
         let trendBuckets = store.snapshot.trendBuckets
         let hasData = trendBuckets.contains { $0.hasEvents }
+        let selectedBucket = selectedTrendBucket(in: trendBuckets)
 
         return TokenMeteringDashboardPanel(
             title: trendTitle,
@@ -107,9 +109,29 @@ struct TokenMeteringDashboardAnalyticsGrid: View {
                     detail: t(.waitingForEvents)
                 )
             } else {
-                TokenMeteringDashboardTrendChart(buckets: trendBuckets, language: language)
+                VStack(alignment: .leading, spacing: 11) {
+                    TokenMeteringDashboardTrendChart(
+                        buckets: trendBuckets,
+                        selectedBucketID: $selectedTrendBucketID,
+                        defaultSelectedBucketID: selectedBucket?.id,
+                        language: language
+                    )
+
+                    if let selectedBucket {
+                        TokenMeteringDashboardTrendBucketSummary(bucket: selectedBucket, language: language)
+                    }
+                }
             }
         }
+    }
+
+    private func selectedTrendBucket(in buckets: [TokenUsageDashboardTrendBucket]) -> TokenUsageDashboardTrendBucket? {
+        if let selectedTrendBucketID,
+           let selectedBucket = buckets.first(where: { $0.id == selectedTrendBucketID && $0.hasEvents }) {
+            return selectedBucket
+        }
+
+        return buckets.last { $0.hasEvents }
     }
 
     private var loadingAnalyticsGrid: some View {
@@ -243,5 +265,71 @@ struct TokenMeteringDashboardAnalyticsGrid: View {
 
     private func t(_ key: TokenMeteringTextKey) -> String {
         TokenMeteringL10n.text(key, language: language)
+    }
+}
+
+private struct TokenMeteringDashboardTrendBucketSummary: View {
+    let bucket: TokenUsageDashboardTrendBucket
+    let language: TokenMeteringLanguage
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(bucket.detail)
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+
+                Spacer(minLength: 8)
+
+                Text(TokenMeteringL10n.localEventsDetail(eventCount: bucket.eventCount, language: language))
+                    .font(.system(size: 9.5, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+            }
+
+            let visibleRows = Array(bucket.toolRows.filter { $0.ratio > 0 }.prefix(3))
+            if !visibleRows.isEmpty {
+                VStack(alignment: .leading, spacing: 5) {
+                    ForEach(visibleRows) { row in
+                        let tint = toolTint(for: row)
+                        HStack(spacing: 7) {
+                            Circle()
+                                .fill(tint)
+                                .frame(width: 6, height: 6)
+
+                            Text(row.title)
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(.primary)
+                                .lineLimit(1)
+
+                            GeometryReader { geometry in
+                                ZStack(alignment: .leading) {
+                                    RoundedRectangle(cornerRadius: 2.5, style: .continuous)
+                                        .fill(Color.primary.opacity(0.05))
+                                    RoundedRectangle(cornerRadius: 2.5, style: .continuous)
+                                        .fill(tint.opacity(0.8))
+                                        .frame(width: Swift.max(CGFloat(5), geometry.size.width * CGFloat(row.ratio)))
+                                }
+                            }
+                            .frame(height: 5)
+
+                            Text(row.value)
+                                .font(.system(size: 9.5, weight: .bold, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.75)
+                        }
+                    }
+                }
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private func toolTint(for row: TokenUsageDashboardBarRow) -> Color {
+        TokenUsageAITool(rawValue: row.id.lowercased())?.dashboardTint ?? .secondary
     }
 }

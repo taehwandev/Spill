@@ -21,6 +21,71 @@ private enum TokenUsageDashboardPreviewDataSource {
     static let onboardingEvents: [TokenUsageEvent] = []
 }
 
+private struct TokenUsageDashboardEventLoadScope {
+    let events: [TokenUsageEvent]
+    let cacheCoverageDateRange: TokenUsageDashboardSnapshot.DateRange
+}
+
+private struct TokenUsageDashboardContextCacheKey: Equatable {
+    let eventCount: Int
+    let firstSpanID: String?
+    let firstCreatedAt: String?
+    let lastSpanID: String?
+    let lastCreatedAt: String?
+    let totalTokens: Int
+    let eventFingerprint: Int
+    let showAdvancedTools: Bool
+    let calendarIdentifier: String
+    let calendarTimeZone: String
+    let firstWeekday: Int
+
+    init(events: [TokenUsageEvent], request: TokenUsageDashboardBuildRequest) {
+        eventCount = events.count
+        firstSpanID = events.first?.spanID
+        firstCreatedAt = events.first?.createdAt
+        lastSpanID = events.last?.spanID
+        lastCreatedAt = events.last?.createdAt
+        totalTokens = events.reduce(0) { $0 + $1.totalTokens }
+        var hasher = Hasher()
+        for event in events {
+            hasher.combine(event.spanID)
+            hasher.combine(event.createdAt)
+            hasher.combine(event.aiTool.rawValue)
+            hasher.combine(event.totalTokens)
+        }
+        eventFingerprint = hasher.finalize()
+        showAdvancedTools = request.showAdvancedTools
+        calendarIdentifier = String(describing: request.calendar.identifier)
+        calendarTimeZone = request.calendar.timeZone.identifier
+        firstWeekday = request.calendar.firstWeekday
+    }
+}
+
+private struct TokenUsageDashboardSnapshotBuildOutput {
+    let snapshotPair: TokenUsageDashboardSnapshotPair
+    let context: TokenUsageDashboardSnapshotBuildContext
+    let contextKey: TokenUsageDashboardContextCacheKey
+}
+
+private final class TokenUsageDashboardSnapshotBuildGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var generation = 0
+
+    @discardableResult
+    func next() -> Int {
+        lock.withLock {
+            generation += 1
+            return generation
+        }
+    }
+
+    func isCurrent(_ candidate: Int) -> Bool {
+        lock.withLock {
+            generation == candidate
+        }
+    }
+}
+
 enum TokenUsageClearScope: Equatable, Identifiable {
     case all
     case currentScope
@@ -58,6 +123,7 @@ final class TokenUsageDashboardStore: ObservableObject {
     @Published private(set) var selectedProjectID: String?
     @Published private(set) var selectedSessionID: String?
     @Published private(set) var calendarMonthStart: Date?
+    @Published private(set) var periodOffset = 0
     @Published private(set) var displayMode: TokenUsageDisplayMode = .tokens
     @Published private(set) var language: TokenMeteringLanguage = .current()
     @Published private(set) var lastError: String?
@@ -67,13 +133,19 @@ final class TokenUsageDashboardStore: ObservableObject {
 
     private let usageStore: TokenUsageStore
     private var events: [TokenUsageEvent] = []
+    private var loadedEventsDateRange: TokenUsageDashboardSnapshot.DateRange?
+    private var periodFilterTotals: [TokenUsageDashboardPeriod: Int] = [:]
+    private var availableDateBounds = TokenUsageDashboardDateBounds.empty
+    private var cachedSnapshotContext: TokenUsageDashboardSnapshotBuildContext?
+    private var cachedSnapshotContextKey: TokenUsageDashboardContextCacheKey?
     private var eventsDidChangeObserver: NSObjectProtocol?
     private var distributedEventsDidChangeObserver: NSObjectProtocol?
     private var collectionDidFinishObserver: NSObjectProtocol?
     private var hasRebuiltSnapshot = false
     private var clearLiveUpdateTask: Task<Void, Never>?
     private var scheduledRefreshTask: Task<Void, Never>?
-    private var asyncRefreshGeneration = 0
+    private let snapshotBuildQueue = DispatchQueue(label: "app.spill.token-dashboard.snapshot-build", qos: .userInitiated)
+    private let snapshotBuildGate = TokenUsageDashboardSnapshotBuildGate()
 
     init(
         usageStore: TokenUsageStore,
@@ -115,9 +187,13 @@ final class TokenUsageDashboardStore: ObservableObject {
 
     var hasDashboardEvents: Bool {
         let showAdvancedTools = SpillSettings.shared.tokenUsageShowAdvancedTools
-        return displayEvents(for: events).contains { event in
+        let hasLoadedDashboardEvents = displayEvents(for: events).contains { event in
             showAdvancedTools || event.aiTool.isDashboardTool
         }
+        if isOnboardingPreviewEnabled {
+            return hasLoadedDashboardEvents
+        }
+        return panelSummary.eventCount > 0 || hasLoadedDashboardEvents
     }
 
     var isDashboardRefreshInProgress: Bool {
@@ -138,29 +214,45 @@ final class TokenUsageDashboardStore: ObservableObject {
         scheduledRefreshTask?.cancel()
     }
 
-    func refresh(trackLiveUpdates: Bool = true) {
+    func refresh(trackLiveUpdates: Bool = true, refreshesPanelSummary: Bool = true) {
         scheduledRefreshTask?.cancel()
         scheduledRefreshTask = nil
-        asyncRefreshGeneration += 1
+        snapshotBuildGate.next()
         let previousEvents = events
         let shouldTrackLiveUpdates = trackLiveUpdates && (
             hasRebuiltSnapshot || (previousEvents.isEmpty && panelSummary.eventCount == 0)
         )
-        events = usageStore.loadEvents()
+        let request = snapshotBuildRequest()
+        let loadedEventScope = loadEvents(for: request)
+        events = loadedEventScope.events
+        loadedEventsDateRange = loadedEventScope.cacheCoverageDateRange
+        let nextPeriodFilterTotals = loadPeriodFilterTotals(for: request)
+        let panelSummary = refreshesPanelSummary ? loadPanelSummary(for: request) : nil
         rebuildSnapshot(
             trackLiveUpdates: shouldTrackLiveUpdates,
-            previousEvents: previousEvents
+            previousEvents: previousEvents,
+            periodFilterTotals: nextPeriodFilterTotals,
+            panelSummary: panelSummary
         )
     }
 
-    func refreshAsync(trackLiveUpdates: Bool = true) {
+    func refreshAsync(
+        trackLiveUpdates: Bool = true,
+        refreshesPanelSummary: Bool = true,
+        reusesLoadedEvents: Bool = false,
+        reusesPeriodFilterTotals: Bool = false
+    ) {
         scheduledRefreshTask?.cancel()
         scheduledRefreshTask = nil
-        asyncRefreshGeneration += 1
-        let generation = asyncRefreshGeneration
+        let generation = snapshotBuildGate.next()
         let previousEvents = events
         let previousSnapshot = snapshot
         let previousUnfilteredSnapshot = unfilteredSnapshot
+        let cachedEvents = reusesLoadedEvents ? events : []
+        let cachedEventsDateRange = reusesLoadedEvents ? loadedEventsDateRange : nil
+        let cachedPeriodFilterTotals = reusesPeriodFilterTotals ? periodFilterTotals : [:]
+        let cachedContext = cachedSnapshotContext
+        let cachedContextKey = cachedSnapshotContextKey
         let shouldTrackLiveUpdates = trackLiveUpdates && !isOnboardingPreviewEnabled && (
             hasRebuiltSnapshot || (previousEvents.isEmpty && panelSummary.eventCount == 0)
         )
@@ -173,33 +265,57 @@ final class TokenUsageDashboardStore: ObservableObject {
         }
         isRefreshing = true
 
-        DispatchQueue.global(qos: .userInitiated).async {
-            let loadedEvents = usageStore.loadEvents()
+        snapshotBuildQueue.async {
+            let loadedEventScope = Self.loadEvents(
+                from: usageStore,
+                for: request,
+                cachedEvents: cachedEvents,
+                cachedDateRange: cachedEventsDateRange
+            )
+            let loadedEvents = loadedEventScope.events
+            let periodFilterTotals = cachedPeriodFilterTotals.isEmpty
+                ? Self.loadPeriodFilterTotals(from: usageStore, for: request)
+                : cachedPeriodFilterTotals
+            let panelSummary = refreshesPanelSummary ? Self.loadPanelSummary(from: usageStore, for: request) : nil
+            let dateBounds = Self.loadDateBounds(from: usageStore, for: request)
+            let buildRequest = request.replacingAvailableDateBounds(dateBounds)
             let displayEvents = usesPreviewDataSource ? TokenUsageDashboardPreviewDataSource.onboardingEvents : loadedEvents
-            let snapshotPair = Self.buildSnapshotPair(events: displayEvents, request: request)
+            let snapshotOutput = Self.buildSnapshotOutput(
+                events: displayEvents,
+                request: buildRequest,
+                periodFilterTotals: periodFilterTotals,
+                cachedContext: cachedContext,
+                cachedContextKey: cachedContextKey
+            )
 
             DispatchQueue.main.async { [weak self] in
-                guard let self, self.asyncRefreshGeneration == generation else {
+                guard let self, self.snapshotBuildGate.isCurrent(generation) else {
                     return
                 }
 
                 self.applySnapshotPair(
-                    snapshotPair,
+                    snapshotOutput.snapshotPair,
                     loadedEvents: loadedEvents,
                     trackLiveUpdates: shouldTrackLiveUpdates,
                     previousEvents: previousEvents,
                     previousSnapshot: previousSnapshot,
-                    previousUnfilteredSnapshot: previousUnfilteredSnapshot
+                    previousUnfilteredSnapshot: previousUnfilteredSnapshot,
+                    loadedEventsDateRange: loadedEventScope.cacheCoverageDateRange,
+                    periodFilterTotals: periodFilterTotals,
+                    panelSummary: panelSummary,
+                    availableDateBounds: dateBounds,
+                    snapshotContext: snapshotOutput.context,
+                    snapshotContextKey: snapshotOutput.contextKey
                 )
             }
         }
     }
 
-    func refreshAsyncIfIdle(trackLiveUpdates: Bool = true) {
+    func refreshAsyncIfIdle(trackLiveUpdates: Bool = true, refreshesPanelSummary: Bool = true) {
         guard loadState == .idle, !isRefreshing else {
             return
         }
-        refreshAsync(trackLiveUpdates: trackLiveUpdates)
+        refreshAsync(trackLiveUpdates: trackLiveUpdates, refreshesPanelSummary: refreshesPanelSummary)
     }
 
     func refreshPanelSummary() {
@@ -233,23 +349,42 @@ final class TokenUsageDashboardStore: ObservableObject {
 
     func rebuildSnapshot(
         trackLiveUpdates: Bool = false,
-        previousEvents: [TokenUsageEvent]? = nil
+        previousEvents: [TokenUsageEvent]? = nil,
+        periodFilterTotals nextPeriodFilterTotals: [TokenUsageDashboardPeriod: Int]? = nil,
+        panelSummary: TokenUsagePanelSummarySnapshot? = nil
     ) {
-        asyncRefreshGeneration += 1
+        snapshotBuildGate.next()
+        if let nextPeriodFilterTotals {
+            periodFilterTotals = nextPeriodFilterTotals
+        }
         let previousSnapshot = snapshot
         let previousUnfilteredSnapshot = unfilteredSnapshot
         let displayEvents = displayEvents(for: events)
-        let snapshotPair = Self.buildSnapshotPair(
+        let nextDateBounds = usageStore.dashboardDateBounds(
+            selectedTool: selectedTool,
+            dashboardToolsOnly: !SpillSettings.shared.tokenUsageShowAdvancedTools
+        )
+        let request = snapshotBuildRequest().replacingAvailableDateBounds(nextDateBounds)
+        let snapshotOutput = Self.buildSnapshotOutput(
             events: displayEvents,
-            request: snapshotBuildRequest()
+            request: request,
+            periodFilterTotals: periodFilterTotals,
+            cachedContext: cachedSnapshotContext,
+            cachedContextKey: cachedSnapshotContextKey
         )
         applySnapshotPair(
-            snapshotPair,
+            snapshotOutput.snapshotPair,
             loadedEvents: events,
             trackLiveUpdates: trackLiveUpdates && !isOnboardingPreviewEnabled,
             previousEvents: previousEvents,
             previousSnapshot: previousSnapshot,
-            previousUnfilteredSnapshot: previousUnfilteredSnapshot
+            previousUnfilteredSnapshot: previousUnfilteredSnapshot,
+            loadedEventsDateRange: nil,
+            periodFilterTotals: periodFilterTotals,
+            panelSummary: panelSummary,
+            availableDateBounds: nextDateBounds,
+            snapshotContext: snapshotOutput.context,
+            snapshotContextKey: snapshotOutput.contextKey
         )
     }
 
@@ -257,31 +392,48 @@ final class TokenUsageDashboardStore: ObservableObject {
         trackLiveUpdates: Bool = false,
         previousEvents: [TokenUsageEvent]? = nil
     ) {
-        asyncRefreshGeneration += 1
-        let generation = asyncRefreshGeneration
+        let generation = snapshotBuildGate.next()
         let currentEvents = events
         let displayEvents = displayEvents(for: currentEvents)
         let request = snapshotBuildRequest()
         let previousSnapshot = snapshot
         let previousUnfilteredSnapshot = unfilteredSnapshot
+        let currentPeriodFilterTotals = periodFilterTotals
+        let cachedContext = cachedSnapshotContext
+        let cachedContextKey = cachedSnapshotContextKey
+        let usageStore = usageStore
 
         isRefreshing = true
 
-        DispatchQueue.global(qos: .userInitiated).async {
-            let snapshotPair = Self.buildSnapshotPair(events: displayEvents, request: request)
+        snapshotBuildQueue.async {
+            let dateBounds = Self.loadDateBounds(from: usageStore, for: request)
+            let buildRequest = request.replacingAvailableDateBounds(dateBounds)
+            let snapshotOutput = Self.buildSnapshotOutput(
+                events: displayEvents,
+                request: buildRequest,
+                periodFilterTotals: currentPeriodFilterTotals,
+                cachedContext: cachedContext,
+                cachedContextKey: cachedContextKey
+            )
 
             DispatchQueue.main.async { [weak self] in
-                guard let self, self.asyncRefreshGeneration == generation else {
+                guard let self, self.snapshotBuildGate.isCurrent(generation) else {
                     return
                 }
 
                 self.applySnapshotPair(
-                    snapshotPair,
+                    snapshotOutput.snapshotPair,
                     loadedEvents: currentEvents,
                     trackLiveUpdates: trackLiveUpdates && !self.isOnboardingPreviewEnabled,
                     previousEvents: previousEvents,
                     previousSnapshot: previousSnapshot,
-                    previousUnfilteredSnapshot: previousUnfilteredSnapshot
+                    previousUnfilteredSnapshot: previousUnfilteredSnapshot,
+                    loadedEventsDateRange: nil,
+                    periodFilterTotals: nil,
+                    panelSummary: nil,
+                    availableDateBounds: dateBounds,
+                    snapshotContext: snapshotOutput.context,
+                    snapshotContextKey: snapshotOutput.contextKey
                 )
             }
         }
@@ -293,16 +445,37 @@ final class TokenUsageDashboardStore: ObservableObject {
         trackLiveUpdates: Bool,
         previousEvents: [TokenUsageEvent]?,
         previousSnapshot: TokenUsageDashboardSnapshot,
-        previousUnfilteredSnapshot: TokenUsageDashboardSnapshot
+        previousUnfilteredSnapshot: TokenUsageDashboardSnapshot,
+        loadedEventsDateRange nextLoadedEventsDateRange: TokenUsageDashboardSnapshot.DateRange?,
+        periodFilterTotals nextPeriodFilterTotals: [TokenUsageDashboardPeriod: Int]?,
+        panelSummary: TokenUsagePanelSummarySnapshot?,
+        availableDateBounds nextAvailableDateBounds: TokenUsageDashboardDateBounds? = nil,
+        snapshotContext nextSnapshotContext: TokenUsageDashboardSnapshotBuildContext? = nil,
+        snapshotContextKey nextSnapshotContextKey: TokenUsageDashboardContextCacheKey? = nil
     ) {
         events = loadedEvents
+        if let nextLoadedEventsDateRange {
+            loadedEventsDateRange = nextLoadedEventsDateRange
+        }
+        if let nextPeriodFilterTotals {
+            periodFilterTotals = nextPeriodFilterTotals
+        }
+        if let nextAvailableDateBounds {
+            availableDateBounds = nextAvailableDateBounds
+        }
+        if let nextSnapshotContext, let nextSnapshotContextKey {
+            cachedSnapshotContext = nextSnapshotContext
+            cachedSnapshotContextKey = nextSnapshotContextKey
+        }
         calendarMonthStart = snapshotPair.calendarMonthStart
         let filteredSnapshot = snapshotPair.filtered
         selectedProjectID = filteredSnapshot.selectedProjectID
         selectedSessionID = filteredSnapshot.selectedSession?.id
         snapshot = filteredSnapshot
         unfilteredSnapshot = snapshotPair.unfiltered
-        panelSummary = TokenUsagePanelSummarySnapshot(snapshot: unfilteredSnapshot)
+        if let panelSummary {
+            self.panelSummary = panelSummary
+        }
         lastError = nil
         loadState = isOnboardingPreviewEnabled ? .previewingEmpty : .loaded
         isRefreshing = false
@@ -338,16 +511,34 @@ final class TokenUsageDashboardStore: ObservableObject {
             showAdvancedTools: SpillSettings.shared.tokenUsageShowAdvancedTools,
             now: Date(),
             proposedCalendarMonthStart: calendarMonthStart,
-            calendar: calendar
+            calendar: calendar,
+            periodOffset: periodOffset,
+            availableDateBounds: availableDateBounds
         )
     }
 
-    nonisolated private static func buildSnapshotPair(
+    nonisolated private static func buildSnapshotOutput(
         events: [TokenUsageEvent],
-        request: TokenUsageDashboardBuildRequest
-    ) -> TokenUsageDashboardSnapshotPair {
-        TokenUsageDashboardSnapshot.buildPair(
-            events: events,
+        request: TokenUsageDashboardBuildRequest,
+        periodFilterTotals: [TokenUsageDashboardPeriod: Int],
+        cachedContext: TokenUsageDashboardSnapshotBuildContext?,
+        cachedContextKey: TokenUsageDashboardContextCacheKey?
+    ) -> TokenUsageDashboardSnapshotBuildOutput {
+        let resolvedPeriodFilterTotals = periodFilterTotals.isEmpty ? nil : periodFilterTotals
+        let contextKey = TokenUsageDashboardContextCacheKey(events: events, request: request)
+        let context: TokenUsageDashboardSnapshotBuildContext
+        if contextKey == cachedContextKey, let cachedContext {
+            context = cachedContext
+        } else {
+            context = TokenUsageDashboardSnapshotBuildContext(
+                events: events,
+                showAdvancedTools: request.showAdvancedTools,
+                calendar: request.calendar
+            )
+        }
+
+        let snapshotPair = TokenUsageDashboardSnapshot.buildPair(
+            context: context,
             selectedTool: request.selectedTool,
             selectedPeriod: request.selectedPeriod,
             selectedCalendarDayID: request.selectedCalendarDayID,
@@ -359,8 +550,219 @@ final class TokenUsageDashboardStore: ObservableObject {
             showAdvancedTools: request.showAdvancedTools,
             now: request.now,
             proposedCalendarMonthStart: request.proposedCalendarMonthStart,
+            calendar: request.calendar,
+            periodFilterTotals: resolvedPeriodFilterTotals,
+            availableDateBounds: request.availableDateBounds,
+            periodOffset: request.periodOffset
+        )
+        return TokenUsageDashboardSnapshotBuildOutput(
+            snapshotPair: snapshotPair,
+            context: context,
+            contextKey: contextKey
+        )
+    }
+
+    nonisolated private static func buildSnapshotPair(
+        events: [TokenUsageEvent],
+        request: TokenUsageDashboardBuildRequest,
+        periodFilterTotals: [TokenUsageDashboardPeriod: Int]
+    ) -> TokenUsageDashboardSnapshotPair {
+        buildSnapshotOutput(
+            events: events,
+            request: request,
+            periodFilterTotals: periodFilterTotals,
+            cachedContext: nil,
+            cachedContextKey: nil
+        )
+        .snapshotPair
+    }
+
+    private func loadEvents(for request: TokenUsageDashboardBuildRequest) -> TokenUsageDashboardEventLoadScope {
+        Self.loadEvents(from: usageStore, for: request)
+    }
+
+    nonisolated private static func loadEvents(
+        from usageStore: TokenUsageStore,
+        for request: TokenUsageDashboardBuildRequest
+    ) -> TokenUsageDashboardEventLoadScope {
+        loadEvents(from: usageStore, for: request, cachedEvents: [], cachedDateRange: nil)
+    }
+
+    nonisolated private static func loadEvents(
+        from usageStore: TokenUsageStore,
+        for request: TokenUsageDashboardBuildRequest,
+        cachedEvents: [TokenUsageEvent],
+        cachedDateRange: TokenUsageDashboardSnapshot.DateRange?
+    ) -> TokenUsageDashboardEventLoadScope {
+        let requestedRange = eventLoadDateRange(for: request)
+        let cacheCoverageRange = cacheCoverageDateRange(for: request, eventLoadRange: requestedRange)
+        if let cachedDateRange,
+           !cachedEvents.isEmpty,
+           dateRange(cachedDateRange, contains: requestedRange) {
+            return TokenUsageDashboardEventLoadScope(
+                events: cachedEvents,
+                cacheCoverageDateRange: cachedDateRange
+            )
+        }
+
+        let events = usageStore.loadEvents(startingAt: requestedRange.start, endingBefore: requestedRange.end)
+        return TokenUsageDashboardEventLoadScope(
+            events: events,
+            cacheCoverageDateRange: cacheCoverageRange
+        )
+    }
+
+    private func loadEvents(
+        for request: TokenUsageDashboardBuildRequest,
+        includingCalendarMonth monthStart: Date
+    ) -> [TokenUsageEvent] {
+        Self.loadEvents(
+            from: usageStore,
+            ranges: [
+                Self.eventLoadDateRange(for: request),
+                Self.calendarMonthDateRange(startingAt: monthStart, calendar: request.calendar)
+            ]
+        )
+    }
+
+    nonisolated private static func loadEvents(
+        from usageStore: TokenUsageStore,
+        ranges: [TokenUsageDashboardSnapshot.DateRange]
+    ) -> [TokenUsageEvent] {
+        var eventsBySpanID = [String: TokenUsageEvent]()
+        for range in ranges {
+            let events = usageStore.loadEvents(startingAt: range.start, endingBefore: range.end)
+            for event in events {
+                eventsBySpanID[event.spanID] = event
+            }
+        }
+        return eventsBySpanID.values.sorted {
+            if $0.createdAt == $1.createdAt {
+                return $0.spanID < $1.spanID
+            }
+            return $0.createdAt < $1.createdAt
+        }
+    }
+
+    private func loadPanelSummary(for request: TokenUsageDashboardBuildRequest) -> TokenUsagePanelSummarySnapshot {
+        Self.loadPanelSummary(from: usageStore, for: request)
+    }
+
+    private func loadPeriodFilterTotals(
+        for request: TokenUsageDashboardBuildRequest
+    ) -> [TokenUsageDashboardPeriod: Int] {
+        Self.loadPeriodFilterTotals(from: usageStore, for: request)
+    }
+
+    nonisolated private static func loadDateBounds(
+        from usageStore: TokenUsageStore,
+        for request: TokenUsageDashboardBuildRequest
+    ) -> TokenUsageDashboardDateBounds {
+        usageStore.dashboardDateBounds(
+            selectedTool: request.selectedTool,
+            dashboardToolsOnly: !request.showAdvancedTools
+        )
+    }
+
+    nonisolated private static func loadPeriodFilterTotals(
+        from usageStore: TokenUsageStore,
+        for request: TokenUsageDashboardBuildRequest
+    ) -> [TokenUsageDashboardPeriod: Int] {
+        var totals = [TokenUsageDashboardPeriod: Int]()
+        let dashboardToolsOnly = !request.showAdvancedTools
+        for period in TokenUsageDashboardPeriod.allCases {
+            if period == .all {
+                totals[period] = usageStore.allTimeTotalTokens(dashboardToolsOnly: dashboardToolsOnly)
+                continue
+            }
+
+            let range = TokenUsageDashboardSnapshot.cutoffDateRange(
+                for: period,
+                periodOffset: 0,
+                now: request.now,
+                calendar: request.calendar
+            )
+            if let start = range.start, let end = range.end {
+                totals[period] = usageStore.totalTokens(
+                    startingAt: start,
+                    endingBefore: end,
+                    dashboardToolsOnly: dashboardToolsOnly
+                )
+            } else {
+                totals[period] = 0
+            }
+        }
+        return totals
+    }
+
+    nonisolated private static func loadPanelSummary(
+        from usageStore: TokenUsageStore,
+        for request: TokenUsageDashboardBuildRequest
+    ) -> TokenUsagePanelSummarySnapshot {
+        let summary = usageStore.dashboardSummary(dashboardToolsOnly: !request.showAdvancedTools)
+        return TokenUsagePanelSummarySnapshot(
+            summary: summary,
+            displayMode: request.displayMode,
+            language: request.language
+        )
+    }
+
+    nonisolated private static func eventLoadDateRange(
+        for request: TokenUsageDashboardBuildRequest
+    ) -> TokenUsageDashboardSnapshot.DateRange {
+        if let selectedCalendarDayID = request.selectedCalendarDayID,
+           let selectedDay = TokenUsageDashboardSnapshot.date(
+            forDayID: selectedCalendarDayID,
+            calendar: request.calendar
+           ) {
+            let start = request.calendar.startOfDay(for: selectedDay)
+            let end = request.calendar.date(byAdding: .day, value: 1, to: start)
+            return TokenUsageDashboardSnapshot.DateRange(start: start, end: end)
+        }
+
+        return TokenUsageDashboardSnapshot.cutoffDateRange(
+            for: request.selectedPeriod,
+            periodOffset: request.periodOffset,
+            now: request.now,
             calendar: request.calendar
         )
+    }
+
+    nonisolated private static func calendarMonthDateRange(
+        startingAt monthStart: Date,
+        calendar: Calendar
+    ) -> TokenUsageDashboardSnapshot.DateRange {
+        TokenUsageDashboardSnapshot.DateRange(
+            start: monthStart,
+            end: calendar.date(byAdding: .month, value: 1, to: monthStart)
+        )
+    }
+
+    nonisolated private static func cacheCoverageDateRange(
+        for request: TokenUsageDashboardBuildRequest,
+        eventLoadRange: TokenUsageDashboardSnapshot.DateRange
+    ) -> TokenUsageDashboardSnapshot.DateRange {
+        guard request.selectedCalendarDayID == nil, request.periodOffset == 0 else {
+            return eventLoadRange
+        }
+        return TokenUsageDashboardSnapshot.DateRange(start: eventLoadRange.start, end: nil)
+    }
+
+    nonisolated private static func dateRange(
+        _ candidate: TokenUsageDashboardSnapshot.DateRange,
+        contains target: TokenUsageDashboardSnapshot.DateRange
+    ) -> Bool {
+        if let candidateStart = candidate.start {
+            guard let targetStart = target.start, targetStart >= candidateStart else {
+                return false
+            }
+        }
+        if let candidateEnd = candidate.end {
+            guard let targetEnd = target.end, targetEnd <= candidateEnd else {
+                return false
+            }
+        }
+        return true
     }
 
     func setOnboardingPreviewEnabled(_ enabled: Bool) {
@@ -397,10 +799,19 @@ final class TokenUsageDashboardStore: ObservableObject {
     }
 
     func setSelectedPeriod(_ period: TokenUsageDashboardPeriod) {
+        guard selectedPeriod != period || selectedCalendarDayID != nil || periodOffset != 0 else {
+            return
+        }
         selectedPeriod = period
         selectedCalendarDayID = nil
         selectedSessionID = nil
-        rebuildSnapshot()
+        periodOffset = 0
+        refreshAsync(
+            trackLiveUpdates: false,
+            refreshesPanelSummary: false,
+            reusesLoadedEvents: true,
+            reusesPeriodFilterTotals: true
+        )
     }
 
     func selectCalendarDay(_ dayID: String) {
@@ -412,10 +823,16 @@ final class TokenUsageDashboardStore: ObservableObject {
 
         selectedCalendarDayID = dayID
         selectedSessionID = nil
+        periodOffset = 0
         if let date = TokenUsageDashboardSnapshot.date(forDayID: dayID, calendar: calendar) {
             calendarMonthStart = TokenUsageDashboardSnapshot.monthStart(for: date, calendar: calendar)
         }
-        rebuildSnapshot()
+        refreshAsync(
+            trackLiveUpdates: false,
+            refreshesPanelSummary: false,
+            reusesLoadedEvents: true,
+            reusesPeriodFilterTotals: true
+        )
     }
 
     func selectTodayCalendarDay() {
@@ -424,14 +841,26 @@ final class TokenUsageDashboardStore: ObservableObject {
         let now = Date()
         selectedCalendarDayID = TokenUsageDashboardSnapshot.dayID(for: now, calendar: calendar)
         selectedSessionID = nil
+        periodOffset = 0
         calendarMonthStart = TokenUsageDashboardSnapshot.monthStart(for: now, calendar: calendar)
-        rebuildSnapshot()
+        refreshAsync(
+            trackLiveUpdates: false,
+            refreshesPanelSummary: false,
+            reusesLoadedEvents: true,
+            reusesPeriodFilterTotals: true
+        )
     }
 
     func clearSelectedCalendarDay() {
         selectedCalendarDayID = nil
         selectedSessionID = nil
-        rebuildSnapshot()
+        periodOffset = 0
+        refreshAsync(
+            trackLiveUpdates: false,
+            refreshesPanelSummary: false,
+            reusesLoadedEvents: true,
+            reusesPeriodFilterTotals: true
+        )
     }
 
     func selectSession(_ sessionID: String) {
@@ -459,7 +888,7 @@ final class TokenUsageDashboardStore: ObservableObject {
     func setAdvancedToolsEnabled(_ enabled: Bool) {
         SpillSettings.shared.tokenUsageShowAdvancedTools = enabled
         if hasRebuiltSnapshot {
-            rebuildSnapshot()
+            refreshAsync(trackLiveUpdates: false, refreshesPanelSummary: false, reusesLoadedEvents: true)
         } else {
             refreshPanelSummary()
         }
@@ -488,6 +917,7 @@ final class TokenUsageDashboardStore: ObservableObject {
             showAdvancedTools: SpillSettings.shared.tokenUsageShowAdvancedTools,
             now: now,
             calendarMonthStart: displayCalendarMonth,
+            periodOffset: periodOffset,
             calendar: calendar
         )
     }
@@ -500,10 +930,31 @@ final class TokenUsageDashboardStore: ObservableObject {
         moveCalendarMonth(by: 1)
     }
 
+    func showPreviousPeriod() {
+        periodOffset -= 1
+        refreshAsync(
+            trackLiveUpdates: false,
+            refreshesPanelSummary: false,
+            reusesLoadedEvents: true,
+            reusesPeriodFilterTotals: true
+        )
+    }
+
+    func showNextPeriod() {
+        guard periodOffset < 0 else { return }
+        periodOffset += 1
+        refreshAsync(
+            trackLiveUpdates: false,
+            refreshesPanelSummary: false,
+            reusesLoadedEvents: true,
+            reusesPeriodFilterTotals: true
+        )
+    }
+
     func setDisplayMode(_ mode: TokenUsageDisplayMode) {
         displayMode = mode
         if hasRebuiltSnapshot {
-            rebuildSnapshot()
+            rebuildSnapshot(panelSummary: loadPanelSummary(for: snapshotBuildRequest()))
         } else {
             refreshPanelSummary()
         }
@@ -515,13 +966,16 @@ final class TokenUsageDashboardStore: ObservableObject {
         }
         self.language = language
         if hasRebuiltSnapshot {
-            rebuildSnapshot()
+            rebuildSnapshot(panelSummary: loadPanelSummary(for: snapshotBuildRequest()))
         } else {
             refreshPanelSummary()
         }
     }
 
     func clearLocalEvents() {
+        guard SpillBuildOptions.developerOptionsEnabled else {
+            return
+        }
         do {
             try usageStore.clearEvents()
             selfTestMessage = nil
@@ -544,6 +998,9 @@ final class TokenUsageDashboardStore: ObservableObject {
     }
 
     func clearEvents(in scope: TokenUsageClearScope) {
+        guard SpillBuildOptions.developerOptionsEnabled else {
+            return
+        }
         do {
             if scope == .all {
                 try usageStore.clearEvents()
@@ -580,7 +1037,8 @@ final class TokenUsageDashboardStore: ObservableObject {
                 selectedPeriod: selectedPeriod,
                 selectedCalendarDayID: selectedCalendarDayID,
                 now: now,
-                calendar: calendar
+                calendar: calendar,
+                periodOffset: periodOffset
             )
             let visibleEvents = selectedTool.map { tool in
                 periodEvents.filter { $0.aiTool == tool }
@@ -641,13 +1099,57 @@ final class TokenUsageDashboardStore: ObservableObject {
             ?? TokenUsageDashboardSnapshot.monthStart(for: now, calendar: calendar)
         let proposedMonth = calendar.date(byAdding: .month, value: value, to: currentMonth)
             ?? currentMonth
-        calendarMonthStart = TokenUsageDashboardSnapshot.normalizedCalendarMonthStart(
-            events: events.filter { $0.aiTool.isDashboardTool },
-            now: now,
-            proposedMonthStart: proposedMonth,
-            calendar: calendar
-        )
-        rebuildSnapshot()
+        calendarMonthStart = proposedMonth
+        let request = snapshotBuildRequest()
+        let generation = snapshotBuildGate.next()
+        let previousSnapshot = snapshot
+        let previousUnfilteredSnapshot = unfilteredSnapshot
+        let usageStore = usageStore
+        let cachedContext = cachedSnapshotContext
+        let cachedContextKey = cachedSnapshotContextKey
+        let currentPeriodFilterTotals = periodFilterTotals
+
+        isRefreshing = true
+
+        snapshotBuildQueue.async {
+            let loadedEvents = Self.loadEvents(
+                from: usageStore,
+                ranges: [
+                    Self.eventLoadDateRange(for: request),
+                    Self.calendarMonthDateRange(startingAt: proposedMonth, calendar: request.calendar)
+                ]
+            )
+            let dateBounds = Self.loadDateBounds(from: usageStore, for: request)
+            let buildRequest = request.replacingAvailableDateBounds(dateBounds)
+            let snapshotOutput = Self.buildSnapshotOutput(
+                events: loadedEvents,
+                request: buildRequest,
+                periodFilterTotals: currentPeriodFilterTotals,
+                cachedContext: cachedContext,
+                cachedContextKey: cachedContextKey
+            )
+
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.snapshotBuildGate.isCurrent(generation) else {
+                    return
+                }
+
+                self.applySnapshotPair(
+                    snapshotOutput.snapshotPair,
+                    loadedEvents: loadedEvents,
+                    trackLiveUpdates: false,
+                    previousEvents: nil,
+                    previousSnapshot: previousSnapshot,
+                    previousUnfilteredSnapshot: previousUnfilteredSnapshot,
+                    loadedEventsDateRange: nil,
+                    periodFilterTotals: nil,
+                    panelSummary: nil,
+                    availableDateBounds: dateBounds,
+                    snapshotContext: snapshotOutput.context,
+                    snapshotContextKey: snapshotOutput.contextKey
+                )
+            }
+        }
     }
 
     func runLocalQueueSelfTest() async {
@@ -1027,6 +1529,8 @@ private struct TokenUsageDashboardBuildRequest {
     let now: Date
     let proposedCalendarMonthStart: Date?
     let calendar: Calendar
+    let periodOffset: Int
+    let availableDateBounds: TokenUsageDashboardDateBounds
 }
 
 struct TokenUsageLiveUpdateMarker: Equatable {
@@ -1037,5 +1541,28 @@ struct TokenUsageLiveUpdateMarker: Equatable {
 
     func contains(_ id: String) -> Bool {
         ids.contains(id)
+    }
+}
+
+private extension TokenUsageDashboardBuildRequest {
+    func replacingAvailableDateBounds(
+        _ bounds: TokenUsageDashboardDateBounds
+    ) -> TokenUsageDashboardBuildRequest {
+        TokenUsageDashboardBuildRequest(
+            selectedTool: selectedTool,
+            selectedPeriod: selectedPeriod,
+            selectedCalendarDayID: selectedCalendarDayID,
+            selectedProjectID: selectedProjectID,
+            selectedSessionID: selectedSessionID,
+            displayMode: displayMode,
+            language: language,
+            localAliases: localAliases,
+            showAdvancedTools: showAdvancedTools,
+            now: now,
+            proposedCalendarMonthStart: proposedCalendarMonthStart,
+            calendar: calendar,
+            periodOffset: periodOffset,
+            availableDateBounds: bounds
+        )
     }
 }

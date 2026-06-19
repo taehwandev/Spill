@@ -196,6 +196,8 @@ enum TokenMeteringTextKey: String {
 
     case preferencesTitle
     case preferencesSubtitle
+    case step1Title
+    case localSyncStatusTitle
     case installPromptTitle
     case recommended
     case installPromptDetail
@@ -215,6 +217,30 @@ enum TokenMeteringTextKey: String {
     case copyWebSetup
     case dashboard
     case localEventQueue
+    case historyImportTitle
+    case historyImportReady
+    case historyImportRunning
+    case historyImportExperimental
+    case historyImportDetail
+    case historyImportAllStart
+    case historyImportStart
+    case historyImportToolStart
+    case historyImportCancel
+    case historyImportFirstMode
+    case historyImportIncrementalMode
+    case historyImportLastFinished
+    case historyImportLastSync
+    case historyImportStateWaiting
+    case historyImportStateScanning
+    case historyImportStateDone
+    case historyImportStateNoSource
+    case historyImportStateFailed
+    case historyImportStateCancelled
+    case historyImportMetricSources
+    case historyImportMetricNew
+    case historyImportMetricDuplicates
+    case historyImportMetricUnsupported
+    case historyImportFullScanWarning
     case copyPath
     case adapterScripts
     case neverCollectedOrUploaded
@@ -305,11 +331,11 @@ enum TokenMeteringL10n {
         tokens: String,
         language: TokenMeteringLanguage = .current()
     ) -> String {
-        localizedFormat("format.events_tokens_detail", language: language, Int64(eventCount), tokens)
+        localizedFormat("format.events_tokens_detail", language: language, formattedCount(eventCount), tokens)
     }
 
     static func localEventsDetail(eventCount: Int, language: TokenMeteringLanguage = .current()) -> String {
-        localizedFormat("format.local_events_detail", language: language, Int64(eventCount))
+        localizedFormat("format.local_events_detail", language: language, formattedCount(eventCount))
     }
 
     static func spansDetail(
@@ -322,12 +348,12 @@ enum TokenMeteringL10n {
             return localizedFormat(
                 "format.spans_detail_with_latency",
                 language: language,
-                Int64(spanCount),
+                formattedCount(spanCount),
                 "\(latencyMS) ms",
                 latest
             )
         }
-        return localizedFormat("format.spans_detail", language: language, Int64(spanCount), latest)
+        return localizedFormat("format.spans_detail", language: language, formattedCount(spanCount), latest)
     }
 
     static func percentOfTotal(_ percent: Int, language: TokenMeteringLanguage = .current()) -> String {
@@ -360,7 +386,11 @@ enum TokenMeteringL10n {
         tokens: String,
         language: TokenMeteringLanguage = .current()
     ) -> String {
-        localizedFormat("format.delete_token_data_message", language: language, scope, Int64(eventCount), tokens)
+        localizedFormat("format.delete_token_data_message", language: language, scope, formattedCount(eventCount), tokens)
+    }
+
+    private static func formattedCount(_ value: Int) -> String {
+        NumberFormatter.tokenUsageFull.string(from: NSNumber(value: value)) ?? "\(value)"
     }
 
     static func installedAt(_ path: String, language: TokenMeteringLanguage = .current()) -> String {

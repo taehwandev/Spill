@@ -36,6 +36,8 @@ struct TokenUsageDashboardSnapshot: Equatable {
     let antigravityLastUpdatedString: String?
     let overallLastUpdatedString: String?
     let comparisonTotalTokens: Int?
+    let canNavigatePreviousPeriod: Bool
+    let canNavigateNextPeriod: Bool
 
     static func buildPair(
         events: [TokenUsageEvent],
@@ -51,6 +53,9 @@ struct TokenUsageDashboardSnapshot: Equatable {
         now: Date,
         proposedCalendarMonthStart: Date?,
         calendar: Calendar,
+        periodFilterTotals: [TokenUsageDashboardPeriod: Int]? = nil,
+        availableDateBounds: TokenUsageDashboardDateBounds? = nil,
+        periodOffset: Int = 0,
         locale: Locale = .autoupdatingCurrent,
         timeZone: TimeZone = .autoupdatingCurrent
     ) -> TokenUsageDashboardSnapshotPair {
@@ -59,6 +64,48 @@ struct TokenUsageDashboardSnapshot: Equatable {
             showAdvancedTools: showAdvancedTools,
             calendar: calendar
         )
+        return buildPair(
+            context: context,
+            selectedTool: selectedTool,
+            selectedPeriod: selectedPeriod,
+            selectedCalendarDayID: selectedCalendarDayID,
+            selectedProjectID: selectedProjectID,
+            selectedSessionID: selectedSessionID,
+            displayMode: displayMode,
+            language: language,
+            localAliases: localAliases,
+            showAdvancedTools: showAdvancedTools,
+            now: now,
+            proposedCalendarMonthStart: proposedCalendarMonthStart,
+            calendar: calendar,
+            periodFilterTotals: periodFilterTotals,
+            availableDateBounds: availableDateBounds,
+            periodOffset: periodOffset,
+            locale: locale,
+            timeZone: timeZone
+        )
+    }
+
+    static func buildPair(
+        context: TokenUsageDashboardSnapshotBuildContext,
+        selectedTool: TokenUsageAITool?,
+        selectedPeriod: TokenUsageDashboardPeriod,
+        selectedCalendarDayID: String?,
+        selectedProjectID: String?,
+        selectedSessionID: String?,
+        displayMode: TokenUsageDisplayMode,
+        language: TokenMeteringLanguage,
+        localAliases: [String: String],
+        showAdvancedTools: Bool,
+        now: Date,
+        proposedCalendarMonthStart: Date?,
+        calendar: Calendar,
+        periodFilterTotals: [TokenUsageDashboardPeriod: Int]? = nil,
+        availableDateBounds: TokenUsageDashboardDateBounds? = nil,
+        periodOffset: Int = 0,
+        locale: Locale = .autoupdatingCurrent,
+        timeZone: TimeZone = .autoupdatingCurrent
+    ) -> TokenUsageDashboardSnapshotPair {
         let selectedDayMonth = selectedCalendarDayID
             .flatMap { date(forDayID: $0, calendar: calendar) }
             .map { monthStart(for: $0, calendar: calendar) }
@@ -82,6 +129,9 @@ struct TokenUsageDashboardSnapshot: Equatable {
             now: now,
             calendarMonthStart: displayCalendarMonth,
             resolvedCalendarMonthStart: displayCalendarMonth,
+            periodFilterTotals: periodFilterTotals,
+            availableDateBounds: availableDateBounds,
+            periodOffset: periodOffset,
             calendar: calendar,
             locale: locale,
             timeZone: timeZone
@@ -102,6 +152,9 @@ struct TokenUsageDashboardSnapshot: Equatable {
                 now: now,
                 calendarMonthStart: displayCalendarMonth,
                 resolvedCalendarMonthStart: displayCalendarMonth,
+                periodFilterTotals: periodFilterTotals,
+                availableDateBounds: availableDateBounds,
+                periodOffset: periodOffset,
                 calendar: calendar,
                 locale: locale,
                 timeZone: timeZone
@@ -127,6 +180,9 @@ struct TokenUsageDashboardSnapshot: Equatable {
         showAdvancedTools: Bool = false,
         now: Date = Date(),
         calendarMonthStart: Date? = nil,
+        periodFilterTotals: [TokenUsageDashboardPeriod: Int]? = nil,
+        availableDateBounds: TokenUsageDashboardDateBounds? = nil,
+        periodOffset: Int = 0,
         calendar: Calendar = .autoupdatingCurrent,
         locale: Locale = .autoupdatingCurrent,
         timeZone: TimeZone = .autoupdatingCurrent
@@ -148,6 +204,10 @@ struct TokenUsageDashboardSnapshot: Equatable {
             showAdvancedTools: showAdvancedTools,
             now: now,
             calendarMonthStart: calendarMonthStart,
+            resolvedCalendarMonthStart: nil,
+            periodFilterTotals: periodFilterTotals,
+            availableDateBounds: availableDateBounds,
+            periodOffset: periodOffset,
             calendar: calendar,
             locale: locale,
             timeZone: timeZone
@@ -168,6 +228,9 @@ struct TokenUsageDashboardSnapshot: Equatable {
         now: Date = Date(),
         calendarMonthStart: Date? = nil,
         resolvedCalendarMonthStart: Date? = nil,
+        periodFilterTotals: [TokenUsageDashboardPeriod: Int]? = nil,
+        availableDateBounds: TokenUsageDashboardDateBounds? = nil,
+        periodOffset: Int = 0,
         calendar: Calendar = .autoupdatingCurrent,
         locale: Locale = .autoupdatingCurrent,
         timeZone: TimeZone = .autoupdatingCurrent
@@ -196,7 +259,8 @@ struct TokenUsageDashboardSnapshot: Equatable {
             selectedPeriod: selectedPeriod,
             selectedCalendarDayID: selectedDayID,
             now: now,
-            calendar: calendar
+            calendar: calendar,
+            periodOffset: periodOffset
         )
         let toolVisibleEvents = selectedDashboardTool.map { tool in
             periodEvents.filter { $0.event.aiTool == tool }
@@ -214,6 +278,9 @@ struct TokenUsageDashboardSnapshot: Equatable {
         let visibleEvents = validSelectedProjectID.map { projectID in
             toolVisibleEvents.filter { $0.event.projectID == projectID }
         } ?? toolVisibleEvents
+        let toolFilterEvents = validSelectedProjectID.map { projectID in
+            periodEvents.filter { $0.event.projectID == projectID }
+        } ?? periodEvents
         let sessionRows = Self.sessionRows(
             events: visibleEvents,
             displayMode: displayMode,
@@ -241,13 +308,18 @@ struct TokenUsageDashboardSnapshot: Equatable {
         workflowUsage = Self.workflowUsage(events: focusedEvents, totalTokens: capturedTotalTokens, language: language)
 
         periodFilters = TokenUsageDashboardPeriod.allCases.map { period in
-            let periodCapturedEvents = Self.filteredParsedEvents(
-                dashboardEvents,
-                selectedPeriod: period,
-                now: now,
-                calendar: calendar
-            )
-            let capturedPeriodTotal = periodCapturedEvents.reduce(0) { $0 + $1.event.totalTokens }
+            let capturedPeriodTotal: Int
+            if let total = periodFilterTotals?[period] {
+                capturedPeriodTotal = total
+            } else {
+                let periodCapturedEvents = Self.filteredParsedEvents(
+                    dashboardEvents,
+                    selectedPeriod: period,
+                    now: now,
+                    calendar: calendar
+                )
+                capturedPeriodTotal = periodCapturedEvents.reduce(0) { $0 + $1.event.totalTokens }
+            }
             return TokenUsageDashboardPeriodFilter(
                 period: period,
                 title: period.title(language: language),
@@ -256,12 +328,13 @@ struct TokenUsageDashboardSnapshot: Equatable {
             )
         }
 
-        let allToolTotals = Self.toolTotals(events: periodEvents)
+        let allToolTotals = Self.toolTotals(events: toolFilterEvents)
         toolFilters = Self.toolFilters(
             selectedTool: selectedDashboardTool,
             totals: allToolTotals,
-            totalEvents: periodEvents.count,
+            totalEvents: toolFilterEvents.count,
             showAdvancedTools: showAdvancedTools,
+            displayMode: displayMode,
             language: language
         )
 
@@ -363,16 +436,18 @@ struct TokenUsageDashboardSnapshot: Equatable {
         sessions = sessionRows
         selectedSession = selectedSessionRow
         trendBuckets = TokenUsageDashboardTrendBucketBuilder.buckets(
-            events: focusedEvents.map(\.event),
+            events: focusedEvents,
             selectedPeriod: selectedPeriod,
+            language: language,
             now: now,
+            periodOffset: periodOffset,
             calendar: calendar,
             locale: locale,
             timeZone: timeZone
         )
 
-        // Comparison period tokens (nil when a work item is selected or period is .all)
-        if selectedSessionRow != nil || selectedDayID != nil {
+        // Comparison period tokens (nil when navigating to offset period, work item is selected, or period is .all)
+        if selectedSessionRow != nil || selectedDayID != nil || periodOffset != 0 {
             comparisonTotalTokens = nil
         } else {
             let toolFilteredEvents = selectedDashboardTool
@@ -448,6 +523,36 @@ struct TokenUsageDashboardSnapshot: Equatable {
         overallLastUpdatedString = overallLastUpdated.map {
             Self.formatLocalTimestamp($0, now: now, calendar: calendar, locale: locale, timeZone: timeZone)
         }
+
+        if selectedDayID != nil {
+            canNavigatePreviousPeriod = false
+            canNavigateNextPeriod = false
+        } else {
+            let currentRange = Self.cutoffDateRange(for: selectedPeriod, periodOffset: periodOffset, now: now, calendar: calendar)
+            let earliestDate = availableDateBounds?.earliest ?? dashboardEvents.compactMap(\.createdAt).min()
+            if let earliestDate {
+                if let currentStart = currentRange.start {
+                    canNavigatePreviousPeriod = earliestDate < currentStart
+                } else {
+                    let nowYear = calendar.component(.year, from: now)
+                    var currentYearComponents = DateComponents()
+                    currentYearComponents.year = nowYear
+                    currentYearComponents.month = 1
+                    currentYearComponents.day = 1
+                    currentYearComponents.hour = 0
+                    currentYearComponents.minute = 0
+                    currentYearComponents.second = 0
+                    if let startOfCurrentYear = calendar.date(from: currentYearComponents) {
+                        canNavigatePreviousPeriod = earliestDate < startOfCurrentYear
+                    } else {
+                        canNavigatePreviousPeriod = false
+                    }
+                }
+            } else {
+                canNavigatePreviousPeriod = false
+            }
+            canNavigateNextPeriod = periodOffset < 0
+        }
     }
 
     private init(events: [TokenUsageEvent], selectedTool legacySelectedTool: TokenUsageAITool?) {
@@ -514,12 +619,121 @@ struct TokenUsageDashboardSnapshot: Equatable {
         return "\(formattedValue)\(unit.suffix)"
     }
 
+    static func formatCount(_ value: Int) -> String {
+        NumberFormatter.tokenUsageFull.string(from: NSNumber(value: value)) ?? "\(value)"
+    }
+
+    struct DateRange {
+        let start: Date?
+        let end: Date?
+    }
+
+    static func cutoffDateRange(
+        for period: TokenUsageDashboardPeriod,
+        periodOffset: Int,
+        now: Date,
+        calendar: Calendar
+    ) -> DateRange {
+        switch period {
+        case .today:
+            let todayStart = calendar.startOfDay(for: now)
+            guard let targetStart = calendar.date(byAdding: .day, value: periodOffset, to: todayStart) else {
+                return DateRange(start: todayStart, end: now)
+            }
+            let targetEnd = calendar.date(byAdding: .day, value: 1, to: targetStart) ?? now
+            return DateRange(start: targetStart, end: targetEnd)
+        case .sevenDays:
+            let startOfToday = calendar.startOfDay(for: now)
+            let daysToSubtract = 7 - 1
+            guard let baseStart = calendar.date(byAdding: .day, value: -daysToSubtract, to: startOfToday) else {
+                return DateRange(start: startOfToday, end: now)
+            }
+            guard let targetStart = calendar.date(byAdding: .day, value: periodOffset * 7, to: baseStart) else {
+                return DateRange(start: baseStart, end: now)
+            }
+            let targetEnd = calendar.date(byAdding: .day, value: 7, to: targetStart) ?? now
+            return DateRange(start: targetStart, end: targetEnd)
+        case .thirtyDays:
+            let startOfToday = calendar.startOfDay(for: now)
+            let daysToSubtract = 30 - 1
+            guard let baseStart = calendar.date(byAdding: .day, value: -daysToSubtract, to: startOfToday) else {
+                return DateRange(start: startOfToday, end: now)
+            }
+            guard let targetStart = calendar.date(byAdding: .day, value: periodOffset * 30, to: baseStart) else {
+                return DateRange(start: baseStart, end: now)
+            }
+            let targetEnd = calendar.date(byAdding: .day, value: 30, to: targetStart) ?? now
+            return DateRange(start: targetStart, end: targetEnd)
+        case .all:
+            let nowYear = calendar.component(.year, from: now)
+            let targetYear = nowYear + periodOffset
+            var startComponents = DateComponents()
+            startComponents.year = targetYear
+            startComponents.month = 1
+            startComponents.day = 1
+            startComponents.hour = 0
+            startComponents.minute = 0
+            startComponents.second = 0
+            guard let targetStart = calendar.date(from: startComponents) else {
+                return DateRange(start: nil, end: nil)
+            }
+            var endComponents = DateComponents()
+            endComponents.year = targetYear + 1
+            endComponents.month = 1
+            endComponents.day = 1
+            endComponents.hour = 0
+            endComponents.minute = 0
+            endComponents.second = 0
+            let targetEnd = calendar.date(from: endComponents) ?? now
+            if periodOffset == 0 {
+                return DateRange(start: targetStart, end: nil)
+            }
+            let resolvedEnd = targetEnd > now ? now : targetEnd
+            return DateRange(start: targetStart, end: resolvedEnd)
+        }
+    }
+
+    static func cachedFixedDateFormatter(
+        dateFormat: String,
+        locale: Locale,
+        timeZone: TimeZone
+    ) -> DateFormatter {
+        let key = "Spill.FixedFormatter.\(dateFormat).\(locale.identifier).\(timeZone.identifier)"
+        if let formatter = Thread.current.threadDictionary[key] as? DateFormatter {
+            return formatter
+        }
+        let formatter = DateFormatter()
+        formatter.dateFormat = dateFormat
+        formatter.locale = locale
+        formatter.timeZone = timeZone
+        Thread.current.threadDictionary[key] = formatter
+        return formatter
+    }
+
+    static func cachedLocalizedDateFormatter(
+        template: String,
+        locale: Locale,
+        timeZone: TimeZone
+    ) -> DateFormatter {
+        let key = "Spill.LocalizedFormatter.\(template).\(locale.identifier).\(timeZone.identifier)"
+        if let formatter = Thread.current.threadDictionary[key] as? DateFormatter {
+            return formatter
+        }
+        let formatter = DateFormatter()
+        formatter.locale = locale
+        formatter.timeZone = timeZone
+        formatter.setLocalizedDateFormatFromTemplate(template)
+        Thread.current.threadDictionary[key] = formatter
+        return formatter
+    }
+
     static func filterEvents(
         _ events: [TokenUsageEvent],
         selectedPeriod: TokenUsageDashboardPeriod,
         selectedCalendarDayID: String? = nil,
         now: Date,
-        calendar: Calendar
+        calendar: Calendar,
+        periodOffset: Int = 0
     ) -> [TokenUsageEvent] {
         if let selectedCalendarDayID {
             return events.filter { event in
@@ -527,15 +741,19 @@ struct TokenUsageDashboardSnapshot: Equatable {
             }
         }
 
-        guard let cutoff = cutoffDate(for: selectedPeriod, now: now, calendar: calendar) else {
-            return events
-        }
+        let range = cutoffDateRange(for: selectedPeriod, periodOffset: periodOffset, now: now, calendar: calendar)
 
         return events.filter { event in
             guard let createdAt = ISO8601DateFormatter.parseTokenUsageDate(from: event.createdAt) else {
                 return false
             }
-            return createdAt >= cutoff && createdAt <= now
+            if let start = range.start, createdAt < start {
+                return false
+            }
+            if let end = range.end, createdAt >= end {
+                return false
+            }
+            return true
         }
     }
 
@@ -576,21 +794,26 @@ struct TokenUsageDashboardSnapshot: Equatable {
         selectedPeriod: TokenUsageDashboardPeriod,
         selectedCalendarDayID: String? = nil,
         now: Date,
-        calendar: Calendar
+        calendar: Calendar,
+        periodOffset: Int = 0
     ) -> [TokenUsageDashboardParsedEvent] {
         if let selectedCalendarDayID {
             return events.filter { $0.dayBucket == selectedCalendarDayID }
         }
 
-        guard let cutoff = cutoffDate(for: selectedPeriod, now: now, calendar: calendar) else {
-            return events
-        }
+        let range = cutoffDateRange(for: selectedPeriod, periodOffset: periodOffset, now: now, calendar: calendar)
 
         return events.filter { event in
             guard let createdAt = event.createdAt else {
                 return false
             }
-            return createdAt >= cutoff && createdAt <= now
+            if let start = range.start, createdAt < start {
+                return false
+            }
+            if let end = range.end, createdAt >= end {
+                return false
+            }
+            return true
         }
     }
 
@@ -656,17 +879,19 @@ struct TokenUsageDashboardSnapshot: Equatable {
         totals: [TokenUsageAITool: Int],
         totalEvents: Int,
         showAdvancedTools: Bool,
+        displayMode: TokenUsageDisplayMode,
         language: TokenMeteringLanguage
     ) -> [TokenUsageDashboardToolFilter] {
         let allTotal = totals.values.reduce(0, +)
+        let allFilterDetail = TokenMeteringL10n.eventsTokensDetail(
+            eventCount: totalEvents,
+            tokens: displayMode == .tokens ? formatTokens(allTotal) : formatPercentage(allTotal > 0 ? 100.0 : 0.0),
+            language: language
+        )
         let allFilter = TokenUsageDashboardToolFilter(
             tool: nil,
             title: TokenMeteringL10n.text(.allTools, language: language),
-            detail: TokenMeteringL10n.eventsTokensDetail(
-                eventCount: totalEvents,
-                tokens: formatTokens(allTotal),
-                language: language
-            ),
+            detail: allFilterDetail,
             shareLabel: nil,
             isSelected: selectedTool == nil
         )
@@ -674,16 +899,26 @@ struct TokenUsageDashboardSnapshot: Equatable {
             ? TokenUsageAITool.allCases
             : TokenUsageAITool.dashboardTools
         let toolFilters = toolsToShow.map { tool in
-            TokenUsageDashboardToolFilter(
+            let tokens = totals[tool, default: 0]
+            let ratio = TokenUsageDashboardSnapshot.chartRatio(
+                tokens: tokens,
+                totalTokens: allTotal
+            )
+            let detail: String
+            let shareLabel: String?
+            switch displayMode {
+            case .tokens:
+                detail = formatTokens(tokens)
+                shareLabel = formatPercentage(ratio * 100.0)
+            case .percentage:
+                detail = formatPercentage(ratio * 100.0)
+                shareLabel = formatTokens(tokens)
+            }
+            return TokenUsageDashboardToolFilter(
                 tool: tool,
                 title: tool.dashboardLabel(language: language),
-                detail: formatTokens(totals[tool, default: 0]),
-                shareLabel: formatPercentage(
-                    TokenUsageDashboardSnapshot.chartRatio(
-                        tokens: totals[tool, default: 0],
-                        totalTokens: allTotal
-                    ) * 100.0
-                ),
+                detail: detail,
+                shareLabel: shareLabel,
                 isSelected: selectedTool == tool
             )
         }

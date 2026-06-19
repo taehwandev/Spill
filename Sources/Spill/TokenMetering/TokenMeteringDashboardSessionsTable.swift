@@ -52,10 +52,9 @@ struct TokenMeteringDashboardSessionsTable: View {
     @ViewBuilder
     private var projectFilterBar: some View {
         if store.snapshot.projectFilters.count > 2 {
-            VStack(alignment: .leading, spacing: 7) {
-                Text(t(.folderFilterHeader).uppercased())
-                    .font(.system(size: 8.5, weight: .black))
-                    .tracking(0.9)
+            VStack(alignment: .leading, spacing: 5) {
+                Text(t(.folderFilterHeader))
+                    .font(.system(size: 9, weight: .semibold))
                     .foregroundStyle(.secondary)
 
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -123,13 +122,13 @@ struct TokenMeteringDashboardSessionsTable: View {
                             .lineLimit(1)
                     }
                     HStack(spacing: 4) {
-                        Image(systemName: "folder.fill")
-                            .font(.system(size: 8, weight: .bold))
+                        Image(systemName: isSelected ? "folder.fill" : "folder")
+                            .font(.system(size: 8.5, weight: .semibold))
                         Text(session.projectTitle)
                             .font(.system(size: 9, weight: .medium))
                             .lineLimit(1)
                     }
-                    .foregroundStyle(isSelected ? .white.opacity(0.72) : .secondary)
+                    .foregroundStyle(isSelected ? .white.opacity(0.75) : .secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 Text(session.detail)
@@ -151,34 +150,30 @@ struct TokenMeteringDashboardSessionsTable: View {
             .background(
                 ZStack {
                     if isSelected {
-                        LinearGradient(
-                            colors: isHovered ? [selectedControlAccent, selectedControlAccent.opacity(0.9)] : [selectedControlAccent.opacity(0.95), selectedControlAccent.opacity(0.8)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
+                        selectedControlAccent.opacity(isHovered ? 0.9 : 0.8)
                     } else {
                         if isHovered {
-                            Color.primary.opacity(0.05)
+                            Color.primary.opacity(0.04)
                         } else {
-                            Color.primary.opacity(0.02)
+                            Color.clear
                         }
                     }
                 }
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
             )
             .overlay {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
                     .stroke(
                         isSelected
-                            ? selectedControlAccent.opacity(isHovered ? 0.45 : 0.3)
-                            : Color.primary.opacity(isHovered ? 0.08 : 0.04),
-                        lineWidth: 0.8
+                            ? selectedControlAccent.opacity(0.15)
+                            : Color.primary.opacity(isHovered ? 0.06 : 0.03),
+                        lineWidth: 0.5
                     )
             }
             .shadow(
-                color: (isSelected ? selectedControlAccent : Color.black).opacity(isHovered ? 0.05 : 0.01),
-                radius: isHovered ? 4 : 1.5,
-                y: isHovered ? 2 : 0.5
+                color: (isSelected ? selectedControlAccent : Color.black).opacity(isHovered ? 0.03 : 0),
+                radius: isHovered ? 3 : 0,
+                y: isHovered ? 1.5 : 0
             )
             .animation(.spring(response: 0.22, dampingFraction: 0.75), value: hoveredSessionID)
             .onHover { hovering in
@@ -189,13 +184,15 @@ struct TokenMeteringDashboardSessionsTable: View {
         .buttonStyle(.plain)
         .padding(.top, 6)
         .contextMenu {
-            Button(role: .destructive) {
-                requestClear(.workItem(session.id))
-                if store.selectedSessionID == session.id {
-                    store.clearWorkItemSelection()
+            if SpillBuildOptions.developerOptionsEnabled {
+                Button(role: .destructive) {
+                    requestClear(.workItem(session.id))
+                    if store.selectedSessionID == session.id {
+                        store.clearWorkItemSelection()
+                    }
+                } label: {
+                    Label(t(.clearSelectedWorkItem), systemImage: "trash")
                 }
-            } label: {
-                Label(t(.clearSelectedWorkItem), systemImage: "trash")
             }
         }
     }
