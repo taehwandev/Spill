@@ -7,17 +7,24 @@ workflow overlays when a shared AgentPlaybook card covers the same behavior.
 
 Shared AgentPlaybook library:
 
-- Use the existing local checkout via `AGENTPLAYBOOK_HOME`.
+- Use the existing local checkout via `AGENTPLAYBOOK_HOME`, falling back to the
+  current local shared checkout when the variable is unset.
 - Do not commit a personal absolute AgentPlaybook path into repo-local docs.
 - For personal shared installs, set `AGENTPLAYBOOK_HOME` in the runtime
   environment.
 - For a future team-pinned install, use a repo-relative checkout such as
   `.agents/AgentPlaybook` only after explicit approval.
-- `${AGENTPLAYBOOK_HOME}/AGENTS.md`
-- `${AGENTPLAYBOOK_HOME}/index.md`
-- `${AGENTPLAYBOOK_HOME}/scripts/workflow.py`
-- `${AGENTPLAYBOOK_HOME}/scripts/agent-preflight.py`
-- `${AGENTPLAYBOOK_HOME}/scripts/agent-finish-check.py`
+
+```bash
+AGENTPLAYBOOK_ROOT="${AGENTPLAYBOOK_HOME:-$HOME/Documents/KeyFlowVault/AgentPlaybook}"
+```
+
+- `${AGENTPLAYBOOK_ROOT}/AGENTS.md`
+- `${AGENTPLAYBOOK_ROOT}/index.md`
+- `${AGENTPLAYBOOK_ROOT}/scripts/agent-hook.py`
+- `${AGENTPLAYBOOK_ROOT}/scripts/workflow.py`
+- `${AGENTPLAYBOOK_ROOT}/scripts/agent-preflight.py`
+- `${AGENTPLAYBOOK_ROOT}/scripts/agent-finish-check.py`
 
 Use repo-local Spill instructions for product and command details. Use
 AgentPlaybook for common, workflow, platform, and review cards. Load the
@@ -84,11 +91,11 @@ Runtime hook evidence and privacy:
 Routing and executable evidence:
 
 - For multi-step tasks, run
-  `python3 "${AGENTPLAYBOOK_HOME}/scripts/workflow.py" route <command> --request "<USER_REQUEST>"`
+  `python3 "${AGENTPLAYBOOK_ROOT}/scripts/agent-hook.py" start --project "$(pwd)" --rules "${AGENTPLAYBOOK_ROOT}" --command <command> --request "<USER_REQUEST>"`
   before selecting shared docs, editing, reviewing, committing, or reporting
   completion. If the current request is a direct question, answer it first, then
-  route with `--request-classified --classification-evidence "<evidence>"` and
-  record that evidence.
+  run the start hook with `--request-classified --classification-evidence
+  "<evidence>"` and record that evidence.
 - Use only two cat signal badges in human-visible reports: 🐱🟢 SUCCESS means
   executed with evidence, and 🐱🔴 FAIL means blocked, failed, missed, or
   missing evidence. 🐱🔴 FAIL triggers missed-gate recovery: stop finalization,
@@ -96,10 +103,10 @@ Routing and executable evidence:
   return to the first missed gate only, and run the retrospective workflow. The
   missed gate gets one recovery retry; do not restart the whole route. Do not
   report any third gate state.
-- When the wrappers are available, run `agent-preflight.py` before editing,
-  reviewing, committing, or reporting completion, and run `agent-finish-check.py`
-  before final report, commit, release, or handoff. Pass evidence for every
-  required route gate.
+- When the wrappers are available, run `agent-hook.py start` before editing,
+  `agent-hook.py review` after the scoped diff is ready, and
+  `agent-hook.py finish` before final report, commit, release, or handoff. Pass
+  evidence for every required route gate.
 - VibeGuard `Needs review` must be reported explicitly and can pass the finish
   check only with an `--allow-vibeguard-review` reason.
 - `--request-classified` must include `--classification-evidence`; if a request
@@ -112,7 +119,7 @@ Before PRD, ARD, task breakdown, or implementation work:
 1. Read `.agents/README.md`.
 2. Read `.agents/specs/prd.md` and `.agents/specs/ard.md`.
 3. Follow the relevant AgentPlaybook workflow cards, starting from
-   `${AGENTPLAYBOOK_HOME}/workflows/agent-task-lifecycle.md`.
+   `${AGENTPLAYBOOK_ROOT}/workflows/agent-task-lifecycle.md`.
 4. Apply the shared AgentPlaybook ambiguity gate before PRD, ARD, task
    breakdown, implementation planning, or code work when scope or intent is
    unclear.
@@ -120,7 +127,7 @@ Before PRD, ARD, task breakdown, or implementation work:
 
 VibeGuard gate:
 
-- Run `npx --yes @taehwandev/vibeguard audit . --rules "${AGENTPLAYBOOK_HOME}"` before and after documentation, code, config, dependency, data, deployment, or credential changes.
+- Run `npx --yes @taehwandev/vibeguard audit . --rules "${AGENTPLAYBOOK_ROOT}"` before and after documentation, code, config, dependency, data, deployment, or credential changes.
 - Use `--fix` only for low-risk VibeGuard fixes, then inspect the diff.
 - Never print secret values. Ask before destructive data actions, production deploys, signing/notarization credential changes, paid-service/model usage increases, or recurring infrastructure.
 

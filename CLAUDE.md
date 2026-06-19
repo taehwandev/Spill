@@ -50,25 +50,27 @@ values, transcripts, shell history, or secrets to explain the output.
 ## Mandatory: Route Before Every Task
 
 **Every task — including direct questions, single-step edits, and reviews —
-requires a workflow.py route call before starting work.** This is not optional.
-The route call writes the Spill label context so token usage is correctly tagged
-by the Stop hook.
+requires an AgentPlaybook start hook before starting work.** This is not
+optional. The hook runs the workflow route/preflight path and writes the Spill
+label context so token usage is correctly tagged by the Stop hook.
 
 The UserPromptSubmit hook writes a baseline `triage/classify` label automatically,
 but that label is overwritten only when you run the explicit route below.
 If you skip the route, the Stop hook records every event as `analysis/classify`.
 
-### Route command shape
+### Start hook command shape
 
 ```bash
-SPILL_AI_TOOL=claude python3 "${AGENTPLAYBOOK_HOME}/scripts/workflow.py" route <command> --request "<USER_REQUEST>"
+AGENTPLAYBOOK_ROOT="${AGENTPLAYBOOK_HOME:-$HOME/Documents/KeyFlowVault/AgentPlaybook}"
+SPILL_AI_TOOL=claude python3 "${AGENTPLAYBOOK_ROOT}/scripts/agent-hook.py" start --project "$(pwd)" --rules "${AGENTPLAYBOOK_ROOT}" --command <command> --request "<USER_REQUEST>"
 ```
 
 For already-classified requests (second pass, follow-up, or any turn where the
 intent is unambiguous without further clarification):
 
 ```bash
-SPILL_AI_TOOL=claude python3 "${AGENTPLAYBOOK_HOME}/scripts/workflow.py" route <command> --request-classified
+AGENTPLAYBOOK_ROOT="${AGENTPLAYBOOK_HOME:-$HOME/Documents/KeyFlowVault/AgentPlaybook}"
+SPILL_AI_TOOL=claude python3 "${AGENTPLAYBOOK_ROOT}/scripts/agent-hook.py" start --project "$(pwd)" --rules "${AGENTPLAYBOOK_ROOT}" --command <command> --request-classified --classification-evidence "<evidence>"
 ```
 
 ### Command mapping
@@ -87,9 +89,9 @@ SPILL_AI_TOOL=claude python3 "${AGENTPLAYBOOK_HOME}/scripts/workflow.py" route <
 | Docs update | `docs` |
 | Ambiguous — needs clarification | `ambiguity` |
 
-### When the route command is missing
+### When the start hook is missing
 
 Do not proceed with editing, reviewing, committing, or running tests until the
-route has been executed and the gate ledger from the route output is visible.
+start hook has been executed and the gate ledger from the route output is visible.
 If the route produces a `clarify_first` response, ask the user the blocker
 question before continuing.
