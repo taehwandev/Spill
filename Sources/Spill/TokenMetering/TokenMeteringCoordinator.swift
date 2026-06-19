@@ -18,6 +18,7 @@ final class TokenMeteringCoordinator: NSObject {
     )
     private lazy var inboxMonitor = TokenUsageInboxMonitor(store: usageStore)
     private lazy var collectorCoordinator = TokenUsageCollectorCoordinator(store: usageStore)
+    private(set) lazy var historyImportCoordinator = TokenUsageHistoryImportCoordinator(store: usageStore)
     private lazy var dashboardLauncher = TokenMeteringDashboardLauncher()
     private(set) lazy var dashboardStore = TokenUsageDashboardStore(
         usageStore: usageStore,
@@ -68,6 +69,7 @@ final class TokenMeteringCoordinator: NSObject {
     func stop() {
         inboxMonitor.stop()
         bridgeServer.stop()
+        historyImportCoordinator.cancelImport()
         privateUsageUploadTask?.cancel()
         privateUsageUploadTask = nil
         cancellables.removeAll()
@@ -102,7 +104,10 @@ final class TokenMeteringCoordinator: NSObject {
     func refreshMenuBarTokenTotal(now: Date = Date(), force: Bool = false) {
         let calendar = Calendar.autoupdatingCurrent
         let dayStart = calendar.startOfDay(for: now)
-        guard force || shouldRefreshMenuBarTokenTotal || menuBarTokenDayStart != dayStart else {
+        guard force || shouldRefreshMenuBarTokenTotal else {
+            return
+        }
+        guard force || menuBarTokenDayStart != dayStart else {
             return
         }
 

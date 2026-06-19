@@ -84,6 +84,7 @@ struct PreferencesView: View {
     @ObservedObject var updateStore: UpdateCheckStore
     @ObservedObject var navigationState: PreferencesNavigationState
     let tokenUsageStore: TokenUsageStore
+    @ObservedObject var tokenHistoryImportCoordinator: TokenUsageHistoryImportCoordinator
     let showPanelAction: () -> Void
     let openTokenDashboardAction: () -> Void
     @State private var accessibilityTrusted = AccessibilityPermission.isTrusted
@@ -435,6 +436,7 @@ struct PreferencesView: View {
                 TokenMeteringPreferencesSection(
                     settings: settings,
                     tokenUsageStore: tokenUsageStore,
+                    tokenHistoryImportCoordinator: tokenHistoryImportCoordinator,
                     openDashboardAction: openTokenDashboardAction
                 )
             }
@@ -471,6 +473,14 @@ struct PreferencesView: View {
                         title: t(.aiDashboardOnboardingPreview),
                         detail: t(.aiDashboardOnboardingPreviewDetail),
                         isOn: $settings.tokenUsageDashboardOnboardingPreviewEnabled
+                    )
+
+                    Divider()
+                        .background(Color.primary.opacity(0.04))
+
+                    TokenMeteringLocalDataManagementSection(
+                        settings: settings,
+                        tokenUsageStore: tokenUsageStore
                     )
                 }
             }

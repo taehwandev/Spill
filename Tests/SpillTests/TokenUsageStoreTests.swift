@@ -371,26 +371,26 @@ final class TokenUsageStoreTests: XCTestCase {
             outputTokens: 50,
             createdAt: "2026-06-04T15:01:00.000Z"
         )
-        let future = Self.safeEvent(
-            spanID: "span_future",
+        let laterSameLocalDay = Self.safeEvent(
+            spanID: "span_later_same_local_day",
             inputTokens: 400,
             outputTokens: 100,
             createdAt: "2026-06-05T12:01:00.000Z"
         )
 
         let snapshot = TokenUsageDashboardSnapshot(
-            events: [previousLocalDay, today, future],
+            events: [previousLocalDay, today, laterSameLocalDay],
             selectedPeriod: .today,
             now: now,
             calendar: calendar
         )
 
-        XCTAssertEqual(snapshot.eventCount, 1)
-        XCTAssertEqual(snapshot.totalTokens, 150)
+        XCTAssertEqual(snapshot.eventCount, 2)
+        XCTAssertEqual(snapshot.totalTokens, 650)
         XCTAssertEqual(snapshot.sessions.map(\.id), ["work_project_local_analysis_plan_2026_06_05"])
         XCTAssertEqual(
             snapshot.periodFilters.first { $0.period == .today }?.detail,
-            "150"
+            "650"
         )
     }
 
@@ -573,6 +573,7 @@ final class TokenUsageStoreTests: XCTestCase {
         let trendChart = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardTrendChart.swift"))
         let trendBucketBuilder = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenUsageDashboardTrendBucketBuilder.swift"))
         let preferencesSection = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Preferences/TokenMeteringPreferencesSection.swift"))
+        let preferencesView = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Preferences/PreferencesView.swift"))
 
         XCTAssertFalse(dashboardView.contains("dataManagementPanel"))
         XCTAssertFalse(dashboardView.contains("title: t(.clearAllLocalData)"))
@@ -581,6 +582,7 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertFalse(dashboardView.contains("scope: .tool(tool)"))
         XCTAssertFalse(dashboardView.contains("scope: .period(period)"))
         XCTAssertTrue(sessionsTable.contains(".contextMenu"))
+        XCTAssertTrue(sessionsTable.contains("if SpillBuildOptions.developerOptionsEnabled"))
         XCTAssertTrue(sessionsTable.contains("requestClear(.workItem(session.id))"))
         XCTAssertFalse(dashboardView.contains("requestClear(.workItem(detailSession.id))"))
         XCTAssertTrue(dashboardView.contains("settingsAction()"))
@@ -597,20 +599,26 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(analyticsGrid.contains("case .sevenDays, .thirtyDays, .all:"))
         XCTAssertTrue(analyticsGrid.contains("if shouldShowTrendChart"))
         XCTAssertTrue(analyticsGrid.contains("store.snapshot.trendBuckets"))
-        XCTAssertTrue(analyticsGrid.contains("TokenMeteringDashboardTrendChart(buckets: trendBuckets, language: language)"))
+        XCTAssertTrue(analyticsGrid.contains("TokenMeteringDashboardTrendChart("))
+        XCTAssertTrue(analyticsGrid.contains("selectedBucketID: $selectedTrendBucketID"))
+        XCTAssertTrue(analyticsGrid.contains("TokenMeteringDashboardTrendBucketSummary"))
         XCTAssertFalse(dashboardView.contains("private func trendBars"))
         XCTAssertTrue(trendChart.contains("struct TokenMeteringDashboardTrendChart: View"))
         XCTAssertTrue(trendBucketBuilder.contains("enum TokenUsageDashboardTrendBucketBuilder"))
         XCTAssertTrue(trendBucketBuilder.contains("static func buckets("))
         XCTAssertTrue(trendBucketBuilder.contains("private static func dailyBuckets("))
         XCTAssertTrue(trendBucketBuilder.contains("private static func monthlyBuckets("))
-        XCTAssertTrue(preferencesSection.contains("localDataManagementSection"))
+        XCTAssertFalse(preferencesSection.contains("localDataManagementSection"))
+        XCTAssertTrue(preferencesSection.contains("struct TokenMeteringLocalDataManagementSection"))
+        XCTAssertTrue(preferencesView.contains("TokenMeteringLocalDataManagementSection("))
+        XCTAssertTrue(preferencesView.contains("private var developerOptionsTab"))
         XCTAssertTrue(preferencesSection.contains("Text(t(.localDataManagementDetail))"))
-        XCTAssertTrue(preferencesSection.contains("DisclosureGroup(isExpanded: $showsLocalDataDeleteControls)"))
+        XCTAssertTrue(preferencesSection.contains("DisclosureGroup(isExpanded: $showsDeleteControls)"))
         XCTAssertTrue(preferencesSection.contains("Label(t(.localDataDeleteOptions), systemImage: \"trash\")"))
         XCTAssertTrue(preferencesSection.contains("Label(t(.reviewLocalDataDelete), systemImage: \"trash\")"))
         XCTAssertFalse(preferencesSection.contains("Label(t(.clearAllLocalData), systemImage: \"trash\")"))
         XCTAssertTrue(preferencesSection.contains("try tokenUsageStore.clearEvents()"))
+        XCTAssertTrue(dashboardView.contains("guard SpillBuildOptions.developerOptionsEnabled else"))
     }
 
     func testPreferencesSetupGuidanceIsAlwaysVisible() throws {
@@ -618,14 +626,14 @@ final class TokenUsageStoreTests: XCTestCase {
         let preferencesSection = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Preferences/TokenMeteringPreferencesSection.swift"))
 
         XCTAssertTrue(preferencesSection.contains("promptInstructionCard"))
-        XCTAssertTrue(preferencesSection.contains("t(.installPromptTitle)"))
+        XCTAssertTrue(preferencesSection.contains("t(.step1Title)"))
         XCTAssertTrue(preferencesSection.contains("t(.copyInstallPrompt)"))
         XCTAssertTrue(preferencesSection.contains("TokenMeteringGlobalSetup.globalPrompt"))
         XCTAssertFalse(preferencesSection.contains("TokenMeteringGlobalSetup.prompt("))
         XCTAssertFalse(preferencesSection.contains("Text(TokenMeteringSetupInstaller.setupCommand())"))
         XCTAssertTrue(preferencesSection.contains("t(.menuBarTokenDisplayModeTitle)"))
         XCTAssertTrue(preferencesSection.contains("t(.menuBarTokenDisplayModeDetail)"))
-        XCTAssertTrue(preferencesSection.contains("localEventQueueSection"))
+        XCTAssertTrue(preferencesSection.contains("localSyncAndDisplaySettingsSection"))
         XCTAssertTrue(preferencesSection.contains("privacyBoundarySection"))
         XCTAssertFalse(preferencesSection.contains("showsPrivateUsageManualConnection"))
         XCTAssertFalse(preferencesSection.contains("privateUsageGrantCode"))
@@ -669,6 +677,7 @@ final class TokenUsageStoreTests: XCTestCase {
         let dashboardView = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardView.swift"))
         let dashboardWindowController = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardWindowController.swift"))
         let dashboardAppDelegate = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardAppDelegate.swift"))
+        let dashboardProcess = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardProcess.swift"))
         let analyticsGrid = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardAnalyticsGrid.swift"))
         let filterBar = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardFilterBar.swift"))
         let calendarControl = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardCalendarControl.swift"))
@@ -677,6 +686,7 @@ final class TokenUsageStoreTests: XCTestCase {
         let chrome = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardChrome.swift"))
         let onboardingGuide = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardOnboardingGuide.swift"))
         let sessionsTable = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardSessionsTable.swift"))
+        let appDelegate = try String(contentsOf: root.appendingPathComponent("Sources/Spill/App/AppDelegate.swift"))
         let preferencesView = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Preferences/PreferencesView.swift"))
         let tokenMeteringPreferencesSection = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Preferences/TokenMeteringPreferencesSection.swift"))
         let dashboardStore = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenUsageDashboardStore.swift"))
@@ -691,15 +701,15 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(toolTab.contains("store.setSelectedTool(filter.tool)"))
         XCTAssertTrue(toolTab.contains("let isSelected = store.selectedTool == filter.tool"))
         XCTAssertTrue(toolTab.contains("filter.shareLabel"))
-        XCTAssertTrue(toolTab.contains("toolShareBadge("))
+        XCTAssertTrue(toolTab.contains("tokenUsageDetail"))
+        XCTAssertTrue(toolTab.contains(#"\(filter.detail) (\(shareLabel))"#))
+        XCTAssertFalse(toolTab.contains("toolShareBadge("))
         XCTAssertTrue(toolTab.contains("filter.tool?.dashboardTint"))
         XCTAssertTrue(toolTab.contains("tabAccent.opacity(0.86)"))
         XCTAssertTrue(toolTab.contains("tabAccent.opacity(0.68)"))
         let tabDetailRange = try XCTUnwrap(toolTab.range(of: "Text(detail)"))
-        let tabShareRange = try XCTUnwrap(toolTab.range(of: "if let shareLabel = filter.shareLabel"))
         let tabLiveDotRange = try XCTUnwrap(toolTab.range(of: "TokenMeteringLiveUpdateDot"))
-        XCTAssertLessThan(tabDetailRange.lowerBound, tabShareRange.lowerBound)
-        XCTAssertLessThan(tabShareRange.lowerBound, tabLiveDotRange.lowerBound)
+        XCTAssertLessThan(tabDetailRange.lowerBound, tabLiveDotRange.lowerBound)
         XCTAssertTrue(analyticsGrid.contains("rowTint: aiToolTint"))
         XCTAssertTrue(analyticsGrid.contains("TokenUsageAITool(rawValue: row.id.lowercased())?.dashboardTint ?? .secondary"))
         XCTAssertTrue(toolColor.contains("extension TokenUsageAITool"))
@@ -721,6 +731,12 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(dashboardWindowController.contains("self.window?.isVisible == true"))
         XCTAssertTrue(dashboardWindowController.contains("!self.store.isDashboardRefreshInProgress"))
         XCTAssertTrue(dashboardAppDelegate.contains("loadsInitialPanelSummary: false"))
+        XCTAssertFalse(dashboardAppDelegate.contains("tokenUsageInboxMonitor.start()"))
+        XCTAssertFalse(dashboardAppDelegate.contains("TokenUsageInboxMonitor(store: tokenUsageStore)"))
+        XCTAssertFalse(dashboardAppDelegate.contains("TokenUsageCollectorCoordinator("))
+        XCTAssertTrue(dashboardAppDelegate.contains("postTokenUsageCollectionRequest(reason: reason)"))
+        XCTAssertTrue(dashboardProcess.contains("collectionRequestNotification"))
+        XCTAssertTrue(appDelegate.contains("tokenUsageCollectionRequestFromDashboard"))
         XCTAssertTrue(dashboardView.contains("syncOnboardingPreviewFromSettings()"))
         XCTAssertTrue(dashboardView.contains("settings.tokenUsageDashboardOnboardingPreviewEnabled"))
         XCTAssertTrue(dashboardView.contains("SpillBuildOptions.developerOptionsEnabled"))
@@ -743,12 +759,17 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(preferencesView.contains("$settings.panelOnboardingPreviewEnabled"))
         XCTAssertTrue(preferencesView.contains("$settings.tokenUsageDashboardOnboardingPreviewEnabled"))
         XCTAssertTrue(preferencesView.contains("t(.aiDashboardOnboardingPreview)"))
-        XCTAssertTrue(dashboardStore.contains("func refreshAsync(trackLiveUpdates: Bool = true)"))
-        XCTAssertTrue(dashboardStore.contains("func refreshAsyncIfIdle(trackLiveUpdates: Bool = true)"))
+        XCTAssertTrue(dashboardStore.contains("func refreshAsync("))
+        XCTAssertTrue(dashboardStore.contains("reusesLoadedEvents: Bool = false"))
+        XCTAssertTrue(dashboardStore.contains("reusesPeriodFilterTotals: Bool = false"))
+        XCTAssertTrue(dashboardStore.contains("func refreshAsyncIfIdle(trackLiveUpdates: Bool = true, refreshesPanelSummary: Bool = true)"))
         XCTAssertTrue(dashboardStore.contains("loadsInitialPanelSummary: Bool = true"))
         XCTAssertTrue(dashboardStore.contains("@Published private(set) var loadState"))
         XCTAssertTrue(dashboardStore.contains("@Published private(set) var isOnboardingPreviewEnabled"))
         XCTAssertTrue(dashboardStore.contains("TokenUsageDashboardPreviewDataSource.onboardingEvents"))
+        XCTAssertTrue(dashboardStore.contains("snapshotBuildQueue = DispatchQueue(label: \"app.spill.token-dashboard.snapshot-build\""))
+        XCTAssertTrue(dashboardStore.contains("snapshotBuildGate.isCurrent(generation)"))
+        XCTAssertFalse(dashboardStore.contains("DispatchQueue.global(qos: .userInitiated).async"))
         XCTAssertTrue(analyticsGrid.contains("loadingAnalyticsGrid"))
         XCTAssertTrue(sessionsTable.contains("TokenMeteringDashboardLoadingSessionRows"))
         XCTAssertTrue(dashboardView.contains("store.loadState == .loading"))
@@ -767,6 +788,13 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(dashboardStore.contains("func clearSelectedCalendarDay()"))
         XCTAssertTrue(dashboardView.contains("TokenMeteringLiveUpdateDot"))
         XCTAssertTrue(dashboardView.contains(".contentTransition(.numericText())"))
+        XCTAssertTrue(tokenMeteringPreferencesSection.contains("tokenUsageStore.dashboardSummary(dashboardToolsOnly: false)"))
+        XCTAssertTrue(tokenMeteringPreferencesSection.contains("t(.historyImportAllStart)"))
+        XCTAssertFalse(tokenMeteringPreferencesSection.contains("if SpillBuildOptions.developerOptionsEnabled"))
+        XCTAssertTrue(preferencesView.contains("TokenMeteringLocalDataManagementSection("))
+        XCTAssertTrue(tokenMeteringPreferencesSection.contains("tokenHistoryImportCoordinator.startImport(for: toolSnapshot.tool)"))
+        XCTAssertTrue(tokenMeteringPreferencesSection.contains("historyImportLastRunText(for: toolSnapshot.lastRun)"))
+        XCTAssertFalse(tokenMeteringPreferencesSection.contains("let events = tokenUsageStore.loadEvents()"))
     }
 
     func testOpeningTokenDashboardDismissesPanelBeforeShowingWindow() throws {
@@ -800,16 +828,15 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(dashboardView.contains("private let settingsAction: () -> Void"))
         XCTAssertTrue(dashboardView.contains("settingsAction: @escaping () -> Void = {}"))
         XCTAssertTrue(dashboardView.contains("refreshAction()"))
-        XCTAssertTrue(collector.contains("runLocalImportersIfAvailable()"))
-        XCTAssertTrue(collector.contains("TokenMeteringAdapterKit.defaultInstallURL(for: TokenMeteringAdapterKit.codex)"))
-        XCTAssertTrue(collector.contains("runCodexImporterIfAvailable()"))
-        XCTAssertTrue(collector.contains("runAntigravityImporterIfAvailable()"))
-        XCTAssertTrue(collector.contains("TokenUsageAntigravityImporter()"))
-        XCTAssertTrue(collector.contains("importQueuedEventsWhileProcessRuns(process)"))
-        XCTAssertTrue(collector.contains("runClaudeTranscriptScanIfAvailable()"))
-        XCTAssertTrue(collector.contains("TokenMeteringAdapterKit.defaultInstallURL(for: TokenMeteringAdapterKit.claudeCode)"))
-        XCTAssertTrue(collector.contains("python3ExecutableURLProvider"))
-        XCTAssertTrue(collector.contains("--scan-dir"))
+        XCTAssertTrue(collector.contains("store.drainQueuedEventsWithoutLoading()"))
+        XCTAssertTrue(collector.contains("Local runtime"))
+        XCTAssertTrue(collector.contains("runAntigravityActiveImporter()"))
+        XCTAssertTrue(collector.contains("AGY is different: it has no runtime hook"))
+        XCTAssertFalse(collector.contains("runLocalImportersIfAvailable()"))
+        XCTAssertFalse(collector.contains("runCodexImporterIfAvailable()"))
+        XCTAssertFalse(collector.contains("runClaudeTranscriptScanIfAvailable()"))
+        XCTAssertFalse(collector.contains("Process()"))
+        XCTAssertFalse(collector.contains("--scan-dir"))
     }
 
     func testDashboardLocalRefreshIsSeparatedFromServerStatusRefresh() throws {
@@ -864,27 +891,85 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertFalse(scanner.contains("cachedImageData(for: snapshot)"))
     }
 
-    func testCodexImporterStreamsInboxWhileImporterRuns() throws {
+    func testTokenUsageCollectorDoesNotAutoRunHistoryImporters() throws {
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let collector = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenUsageCollectorCoordinator.swift"))
 
-        XCTAssertTrue(collector.contains("private func importQueuedEventsWhileProcessRuns(_ process: Process)"))
-        XCTAssertTrue(collector.contains("while process.isRunning"))
-        XCTAssertTrue(collector.contains("store.importQueuedEventsWithoutLoading()"))
-        XCTAssertTrue(collector.contains("Thread.sleep(forTimeInterval: importerDrainInterval)"))
-        XCTAssertTrue(collector.contains("process.terminate()"))
-        XCTAssertTrue(collector.contains("importerMaximumRuntime"))
-        XCTAssertTrue(collector.contains("process.standardOutput = FileHandle.nullDevice"))
-        XCTAssertTrue(collector.contains("process.standardError = FileHandle.nullDevice"))
+        XCTAssertTrue(collector.contains("store.drainQueuedEventsWithoutLoading()"))
+        XCTAssertTrue(collector.contains("runAntigravityActiveImporter()"))
+        XCTAssertTrue(collector.contains("TokenUsageAntigravityImporter().importRecentEvents"))
+        XCTAssertFalse(collector.contains("private func importQueuedEventsWhileProcessRuns(_ process: Process)"))
+        XCTAssertFalse(collector.contains("while process.isRunning"))
+        XCTAssertFalse(collector.contains("Thread.sleep(forTimeInterval: importerDrainInterval)"))
+        XCTAssertFalse(collector.contains("process.terminate()"))
+        XCTAssertFalse(collector.contains("process.standardOutput = FileHandle.nullDevice"))
+        XCTAssertFalse(collector.contains("process.standardError = FileHandle.nullDevice"))
+        XCTAssertFalse(collector.contains("\"--since-hours\""))
+        XCTAssertFalse(collector.contains("\"--scan-dir\""))
+    }
+
+    func testTokenUsageCollectorRunsAntigravityActiveImporter() {
+        let store = TokenUsageStore(fileURL: temporaryEventsURL())
+        let lock = NSLock()
+        var capturedStartDate: Date?
+        let collector = TokenUsageCollectorCoordinator(
+            store: store,
+            antigravityImportRunner: { _, startDate in
+                lock.withLock {
+                    capturedStartDate = startDate
+                }
+                return TokenUsageAntigravityImportSummary(
+                    scannedDatabases: 0,
+                    scannedGenerationRows: 0,
+                    parsedUsageEvents: 0,
+                    importedEvents: 0,
+                    skippedDuplicateEvents: 0,
+                    unsupportedRecords: 0,
+                    splitOutputFallbackEvents: 0,
+                    cursorAdvancedDatabases: 0,
+                    failedToWriteEvents: false
+                )
+            },
+            antigravityLookbackInterval: 3600
+        )
+        let beforeRequest = Date()
+        let notification = expectation(description: "collection finished notification")
+        let observer = NotificationCenter.default.addObserver(
+            forName: TokenUsageCollectorCoordinator.collectionDidFinishNotification,
+            object: collector,
+            queue: .main
+        ) { _ in
+            notification.fulfill()
+        }
+        defer {
+            NotificationCenter.default.removeObserver(observer)
+        }
+
+        collector.requestCollection(reason: "test")
+        wait(for: [notification], timeout: 1)
+
+        let startDate = lock.withLock { capturedStartDate }
+        XCTAssertNotNil(startDate)
+        XCTAssertEqual(startDate?.timeIntervalSince(beforeRequest.addingTimeInterval(-3600)) ?? 0, 0, accuracy: 2)
     }
 
     func testTokenUsageCollectorPostsCollectionFinishedNotification() {
         let store = TokenUsageStore(fileURL: temporaryEventsURL())
         let collector = TokenUsageCollectorCoordinator(
             store: store,
-            codexImporterURLProvider: { nil },
-            nodeExecutableURLProvider: { nil },
-            antigravityImporterProvider: { nil }
+            antigravityImportRunner: { _, _ in
+                TokenUsageAntigravityImportSummary(
+                    scannedDatabases: 0,
+                    scannedGenerationRows: 0,
+                    parsedUsageEvents: 0,
+                    importedEvents: 0,
+                    skippedDuplicateEvents: 0,
+                    unsupportedRecords: 0,
+                    splitOutputFallbackEvents: 0,
+                    cursorAdvancedDatabases: 0,
+                    failedToWriteEvents: false
+                )
+            }
         )
         let notification = expectation(description: "collection finished notification")
         let observer = NotificationCenter.default.addObserver(
@@ -958,6 +1043,7 @@ final class TokenUsageStoreTests: XCTestCase {
 
         let event = try XCTUnwrap(store.loadEvents().first)
         XCTAssertEqual(event.aiTool, .antigravity)
+        XCTAssertEqual(event.createdAt, "2026-06-18T00:00:00.000Z")
         XCTAssertEqual(event.projectID, "project_2222222222225222a222222222222222")
         XCTAssertEqual(event.taskType, .debugging)
         XCTAssertEqual(event.stage, .implement)
@@ -998,7 +1084,8 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(tokenMeteringCoordinator.contains("menuBarTokenCollectionInterval"))
         XCTAssertTrue(appDelegate.contains("requestMenuBarTokenUsageCollectionIfNeeded()"))
         XCTAssertTrue(tokenMeteringCoordinator.contains("requestCollection(reason: \"menu_bar_status\")"))
-        XCTAssertFalse(tokenMeteringCoordinator.contains("guard force || menuBarTokenDayStart != dayStart else"))
+        XCTAssertTrue(tokenMeteringCoordinator.contains("guard force || shouldRefreshMenuBarTokenTotal else"))
+        XCTAssertTrue(tokenMeteringCoordinator.contains("guard force || menuBarTokenDayStart != dayStart else"))
         XCTAssertTrue(dashboardStore.contains("distributedEventsDidChangeObserver"))
         XCTAssertTrue(dashboardStore.contains("TokenUsageStore.distributedEventsDidChangeNotification"))
         XCTAssertTrue(dashboardStore.contains("private var scheduledRefreshTask"))
@@ -1196,6 +1283,37 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(usageStore.loadEvents(), [])
     }
 
+    func testAppendEventsWithoutLoadingPreservesExistingLabelMetadataForDuplicateSpan() throws {
+        let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
+        let existing = Self.safeEvent(
+            spanID: "span_reconciled_history",
+            inputTokens: 10,
+            outputTokens: 2,
+            projectID: "project_existing",
+            taskType: .codeReview,
+            stage: .verify
+        )
+        let incoming = Self.safeEvent(
+            spanID: "span_reconciled_history",
+            inputTokens: 20,
+            outputTokens: 4,
+            projectID: "project_new",
+            taskType: .uiDesign,
+            stage: .implement
+        )
+
+        try usageStore.appendEvent(existing)
+        let insertedCount = try usageStore.appendEventsWithoutLoading([incoming])
+        let event = try XCTUnwrap(usageStore.loadEvents().first)
+
+        XCTAssertEqual(insertedCount, 0)
+        XCTAssertEqual(event.projectID, "project_existing")
+        XCTAssertEqual(event.taskType, .codeReview)
+        XCTAssertEqual(event.stage, .verify)
+        XCTAssertEqual(event.inputTokens, 10)
+        XCTAssertEqual(event.outputTokens, 2)
+    }
+
     @MainActor
     func testDashboardStoreClearsSelectedWorkItemOnly() throws {
         let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
@@ -1270,6 +1388,7 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(dashboardStore.unfilteredSnapshot.eventCount, 2)
 
         dashboardStore.setSelectedProjectID("project_aaaaaaaaaaaa5aaaaaaa9aaaaaaaaaaa")
+        try await waitForDashboardStoreRefresh(dashboardStore)
         XCTAssertEqual(dashboardStore.snapshot.eventCount, 1)
         XCTAssertEqual(dashboardStore.unfilteredSnapshot.eventCount, 2)
 
@@ -1297,6 +1416,115 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(dashboardStore.snapshot.eventCount, 1)
         XCTAssertEqual(dashboardStore.unfilteredSnapshot.eventCount, 1)
         XCTAssertEqual(dashboardStore.panelSummary.eventCount, 1)
+    }
+
+    @MainActor
+    func testDashboardStoreMovesCalendarMonthWithAsyncSnapshotRefresh() async throws {
+        let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
+        let dashboardStore = dashboardStore(usageStore: usageStore)
+        var calendar = Calendar.autoupdatingCurrent
+        calendar.firstWeekday = 1
+        let now = Date()
+        let currentMonth = TokenUsageDashboardSnapshot.monthStart(for: now, calendar: calendar)
+        let previousMonth = try XCTUnwrap(calendar.date(byAdding: .month, value: -1, to: currentMonth))
+        let previousDay = try XCTUnwrap(calendar.date(byAdding: .day, value: 1, to: previousMonth))
+        let currentDay = try XCTUnwrap(calendar.date(byAdding: .day, value: 1, to: currentMonth))
+        let previousDayID = TokenUsageDashboardSnapshot.dayID(for: previousDay, calendar: calendar)
+
+        try usageStore.replaceEvents([
+            Self.safeEvent(
+                spanID: "span_previous_month",
+                createdAt: ISO8601DateFormatter.tokenUsage.string(from: previousDay)
+            ),
+            Self.safeEvent(
+                spanID: "span_current_month",
+                createdAt: ISO8601DateFormatter.tokenUsage.string(from: currentDay)
+            )
+        ])
+        dashboardStore.refresh()
+
+        let sessionsBeforeMove = dashboardStore.snapshot.sessions
+        let eventCountBeforeMove = dashboardStore.snapshot.eventCount
+        dashboardStore.showPreviousCalendarMonth()
+        try await waitForDashboardStoreRefresh(dashboardStore)
+
+        XCTAssertEqual(dashboardStore.snapshot.eventCount, eventCountBeforeMove)
+        XCTAssertEqual(dashboardStore.snapshot.sessions, sessionsBeforeMove)
+        XCTAssertTrue(calendar.isDate(dashboardStore.calendarMonthStart ?? now, equalTo: previousMonth, toGranularity: .month))
+        XCTAssertTrue(dashboardStore.snapshot.calendarDays.contains { day in
+            day.id == previousDayID && day.hasEvents
+        })
+    }
+
+    @MainActor
+    func testDashboardStoreDateSelectionLoadsSelectedDayWithoutRefreshingPanelSummary() async throws {
+        let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
+        var calendar = Calendar.autoupdatingCurrent
+        calendar.firstWeekday = 1
+        let todayStart = calendar.startOfDay(for: Date())
+        let yesterdayStart = try XCTUnwrap(calendar.date(byAdding: .day, value: -1, to: todayStart))
+        let today = try XCTUnwrap(calendar.date(byAdding: .hour, value: 1, to: todayStart))
+        let yesterday = try XCTUnwrap(calendar.date(byAdding: .hour, value: 1, to: yesterdayStart))
+        let yesterdayDayID = TokenUsageDashboardSnapshot.dayID(for: yesterday, calendar: calendar)
+        try usageStore.replaceEvents([
+            Self.safeEvent(
+                aiTool: .codex,
+                spanID: "span_date_select_today",
+                inputTokens: 80,
+                outputTokens: 20,
+                createdAt: ISO8601DateFormatter.tokenUsage.string(from: today)
+            ),
+            Self.safeEvent(
+                aiTool: .claude,
+                spanID: "span_date_select_yesterday",
+                inputTokens: 160,
+                outputTokens: 40,
+                createdAt: ISO8601DateFormatter.tokenUsage.string(from: yesterday)
+            )
+        ])
+        let dashboardStore = TokenUsageDashboardStore(
+            usageStore: usageStore,
+            loadsInitialPanelSummary: false
+        )
+
+        dashboardStore.refreshAsyncIfIdle()
+        try await waitForDashboardStoreRefresh(dashboardStore)
+        XCTAssertEqual(dashboardStore.snapshot.eventCount, 1)
+        XCTAssertEqual(dashboardStore.snapshot.totalTokens, 100)
+        XCTAssertEqual(dashboardStore.panelSummary.eventCount, 2)
+
+        dashboardStore.selectCalendarDay(yesterdayDayID)
+        try await waitForDashboardStoreRefresh(dashboardStore)
+
+        XCTAssertEqual(dashboardStore.selectedCalendarDayID, yesterdayDayID)
+        XCTAssertEqual(dashboardStore.snapshot.eventCount, 1)
+        XCTAssertEqual(dashboardStore.snapshot.totalTokens, 200)
+        XCTAssertEqual(dashboardStore.snapshot.toolRows.map(\.id), ["claude"])
+        XCTAssertEqual(dashboardStore.panelSummary.eventCount, 2)
+    }
+
+    func testDashboardStoreScopeChangesSkipPanelSummaryRefresh() throws {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let dashboardStore = try String(
+            contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenUsageDashboardStore.swift")
+        )
+
+        XCTAssertTrue(dashboardStore.contains("refreshesPanelSummary ? loadPanelSummary"))
+        XCTAssertTrue(dashboardStore.contains("refreshesPanelSummary ? Self.loadPanelSummary"))
+        XCTAssertEqual(
+            dashboardStore.components(
+                separatedBy: "reusesPeriodFilterTotals: true"
+            ).count - 1,
+            6
+        )
+        XCTAssertTrue(dashboardStore.contains("let cachedPeriodFilterTotals = reusesPeriodFilterTotals ? periodFilterTotals : [:]"))
+        XCTAssertTrue(dashboardStore.contains("dateRange(cachedDateRange, contains: requestedRange)"))
+
+        let moveCalendarStart = try XCTUnwrap(dashboardStore.range(of: "private func moveCalendarMonth"))
+        let runSelfTestStart = try XCTUnwrap(dashboardStore.range(of: "func runLocalQueueSelfTest"))
+        let moveCalendarSource = String(dashboardStore[moveCalendarStart.lowerBound..<runSelfTestStart.lowerBound])
+        XCTAssertFalse(moveCalendarSource.contains("loadPanelSummary"))
+        XCTAssertTrue(moveCalendarSource.contains("snapshotBuildQueue.async"))
     }
 
     @MainActor
@@ -1357,7 +1585,7 @@ final class TokenUsageStoreTests: XCTestCase {
     }
 
     @MainActor
-    func testDashboardStoreMarksLiveUpdatesOnlyWhenEventDataChanges() throws {
+    func testDashboardStoreMarksLiveUpdatesOnlyWhenEventDataChanges() async throws {
         let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
         let dashboardStore = dashboardStore(usageStore: usageStore)
         let createdAt = ISO8601DateFormatter.tokenUsage.string(from: Date())
@@ -1396,6 +1624,7 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(dashboardStore.isLiveUpdated("session:\(sessionID)"))
 
         dashboardStore.setDisplayMode(.percentage)
+        try await waitForDashboardStoreRefresh(dashboardStore)
         XCTAssertEqual(dashboardStore.liveUpdateMarker.sequence, sequence)
 
         dashboardStore.refresh()
@@ -1552,6 +1781,201 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(dashboardStore.loadState, .loaded)
         XCTAssertEqual(dashboardStore.snapshot.eventCount, 1)
         XCTAssertEqual(dashboardStore.panelSummary.eventCount, 1)
+    }
+
+    @MainActor
+    func testDashboardStoreInitialAsyncRefreshLoadsTodayScopeFirst() async throws {
+        let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        let todayStart = calendar.startOfDay(for: Date())
+        let yesterday = try XCTUnwrap(calendar.date(byAdding: .day, value: -1, to: todayStart))
+        let today = try XCTUnwrap(calendar.date(byAdding: .hour, value: 1, to: todayStart))
+        try usageStore.replaceEvents([
+            Self.safeEvent(
+                aiTool: .codex,
+                spanID: "span_initial_yesterday",
+                inputTokens: 900,
+                outputTokens: 100,
+                createdAt: ISO8601DateFormatter.tokenUsage.string(from: yesterday)
+            ),
+            Self.safeEvent(
+                aiTool: .claude,
+                spanID: "span_initial_today",
+                inputTokens: 90,
+                outputTokens: 10,
+                createdAt: ISO8601DateFormatter.tokenUsage.string(from: today)
+            )
+        ])
+        let dashboardStore = TokenUsageDashboardStore(
+            usageStore: usageStore,
+            loadsInitialPanelSummary: false
+        )
+
+        dashboardStore.refreshAsyncIfIdle()
+        try await waitForDashboardStoreRefresh(dashboardStore)
+
+        XCTAssertEqual(dashboardStore.snapshot.eventCount, 1)
+        XCTAssertEqual(dashboardStore.snapshot.totalTokens, 100)
+        XCTAssertEqual(dashboardStore.snapshot.toolRows.map(\.id), ["claude"])
+        XCTAssertEqual(dashboardStore.panelSummary.eventCount, 2)
+        XCTAssertEqual(dashboardStore.panelSummary.totalTokens, 1_100)
+
+        dashboardStore.setSelectedPeriod(.sevenDays)
+        try await waitForDashboardStoreRefresh(dashboardStore)
+
+        XCTAssertEqual(dashboardStore.snapshot.eventCount, 2)
+        XCTAssertEqual(dashboardStore.snapshot.totalTokens, 1_100)
+    }
+
+    @MainActor
+    func testDashboardStoreIgnoresActivePeriodReselect() async throws {
+        let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
+        try usageStore.replaceEvents([
+            Self.safeEvent(spanID: "span_active_period_today")
+        ])
+        let dashboardStore = TokenUsageDashboardStore(
+            usageStore: usageStore,
+            loadsInitialPanelSummary: false
+        )
+
+        dashboardStore.refreshAsyncIfIdle()
+        try await waitForDashboardStoreRefresh(dashboardStore)
+
+        XCTAssertEqual(dashboardStore.selectedPeriod, .today)
+        XCTAssertFalse(dashboardStore.isDashboardRefreshInProgress)
+
+        dashboardStore.setSelectedPeriod(.today)
+
+        XCTAssertFalse(dashboardStore.isDashboardRefreshInProgress)
+        XCTAssertEqual(dashboardStore.snapshot.eventCount, 1)
+    }
+
+    @MainActor
+    func testDashboardStorePeriodFilterTotalsStayAnchoredToFullStore() async throws {
+        let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        let todayStart = calendar.startOfDay(for: Date())
+        let today = try XCTUnwrap(calendar.date(byAdding: .hour, value: 1, to: todayStart))
+        let sixDaysAgo = try XCTUnwrap(calendar.date(byAdding: .day, value: -6, to: todayStart))
+        let twentyDaysAgo = try XCTUnwrap(calendar.date(byAdding: .day, value: -20, to: todayStart))
+        let fortyDaysAgo = try XCTUnwrap(calendar.date(byAdding: .day, value: -40, to: todayStart))
+        try usageStore.replaceEvents([
+            Self.safeEvent(spanID: "span_period_today", inputTokens: 8, outputTokens: 2, createdAt: ISO8601DateFormatter.tokenUsage.string(from: today)),
+            Self.safeEvent(spanID: "span_period_six", inputTokens: 16, outputTokens: 4, createdAt: ISO8601DateFormatter.tokenUsage.string(from: sixDaysAgo)),
+            Self.safeEvent(spanID: "span_period_twenty", inputTokens: 24, outputTokens: 6, createdAt: ISO8601DateFormatter.tokenUsage.string(from: twentyDaysAgo)),
+            Self.safeEvent(spanID: "span_period_forty", inputTokens: 32, outputTokens: 8, createdAt: ISO8601DateFormatter.tokenUsage.string(from: fortyDaysAgo))
+        ])
+        let dashboardStore = TokenUsageDashboardStore(
+            usageStore: usageStore,
+            loadsInitialPanelSummary: false
+        )
+
+        dashboardStore.refreshAsyncIfIdle()
+        try await waitForDashboardStoreRefresh(dashboardStore)
+
+        XCTAssertEqual(dashboardStore.snapshot.eventCount, 1)
+        XCTAssertEqual(dashboardStore.snapshot.periodFilters.map(\.detail), ["10", "30", "60", "100"])
+
+        dashboardStore.setSelectedPeriod(.sevenDays)
+        try await waitForDashboardStoreRefresh(dashboardStore)
+
+        XCTAssertEqual(dashboardStore.snapshot.eventCount, 2)
+        XCTAssertEqual(dashboardStore.snapshot.periodFilters.map(\.detail), ["10", "30", "60", "100"])
+    }
+
+    @MainActor
+    func testDashboardStorePreviousPeriodUsesDatabaseBoundsOutsideLoadedScope() async throws {
+        let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        let todayStart = calendar.startOfDay(for: Date())
+        let today = try XCTUnwrap(calendar.date(byAdding: .hour, value: 1, to: todayStart))
+        let previousWindowDay = try XCTUnwrap(calendar.date(byAdding: .day, value: -8, to: todayStart))
+        try usageStore.replaceEvents([
+            Self.safeEvent(
+                spanID: "span_current_window",
+                inputTokens: 80,
+                outputTokens: 20,
+                createdAt: ISO8601DateFormatter.tokenUsage.string(from: today)
+            ),
+            Self.safeEvent(
+                spanID: "span_previous_window",
+                inputTokens: 160,
+                outputTokens: 40,
+                createdAt: ISO8601DateFormatter.tokenUsage.string(from: previousWindowDay)
+            )
+        ])
+        let dashboardStore = TokenUsageDashboardStore(
+            usageStore: usageStore,
+            loadsInitialPanelSummary: false
+        )
+
+        dashboardStore.refreshAsyncIfIdle()
+        try await waitForDashboardStoreRefresh(dashboardStore)
+        dashboardStore.setSelectedPeriod(.sevenDays)
+        try await waitForDashboardStoreRefresh(dashboardStore)
+
+        XCTAssertEqual(dashboardStore.snapshot.totalTokens, 100)
+        XCTAssertTrue(dashboardStore.snapshot.canNavigatePreviousPeriod)
+
+        dashboardStore.showPreviousPeriod()
+        try await waitForDashboardStoreRefresh(dashboardStore)
+
+        XCTAssertEqual(dashboardStore.snapshot.totalTokens, 200)
+        XCTAssertEqual(dashboardStore.periodOffset, -1)
+    }
+
+    @MainActor
+    func testDashboardStoreToolTabFiltersLoadedScopeWithoutReloadingAllHistory() async throws {
+        let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        let todayStart = calendar.startOfDay(for: Date())
+        let yesterday = try XCTUnwrap(calendar.date(byAdding: .day, value: -1, to: todayStart))
+        let today = try XCTUnwrap(calendar.date(byAdding: .hour, value: 1, to: todayStart))
+        try usageStore.replaceEvents([
+            Self.safeEvent(
+                aiTool: .codex,
+                spanID: "span_tool_today_codex",
+                inputTokens: 80,
+                outputTokens: 20,
+                createdAt: ISO8601DateFormatter.tokenUsage.string(from: today)
+            ),
+            Self.safeEvent(
+                aiTool: .claude,
+                spanID: "span_tool_today_claude",
+                inputTokens: 160,
+                outputTokens: 40,
+                createdAt: ISO8601DateFormatter.tokenUsage.string(from: today)
+            ),
+            Self.safeEvent(
+                aiTool: .antigravity,
+                spanID: "span_tool_yesterday_agy",
+                inputTokens: 240,
+                outputTokens: 60,
+                createdAt: ISO8601DateFormatter.tokenUsage.string(from: yesterday)
+            )
+        ])
+        let dashboardStore = TokenUsageDashboardStore(
+            usageStore: usageStore,
+            loadsInitialPanelSummary: false
+        )
+
+        dashboardStore.refreshAsyncIfIdle()
+        try await waitForDashboardStoreRefresh(dashboardStore)
+        XCTAssertEqual(dashboardStore.snapshot.eventCount, 2)
+
+        dashboardStore.setSelectedTool(.claude)
+        try await waitForDashboardStoreRefresh(dashboardStore)
+
+        XCTAssertEqual(dashboardStore.selectedTool, .claude)
+        XCTAssertEqual(dashboardStore.snapshot.eventCount, 1)
+        XCTAssertEqual(dashboardStore.snapshot.totalTokens, 200)
+        XCTAssertEqual(dashboardStore.snapshot.toolRows.map(\.id), ["claude"])
+        XCTAssertEqual(dashboardStore.unfilteredSnapshot.eventCount, 2)
+        XCTAssertEqual(dashboardStore.panelSummary.eventCount, 3)
     }
 
     @MainActor
@@ -1778,6 +2202,55 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(store.loadEvents(), [])
     }
 
+    func testClearCodexEventsResetsHistoryAndLiveImporterStateBesideStore() throws {
+        let rootURL = temporaryDirectoryURL()
+        let eventsURL = rootURL.appendingPathComponent("events.json")
+        let store = TokenUsageStore(fileURL: eventsURL)
+        let historyStateURL = rootURL
+            .appendingPathComponent("history-import", isDirectory: true)
+            .appendingPathComponent("codex-session-import-state.json")
+        let liveStateURL = rootURL.appendingPathComponent("codex-session-import-state.json")
+        try FileManager.default.createDirectory(
+            at: historyStateURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try Data(#"{"cursor":1}"#.utf8).write(to: historyStateURL)
+        try Data(#"{"cursor":2}"#.utf8).write(to: liveStateURL)
+
+        try store.clearEvents(forAITool: TokenUsageAITool.codex.rawValue)
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: historyStateURL.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: liveStateURL.path))
+    }
+
+    func testClearClaudeEventsKeepsLiveStateAndResetsHistoryStateBesideStore() throws {
+        let rootURL = temporaryDirectoryURL()
+        let eventsURL = rootURL.appendingPathComponent("events.json")
+        let store = TokenUsageStore(fileURL: eventsURL)
+        let liveStateURL = rootURL
+            .appendingPathComponent("session-state", isDirectory: true)
+            .appendingPathComponent("session-a.json")
+        let historyStateURL = rootURL
+            .appendingPathComponent("history-import", isDirectory: true)
+            .appendingPathComponent("claude-session-state", isDirectory: true)
+            .appendingPathComponent("session-a.json")
+        try FileManager.default.createDirectory(
+            at: liveStateURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try FileManager.default.createDirectory(
+            at: historyStateURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try Data(#"{"fresh":100}"#.utf8).write(to: liveStateURL)
+        try Data(#"{"fresh":200}"#.utf8).write(to: historyStateURL)
+
+        try store.clearEvents(forAITool: TokenUsageAITool.claude.rawValue)
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: liveStateURL.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: historyStateURL.path))
+    }
+
     func testStoreMigratesLegacyJSONEventsIntoSQLite() throws {
         let eventsURL = temporaryEventsURL()
         let store = TokenUsageStore(fileURL: eventsURL)
@@ -1824,11 +2297,17 @@ final class TokenUsageStoreTests: XCTestCase {
             databaseURL: store.eventsDatabaseURL,
             sql: """
             SELECT
+                device_id,
+                project_id,
+                artifact_id,
                 run_id,
                 task_type,
                 stage,
                 model,
                 ai_tool,
+                input_tokens,
+                output_tokens,
+                latency_ms,
                 total_tokens,
                 source_system,
                 source_user,
@@ -1840,14 +2319,20 @@ final class TokenUsageStoreTests: XCTestCase {
             FROM token_usage_events
             WHERE span_id = 'span_indexed'
             """,
-            columnCount: 13
+            columnCount: 19
         )
         XCTAssertEqual(rows, [[
+            "device_local",
+            "project_local",
+            "artifact_one",
             "run_indexed",
             "code_review",
             "verify",
             "claude-indexed",
             "claude",
+            "100",
+            "50",
+            "20",
             "150",
             "10",
             "20",
@@ -1867,6 +2352,7 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(indexNames.contains("idx_token_usage_events_stage_created_at"))
         XCTAssertTrue(indexNames.contains("idx_token_usage_events_model_created_at"))
         XCTAssertTrue(indexNames.contains("idx_token_usage_events_run_id"))
+        XCTAssertTrue(indexNames.contains("idx_token_usage_events_project_created_at"))
     }
 
     func testStoreReadsPeriodTotalWithoutLoadingEvents() throws {
@@ -1957,6 +2443,59 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(fullSummary.sourceTotals["unknown"], 1_180)
     }
 
+    func testStoreReadsDashboardSummaryForDateRangeWithoutLoadingEvents() throws {
+        let store = TokenUsageStore(fileURL: temporaryEventsURL())
+        let start = try Self.date("2026-06-05T15:00:00.000Z")
+        let end = try Self.date("2026-06-06T15:00:00.000Z")
+        try store.appendEvent(Self.safeEvent(
+            aiTool: .codex,
+            spanID: "span_summary_before_range",
+            inputTokens: 9_000,
+            outputTokens: 1_000,
+            taskType: .testing,
+            createdAt: "2026-06-05T14:59:59.000Z"
+        ))
+        try store.appendEvent(Self.safeEvent(
+            aiTool: .codex,
+            spanID: "span_summary_range_codex",
+            inputTokens: 100,
+            outputTokens: 50,
+            taskType: .analysis,
+            createdAt: "2026-06-05T15:00:00.000Z"
+        ))
+        try store.appendEvent(Self.safeEvent(
+            aiTool: .claude,
+            spanID: "span_summary_range_claude",
+            inputTokens: 200,
+            outputTokens: 80,
+            taskType: .codeReview,
+            createdAt: "2026-06-06T14:59:59.000Z"
+        ))
+        try store.appendEvent(Self.safeEvent(
+            aiTool: .openAI,
+            spanID: "span_summary_range_openai",
+            inputTokens: 700,
+            outputTokens: 200,
+            taskType: .testing,
+            createdAt: "2026-06-06T01:00:00.000Z"
+        ))
+
+        let dashboardSummary = store.dashboardSummary(startingAt: start, endingBefore: end)
+        XCTAssertEqual(dashboardSummary.eventCount, 2)
+        XCTAssertEqual(dashboardSummary.totalTokens, 430)
+        XCTAssertEqual(dashboardSummary.toolTotals["codex"], 150)
+        XCTAssertEqual(dashboardSummary.toolTotals["claude"], 280)
+        XCTAssertNil(dashboardSummary.toolTotals["openai"])
+        XCTAssertEqual(dashboardSummary.taskTotals["analysis"], 150)
+        XCTAssertEqual(dashboardSummary.taskTotals["code_review"], 280)
+
+        let fullSummary = store.dashboardSummary(startingAt: start, endingBefore: end, dashboardToolsOnly: false)
+        XCTAssertEqual(fullSummary.eventCount, 3)
+        XCTAssertEqual(fullSummary.totalTokens, 1_330)
+        XCTAssertEqual(fullSummary.toolTotals["openai"], 900)
+        XCTAssertEqual(fullSummary.taskTotals["testing"], 900)
+    }
+
     func testStoreReadsPeriodTotalWithOffsetTimestamps() throws {
         let store = TokenUsageStore(fileURL: temporaryEventsURL())
         let start = try Self.date("2026-06-06T00:00:00.000Z")
@@ -2034,10 +2573,16 @@ final class TokenUsageStoreTests: XCTestCase {
             databaseURL: databaseURL,
             sql: """
             SELECT
+                device_id,
+                project_id,
+                artifact_id,
                 run_id,
                 task_type,
                 stage,
                 model,
+                input_tokens,
+                output_tokens,
+                latency_ms,
                 source_system,
                 source_user,
                 source_history,
@@ -2048,13 +2593,19 @@ final class TokenUsageStoreTests: XCTestCase {
             FROM token_usage_events
             WHERE span_id = 'span_legacy_sqlite'
             """,
-            columnCount: 11
+            columnCount: 17
         )
         XCTAssertEqual(rows, [[
+            "device_local",
+            "project_local",
+            "artifact_one",
             "run_legacy_sqlite",
             "debugging",
             "implement",
             "gemini-legacy",
+            "300",
+            "70",
+            "20",
             "0",
             "0",
             "0",
@@ -2121,6 +2672,40 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: inboxURL.path))
     }
 
+    func testStoreDrainsQueuedJSONLInboxBatchEvents() throws {
+        let eventsURL = temporaryEventsURL()
+        let inboxURL = temporaryInboxURL()
+        let store = TokenUsageStore(fileURL: eventsURL, inboxURL: inboxURL)
+        let firstEvent = Self.safeEvent(
+            aiTool: .codex,
+            spanID: "span_jsonl_batch_01",
+            inputTokens: 20,
+            outputTokens: 10
+        )
+        let secondEvent = Self.safeEvent(
+            aiTool: .claude,
+            spanID: "span_jsonl_batch_02",
+            inputTokens: 30,
+            outputTokens: 12
+        )
+        try FileManager.default.createDirectory(
+            at: inboxURL,
+            withIntermediateDirectories: true
+        )
+        let batchURL = inboxURL.appendingPathComponent("001.jsonl")
+        let batch = [
+            String(data: try TokenUsageSanitizer.eventData(firstEvent), encoding: .utf8) ?? "",
+            String(data: try TokenUsageSanitizer.eventData(secondEvent), encoding: .utf8) ?? "",
+        ].joined(separator: "\n")
+        try Data((batch + "\n").utf8).write(to: batchURL)
+
+        let events = store.importQueuedEvents()
+
+        XCTAssertEqual(events.map(\.spanID), ["span_jsonl_batch_01", "span_jsonl_batch_02"])
+        XCTAssertEqual(events.map(\.aiTool), [.codex, .claude])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: batchURL.path))
+    }
+
     func testStoreCanEnqueueInboxEventAtomically() throws {
         let eventsURL = temporaryEventsURL()
         let inboxURL = temporaryInboxURL()
@@ -2155,6 +2740,38 @@ final class TokenUsageStoreTests: XCTestCase {
             )
             .filter { $0.pathExtension == "json" }
             .count,
+            0
+        )
+    }
+
+    func testStoreDrainsQueuedInboxEventsInBatchesWithoutLoadingAllFiles() throws {
+        let eventsURL = temporaryEventsURL()
+        let inboxURL = temporaryInboxURL()
+        let store = TokenUsageStore(fileURL: eventsURL, inboxURL: inboxURL)
+
+        for index in 0..<3 {
+            try store.enqueueInboxEvent(Self.safeEvent(
+                spanID: "span_batch_\(index)",
+                inputTokens: 10 + index,
+                outputTokens: 1
+            ))
+        }
+
+        XCTAssertTrue(store.importQueuedEventsWithoutLoading(maximumInboxEventCount: 2))
+        XCTAssertEqual(store.loadEvents().count, 2)
+        XCTAssertEqual(
+            try FileManager.default.contentsOfDirectory(at: inboxURL, includingPropertiesForKeys: nil)
+                .filter { $0.pathExtension == "json" }
+                .count,
+            1
+        )
+
+        XCTAssertTrue(store.importQueuedEventsWithoutLoading(maximumInboxEventCount: 2))
+        XCTAssertEqual(store.loadEvents().count, 3)
+        XCTAssertEqual(
+            try FileManager.default.contentsOfDirectory(at: inboxURL, includingPropertiesForKeys: nil)
+                .filter { $0.pathExtension == "json" }
+                .count,
             0
         )
     }
@@ -2227,6 +2844,15 @@ final class TokenUsageStoreTests: XCTestCase {
         let clearResponse = server.response(for: httpRequest(method: "DELETE", path: "/v1/usage/events"))
         XCTAssertTrue(httpStatusLine(clearResponse).contains("200 OK"))
         XCTAssertEqual(store.loadEvents(), [])
+    }
+
+    func testBridgeClearEndpointIsDebugOnly() throws {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let bridgeServer = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenUsageBridgeServer.swift"))
+
+        XCTAssertTrue(bridgeServer.contains(#"case ("DELETE", "/v1/usage/events")"#))
+        XCTAssertTrue(bridgeServer.contains("guard SpillBuildOptions.developerOptionsEnabled else"))
+        XCTAssertTrue(bridgeServer.contains(#"errorBody("debug_only")"#))
     }
 
     func testBridgeStartBindsLoopbackHTTPPort() async throws {
@@ -2563,6 +3189,9 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(helper.contains(#""antigravity""#))
         XCTAssertTrue(helper.contains("active_importer_only"))
         XCTAssertTrue(helper.contains("removeAgyHookFile"))
+        XCTAssertTrue(helper.contains("removeLegacyClaudeScannerLaunchAgent"))
+        XCTAssertTrue(helper.contains("net.thdev.spill.claude-scanner.plist"))
+        XCTAssertTrue(helper.contains(#""bootout""#))
         XCTAssertFalse(helper.contains("runtime_restart_required"))
         XCTAssertFalse(helper.contains("installAntigravityWrapper"))
         XCTAssertFalse(helper.contains("agentcatd"))
@@ -2620,9 +3249,11 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertFalse(statsHelper.contains("writeFile"))
         XCTAssertFalse(statsHelper.contains("appendFile"))
 
-        XCTAssertTrue(codexImporter.contains("labelForTimestamp(runtimeLabel, latest.timestamp)"))
-        XCTAssertTrue(codexImporter.contains("timestamp < label.updatedAt"))
-        XCTAssertTrue(codexImporter.contains("timestamp > label.expiresAt"))
+        XCTAssertTrue(codexImporter.contains("labelForTimestamp(runtimeLabel, record.timestamp)"))
+        XCTAssertTrue(codexImporter.contains("const records = []"))
+        XCTAssertTrue(codexImporter.contains("shouldAdvanceCursor(cursor, nextCursor)"))
+        XCTAssertTrue(codexImporter.contains("timestamp < entry.updatedAt"))
+        XCTAssertTrue(codexImporter.contains("timestamp > entry.expiresAt"))
         XCTAssertTrue(codexImporter.contains("usedRuntimeLabel"))
         XCTAssertTrue(codexImporter.contains("taskType: taskTypeOverride ?? eventLabel.taskType ?? fallbackLabel.taskType"))
 
@@ -2863,6 +3494,8 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(TokenUsageDashboardSnapshot.formatTokens(10_000), "10K")
         XCTAssertEqual(TokenUsageDashboardSnapshot.formatTokens(1_439_865), "1.44M")
         XCTAssertEqual(TokenUsageDashboardSnapshot.formatTokens(282_196_651), "282.2M")
+        XCTAssertEqual(TokenUsageDashboardSnapshot.formatCount(10_000), "10,000")
+        XCTAssertEqual(TokenMeteringL10n.localEventsDetail(eventCount: 10_000, language: .english), "10,000 local records")
         XCTAssertEqual(TokenUsageDashboardSnapshot.formatPercentage(0), "0.0%")
         XCTAssertEqual(TokenUsageDashboardSnapshot.formatPercentage(0.04), "<0.1%")
         XCTAssertEqual(TokenUsageDashboardSnapshot.formatPercentage(1.234), "1.2%")
@@ -3047,6 +3680,51 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(filtered.sessions.first?.projectTitle, "Folder aaaaaaaa")
         XCTAssertEqual(filtered.totalTokens, 25)
         XCTAssertEqual(filtered.projectFilters.first { $0.projectID == "project_aaaaaaaaaaaa5aaaaaaa9aaaaaaaaaaa" }?.isSelected, true)
+    }
+
+    func testDashboardSnapshotToolFiltersRespectSelectedProjectID() {
+        let projectA = "project_aaaaaaaaaaaa5aaaaaaa9aaaaaaaaaaa"
+        let projectB = "project_bbbbbbbbbbbb5bbbbbbb9bbbbbbbbbbb"
+        let codexProjectA = Self.safeEvent(
+            aiTool: .codex,
+            spanID: "span_tool_filter_codex_project_a",
+            inputTokens: 20,
+            outputTokens: 5,
+            projectID: projectA,
+            createdAt: "2026-06-05T00:00:00.000Z"
+        )
+        let claudeProjectB = Self.safeEvent(
+            aiTool: .claude,
+            spanID: "span_tool_filter_claude_project_b",
+            inputTokens: 300,
+            outputTokens: 200,
+            projectID: projectB,
+            createdAt: "2026-06-05T00:01:00.000Z"
+        )
+        let antigravityProjectB = Self.safeEvent(
+            aiTool: .antigravity,
+            spanID: "span_tool_filter_antigravity_project_b",
+            inputTokens: 20,
+            outputTokens: 10,
+            projectID: projectB,
+            createdAt: "2026-06-05T00:02:00.000Z"
+        )
+
+        let filtered = TokenUsageDashboardSnapshot(
+            events: [codexProjectA, claudeProjectB, antigravityProjectB],
+            selectedProjectID: projectB,
+            language: .english
+        )
+
+        XCTAssertEqual(filtered.totalTokens, 530)
+        XCTAssertEqual(filtered.toolRows.map(\.title), ["Claude", "Antigravity (agy)"])
+        XCTAssertEqual(filtered.toolFilters.first?.title, "All")
+        XCTAssertTrue(filtered.toolFilters.first?.detail.contains("530") == true)
+        XCTAssertEqual(filtered.toolFilters.first { $0.tool == .codex }?.detail, "0")
+        XCTAssertEqual(filtered.toolFilters.first { $0.tool == .claude }?.detail, "500")
+        XCTAssertEqual(filtered.toolFilters.first { $0.tool == .antigravity }?.detail, "30")
+        XCTAssertEqual(filtered.toolFilters.first { $0.tool == .claude }?.shareLabel, "94.3%")
+        XCTAssertEqual(filtered.toolFilters.first { $0.tool == .antigravity }?.shareLabel, "5.7%")
     }
 
     func testDashboardSnapshotUsesLocalLocaleAndTimeZoneForEventTimes() throws {
@@ -3522,11 +4200,21 @@ final class TokenUsageStoreTests: XCTestCase {
 
         var generation = Data()
         generation.append(protoBytesField(4, usage))
+        generation.append(protoBytesField(9, antigravityTimestampBlob(seconds: 1_781_740_800)))
         generation.append(protoBytesField(19, Data(model.utf8)))
 
         var envelope = Data()
         envelope.append(protoBytesField(1, generation))
         return envelope
+    }
+
+    private func antigravityTimestampBlob(seconds: Int) -> Data {
+        var timestampMessage = Data()
+        timestampMessage.append(protoVarintField(1, seconds))
+
+        var timestampContainer = Data()
+        timestampContainer.append(protoBytesField(4, timestampMessage))
+        return timestampContainer
     }
 
     private func protoVarintField(_ number: Int, _ value: Int) -> Data {

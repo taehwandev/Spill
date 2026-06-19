@@ -6,13 +6,9 @@ final class TokenMeteringDashboardAppDelegate: NSObject, NSApplicationDelegate {
     private let cloudServiceStatusStore = CloudServiceStatusStore()
     private let aiStatusStore = AIStatusStore()
     private let tokenUsageStore: TokenUsageStore
-    private lazy var tokenUsageInboxMonitor = TokenUsageInboxMonitor(store: tokenUsageStore)
-    private lazy var tokenUsageCollectorCoordinator = TokenUsageCollectorCoordinator(
-        store: tokenUsageStore
-    )
     private lazy var tokenUsageDashboardStore = TokenUsageDashboardStore(
         usageStore: tokenUsageStore,
-        collectionCoordinator: tokenUsageCollectorCoordinator,
+        collectionCoordinator: nil,
         loadsInitialPanelSummary: false
     )
     private var windowController: TokenMeteringDashboardWindowController?
@@ -27,7 +23,6 @@ final class TokenMeteringDashboardAppDelegate: NSObject, NSApplicationDelegate {
         configureMainMenu()
         observeSettingsChanges()
         launchMainAppIfNeeded()
-        tokenUsageInboxMonitor.start()
         if !shouldHideWindowInSmokeTest {
             dashboardWindowController().show()
         }
@@ -42,7 +37,6 @@ final class TokenMeteringDashboardAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        tokenUsageInboxMonitor.stop()
         DistributedNotificationCenter.default().removeObserver(
             self,
             name: TokenMeteringDashboardProcess.settingsDidChangeNotification,
@@ -95,7 +89,7 @@ final class TokenMeteringDashboardAppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        tokenUsageCollectorCoordinator.requestCollection(reason: reason)
+        postTokenUsageCollectionRequest(reason: reason)
     }
 
     private func openMainAppTokenMeteringSettings() {
@@ -120,23 +114,37 @@ final class TokenMeteringDashboardAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func launchMainAppIfNeeded() {
+        openMainAppIfNeeded()
+    }
+
+    private func postTokenUsageCollectionRequest(reason: String) {
+        openMainAppIfNeeded {
+            TokenMeteringDashboardProcess.postTokenUsageCollectionRequest(reason: reason)
+        }
+    }
+
+    private func openMainAppIfNeeded(completion: (@Sendable () -> Void)? = nil) {
         guard !isSmokeTest,
               let mainAppURL = TokenMeteringDashboardProcess.mainAppURLForDashboardHelper(),
               let mainBundleIdentifier = TokenMeteringDashboardProcess.mainBundleIdentifierForDashboardHelper()
         else {
+            completion?()
             return
         }
 
         let isRunning = NSWorkspace.shared.runningApplications.contains {
             $0.bundleIdentifier == mainBundleIdentifier
         }
-        guard !isRunning else {
+        if isRunning {
+            completion?()
             return
         }
 
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.activates = false
-        NSWorkspace.shared.openApplication(at: mainAppURL, configuration: configuration)
+        NSWorkspace.shared.openApplication(at: mainAppURL, configuration: configuration) { _, _ in
+            completion?()
+        }
     }
 
     private func observeSettingsChanges() {

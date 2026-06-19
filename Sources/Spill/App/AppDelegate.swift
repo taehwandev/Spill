@@ -59,6 +59,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         scanner: scanner,
         updateStore: updateCheckStore,
         tokenUsageStore: tokenMeteringCoordinator.usageStore,
+        tokenHistoryImportCoordinator: tokenMeteringCoordinator.historyImportCoordinator,
         showPanelAction: { [weak self] in
             self?.showSpillBar(source: "preferences")
         },
@@ -313,6 +314,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DistributedNotificationCenter.default().removeObserver(
             self,
             name: TokenMeteringDashboardProcess.openPreferencesNotification,
+            object: nil
+        )
+        DistributedNotificationCenter.default().removeObserver(
+            self,
+            name: TokenMeteringDashboardProcess.collectionRequestNotification,
             object: nil
         )
         statusRefreshTask?.cancel()
@@ -671,11 +677,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             name: TokenMeteringDashboardProcess.openPreferencesNotification,
             object: nil
         )
+        DistributedNotificationCenter.default().addObserver(
+            self,
+            selector: #selector(tokenUsageCollectionRequestFromDashboard(_:)),
+            name: TokenMeteringDashboardProcess.collectionRequestNotification,
+            object: nil
+        )
     }
 
     @objc private func showPreferencesFromDashboardRequest(_ notification: Notification) {
         let selectedTab = notification.userInfo?[TokenMeteringDashboardProcess.preferencesTabUserInfoKey] as? String
         showPreferences(source: "token_dashboard", selectedTab: selectedTab)
+    }
+
+    @objc private func tokenUsageCollectionRequestFromDashboard(_ notification: Notification) {
+        let reason = notification.userInfo?[TokenMeteringDashboardProcess.collectionReasonUserInfoKey] as? String
+        tokenMeteringCoordinator.requestCollection(reason: reason ?? "dashboard_refresh")
     }
 
     private func configureStatusRefreshLoop() {

@@ -4,22 +4,21 @@ import SwiftUI
 struct TokenMeteringPreferencesSection: View {
     @ObservedObject var settings: SpillSettings
     let tokenUsageStore: TokenUsageStore
+    @ObservedObject var tokenHistoryImportCoordinator: TokenUsageHistoryImportCoordinator
     let openDashboardAction: () -> Void
     @StateObject private var privateUsageUploadStore: PrivateUsageUploadStore
     @State private var copiedTarget: String?
-    @State private var showsLocalDataDeleteControls = false
     @State private var adapterStatuses: [String: TokenMeteringAdapterConnectionStatus] = [:]
-    @State private var localDataPreview = TokenUsageClearPreview(scopeTitle: "", eventCount: 0, totalTokens: 0)
-    @State private var pendingClearAllPreview: TokenUsageClearPreview?
-    @State private var clearAllError: String?
 
     init(
         settings: SpillSettings,
         tokenUsageStore: TokenUsageStore,
+        tokenHistoryImportCoordinator: TokenUsageHistoryImportCoordinator,
         openDashboardAction: @escaping () -> Void
     ) {
         self.settings = settings
         self.tokenUsageStore = tokenUsageStore
+        self.tokenHistoryImportCoordinator = tokenHistoryImportCoordinator
         self.openDashboardAction = openDashboardAction
         _privateUsageUploadStore = StateObject(
             wrappedValue: PrivateUsageUploadStore(
@@ -51,12 +50,13 @@ struct TokenMeteringPreferencesSection: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
+            // Step 1: Automatic AI usage tracking Setup & Status
             VStack(alignment: .leading, spacing: 14) {
                 HStack(spacing: 8) {
                     Image(systemName: "wand.and.stars")
                         .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(.teal)
-                    Text(t(.installPromptTitle))
+                    Text(t(.step1Title))
                         .font(.system(size: 13, weight: .bold))
                     Spacer()
                     Text(t(.recommended))
@@ -71,35 +71,18 @@ struct TokenMeteringPreferencesSection: View {
 
                 Divider().opacity(0.45)
 
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(t(.menuBarTokenDisplayModeTitle))
-                            .font(.system(size: 12, weight: .bold))
-                        Text(t(.menuBarTokenDisplayModeDetail))
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
-                            .lineSpacing(2)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    Spacer()
-                    Picker("", selection: $settings.menuBarTokenDisplayMode) {
-                        ForEach(MenuBarTokenDisplayMode.allCases) { mode in
-                            Text(mode.title(appLanguage: settings.appLanguage)).tag(mode)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                    .labelsHidden()
-                    .frame(width: 140)
-                }
-
+                agentStatusSection
             }
             .padding(10)
             .background(tokenMeteringOptionBackground)
 
-            // Agent Connection Status
-            agentStatusSection
+            // Step 2: Local history import (Optional)
+            historyImportSection
 
-            // Local & Remote Mode Status - Main visible area!
+            // Local sync status & display settings
+            localSyncAndDisplaySettingsSection
+
+            // Local & Cloud Sync Mode List
             VStack(spacing: 8) {
                 ForEach(TokenMeteringPreferencesModel.modes) { mode in
                     TokenMeteringModeRow(mode: mode)
@@ -110,79 +93,74 @@ struct TokenMeteringPreferencesSection: View {
                 privateUsageUploadSection
             }
 
-            localDataManagementSection
-
-            localEventQueueSection
-
             privacyBoundarySection
         }
         .onAppear {
             refreshAdapterStatuses()
-            refreshLocalDataPreview()
             refreshPrivateUsageUploadIfAvailable()
         }
         .onReceive(NotificationCenter.default.publisher(for: TokenUsageStore.eventsDidChangeNotification)) { _ in
-            refreshLocalDataPreview()
             refreshPrivateUsageUploadIfAvailable()
         }
         .onChange(of: settings.privateUsageUploadEnabled) { _, _ in
             refreshPrivateUsageUploadIfAvailable()
         }
-        .alert(
-            t(.deleteTokenDataTitle),
-            isPresented: Binding(
-                get: { pendingClearAllPreview != nil },
-                set: { isPresented in
-                    if !isPresented {
-                        pendingClearAllPreview = nil
-                    }
-                }
-            ),
-            presenting: pendingClearAllPreview
-        ) { _ in
-            Button(t(.deleteTokenDataCancel), role: .cancel) {
-                pendingClearAllPreview = nil
-            }
-            Button(t(.deleteTokenDataConfirm), role: .destructive) {
-                clearAllLocalTokenData()
-            }
-        } message: { preview in
-            Text(TokenMeteringL10n.deleteTokenDataMessage(
-                scope: preview.scopeTitle,
-                eventCount: preview.eventCount,
-                tokens: TokenUsageDashboardSnapshot.formatTokens(preview.totalTokens),
-                language: currentLanguage
-            ))
-        }
     }
 
-    private var localEventQueueSection: some View {
-        VStack(alignment: .leading, spacing: 9) {
+    private var localSyncAndDisplaySettingsSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
             TokenMeteringOptionHeader(
-                title: t(.localEventQueue),
+                title: t(.localSyncStatusTitle),
                 state: t(.defaultState),
-                systemImage: "tray.and.arrow.down",
-                tint: .green
+                systemImage: "folder.badge.gearshape",
+                tint: .blue
             )
 
-            HStack(spacing: 8) {
-                Text(TokenUsageStore.defaultInboxURL().path)
-                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                    .textSelection(.enabled)
-
-                Spacer(minLength: 8)
-
-                Button {
-                    copyToClipboard(TokenUsageStore.defaultInboxURL().path, target: "inbox")
-                } label: {
-                    Label(
-                        copiedTarget == "inbox" ? t(.copied) : t(.copyPath),
-                        systemImage: copiedTarget == "inbox" ? "checkmark" : "doc.on.doc"
-                    )
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(t(.menuBarTokenDisplayModeTitle))
+                        .font(.system(size: 12, weight: .bold))
+                    Text(t(.menuBarTokenDisplayModeDetail))
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .lineSpacing(2)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .font(.system(size: 12, weight: .semibold))
+                Spacer()
+                Picker("", selection: $settings.menuBarTokenDisplayMode) {
+                    ForEach(MenuBarTokenDisplayMode.allCases) { mode in
+                        Text(mode.title(appLanguage: settings.appLanguage)).tag(mode)
+                    }
+                }
+                .pickerStyle(.menu)
+                .labelsHidden()
+                .frame(width: 140)
+            }
+
+            Divider().opacity(0.45)
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(t(.localEventQueue))
+                    .font(.system(size: 12, weight: .bold))
+                HStack(spacing: 8) {
+                    Text(TokenUsageStore.defaultInboxURL().path)
+                        .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .textSelection(.enabled)
+
+                    Spacer(minLength: 8)
+
+                    Button {
+                        copyToClipboard(TokenUsageStore.defaultInboxURL().path, target: "inbox")
+                    } label: {
+                        Label(
+                            copiedTarget == "inbox" ? t(.copied) : t(.copyPath),
+                            systemImage: copiedTarget == "inbox" ? "checkmark" : "doc.on.doc"
+                        )
+                    }
+                    .font(.system(size: 12, weight: .semibold))
+                }
             }
         }
         .padding(10)
@@ -440,96 +418,128 @@ struct TokenMeteringPreferencesSection: View {
         }
     }
 
-    private var localDataManagementSection: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            TokenMeteringOptionHeader(
-                title: t(.dataManagement),
-                state: t(.localOnly),
-                systemImage: "externaldrive.fill",
-                tint: .orange
-            )
+    private var historyImportSection: some View {
+        let snapshot = tokenHistoryImportCoordinator.snapshot
+        let tint = snapshot.isRunning ? Color.blue : Color.teal
+        let stateText = snapshot.isRunning ? t(.historyImportRunning) : t(.historyImportReady)
 
-            Text(TokenMeteringL10n.eventsTokensDetail(
-                eventCount: localDataPreview.eventCount,
-                tokens: TokenUsageDashboardSnapshot.formatTokens(localDataPreview.totalTokens),
-                language: currentLanguage
-            ))
-            .font(.system(size: 11, weight: .semibold, design: .monospaced))
-            .foregroundStyle(.secondary)
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .center, spacing: 8) {
+                TokenMeteringOptionHeader(
+                    title: t(.historyImportTitle),
+                    state: stateText,
+                    systemImage: "arrow.triangle.2.circlepath",
+                    tint: tint
+                )
 
-            if localDataPreview.hasEvents {
-                DisclosureGroup(isExpanded: $showsLocalDataDeleteControls) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(t(.localDataManagementDetail))
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
-                            .lineSpacing(2)
-                            .fixedSize(horizontal: false, vertical: true)
+                Text(t(.historyImportExperimental))
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(.orange)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(Capsule(style: .continuous).fill(Color.orange.opacity(0.12)))
 
-                        Button(role: .destructive) {
-                            let preview = makeAllLocalDataPreview()
-                            localDataPreview = preview
-                            if preview.hasEvents {
-                                pendingClearAllPreview = preview
-                            }
-                        } label: {
-                            Label(t(.reviewLocalDataDelete), systemImage: "trash")
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                        .font(.system(size: 12, weight: .semibold))
-                        .tint(.red)
+                Spacer(minLength: 8)
+
+                Button {
+                    if snapshot.isRunning {
+                        tokenHistoryImportCoordinator.cancelImport()
+                    } else {
+                        tokenHistoryImportCoordinator.startImport()
                     }
-                    .padding(.top, 4)
                 } label: {
-                    Label(t(.localDataDeleteOptions), systemImage: "trash")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.secondary)
+                    Label(
+                        snapshot.isRunning ? t(.historyImportCancel) : t(.historyImportAllStart),
+                        systemImage: snapshot.isRunning ? "xmark.circle" : "arrow.down.doc"
+                    )
                 }
-            } else {
-                Label(t(.noLocalTokenEvents), systemImage: "checkmark.circle")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.secondary)
+                .buttonStyle(.bordered)
+                .font(.system(size: 12, weight: .semibold))
+                .disabled(snapshot.isRunning && snapshot.tools.allSatisfy(\.state.isFinished))
             }
 
-            if let clearAllError {
-                Text(clearAllError)
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.red)
-                    .fixedSize(horizontal: false, vertical: true)
+            Text(t(.historyImportDetail))
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+                .lineSpacing(2)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Label(t(.historyImportFullScanWarning), systemImage: "exclamationmark.triangle.fill")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.orange)
+                .fixedSize(horizontal: false, vertical: true)
+
+            VStack(spacing: 7) {
+                ForEach(snapshot.tools) { toolSnapshot in
+                    TokenUsageHistoryImportToolRow(
+                        snapshot: toolSnapshot,
+                        language: currentLanguage,
+                        firstModeText: t(.historyImportFirstMode),
+                        incrementalModeText: t(.historyImportIncrementalMode),
+                        waitingText: t(.historyImportStateWaiting),
+                        scanningText: t(.historyImportStateScanning),
+                        doneText: t(.historyImportStateDone),
+                        noSourceText: t(.historyImportStateNoSource),
+                        failedText: t(.historyImportStateFailed),
+                        cancelledText: t(.historyImportStateCancelled),
+                        sourcesText: t(.historyImportMetricSources),
+                        newText: t(.historyImportMetricNew),
+                        duplicatesText: t(.historyImportMetricDuplicates),
+                        unsupportedText: t(.historyImportMetricUnsupported),
+                        syncText: t(.historyImportToolStart),
+                        isImportRunning: snapshot.isRunning,
+                        lastRunText: historyImportLastRunText(for: toolSnapshot.lastRun),
+                        syncAction: {
+                            tokenHistoryImportCoordinator.startImport(for: toolSnapshot.tool)
+                        }
+                    )
+                }
+            }
+
+            if let finishedAt = snapshot.finishedAt {
+                Label(
+                    "\(t(.historyImportLastFinished)) \(formatUploadDate(finishedAt))",
+                    systemImage: "clock"
+                )
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.secondary)
             }
         }
         .padding(10)
         .background(tokenMeteringOptionBackground)
     }
 
-    private func refreshLocalDataPreview() {
-        let preview = makeAllLocalDataPreview()
-        localDataPreview = preview
-        if !preview.hasEvents {
-            showsLocalDataDeleteControls = false
+    private func historyImportLastRunText(for lastRun: TokenUsageHistoryImportLastRunSnapshot?) -> String? {
+        guard let lastRun else {
+            return nil
         }
+        let metrics = [
+            "\(t(.historyImportMetricSources)) \(TokenUsageDashboardSnapshot.formatCount(lastRun.scannedSources))",
+            "\(t(.historyImportMetricNew)) \(TokenUsageDashboardSnapshot.formatCount(lastRun.importedEvents))",
+            "\(t(.historyImportMetricDuplicates)) \(TokenUsageDashboardSnapshot.formatCount(lastRun.skippedDuplicates))",
+            "\(t(.historyImportMetricUnsupported)) \(TokenUsageDashboardSnapshot.formatCount(lastRun.unsupportedRecords))"
+        ]
+        return [
+            "\(t(.historyImportLastSync)) \(formatUploadDate(lastRun.finishedAt))",
+            historyImportStateText(lastRun.state),
+            metrics.joined(separator: " / ")
+        ].joined(separator: " · ")
     }
 
-    private func makeAllLocalDataPreview() -> TokenUsageClearPreview {
-        let events = tokenUsageStore.loadEvents()
-        return TokenUsageClearPreview(
-            scopeTitle: t(.allLocalData),
-            eventCount: events.count,
-            totalTokens: events.reduce(0) { $0 + $1.totalTokens }
-        )
-    }
-
-    private func clearAllLocalTokenData() {
-        do {
-            try tokenUsageStore.clearEvents()
-            clearAllError = nil
-            pendingClearAllPreview = nil
-            showsLocalDataDeleteControls = false
-            refreshLocalDataPreview()
-        } catch {
-            clearAllError = TokenMeteringL10n.text(.clearFailed, language: currentLanguage)
-            pendingClearAllPreview = nil
+    private func historyImportStateText(_ state: TokenUsageHistoryImportToolState) -> String {
+        switch state {
+        case .pending:
+            return t(.historyImportStateWaiting)
+        case .running:
+            return t(.historyImportStateScanning)
+        case .completed:
+            return t(.historyImportStateDone)
+        case .unavailable:
+            return t(.historyImportStateNoSource)
+        case .failed:
+            return t(.historyImportStateFailed)
+        case .cancelled:
+            return t(.historyImportStateCancelled)
         }
     }
 
@@ -746,6 +756,330 @@ private struct TokenMeteringOptionHeader: View {
                         .fill(tint.opacity(0.12))
                 )
         }
+    }
+}
+
+struct TokenMeteringLocalDataManagementSection: View {
+    @ObservedObject var settings: SpillSettings
+    let tokenUsageStore: TokenUsageStore
+    @State private var showsDeleteControls = false
+    @State private var localDataPreview = TokenUsageClearPreview(scopeTitle: "", eventCount: 0, totalTokens: 0)
+    @State private var pendingClearAllPreview: TokenUsageClearPreview?
+    @State private var clearAllError: String?
+
+    private var currentLanguage: TokenMeteringLanguage {
+        TokenMeteringLanguage.current(appLanguage: settings.appLanguage)
+    }
+
+    private func t(_ key: TokenMeteringTextKey) -> String {
+        TokenMeteringL10n.text(key, language: currentLanguage)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            TokenMeteringOptionHeader(
+                title: t(.dataManagement),
+                state: t(.localOnly),
+                systemImage: "externaldrive.fill",
+                tint: .orange
+            )
+
+            Label(t(.debugOnly), systemImage: "ladybug.fill")
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(.orange)
+
+            Text(TokenMeteringL10n.eventsTokensDetail(
+                eventCount: localDataPreview.eventCount,
+                tokens: TokenUsageDashboardSnapshot.formatTokens(localDataPreview.totalTokens),
+                language: currentLanguage
+            ))
+            .font(.system(size: 11, weight: .semibold, design: .monospaced))
+            .foregroundStyle(.secondary)
+
+            if localDataPreview.hasEvents {
+                DisclosureGroup(isExpanded: $showsDeleteControls) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(t(.localDataManagementDetail))
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                            .lineSpacing(2)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        Button(role: .destructive) {
+                            let preview = makeAllLocalDataPreview()
+                            localDataPreview = preview
+                            if preview.hasEvents {
+                                pendingClearAllPreview = preview
+                            }
+                        } label: {
+                            Label(t(.reviewLocalDataDelete), systemImage: "trash")
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .font(.system(size: 12, weight: .semibold))
+                        .tint(.red)
+                    }
+                    .padding(.top, 4)
+                } label: {
+                    Label(t(.localDataDeleteOptions), systemImage: "trash")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                Label(t(.noLocalTokenEvents), systemImage: "checkmark.circle")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
+
+            if let clearAllError {
+                Text(clearAllError)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(10)
+        .background(tokenMeteringOptionBackground)
+        .onAppear {
+            refreshLocalDataPreview()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: TokenUsageStore.eventsDidChangeNotification)) { _ in
+            refreshLocalDataPreview()
+        }
+        .alert(
+            t(.deleteTokenDataTitle),
+            isPresented: Binding(
+                get: { pendingClearAllPreview != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        pendingClearAllPreview = nil
+                    }
+                }
+            ),
+            presenting: pendingClearAllPreview
+        ) { _ in
+            Button(t(.deleteTokenDataCancel), role: .cancel) {
+                pendingClearAllPreview = nil
+            }
+            Button(t(.deleteTokenDataConfirm), role: .destructive) {
+                clearAllLocalTokenData()
+            }
+        } message: { preview in
+            Text(TokenMeteringL10n.deleteTokenDataMessage(
+                scope: preview.scopeTitle,
+                eventCount: preview.eventCount,
+                tokens: TokenUsageDashboardSnapshot.formatTokens(preview.totalTokens),
+                language: currentLanguage
+            ))
+        }
+    }
+
+    private var tokenMeteringOptionBackground: some View {
+        RoundedRectangle(cornerRadius: 8, style: .continuous)
+            .fill(Color(NSColor.controlBackgroundColor).opacity(0.35))
+    }
+
+    private func refreshLocalDataPreview() {
+        let preview = makeAllLocalDataPreview()
+        localDataPreview = preview
+        if !preview.hasEvents {
+            showsDeleteControls = false
+        }
+    }
+
+    private func makeAllLocalDataPreview() -> TokenUsageClearPreview {
+        let summary = tokenUsageStore.dashboardSummary(dashboardToolsOnly: false)
+        return TokenUsageClearPreview(
+            scopeTitle: t(.allLocalData),
+            eventCount: summary.eventCount,
+            totalTokens: summary.totalTokens
+        )
+    }
+
+    private func clearAllLocalTokenData() {
+        guard SpillBuildOptions.developerOptionsEnabled else {
+            pendingClearAllPreview = nil
+            return
+        }
+        do {
+            try tokenUsageStore.clearEvents()
+            clearAllError = nil
+            pendingClearAllPreview = nil
+            showsDeleteControls = false
+            refreshLocalDataPreview()
+        } catch {
+            clearAllError = TokenMeteringL10n.text(.clearFailed, language: currentLanguage)
+            pendingClearAllPreview = nil
+        }
+    }
+}
+
+private struct TokenUsageHistoryImportToolRow: View {
+    let snapshot: TokenUsageHistoryImportToolSnapshot
+    let language: TokenMeteringLanguage
+    let firstModeText: String
+    let incrementalModeText: String
+    let waitingText: String
+    let scanningText: String
+    let doneText: String
+    let noSourceText: String
+    let failedText: String
+    let cancelledText: String
+    let sourcesText: String
+    let newText: String
+    let duplicatesText: String
+    let unsupportedText: String
+    let syncText: String
+    let isImportRunning: Bool
+    let lastRunText: String?
+    let syncAction: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 9) {
+            statusIcon
+
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(alignment: .firstTextBaseline, spacing: 7) {
+                    Text(snapshot.tool.aiTool.dashboardLabel(language: language))
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(.primary)
+
+                    Text(modeText)
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(tint)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Capsule().fill(tint.opacity(0.12)))
+
+                    Spacer(minLength: 0)
+
+                    Button(action: syncAction) {
+                        Label(syncText, systemImage: "arrow.down.doc")
+                            .labelStyle(.titleAndIcon)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .font(.system(size: 10, weight: .bold))
+                    .disabled(isImportRunning)
+
+                    Text(stateText)
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(stateColor)
+                }
+
+                Text(detailText)
+                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.78)
+
+                if let lastRunText {
+                    Label(lastRunText, systemImage: "clock")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(8)
+        .background(Color.primary.opacity(0.025), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(tint.opacity(0.13), lineWidth: 0.5)
+        }
+    }
+
+    @ViewBuilder
+    private var statusIcon: some View {
+        if snapshot.state == .running {
+            ProgressView()
+                .controlSize(.small)
+                .frame(width: 16, height: 16)
+        } else {
+            Image(systemName: systemImage)
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(stateColor)
+                .frame(width: 16, height: 16)
+        }
+    }
+
+    private var tint: Color {
+        snapshot.tool.aiTool.dashboardTint
+    }
+
+    private var modeText: String {
+        switch snapshot.mode {
+        case .firstImport:
+            return firstModeText
+        case .incremental:
+            return incrementalModeText
+        }
+    }
+
+    private var stateText: String {
+        switch snapshot.state {
+        case .pending:
+            return waitingText
+        case .running:
+            return scanningText
+        case .completed:
+            return doneText
+        case .unavailable:
+            return noSourceText
+        case .failed:
+            return failedText
+        case .cancelled:
+            return cancelledText
+        }
+    }
+
+    private var systemImage: String {
+        switch snapshot.state {
+        case .pending:
+            return "clock"
+        case .running:
+            return "arrow.triangle.2.circlepath"
+        case .completed:
+            return "checkmark.circle.fill"
+        case .unavailable:
+            return "minus.circle.fill"
+        case .failed:
+            return "exclamationmark.triangle.fill"
+        case .cancelled:
+            return "xmark.circle.fill"
+        }
+    }
+
+    private var stateColor: Color {
+        switch snapshot.state {
+        case .completed:
+            return .green
+        case .running:
+            return tint
+        case .failed:
+            return .red
+        case .unavailable, .cancelled:
+            return .orange
+        case .pending:
+            return .secondary
+        }
+    }
+
+    private var detailText: String {
+        if snapshot.state == .running {
+            return snapshot.message ?? scanningText
+        }
+
+        if let message = snapshot.message, snapshot.scannedSources == 0 {
+            return message
+        }
+
+        let parts = [
+            "\(sourcesText) \(TokenUsageDashboardSnapshot.formatCount(snapshot.scannedSources))",
+            "\(newText) \(TokenUsageDashboardSnapshot.formatCount(snapshot.importedEvents))",
+            "\(duplicatesText) \(TokenUsageDashboardSnapshot.formatCount(snapshot.skippedDuplicates))",
+            "\(unsupportedText) \(TokenUsageDashboardSnapshot.formatCount(snapshot.unsupportedRecords))"
+        ]
+        return parts.joined(separator: " / ")
     }
 }
 

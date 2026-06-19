@@ -12,6 +12,7 @@ final class PreferencesWindowController {
     private let scanner: AXMenuBarItemScanner
     private let updateStore: UpdateCheckStore
     private let tokenUsageStore: TokenUsageStore
+    private let tokenHistoryImportCoordinator: TokenUsageHistoryImportCoordinator
     private let showPanelAction: () -> Void
     private let openTokenDashboardAction: () -> Void
     private let navigationState = PreferencesNavigationState()
@@ -23,6 +24,7 @@ final class PreferencesWindowController {
         scanner: AXMenuBarItemScanner,
         updateStore: UpdateCheckStore,
         tokenUsageStore: TokenUsageStore,
+        tokenHistoryImportCoordinator: TokenUsageHistoryImportCoordinator,
         showPanelAction: @escaping () -> Void,
         openTokenDashboardAction: @escaping () -> Void
     ) {
@@ -30,6 +32,7 @@ final class PreferencesWindowController {
         self.scanner = scanner
         self.updateStore = updateStore
         self.tokenUsageStore = tokenUsageStore
+        self.tokenHistoryImportCoordinator = tokenHistoryImportCoordinator
         self.showPanelAction = showPanelAction
         self.openTokenDashboardAction = openTokenDashboardAction
     }
@@ -59,6 +62,7 @@ final class PreferencesWindowController {
             updateStore: updateStore,
             navigationState: navigationState,
             tokenUsageStore: tokenUsageStore,
+            tokenHistoryImportCoordinator: tokenHistoryImportCoordinator,
             showPanelAction: showPanelAction,
             openTokenDashboardAction: openTokenDashboardAction
         )

@@ -8,8 +8,10 @@ enum TokenMeteringDashboardProcess {
     static let standaloneArgument = "--token-dashboard"
     static let openPreferencesNotification = Notification.Name("app.spill.open-preferences")
     static let settingsDidChangeNotification = Notification.Name("app.spill.settings-did-change")
+    static let collectionRequestNotification = Notification.Name("app.spill.token-usage.collection-request")
     static let preferencesTabUserInfoKey = "tab"
     static let settingsKeyUserInfoKey = "key"
+    static let collectionReasonUserInfoKey = "reason"
     static let tokenMeteringPreferencesTab = "tokens"
     static let developerOptionsPreferencesTab = "developer"
     static let appLanguageSettingsKey = "appLanguage"
@@ -76,6 +78,15 @@ enum TokenMeteringDashboardProcess {
             openPreferencesNotification,
             object: nil,
             userInfo: [preferencesTabUserInfoKey: tab],
+            deliverImmediately: true
+        )
+    }
+
+    static func postTokenUsageCollectionRequest(reason: String) {
+        DistributedNotificationCenter.default().postNotificationName(
+            collectionRequestNotification,
+            object: nil,
+            userInfo: [collectionReasonUserInfoKey: reason],
             deliverImmediately: true
         )
     }

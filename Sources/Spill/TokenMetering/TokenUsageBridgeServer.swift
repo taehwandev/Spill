@@ -258,6 +258,9 @@ final class TokenUsageBridgeServer: @unchecked Sendable {
                 return httpResponse(status: 400, body: errorBody("invalid_usage_event"))
             }
         case ("DELETE", "/v1/usage/events"):
+            guard SpillBuildOptions.developerOptionsEnabled else {
+                return httpResponse(status: 403, body: errorBody("debug_only"))
+            }
             do {
                 try store.clearEvents()
                 return httpResponse(
