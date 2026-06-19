@@ -7,6 +7,7 @@ final class TokenUsageInboxMonitor: @unchecked Sendable {
     private let lock = NSLock()
     private var source: DispatchSourceFileSystemObject?
     private var fileDescriptor: CInt = -1
+    private var isDraining = false
 
     init(store: TokenUsageStore) {
         self.store = store
@@ -38,8 +39,8 @@ final class TokenUsageInboxMonitor: @unchecked Sendable {
                 eventMask: [.write, .extend, .attrib, .rename, .delete],
                 queue: queue
             )
-            nextSource.setEventHandler { [weak store] in
-                store?.importQueuedEventsWithoutLoading()
+            nextSource.setEventHandler { [weak self] in
+                self?.requestDrain()
             }
             nextSource.setCancelHandler {
                 Darwin.close(descriptor)
@@ -50,7 +51,7 @@ final class TokenUsageInboxMonitor: @unchecked Sendable {
             nextSource.resume()
         }
 
-        store.importQueuedEventsWithoutLoading()
+        requestDrain()
     }
 
     func stop() {
@@ -64,12 +65,35 @@ final class TokenUsageInboxMonitor: @unchecked Sendable {
             source.cancel()
         }
     }
-}
 
-private extension NSLock {
-    func withLock<T>(_ body: () throws -> T) rethrows -> T {
-        lock()
-        defer { unlock() }
-        return try body()
+    private func requestDrain() {
+        queue.async { [weak self] in
+            self?.drainIfNeeded()
+        }
+    }
+
+    private func drainIfNeeded() {
+        let shouldDrain = lock.withLock {
+            guard !isDraining else {
+                return false
+            }
+            isDraining = true
+            return true
+        }
+        guard shouldDrain else {
+            return
+        }
+
+        defer {
+            lock.withLock {
+                isDraining = false
+            }
+        }
+
+        _ = autoreleasepool {
+            store.drainQueuedEventsWithoutLoading(
+                maximumInboxEventCount: TokenUsageStore.defaultInboxImportBatchLimit
+            )
+        }
     }
 }

@@ -503,14 +503,30 @@ enum TokenUsageSanitizer {
 
 extension ISO8601DateFormatter {
     static var tokenUsage: ISO8601DateFormatter {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter
+        cachedTokenUsageFormatter(
+            key: "app.spill.iso8601.tokenUsage.fractional",
+            options: [.withInternetDateTime, .withFractionalSeconds]
+        )
     }
 
     private static var tokenUsageWithoutFractionalSeconds: ISO8601DateFormatter {
+        cachedTokenUsageFormatter(
+            key: "app.spill.iso8601.tokenUsage.plain",
+            options: [.withInternetDateTime]
+        )
+    }
+
+    private static func cachedTokenUsageFormatter(
+        key: String,
+        options: ISO8601DateFormatter.Options
+    ) -> ISO8601DateFormatter {
+        if let formatter = Thread.current.threadDictionary[key] as? ISO8601DateFormatter {
+            return formatter
+        }
+
         let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime]
+        formatter.formatOptions = options
+        Thread.current.threadDictionary[key] = formatter
         return formatter
     }
 

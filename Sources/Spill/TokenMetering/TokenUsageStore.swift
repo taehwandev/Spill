@@ -6,6 +6,30 @@ private let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.sel
 final class TokenUsageStore: @unchecked Sendable {
     static let eventsDidChangeNotification = Notification.Name("app.spill.token-usage-store.events-did-change")
     static let distributedEventsDidChangeNotification = Notification.Name("app.spill.token-usage-store.events-did-change.distributed")
+    static let defaultInboxImportBatchLimit = 500
+    private static let eventSelectColumns = """
+    span_id,
+    device_id,
+    project_id,
+    artifact_id,
+    run_id,
+    created_at,
+    ai_tool,
+    task_type,
+    stage,
+    model,
+    input_tokens,
+    output_tokens,
+    total_tokens,
+    latency_ms,
+    source_system,
+    source_user,
+    source_history,
+    source_repo_context,
+    source_tool_output,
+    source_generated_output,
+    source_unknown
+    """
 
     private let fileURL: URL
     private let databaseURL: URL
@@ -34,16 +58,42 @@ final class TokenUsageStore: @unchecked Sendable {
         inboxURL
     }
 
+    private var tokenMeteringDirectory: URL {
+        fileURL.deletingLastPathComponent()
+    }
+
     func loadEvents() -> [TokenUsageEvent] {
         lock.withLock {
             readEventsWithoutLock()
         }
     }
 
+    func loadEvents(
+        startingAt startDate: Date?,
+        endingBefore endDate: Date?
+    ) -> [TokenUsageEvent] {
+        lock.withLock {
+            let database: OpaquePointer
+            do {
+                database = try openDatabase()
+            } catch {
+                return []
+            }
+            defer { sqlite3_close(database) }
+
+            return loadDatabaseEvents(
+                startingAt: startDate,
+                endingBefore: endDate,
+                database: database
+            )
+        }
+    }
+
     @discardableResult
     func importQueuedEvents() -> [TokenUsageEvent] {
+        let inboxResult = loadInboxEvents(maximumEventCount: nil)
         let result = lock.withLock {
-            importQueuedEventsWithoutLock(loadEvents: true)
+            importQueuedEventsWithoutLock(loadEvents: true, inboxResult: inboxResult)
         }
 
         if result.didImportQueuedEvents {
@@ -54,15 +104,46 @@ final class TokenUsageStore: @unchecked Sendable {
     }
 
     @discardableResult
-    func importQueuedEventsWithoutLoading() -> Bool {
+    func importQueuedEventsWithoutLoading(
+        maximumInboxEventCount: Int? = 500
+    ) -> Bool {
+        let inboxResult = loadInboxEvents(maximumEventCount: maximumInboxEventCount)
         let didImportQueuedEvents = lock.withLock {
-            importQueuedEventsWithoutLock(loadEvents: false).didImportQueuedEvents
+            importQueuedEventsWithoutLock(loadEvents: false, inboxResult: inboxResult).didImportQueuedEvents
         }
 
         if didImportQueuedEvents {
             postEventsDidChange()
         }
 
+        return didImportQueuedEvents
+    }
+
+    @discardableResult
+    func drainQueuedEventsWithoutLoading(
+        maximumInboxEventCount: Int? = TokenUsageStore.defaultInboxImportBatchLimit
+    ) -> Bool {
+        var didImportQueuedEvents = false
+
+        while true {
+            let inboxResult = loadInboxEvents(maximumEventCount: maximumInboxEventCount)
+            guard !inboxResult.consumedURLs.isEmpty else {
+                break
+            }
+
+            let didImportBatch = lock.withLock {
+                importQueuedEventsWithoutLock(loadEvents: false, inboxResult: inboxResult).didImportQueuedEvents
+            }
+            didImportQueuedEvents = didImportQueuedEvents || didImportBatch
+
+            if maximumInboxEventCount == nil {
+                break
+            }
+        }
+
+        if didImportQueuedEvents {
+            postEventsDidChange()
+        }
         return didImportQueuedEvents
     }
 
@@ -117,6 +198,50 @@ final class TokenUsageStore: @unchecked Sendable {
             defer { sqlite3_close(database) }
 
             return loadDashboardSummary(
+                dashboardToolsOnly: dashboardToolsOnly,
+                database: database
+            )
+        }
+    }
+
+    func dashboardSummary(
+        startingAt startDate: Date,
+        endingBefore endDate: Date,
+        dashboardToolsOnly: Bool = true
+    ) -> TokenUsageDashboardSummary {
+        lock.withLock {
+            let database: OpaquePointer
+            do {
+                database = try openDatabase()
+            } catch {
+                return .empty
+            }
+            defer { sqlite3_close(database) }
+
+            return loadDashboardSummary(
+                startingAt: startDate,
+                endingBefore: endDate,
+                dashboardToolsOnly: dashboardToolsOnly,
+                database: database
+            )
+        }
+    }
+
+    func dashboardDateBounds(
+        selectedTool: TokenUsageAITool? = nil,
+        dashboardToolsOnly: Bool = true
+    ) -> TokenUsageDashboardDateBounds {
+        lock.withLock {
+            let database: OpaquePointer
+            do {
+                database = try openDatabase()
+            } catch {
+                return .empty
+            }
+            defer { sqlite3_close(database) }
+
+            return loadDashboardDateBounds(
+                selectedTool: selectedTool,
                 dashboardToolsOnly: dashboardToolsOnly,
                 database: database
             )
@@ -179,17 +304,41 @@ final class TokenUsageStore: @unchecked Sendable {
         return insertedCount
     }
 
-    func existingSpanIDs() -> Set<String> {
+    func loadEvents(afterRowID rowID: Int64) -> (events: [TokenUsageEvent], maxRowID: Int64) {
         lock.withLock {
             let database: OpaquePointer
             do {
                 database = try openDatabase()
             } catch {
-                return []
+                return ([], rowID)
             }
             defer { sqlite3_close(database) }
 
-            return loadSpanIDs(database: database)
+            return loadDatabaseEventsAfterRowID(rowID, database: database)
+        }
+    }
+
+    func currentEventCount() -> Int {
+        lock.withLock {
+            let database: OpaquePointer
+            do {
+                database = try openDatabase()
+            } catch {
+                return 0
+            }
+            defer { sqlite3_close(database) }
+
+            var statement: OpaquePointer?
+            guard sqlite3_prepare_v2(database, "SELECT COUNT(*) FROM token_usage_events", -1, &statement, nil) == SQLITE_OK,
+                  let statement
+            else {
+                return 0
+            }
+            defer { sqlite3_finalize(statement) }
+            guard sqlite3_step(statement) == SQLITE_ROW else {
+                return 0
+            }
+            return Int(sqlite3_column_int64(statement, 0))
         }
     }
 
@@ -207,7 +356,63 @@ final class TokenUsageStore: @unchecked Sendable {
                 try FileManager.default.removeItem(at: legacyInboxURL)
             }
         }
+        resetImporterState(for: TokenUsageAITool.allCases)
+        postEventsDidChange()
+    }
 
+    func clearEvents(forAITool aiTool: String) throws {
+        try lock.withLock {
+            let database = try openDatabase()
+            defer { sqlite3_close(database) }
+            var statement: OpaquePointer?
+            guard sqlite3_prepare_v2(database, "DELETE FROM token_usage_events WHERE ai_tool = ?", -1, &statement, nil) == SQLITE_OK,
+                  let statement
+            else {
+                throw TokenUsageStoreError.databaseWriteFailed
+            }
+            defer { sqlite3_finalize(statement) }
+            sqlite3_bind_text(statement, 1, aiTool, -1, SQLITE_TRANSIENT)
+            guard sqlite3_step(statement) == SQLITE_DONE else {
+                throw TokenUsageStoreError.databaseWriteFailed
+            }
+        }
+        if let tool = TokenUsageAITool(rawValue: aiTool) {
+            resetImporterState(for: [tool])
+        }
+        postEventsDidChange()
+    }
+
+    func clearEvents(for aiTools: [TokenUsageAITool]) throws {
+        let toolValues = aiTools.map(\.rawValue)
+        guard !toolValues.isEmpty else {
+            return
+        }
+
+        try lock.withLock {
+            let database = try openDatabase()
+            defer { sqlite3_close(database) }
+            _ = try migrateLegacyJSONEventsIfNeeded(database: database)
+
+            let placeholders = Array(repeating: "?", count: toolValues.count).joined(separator: ", ")
+            let sql = "DELETE FROM token_usage_events WHERE ai_tool IN (\(placeholders))"
+            var statement: OpaquePointer?
+            guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
+                  let statement
+            else {
+                throw TokenUsageStoreError.databaseWriteFailed
+            }
+            defer { sqlite3_finalize(statement) }
+
+            for (index, toolValue) in toolValues.enumerated() {
+                sqlite3_bind_text(statement, Int32(index + 1), toolValue, -1, SQLITE_TRANSIENT)
+            }
+
+            guard sqlite3_step(statement) == SQLITE_DONE else {
+                throw TokenUsageStoreError.databaseWriteFailed
+            }
+            try removeLegacyEventsFileWithoutLock()
+        }
+        resetImporterState(for: aiTools)
         postEventsDidChange()
     }
 
@@ -270,7 +475,10 @@ final class TokenUsageStore: @unchecked Sendable {
         return loadDatabaseEvents(database: database)
     }
 
-    private func importQueuedEventsWithoutLock(loadEvents: Bool) -> StoreLoadResult {
+    private func importQueuedEventsWithoutLock(
+        loadEvents: Bool,
+        inboxResult: InboxReadResult
+    ) -> StoreLoadResult {
         let database: OpaquePointer
         do {
             database = try openDatabase()
@@ -280,7 +488,6 @@ final class TokenUsageStore: @unchecked Sendable {
         defer { sqlite3_close(database) }
 
         let didMigrateLegacyEvents = (try? migrateLegacyJSONEventsIfNeeded(database: database)) ?? false
-        let inboxResult = loadInboxEvents()
         var didImportQueuedEvents = didMigrateLegacyEvents
 
         if !inboxResult.consumedURLs.isEmpty {
@@ -309,9 +516,10 @@ final class TokenUsageStore: @unchecked Sendable {
         return events
     }
 
-    private func loadInboxEvents() -> InboxReadResult {
+    private func loadInboxEvents(maximumEventCount: Int?) -> InboxReadResult {
         var events = [TokenUsageEvent]()
         var consumedURLs = [URL]()
+        let maximumEventCount = maximumEventCount.map { max(0, $0) }
 
         if let inboxURL,
            let urls = try? FileManager.default.contentsOfDirectory(
@@ -319,18 +527,29 @@ final class TokenUsageStore: @unchecked Sendable {
             includingPropertiesForKeys: nil,
             options: [.skipsHiddenFiles]
            ) {
-            for url in urls
-                .filter({ $0.pathExtension == "json" })
-                .sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
-                if let event = loadInboxEvent(from: url) {
+            let inboxEventURLs = urls
+                .filter({ $0.pathExtension == "json" || $0.pathExtension == "jsonl" })
+                .sorted(by: { $0.lastPathComponent < $1.lastPathComponent })
+            let limitedURLs = maximumEventCount.map { Array(inboxEventURLs.prefix($0)) } ?? inboxEventURLs
+
+            for url in limitedURLs {
+                if url.pathExtension == "jsonl" {
+                    if let jsonlEvents = loadJSONLInboxEvents(from: url) {
+                        events.append(contentsOf: jsonlEvents)
+                    }
+                } else if let event = loadInboxEvent(from: url) {
                     events.append(event)
                 }
                 consumedURLs.append(url)
             }
         }
 
+        if let maximumEventCount, events.count >= maximumEventCount {
+            return InboxReadResult(events: events, consumedURLs: consumedURLs)
+        }
+
         if let legacyInboxURL = legacyJSONLInboxURL(),
-           let legacyEvents = loadLegacyJSONLInboxEvents(from: legacyInboxURL) {
+           let legacyEvents = loadJSONLInboxEvents(from: legacyInboxURL) {
             events.append(contentsOf: legacyEvents)
             consumedURLs.append(legacyInboxURL)
         }
@@ -348,7 +567,7 @@ final class TokenUsageStore: @unchecked Sendable {
         return event
     }
 
-    private func loadLegacyJSONLInboxEvents(from url: URL) -> [TokenUsageEvent]? {
+    private func loadJSONLInboxEvents(from url: URL) -> [TokenUsageEvent]? {
         guard let data = try? Data(contentsOf: url),
               let contents = String(data: data, encoding: .utf8)
         else {
@@ -448,6 +667,22 @@ final class TokenUsageStore: @unchecked Sendable {
         return Int(sqlite3_column_int(statement, 0))
     }
 
+    private func databaseUserVersion(database: OpaquePointer) -> Int {
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(database, "PRAGMA user_version", -1, &statement, nil) == SQLITE_OK,
+              let statement
+        else {
+            return -1
+        }
+        defer { sqlite3_finalize(statement) }
+
+        guard sqlite3_step(statement) == SQLITE_ROW else {
+            return -1
+        }
+
+        return Int(sqlite3_column_int(statement, 0))
+    }
+
     private func execute(_ sql: String, database: OpaquePointer) throws {
         guard sqlite3_exec(database, sql, nil, nil, nil) == SQLITE_OK else {
             throw TokenUsageStoreError.databaseWriteFailed
@@ -459,12 +694,18 @@ final class TokenUsageStore: @unchecked Sendable {
             """
             CREATE TABLE IF NOT EXISTS token_usage_events (
                 span_id TEXT PRIMARY KEY NOT NULL,
+                device_id TEXT,
+                project_id TEXT,
+                artifact_id TEXT,
                 run_id TEXT,
                 created_at TEXT NOT NULL,
                 ai_tool TEXT NOT NULL,
                 task_type TEXT,
                 stage TEXT,
                 model TEXT,
+                input_tokens INTEGER,
+                output_tokens INTEGER,
+                latency_ms INTEGER,
                 total_tokens INTEGER NOT NULL,
                 payload_json BLOB NOT NULL
             )
@@ -481,31 +722,42 @@ final class TokenUsageStore: @unchecked Sendable {
             """,
             database: database
         )
+
+        let userVersion = databaseUserVersion(database: database)
+        if userVersion < 2 {
+            try execute("DROP INDEX IF EXISTS idx_token_usage_events_tool_created_at", database: database)
+            try execute("DROP INDEX IF EXISTS idx_token_usage_events_task_type_created_at", database: database)
+            try execute("DROP INDEX IF EXISTS idx_token_usage_events_stage_created_at", database: database)
+            try execute("DROP INDEX IF EXISTS idx_token_usage_events_model_created_at", database: database)
+            try execute("DROP INDEX IF EXISTS idx_token_usage_events_project_created_at", database: database)
+            try execute("PRAGMA user_version = 2", database: database)
+        }
+
         try execute(
             """
             CREATE INDEX IF NOT EXISTS idx_token_usage_events_tool_created_at
-            ON token_usage_events(ai_tool, created_at)
+            ON token_usage_events(ai_tool, created_at, total_tokens, input_tokens, output_tokens)
             """,
             database: database
         )
         try execute(
             """
             CREATE INDEX IF NOT EXISTS idx_token_usage_events_task_type_created_at
-            ON token_usage_events(task_type, created_at)
+            ON token_usage_events(task_type, created_at, total_tokens)
             """,
             database: database
         )
         try execute(
             """
             CREATE INDEX IF NOT EXISTS idx_token_usage_events_stage_created_at
-            ON token_usage_events(stage, created_at)
+            ON token_usage_events(stage, created_at, total_tokens)
             """,
             database: database
         )
         try execute(
             """
             CREATE INDEX IF NOT EXISTS idx_token_usage_events_model_created_at
-            ON token_usage_events(model, created_at)
+            ON token_usage_events(model, created_at, total_tokens)
             """,
             database: database
         )
@@ -516,15 +768,28 @@ final class TokenUsageStore: @unchecked Sendable {
             """,
             database: database
         )
+        try execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_token_usage_events_project_created_at
+            ON token_usage_events(project_id, created_at, total_tokens)
+            """,
+            database: database
+        )
     }
 
     private func ensureDashboardColumns(database: OpaquePointer) throws {
         let existingColumns = databaseColumns(tableName: "token_usage_events", database: database)
         let requiredColumns: [(name: String, definition: String)] = [
+            ("device_id", "TEXT"),
+            ("project_id", "TEXT"),
+            ("artifact_id", "TEXT"),
             ("run_id", "TEXT"),
             ("task_type", "TEXT"),
             ("stage", "TEXT"),
             ("model", "TEXT"),
+            ("input_tokens", "INTEGER"),
+            ("output_tokens", "INTEGER"),
+            ("latency_ms", "INTEGER"),
             ("source_system", "INTEGER"),
             ("source_user", "INTEGER"),
             ("source_history", "INTEGER"),
@@ -567,9 +832,15 @@ final class TokenUsageStore: @unchecked Sendable {
         SELECT span_id, payload_json
         FROM token_usage_events
         WHERE run_id IS NULL
+            OR device_id IS NULL
+            OR project_id IS NULL
+            OR artifact_id IS NULL
             OR task_type IS NULL
             OR stage IS NULL
             OR model IS NULL
+            OR input_tokens IS NULL
+            OR output_tokens IS NULL
+            OR latency_ms IS NULL
             OR source_system IS NULL
             OR source_user IS NULL
             OR source_history IS NULL
@@ -698,10 +969,16 @@ final class TokenUsageStore: @unchecked Sendable {
     private func updateDashboardColumns(for event: TokenUsageEvent, database: OpaquePointer) throws {
         let sql = """
         UPDATE token_usage_events
-        SET run_id = ?,
+        SET device_id = ?,
+            project_id = ?,
+            artifact_id = ?,
+            run_id = ?,
             task_type = ?,
             stage = ?,
             model = ?,
+            input_tokens = ?,
+            output_tokens = ?,
+            latency_ms = ?,
             source_system = ?,
             source_user = ?,
             source_history = ?,
@@ -719,18 +996,24 @@ final class TokenUsageStore: @unchecked Sendable {
         }
         defer { sqlite3_finalize(statement) }
 
-        sqlite3_bind_text(statement, 1, event.runID, -1, SQLITE_TRANSIENT)
-        sqlite3_bind_text(statement, 2, event.taskType.rawValue, -1, SQLITE_TRANSIENT)
-        sqlite3_bind_text(statement, 3, event.stage.rawValue, -1, SQLITE_TRANSIENT)
-        sqlite3_bind_text(statement, 4, event.model, -1, SQLITE_TRANSIENT)
-        sqlite3_bind_int64(statement, 5, sqlite3_int64(event.tokenBreakdown.system))
-        sqlite3_bind_int64(statement, 6, sqlite3_int64(event.tokenBreakdown.user))
-        sqlite3_bind_int64(statement, 7, sqlite3_int64(event.tokenBreakdown.history))
-        sqlite3_bind_int64(statement, 8, sqlite3_int64(event.tokenBreakdown.repoContext))
-        sqlite3_bind_int64(statement, 9, sqlite3_int64(event.tokenBreakdown.toolOutput))
-        sqlite3_bind_int64(statement, 10, sqlite3_int64(event.tokenBreakdown.generatedOutput))
-        sqlite3_bind_int64(statement, 11, sqlite3_int64(event.tokenBreakdown.unknown))
-        sqlite3_bind_text(statement, 12, event.spanID, -1, SQLITE_TRANSIENT)
+        sqlite3_bind_text(statement, 1, event.deviceID, -1, SQLITE_TRANSIENT)
+        sqlite3_bind_text(statement, 2, event.projectID, -1, SQLITE_TRANSIENT)
+        sqlite3_bind_text(statement, 3, event.artifactID, -1, SQLITE_TRANSIENT)
+        sqlite3_bind_text(statement, 4, event.runID, -1, SQLITE_TRANSIENT)
+        sqlite3_bind_text(statement, 5, event.taskType.rawValue, -1, SQLITE_TRANSIENT)
+        sqlite3_bind_text(statement, 6, event.stage.rawValue, -1, SQLITE_TRANSIENT)
+        sqlite3_bind_text(statement, 7, event.model, -1, SQLITE_TRANSIENT)
+        sqlite3_bind_int64(statement, 8, sqlite3_int64(event.inputTokens))
+        sqlite3_bind_int64(statement, 9, sqlite3_int64(event.outputTokens))
+        sqlite3_bind_int64(statement, 10, sqlite3_int64(event.latencyMS))
+        sqlite3_bind_int64(statement, 11, sqlite3_int64(event.tokenBreakdown.system))
+        sqlite3_bind_int64(statement, 12, sqlite3_int64(event.tokenBreakdown.user))
+        sqlite3_bind_int64(statement, 13, sqlite3_int64(event.tokenBreakdown.history))
+        sqlite3_bind_int64(statement, 14, sqlite3_int64(event.tokenBreakdown.repoContext))
+        sqlite3_bind_int64(statement, 15, sqlite3_int64(event.tokenBreakdown.toolOutput))
+        sqlite3_bind_int64(statement, 16, sqlite3_int64(event.tokenBreakdown.generatedOutput))
+        sqlite3_bind_int64(statement, 17, sqlite3_int64(event.tokenBreakdown.unknown))
+        sqlite3_bind_text(statement, 18, event.spanID, -1, SQLITE_TRANSIENT)
 
         guard sqlite3_step(statement) == SQLITE_DONE else {
             throw TokenUsageStoreError.databaseWriteFailed
@@ -784,12 +1067,18 @@ final class TokenUsageStore: @unchecked Sendable {
         let sql = """
         INSERT OR IGNORE INTO token_usage_events (
             span_id,
+            device_id,
+            project_id,
+            artifact_id,
             run_id,
             created_at,
             ai_tool,
             task_type,
             stage,
             model,
+            input_tokens,
+            output_tokens,
+            latency_ms,
             source_system,
             source_user,
             source_history,
@@ -799,7 +1088,7 @@ final class TokenUsageStore: @unchecked Sendable {
             source_unknown,
             total_tokens,
             payload_json
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
@@ -811,28 +1100,34 @@ final class TokenUsageStore: @unchecked Sendable {
 
         let payload = try TokenUsageSanitizer.eventData(event)
         sqlite3_bind_text(statement, 1, event.spanID, -1, SQLITE_TRANSIENT)
-        sqlite3_bind_text(statement, 2, event.runID, -1, SQLITE_TRANSIENT)
+        sqlite3_bind_text(statement, 2, event.deviceID, -1, SQLITE_TRANSIENT)
+        sqlite3_bind_text(statement, 3, event.projectID, -1, SQLITE_TRANSIENT)
+        sqlite3_bind_text(statement, 4, event.artifactID, -1, SQLITE_TRANSIENT)
+        sqlite3_bind_text(statement, 5, event.runID, -1, SQLITE_TRANSIENT)
         sqlite3_bind_text(
             statement,
-            3,
+            6,
             Self.normalizedCreatedAt(event.createdAt) ?? event.createdAt,
             -1,
             SQLITE_TRANSIENT
         )
-        sqlite3_bind_text(statement, 4, event.aiTool.rawValue, -1, SQLITE_TRANSIENT)
-        sqlite3_bind_text(statement, 5, event.taskType.rawValue, -1, SQLITE_TRANSIENT)
-        sqlite3_bind_text(statement, 6, event.stage.rawValue, -1, SQLITE_TRANSIENT)
-        sqlite3_bind_text(statement, 7, event.model, -1, SQLITE_TRANSIENT)
-        sqlite3_bind_int64(statement, 8, sqlite3_int64(event.tokenBreakdown.system))
-        sqlite3_bind_int64(statement, 9, sqlite3_int64(event.tokenBreakdown.user))
-        sqlite3_bind_int64(statement, 10, sqlite3_int64(event.tokenBreakdown.history))
-        sqlite3_bind_int64(statement, 11, sqlite3_int64(event.tokenBreakdown.repoContext))
-        sqlite3_bind_int64(statement, 12, sqlite3_int64(event.tokenBreakdown.toolOutput))
-        sqlite3_bind_int64(statement, 13, sqlite3_int64(event.tokenBreakdown.generatedOutput))
-        sqlite3_bind_int64(statement, 14, sqlite3_int64(event.tokenBreakdown.unknown))
-        sqlite3_bind_int64(statement, 15, sqlite3_int64(event.totalTokens))
+        sqlite3_bind_text(statement, 7, event.aiTool.rawValue, -1, SQLITE_TRANSIENT)
+        sqlite3_bind_text(statement, 8, event.taskType.rawValue, -1, SQLITE_TRANSIENT)
+        sqlite3_bind_text(statement, 9, event.stage.rawValue, -1, SQLITE_TRANSIENT)
+        sqlite3_bind_text(statement, 10, event.model, -1, SQLITE_TRANSIENT)
+        sqlite3_bind_int64(statement, 11, sqlite3_int64(event.inputTokens))
+        sqlite3_bind_int64(statement, 12, sqlite3_int64(event.outputTokens))
+        sqlite3_bind_int64(statement, 13, sqlite3_int64(event.latencyMS))
+        sqlite3_bind_int64(statement, 14, sqlite3_int64(event.tokenBreakdown.system))
+        sqlite3_bind_int64(statement, 15, sqlite3_int64(event.tokenBreakdown.user))
+        sqlite3_bind_int64(statement, 16, sqlite3_int64(event.tokenBreakdown.history))
+        sqlite3_bind_int64(statement, 17, sqlite3_int64(event.tokenBreakdown.repoContext))
+        sqlite3_bind_int64(statement, 18, sqlite3_int64(event.tokenBreakdown.toolOutput))
+        sqlite3_bind_int64(statement, 19, sqlite3_int64(event.tokenBreakdown.generatedOutput))
+        sqlite3_bind_int64(statement, 20, sqlite3_int64(event.tokenBreakdown.unknown))
+        sqlite3_bind_int64(statement, 21, sqlite3_int64(event.totalTokens))
         _ = payload.withUnsafeBytes { buffer in
-            sqlite3_bind_blob(statement, 16, buffer.baseAddress, Int32(buffer.count), SQLITE_TRANSIENT)
+            sqlite3_bind_blob(statement, 22, buffer.baseAddress, Int32(buffer.count), SQLITE_TRANSIENT)
         }
 
         guard sqlite3_step(statement) == SQLITE_DONE else {
@@ -841,32 +1136,31 @@ final class TokenUsageStore: @unchecked Sendable {
         return Int(sqlite3_changes(database))
     }
 
-    private func loadSpanIDs(database: OpaquePointer) -> Set<String> {
-        let sql = "SELECT span_id FROM token_usage_events"
-        var statement: OpaquePointer?
-        guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
-              let statement
-        else {
-            return []
-        }
-        defer { sqlite3_finalize(statement) }
-
-        var spanIDs = Set<String>()
-        while sqlite3_step(statement) == SQLITE_ROW {
-            guard let text = sqlite3_column_text(statement, 0) else {
-                continue
-            }
-            spanIDs.insert(String(cString: text))
-        }
-        return spanIDs
+    private func loadDatabaseEvents(database: OpaquePointer) -> [TokenUsageEvent] {
+        loadDatabaseEvents(startingAt: nil, endingBefore: nil, database: database)
     }
 
-    private func loadDatabaseEvents(database: OpaquePointer) -> [TokenUsageEvent] {
-        let sql = """
-        SELECT payload_json
+    private func loadDatabaseEvents(
+        startingAt startDate: Date?,
+        endingBefore endDate: Date?,
+        database: OpaquePointer
+    ) -> [TokenUsageEvent] {
+        var conditions = [String]()
+        if startDate != nil {
+            conditions.append("created_at >= ?")
+        }
+        if endDate != nil {
+            conditions.append("created_at < ?")
+        }
+
+        var sql = """
+        SELECT \(Self.eventSelectColumns)
         FROM token_usage_events
-        ORDER BY created_at ASC, rowid ASC
         """
+        if !conditions.isEmpty {
+            sql += "\nWHERE \(conditions.joined(separator: " AND "))"
+        }
+        sql += "\nORDER BY created_at ASC, rowid ASC"
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
               let statement
@@ -874,26 +1168,142 @@ final class TokenUsageStore: @unchecked Sendable {
             return []
         }
         defer { sqlite3_finalize(statement) }
+
+        var bindIndex: Int32 = 1
+        if let startDate {
+            let startValue = ISO8601DateFormatter.tokenUsage.string(from: startDate)
+            sqlite3_bind_text(statement, bindIndex, startValue, -1, SQLITE_TRANSIENT)
+            bindIndex += 1
+        }
+        if let endDate {
+            let endValue = ISO8601DateFormatter.tokenUsage.string(from: endDate)
+            sqlite3_bind_text(statement, bindIndex, endValue, -1, SQLITE_TRANSIENT)
+        }
 
         var events = [TokenUsageEvent]()
         while sqlite3_step(statement) == SQLITE_ROW {
-            guard let blob = sqlite3_column_blob(statement, 0) else {
-                continue
-            }
-            let byteCount = Int(sqlite3_column_bytes(statement, 0))
-            let data = Data(bytes: blob, count: byteCount)
-            if let event = try? JSONDecoder().decode(TokenUsageEvent.self, from: data) {
+            if let event = Self.event(from: statement, startingAt: 0) {
                 events.append(event)
             }
         }
         return events
     }
 
+    private func loadDatabaseEventsAfterRowID(
+        _ rowID: Int64,
+        database: OpaquePointer
+    ) -> (events: [TokenUsageEvent], maxRowID: Int64) {
+        let sql = """
+        SELECT rowid, \(Self.eventSelectColumns)
+        FROM token_usage_events
+        WHERE rowid > ?
+        ORDER BY created_at ASC, rowid ASC
+        """
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
+              let statement
+        else {
+            return ([], rowID)
+        }
+        defer { sqlite3_finalize(statement) }
+        sqlite3_bind_int64(statement, 1, rowID)
+
+        var events = [TokenUsageEvent]()
+        var maxRowID = rowID
+        while sqlite3_step(statement) == SQLITE_ROW {
+            let currentRowID = sqlite3_column_int64(statement, 0)
+            if currentRowID > maxRowID {
+                maxRowID = currentRowID
+            }
+            if let event = Self.event(from: statement, startingAt: 1) {
+                events.append(event)
+            }
+        }
+        return (events, maxRowID)
+    }
+
+    private static func event(from statement: OpaquePointer, startingAt offset: Int32) -> TokenUsageEvent? {
+        guard let spanID = columnString(statement, offset + 0),
+              let deviceID = columnString(statement, offset + 1),
+              let projectID = columnString(statement, offset + 2),
+              let artifactID = columnString(statement, offset + 3),
+              let runID = columnString(statement, offset + 4),
+              let createdAt = columnString(statement, offset + 5),
+              let aiToolRaw = columnString(statement, offset + 6),
+              let taskTypeRaw = columnString(statement, offset + 7),
+              let stageRaw = columnString(statement, offset + 8),
+              let model = columnString(statement, offset + 9),
+              let taskType = TokenUsageTaskType(rawValue: taskTypeRaw),
+              let stage = TokenUsageStage(rawValue: stageRaw)
+        else {
+            return nil
+        }
+
+        let aiTool: TokenUsageAITool
+        switch aiToolRaw {
+        case "agy":
+            aiTool = .antigravity
+        case "ollama":
+            aiTool = .unknown
+        default:
+            aiTool = TokenUsageAITool(rawValue: aiToolRaw) ?? .unknown
+        }
+
+        let inputTokens = Int(sqlite3_column_int64(statement, offset + 10))
+        let outputTokens = Int(sqlite3_column_int64(statement, offset + 11))
+        let totalTokens = Int(sqlite3_column_int64(statement, offset + 12))
+        let latencyMS = Int(sqlite3_column_int64(statement, offset + 13))
+        let tokenBreakdown = TokenUsageBreakdown(
+            system: Int(sqlite3_column_int64(statement, offset + 14)),
+            user: Int(sqlite3_column_int64(statement, offset + 15)),
+            history: Int(sqlite3_column_int64(statement, offset + 16)),
+            repoContext: Int(sqlite3_column_int64(statement, offset + 17)),
+            toolOutput: Int(sqlite3_column_int64(statement, offset + 18)),
+            generatedOutput: Int(sqlite3_column_int64(statement, offset + 19)),
+            unknown: Int(sqlite3_column_int64(statement, offset + 20))
+        )
+        let event = TokenUsageEvent(
+            schemaVersion: 1,
+            deviceID: deviceID,
+            projectID: projectID,
+            artifactID: artifactID,
+            runID: runID,
+            spanID: spanID,
+            aiTool: aiTool,
+            taskType: taskType,
+            stage: stage,
+            model: model,
+            inputTokens: inputTokens,
+            outputTokens: outputTokens,
+            totalTokens: totalTokens,
+            tokenBreakdown: tokenBreakdown,
+            latencyMS: latencyMS,
+            createdAt: createdAt
+        )
+        guard (try? event.validate()) != nil else {
+            return nil
+        }
+        return event
+    }
+
+    private static func columnString(_ statement: OpaquePointer, _ index: Int32) -> String? {
+        guard sqlite3_column_type(statement, index) != SQLITE_NULL,
+              let text = sqlite3_column_text(statement, index)
+        else {
+            return nil
+        }
+        return String(cString: text)
+    }
+
     private func loadDashboardSummary(
+        startingAt startDate: Date? = nil,
+        endingBefore endDate: Date? = nil,
         dashboardToolsOnly: Bool,
         database: OpaquePointer
     ) -> TokenUsageDashboardSummary {
         let totals = loadDashboardCountAndTotal(
+            startingAt: startDate,
+            endingBefore: endDate,
             dashboardToolsOnly: dashboardToolsOnly,
             database: database
         )
@@ -902,29 +1312,80 @@ final class TokenUsageStore: @unchecked Sendable {
             totalTokens: totals.totalTokens,
             toolTotals: loadGroupedTokenTotals(
                 column: "ai_tool",
+                startingAt: startDate,
+                endingBefore: endDate,
                 dashboardToolsOnly: dashboardToolsOnly,
                 database: database
             ),
             taskTotals: loadGroupedTokenTotals(
                 column: "task_type",
+                startingAt: startDate,
+                endingBefore: endDate,
                 dashboardToolsOnly: dashboardToolsOnly,
                 database: database
             ),
             sourceTotals: loadSourceTokenTotals(
+                startingAt: startDate,
+                endingBefore: endDate,
                 dashboardToolsOnly: dashboardToolsOnly,
                 database: database
             )
         )
     }
 
+    private func loadDashboardDateBounds(
+        selectedTool: TokenUsageAITool?,
+        dashboardToolsOnly: Bool,
+        database: OpaquePointer
+    ) -> TokenUsageDashboardDateBounds {
+        var conditions = [String]()
+        if selectedTool != nil {
+            conditions.append("ai_tool = ?")
+        } else if dashboardToolsOnly {
+            conditions.append("ai_tool IN ('codex', 'claude', 'antigravity')")
+        }
+
+        var sql = """
+        SELECT MIN(created_at), MAX(created_at)
+        FROM token_usage_events
+        """
+        if !conditions.isEmpty {
+            sql += "\nWHERE \(conditions.joined(separator: " AND "))"
+        }
+
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
+              let statement
+        else {
+            return .empty
+        }
+        defer { sqlite3_finalize(statement) }
+
+        if let selectedTool {
+            sqlite3_bind_text(statement, 1, selectedTool.rawValue, -1, SQLITE_TRANSIENT)
+        }
+
+        guard sqlite3_step(statement) == SQLITE_ROW else {
+            return .empty
+        }
+
+        let earliest = Self.columnString(statement, 0)
+            .flatMap(ISO8601DateFormatter.parseTokenUsageDate(from:))
+        let latest = Self.columnString(statement, 1)
+            .flatMap(ISO8601DateFormatter.parseTokenUsageDate(from:))
+        return TokenUsageDashboardDateBounds(earliest: earliest, latest: latest)
+    }
+
     private func loadDashboardCountAndTotal(
+        startingAt startDate: Date? = nil,
+        endingBefore endDate: Date? = nil,
         dashboardToolsOnly: Bool,
         database: OpaquePointer
     ) -> (eventCount: Int, totalTokens: Int) {
         let sql = """
         SELECT COUNT(*), COALESCE(SUM(total_tokens), 0)
         FROM token_usage_events
-        \(Self.dashboardToolWhereClause(dashboardToolsOnly: dashboardToolsOnly))
+        \(Self.dashboardWhereClause(startingAt: startDate, endingBefore: endDate, dashboardToolsOnly: dashboardToolsOnly))
         """
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
@@ -933,6 +1394,7 @@ final class TokenUsageStore: @unchecked Sendable {
             return (0, 0)
         }
         defer { sqlite3_finalize(statement) }
+        Self.bindDashboardDateRange(startingAt: startDate, endingBefore: endDate, statement: statement)
 
         guard sqlite3_step(statement) == SQLITE_ROW else {
             return (0, 0)
@@ -946,13 +1408,15 @@ final class TokenUsageStore: @unchecked Sendable {
 
     private func loadGroupedTokenTotals(
         column: String,
+        startingAt startDate: Date? = nil,
+        endingBefore endDate: Date? = nil,
         dashboardToolsOnly: Bool,
         database: OpaquePointer
     ) -> [String: Int] {
         let sql = """
         SELECT \(column), COALESCE(SUM(total_tokens), 0)
         FROM token_usage_events
-        \(Self.dashboardToolWhereClause(dashboardToolsOnly: dashboardToolsOnly))
+        \(Self.dashboardWhereClause(startingAt: startDate, endingBefore: endDate, dashboardToolsOnly: dashboardToolsOnly))
         GROUP BY \(column)
         """
         var statement: OpaquePointer?
@@ -962,6 +1426,7 @@ final class TokenUsageStore: @unchecked Sendable {
             return [:]
         }
         defer { sqlite3_finalize(statement) }
+        Self.bindDashboardDateRange(startingAt: startDate, endingBefore: endDate, statement: statement)
 
         var totals = [String: Int]()
         while sqlite3_step(statement) == SQLITE_ROW {
@@ -978,6 +1443,8 @@ final class TokenUsageStore: @unchecked Sendable {
     }
 
     private func loadSourceTokenTotals(
+        startingAt startDate: Date? = nil,
+        endingBefore endDate: Date? = nil,
         dashboardToolsOnly: Bool,
         database: OpaquePointer
     ) -> [String: Int] {
@@ -991,7 +1458,7 @@ final class TokenUsageStore: @unchecked Sendable {
             COALESCE(SUM(source_generated_output), 0),
             COALESCE(SUM(source_unknown), 0)
         FROM token_usage_events
-        \(Self.dashboardToolWhereClause(dashboardToolsOnly: dashboardToolsOnly))
+        \(Self.dashboardWhereClause(startingAt: startDate, endingBefore: endDate, dashboardToolsOnly: dashboardToolsOnly))
         """
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
@@ -1000,6 +1467,7 @@ final class TokenUsageStore: @unchecked Sendable {
             return [:]
         }
         defer { sqlite3_finalize(statement) }
+        Self.bindDashboardDateRange(startingAt: startDate, endingBefore: endDate, statement: statement)
 
         guard sqlite3_step(statement) == SQLITE_ROW else {
             return [:]
@@ -1057,6 +1525,39 @@ final class TokenUsageStore: @unchecked Sendable {
             : ""
     }
 
+    private static func dashboardWhereClause(
+        startingAt startDate: Date?,
+        endingBefore endDate: Date?,
+        dashboardToolsOnly: Bool
+    ) -> String {
+        var conditions = [String]()
+        if startDate != nil, endDate != nil {
+            conditions.append("created_at >= ? AND created_at < ?")
+        }
+        if dashboardToolsOnly {
+            conditions.append("ai_tool IN ('codex', 'claude', 'antigravity')")
+        }
+        guard !conditions.isEmpty else {
+            return ""
+        }
+        return "WHERE \(conditions.joined(separator: " AND "))"
+    }
+
+    private static func bindDashboardDateRange(
+        startingAt startDate: Date?,
+        endingBefore endDate: Date?,
+        statement: OpaquePointer
+    ) {
+        guard let startDate, let endDate else {
+            return
+        }
+
+        let startValue = ISO8601DateFormatter.tokenUsage.string(from: startDate)
+        let endValue = ISO8601DateFormatter.tokenUsage.string(from: endDate)
+        sqlite3_bind_text(statement, 1, startValue, -1, SQLITE_TRANSIENT)
+        sqlite3_bind_text(statement, 2, endValue, -1, SQLITE_TRANSIENT)
+    }
+
     private static func normalizedCreatedAt(_ createdAt: String) -> String? {
         guard let date = ISO8601DateFormatter.parseTokenUsageDate(from: createdAt) else {
             return nil
@@ -1082,6 +1583,10 @@ final class TokenUsageStore: @unchecked Sendable {
             .appendingPathExtension("sqlite3")
     }
 
+    func notifyEventsDidChange() {
+        postEventsDidChange()
+    }
+
     private func postEventsDidChange() {
         NotificationCenter.default.post(
             name: Self.eventsDidChangeNotification,
@@ -1093,6 +1598,39 @@ final class TokenUsageStore: @unchecked Sendable {
             userInfo: nil,
             deliverImmediately: true
         )
+    }
+
+    private func resetImporterState(for aiTools: [TokenUsageAITool]) {
+        let fileManager = FileManager.default
+        let tokenMeteringDir = tokenMeteringDirectory
+        let sessionStateDir = tokenMeteringDir.appendingPathComponent("session-state", isDirectory: true)
+        let historyImportDir = tokenMeteringDir.appendingPathComponent("history-import", isDirectory: true)
+
+        for tool in aiTools {
+            switch tool {
+            case .antigravity:
+                let activeState = sessionStateDir.appendingPathComponent("antigravity-active-importer-state.json")
+                let historyState = historyImportDir.appendingPathComponent("antigravity-active-importer-state.json")
+                try? fileManager.removeItem(at: activeState)
+                try? fileManager.removeItem(at: historyState)
+            case .codex:
+                // History import state
+                let codexHistoryState = historyImportDir.appendingPathComponent("codex-session-import-state.json")
+                try? fileManager.removeItem(at: codexHistoryState)
+                // Live Stop-hook state (default path used by the live importer)
+                let codexLiveState = tokenMeteringDir.appendingPathComponent("codex-session-import-state.json")
+                try? fileManager.removeItem(at: codexLiveState)
+            case .claude:
+                let claudeDir = historyImportDir.appendingPathComponent("claude-session-state", isDirectory: true)
+                if let files = try? fileManager.contentsOfDirectory(at: claudeDir, includingPropertiesForKeys: nil) {
+                    for file in files where file.pathExtension == "json" {
+                        try? fileManager.removeItem(at: file)
+                    }
+                }
+            default:
+                break
+            }
+        }
     }
 }
 
@@ -1130,14 +1668,6 @@ private struct StoreLoadResult {
 private struct DatabaseSchemaCheckpoint: Equatable {
     let fileIdentity: String?
     let schemaVersion: Int
-}
-
-private extension NSLock {
-    func withLock<T>(_ body: () throws -> T) rethrows -> T {
-        lock()
-        defer { unlock() }
-        return try body()
-    }
 }
 
 struct SafeDecodableArray<Element: Decodable>: Decodable {
