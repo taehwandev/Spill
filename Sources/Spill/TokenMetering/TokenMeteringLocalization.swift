@@ -349,7 +349,7 @@ enum TokenMeteringL10n {
                 "format.spans_detail_with_latency",
                 language: language,
                 formattedCount(spanCount),
-                "\(latencyMS) ms",
+                "\(formattedCount(latencyMS)) ms",
                 latest
             )
         }

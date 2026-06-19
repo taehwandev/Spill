@@ -224,7 +224,7 @@ struct TokenMeteringPreferencesSection: View {
             HStack(spacing: 10) {
                 PrivateUsageUploadMetric(
                     title: t(.privateUsageUploadQueued),
-                    value: "\(status.queuedBucketCount)"
+                    value: TokenUsageDashboardSnapshot.formatCount(status.queuedBucketCount)
                 )
                 PrivateUsageUploadMetric(
                     title: t(.privateUsageUploadLastBackup),

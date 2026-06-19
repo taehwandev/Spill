@@ -159,13 +159,13 @@ struct TokenMeteringDashboardAgentStatusPanel: View {
         LazyVGrid(columns: Self.summaryColumns, alignment: .leading, spacing: 6) {
             summaryPill(
                 title: t(.agentStatusDetected),
-                value: "\(summary.detectedToolCount)",
+                value: TokenUsageDashboardSnapshot.formatCount(summary.detectedToolCount),
                 systemImage: "sparkles",
                 tint: .teal
             )
             summaryPill(
                 title: AppL10n.text(.processes, appLanguage: appLanguage),
-                value: "\(summary.processCount)",
+                value: TokenUsageDashboardSnapshot.formatCount(summary.processCount),
                 systemImage: "cpu",
                 tint: .blue
             )
@@ -320,7 +320,7 @@ struct TokenMeteringDashboardAgentStatusPanel: View {
             HStack(spacing: 6) {
                 miniMetric(
                     title: AppL10n.text(.processes, appLanguage: appLanguage),
-                    value: "\(row.processCount)"
+                    value: TokenUsageDashboardSnapshot.formatCount(row.processCount)
                 )
                 miniMetric(title: AppL10n.text(.cpu, appLanguage: appLanguage), value: row.cpuText)
                 miniMetric(title: AppL10n.text(.memory, appLanguage: appLanguage), value: row.memoryText)
