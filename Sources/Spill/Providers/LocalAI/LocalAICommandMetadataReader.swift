@@ -1,12 +1,16 @@
 import Foundation
 
 enum LocalAICommandMetadataReader {
-    static func metadata(for executablePaths: [String: String]) -> [LocalAIToolKind: LocalAIToolMetadata] {
+    private static let cacheLock = NSLock()
+    private nonisolated(unsafe) static var cachedVersionsByExecutablePath: [String: CachedVersion] = [:]
+    private static let versionCacheTTL: TimeInterval = 300
+
+    static func metadata(for executablePaths: [String: String], now: Date = Date()) -> [LocalAIToolKind: LocalAIToolMetadata] {
         var metadata = [LocalAIToolKind: LocalAIToolMetadata]()
 
         for kind in LocalAIToolKind.allCases {
             guard let executablePath = kind.executableNames.compactMap({ executablePaths[$0] }).first,
-                  let version = version(executablePath: executablePath)
+                  let version = version(executablePath: executablePath, now: now)
             else {
                 continue
             }
@@ -17,7 +21,12 @@ enum LocalAICommandMetadataReader {
         return metadata
     }
 
-    private static func version(executablePath: String) -> String? {
+    private static func version(executablePath: String, now: Date) -> String? {
+        if let cached = cacheLock.withLock({ cachedVersionsByExecutablePath[executablePath] }),
+           now.timeIntervalSince(cached.cachedAt) < versionCacheTTL {
+            return cached.version
+        }
+
         guard let output = LocalCommandRunner.output(
             executablePath: executablePath,
             arguments: ["--version"],
@@ -26,7 +35,13 @@ enum LocalAICommandMetadataReader {
             return nil
         }
 
-        return versionText(from: output)
+        guard let version = versionText(from: output) else {
+            return nil
+        }
+        cacheLock.withLock {
+            cachedVersionsByExecutablePath[executablePath] = CachedVersion(version: version, cachedAt: now)
+        }
+        return version
     }
 
     private static func versionText(from output: String) -> String? {
@@ -51,5 +66,10 @@ enum LocalAICommandMetadataReader {
                 character.isNumber
             }
         }?.trimmingCharacters(in: CharacterSet(charactersIn: "vV"))
+    }
+
+    private struct CachedVersion {
+        let version: String
+        let cachedAt: Date
     }
 }

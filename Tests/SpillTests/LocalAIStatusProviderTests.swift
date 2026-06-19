@@ -122,6 +122,84 @@ final class LocalAIStatusProviderTests: XCTestCase {
         XCTAssertFalse(source.contains("LocalAICommandLineParser.tokens(from: snapshot.commandLine)"))
     }
 
+    func testCommandMetadataCachesVersionLookups() throws {
+        let directory = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer {
+            try? FileManager.default.removeItem(at: directory)
+        }
+
+        let counterURL = directory.appendingPathComponent("count.txt")
+        let executableURL = directory.appendingPathComponent("codex")
+        let script = """
+        #!/bin/sh
+        count=0
+        if [ -f "\(counterURL.path)" ]; then
+          count=$(cat "\(counterURL.path)")
+        fi
+        count=$((count + 1))
+        echo "$count" > "\(counterURL.path)"
+        echo "codex 9.8.7"
+        """
+        try script.write(to: executableURL, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executableURL.path)
+
+        let first = LocalAICommandMetadataReader.metadata(
+            for: ["codex": executableURL.path],
+            now: Date(timeIntervalSince1970: 100)
+        )
+        let second = LocalAICommandMetadataReader.metadata(
+            for: ["codex": executableURL.path],
+            now: Date(timeIntervalSince1970: 160)
+        )
+
+        XCTAssertEqual(first[.codex]?.version, "9.8.7")
+        XCTAssertEqual(second[.codex]?.version, "9.8.7")
+        XCTAssertEqual(try String(contentsOf: counterURL).trimmingCharacters(in: .whitespacesAndNewlines), "1")
+
+        let expired = LocalAICommandMetadataReader.metadata(
+            for: ["codex": executableURL.path],
+            now: Date(timeIntervalSince1970: 401)
+        )
+
+        XCTAssertEqual(expired[.codex]?.version, "9.8.7")
+        XCTAssertEqual(try String(contentsOf: counterURL).trimmingCharacters(in: .whitespacesAndNewlines), "2")
+    }
+
+    func testCommandMetadataDoesNotCacheFailedVersionLookups() throws {
+        let directory = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer {
+            try? FileManager.default.removeItem(at: directory)
+        }
+
+        let executableURL = directory.appendingPathComponent("codex")
+        try """
+        #!/bin/sh
+        exit 1
+        """.write(to: executableURL, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executableURL.path)
+
+        let failed = LocalAICommandMetadataReader.metadata(
+            for: ["codex": executableURL.path],
+            now: Date(timeIntervalSince1970: 100)
+        )
+        XCTAssertNil(failed[.codex])
+
+        try """
+        #!/bin/sh
+        echo "codex 9.8.8"
+        """.write(to: executableURL, atomically: true, encoding: .utf8)
+
+        let recovered = LocalAICommandMetadataReader.metadata(
+            for: ["codex": executableURL.path],
+            now: Date(timeIntervalSince1970: 120)
+        )
+        XCTAssertEqual(recovered[.codex]?.version, "9.8.8")
+    }
+
     func testDetectedProcessAndOpenAIConfigMapping() {
         let statuses = LocalAIStatusProvider.statuses(
             environment: ["OPENAI_API_KEY": "set"],

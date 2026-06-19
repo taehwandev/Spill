@@ -8,6 +8,10 @@ final class AIStatusStore: ObservableObject {
 
     private let reader: Reader
     private var backgroundRefreshTask: Task<Void, Never>?
+    private var isBackgroundRefreshInFlight = false
+    private var lastBackgroundRefreshStartedAt: Date?
+
+    private static let minimumBackgroundRefreshInterval: TimeInterval = 3.0
 
     init(
         statuses: [LocalAIToolStatus] = LocalAIStatusProvider.statuses(environment: [:], processNames: []),
@@ -22,17 +26,32 @@ final class AIStatusStore: ObservableObject {
     }
 
     func refreshInBackground() {
-        backgroundRefreshTask?.cancel()
+        let now = Date()
+        guard !isBackgroundRefreshInFlight else {
+            return
+        }
+        if let lastBackgroundRefreshStartedAt,
+           now.timeIntervalSince(lastBackgroundRefreshStartedAt) < Self.minimumBackgroundRefreshInterval {
+            return
+        }
+
+        isBackgroundRefreshInFlight = true
+        lastBackgroundRefreshStartedAt = now
         backgroundRefreshTask = Task { @MainActor [weak self] in
             let statuses = await Task.detached(priority: .utility) {
                 LocalAIStatusProvider.statuses()
             }.value
 
+            guard let self else {
+                return
+            }
+            self.isBackgroundRefreshInFlight = false
+
             guard !Task.isCancelled else {
                 return
             }
 
-            self?.statuses = statuses
+            self.statuses = statuses
         }
     }
 }
