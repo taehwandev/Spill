@@ -562,12 +562,13 @@ final class TokenUsageStoreTests: XCTestCase {
 
     func testDashboardViewSimplifiesClearActions() throws {
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let dashboardView = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardView.swift"))
-        let analyticsGrid = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardAnalyticsGrid.swift"))
-        let sessionsTable = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardSessionsTable.swift"))
-        let trendChart = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardTrendChart.swift"))
-        let trendBucketBuilder = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenUsageDashboardTrendBucketBuilder.swift"))
+        let dashboardView = try Self.source(named: "TokenMeteringDashboardView.swift")
+        let analyticsGrid = try Self.source(named: "TokenMeteringDashboardAnalyticsGrid.swift")
+        let sessionsTable = try Self.source(named: "TokenMeteringDashboardSessionsTable.swift")
+        let trendChart = try Self.source(named: "TokenMeteringDashboardTrendChart.swift")
+        let trendBucketBuilder = try Self.source(named: "TokenUsageDashboardTrendBucketBuilder.swift")
         let preferencesSection = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Preferences/TokenMeteringPreferencesSection.swift"))
+        let localDataSection = try Self.source(named: "TokenMeteringLocalDataManagementSection.swift")
         let preferencesView = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Preferences/PreferencesView.swift"))
 
         XCTAssertFalse(dashboardView.contains("dataManagementPanel"))
@@ -604,15 +605,15 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(trendBucketBuilder.contains("private static func dailyBuckets("))
         XCTAssertTrue(trendBucketBuilder.contains("private static func monthlyBuckets("))
         XCTAssertFalse(preferencesSection.contains("localDataManagementSection"))
-        XCTAssertTrue(preferencesSection.contains("struct TokenMeteringLocalDataManagementSection"))
+        XCTAssertTrue(localDataSection.contains("struct TokenMeteringLocalDataManagementSection"))
         XCTAssertTrue(preferencesView.contains("TokenMeteringLocalDataManagementSection("))
         XCTAssertTrue(preferencesView.contains("private var developerOptionsTab"))
-        XCTAssertTrue(preferencesSection.contains("Text(t(.localDataManagementDetail))"))
-        XCTAssertTrue(preferencesSection.contains("DisclosureGroup(isExpanded: $showsDeleteControls)"))
-        XCTAssertTrue(preferencesSection.contains("Label(t(.localDataDeleteOptions), systemImage: \"trash\")"))
-        XCTAssertTrue(preferencesSection.contains("Label(t(.reviewLocalDataDelete), systemImage: \"trash\")"))
-        XCTAssertFalse(preferencesSection.contains("Label(t(.clearAllLocalData), systemImage: \"trash\")"))
-        XCTAssertTrue(preferencesSection.contains("try tokenUsageStore.clearEvents()"))
+        XCTAssertTrue(localDataSection.contains("Text(t(.localDataManagementDetail))"))
+        XCTAssertTrue(localDataSection.contains("DisclosureGroup(isExpanded: $showsDeleteControls)"))
+        XCTAssertTrue(localDataSection.contains("Label(t(.localDataDeleteOptions), systemImage: \"trash\")"))
+        XCTAssertTrue(localDataSection.contains("Label(t(.reviewLocalDataDelete), systemImage: \"trash\")"))
+        XCTAssertFalse(localDataSection.contains("Label(t(.clearAllLocalData), systemImage: \"trash\")"))
+        XCTAssertTrue(localDataSection.contains("try tokenUsageStore.clearEvents()"))
         XCTAssertTrue(dashboardView.contains("guard SpillBuildOptions.developerOptionsEnabled else"))
     }
 
@@ -640,11 +641,10 @@ final class TokenUsageStoreTests: XCTestCase {
     }
 
     func testDashboardShowsSelectedWorkItemInPopover() throws {
-        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let dashboardView = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardView.swift"))
-        let analyticsGrid = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardAnalyticsGrid.swift"))
-        let detailPanel = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardDetailPanel.swift"))
-        let sessionsTable = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardSessionsTable.swift"))
+        let dashboardView = try Self.source(named: "TokenMeteringDashboardView.swift")
+        let analyticsGrid = try Self.source(named: "TokenMeteringDashboardAnalyticsGrid.swift")
+        let detailPanel = try Self.source(named: "TokenMeteringDashboardDetailPanel.swift")
+        let sessionsTable = try Self.source(named: "TokenMeteringDashboardSessionsTable.swift")
 
         XCTAssertTrue(dashboardView.contains("TokenMeteringDashboardDetailPanel("))
         XCTAssertTrue(sessionsTable.contains("store.selectSession(session.id)"))
@@ -669,22 +669,23 @@ final class TokenUsageStoreTests: XCTestCase {
 
     func testDashboardViewUsesTopToolTabsAndOptionalCalendarPicker() throws {
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let dashboardView = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardView.swift"))
-        let dashboardWindowController = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardWindowController.swift"))
-        let dashboardAppDelegate = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardAppDelegate.swift"))
-        let dashboardProcess = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardProcess.swift"))
-        let analyticsGrid = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardAnalyticsGrid.swift"))
-        let filterBar = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardFilterBar.swift"))
-        let calendarControl = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardCalendarControl.swift"))
-        let toolTab = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardToolTab.swift"))
-        let toolColor = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardToolColor.swift"))
-        let chrome = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardChrome.swift"))
-        let onboardingGuide = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardOnboardingGuide.swift"))
-        let sessionsTable = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardSessionsTable.swift"))
+        let dashboardView = try Self.source(named: "TokenMeteringDashboardView.swift")
+        let dashboardWindowController = try Self.source(named: "TokenMeteringDashboardWindowController.swift")
+        let dashboardAppDelegate = try Self.source(named: "TokenMeteringDashboardAppDelegate.swift")
+        let dashboardProcess = try Self.source(named: "TokenMeteringDashboardProcess.swift")
+        let analyticsGrid = try Self.source(named: "TokenMeteringDashboardAnalyticsGrid.swift")
+        let filterBar = try Self.source(named: "TokenMeteringDashboardFilterBar.swift")
+        let calendarControl = try Self.source(named: "TokenMeteringDashboardCalendarControl.swift")
+        let toolTab = try Self.source(named: "TokenMeteringDashboardToolTab.swift")
+        let toolColor = try Self.source(named: "TokenMeteringDashboardToolColor.swift")
+        let infoButton = try Self.source(named: "TokenMeteringInfoButton.swift")
+        let onboardingGuide = try Self.source(named: "TokenMeteringDashboardOnboardingGuide.swift")
+        let sessionsTable = try Self.source(named: "TokenMeteringDashboardSessionsTable.swift")
         let appDelegate = try String(contentsOf: root.appendingPathComponent("Sources/Spill/App/AppDelegate.swift"))
         let preferencesView = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Preferences/PreferencesView.swift"))
         let tokenMeteringPreferencesSection = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Preferences/TokenMeteringPreferencesSection.swift"))
-        let dashboardStore = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenUsageDashboardStore.swift"))
+        let localDataSection = try Self.source(named: "TokenMeteringLocalDataManagementSection.swift")
+        let dashboardStore = try Self.source(named: "TokenUsageDashboardStore.swift")
 
         XCTAssertFalse(dashboardView.contains("private var leftRail"))
         XCTAssertFalse(dashboardView.contains("railPanel(title: t(.aiTool))"))
@@ -781,9 +782,9 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(calendarControl.contains("store.clearSelectedCalendarDay()"))
         XCTAssertTrue(dashboardView.contains("receiverPanel"))
         XCTAssertTrue(dashboardView.contains(".focusEffectDisabled()"))
-        XCTAssertTrue(chrome.contains("struct TokenMeteringInfoButton"))
-        XCTAssertTrue(chrome.contains(".focusable(false)"))
-        XCTAssertTrue(chrome.contains(".accessibilityLabel(title)"))
+        XCTAssertTrue(infoButton.contains("struct TokenMeteringInfoButton"))
+        XCTAssertTrue(infoButton.contains(".focusable(false)"))
+        XCTAssertTrue(infoButton.contains(".accessibilityLabel(title)"))
         XCTAssertTrue(preferencesView.contains("private func sidebarItem"))
         XCTAssertTrue(preferencesView.contains(".focusEffectDisabled()"))
         XCTAssertTrue(dashboardStore.contains("@Published private(set) var unfilteredSnapshot"))
@@ -791,7 +792,7 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(dashboardStore.contains("func clearSelectedCalendarDay()"))
         XCTAssertTrue(dashboardView.contains("TokenMeteringLiveUpdateDot"))
         XCTAssertTrue(dashboardView.contains(".contentTransition(.numericText())"))
-        XCTAssertTrue(tokenMeteringPreferencesSection.contains("tokenUsageStore.dashboardSummary(dashboardToolsOnly: false)"))
+        XCTAssertTrue(localDataSection.contains("tokenUsageStore.dashboardSummary(dashboardToolsOnly: false)"))
         XCTAssertTrue(tokenMeteringPreferencesSection.contains("t(.historyImportAllStart)"))
         XCTAssertFalse(tokenMeteringPreferencesSection.contains("if SpillBuildOptions.developerOptionsEnabled"))
         XCTAssertTrue(preferencesView.contains("TokenMeteringLocalDataManagementSection("))
@@ -803,10 +804,10 @@ final class TokenUsageStoreTests: XCTestCase {
     func testOpeningTokenDashboardDismissesPanelBeforeShowingWindow() throws {
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let appDelegate = try String(contentsOf: root.appendingPathComponent("Sources/Spill/App/AppDelegate.swift"))
-        let dashboardView = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardView.swift"))
-        let dashboardProcess = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardProcess.swift"))
-        let tokenMeteringCoordinator = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringCoordinator.swift"))
-        let collector = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenUsageCollectorCoordinator.swift"))
+        let dashboardView = try Self.source(named: "TokenMeteringDashboardView.swift")
+        let dashboardProcess = try Self.source(named: "TokenMeteringDashboardProcess.swift")
+        let tokenMeteringCoordinator = try Self.source(named: "TokenMeteringCoordinator.swift")
+        let collector = try Self.source(named: "TokenUsageCollectorCoordinator.swift")
 
         XCTAssertTrue(appDelegate.contains("let wasPanelVisible = spillPanelController.isVisible"))
         XCTAssertTrue(appDelegate.contains("spillPanelController.hide(animated: false)"))
@@ -844,7 +845,7 @@ final class TokenUsageStoreTests: XCTestCase {
 
     func testDashboardLocalRefreshIsSeparatedFromServerStatusRefresh() throws {
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let dashboardView = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardView.swift"))
+        let dashboardView = try Self.source(named: "TokenMeteringDashboardView.swift")
         let panelController = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Panel/SpillPanelController.swift"))
         let spillBarView = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Panel/SpillBarView.swift"))
         let spillBarAISection = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Panel/SpillBarAISection.swift"))
@@ -895,8 +896,7 @@ final class TokenUsageStoreTests: XCTestCase {
     }
 
     func testTokenUsageCollectorDoesNotAutoRunHistoryImporters() throws {
-        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let collector = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenUsageCollectorCoordinator.swift"))
+        let collector = try Self.source(named: "TokenUsageCollectorCoordinator.swift")
 
         XCTAssertTrue(collector.contains("store.drainQueuedEventsWithoutLoading()"))
         XCTAssertTrue(collector.contains("runAntigravityActiveImporter()"))
@@ -1072,9 +1072,9 @@ final class TokenUsageStoreTests: XCTestCase {
     func testMenuBarAITokenStatusRefreshesFromSharedStoreChanges() throws {
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let appDelegate = try String(contentsOf: root.appendingPathComponent("Sources/Spill/App/AppDelegate.swift"))
-        let tokenMeteringCoordinator = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringCoordinator.swift"))
-        let usageStore = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenUsageStore.swift"))
-        let dashboardStore = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenUsageDashboardStore.swift"))
+        let tokenMeteringCoordinator = try Self.source(named: "TokenMeteringCoordinator.swift")
+        let usageStore = try Self.source(named: "TokenUsageStore.swift")
+        let dashboardStore = try Self.source(named: "TokenUsageDashboardStore.swift")
 
         XCTAssertTrue(usageStore.contains("distributedEventsDidChangeNotification"))
         XCTAssertTrue(usageStore.contains("DistributedNotificationCenter.default().postNotificationName"))
@@ -1099,11 +1099,11 @@ final class TokenUsageStoreTests: XCTestCase {
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let main = try String(contentsOf: root.appendingPathComponent("Sources/Spill/App/SpillMain.swift"))
         let appDelegate = try String(contentsOf: root.appendingPathComponent("Sources/Spill/App/AppDelegate.swift"))
-        let process = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardProcess.swift"))
-        let launcher = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardLauncher.swift"))
-        let tokenMeteringCoordinator = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringCoordinator.swift"))
-        let helperDelegate = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardAppDelegate.swift"))
-        let windowController = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardWindowController.swift"))
+        let process = try Self.source(named: "TokenMeteringDashboardProcess.swift")
+        let launcher = try Self.source(named: "TokenMeteringDashboardLauncher.swift")
+        let tokenMeteringCoordinator = try Self.source(named: "TokenMeteringCoordinator.swift")
+        let helperDelegate = try Self.source(named: "TokenMeteringDashboardAppDelegate.swift")
+        let windowController = try Self.source(named: "TokenMeteringDashboardWindowController.swift")
         let buildScript = try String(contentsOf: root.appendingPathComponent("scripts/build-app.sh"))
         let smokeScript = try String(contentsOf: root.appendingPathComponent("scripts/verify-runtime-smoke.sh"))
 
@@ -1510,10 +1510,7 @@ final class TokenUsageStoreTests: XCTestCase {
     }
 
     func testDashboardStoreScopeChangesSkipPanelSummaryRefresh() throws {
-        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let dashboardStore = try String(
-            contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenUsageDashboardStore.swift")
-        )
+        let dashboardStore = try Self.source(named: "TokenUsageDashboardStore.swift")
 
         XCTAssertTrue(dashboardStore.contains("refreshesPanelSummary ? loadPanelSummary"))
         XCTAssertTrue(dashboardStore.contains("refreshesPanelSummary ? Self.loadPanelSummary"))
@@ -2908,8 +2905,7 @@ final class TokenUsageStoreTests: XCTestCase {
     }
 
     func testBridgeClearEndpointIsDebugOnly() throws {
-        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let bridgeServer = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenUsageBridgeServer.swift"))
+        let bridgeServer = try Self.source(named: "TokenUsageBridgeServer.swift")
 
         XCTAssertTrue(bridgeServer.contains(#"case ("DELETE", "/v1/usage/events")"#))
         XCTAssertTrue(bridgeServer.contains("guard SpillBuildOptions.developerOptionsEnabled else"))
@@ -3059,7 +3055,7 @@ final class TokenUsageStoreTests: XCTestCase {
         let publicStatsHelper = try String(contentsOf: root.appendingPathComponent("scripts/spill-token-metering-stats.mjs"))
         let bundledStatsHelper = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Resources/adapters/setup/spill-token-metering-stats.mjs"))
         let codexImporter = try String(contentsOf: root.appendingPathComponent("adapters/codex/spill-importer.mjs"))
-        let antigravityImporter = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenUsageAntigravityImporter.swift"))
+        let antigravityImporter = try Self.source(named: "TokenUsageAntigravityImporter.swift")
         let claudeHook = try String(contentsOf: root.appendingPathComponent("adapters/claude-code/spill-hook.py"))
         let bundledClaudeHook = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Resources/adapters/claude-code/spill-hook.py"))
         let preferencesSection = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Preferences/TokenMeteringPreferencesSection.swift"))
@@ -4412,6 +4408,20 @@ final class TokenUsageStoreTests: XCTestCase {
 
     private func decodedJSONObject(from data: Data) throws -> [String: Any] {
         try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+    }
+
+    private static func source(named fileName: String) throws -> String {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let sourcesURL = root.appendingPathComponent("Sources/Spill", isDirectory: true)
+        let urls = FileManager.default.enumerator(
+            at: sourcesURL,
+            includingPropertiesForKeys: nil
+        )?
+            .compactMap { $0 as? URL }
+            .filter { $0.lastPathComponent == fileName }
+            .sorted { $0.path < $1.path } ?? []
+        let sourceURL = try XCTUnwrap(urls.first, "Missing source file named \(fileName)")
+        return try String(contentsOf: sourceURL)
     }
 
     private func httpRequest(method: String, path: String, body: Data = Data()) -> Data {

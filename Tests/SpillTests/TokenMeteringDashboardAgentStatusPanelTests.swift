@@ -3,10 +3,7 @@ import XCTest
 
 final class TokenMeteringDashboardAgentStatusPanelTests: XCTestCase {
     func testAgentStatusPanelKeepsSummaryAndGridWorkLocalToOneRenderPass() throws {
-        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let source = try String(
-            contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/TokenMeteringDashboardAgentStatusPanel.swift")
-        )
+        let source = try Self.source(named: "TokenMeteringDashboardAgentStatusPanel.swift")
 
         XCTAssertTrue(source.contains("private static let summaryColumns"))
         XCTAssertTrue(source.contains("let summary = TokenMeteringDashboardAgentStatusSummary.make(statuses: aiStatusStore.statuses)"))
@@ -119,5 +116,19 @@ final class TokenMeteringDashboardAgentStatusPanelTests: XCTestCase {
         XCTAssertEqual(codex.cpuText, "N/A")
         XCTAssertEqual(codex.memoryText, "N/A")
         XCTAssertEqual(codex.processRows.first?.detail, "codex / CPU N/A / N/A")
+    }
+
+    private static func source(named fileName: String) throws -> String {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let sourcesURL = root.appendingPathComponent("Sources/Spill", isDirectory: true)
+        let urls = FileManager.default.enumerator(
+            at: sourcesURL,
+            includingPropertiesForKeys: nil
+        )?
+            .compactMap { $0 as? URL }
+            .filter { $0.lastPathComponent == fileName }
+            .sorted { $0.path < $1.path } ?? []
+        let sourceURL = try XCTUnwrap(urls.first, "Missing source file named \(fileName)")
+        return try String(contentsOf: sourceURL)
     }
 }

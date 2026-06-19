@@ -1,22 +1,5 @@
 @preconcurrency import Foundation
 
-struct TokenUsageClearPreview: Equatable {
-    let scopeTitle: String
-    let eventCount: Int
-    let totalTokens: Int
-
-    var hasEvents: Bool {
-        eventCount > 0
-    }
-}
-
-enum TokenUsageDashboardLoadState: Equatable {
-    case idle
-    case loading
-    case loaded
-    case previewingEmpty
-}
-
 private enum TokenUsageDashboardPreviewDataSource {
     static let onboardingEvents: [TokenUsageEvent] = []
 }
@@ -89,29 +72,6 @@ private final class TokenUsageDashboardSnapshotBuildGate: @unchecked Sendable {
     func isCurrent(_ candidate: Int) -> Bool {
         lock.withLock {
             generation == candidate
-        }
-    }
-}
-
-enum TokenUsageClearScope: Equatable, Identifiable {
-    case all
-    case currentScope
-    case tool(TokenUsageAITool)
-    case period(TokenUsageDashboardPeriod)
-    case workItem(String)
-
-    var id: String {
-        switch self {
-        case .all:
-            return "all"
-        case .currentScope:
-            return "current_scope"
-        case let .tool(tool):
-            return "tool_\(tool.rawValue)"
-        case let .period(period):
-            return "period_\(period.rawValue)"
-        case let .workItem(id):
-            return "work_item_\(id)"
         }
     }
 }
@@ -1550,17 +1510,6 @@ private struct TokenUsageDashboardBuildRequest {
     let calendar: Calendar
     let periodOffset: Int
     let availableDateBounds: TokenUsageDashboardDateBounds
-}
-
-struct TokenUsageLiveUpdateMarker: Equatable {
-    let ids: Set<String>
-    let sequence: Int
-
-    static let empty = TokenUsageLiveUpdateMarker(ids: [], sequence: 0)
-
-    func contains(_ id: String) -> Bool {
-        ids.contains(id)
-    }
 }
 
 private extension TokenUsageDashboardBuildRequest {
