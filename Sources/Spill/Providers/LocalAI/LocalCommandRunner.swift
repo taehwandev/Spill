@@ -1,6 +1,8 @@
 import Foundation
 
 enum LocalCommandRunner {
+    private static let processLimit = DispatchSemaphore(value: 2)
+
     static func output(
         executablePath: String,
         arguments: [String],
@@ -8,6 +10,12 @@ enum LocalCommandRunner {
     ) -> String? {
         guard FileManager.default.fileExists(atPath: executablePath) else {
             return nil
+        }
+        guard processLimit.wait(timeout: .now()) == .success else {
+            return nil
+        }
+        defer {
+            processLimit.signal()
         }
 
         let process = Process()
@@ -17,6 +25,10 @@ enum LocalCommandRunner {
         let pipe = Pipe()
         process.standardOutput = pipe
         process.standardError = nil
+        let terminationSemaphore = DispatchSemaphore(value: 0)
+        process.terminationHandler = { _ in
+            terminationSemaphore.signal()
+        }
 
         do {
             try process.run()
@@ -24,16 +36,9 @@ enum LocalCommandRunner {
             return nil
         }
 
-        let group = DispatchGroup()
-        group.enter()
-        DispatchQueue.global(qos: .utility).async {
-            process.waitUntilExit()
-            group.leave()
-        }
-
-        guard group.wait(timeout: .now() + timeout) == .success else {
+        guard terminationSemaphore.wait(timeout: .now() + timeout) == .success else {
             process.terminate()
-            _ = group.wait(timeout: .now() + 0.2)
+            _ = terminationSemaphore.wait(timeout: .now() + 0.2)
             return nil
         }
 

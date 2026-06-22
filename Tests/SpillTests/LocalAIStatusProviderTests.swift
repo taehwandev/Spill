@@ -167,7 +167,7 @@ final class LocalAIStatusProviderTests: XCTestCase {
         XCTAssertEqual(try String(contentsOf: counterURL).trimmingCharacters(in: .whitespacesAndNewlines), "2")
     }
 
-    func testCommandMetadataDoesNotCacheFailedVersionLookups() throws {
+    func testCommandMetadataCachesFailedVersionLookupsBriefly() throws {
         let directory = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -193,11 +193,28 @@ final class LocalAIStatusProviderTests: XCTestCase {
         echo "codex 9.8.8"
         """.write(to: executableURL, atomically: true, encoding: .utf8)
 
+        let cachedFailure = LocalAICommandMetadataReader.metadata(
+            for: ["codex": executableURL.path],
+            now: Date(timeIntervalSince1970: 110)
+        )
+        XCTAssertNil(cachedFailure[.codex])
+
         let recovered = LocalAICommandMetadataReader.metadata(
             for: ["codex": executableURL.path],
-            now: Date(timeIntervalSince1970: 120)
+            now: Date(timeIntervalSince1970: 116)
         )
         XCTAssertEqual(recovered[.codex]?.version, "9.8.8")
+    }
+
+    func testLocalCommandRunnerAvoidsDispatchWorkerWaitStorm() throws {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let source = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Providers/LocalAI/LocalCommandRunner.swift"))
+
+        XCTAssertTrue(source.contains("processLimit"))
+        XCTAssertTrue(source.contains("process.terminationHandler"))
+        XCTAssertTrue(source.contains("terminationSemaphore.wait"))
+        XCTAssertFalse(source.contains("DispatchQueue.global"))
+        XCTAssertFalse(source.contains("waitUntilExit"))
     }
 
     func testDetectedProcessAndOpenAIConfigMapping() {
