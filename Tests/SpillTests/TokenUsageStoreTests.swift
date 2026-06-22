@@ -3067,7 +3067,14 @@ final class TokenUsageStoreTests: XCTestCase {
         let publicStatsHelper = try String(contentsOf: root.appendingPathComponent("scripts/spill-token-metering-stats.mjs"))
         let bundledStatsHelper = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Resources/adapters/setup/spill-token-metering-stats.mjs"))
         let codexImporter = try String(contentsOf: root.appendingPathComponent("adapters/codex/spill-importer.mjs"))
-        let antigravityImporter = try Self.source(named: "TokenUsageAntigravityImporter.swift")
+        let antigravityImporter = try [
+            "TokenUsageAntigravityImporter.swift",
+            "TokenUsageAntigravityImporter+DatabaseReader.swift",
+            "TokenUsageAntigravityImporter+Defaults.swift",
+            "TokenUsageAntigravityImporter+Diagnostics.swift",
+            "TokenUsageAntigravityImporter+EventFactory.swift",
+            "TokenUsageAntigravityImporter+UsageParser.swift",
+            ].map(Self.source(named:)).joined(separator: "\n")
         let claudeHook = try String(contentsOf: root.appendingPathComponent("adapters/claude-code/spill-hook.py"))
         let bundledClaudeHook = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Resources/adapters/claude-code/spill-hook.py"))
         let preferencesSection = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Preferences/TokenMeteringPreferencesSection.swift"))

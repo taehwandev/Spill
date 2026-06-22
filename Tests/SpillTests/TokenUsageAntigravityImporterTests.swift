@@ -165,6 +165,53 @@ final class TokenUsageAntigravityImporterTests: XCTestCase {
         XCTAssertNotEqual(event.createdAt, ISO8601DateFormatter.tokenUsage.string(from: syncDate))
     }
 
+    func testImporterDiscoversRecentlyTouchedSQLiteSidecar() throws {
+        let rootURL = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: rootURL) }
+
+        let conversationsURL = rootURL.appendingPathComponent("conversations", isDirectory: true)
+        let databaseURL = conversationsURL.appendingPathComponent("conversation-a.db")
+        let labelURL = rootURL.appendingPathComponent("labels/antigravity-timeline.jsonl")
+        let diagnosticsURL = rootURL.appendingPathComponent("diagnostics/antigravity-active-importer-last.json")
+        try writeAlwaysActiveLabel(at: labelURL)
+
+        try writeAntigravityConversationDatabase(
+            at: databaseURL,
+            rows: [
+                (
+                    1,
+                    antigravityGenerationMetadataBlob(
+                        inputTokenChunks: [40],
+                        outputTokenChunks: [12],
+                        cachedInputTokenChunks: [],
+                        model: "gemini-3.5-flash-low"
+                    )
+                )
+            ]
+        )
+
+        let oldDatabaseModifiedAt = Date(timeIntervalSince1970: 1_000)
+        let recentSidecarModifiedAt = Date(timeIntervalSince1970: 2_000)
+        try FileManager.default.setAttributes([.modificationDate: oldDatabaseModifiedAt], ofItemAtPath: databaseURL.path)
+        let sidecarURL = URL(fileURLWithPath: databaseURL.path + "-shm")
+        try Data().write(to: sidecarURL)
+        try FileManager.default.setAttributes([.modificationDate: recentSidecarModifiedAt], ofItemAtPath: sidecarURL.path)
+
+        let store = TokenUsageStore(fileURL: rootURL.appendingPathComponent("events.json"))
+        let importer = TokenUsageAntigravityImporter(
+            conversationsDirectory: conversationsURL,
+            labelTimelineURL: labelURL,
+            diagnosticsURL: diagnosticsURL,
+            stateURL: rootURL.appendingPathComponent("state/antigravity-active-importer-state.json")
+        )
+
+        let summary = importer.importRecentEvents(into: store, since: Date(timeIntervalSince1970: 1_500))
+
+        XCTAssertEqual(summary.scannedDatabases, 1)
+        XCTAssertEqual(summary.importedEvents, 1)
+        XCTAssertEqual(store.loadEvents().count, 1)
+    }
+
     func testImporterUsesTimelineLabelsOnlyInsideCoveredWindow() throws {
         let rootURL = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: rootURL) }
@@ -588,7 +635,7 @@ final class TokenUsageAntigravityImporterTests: XCTestCase {
     }
 
     func testImporterUsesBatchAppendInsteadOfPerEventStoreAppend() throws {
-        let source = try Self.source(named: "TokenUsageAntigravityImporter.swift")
+        let source = try Self.source(named: "TokenUsageAntigravityImporter+ImportRecentEvents.swift")
 
         XCTAssertTrue(source.contains("store.appendEventsWithoutLoading(candidateEvents)"))
         XCTAssertFalse(source.contains("store.appendEvent("))
