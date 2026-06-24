@@ -1110,10 +1110,11 @@ final class TokenUsageStoreTests: XCTestCase {
 
     func testTokenDashboardHelperProcessContracts() throws {
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let main = try String(contentsOf: root.appendingPathComponent("Sources/Spill/App/SpillMain.swift"))
+        let main = try Self.source(named: "SpillMain.swift")
         let appDelegate = try String(contentsOf: root.appendingPathComponent("Sources/Spill/App/AppDelegate.swift"))
         let process = try Self.source(named: "TokenMeteringDashboardProcess.swift")
         let launcher = try Self.source(named: "TokenMeteringDashboardLauncher.swift")
+        let lifecycle = try Self.source(named: "TokenMeteringDashboardLifecycle.swift")
         let tokenMeteringCoordinator = try Self.source(named: "TokenMeteringCoordinator.swift")
         let helperDelegate = try Self.source(named: "TokenMeteringDashboardAppDelegate.swift")
         let windowController = try Self.source(named: "TokenMeteringDashboardWindowController.swift")
@@ -1121,6 +1122,9 @@ final class TokenUsageStoreTests: XCTestCase {
         let smokeScript = try String(contentsOf: root.appendingPathComponent("scripts/verify-runtime-smoke.sh"))
 
         XCTAssertTrue(main.contains("TokenMeteringDashboardProcess.isDashboardProcess"))
+        XCTAssertTrue(main.contains("TokenMeteringDashboardLifecycle.shared.observeDashboardMainApplicationTermination"))
+        XCTAssertTrue(main.contains("TokenMeteringDashboardProcess.mainBundleIdentifierForDashboardHelper()"))
+        XCTAssertTrue(main.contains("TokenMeteringDashboardLifecycle.shared.observeMainApplicationTermination"))
         XCTAssertTrue(main.contains("TokenMeteringDashboardAppDelegate()"))
         XCTAssertTrue(main.contains("application.setActivationPolicy(.regular)"))
         XCTAssertTrue(main.contains("application.setActivationPolicy(.accessory)"))
@@ -1130,6 +1134,16 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(process.contains("settingsDidChangeNotification"))
         XCTAssertTrue(process.contains("postAppLanguageDidChange"))
         XCTAssertTrue(process.contains("postTokenUsageDashboardOnboardingPreviewDidChange"))
+        XCTAssertTrue(lifecycle.contains("mainAppWillTerminateNotification"))
+        XCTAssertTrue(lifecycle.contains("observeMainApplicationTermination"))
+        XCTAssertTrue(lifecycle.contains("observeDashboardMainApplicationTermination"))
+        XCTAssertTrue(lifecycle.contains("NSApplication.willTerminateNotification"))
+        XCTAssertTrue(lifecycle.contains("NSWorkspace.didTerminateApplicationNotification"))
+        XCTAssertTrue(lifecycle.contains("postMainAppWillTerminate()"))
+        XCTAssertTrue(lifecycle.contains("terminateDashboardHelperProcesses()"))
+        XCTAssertTrue(lifecycle.contains("workspaceApplicationDidTerminate"))
+        XCTAssertTrue(lifecycle.contains("runningApplication.terminate()"))
+        XCTAssertTrue(lifecycle.contains("dashboardBundleIdentifier(forMainBundleIdentifier"))
         XCTAssertTrue(process.contains(#"static let developerOptionsPreferencesTab = "developer""#))
         XCTAssertTrue(launcher.contains("NSWorkspace.OpenConfiguration"))
         XCTAssertTrue(launcher.contains("workspace.openApplication(at: helperURL"))
@@ -1246,6 +1260,11 @@ final class TokenUsageStoreTests: XCTestCase {
             helperBundleIdentifier: "dev.spill.Spill",
             environment: [:]
         ))
+        XCTAssertEqual(
+            TokenMeteringDashboardLifecycle.dashboardBundleIdentifier(forMainBundleIdentifier: "dev.spill.Spill"),
+            "dev.spill.Spill.TokenDashboard"
+        )
+        XCTAssertNil(TokenMeteringDashboardLifecycle.dashboardBundleIdentifier(forMainBundleIdentifier: nil))
         XCTAssertTrue(TokenMeteringDashboardProcess.isDashboardBundleIdentifier("dev.spill.Spill.TokenDashboard"))
         XCTAssertFalse(TokenMeteringDashboardProcess.isDashboardBundleIdentifier("dev.spill.Spill"))
     }

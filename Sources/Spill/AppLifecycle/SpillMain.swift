@@ -10,9 +10,15 @@ enum SpillMain {
         let delegate: NSObject & NSApplicationDelegate
 
         if TokenMeteringDashboardProcess.isDashboardProcess {
+            TokenMeteringDashboardLifecycle.shared.observeDashboardMainApplicationTermination(
+                mainBundleIdentifier: TokenMeteringDashboardProcess.mainBundleIdentifierForDashboardHelper()
+            )
             delegate = TokenMeteringDashboardAppDelegate()
             application.setActivationPolicy(.regular)
         } else {
+            TokenMeteringDashboardLifecycle.shared.observeMainApplicationTermination(
+                mainBundleIdentifier: Bundle.main.bundleIdentifier
+            )
             delegate = AppDelegate()
             application.setActivationPolicy(.accessory)
         }
