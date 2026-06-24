@@ -107,19 +107,22 @@ final class LocalAIStatusProviderTests: XCTestCase {
 
     func testProcessSnapshotReaderUsesMacOSProcessAPIsForMetrics() throws {
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let source = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Providers/LocalAI/LocalAIProcessSnapshotReader.swift"))
+        let readerSource = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Providers/LocalAI/ProcessSnapshot/LocalAIProcessSnapshotReader.swift"))
+        let darwinSource = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Providers/LocalAI/ProcessSnapshot/LocalAIProcessSnapshotReader+Darwin.swift"))
+        let metricsSource = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Providers/LocalAI/ProcessSnapshot/LocalAIProcessSnapshotReader+Metrics.swift"))
+        let combinedSource = [readerSource, darwinSource, metricsSource].joined(separator: "\n")
 
-        XCTAssertTrue(source.contains("proc_pidinfo"))
-        XCTAssertTrue(source.contains("PROC_PIDTASKINFO"))
-        XCTAssertTrue(source.contains("proc_pid_rusage"))
-        XCTAssertTrue(source.contains("ri_phys_footprint"))
-        XCTAssertTrue(source.contains("candidateSnapshots.map(\\.processID)"))
-        XCTAssertTrue(source.contains("snapshots.filter(isKnownAIToolProcess)"))
-        XCTAssertTrue(source.contains("executableToken: snapshot.executableToken"))
-        XCTAssertTrue(source.contains("LocalAIRawProcessMetrics"))
-        XCTAssertTrue(source.contains("UInt64(taskInfo.pti_total_user) &+ UInt64(taskInfo.pti_total_system)"))
-        XCTAssertFalse(source.contains("pcpu=,rss="))
-        XCTAssertFalse(source.contains("LocalAICommandLineParser.tokens(from: snapshot.commandLine)"))
+        XCTAssertTrue(darwinSource.contains("proc_pidinfo"))
+        XCTAssertTrue(darwinSource.contains("PROC_PIDTASKINFO"))
+        XCTAssertTrue(darwinSource.contains("proc_pid_rusage"))
+        XCTAssertTrue(darwinSource.contains("ri_phys_footprint"))
+        XCTAssertTrue(readerSource.contains("candidateSnapshots.map(\\.processID)"))
+        XCTAssertTrue(readerSource.contains("snapshots.filter(isKnownAIToolProcess)"))
+        XCTAssertTrue(readerSource.contains("executableToken: snapshot.executableToken"))
+        XCTAssertTrue(metricsSource.contains("LocalAIRawProcessMetrics"))
+        XCTAssertTrue(metricsSource.contains("UInt64(taskInfo.pti_total_user) &+ UInt64(taskInfo.pti_total_system)"))
+        XCTAssertFalse(combinedSource.contains("pcpu=,rss="))
+        XCTAssertFalse(combinedSource.contains("LocalAICommandLineParser.tokens(from: snapshot.commandLine)"))
     }
 
     func testCommandMetadataCachesVersionLookups() throws {
@@ -208,13 +211,49 @@ final class LocalAIStatusProviderTests: XCTestCase {
 
     func testLocalCommandRunnerAvoidsDispatchWorkerWaitStorm() throws {
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let source = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Providers/LocalAI/LocalCommandRunner.swift"))
+        let source = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Providers/LocalAI/Command/LocalCommandRunner.swift"))
+        let snapshotSource = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Providers/LocalAI/ProcessSnapshot/LocalAIProcessSnapshotReader.swift"))
 
         XCTAssertTrue(source.contains("processLimit"))
         XCTAssertTrue(source.contains("process.terminationHandler"))
         XCTAssertTrue(source.contains("terminationSemaphore.wait"))
+        XCTAssertTrue(source.contains("SIGKILL"))
+        XCTAssertTrue(source.contains("readabilityHandler"))
         XCTAssertFalse(source.contains("DispatchQueue.global"))
         XCTAssertFalse(source.contains("waitUntilExit"))
+        XCTAssertFalse(source.contains("readDataToEndOfFile"))
+        XCTAssertTrue(snapshotSource.contains("LocalCommandRunner.output"))
+        XCTAssertFalse(snapshotSource.contains("waitUntilExit"))
+        XCTAssertFalse(snapshotSource.contains("readDataToEndOfFile"))
+    }
+
+    func testLocalCommandRunnerDrainsLargeOutputWhileProcessRuns() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer {
+            try? FileManager.default.removeItem(at: directory)
+        }
+
+        let executableURL = directory.appendingPathComponent("large-output")
+        let line = String(repeating: "x", count: 128)
+        try """
+        #!/bin/sh
+        i=0
+        while [ "$i" -lt 1200 ]; do
+          printf '\(line)\\n'
+          i=$((i + 1))
+        done
+        """.write(to: executableURL, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executableURL.path)
+
+        let output = try XCTUnwrap(LocalCommandRunner.output(
+            executablePath: executableURL.path,
+            arguments: [],
+            timeout: 2.0,
+            maximumOutputBytes: 256 * 1024
+        ))
+        XCTAssertGreaterThan(output.utf8.count, 64 * 1024)
     }
 
     func testDetectedProcessAndOpenAIConfigMapping() {
