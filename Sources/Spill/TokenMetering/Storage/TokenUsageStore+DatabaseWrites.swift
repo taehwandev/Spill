@@ -46,7 +46,7 @@ extension TokenUsageStore {
         try event.validate()
 
         let sql = """
-        INSERT OR IGNORE INTO token_usage_events (
+        INSERT INTO token_usage_events (
             span_id,
             device_id,
             project_id,
@@ -70,6 +70,47 @@ extension TokenUsageStore {
             total_tokens,
             payload_json
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(span_id) DO UPDATE SET
+            input_tokens = excluded.input_tokens,
+            output_tokens = excluded.output_tokens,
+            latency_ms = excluded.latency_ms,
+            source_system = excluded.source_system,
+            source_user = excluded.source_user,
+            source_history = excluded.source_history,
+            source_repo_context = excluded.source_repo_context,
+            source_tool_output = excluded.source_tool_output,
+            source_generated_output = excluded.source_generated_output,
+            source_unknown = excluded.source_unknown,
+            total_tokens = excluded.total_tokens,
+            payload_json = json_set(
+                CAST(token_usage_events.payload_json AS TEXT),
+                '$.input_tokens', excluded.input_tokens,
+                '$.output_tokens', excluded.output_tokens,
+                '$.latency_ms', excluded.latency_ms,
+                '$.total_tokens', excluded.total_tokens,
+                '$.token_breakdown.system', excluded.source_system,
+                '$.token_breakdown.user', excluded.source_user,
+                '$.token_breakdown.history', excluded.source_history,
+                '$.token_breakdown.repo_context', excluded.source_repo_context,
+                '$.token_breakdown.tool_output', excluded.source_tool_output,
+                '$.token_breakdown.generated_output', excluded.source_generated_output,
+                '$.token_breakdown.unknown', excluded.source_unknown
+            )
+        WHERE token_usage_events.ai_tool = 'codex'
+            AND excluded.ai_tool = 'codex'
+            AND (
+                token_usage_events.input_tokens != excluded.input_tokens
+                OR token_usage_events.output_tokens != excluded.output_tokens
+                OR token_usage_events.latency_ms != excluded.latency_ms
+                OR token_usage_events.source_system != excluded.source_system
+                OR token_usage_events.source_user != excluded.source_user
+                OR token_usage_events.source_history != excluded.source_history
+                OR token_usage_events.source_repo_context != excluded.source_repo_context
+                OR token_usage_events.source_tool_output != excluded.source_tool_output
+                OR token_usage_events.source_generated_output != excluded.source_generated_output
+                OR token_usage_events.source_unknown != excluded.source_unknown
+                OR token_usage_events.total_tokens != excluded.total_tokens
+            )
         """
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,

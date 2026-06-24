@@ -17,6 +17,7 @@ extension TokenUsageHistoryImportCoordinator {
             historyStateDirectory.appendingPathComponent("codex-session-import-state.json").path,
             "--label-file",
             historyStateDirectory.appendingPathComponent("codex-label-context.json").path,
+            "--reconcile-existing",
         ] + historyArguments(for: mode) + ["--json"]
         let processResult = runProcess(executableURL: nodeURL, arguments: arguments)
         if isCancelled {

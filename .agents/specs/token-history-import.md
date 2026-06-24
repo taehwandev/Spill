@@ -95,12 +95,20 @@ local history. Cursors are optimization checkpoints for non-destructive
 background collection paths only; the settings action must reread the selected
 local sources and merge the result by stable event identity.
 
-Existing rows with the same stable event identity are preserved. Reconciliation
-must not overwrite their workflow labels, project ids, local display metadata,
-or other user-visible grouping metadata. Newly discovered rows use trusted
-runtime/workflow label timelines for their source event timestamp; if no
-trusted label covers that timestamp, they use the safe fallback
-`uncategorized/summarize`.
+Importer-side duplicate filters must not block this settings reconciliation
+from reaching the app store. Manual Codex history sync re-emits previously seen
+stable span ids for the selected local sources, and the app store resolves them
+by stable identity. Normal live or incremental collection paths may still use
+adapter-side duplicate filters to avoid noisy queue growth.
+
+Existing rows with the same stable event identity are preserved as the
+authority for workflow labels, project ids, local display metadata, and other
+user-visible grouping metadata. Reconciliation may repair exact numeric usage
+fields for the same stable event identity when an importer bug or newer parser
+produces a more accurate token count, but it must not overwrite the existing
+row's grouping metadata. Newly discovered rows use trusted runtime/workflow
+label timelines for their source event timestamp; if no trusted label covers
+that timestamp, they use the safe fallback `uncategorized/summarize`.
 
 Label restoration is evidence-bound:
 
@@ -186,8 +194,12 @@ of filesystem entries and freezing the app.
 Tool-specific partitioning:
 
 - Codex history is discovered by local session date directories and reconciled
-  by session cursor deltas. Codex cached-input policy is a separate measurement
-  decision and must not be changed by history import.
+  by session cursor deltas. When a Codex `token_count` record contains both
+  `last_token_usage` and `total_token_usage`, the emitted Spill event must use
+  `last_token_usage` as the per-call token amount. `total_token_usage` is
+  cumulative session support data and may be used for cursors or as a fallback
+  only when no `last_token_usage` is present. Codex cached-input policy is a
+  separate measurement decision and must not be changed by history import.
 - Claude history is partitioned by transcript source, including subagent
   sources, with per-source byte offsets and aggregate counters.
 - AGY history is partitioned by opaque conversation or generation identifiers

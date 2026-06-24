@@ -1299,7 +1299,7 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(usageStore.loadEvents(), [])
     }
 
-    func testAppendEventsWithoutLoadingPreservesExistingLabelMetadataForDuplicateSpan() throws {
+    func testAppendEventsWithoutLoadingRepairsDuplicateSpanTokenCountsAndPreservesMetadata() throws {
         let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
         let existing = Self.safeEvent(
             spanID: "span_reconciled_history",
@@ -1322,12 +1322,12 @@ final class TokenUsageStoreTests: XCTestCase {
         let insertedCount = try usageStore.appendEventsWithoutLoading([incoming])
         let event = try XCTUnwrap(usageStore.loadEvents().first)
 
-        XCTAssertEqual(insertedCount, 0)
+        XCTAssertEqual(insertedCount, 1)
         XCTAssertEqual(event.projectID, "project_existing")
         XCTAssertEqual(event.taskType, .codeReview)
         XCTAssertEqual(event.stage, .verify)
-        XCTAssertEqual(event.inputTokens, 10)
-        XCTAssertEqual(event.outputTokens, 2)
+        XCTAssertEqual(event.inputTokens, 20)
+        XCTAssertEqual(event.outputTokens, 4)
     }
 
     @MainActor

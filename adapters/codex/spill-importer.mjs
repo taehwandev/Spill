@@ -153,6 +153,7 @@ async function importOnce() {
     : transport === "http"
       ? await readBridgeSpanIDs(endpoint)
       : await readLocalSpanIDs(eventsPath, inboxPath);
+  const emittedSpans = new Set();
   const sources = await discoverCodexSessionFiles(codexHome, afterDate);
   let scannedFiles = 0;
   let importedEvents = 0;
@@ -174,7 +175,9 @@ async function importOnce() {
     const records = await parseSessionFile(source, afterDate, state, unsupportedRecords);
     for (const record of records) {
       const event = record.event;
-      if (sentSpans.has(event.span_id) || storedSpans.has(event.span_id)) {
+      const alreadySeen = emittedSpans.has(event.span_id)
+        || (!options.reconcileExisting && (sentSpans.has(event.span_id) || storedSpans.has(event.span_id)));
+      if (alreadySeen) {
         skippedSeen += 1;
         continue;
       }
@@ -199,10 +202,13 @@ async function importOnce() {
       if (record.usedRuntimeLabel) {
         usedRuntimeLabel = true;
       }
-      sentSpans.add(event.span_id);
-      state.sentSpanIDs.push(event.span_id);
-      if (state.sentSpanIDs.length > 5000) {
-        state.sentSpanIDs = state.sentSpanIDs.slice(-5000);
+      emittedSpans.add(event.span_id);
+      if (!sentSpans.has(event.span_id)) {
+        sentSpans.add(event.span_id);
+        state.sentSpanIDs.push(event.span_id);
+        if (state.sentSpanIDs.length > 5000) {
+          state.sentSpanIDs = state.sentSpanIDs.slice(-5000);
+        }
       }
     }
   }
@@ -394,14 +400,14 @@ function usageDelta(record, cursor) {
   let inputTokens = 0;
   let outputTokens = 0;
 
-  if (cursor && record.total.hasAny && record.total.totalTokens >= (cursor.totalTokens ?? 0)) {
+  if (record.last.hasAny) {
+    inputTokens = record.last.inputTokens;
+    outputTokens = record.last.outputTokens + record.last.reasoningTokens;
+  } else if (cursor && record.total.hasAny && record.total.totalTokens >= (cursor.totalTokens ?? 0)) {
     inputTokens = Math.max(0, record.total.inputTokens - cursor.inputTokens);
     outputTokens =
       Math.max(0, record.total.outputTokens - cursor.outputTokens) +
       Math.max(0, record.total.reasoningTokens - cursor.reasoningTokens);
-  } else if (record.last.hasAny) {
-    inputTokens = record.last.inputTokens;
-    outputTokens = record.last.outputTokens + record.last.reasoningTokens;
   } else if (record.total.hasAny) {
     inputTokens = record.total.inputTokens;
     outputTokens = record.total.outputTokens + record.total.reasoningTokens;
@@ -791,6 +797,7 @@ function parseArgs(args) {
     else if (arg === "--dry-run") parsed.dryRun = true;
     else if (arg === "--all") parsed.all = true;
     else if (arg === "--mark-existing") parsed.markExisting = true;
+    else if (arg === "--reconcile-existing") parsed.reconcileExisting = true;
     else if (arg === "--strict") parsed.strict = true;
     else if (arg === "--watch") parsed.watch = true;
     else if (arg === "--codex-home") parsed.codexHome = requiredValue(args, ++index, arg);
@@ -835,6 +842,7 @@ Options:
   --json                 Print import summary as JSON.
   --dry-run              Parse usage without writing local storage, posting to Spill, or writing state.
   --mark-existing        Record parsed span ids in state without storing them.
+  --reconcile-existing   Re-emit existing span ids so the app store can repair numeric usage fields.
   --strict               Exit non-zero when the selected transport is unavailable.
   --watch                Poll Codex sessions continuously. Not needed for hook-based metering.
   --all                  Scan all supported local session history.
