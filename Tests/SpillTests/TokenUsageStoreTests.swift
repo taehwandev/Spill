@@ -844,7 +844,7 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(dashboardView.contains("private let settingsAction: () -> Void"))
         XCTAssertTrue(dashboardView.contains("settingsAction: @escaping () -> Void = {}"))
         XCTAssertTrue(dashboardView.contains("refreshAction()"))
-        XCTAssertTrue(collector.contains("store.drainQueuedEventsWithoutLoading()"))
+        XCTAssertTrue(collector.contains("drainQueuedInbox()"))
         XCTAssertTrue(collector.contains("Local runtime"))
         XCTAssertTrue(collector.contains("runAntigravityActiveImporter()"))
         XCTAssertTrue(collector.contains("AGY is different: it has no runtime hook"))
@@ -910,7 +910,7 @@ final class TokenUsageStoreTests: XCTestCase {
     func testTokenUsageCollectorDoesNotAutoRunHistoryImporters() throws {
         let collector = try Self.source(named: "TokenUsageCollectorCoordinator.swift")
 
-        XCTAssertTrue(collector.contains("store.drainQueuedEventsWithoutLoading()"))
+        XCTAssertTrue(collector.contains("drainQueuedInbox()"))
         XCTAssertTrue(collector.contains("runAntigravityActiveImporter()"))
         XCTAssertTrue(collector.contains("TokenUsageAntigravityImporter().importRecentEvents"))
         XCTAssertFalse(collector.contains("private func importQueuedEventsWhileProcessRuns(_ process: Process)"))
@@ -1086,10 +1086,11 @@ final class TokenUsageStoreTests: XCTestCase {
         let appDelegate = try String(contentsOf: root.appendingPathComponent("Sources/Spill/App/AppDelegate.swift"))
         let tokenMeteringCoordinator = try Self.source(named: "TokenMeteringCoordinator.swift")
         let usageStore = try Self.source(named: "TokenUsageStore.swift")
+        let usageStoreNotifications = try Self.source(named: "TokenUsageStore+ClearAndNotify.swift")
         let dashboardStore = try Self.source(named: "TokenUsageDashboardStore.swift")
 
         XCTAssertTrue(usageStore.contains("distributedEventsDidChangeNotification"))
-        XCTAssertTrue(usageStore.contains("DistributedNotificationCenter.default().postNotificationName"))
+        XCTAssertTrue(usageStoreNotifications.contains("DistributedNotificationCenter.default().postNotificationName"))
         XCTAssertTrue(tokenMeteringCoordinator.contains("TokenUsageStore.distributedEventsDidChangeNotification"))
         XCTAssertTrue(tokenMeteringCoordinator.contains("tokenUsageEventsDidChangeFromDistributedNotification"))
         XCTAssertTrue(tokenMeteringCoordinator.contains("private var shouldRefreshMenuBarTokenTotal"))
@@ -1566,6 +1567,75 @@ final class TokenUsageStoreTests: XCTestCase {
 
         XCTAssertEqual(dashboardStore.snapshot.eventCount, 1)
         XCTAssertFalse(FileManager.default.fileExists(atPath: queuedURL.path))
+    }
+
+    func testDrainQueuedEventsSchedulesFollowUpAfterConsumingNonImportedFiles() throws {
+        let inboxURL = temporaryInboxURL()
+        let usageStore = TokenUsageStore(fileURL: temporaryEventsURL(), inboxURL: inboxURL)
+        try FileManager.default.createDirectory(at: inboxURL, withIntermediateDirectories: true)
+        let duplicateEvent = Self.safeEvent(spanID: "span_duplicate_drain")
+        try usageStore.appendEvent(duplicateEvent)
+
+        for index in 0..<5 {
+            let queuedURL = inboxURL.appendingPathComponent(String(format: "%03d.json", index))
+            try TokenUsageSanitizer.eventData(duplicateEvent).write(to: queuedURL)
+        }
+
+        var didScheduleFollowUp = false
+        let didImport = usageStore.drainQueuedEventsWithoutLoading(
+            maximumInboxEventCount: 1,
+            maximumBatchCount: 4
+        ) {
+            didScheduleFollowUp = true
+        }
+
+        XCTAssertFalse(didImport)
+        XCTAssertTrue(didScheduleFollowUp)
+        XCTAssertEqual(usageStore.loadEvents().map(\.spanID), ["span_duplicate_drain"])
+        let remainingURLs = try FileManager.default.contentsOfDirectory(
+            at: inboxURL,
+            includingPropertiesForKeys: nil
+        )
+        XCTAssertEqual(remainingURLs.count, 1)
+    }
+
+    func testDrainQueuedEventsChunksLargeJSONLInboxFile() throws {
+        let inboxURL = temporaryInboxURL()
+        let usageStore = TokenUsageStore(fileURL: temporaryEventsURL(), inboxURL: inboxURL)
+        try FileManager.default.createDirectory(at: inboxURL, withIntermediateDirectories: true)
+
+        let events = [
+            Self.safeEvent(spanID: "span_jsonl_chunk_1"),
+            Self.safeEvent(spanID: "span_jsonl_chunk_2"),
+            Self.safeEvent(spanID: "span_jsonl_chunk_3")
+        ]
+        let jsonl = try events
+            .map { event -> String in
+                let data = try TokenUsageSanitizer.eventData(event)
+                return try XCTUnwrap(String(data: data, encoding: .utf8))
+            }
+            .joined(separator: "\n")
+        try (jsonl + "\n").write(
+            to: inboxURL.appendingPathComponent("001.jsonl"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        var didScheduleFollowUp = false
+        XCTAssertTrue(usageStore.drainQueuedEventsWithoutLoading(
+            maximumInboxEventCount: 2,
+            maximumBatchCount: 1
+        ) {
+            didScheduleFollowUp = true
+        })
+        XCTAssertTrue(didScheduleFollowUp)
+        XCTAssertEqual(usageStore.loadEvents().map(\.spanID), ["span_jsonl_chunk_1", "span_jsonl_chunk_2"])
+
+        XCTAssertTrue(usageStore.drainQueuedEventsWithoutLoading(maximumInboxEventCount: 2))
+        XCTAssertEqual(
+            usageStore.loadEvents().map(\.spanID),
+            ["span_jsonl_chunk_1", "span_jsonl_chunk_2", "span_jsonl_chunk_3"]
+        )
     }
 
     @MainActor

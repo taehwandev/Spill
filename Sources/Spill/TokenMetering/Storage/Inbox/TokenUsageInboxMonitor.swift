@@ -92,7 +92,13 @@ final class TokenUsageInboxMonitor: @unchecked Sendable {
 
         _ = autoreleasepool {
             store.drainQueuedEventsWithoutLoading(
-                maximumInboxEventCount: TokenUsageStore.defaultInboxImportBatchLimit
+                maximumInboxEventCount: TokenUsageStore.defaultInboxImportBatchLimit,
+                scheduleFollowUpDrain: { [weak self] in
+                    guard let self else { return }
+                    queue.asyncAfter(deadline: .now() + .milliseconds(25)) { [weak self] in
+                        self?.requestDrain()
+                    }
+                }
             )
         }
     }
