@@ -265,6 +265,25 @@ Optional telemetry secrets:
 - `SPILL_WEB_APTABASE_APP_KEY`: optional landing page analytics key injected
   during Pages deployment.
 
+Optional Sentry crash and hang diagnostics:
+
+- `SPILL_SENTRY_DSN`: public Sentry DSN injected into `Info.plist`. Store it as
+  a GitHub Actions secret or repository variable. When absent, Sentry is
+  disabled.
+- `SENTRY_AUTH_TOKEN`: GitHub Actions secret used only by the release workflow to
+  create the Sentry release/deploy record.
+- `SENTRY_ORG` and `SENTRY_PROJECT`: GitHub Actions secrets or repository
+  variables naming the Sentry organization and project.
+
+Release builds set the Sentry release to `spill@<version>+<git-sha>` and the
+Sentry dist to the build number. The GitHub workflow publishes the matching
+Sentry Release only when the token, org, project, and app DSN are all configured.
+It also uploads the release `Spill.dSYM` so native crash reports can be
+symbolicated. Crash and app-hang reports are configured with
+`sendDefaultPii=false`, no logs, no session replay, no MetricKit payloads, and no
+performance sampling; do not use Sentry for token events, prompts, arbitrary
+local file paths, or support logs.
+
 ### Download Site
 
 The static distribution site source lives in `docs/`. The `Deploy Site` workflow

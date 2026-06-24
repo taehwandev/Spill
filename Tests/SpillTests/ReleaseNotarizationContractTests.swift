@@ -78,6 +78,72 @@ final class ReleaseNotarizationContractTests: XCTestCase {
         XCTAssertFalse(uploadModels.contains("functions/v1/private-usage-relay"))
     }
 
+    func testReleaseBuildCanInjectOptionalSentryDiagnosticsConfiguration() throws {
+        let package = try read("Package.swift")
+        let buildScript = try read("scripts/build-app.sh")
+        let entryPoint = try read("Sources/Spill/AppLifecycle/SpillMain.swift")
+        let crashReporter = try read("Sources/Spill/Observability/SpillCrashReporter.swift")
+
+        XCTAssertTrue(package.contains("https://github.com/getsentry/sentry-cocoa.git"))
+        XCTAssertTrue(package.contains(".product(name: \"Sentry\", package: \"sentry-cocoa\")"))
+
+        XCTAssertTrue(buildScript.contains("SPILL_SENTRY_DSN"))
+        XCTAssertTrue(buildScript.contains("SPILLSentryDSN"))
+        XCTAssertTrue(buildScript.contains("SPILLSentryEnvironment"))
+        XCTAssertTrue(buildScript.contains("SPILLSentryRelease"))
+        XCTAssertTrue(buildScript.contains("SPILLSentryDist"))
+        XCTAssertTrue(buildScript.contains("SPILLGitCommitSHA"))
+        XCTAssertTrue(buildScript.contains("SPILL_SENTRY_DSN must be an https DSN."))
+
+        XCTAssertTrue(entryPoint.contains("SpillCrashReporter.start(processRole: \"main_app\")"))
+        XCTAssertTrue(entryPoint.contains("SpillCrashReporter.start(processRole: \"token_dashboard\")"))
+
+        XCTAssertTrue(crashReporter.contains("options.sendDefaultPii = false"))
+        XCTAssertTrue(crashReporter.contains("options.tracesSampleRate = 0"))
+        XCTAssertTrue(crashReporter.contains("options.enableAppHangTracking = true"))
+        XCTAssertTrue(crashReporter.contains("options.enableMetricKit = false"))
+        XCTAssertTrue(crashReporter.contains("options.enableMetricKitRawPayload = false"))
+        XCTAssertTrue(crashReporter.contains("options.enableAutoSessionTracking = false"))
+        XCTAssertTrue(crashReporter.contains("options.enableAutoBreadcrumbTracking = false"))
+        XCTAssertTrue(crashReporter.contains("event.breadcrumbs = []"))
+        XCTAssertTrue(crashReporter.contains("event.extra = nil"))
+        XCTAssertTrue(crashReporter.contains("tags[\"process_role\"] = processRole"))
+        XCTAssertFalse(crashReporter.contains("token_usage"))
+    }
+
+    func testReleaseWorkflowPublishesSentryReleaseWhenConfigured() throws {
+        let workflow = try read(".github/workflows/release.yml")
+        let envExample = try read(".env.example")
+        let releaseEnvExample = try read(".env.release.example")
+        let readme = try read("README.md")
+
+        XCTAssertTrue(workflow.contains("fetch-depth: 0"))
+        XCTAssertTrue(workflow.contains("Resolve Sentry release metadata"))
+        XCTAssertTrue(workflow.contains("release=\"spill@$version+$GITHUB_SHA\""))
+        XCTAssertTrue(workflow.contains("SPILL_SENTRY_DSN: ${{ secrets.SPILL_SENTRY_DSN || vars.SPILL_SENTRY_DSN }}"))
+        XCTAssertTrue(workflow.contains("&& -n \"${SPILL_SENTRY_DSN:-}\""))
+        XCTAssertTrue(workflow.contains("SPILL_SENTRY_RELEASE: ${{ steps.sentry.outputs.release }}"))
+        XCTAssertTrue(workflow.contains("SPILL_GIT_COMMIT_SHA: ${{ github.sha }}"))
+        XCTAssertTrue(workflow.contains("uses: getsentry/action-release@v3"))
+        XCTAssertTrue(workflow.contains("if: steps.sentry.outputs.enabled == 'true'"))
+        XCTAssertTrue(workflow.contains("Upload Sentry debug symbols"))
+        XCTAssertTrue(workflow.contains("*/release/Spill.dSYM"))
+        XCTAssertTrue(workflow.contains("npx --yes @sentry/cli debug-files upload \"$dsym_path\""))
+        XCTAssertTrue(workflow.contains("SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}"))
+        XCTAssertTrue(workflow.contains("SENTRY_ORG: ${{ secrets.SENTRY_ORG || vars.SENTRY_ORG }}"))
+        XCTAssertTrue(workflow.contains("SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT || vars.SENTRY_PROJECT }}"))
+        XCTAssertTrue(workflow.contains("set_commits: auto"))
+        XCTAssertTrue(workflow.contains("disable_telemetry: true"))
+
+        XCTAssertTrue(envExample.contains("SPILL_SENTRY_DSN="))
+        XCTAssertTrue(envExample.contains("SPILL_SENTRY_ENVIRONMENT=development"))
+        XCTAssertTrue(releaseEnvExample.contains("SENTRY_AUTH_TOKEN="))
+        XCTAssertTrue(releaseEnvExample.contains("SENTRY_ORG="))
+        XCTAssertTrue(releaseEnvExample.contains("SENTRY_PROJECT="))
+        XCTAssertTrue(readme.contains("spill@<version>+<git-sha>"))
+        XCTAssertTrue(readme.contains("sendDefaultPii=false"))
+    }
+
     func testReleaseBuildCanHideConfiguredPrivateUsageUploadSurface() throws {
         let uploadModels = try privateUsageUploadModelSources()
         let preferencesSection = try read("Sources/Spill/Preferences/TokenMeteringPreferencesSection.swift")

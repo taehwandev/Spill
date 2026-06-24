@@ -29,6 +29,12 @@ BUILD_NUMBER="${SPILL_BUILD:-$VERSION}"
 SIGN_IDENTITY="${SPILL_SIGN_IDENTITY:--}"
 APTABASE_APP_KEY="${SPILL_APTABASE_APP_KEY:-}"
 APTABASE_INFO_PLIST_ENTRY=""
+SENTRY_DSN="${SPILL_SENTRY_DSN:-}"
+SENTRY_ENVIRONMENT="${SPILL_SENTRY_ENVIRONMENT:-}"
+SENTRY_RELEASE="${SPILL_SENTRY_RELEASE:-}"
+SENTRY_DIST="${SPILL_SENTRY_DIST:-}"
+GIT_COMMIT_SHA="${SPILL_GIT_COMMIT_SHA:-}"
+SENTRY_INFO_PLIST_ENTRY=""
 DEFAULT_SPARKLE_PUBLIC_ED_KEY="Ct1877nZCozc18GRWu66vBaTpuAuj1RTxzKlyH6WvpA="
 SPARKLE_PUBLIC_ED_KEY="${SPILL_SPARKLE_PUBLIC_ED_KEY:-$DEFAULT_SPARKLE_PUBLIC_ED_KEY}"
 SPARKLE_FEED_URL="${SPILL_SPARKLE_FEED_URL:-https://github.com/taehwandev/Spill/releases/latest/download/appcast.xml}"
@@ -96,6 +102,16 @@ validate_private_usage_url() {
     exit 2
 }
 
+xml_escape() {
+    local value="$1"
+    value="${value//&/&amp;}"
+    value="${value//</&lt;}"
+    value="${value//>/&gt;}"
+    value="${value//\"/&quot;}"
+    value="${value//\'/&apos;}"
+    printf '%s' "$value"
+}
+
 sign_sparkle_framework() {
     local frameworks_dir="$1"
     local sparkle_version_dir="$frameworks_dir/Sparkle.framework/Versions/B"
@@ -137,6 +153,38 @@ if [[ -n "$APTABASE_APP_KEY" ]]; then
 
     APTABASE_INFO_PLIST_ENTRY="    <key>SPILLAptabaseAppKey</key>
     <string>$APTABASE_APP_KEY</string>"
+fi
+
+if [[ -n "$SENTRY_DSN" ]]; then
+    if [[ ! "$SENTRY_DSN" =~ ^https://[^[:space:]]+$ ]]; then
+        echo "SPILL_SENTRY_DSN must be an https DSN." >&2
+        exit 2
+    fi
+
+    if [[ -z "$SENTRY_ENVIRONMENT" ]]; then
+        SENTRY_ENVIRONMENT="development"
+    fi
+    if [[ -z "$SENTRY_RELEASE" ]]; then
+        SENTRY_RELEASE="spill@$VERSION+$BUILD_NUMBER"
+    fi
+    if [[ -z "$SENTRY_DIST" ]]; then
+        SENTRY_DIST="$BUILD_NUMBER"
+    fi
+
+    SENTRY_INFO_PLIST_ENTRY="    <key>SPILLSentryDSN</key>
+    <string>$(xml_escape "$SENTRY_DSN")</string>
+    <key>SPILLSentryEnvironment</key>
+    <string>$(xml_escape "$SENTRY_ENVIRONMENT")</string>
+    <key>SPILLSentryRelease</key>
+    <string>$(xml_escape "$SENTRY_RELEASE")</string>
+    <key>SPILLSentryDist</key>
+    <string>$(xml_escape "$SENTRY_DIST")</string>"
+
+    if [[ -n "$GIT_COMMIT_SHA" ]]; then
+        SENTRY_INFO_PLIST_ENTRY="$SENTRY_INFO_PLIST_ENTRY
+    <key>SPILLGitCommitSHA</key>
+    <string>$(xml_escape "$GIT_COMMIT_SHA")</string>"
+    fi
 fi
 
 if [[ -n "$SPARKLE_PUBLIC_ED_KEY" ]]; then
@@ -281,6 +329,7 @@ cat > "$CONTENTS_DIR/Info.plist" <<PLIST
     <key>NSHumanReadableCopyright</key>
     <string>Copyright 2026 Spill contributors</string>
 $APTABASE_INFO_PLIST_ENTRY
+$SENTRY_INFO_PLIST_ENTRY
 $SPARKLE_INFO_PLIST_ENTRY
 </dict>
 </plist>
@@ -326,6 +375,7 @@ cat > "$HELPER_CONTENTS_DIR/Info.plist" <<PLIST
     <true/>
     <key>NSHumanReadableCopyright</key>
     <string>Copyright 2026 Spill contributors</string>
+$SENTRY_INFO_PLIST_ENTRY
 $SPARKLE_INFO_PLIST_ENTRY
 </dict>
 </plist>

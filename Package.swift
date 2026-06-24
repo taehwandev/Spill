@@ -12,13 +12,15 @@ let package = Package(
         .executable(name: "Spill", targets: ["Spill"])
     ],
     dependencies: [
-        .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.9.1")
+        .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.9.1"),
+        .package(url: "https://github.com/getsentry/sentry-cocoa.git", from: "9.18.0")
     ],
     targets: [
         .executableTarget(
             name: "Spill",
             dependencies: [
-                .product(name: "Sparkle", package: "Sparkle")
+                .product(name: "Sparkle", package: "Sparkle"),
+                .product(name: "Sentry", package: "sentry-cocoa")
             ],
             resources: [
                 .copy("Resources/adapters"),

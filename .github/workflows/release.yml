@@ -37,6 +37,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
 
       - name: Resolve release version
         id: version
@@ -72,6 +74,29 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "build=$build" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve Sentry release metadata
+        id: sentry
+        shell: bash
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG || vars.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT || vars.SENTRY_PROJECT }}
+          SPILL_SENTRY_DSN: ${{ secrets.SPILL_SENTRY_DSN || vars.SPILL_SENTRY_DSN }}
+        run: |
+          set -euo pipefail
+
+          version="${{ steps.version.outputs.version }}"
+          build="${{ steps.version.outputs.build }}"
+          release="spill@$version+$GITHUB_SHA"
+          enabled=false
+          if [[ -n "${SENTRY_AUTH_TOKEN:-}" && -n "${SENTRY_ORG:-}" && -n "${SENTRY_PROJECT:-}" && -n "${SPILL_SENTRY_DSN:-}" ]]; then
+            enabled=true
+          fi
+
+          echo "enabled=$enabled" >> "$GITHUB_OUTPUT"
+          echo "release=$release" >> "$GITHUB_OUTPUT"
+          echo "dist=$build" >> "$GITHUB_OUTPUT"
 
       - name: Prepare Developer ID signing
         id: signing
@@ -163,12 +188,35 @@ jobs:
           SPILL_BUNDLE_ID: ${{ env.SPILL_BUNDLE_ID }}
           SPILL_SIGN_IDENTITY: ${{ steps.signing.outputs.sign_identity }}
           SPILL_APTABASE_APP_KEY: ${{ secrets.SPILL_APTABASE_APP_KEY }}
+          SPILL_SENTRY_DSN: ${{ secrets.SPILL_SENTRY_DSN || vars.SPILL_SENTRY_DSN }}
+          SPILL_SENTRY_ENVIRONMENT: production
+          SPILL_SENTRY_RELEASE: ${{ steps.sentry.outputs.release }}
+          SPILL_SENTRY_DIST: ${{ steps.sentry.outputs.dist }}
+          SPILL_GIT_COMMIT_SHA: ${{ github.sha }}
           SPILL_SPARKLE_PUBLIC_ED_KEY: ${{ secrets.SPARKLE_PUBLIC_ED_KEY }}
           SPILL_BUILD_PRIVATE_USAGE_FEATURE_ENABLED: "0"
           SPILL_BUILD_PRIVATE_USAGE_ENVIRONMENT: production
           SPILL_BUILD_PRIVATE_USAGE_RELAY_URL: ${{ vars.SPILL_BUILD_PRIVATE_USAGE_RELAY_URL }}
           SPILL_BUILD_PRIVATE_USAGE_WEB_URL: ${{ vars.SPILL_BUILD_PRIVATE_USAGE_WEB_URL }}
         run: ./scripts/build-app.sh
+
+      - name: Upload Sentry debug symbols
+        if: steps.sentry.outputs.enabled == 'true'
+        shell: bash
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG || vars.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT || vars.SENTRY_PROJECT }}
+        run: |
+          set -euo pipefail
+
+          dsym_path="$(find .build -path "*/release/Spill.dSYM" -type d -print -quit)"
+          if [[ -z "$dsym_path" ]]; then
+            echo "Spill.dSYM was not found after the release build." >&2
+            exit 2
+          fi
+
+          npx --yes @sentry/cli debug-files upload "$dsym_path"
 
       - name: Notarize signed app bundle
         shell: bash
@@ -187,6 +235,11 @@ jobs:
           SPILL_SIGN_IDENTITY: ${{ steps.signing.outputs.sign_identity }}
           SPILL_SKIP_BUILD: "1"
           SPILL_APTABASE_APP_KEY: ${{ secrets.SPILL_APTABASE_APP_KEY }}
+          SPILL_SENTRY_DSN: ${{ secrets.SPILL_SENTRY_DSN || vars.SPILL_SENTRY_DSN }}
+          SPILL_SENTRY_ENVIRONMENT: production
+          SPILL_SENTRY_RELEASE: ${{ steps.sentry.outputs.release }}
+          SPILL_SENTRY_DIST: ${{ steps.sentry.outputs.dist }}
+          SPILL_GIT_COMMIT_SHA: ${{ github.sha }}
           SPILL_SPARKLE_PUBLIC_ED_KEY: ${{ secrets.SPARKLE_PUBLIC_ED_KEY }}
           SPILL_BUILD_PRIVATE_USAGE_FEATURE_ENABLED: "0"
           SPILL_BUILD_PRIVATE_USAGE_ENVIRONMENT: production
@@ -324,3 +377,18 @@ jobs:
                 "${assets[@]}"
             fi
           fi
+
+      - name: Publish Sentry Release
+        if: steps.sentry.outputs.enabled == 'true'
+        uses: getsentry/action-release@v3
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG || vars.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT || vars.SENTRY_PROJECT }}
+        with:
+          release: ${{ steps.sentry.outputs.release }}
+          dist: ${{ steps.sentry.outputs.dist }}
+          environment: production
+          set_commits: auto
+          ignore_missing: true
+          disable_telemetry: true
