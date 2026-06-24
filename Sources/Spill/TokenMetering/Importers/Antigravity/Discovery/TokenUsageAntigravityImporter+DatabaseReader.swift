@@ -2,6 +2,8 @@ import Foundation
 import SQLite3
 
 extension TokenUsageAntigravityImporter {
+    private static let maximumTemporaryDatabaseCopyByteCount: Int64 = 200 * 1024 * 1024
+
     func readGenerationRecords(
         from source: ConversationDatabase,
         after previousMaxIndex: Int?
@@ -12,7 +14,7 @@ extension TokenUsageAntigravityImporter {
         let database = openedDatabase.database
         defer { sqlite3_close(database) }
         defer {
-            if let temporaryCopyURL = openedDatabase.temporaryCopyURL {
+            for temporaryCopyURL in openedDatabase.temporaryCopyURLs {
                 try? fileManager.removeItem(at: temporaryCopyURL)
             }
         }
@@ -63,17 +65,19 @@ extension TokenUsageAntigravityImporter {
     private func openReadableDatabase(for sourceURL: URL) -> OpenedDatabase? {
         if !forceTemporaryCopyFallback,
            let database = openSQLiteDatabase(at: sourceURL) {
-            return OpenedDatabase(database: database, temporaryCopyURL: nil)
+            return OpenedDatabase(database: database, temporaryCopyURLs: [])
         }
 
-        guard let temporaryCopyURL = copyDatabaseToTemporaryFile(sourceURL) else {
+        guard let temporaryCopy = copyDatabaseToTemporaryFile(sourceURL) else {
             return nil
         }
-        guard let database = openSQLiteDatabase(at: temporaryCopyURL) else {
-            try? fileManager.removeItem(at: temporaryCopyURL)
+        guard let database = openSQLiteDatabase(at: temporaryCopy.databaseURL) else {
+            for temporaryCopyURL in temporaryCopy.copiedURLs {
+                try? fileManager.removeItem(at: temporaryCopyURL)
+            }
             return nil
         }
-        return OpenedDatabase(database: database, temporaryCopyURL: temporaryCopyURL)
+        return OpenedDatabase(database: database, temporaryCopyURLs: temporaryCopy.copiedURLs)
     }
 
     private func openSQLiteDatabase(at url: URL) -> OpaquePointer? {
@@ -88,7 +92,7 @@ extension TokenUsageAntigravityImporter {
         return database
     }
 
-    private func copyDatabaseToTemporaryFile(_ sourceURL: URL) -> URL? {
+    private func copyDatabaseToTemporaryFile(_ sourceURL: URL) -> TemporaryDatabaseCopy? {
         let directoryURL = fileManager.temporaryDirectory
             .appendingPathComponent("spill-agy-import", isDirectory: true)
         let temporaryURL = directoryURL
@@ -96,13 +100,39 @@ extension TokenUsageAntigravityImporter {
             .appendingPathExtension("db")
 
         do {
+            let sidecarURLs = [
+                URL(fileURLWithPath: sourceURL.path + "-wal"),
+                URL(fileURLWithPath: sourceURL.path + "-shm")
+            ]
+                .filter { fileManager.fileExists(atPath: $0.path) }
+            let totalSize = try ([sourceURL] + sidecarURLs).reduce(Int64(0)) { total, url in
+                let attributes = try fileManager.attributesOfItem(atPath: url.path)
+                return total + ((attributes[.size] as? NSNumber)?.int64Value ?? 0)
+            }
+            if totalSize > Self.maximumTemporaryDatabaseCopyByteCount {
+                return nil
+            }
+
             try fileManager.createDirectory(at: directoryURL, withIntermediateDirectories: true)
-            let data = try Data(contentsOf: sourceURL)
-            try data.write(to: temporaryURL, options: [.atomic])
-            return temporaryURL
+            try fileManager.copyItem(at: sourceURL, to: temporaryURL)
+            var copiedURLs = [temporaryURL]
+            for sidecarURL in sidecarURLs {
+                let suffix = sidecarURL.path.hasSuffix("-wal") ? "-wal" : "-shm"
+                let temporarySidecarURL = URL(fileURLWithPath: temporaryURL.path + suffix)
+                try fileManager.copyItem(at: sidecarURL, to: temporarySidecarURL)
+                copiedURLs.append(temporarySidecarURL)
+            }
+            return TemporaryDatabaseCopy(databaseURL: temporaryURL, copiedURLs: copiedURLs)
         } catch {
             try? fileManager.removeItem(at: temporaryURL)
+            try? fileManager.removeItem(at: URL(fileURLWithPath: temporaryURL.path + "-wal"))
+            try? fileManager.removeItem(at: URL(fileURLWithPath: temporaryURL.path + "-shm"))
             return nil
         }
     }
+}
+
+private struct TemporaryDatabaseCopy {
+    let databaseURL: URL
+    let copiedURLs: [URL]
 }

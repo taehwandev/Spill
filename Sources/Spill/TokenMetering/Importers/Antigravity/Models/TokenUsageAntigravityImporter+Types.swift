@@ -21,7 +21,7 @@ extension TokenUsageAntigravityImporter {
 
     struct OpenedDatabase {
         let database: OpaquePointer
-        let temporaryCopyURL: URL?
+        let temporaryCopyURLs: [URL]
     }
 
     struct UsageRecord {
