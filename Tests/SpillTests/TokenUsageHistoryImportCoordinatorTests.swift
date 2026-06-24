@@ -3,6 +3,33 @@ import XCTest
 @testable import Spill
 
 final class TokenUsageHistoryImportCoordinatorTests: XCTestCase {
+    func testHistoryImportProcessRunnerUsesFiniteHardKillPath() throws {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let source = try String(
+            contentsOf: root.appendingPathComponent(
+                "Sources/Spill/TokenMetering/HistoryImport/TokenUsageHistoryImportProcessRunner.swift"
+            )
+        )
+
+        XCTAssertTrue(source.contains("process.terminationHandler"))
+        XCTAssertTrue(source.contains("terminateProcess(process, terminationSemaphore: terminationSemaphore)"))
+        XCTAssertTrue(source.contains("SIGKILL"))
+        XCTAssertFalse(source.contains("process.waitUntilExit()"))
+        XCTAssertFalse(source.contains("readDataToEndOfFile()"))
+    }
+
+    func testClaudeHistoryStateSyncReplacesExistingLiveStateFile() throws {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let source = try String(
+            contentsOf: root.appendingPathComponent(
+                "Sources/Spill/TokenMetering/HistoryImport/TokenUsageHistoryImportCoordinator+StateSync.swift"
+            )
+        )
+
+        XCTAssertTrue(source.contains("replaceItemAt(liveFile, withItemAt: tmpFile)"))
+        XCTAssertFalse(source.contains("moveItem(at: tmpFile, to: liveFile)) != nil"))
+    }
+
     func testFirstExplicitImportAttemptsCodexClaudeAndAntigravityWithFullHistory() throws {
         let fixture = try HistoryImportFixture()
         let recorder = HistoryImportRecorder()
