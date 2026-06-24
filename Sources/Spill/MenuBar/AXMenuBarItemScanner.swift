@@ -83,6 +83,8 @@ final class AXMenuBarItemScanner: ObservableObject {
         pendingRefreshReason = .manual
         items = []
         elementsByID = [:]
+        imageDataCache.removeAll()
+        missingImageKeys.removeAll()
         lastScannedAt = nil
         scanMessage = AppL10n.text(.accessibilityNotTrusted)
     }
@@ -183,6 +185,7 @@ final class AXMenuBarItemScanner: ObservableObject {
         if didChangeItems {
             items = enrichedItems
         }
+        pruneStaleProcessIconCacheEntries(for: enrichedItems)
         elementsByID = result.elementsByID
         lastScannedAt = dateProvider()
         isScanning = false
@@ -252,6 +255,17 @@ final class AXMenuBarItemScanner: ObservableObject {
 
     private func iconCacheKey(for item: MenuBarItemSnapshot) -> String {
         item.bundleIdentifier ?? "pid:\(item.processIdentifier)"
+    }
+
+    private func pruneStaleProcessIconCacheEntries(for items: [MenuBarItemSnapshot]) {
+        let currentProcessKeys = Set(items.map { "pid:\($0.processIdentifier)" })
+
+        imageDataCache = imageDataCache.filter { key, _ in
+            !key.hasPrefix("pid:") || currentProcessKeys.contains(key)
+        }
+        missingImageKeys = missingImageKeys.filter { key in
+            !key.hasPrefix("pid:") || currentProcessKeys.contains(key)
+        }
     }
 
     private func nextIconRefreshGeneration() -> Int {
