@@ -3,6 +3,7 @@ import SQLite3
 
 extension TokenUsageAntigravityImporter {
     private static let maximumTemporaryDatabaseCopyByteCount: Int64 = 200 * 1024 * 1024
+    private static let temporaryDatabaseCopyMaximumAge: TimeInterval = 24 * 60 * 60
 
     func readGenerationRecords(
         from source: ConversationDatabase,
@@ -100,6 +101,7 @@ extension TokenUsageAntigravityImporter {
             .appendingPathExtension("db")
 
         do {
+            pruneStaleTemporaryDatabaseCopies(in: directoryURL)
             let sidecarURLs = [
                 URL(fileURLWithPath: sourceURL.path + "-wal"),
                 URL(fileURLWithPath: sourceURL.path + "-shm")
@@ -128,6 +130,27 @@ extension TokenUsageAntigravityImporter {
             try? fileManager.removeItem(at: URL(fileURLWithPath: temporaryURL.path + "-wal"))
             try? fileManager.removeItem(at: URL(fileURLWithPath: temporaryURL.path + "-shm"))
             return nil
+        }
+    }
+
+    private func pruneStaleTemporaryDatabaseCopies(in directoryURL: URL) {
+        guard let urls = try? fileManager.contentsOfDirectory(
+            at: directoryURL,
+            includingPropertiesForKeys: [.contentModificationDateKey, .isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            return
+        }
+
+        let cutoff = Date().addingTimeInterval(-Self.temporaryDatabaseCopyMaximumAge)
+        for url in urls {
+            let values = try? url.resourceValues(forKeys: [.contentModificationDateKey, .isRegularFileKey])
+            guard values?.isRegularFile == true,
+                  (values?.contentModificationDate ?? .distantPast) < cutoff
+            else {
+                continue
+            }
+            try? fileManager.removeItem(at: url)
         }
     }
 }

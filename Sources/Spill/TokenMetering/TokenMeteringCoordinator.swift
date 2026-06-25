@@ -33,6 +33,8 @@ final class TokenMeteringCoordinator: NSObject {
     private var lastMenuBarTokenCollectionAt: Date?
     private var usageEventsDidChange: (@MainActor () -> Void)?
     private var cancellables = Set<AnyCancellable>()
+    private var hasStarted = false
+    private var isStopped = false
 
     private(set) var menuBarTokenTotal = 0
     private(set) var menuBarAllTimeTokenTotal = 0
@@ -52,10 +54,20 @@ final class TokenMeteringCoordinator: NSObject {
         super.init()
     }
 
+    deinit {
+        DistributedNotificationCenter.default().removeObserver(self)
+        NSAppleEventManager.shared().removeEventHandler(
+            forEventClass: AEEventClass(kInternetEventClass),
+            andEventID: AEEventID(kAEGetURL)
+        )
+    }
+
     func start(
         isSmokeTest: Bool,
         usageEventsDidChange: @escaping @MainActor () -> Void
     ) {
+        hasStarted = true
+        isStopped = false
         self.isSmokeTest = isSmokeTest
         self.usageEventsDidChange = usageEventsDidChange
         observeUsageEvents()
@@ -67,9 +79,15 @@ final class TokenMeteringCoordinator: NSObject {
     }
 
     func stop() {
+        guard hasStarted, !isStopped else {
+            return
+        }
+        isStopped = true
         inboxMonitor.stop()
+        collectorCoordinator.stop()
         bridgeServer.stop()
         historyImportCoordinator.cancelImport()
+        aiStatusStore.cancelRefresh()
         privateUsageUploadTask?.cancel()
         privateUsageUploadTask = nil
         cancellables.removeAll()

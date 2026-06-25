@@ -146,11 +146,7 @@ private extension TokenUsageInboxReader {
     }
 
     private func deferredJSONLInboxURL(for consumedURL: URL) -> URL {
-        let directory = inboxURL ?? consumedURL.deletingLastPathComponent()
-        let stem = consumedURL.deletingPathExtension().lastPathComponent
-        return directory
-            .appendingPathComponent("\(stem)-remaining-\(UUID().uuidString)")
-            .appendingPathExtension("jsonl")
+        consumedURL
     }
 
     private func legacyJSONLInboxURL() -> URL? {

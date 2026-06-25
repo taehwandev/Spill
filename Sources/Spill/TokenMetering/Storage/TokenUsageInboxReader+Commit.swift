@@ -30,13 +30,20 @@ extension TokenUsageInboxReader {
             try deferredFile.contents.write(to: temporaryURL, atomically: true, encoding: .utf8)
             return (temporaryURL: temporaryURL, finalURL: deferredFile.finalURL)
         }
+        let rewrittenURLs = Set(deferredWrites.map(\.finalURL))
 
         for deferredWrite in deferredWrites {
-            try? FileManager.default.removeItem(at: deferredWrite.finalURL)
-            try FileManager.default.moveItem(at: deferredWrite.temporaryURL, to: deferredWrite.finalURL)
+            if FileManager.default.fileExists(atPath: deferredWrite.finalURL.path) {
+                _ = try FileManager.default.replaceItemAt(
+                    deferredWrite.finalURL,
+                    withItemAt: deferredWrite.temporaryURL
+                )
+            } else {
+                try FileManager.default.moveItem(at: deferredWrite.temporaryURL, to: deferredWrite.finalURL)
+            }
         }
 
-        for url in result.consumedURLs {
+        for url in result.consumedURLs where !rewrittenURLs.contains(url) {
             try? FileManager.default.removeItem(at: url)
         }
     }
