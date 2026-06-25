@@ -160,6 +160,11 @@ async function importOnce() {
   let markedExisting = 0;
   let skippedSeen = 0;
   const unsupportedRecords = { count: 0 };
+  const diagnostics = {
+    lastUsageEvents: 0,
+    cumulativeDeltaEvents: 0,
+    unsupportedCumulativeWithoutCursor: 0,
+  };
   let usedRuntimeLabel = false;
   let pendingFileEvents = [];
 
@@ -172,7 +177,7 @@ async function importOnce() {
 
   for (const source of sources) {
     scannedFiles += 1;
-    const records = await parseSessionFile(source, afterDate, state, unsupportedRecords);
+    const records = await parseSessionFile(source, afterDate, state, unsupportedRecords, diagnostics);
     for (const record of records) {
       const event = record.event;
       const alreadySeen = emittedSpans.has(event.span_id)
@@ -231,6 +236,11 @@ async function importOnce() {
       marked_existing: markedExisting,
       skipped_seen: skippedSeen,
       unsupported_records: unsupportedRecords.count,
+      unsupported_cumulative_without_cursor: diagnostics.unsupportedCumulativeWithoutCursor,
+      delta_sources: {
+        last_usage: diagnostics.lastUsageEvents,
+        cumulative_delta: diagnostics.cumulativeDeltaEvents,
+      },
       codex_home: codexHome,
       endpoint,
       transport,
@@ -268,7 +278,7 @@ async function discoverCodexSessionFiles(root, after) {
   return files.sort();
 }
 
-async function parseSessionFile(path, after, state, unsupportedRecords = { count: 0 }) {
+async function parseSessionFile(path, after, state, unsupportedRecords = { count: 0 }, diagnostics = null) {
   const counters = {
     sessionID: "",
     sessionModel: "",
@@ -338,7 +348,19 @@ async function parseSessionFile(path, after, state, unsupportedRecords = { count
       cursor = nextCursor;
     }
 
-    if (record.timestamp < after || !delta) continue;
+    if (record.timestamp < after) continue;
+    if (!delta) {
+      unsupportedRecords.count += 1;
+      if (!record.usage.last.hasAny && record.usage.total.hasAny) {
+        if (diagnostics) diagnostics.unsupportedCumulativeWithoutCursor += 1;
+      }
+      continue;
+    }
+    if (delta.source === "last_usage") {
+      if (diagnostics) diagnostics.lastUsageEvents += 1;
+    } else if (delta.source === "cumulative_delta") {
+      if (diagnostics) diagnostics.cumulativeDeltaEvents += 1;
+    }
 
     const eventLabel = labelForTimestamp(runtimeLabel, record.timestamp);
     const usedRuntimeLabel = Boolean(
@@ -355,6 +377,7 @@ async function parseSessionFile(path, after, state, unsupportedRecords = { count
         inputTokens: delta.inputTokens,
         outputTokens: delta.outputTokens,
         cumulativeTotal: record.usage.total.totalTokens,
+        deltaSource: delta.source,
         projectID: eventLabel.projectID,
         taskType: taskTypeOverride ?? eventLabel.taskType ?? fallbackLabel.taskType,
         stage: stageOverride ?? eventLabel.stage ?? fallbackLabel.stage,
@@ -399,34 +422,43 @@ function usageRecordFromTokenCount(info) {
 function usageDelta(record, cursor) {
   let inputTokens = 0;
   let outputTokens = 0;
+  let source = "";
 
   if (record.last.hasAny) {
     inputTokens = record.last.inputTokens;
     outputTokens = record.last.outputTokens + record.last.reasoningTokens;
-  } else if (cursor && record.total.hasAny && record.total.totalTokens >= (cursor.totalTokens ?? 0)) {
+    source = "last_usage";
+  } else if (
+    hasUsableCumulativeCursor(cursor) &&
+    record.total.hasAny &&
+    record.total.totalTokens > 0 &&
+    record.total.totalTokens >= cursor.totalTokens
+  ) {
     inputTokens = Math.max(0, record.total.inputTokens - cursor.inputTokens);
     outputTokens =
       Math.max(0, record.total.outputTokens - cursor.outputTokens) +
       Math.max(0, record.total.reasoningTokens - cursor.reasoningTokens);
-  } else if (record.total.hasAny) {
-    inputTokens = record.total.inputTokens;
-    outputTokens = record.total.outputTokens + record.total.reasoningTokens;
+    source = "cumulative_delta";
   } else {
     return null;
   }
 
   if (inputTokens === 0 && outputTokens === 0) return null;
-  return { inputTokens, outputTokens };
+  return { inputTokens, outputTokens, source };
 }
 
 function cursorFromUsage(record) {
-  if (!record.total.hasAny) return null;
+  if (!record.total.hasAny || record.total.totalTokens <= 0) return null;
   return {
     inputTokens: record.total.inputTokens,
     outputTokens: record.total.outputTokens,
     reasoningTokens: record.total.reasoningTokens,
     totalTokens: record.total.totalTokens,
   };
+}
+
+function hasUsableCumulativeCursor(cursor) {
+  return Boolean(cursor && Number.isFinite(cursor.totalTokens) && cursor.totalTokens > 0);
 }
 
 function shouldAdvanceCursor(currentCursor, nextCursor) {
@@ -510,6 +542,7 @@ function toSpillEvent({
   inputTokens,
   outputTokens,
   cumulativeTotal,
+  deltaSource,
   projectID,
   taskType,
   stage,
@@ -517,7 +550,10 @@ function toSpillEvent({
   const totalTokens = inputTokens + outputTokens;
   const sessionKey = sessionID || sourcePath;
   const cumulativeKey = cumulativeTotal > 0 ? String(cumulativeTotal) : String(eventIndex);
-  const spanHash = opaqueHash(`${sourcePath}:${sessionKey}:${cumulativeKey}:${timestamp.toISOString()}`);
+  const spanIdentity = deltaSource === "cumulative_delta"
+    ? `${sourcePath}:${sessionKey}:cumulative:${cumulativeKey}`
+    : `${sourcePath}:${sessionKey}:${cumulativeKey}:${timestamp.toISOString()}`;
+  const spanHash = opaqueHash(spanIdentity);
   const runHash = opaqueHash(sessionKey);
 
   return {

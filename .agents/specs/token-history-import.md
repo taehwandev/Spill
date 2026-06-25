@@ -70,6 +70,10 @@ repository names, branches, transcript content, logs, diffs, source content,
 environment values, secrets, conversation titles, work item titles, or local
 aliases.
 
+Setup and history-import UI must disclose that Codex/Claude JSONL or transcript
+stores and AGY metadata stores may be read locally for exact token metadata, and
+must state that content-like fields are not stored or uploaded.
+
 The normalized local source path may be used only in memory while deriving a
 cursor key. It must not be written to cursor state, event payloads,
 diagnostics, or cloud-synced data.
@@ -185,6 +189,14 @@ resistance by `ai_tool` plus `span_id`.
 Import summaries must report skipped duplicates separately from unsupported
 records.
 
+Codex import summaries must include content-free diagnostic counts for the
+delta source used by imported records, including `last_token_usage` and
+trusted-cursor `total_token_usage` deltas, plus a count of cumulative-only
+records rejected because no trusted prior cumulative cursor existed. These
+diagnostics may contain only counts and fixed field names, never source paths,
+session ids, prompts, responses, commands, logs, diffs, source text, or
+environment values.
+
 History importers should enqueue large backfills as batch JSONL inbox files
 rather than one JSON file per event. The app store must import both legacy
 single-event `.json` files and batch `.jsonl` files from the inbox. This keeps a
@@ -198,8 +210,11 @@ Tool-specific partitioning:
   `last_token_usage` and `total_token_usage`, the emitted Spill event must use
   `last_token_usage` as the per-call token amount. `total_token_usage` is
   cumulative session support data and may be used for cursors or as a fallback
-  only when no `last_token_usage` is present. Codex cached-input policy is a
-  separate measurement decision and must not be changed by history import.
+  only when no `last_token_usage` is present and the importer already has a
+  positive prior cumulative cursor for that same source. A current-window
+  cumulative-only record without a trusted prior cursor is unsupported, not a
+  new event. Codex cached-input policy is a separate measurement decision and
+  must not be changed by history import.
 - Claude history is partitioned by transcript source, including subagent
   sources, with per-source byte offsets and aggregate counters.
 - AGY history is partitioned by opaque conversation or generation identifiers
