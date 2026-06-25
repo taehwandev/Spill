@@ -271,6 +271,14 @@ final class SpillSettings: ObservableObject {
         didSet { defaults.set(menuBarStatusLayoutStyle.rawValue, forKey: Keys.menuBarStatusLayoutStyle) }
     }
 
+    @Published var menuBarStatusCompactMode: Bool {
+        didSet { defaults.set(menuBarStatusCompactMode, forKey: Keys.menuBarStatusCompactMode) }
+    }
+
+    @Published var menuBarStatusSplitGroups: Bool {
+        didSet { defaults.set(menuBarStatusSplitGroups, forKey: Keys.menuBarStatusSplitGroups) }
+    }
+
     @Published var menuBarStatusPrecision: MenuBarStatusPrecision {
         didSet { defaults.set(menuBarStatusPrecision.rawValue, forKey: Keys.menuBarStatusPrecision) }
     }
@@ -461,6 +469,8 @@ final class SpillSettings: ObservableObject {
         let layoutRawValue = defaults.string(forKey: Keys.menuBarStatusLayoutStyle)
             ?? MenuBarStatusLayoutStyle.inline.rawValue
         menuBarStatusLayoutStyle = MenuBarStatusLayoutStyle(rawValue: layoutRawValue) ?? .inline
+        menuBarStatusCompactMode = defaults.object(forKey: Keys.menuBarStatusCompactMode) as? Bool ?? false
+        menuBarStatusSplitGroups = defaults.object(forKey: Keys.menuBarStatusSplitGroups) as? Bool ?? false
         let precisionRawValue = defaults.object(forKey: Keys.menuBarStatusPrecision) as? Int
             ?? MenuBarStatusPrecision.tenths.rawValue
         menuBarStatusPrecision = MenuBarStatusPrecision(rawValue: precisionRawValue) ?? .tenths
@@ -793,6 +803,8 @@ private enum Keys {
     static let panelOnboardingPreviewEnabled = "panelOnboardingPreviewEnabled"
     static let tokenUsageDashboardOnboardingPreviewEnabled = "tokenUsageDashboardOnboardingPreviewEnabled"
     static let menuBarStatusLayoutStyle = "menuBarStatusLayoutStyle"
+    static let menuBarStatusCompactMode = "menuBarStatusCompactMode"
+    static let menuBarStatusSplitGroups = "menuBarStatusSplitGroups"
     static let menuBarStatusPrecision = "menuBarStatusPrecision"
     static let menuBarStatusHighlightThreshold = "menuBarStatusHighlightThreshold"
     static let menuBarStatusFontSize = "menuBarStatusFontSize"

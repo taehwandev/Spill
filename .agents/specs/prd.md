@@ -103,11 +103,25 @@ Spill is not:
 
 ## MVP Scope
 
-### 1. Single Menu Bar Trigger
+### 1. Functional Menu Bar Items
 
 Requirements:
 
-- A single fixed-width `...` or Spill icon appears in the menu bar.
+- A small fixed-width Spill icon appears in the menu bar as the primary Main
+  item.
+- By default, enabled menu bar values render in one horizontal status item with
+  the Spill trigger, preserving the classic compact menu bar presentation.
+- Compact rendering and functional group splitting are independent Preferences
+  options. Users may opt into tighter icon/value rendering, separate Main/System/AI
+  menu bar items, both, or neither.
+- In split mode, the groups are:
+  - Main: Spill trigger plus optional Caffeine state.
+  - System: CPU and memory glance values.
+  - AI: local token/AI glance value.
+- Caffeine is part of the main menu bar surface, not a standalone status group.
+  When compact split mode is enabled, it may appear as a small badge or active
+  state on the Spill trigger, with detailed remaining time available in tooltip
+  or panel UI.
 - Left click toggles Spill Panel.
 - Right click or Control-click opens a native menu with:
   - Show/Hide Spill Panel
@@ -120,9 +134,15 @@ Requirements:
 
 Acceptance:
 
-- The trigger remains small.
+- The default menu bar presentation remains a single horizontal item unless the
+  user enables split groups.
+- In split mode, the Main trigger remains small and visually distinct from
+  optional System and AI status values.
+- Compact icon/value rendering never becomes the default solely because the menu
+  bar is crowded; it is controlled by the compact display option.
+- Caffeine state does not consume a standalone status group.
 - Local token usage appears inside the panel AI section.
-- No invisible or oversized status items are created.
+- No invisible, spacer, or oversized status items are created.
 - The app remains usable when the menu bar is crowded, subject to macOS status
   item limitations.
 

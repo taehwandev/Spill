@@ -15,6 +15,8 @@ final class SpillSettingsTests: XCTestCase {
         XCTAssertFalse(settings.panelOnboardingPreviewEnabled)
         XCTAssertFalse(settings.tokenUsageDashboardOnboardingPreviewEnabled)
         XCTAssertEqual(settings.menuBarStatusLayoutStyle, .inline)
+        XCTAssertFalse(settings.menuBarStatusCompactMode)
+        XCTAssertFalse(settings.menuBarStatusSplitGroups)
         XCTAssertEqual(settings.menuBarStatusPrecision, .tenths)
         XCTAssertEqual(settings.menuBarStatusHighlightThreshold, .seventy)
         XCTAssertEqual(settings.menuBarStatusFontSize, 13.5)
@@ -334,6 +336,8 @@ final class SpillSettingsTests: XCTestCase {
         let settings = SpillSettings(defaults: defaults)
 
         settings.menuBarStatusLayoutStyle = .stacked
+        settings.menuBarStatusCompactMode = true
+        settings.menuBarStatusSplitGroups = true
         settings.menuBarStatusPrecision = .tenths
         settings.menuBarStatusHighlightThreshold = .ninety
         settings.menuBarStatusFontSize = 14.5
@@ -341,6 +345,8 @@ final class SpillSettingsTests: XCTestCase {
         settings.menuBarTriggerIconStyle = .spill
 
         XCTAssertEqual(defaults.string(forKey: "menuBarStatusLayoutStyle"), "stacked")
+        XCTAssertTrue(defaults.bool(forKey: "menuBarStatusCompactMode"))
+        XCTAssertTrue(defaults.bool(forKey: "menuBarStatusSplitGroups"))
         XCTAssertEqual(defaults.integer(forKey: "menuBarStatusPrecision"), 1)
         XCTAssertEqual(defaults.integer(forKey: "menuBarStatusHighlightThreshold"), 90)
         XCTAssertEqual(defaults.double(forKey: "menuBarStatusFontSize"), 14.5)
@@ -349,6 +355,8 @@ final class SpillSettingsTests: XCTestCase {
 
         let reloadedSettings = SpillSettings(defaults: defaults)
         XCTAssertEqual(reloadedSettings.menuBarStatusLayoutStyle, .stacked)
+        XCTAssertTrue(reloadedSettings.menuBarStatusCompactMode)
+        XCTAssertTrue(reloadedSettings.menuBarStatusSplitGroups)
         XCTAssertEqual(reloadedSettings.menuBarStatusPrecision, .tenths)
         XCTAssertEqual(reloadedSettings.menuBarStatusHighlightThreshold, .ninety)
         XCTAssertEqual(reloadedSettings.menuBarStatusFontSize, 14.5)

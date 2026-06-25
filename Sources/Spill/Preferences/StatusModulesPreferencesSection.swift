@@ -160,6 +160,20 @@ struct ClockAreaStatusPreferencesSection: View {
                 }
             }
 
+            modeToggle(
+                title: t(.clockAreaCompactMode),
+                detail: t(.clockAreaCompactModeDetail),
+                systemImage: "rectangle.compress.vertical",
+                isOn: $settings.menuBarStatusCompactMode
+            )
+
+            modeToggle(
+                title: t(.clockAreaSplitGroups),
+                detail: t(.clockAreaSplitGroupsDetail),
+                systemImage: "rectangle.split.3x1",
+                isOn: $settings.menuBarStatusSplitGroups
+            )
+
             HStack {
                 Label(t(.clockAreaTextBold), systemImage: "bold")
                     .font(.callout)
@@ -194,6 +208,8 @@ struct ClockAreaStatusPreferencesSection: View {
                     Text(layout.title(appLanguage: settings.appLanguage)).tag(layout)
                 }
             }
+            .disabled(!settings.menuBarStatusCompactMode)
+            .opacity(settings.menuBarStatusCompactMode ? 1 : 0.55)
 
             optionPicker(
                 title: t(.decimals),
@@ -238,7 +254,7 @@ struct ClockAreaStatusPreferencesSection: View {
 
                 Spacer()
 
-                Text(settings.menuBarStatusLayoutStyle.title(appLanguage: settings.appLanguage))
+                Text(previewModeTitle)
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(.secondary)
             }
@@ -296,7 +312,7 @@ struct ClockAreaStatusPreferencesSection: View {
                 .font(.system(size: 10.5, weight: .semibold))
                 .symbolRenderingMode(.hierarchical)
 
-            if settings.menuBarStatusLayoutStyle == .stacked, !isTrigger, value != nil {
+            if previewUsesStackedLayout, !isTrigger, value != nil {
                 VStack(spacing: 0) {
                     if let label {
                         Text(label)
@@ -349,7 +365,7 @@ struct ClockAreaStatusPreferencesSection: View {
         switch item {
         case .caffeine:
             return nil
-        case .memory where settings.menuBarStatusLayoutStyle == .stacked:
+        case .memory where previewUsesStackedLayout:
             return "RAM"
         default:
             return item.shortTitle
@@ -391,6 +407,48 @@ struct ClockAreaStatusPreferencesSection: View {
                 .pickerStyle(.segmented)
                 .frame(maxWidth: 210)
         }
+    }
+
+    private func modeToggle(
+        title: String,
+        detail: String,
+        systemImage: String,
+        isOn: Binding<Bool>
+    ) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Label(title, systemImage: systemImage)
+                .font(.callout)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 8)
+
+            Toggle(title, isOn: isOn)
+                .labelsHidden()
+                .toggleStyle(.switch)
+        }
+    }
+
+    private var previewUsesStackedLayout: Bool {
+        settings.menuBarStatusCompactMode && settings.menuBarStatusLayoutStyle == .stacked
+    }
+
+    private var previewModeTitle: String {
+        var parts: [String] = []
+        if settings.menuBarStatusCompactMode {
+            parts.append(settings.menuBarStatusLayoutStyle.title(appLanguage: settings.appLanguage))
+        } else {
+            parts.append(PreferencesL10n.text(.inline, appLanguage: settings.appLanguage))
+        }
+        if settings.menuBarStatusSplitGroups {
+            parts.append(PreferencesL10n.text(.clockAreaSplitGroups, appLanguage: settings.appLanguage))
+        }
+        return parts.joined(separator: " / ")
     }
 
     private func menuBarStatusTitle(for item: SpillMenuBarStatusItem) -> String {

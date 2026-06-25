@@ -14,7 +14,8 @@ The architecture must avoid fragile menu bar manipulation and instead treat the 
 
 Decision:
 
-Use a single fixed-width status item as the visible trigger. Do not create giant or invisible spacer status items.
+Use small functional status items only. Do not create giant or invisible spacer
+status items.
 
 Rationale:
 
@@ -24,6 +25,56 @@ Implications:
 
 - Spill cannot promise to physically move hidden items out from behind the notch.
 - Spill must provide value through its panel and providers.
+
+### ARD-001A: Functional Menu Bar Status Surface
+
+Decision:
+
+Use one small horizontal `NSStatusItem` as the default menu bar surface. Compact
+icon/value rendering and functional group splitting are independent user
+preferences, not automatic defaults.
+
+When split groups are enabled, Spill may create separate small `NSStatusItem`
+instances:
+
+1. Main trigger, including optional Caffeine state.
+2. System glance values such as CPU and memory.
+3. AI glance values such as local token usage.
+
+The Main trigger is the survival priority and remains the panel entry point.
+Caffeine remains part of the main surface. Only compact split mode may render it
+as trigger state or a compact badge on the Main trigger instead of a separate
+chip in the main item. System and AI values use their own compact status items
+only when the user enables split groups.
+
+Rationale:
+
+macOS does not expose a reliable status item width negotiation API when system
+extras such as Now Playing, iPhone, call, microphone, screen sharing, or other
+Apple-managed indicators appear. Spill therefore cannot wait for an exact
+"space is running out" callback. The default must remain predictable, while
+optional split groups let users who prefer survival-priority behavior allow
+System and AI values to be moved, hidden, or reordered by macOS/user menu bar
+behavior.
+
+Rules:
+
+- The default experience uses one horizontal status item and does not force
+  compact icon/value rendering.
+- Split groups are opt-in. Compact rendering is opt-in. Either option can be
+  enabled independently.
+- Caffeine must not create a separate `NSStatusItem`; it is part of the main
+  surface.
+- The Main trigger opens the Spill Panel. Caffeine details and actions remain
+  available through tooltip, menu, or panel UI when compact mode makes the badge
+  itself too small for reliable direct interaction.
+- System and AI values must share the same provider stores and refresh cadence
+  as the Main app state instead of starting independent timers.
+- System and AI status items are optional display surfaces. Hiding them because
+  no corresponding value is enabled must not disable the underlying provider.
+- Spill cannot rely on macOS preserving item order. Functional items are a
+  resilience strategy, not a guarantee that System or AI always appear in a
+  precise position.
 
 ### ARD-002: Public APIs First
 

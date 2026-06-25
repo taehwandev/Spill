@@ -28,7 +28,6 @@ enum PreferencesTextKey: String {
     case menuBarIconAnimation
     case useSpillAnimation
     case menuBarTriggerIcon
-    case menuBarIconSpacing
     case globalShortcut
     case keyboardShortcut
     case windowSnapShortcuts
@@ -88,6 +87,10 @@ enum PreferencesTextKey: String {
     case fontMono
     case clockAreaStatus
     case clockAreaStatusDetail
+    case clockAreaCompactMode
+    case clockAreaCompactModeDetail
+    case clockAreaSplitGroups
+    case clockAreaSplitGroupsDetail
     case clockAreaTextBold
     case clockAreaTextSize
     case layout
@@ -263,7 +266,6 @@ enum PreferencesL10n {
             .menuBarIconAnimation: "Menu Bar Icon & Animation",
             .useSpillAnimation: "Use spill animation",
             .menuBarTriggerIcon: "Menu bar trigger icon",
-            .menuBarIconSpacing: "Menu bar icon spacing",
             .globalShortcut: "Global Shortcut",
             .keyboardShortcut: "Keyboard shortcut",
             .windowSnapShortcuts: "Window Snap Shortcuts",
@@ -323,6 +325,10 @@ enum PreferencesL10n {
             .fontMono: "Mono",
             .clockAreaStatus: "Clock Area",
             .clockAreaStatusDetail: "Shown next to the macOS clock. Clicking AI opens the local token dashboard.",
+            .clockAreaCompactMode: "Compact Status Values",
+            .clockAreaCompactModeDetail: "Use tighter icon/value rendering only when you choose a compact menu bar.",
+            .clockAreaSplitGroups: "Split Status Groups",
+            .clockAreaSplitGroupsDetail: "Separate Main, System, and AI into independent menu bar items.",
             .clockAreaTextBold: "Bold Clock Text",
             .clockAreaTextSize: "Clock Text Size",
             .layout: "Layout",
@@ -366,7 +372,6 @@ enum PreferencesL10n {
             .menuBarIconAnimation: "메뉴 막대 아이콘 및 애니메이션",
             .useSpillAnimation: "Spill 애니메이션 사용",
             .menuBarTriggerIcon: "메뉴 막대 트리거 아이콘",
-            .menuBarIconSpacing: "메뉴 막대 아이콘 간격",
             .globalShortcut: "전역 단축키",
             .keyboardShortcut: "키보드 단축키",
             .windowSnapShortcuts: "윈도우 스냅 단축키",
@@ -426,6 +431,10 @@ enum PreferencesL10n {
             .fontMono: "고정폭",
             .clockAreaStatus: "시계 옆 상태",
             .clockAreaStatusDetail: "macOS 시계 옆에 표시됩니다. AI를 누르면 로컬 토큰 대시보드가 열립니다.",
+            .clockAreaCompactMode: "상태값 축소 표시",
+            .clockAreaCompactModeDetail: "선택한 경우에만 아이콘과 값을 더 촘촘한 메뉴 막대 형태로 표시합니다.",
+            .clockAreaSplitGroups: "상태 그룹 분리",
+            .clockAreaSplitGroupsDetail: "Main, 시스템, AI를 각각 독립된 메뉴 막대 항목으로 나눕니다.",
             .clockAreaTextBold: "시계 옆 텍스트 굵게",
             .clockAreaTextSize: "시계 옆 텍스트 크기",
             .layout: "레이아웃",
@@ -469,7 +478,6 @@ enum PreferencesL10n {
             .menuBarIconAnimation: "メニューバーアイコンとアニメーション",
             .useSpillAnimation: "Spill アニメーションを使用",
             .menuBarTriggerIcon: "メニューバートリガーアイコン",
-            .menuBarIconSpacing: "メニューバーアイコン間隔",
             .globalShortcut: "グローバルショートカット",
             .keyboardShortcut: "キーボードショートカット",
             .windowSnapShortcuts: "ウィンドウスナップショートカット",
@@ -529,6 +537,10 @@ enum PreferencesL10n {
             .fontMono: "等幅",
             .clockAreaStatus: "時計横の状態",
             .clockAreaStatusDetail: "macOS の時計横に表示されます。AI をクリックするとローカルトークンダッシュボードを開きます。",
+            .clockAreaCompactMode: "状態値をコンパクト表示",
+            .clockAreaCompactModeDetail: "選択した場合だけ、アイコンと値をより詰めたメニューバー表示にします。",
+            .clockAreaSplitGroups: "状態グループを分離",
+            .clockAreaSplitGroupsDetail: "Main、システム、AI を個別のメニューバー項目に分けます。",
             .clockAreaTextBold: "時計横テキストを太字",
             .clockAreaTextSize: "時計横テキストサイズ",
             .layout: "レイアウト",

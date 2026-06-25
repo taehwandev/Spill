@@ -55,7 +55,7 @@ final class MenuBarStatusContentViewTests: XCTestCase {
         XCTAssertEqual(segments.map(\.kind), [.caffeine, .trigger, .cpu, .memory])
     }
 
-    func testSegmentHitTestingFindsCaffeineChip() {
+    func testSegmentHitTestingFindsInactiveCaffeineInsideMainChip() {
         let trigger = MenuBarStatusSegment(
             kind: .trigger,
             title: "Spill",
@@ -87,31 +87,132 @@ final class MenuBarStatusContentViewTests: XCTestCase {
             symbolName: "cpu"
         )
 
-        let triggerWidth = MenuBarStatusContentView.preferredWidth(for: [trigger])
-        let caffeineOnlyWidth = MenuBarStatusContentView.preferredWidth(for: [caffeine])
-
         let segments = [caffeine, trigger, cpu]
-
-        XCTAssertEqual(
-            MenuBarStatusContentView.segmentKind(at: NSPoint(x: 4, y: 10), in: segments),
-            .caffeine
+        let mainWidth = MenuBarStatusContentView.preferredWidth(
+            for: [caffeine, trigger],
+            groupsMainCaffeine: true
         )
+
         XCTAssertEqual(
             MenuBarStatusContentView.segmentKind(
-                at: NSPoint(x: caffeineOnlyWidth + 4, y: 10),
-                in: segments
+                at: NSPoint(x: 4, y: 10),
+                in: segments,
+                groupsMainCaffeine: true
             ),
             .trigger
         )
         XCTAssertEqual(
             MenuBarStatusContentView.segmentKind(
-                at: NSPoint(x: caffeineOnlyWidth + triggerWidth + 4, y: 10),
-                in: segments
+                at: NSPoint(x: mainWidth - 6, y: 10),
+                in: segments,
+                groupsMainCaffeine: true
+            ),
+            .caffeine
+        )
+        XCTAssertEqual(
+            MenuBarStatusContentView.segmentKind(
+                at: NSPoint(x: mainWidth + 4, y: 10),
+                in: segments,
+                groupsMainCaffeine: true
             ),
             .cpu
         )
         XCTAssertNil(
             MenuBarStatusContentView.segmentKind(at: NSPoint(x: 9_999, y: 10), in: segments)
+        )
+    }
+
+    func testSegmentHitTestingFindsActiveCaffeineBadgeInsideMainChip() {
+        let trigger = MenuBarStatusSegment(
+            kind: .trigger,
+            title: "Spill",
+            shortTitle: "Spill",
+            value: "",
+            displayText: "",
+            usageRatio: 0,
+            state: .normal,
+            symbolName: "drop.fill"
+        )
+        let caffeine = MenuBarStatusSegment(
+            kind: .caffeine,
+            title: "Caffeine",
+            shortTitle: "CAF",
+            value: "15m",
+            displayText: "15m",
+            usageRatio: 0,
+            state: .active,
+            symbolName: "cup.and.saucer.fill"
+        )
+        let segments = [caffeine, trigger]
+        let width = MenuBarStatusContentView.preferredWidth(for: segments, groupsMainCaffeine: true)
+
+        XCTAssertEqual(
+            MenuBarStatusContentView.segmentKind(
+                at: NSPoint(x: width - 3, y: 18),
+                in: segments,
+                groupsMainCaffeine: true
+            ),
+            .caffeine
+        )
+        XCTAssertEqual(
+            MenuBarStatusContentView.segmentKind(
+                at: NSPoint(x: 4, y: 10),
+                in: segments,
+                groupsMainCaffeine: true
+            ),
+            .trigger
+        )
+    }
+
+    func testMainChipShowsCaffeineIconEvenWhenInactive() throws {
+        let trigger = MenuBarStatusSegment(
+            kind: .trigger,
+            title: "Spill",
+            shortTitle: "Spill",
+            value: "",
+            displayText: "",
+            usageRatio: 0,
+            state: .normal,
+            symbolName: "drop.fill"
+        )
+        let caffeine = MenuBarStatusSegment(
+            kind: .caffeine,
+            title: "Caffeine",
+            shortTitle: "CAF",
+            value: "",
+            displayText: "",
+            usageRatio: 0,
+            state: .unavailable,
+            symbolName: "cup.and.saucer"
+        )
+
+        let view = MenuBarStatusContentView(segments: [caffeine, trigger], groupsMainCaffeine: true)
+        let chip = try XCTUnwrap(view.subviews.first)
+
+        XCTAssertEqual(chip.subviews.compactMap { $0 as? NSImageView }.count, 2)
+        XCTAssertTrue(chip.subviews.compactMap { $0 as? NSTextField }.isEmpty)
+    }
+
+    func testInactiveCaffeineInMainChipUsesNormalIconColor() throws {
+        let trigger = makeTriggerSegment()
+        let caffeine = makeCaffeineSegment()
+        let view = MenuBarStatusContentView(segments: [caffeine, trigger], groupsMainCaffeine: true)
+        let chip = try XCTUnwrap(view.subviews.first)
+        let icons = chip.subviews.compactMap { $0 as? NSImageView }
+
+        XCTAssertEqual(icons.count, 2)
+        XCTAssertEqual(icons.last?.contentTintColor, .labelColor)
+    }
+
+    func testDefaultLayoutKeepsCaffeineAndTriggerSeparate() throws {
+        let trigger = makeTriggerSegment()
+        let caffeine = makeCaffeineSegment()
+        let view = MenuBarStatusContentView(segments: [caffeine, trigger])
+
+        XCTAssertEqual(view.subviews.count, 2)
+        XCTAssertEqual(
+            MenuBarStatusContentView.segmentKind(at: NSPoint(x: 4, y: 10), in: [caffeine, trigger]),
+            .caffeine
         )
     }
 
@@ -257,13 +358,12 @@ final class MenuBarStatusContentViewTests: XCTestCase {
             statusSegments: [cpu, memory],
             caffeineSegment: caffeine
         )
-        let fixedLegacyMaximum: CGFloat = 190
         let wideMaximum = StatusItemController.maximumStatusItemLength(
             screenWidth: 1_512,
             isSleepGuardActive: false
         )
 
-        XCTAssertGreaterThan(MenuBarStatusContentView.preferredWidth(for: requestedSegments), fixedLegacyMaximum)
+        XCTAssertLessThan(MenuBarStatusContentView.preferredWidth(for: requestedSegments), wideMaximum)
 
         let segments = StatusItemController.visibleSegments(
             trigger: trigger,
@@ -274,6 +374,25 @@ final class MenuBarStatusContentViewTests: XCTestCase {
 
         XCTAssertEqual(segments.map(\.kind), [.caffeine, .trigger, .cpu, .memory])
         XCTAssertEqual(segments.suffix(2).map(\.visualStyle), [.symbol, .symbol])
+    }
+
+    func testVisibleSegmentsWithoutCompactFallbackDropsTrailingStatusInsteadOfCompacting() {
+        let trigger = makeTriggerSegment()
+        let caffeine = makeCaffeineSegment()
+        let cpu = makeStatusSegment(kind: .cpu, value: "90.0%")
+        let memory = makeStatusSegment(kind: .memory, value: "90.0%")
+
+        let segments = StatusItemController.visibleSegments(
+            trigger: trigger,
+            statusSegments: [cpu, memory],
+            caffeineSegment: caffeine,
+            maximumWidth: 104,
+            usesCompactFallback: false
+        )
+
+        XCTAssertEqual(segments.map(\.kind), [.caffeine, .trigger])
+        XCTAssertEqual(segments.first?.visualStyle, .symbol)
+        XCTAssertEqual(segments.last?.visualStyle, .symbol)
     }
 
     func testMaximumStatusItemLengthExpandsWithScreenWidth() {
@@ -295,7 +414,7 @@ final class MenuBarStatusContentViewTests: XCTestCase {
         )
     }
 
-    func testVisibleSegmentsDropStatusOnlyAfterValueOnlySegmentsStillOverflow() {
+    func testVisibleSegmentsKeepMainCaffeineAndCompactStatusWhenNarrow() {
         let trigger = makeTriggerSegment()
         let caffeine = makeCaffeineSegment(value: "1h 59m", active: true)
         let cpu = makeStatusSegment(kind: .cpu, value: "90.0%")
@@ -305,11 +424,32 @@ final class MenuBarStatusContentViewTests: XCTestCase {
             trigger: trigger,
             statusSegments: [cpu, memory],
             caffeineSegment: caffeine,
-            maximumWidth: 96
+            maximumWidth: 104
+        )
+
+        XCTAssertEqual(segments.map(\.kind), [.caffeine, .trigger, .cpu])
+        XCTAssertEqual(segments.prefix(2).map(\.kind), [.caffeine, .trigger])
+        XCTAssertEqual(segments.first?.visualStyle, .symbolBadge)
+        XCTAssertEqual(segments.last?.visualStyle, .valueOnly)
+        XCTAssertLessThanOrEqual(MenuBarStatusContentView.preferredWidth(for: segments), 104)
+    }
+
+    func testVisibleSegmentsKeepCaffeineWhenNoStatusCanFit() {
+        let trigger = makeTriggerSegment()
+        let caffeine = makeCaffeineSegment(value: "1h 59m", active: true)
+        let cpu = makeStatusSegment(kind: .cpu, value: "90.0%")
+        let memory = makeStatusSegment(kind: .memory, value: "90.0%")
+
+        let segments = StatusItemController.visibleSegments(
+            trigger: trigger,
+            statusSegments: [cpu, memory],
+            caffeineSegment: caffeine,
+            maximumWidth: 64
         )
 
         XCTAssertEqual(segments.map(\.kind), [.caffeine, .trigger])
-        XCTAssertLessThanOrEqual(MenuBarStatusContentView.preferredWidth(for: segments), 96)
+        XCTAssertEqual(segments.first?.visualStyle, .symbolBadge)
+        XCTAssertLessThanOrEqual(MenuBarStatusContentView.preferredWidth(for: segments), 64)
     }
 
     func testCompactCpuMemorySegmentsStackIntoNarrowChip() {

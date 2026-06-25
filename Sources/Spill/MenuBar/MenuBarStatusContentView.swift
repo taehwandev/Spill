@@ -9,6 +9,7 @@ final class MenuBarStatusContentView: NSView {
     private static let triggerChipHeight: CGFloat = 20
     private static let iconOnlyChipWidth: CGFloat = 22
     private static let triggerChipWidth: CGFloat = 30
+    private static let mainWithCaffeineChipWidth: CGFloat = 50
     private static let compactStackChipMinWidth: CGFloat = 34
     private static let compactStackHorizontalPadding: CGFloat = 16
     fileprivate static let compactStackIconSize: CGFloat = 7
@@ -24,8 +25,10 @@ final class MenuBarStatusContentView: NSView {
     private let layoutStyle: MenuBarStatusLayoutStyle
     private let textFontSize: CGFloat
     private let textIsBold: Bool
+    private let groupsMainCaffeine: Bool
 
     private enum ChipDescriptor {
+        case main(trigger: MenuBarStatusSegment, caffeine: MenuBarStatusSegment?)
         case single(MenuBarStatusSegment)
         case compactStack([MenuBarStatusSegment])
         case vertical(MenuBarStatusSegment)
@@ -35,12 +38,14 @@ final class MenuBarStatusContentView: NSView {
         segments: [MenuBarStatusSegment],
         layoutStyle: MenuBarStatusLayoutStyle = .inline,
         textFontSize: CGFloat = MenuBarStatusContentView.defaultTextFontSize,
-        textIsBold: Bool = false
+        textIsBold: Bool = false,
+        groupsMainCaffeine: Bool = false
     ) {
         self.segments = segments
         self.layoutStyle = layoutStyle
         self.textFontSize = Self.normalizedTextFontSize(textFontSize)
         self.textIsBold = textIsBold
+        self.groupsMainCaffeine = groupsMainCaffeine
         super.init(frame: .zero)
 
         translatesAutoresizingMaskIntoConstraints = false
@@ -60,7 +65,8 @@ final class MenuBarStatusContentView: NSView {
                 for: segments,
                 layoutStyle: layoutStyle,
                 textFontSize: textFontSize,
-                textIsBold: textIsBold
+                textIsBold: textIsBold,
+                groupsMainCaffeine: groupsMainCaffeine
             ),
             height: Self.height
         )
@@ -74,14 +80,19 @@ final class MenuBarStatusContentView: NSView {
         for segments: [MenuBarStatusSegment],
         layoutStyle: MenuBarStatusLayoutStyle = .inline,
         textFontSize: CGFloat = MenuBarStatusContentView.defaultTextFontSize,
-        textIsBold: Bool = false
+        textIsBold: Bool = false,
+        groupsMainCaffeine: Bool = false
     ) -> CGFloat {
         guard !segments.isEmpty else {
             return 26
         }
 
         let normalizedFontSize = Self.normalizedTextFontSize(textFontSize)
-        let chips = chipDescriptors(for: segments, layoutStyle: layoutStyle)
+        let chips = chipDescriptors(
+            for: segments,
+            layoutStyle: layoutStyle,
+            groupsMainCaffeine: groupsMainCaffeine
+        )
         let chipTotal = chips.reduce(CGFloat.zero) { partial, descriptor in
             partial + chipWidth(
                 for: descriptor,
@@ -98,12 +109,17 @@ final class MenuBarStatusContentView: NSView {
         in segments: [MenuBarStatusSegment],
         layoutStyle: MenuBarStatusLayoutStyle = .inline,
         textFontSize: CGFloat = MenuBarStatusContentView.defaultTextFontSize,
-        textIsBold: Bool = false
+        textIsBold: Bool = false,
+        groupsMainCaffeine: Bool = false
     ) -> MenuBarStatusSegment.Kind? {
         let normalizedFontSize = Self.normalizedTextFontSize(textFontSize)
         var currentX = sidePadding
 
-        for descriptor in chipDescriptors(for: segments, layoutStyle: layoutStyle) {
+        for descriptor in chipDescriptors(
+            for: segments,
+            layoutStyle: layoutStyle,
+            groupsMainCaffeine: groupsMainCaffeine
+        ) {
             let width = chipWidth(
                 for: descriptor,
                 textFontSize: normalizedFontSize,
@@ -122,19 +138,35 @@ final class MenuBarStatusContentView: NSView {
 
     private static func chipDescriptors(
         for segments: [MenuBarStatusSegment],
-        layoutStyle: MenuBarStatusLayoutStyle
+        layoutStyle: MenuBarStatusLayoutStyle,
+        groupsMainCaffeine: Bool
     ) -> [ChipDescriptor] {
-        if layoutStyle == .stacked {
-            return segments.map { segment in
-                isVerticalStatus(segment) ? .vertical(segment) : .single(segment)
-            }
-        }
-
         var descriptors: [ChipDescriptor] = []
         var index = 0
 
         while index < segments.count {
             let segment = segments[index]
+            if groupsMainCaffeine,
+               segment.kind == .caffeine,
+               index + 1 < segments.count,
+               segments[index + 1].kind == .trigger {
+                descriptors.append(.main(trigger: segments[index + 1], caffeine: segment))
+                index += 2
+                continue
+            }
+
+            if groupsMainCaffeine, segment.kind == .trigger {
+                descriptors.append(.main(trigger: segment, caffeine: nil))
+                index += 1
+                continue
+            }
+
+            if layoutStyle == .stacked {
+                descriptors.append(isVerticalStatus(segment) ? .vertical(segment) : .single(segment))
+                index += 1
+                continue
+            }
+
             guard isStackableCompactStatus(segment) else {
                 descriptors.append(.single(segment))
                 index += 1
@@ -194,6 +226,11 @@ final class MenuBarStatusContentView: NSView {
         descriptor: ChipDescriptor
     ) -> MenuBarStatusSegment.Kind? {
         switch descriptor {
+        case let .main(_, caffeine):
+            if caffeine != nil, point.x >= frame.midX {
+                return .caffeine
+            }
+            return .trigger
         case let .single(segment):
             return segment.kind
         case let .vertical(segment):
@@ -258,6 +295,8 @@ final class MenuBarStatusContentView: NSView {
         switch descriptor {
         case let .single(segment):
             return chipWidth(for: segment, textFontSize: textFontSize, textIsBold: textIsBold)
+        case let .main(_, caffeine):
+            return caffeine == nil ? triggerChipWidth : mainWithCaffeineChipWidth
         case let .compactStack(segments):
             return compactStackChipWidth(for: segments, textFontSize: textFontSize, textIsBold: textIsBold)
         case let .vertical(segment):
@@ -267,6 +306,8 @@ final class MenuBarStatusContentView: NSView {
 
     private static func chipHeight(for descriptor: ChipDescriptor) -> CGFloat {
         switch descriptor {
+        case .main:
+            return triggerChipHeight
         case let .single(segment):
             return chipHeight(for: segment)
         case .compactStack, .vertical:
@@ -313,6 +354,45 @@ final class MenuBarStatusContentView: NSView {
         }
     }
 
+    fileprivate static func compactBadgeText(for value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return ""
+        }
+
+        if trimmed == "∞" {
+            return trimmed
+        }
+
+        if let hoursRange = trimmed.range(of: #"^\d+h"#, options: .regularExpression) {
+            return String(trimmed[hoursRange])
+        }
+
+        if let minutesRange = trimmed.range(of: #"^\d+"#, options: .regularExpression) {
+            return String(trimmed[minutesRange])
+        }
+
+        return String(trimmed.prefix(2))
+    }
+
+    fileprivate static func mainCaffeineBadgeText(for caffeine: MenuBarStatusSegment?) -> String {
+        guard let caffeine else {
+            return ""
+        }
+
+        let text = compactBadgeText(for: caffeine.value)
+        if !text.isEmpty {
+            return text
+        }
+
+        switch caffeine.state {
+        case .active, .refreshing:
+            return "•"
+        case .normal, .warning, .unavailable:
+            return ""
+        }
+    }
+
     private static func chipWidth(
         for segment: MenuBarStatusSegment,
         textFontSize: CGFloat,
@@ -352,9 +432,15 @@ final class MenuBarStatusContentView: NSView {
     private func installChips() {
         var previous: NSView?
 
-        for descriptor in Self.chipDescriptors(for: segments, layoutStyle: layoutStyle) {
+        for descriptor in Self.chipDescriptors(
+            for: segments,
+            layoutStyle: layoutStyle,
+            groupsMainCaffeine: groupsMainCaffeine
+        ) {
             let chip: NSView
             switch descriptor {
+            case let .main(trigger, caffeine):
+                chip = MenuBarMainTriggerChipView(trigger: trigger, caffeine: caffeine)
             case let .single(segment):
                 chip = MenuBarMetricChipView(
                     segment: segment,
@@ -400,6 +486,160 @@ final class MenuBarStatusContentView: NSView {
         if let previous {
             previous.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -Self.sidePadding).isActive = true
         }
+    }
+}
+
+@MainActor
+private final class MenuBarMainTriggerChipView: NSView {
+    private let trigger: MenuBarStatusSegment
+    private let caffeine: MenuBarStatusSegment?
+    private let triggerIconView = NSImageView()
+    private let caffeineIconView = NSImageView()
+    private let badgeLabel = NSTextField(labelWithString: "")
+
+    init(trigger: MenuBarStatusSegment, caffeine: MenuBarStatusSegment?) {
+        self.trigger = trigger
+        self.caffeine = caffeine
+        super.init(frame: .zero)
+
+        translatesAutoresizingMaskIntoConstraints = false
+        configureIcon()
+        configureBadge()
+        installSubviews()
+        refreshColors()
+        setAccessibilityLabel(accessibilityText)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        configureIcon()
+        refreshColors()
+    }
+
+    private func configureIcon() {
+        triggerIconView.translatesAutoresizingMaskIntoConstraints = false
+        triggerIconView.imageScaling = .scaleProportionallyDown
+        let config = NSImage.SymbolConfiguration(pointSize: 15.5, weight: .semibold)
+        triggerIconView.image = NSImage(systemSymbolName: trigger.symbolName, accessibilityDescription: trigger.title)?
+            .withSymbolConfiguration(config)
+        triggerIconView.symbolConfiguration = config
+
+        guard let caffeine else {
+            return
+        }
+
+        caffeineIconView.translatesAutoresizingMaskIntoConstraints = false
+        caffeineIconView.imageScaling = .scaleProportionallyDown
+        let caffeineConfig = NSImage.SymbolConfiguration(pointSize: 13.5, weight: .semibold)
+        caffeineIconView.image = NSImage(
+            systemSymbolName: caffeine.symbolName,
+            accessibilityDescription: caffeine.title
+        )?
+            .withSymbolConfiguration(caffeineConfig)
+        caffeineIconView.symbolConfiguration = caffeineConfig
+    }
+
+    private func configureBadge() {
+        let badgeText = MenuBarStatusContentView.mainCaffeineBadgeText(for: caffeine)
+        badgeLabel.translatesAutoresizingMaskIntoConstraints = false
+        badgeLabel.stringValue = badgeText
+        badgeLabel.font = MenuBarStatusContentView.badgeTextFont(
+            textFontSize: MenuBarStatusContentView.defaultTextFontSize,
+            textIsBold: true
+        )
+        badgeLabel.alignment = .center
+        badgeLabel.lineBreakMode = .byClipping
+        badgeLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
+        badgeLabel.setContentHuggingPriority(.required, for: .horizontal)
+    }
+
+    private func installSubviews() {
+        addSubview(triggerIconView)
+
+        if caffeine == nil {
+            NSLayoutConstraint.activate([
+                triggerIconView.centerXAnchor.constraint(equalTo: centerXAnchor),
+                triggerIconView.centerYAnchor.constraint(equalTo: centerYAnchor),
+                triggerIconView.widthAnchor.constraint(equalToConstant: 18),
+                triggerIconView.heightAnchor.constraint(equalToConstant: 18)
+            ])
+            return
+        }
+
+        addSubview(caffeineIconView)
+        NSLayoutConstraint.activate([
+            triggerIconView.centerXAnchor.constraint(equalTo: leadingAnchor, constant: 15),
+            triggerIconView.centerYAnchor.constraint(equalTo: centerYAnchor),
+            triggerIconView.widthAnchor.constraint(equalToConstant: 18),
+            triggerIconView.heightAnchor.constraint(equalToConstant: 18),
+
+            caffeineIconView.centerXAnchor.constraint(equalTo: trailingAnchor, constant: -14),
+            caffeineIconView.centerYAnchor.constraint(equalTo: centerYAnchor, constant: 0.5),
+            caffeineIconView.widthAnchor.constraint(equalToConstant: 16),
+            caffeineIconView.heightAnchor.constraint(equalToConstant: 16)
+        ])
+
+        guard !badgeLabel.stringValue.isEmpty else {
+            return
+        }
+
+        addSubview(badgeLabel)
+        NSLayoutConstraint.activate([
+            badgeLabel.topAnchor.constraint(equalTo: topAnchor, constant: -1),
+            badgeLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: 1),
+            badgeLabel.leadingAnchor.constraint(greaterThanOrEqualTo: caffeineIconView.centerXAnchor, constant: -2)
+        ])
+    }
+
+    private func refreshColors() {
+        triggerIconView.contentTintColor = triggerColor
+        caffeineIconView.contentTintColor = caffeineColor
+        badgeLabel.textColor = caffeineColor
+    }
+
+    private var triggerColor: NSColor {
+        switch trigger.state {
+        case .normal:
+            return .labelColor
+        case .active, .refreshing:
+            return .systemTeal
+        case .warning:
+            return .systemOrange
+        case .unavailable:
+            return .tertiaryLabelColor
+        }
+    }
+
+    private var caffeineColor: NSColor {
+        switch caffeine?.state {
+        case .active, .refreshing:
+            return .systemTeal
+        case .warning:
+            return .systemOrange
+        case .normal, .unavailable, .none:
+            return .labelColor
+        }
+    }
+
+    private var accessibilityText: String {
+        guard let caffeine else {
+            return trigger.title
+        }
+
+        guard !MenuBarStatusContentView.mainCaffeineBadgeText(for: caffeine).isEmpty else {
+            return "\(trigger.title), \(caffeine.title) off"
+        }
+
+        if caffeine.value.isEmpty {
+            return "\(trigger.title), \(caffeine.title) active"
+        }
+
+        return "\(trigger.title), \(caffeine.title) \(caffeine.value)"
     }
 }
 
@@ -874,24 +1114,7 @@ private final class MenuBarMetricChipView: NSView {
     }
 
     private func badgeText(for value: String) -> String {
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            return ""
-        }
-
-        if trimmed == "∞" {
-            return trimmed
-        }
-
-        if let hoursRange = trimmed.range(of: #"^\d+h"#, options: .regularExpression) {
-            return String(trimmed[hoursRange])
-        }
-
-        if let minutesRange = trimmed.range(of: #"^\d+"#, options: .regularExpression) {
-            return String(trimmed[minutesRange])
-        }
-
-        return String(trimmed.prefix(2))
+        MenuBarStatusContentView.compactBadgeText(for: value)
     }
 
     private var accessibilityText: String {

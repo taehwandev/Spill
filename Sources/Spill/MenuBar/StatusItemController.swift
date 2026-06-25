@@ -20,12 +20,21 @@ final class StatusItemController: NSObject {
     private let updateAction: () -> Void
     private let quitAction: () -> Void
     private let triggerItem: NSStatusItem
+    private let systemItem: NSStatusItem
+    private let aiItem: NSStatusItem
     private var isSpillBarVisible = false
-    private var statusContentView: MenuBarStatusContentView?
-    private var currentSegments: [MenuBarStatusSegment] = []
+    private var mainStatusContentView: MenuBarStatusContentView?
+    private var systemStatusContentView: MenuBarStatusContentView?
+    private var aiStatusContentView: MenuBarStatusContentView?
+    private var currentMainSegments: [MenuBarStatusSegment] = []
+    private var currentSystemSegments: [MenuBarStatusSegment] = []
+    private var currentAISegments: [MenuBarStatusSegment] = []
     private var currentLayoutStyle: MenuBarStatusLayoutStyle = .inline
     private var currentMenuBarStatusFontSize: CGFloat = MenuBarStatusContentView.defaultTextFontSize
     private var currentMenuBarStatusTextBold = false
+    private var currentMenuBarStatusCompactMode = false
+    private var currentMenuBarStatusSplitGroups = false
+    private var currentMainGroupsMainCaffeine = false
 
     init(
         settings: SpillSettings,
@@ -55,22 +64,22 @@ final class StatusItemController: NSObject {
         self.quitAction = quitAction
 
         triggerItem = NSStatusBar.system.statusItem(withLength: defaultLength)
+        systemItem = NSStatusBar.system.statusItem(withLength: defaultLength)
+        aiItem = NSStatusBar.system.statusItem(withLength: defaultLength)
 
         super.init()
 
         triggerItem.autosaveName = "dev.spill.status-trigger"
+        systemItem.autosaveName = "dev.spill.status-system"
+        aiItem.autosaveName = "dev.spill.status-ai"
 
-        configureTriggerButton()
+        configureStatusButtons()
         refresh(isSpillBarVisible: false)
     }
 
     func refresh(isSpillBarVisible: Bool? = nil) {
         if let isSpillBarVisible {
             self.isSpillBarVisible = isSpillBarVisible
-        }
-
-        guard let button = triggerItem.button else {
-            return
         }
 
         let hiddenCount = hiddenItemCountProvider()
@@ -88,55 +97,128 @@ final class StatusItemController: NSObject {
         )
         let performanceEffect = menuBarPerformanceEffect
         let sleepGuardSegment = sleepGuardMenuBarSegment
-        let layoutStyle = settings.menuBarStatusLayoutStyle
+        let compactMode = settings.menuBarStatusCompactMode
+        let splitGroups = settings.menuBarStatusSplitGroups
+        let layoutStyle: MenuBarStatusLayoutStyle = compactMode ? settings.menuBarStatusLayoutStyle : .inline
         let textFontSize = MenuBarStatusContentView.normalizedTextFontSize(
             CGFloat(settings.menuBarStatusFontSize)
         )
         let textIsBold = settings.menuBarStatusTextBold
-        let segments = Self.visibleSegments(
-            trigger: triggerSegment(performanceEffect: performanceEffect),
-            statusSegments: summary.segments,
-            caffeineSegment: sleepGuardSegment,
-            maximumWidth: maximumStatusItemLength,
-            layoutStyle: layoutStyle,
-            textFontSize: textFontSize,
-            textIsBold: textIsBold
-        )
-        let segmentsChanged = segments != currentSegments
+        let trigger = triggerSegment(performanceEffect: performanceEffect)
+        let displayStatusSegments = compactMode
+            ? summary.segments.map { $0.valueOnlyMenuBarSegment() }
+            : summary.segments
+        let displaySleepGuardSegment = compactMode
+            ? sleepGuardSegment?.badgeMenuBarSegment()
+            : sleepGuardSegment
+        let mainGroupsMainCaffeine = compactMode && splitGroups
+        let mainSegments: [MenuBarStatusSegment]
+        let systemSegments: [MenuBarStatusSegment]
+        let aiSegments: [MenuBarStatusSegment]
+
+        if splitGroups {
+            mainSegments = Self.orderedSegments(
+                trigger: trigger,
+                statusSegments: [],
+                caffeineSegment: displaySleepGuardSegment
+            )
+            systemSegments = displayStatusSegments.filter { segment in
+                switch segment.kind {
+                case .cpu, .memory:
+                    return true
+                case .ai, .caffeine, .sleepGuard, .trigger:
+                    return false
+                }
+            }
+            aiSegments = displayStatusSegments.filter { $0.kind == .ai }
+        } else {
+            mainSegments = Self.visibleSegments(
+                trigger: trigger,
+                statusSegments: displayStatusSegments,
+                caffeineSegment: displaySleepGuardSegment,
+                maximumWidth: maximumStatusItemLength,
+                layoutStyle: layoutStyle,
+                textFontSize: textFontSize,
+                textIsBold: textIsBold,
+                usesCompactFallback: compactMode
+            )
+            systemSegments = []
+            aiSegments = []
+        }
         let layoutChanged = layoutStyle != currentLayoutStyle
         let fontSizeChanged = textFontSize != currentMenuBarStatusFontSize
         let fontWeightChanged = textIsBold != currentMenuBarStatusTextBold
-        currentSegments = segments
+        let compactModeChanged = compactMode != currentMenuBarStatusCompactMode
+        let splitGroupsChanged = splitGroups != currentMenuBarStatusSplitGroups
+        let mainGroupingChanged = mainGroupsMainCaffeine != currentMainGroupsMainCaffeine
+        let styleChanged = layoutChanged
+            || fontSizeChanged
+            || fontWeightChanged
+            || compactModeChanged
+            || splitGroupsChanged
+            || mainGroupingChanged
+        let mainSegmentsChanged = mainSegments != currentMainSegments
+        let systemSegmentsChanged = systemSegments != currentSystemSegments
+        let aiSegmentsChanged = aiSegments != currentAISegments
+        currentMainSegments = mainSegments
+        currentSystemSegments = systemSegments
+        currentAISegments = aiSegments
         currentLayoutStyle = layoutStyle
         currentMenuBarStatusFontSize = textFontSize
         currentMenuBarStatusTextBold = textIsBold
+        currentMenuBarStatusCompactMode = compactMode
+        currentMenuBarStatusSplitGroups = splitGroups
+        currentMainGroupsMainCaffeine = mainGroupsMainCaffeine
         let statusTooltip = statusTooltip(
             summary: summary,
             sleepGuardSegment: sleepGuardSegment,
             performanceEffect: performanceEffect
         )
-        triggerItem.isVisible = true
-        triggerItem.length = MenuBarStatusContentView.preferredWidth(
-            for: segments,
-            layoutStyle: layoutStyle,
-            textFontSize: textFontSize,
-            textIsBold: textIsBold
-        )
-        configureAppearance(
-            for: button,
-            segments: segments,
+        applySegments(
+            mainSegments,
+            to: triggerItem,
+            contentView: &mainStatusContentView,
             statusTooltip: statusTooltip,
             layoutStyle: layoutStyle,
             textFontSize: textFontSize,
             textIsBold: textIsBold,
-            rebuildsContentView: segmentsChanged || layoutChanged || fontSizeChanged || fontWeightChanged
+            groupsMainCaffeine: mainGroupsMainCaffeine,
+            isVisible: true,
+            rebuildsContentView: mainSegmentsChanged || styleChanged
         )
-        button.state = self.isSpillBarVisible ? .on : .off
-        button.toolTip = tooltip(
+        applySegments(
+            systemSegments,
+            to: systemItem,
+            contentView: &systemStatusContentView,
+            statusTooltip: segmentTooltip(for: systemSegments),
+            layoutStyle: layoutStyle,
+            textFontSize: textFontSize,
+            textIsBold: textIsBold,
+            groupsMainCaffeine: false,
+            isVisible: !systemSegments.isEmpty,
+            rebuildsContentView: systemSegmentsChanged || styleChanged
+        )
+        applySegments(
+            aiSegments,
+            to: aiItem,
+            contentView: &aiStatusContentView,
+            statusTooltip: segmentTooltip(for: aiSegments),
+            layoutStyle: layoutStyle,
+            textFontSize: textFontSize,
+            textIsBold: textIsBold,
+            groupsMainCaffeine: false,
+            isVisible: !aiSegments.isEmpty,
+            rebuildsContentView: aiSegmentsChanged || styleChanged
+        )
+
+        triggerItem.button?.state = self.isSpillBarVisible ? .on : .off
+        triggerItem.button?.toolTip = tooltip(
             statusTooltip: statusTooltip,
             hiddenCount: hiddenCount,
             isSpillBarVisible: self.isSpillBarVisible
         )
+        systemItem.button?.toolTip = segmentTooltip(for: systemSegments)
+        aiItem.button?.toolTip = segmentTooltip(for: aiSegments)
     }
 
     var buttonScreenFrame: NSRect? {
@@ -178,7 +260,8 @@ final class StatusItemController: NSObject {
         maximumWidth: CGFloat,
         layoutStyle: MenuBarStatusLayoutStyle = .inline,
         textFontSize: CGFloat = MenuBarStatusContentView.defaultTextFontSize,
-        textIsBold: Bool = false
+        textIsBold: Bool = false,
+        usesCompactFallback: Bool = true
     ) -> [MenuBarStatusSegment] {
         let requestedSegments = orderedSegments(
             trigger: trigger,
@@ -192,6 +275,41 @@ final class StatusItemController: NSObject {
             textIsBold: textIsBold
         ) > maximumWidth else {
             return requestedSegments
+        }
+
+        guard usesCompactFallback else {
+            var visibleStatusSegments = statusSegments
+            var fittedSegments = orderedSegments(
+                trigger: trigger,
+                statusSegments: visibleStatusSegments,
+                caffeineSegment: caffeineSegment
+            )
+
+            while !visibleStatusSegments.isEmpty,
+                  MenuBarStatusContentView.preferredWidth(
+                      for: fittedSegments,
+                      layoutStyle: layoutStyle,
+                      textFontSize: textFontSize,
+                      textIsBold: textIsBold
+                  ) > maximumWidth {
+                visibleStatusSegments.removeLast()
+                fittedSegments = orderedSegments(
+                    trigger: trigger,
+                    statusSegments: visibleStatusSegments,
+                    caffeineSegment: caffeineSegment
+                )
+            }
+
+            if MenuBarStatusContentView.preferredWidth(
+                for: fittedSegments,
+                layoutStyle: layoutStyle,
+                textFontSize: textFontSize,
+                textIsBold: textIsBold
+            ) <= maximumWidth {
+                return fittedSegments
+            }
+
+            return [trigger]
         }
 
         let compactCaffeineSegment = caffeineSegment?.badgeMenuBarSegment()
@@ -217,12 +335,45 @@ final class StatusItemController: NSObject {
             )
         }
 
-        if MenuBarStatusContentView.preferredWidth(
-            for: fittedSegments,
-            layoutStyle: layoutStyle,
-            textFontSize: textFontSize,
-            textIsBold: textIsBold
-        ) <= maximumWidth {
+        if (statusSegments.isEmpty || !visibleStatusSegments.isEmpty),
+           MenuBarStatusContentView.preferredWidth(
+               for: fittedSegments,
+               layoutStyle: layoutStyle,
+               textFontSize: textFontSize,
+               textIsBold: textIsBold
+           ) <= maximumWidth {
+            return fittedSegments
+        }
+
+        visibleStatusSegments = statusSegments.map { $0.valueOnlyMenuBarSegment() }
+        fittedSegments = orderedSegments(
+            trigger: trigger,
+            statusSegments: visibleStatusSegments,
+            caffeineSegment: nil
+        )
+
+        while !visibleStatusSegments.isEmpty,
+              MenuBarStatusContentView.preferredWidth(
+                  for: fittedSegments,
+                  layoutStyle: layoutStyle,
+                  textFontSize: textFontSize,
+                  textIsBold: textIsBold
+              ) > maximumWidth {
+            visibleStatusSegments.removeLast()
+            fittedSegments = orderedSegments(
+                trigger: trigger,
+                statusSegments: visibleStatusSegments,
+                caffeineSegment: nil
+            )
+        }
+
+        if !visibleStatusSegments.isEmpty,
+           MenuBarStatusContentView.preferredWidth(
+               for: fittedSegments,
+               layoutStyle: layoutStyle,
+               textFontSize: textFontSize,
+               textIsBold: textIsBold
+           ) <= maximumWidth {
             return fittedSegments
         }
 
@@ -281,26 +432,89 @@ final class StatusItemController: NSObject {
         return NSScreen.main?.visibleFrame.width
     }
 
-    private func configureTriggerButton() {
-        guard let button = triggerItem.button else {
+    private func configureStatusButtons() {
+        configureStatusButton(
+            triggerItem,
+            action: #selector(mainStatusButtonClicked(_:)),
+            isVisible: true
+        )
+        configureStatusButton(
+            systemItem,
+            action: #selector(systemStatusButtonClicked(_:)),
+            isVisible: false
+        )
+        configureStatusButton(
+            aiItem,
+            action: #selector(aiStatusButtonClicked(_:)),
+            isVisible: false
+        )
+    }
+
+    private func configureStatusButton(
+        _ item: NSStatusItem,
+        action: Selector,
+        isVisible: Bool
+    ) {
+        item.isVisible = isVisible
+        item.length = defaultLength
+        guard let button = item.button else {
             return
         }
 
-        triggerItem.isVisible = true
-        triggerItem.length = defaultLength
-        configureIconAppearance(for: button)
         button.target = self
-        button.action = #selector(statusButtonClicked(_:))
+        button.action = action
         button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+        button.isBordered = false
+    }
+
+    private func applySegments(
+        _ segments: [MenuBarStatusSegment],
+        to item: NSStatusItem,
+        contentView: inout MenuBarStatusContentView?,
+        statusTooltip: String,
+        layoutStyle: MenuBarStatusLayoutStyle,
+        textFontSize: CGFloat,
+        textIsBold: Bool,
+        groupsMainCaffeine: Bool,
+        isVisible: Bool,
+        rebuildsContentView: Bool
+    ) {
+        item.isVisible = isVisible
+        guard isVisible, let button = item.button else {
+            item.length = 0
+            removeStatusContentView(&contentView)
+            return
+        }
+
+        item.length = MenuBarStatusContentView.preferredWidth(
+            for: segments,
+            layoutStyle: layoutStyle,
+            textFontSize: textFontSize,
+            textIsBold: textIsBold,
+            groupsMainCaffeine: groupsMainCaffeine
+        )
+        configureAppearance(
+            for: button,
+            contentView: &contentView,
+            segments: segments,
+            statusTooltip: statusTooltip,
+            layoutStyle: layoutStyle,
+            textFontSize: textFontSize,
+            textIsBold: textIsBold,
+            groupsMainCaffeine: groupsMainCaffeine,
+            rebuildsContentView: rebuildsContentView
+        )
     }
 
     private func configureAppearance(
         for button: NSStatusBarButton,
+        contentView: inout MenuBarStatusContentView?,
         segments: [MenuBarStatusSegment],
         statusTooltip: String,
         layoutStyle: MenuBarStatusLayoutStyle,
         textFontSize: CGFloat,
         textIsBold: Bool,
+        groupsMainCaffeine: Bool,
         rebuildsContentView: Bool
     ) {
         button.image = nil
@@ -312,21 +526,26 @@ final class StatusItemController: NSObject {
         if !segments.isEmpty {
             installStatusContentView(
                 on: button,
+                contentView: &contentView,
                 segments: segments,
                 layoutStyle: layoutStyle,
                 textFontSize: textFontSize,
                 textIsBold: textIsBold,
+                groupsMainCaffeine: groupsMainCaffeine,
                 rebuildsContentView: rebuildsContentView
             )
             button.setAccessibilityLabel(statusTooltip.isEmpty ? "Spill" : statusTooltip)
             return
         }
 
-        configureIconAppearance(for: button)
+        configureIconAppearance(for: button, contentView: &contentView)
     }
 
-    private func configureIconAppearance(for button: NSStatusBarButton) {
-        removeStatusContentView()
+    private func configureIconAppearance(
+        for button: NSStatusBarButton,
+        contentView: inout MenuBarStatusContentView?
+    ) {
+        removeStatusContentView(&contentView)
         button.image = nil
         button.imagePosition = .noImage
         button.title = ""
@@ -352,37 +571,40 @@ final class StatusItemController: NSObject {
 
     private func installStatusContentView(
         on button: NSStatusBarButton,
+        contentView: inout MenuBarStatusContentView?,
         segments: [MenuBarStatusSegment],
         layoutStyle: MenuBarStatusLayoutStyle,
         textFontSize: CGFloat,
         textIsBold: Bool,
+        groupsMainCaffeine: Bool,
         rebuildsContentView: Bool
     ) {
-        guard rebuildsContentView || statusContentView == nil else {
+        guard rebuildsContentView || contentView == nil else {
             return
         }
 
-        removeStatusContentView()
+        removeStatusContentView(&contentView)
 
-        let contentView = MenuBarStatusContentView(
+        let nextContentView = MenuBarStatusContentView(
             segments: segments,
             layoutStyle: layoutStyle,
             textFontSize: textFontSize,
-            textIsBold: textIsBold
+            textIsBold: textIsBold,
+            groupsMainCaffeine: groupsMainCaffeine
         )
-        button.addSubview(contentView)
+        button.addSubview(nextContentView)
         NSLayoutConstraint.activate([
-            contentView.leadingAnchor.constraint(equalTo: button.leadingAnchor),
-            contentView.trailingAnchor.constraint(equalTo: button.trailingAnchor),
-            contentView.topAnchor.constraint(equalTo: button.topAnchor),
-            contentView.bottomAnchor.constraint(equalTo: button.bottomAnchor)
+            nextContentView.leadingAnchor.constraint(equalTo: button.leadingAnchor),
+            nextContentView.trailingAnchor.constraint(equalTo: button.trailingAnchor),
+            nextContentView.topAnchor.constraint(equalTo: button.topAnchor),
+            nextContentView.bottomAnchor.constraint(equalTo: button.bottomAnchor)
         ])
-        statusContentView = contentView
+        contentView = nextContentView
     }
 
-    private func removeStatusContentView() {
-        statusContentView?.removeFromSuperview()
-        statusContentView = nil
+    private func removeStatusContentView(_ contentView: inout MenuBarStatusContentView?) {
+        contentView?.removeFromSuperview()
+        contentView = nil
     }
 
     private func attributedTitle(_ title: String, fontSize: CGFloat) -> NSAttributedString {
@@ -491,15 +713,30 @@ final class StatusItemController: NSObject {
         return parts.joined(separator: " | ")
     }
 
-    @objc private func statusButtonClicked(_ sender: NSStatusBarButton) {
+    private func segmentTooltip(for segments: [MenuBarStatusSegment]) -> String {
+        segments.map { segment in
+            segment.value.isEmpty
+                ? segment.title
+                : "\(segment.title) \(segment.value)"
+        }
+        .joined(separator: " | ")
+    }
+
+    @objc private func mainStatusButtonClicked(_ sender: NSStatusBarButton) {
         let event = NSApp.currentEvent
         let shouldShowMenu = event?.type == .rightMouseUp || event?.modifierFlags.contains(.control) == true
 
-        let clickedSegment = clickedSegmentKind(sender: sender, event: event)
-
         if shouldShowMenu {
             showMenu(for: sender, event: event)
-        } else if clickedSegment == .caffeine {
+            return
+        }
+
+        let clickedSegment = clickedSegmentKind(
+            sender: sender,
+            event: event,
+            segments: currentMainSegments
+        )
+        if clickedSegment == .caffeine {
             toggleCaffeineFromStatusItem()
         } else if clickedSegment == .ai {
             tokenDashboardAction()
@@ -508,7 +745,33 @@ final class StatusItemController: NSObject {
         }
     }
 
-    private func clickedSegmentKind(sender: NSStatusBarButton, event: NSEvent?) -> MenuBarStatusSegment.Kind? {
+    @objc private func systemStatusButtonClicked(_ sender: NSStatusBarButton) {
+        let event = NSApp.currentEvent
+        let shouldShowMenu = event?.type == .rightMouseUp || event?.modifierFlags.contains(.control) == true
+
+        if shouldShowMenu {
+            showMenu(for: sender, event: event)
+        } else {
+            toggleAction()
+        }
+    }
+
+    @objc private func aiStatusButtonClicked(_ sender: NSStatusBarButton) {
+        let event = NSApp.currentEvent
+        let shouldShowMenu = event?.type == .rightMouseUp || event?.modifierFlags.contains(.control) == true
+
+        if shouldShowMenu {
+            showMenu(for: sender, event: event)
+        } else {
+            tokenDashboardAction()
+        }
+    }
+
+    private func clickedSegmentKind(
+        sender: NSStatusBarButton,
+        event: NSEvent?,
+        segments: [MenuBarStatusSegment]
+    ) -> MenuBarStatusSegment.Kind? {
         guard let event else {
             return nil
         }
@@ -516,10 +779,11 @@ final class StatusItemController: NSObject {
         let point = sender.convert(event.locationInWindow, from: nil)
         return MenuBarStatusContentView.segmentKind(
             at: point,
-            in: currentSegments,
+            in: segments,
             layoutStyle: currentLayoutStyle,
             textFontSize: currentMenuBarStatusFontSize,
-            textIsBold: currentMenuBarStatusTextBold
+            textIsBold: currentMenuBarStatusTextBold,
+            groupsMainCaffeine: currentMainGroupsMainCaffeine
         )
     }
 
