@@ -342,10 +342,22 @@ def code_gates() -> None:
         status_controller = status_controllers[0]
         text = read(status_controller)
         created_items = len(re.findall(r"NSStatusBar\.system\.statusItem", text))
-        if created_items == 1:
-            result.ok("StatusItemController creates one NSStatusItem")
+        if 1 <= created_items <= 3:
+            result.ok(f"StatusItemController creates {created_items} small NSStatusItem surface(s)")
         else:
-            result.fail(f"StatusItemController creates {created_items} NSStatusItems; expected 1")
+            result.fail(f"StatusItemController creates {created_items} NSStatusItems; expected 1 to 3 small functional surfaces")
+
+        if created_items > 1:
+            required_names = [
+                "dev.spill.status-trigger",
+                "dev.spill.status-system",
+                "dev.spill.status-ai",
+            ]
+            for name in required_names:
+                if name in text:
+                    result.ok(f"StatusItemController declares {name}")
+                else:
+                    result.fail(f"StatusItemController split status item is missing autosaveName {name}")
 
         if re.search(r"\bspacer(Item)?\b", text, re.IGNORECASE):
             result.fail("StatusItemController still contains spacer logic")
