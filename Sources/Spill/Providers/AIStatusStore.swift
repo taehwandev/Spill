@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 
 @MainActor
@@ -14,7 +15,7 @@ final class AIStatusStore: ObservableObject {
     private var isBackgroundRefreshInFlight = false
     private var lastBackgroundRefreshStartedAt: Date?
 
-    private static let minimumBackgroundRefreshInterval: TimeInterval = 3.0
+    private static let minimumBackgroundRefreshInterval: TimeInterval = 5.0
 
     init(
         statuses: [LocalAIToolStatus] = LocalAIStatusProvider.statuses(environment: [:], processNames: []),
@@ -26,6 +27,13 @@ final class AIStatusStore: ObservableObject {
         self.statuses = statuses
         self.reader = reader
         self.backgroundReader = backgroundReader
+    }
+
+    var statusCountDidChange: AnyPublisher<Int, Never> {
+        $statuses
+            .map(\.count)
+            .removeDuplicates()
+            .eraseToAnyPublisher()
     }
 
     func refresh() {

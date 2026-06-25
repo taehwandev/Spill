@@ -1,6 +1,8 @@
 import Foundation
 
 extension LocalAIProcessSnapshotReader {
+    private static let minimumCPUPercentSampleInterval: TimeInterval = 0.75
+
     private static var sampleLock: NSLock {
         LocalAIProcessSampleStore.shared.lock
     }
@@ -29,7 +31,7 @@ extension LocalAIProcessSnapshotReader {
         }
 
         let elapsedSeconds = current.timestamp.timeIntervalSince(previous.timestamp)
-        guard elapsedSeconds > 0 else {
+        guard elapsedSeconds >= minimumCPUPercentSampleInterval else {
             return 0
         }
 

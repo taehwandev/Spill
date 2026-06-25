@@ -34,6 +34,23 @@ final class LocalAIStatusProviderTests: XCTestCase {
         )
     }
 
+    func testProcessMetricDeltaIgnoresTooShortSampleIntervals() {
+        let previous = LocalAIProcessMetricSample(
+            processID: 123,
+            timestamp: Date(timeIntervalSince1970: 10),
+            cpuTimeNanoseconds: 1_000_000_000,
+            processStartTimeNanoseconds: 500_000
+        )
+        let current = LocalAIProcessMetricSample(
+            processID: 123,
+            timestamp: Date(timeIntervalSince1970: 10.1),
+            cpuTimeNanoseconds: 1_500_000_000,
+            processStartTimeNanoseconds: 500_000
+        )
+
+        XCTAssertEqual(LocalAIProcessSnapshotReader.cpuPercent(previous: previous, current: current), 0)
+    }
+
     func testProcessMetricDeltaIgnoresReusedPIDWithDifferentStartTime() {
         let previous = LocalAIProcessMetricSample(
             processID: 123,

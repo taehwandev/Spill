@@ -4,7 +4,7 @@ import Combine
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private static let statusRefreshDelayNanoseconds: UInt64 = 1_000_000_000
+    private static let statusRefreshDelayNanoseconds: UInt64 = 3_000_000_000
 
     private let settings = SpillSettings.shared
     private let scanner = AXMenuBarItemScanner()
@@ -42,7 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.isSpillPanelVisible = isVisible
             self?.tokenMeteringCoordinator.setSpillPanelVisible(isVisible)
             self?.statusItemController?.refresh(isSpillBarVisible: isVisible)
-            self?.configureStatusRefreshLoop()
+            self?.configureStatusRefreshLoop(startsImmediately: false)
         },
         settingsAction: { [weak self] in
             self?.showPreferencesFromPanel()
@@ -342,13 +342,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func showSpillBar(source: String = "unknown") {
-        tokenMeteringCoordinator.requestCollection(reason: "panel_open")
-        tokenMeteringCoordinator.refreshPanelSummary()
         spillPanelController.show(
-            anchorFrame: statusItemController?.buttonScreenFrame,
-            tokenUsageAlreadyRefreshed: true
+            anchorFrame: statusItemController?.buttonScreenFrame
         )
         statusItemController?.refresh(isSpillBarVisible: spillPanelController.isVisible)
+        tokenMeteringCoordinator.requestCollection(reason: "panel_open")
 
         if spillPanelController.isVisible {
             SpillTelemetry.shared.track("panel_opened", props: ["source": source])
@@ -608,6 +606,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             .store(in: &cancellables)
 
+        settings.$menuBarStatusCompactMode
+            .dropFirst()
+            .sink { [weak self] _ in
+                SpillTelemetry.shared.track("preference_changed", props: ["name": "menu_bar_status_compact_mode"])
+                self?.statusItemController?.refresh()
+            }
+            .store(in: &cancellables)
+
+        settings.$menuBarStatusSplitGroups
+            .dropFirst()
+            .sink { [weak self] _ in
+                SpillTelemetry.shared.track("preference_changed", props: ["name": "menu_bar_status_split_groups"])
+                self?.statusItemController?.refresh()
+            }
+            .store(in: &cancellables)
+
         settings.$menuBarStatusPrecision
             .dropFirst()
             .sink { [weak self] _ in
@@ -699,7 +713,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         tokenMeteringCoordinator.requestCollection(reason: reason ?? "dashboard_refresh")
     }
 
-    private func configureStatusRefreshLoop() {
+    private func configureStatusRefreshLoop(startsImmediately: Bool = true) {
         statusRefreshTask?.cancel()
 
         guard isSpillPanelVisible
@@ -711,6 +725,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         statusRefreshTask = Task { @MainActor [weak self] in
+            if !startsImmediately {
+                do {
+                    try await Task.sleep(nanoseconds: Self.statusRefreshDelayNanoseconds)
+                } catch {
+                    return
+                }
+            }
+
             while !Task.isCancelled {
                 guard let self else { return }
                 await refreshMenuBarStatusData()

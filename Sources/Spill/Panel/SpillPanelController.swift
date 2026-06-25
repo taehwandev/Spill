@@ -364,7 +364,8 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
             }
             .store(in: &cancellables)
 
-        aiStatusStore.objectWillChange
+        aiStatusStore.statusCountDidChange
+            .dropFirst()
             .sink { [weak self] _ in
                 DispatchQueue.main.async {
                     self?.resizePanelIfVisible()
