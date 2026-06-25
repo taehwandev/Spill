@@ -15,6 +15,7 @@ final class PrivateUsageUploadStore: ObservableObject {
     var coordinator: PrivateUsageUploadCoordinator
     var coordinatorEnvironment: PrivateUsageUploadEnvironment
     var refreshTask: Task<Void, Never>?
+    var webConnectionWaitTask: Task<Void, Never>?
     var refreshGeneration = 0
 
     init(
@@ -39,6 +40,7 @@ final class PrivateUsageUploadStore: ObservableObject {
 
     deinit {
         refreshTask?.cancel()
+        webConnectionWaitTask?.cancel()
     }
 
 }

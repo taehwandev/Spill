@@ -140,6 +140,7 @@ private extension TokenMeteringPreferencesSection {
             return
         }
 
+        privateUsageUploadStore.beginWebConnectionAttempt()
         NSWorkspace.shared.open(url)
     }
 

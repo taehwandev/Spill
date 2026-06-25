@@ -48,6 +48,20 @@ final class PrivateUsageUploadTests: XCTestCase {
         )
     }
 
+    func testConnectionDeepLinkExtractsConnectionCodeFromFragment() throws {
+        let fragmentURL = try XCTUnwrap(URL(string: "spill://private-usage/connect#code=spill-v1%3Agrant_opaque%3A\(testWrappingSecret)"))
+        let routedFragmentURL = try XCTUnwrap(URL(string: "spill://private-usage/connect#/done?connection_code=spill-v1%3Agrant_opaque%3A\(testWrappingSecret)"))
+
+        XCTAssertEqual(
+            PrivateUsageConnectionDeepLink.connectionCode(from: fragmentURL),
+            "spill-v1:grant_opaque:\(testWrappingSecret)"
+        )
+        XCTAssertEqual(
+            PrivateUsageConnectionDeepLink.connectionCode(from: routedFragmentURL),
+            "spill-v1:grant_opaque:\(testWrappingSecret)"
+        )
+    }
+
     func testConnectionDeepLinkRejectsUnrelatedURLs() throws {
         XCTAssertNil(PrivateUsageConnectionDeepLink.connectionCode(from: URL(string: "spill://private-usage/other?code=value")!))
         XCTAssertNil(PrivateUsageConnectionDeepLink.connectionCode(from: URL(string: "https://spill.thdev.app/settings?code=value")!))
@@ -665,7 +679,7 @@ final class PrivateUsageUploadTests: XCTestCase {
                     PrivateUsageWebConnection.webURLOverrideEnvironmentKey: "http://localhost/#/connect-device"
                 ]
             )?.absoluteString,
-            Optional("http://localhost/#/connect-device")
+            Optional("http://localhost/#/connect-device?source=macos&callback_url=spill://private-usage/connect")
         )
         XCTAssertEqual(
             PrivateUsageWebConnection.connectDeviceURL(
@@ -674,7 +688,7 @@ final class PrivateUsageUploadTests: XCTestCase {
                     PrivateUsageWebConnection.webURLInfoDictionaryKey: "https://web.example.test/#/connect-device"
                 ]
             )?.absoluteString,
-            Optional("https://web.example.test/#/connect-device")
+            Optional("https://web.example.test/#/connect-device?source=macos&callback_url=spill://private-usage/connect")
         )
         XCTAssertNil(
             PrivateUsageWebConnection.connectDeviceURL(
@@ -696,6 +710,17 @@ final class PrivateUsageUploadTests: XCTestCase {
                     PrivateUsageWebConnection.webURLOverrideEnvironmentKey: "ftp://localhost/#/connect-device"
                 ]
             )
+        )
+    }
+
+    func testWebConnectionURLUsesAppCallbackOverConfiguredCallback() {
+        XCTAssertEqual(
+            PrivateUsageWebConnection.connectDeviceURL(
+                processEnvironment: [
+                    PrivateUsageWebConnection.webURLOverrideEnvironmentKey: "https://web.example.test/#/connect-device?source=browser&callback_url=https%3A%2F%2Fexample.test%2Fdone"
+                ]
+            )?.absoluteString,
+            Optional("https://web.example.test/#/connect-device?source=macos&callback_url=spill://private-usage/connect")
         )
     }
 
@@ -741,7 +766,7 @@ final class PrivateUsageUploadTests: XCTestCase {
                 processEnvironment: [:],
                 bundleInfo: bundleInfo
             )?.absoluteString,
-            Optional("https://preview.example.com/#/connect-device")
+            Optional("https://preview.example.com/#/connect-device?source=macos&callback_url=spill://private-usage/connect")
         )
         XCTAssertEqual(
             PrivateUsageRelayEndpoint.relayURL(
@@ -758,7 +783,7 @@ final class PrivateUsageUploadTests: XCTestCase {
                 ],
                 bundleInfo: bundleInfo
             )?.absoluteString,
-            Optional("http://localhost/#/connect-device")
+            Optional("http://localhost/#/connect-device?source=macos&callback_url=spill://private-usage/connect")
         )
         XCTAssertEqual(
             PrivateUsageRelayEndpoint.relayURL(

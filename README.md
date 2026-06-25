@@ -136,6 +136,13 @@ support Sign In and Connect should set
 `SPILL_BUILD_PRIVATE_USAGE_WEB_URL`, and `SPILL_BUILD_PRIVATE_USAGE_RELAY_URL`.
 Bundles that do not support the web connection can leave the flag at `0`; the
 login/sync UI is hidden and the web/relay URLs can remain empty.
+The GitHub release workflow reads `SPILL_BUILD_PRIVATE_USAGE_FEATURE_ENABLED`
+from repository variables and defaults to `0`. Set it to `1` only when the
+production web and relay URLs are configured. Spill appends only fixed
+connection hints (`source=macos` and `callback_url=spill://private-usage/connect`)
+when opening the web connection page; prompts, responses, commands, file paths,
+logs, diffs, source content, environment values, and secrets are not added to
+the URL or upload payload.
 
 This writes:
 

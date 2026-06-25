@@ -1,6 +1,26 @@
 import Foundation
 
 extension PrivateUsageUploadStore {
+    func beginWebConnectionAttempt(timeout: TimeInterval = 180) {
+        isConnecting = true
+        message = nil
+        errorMessage = nil
+        webConnectionWaitTask?.cancel()
+        webConnectionWaitTask = Task { [weak self] in
+            let nanoseconds = UInt64(timeout * 1_000_000_000)
+            try? await Task.sleep(nanoseconds: nanoseconds)
+            await MainActor.run {
+                guard let self,
+                      self.isConnecting,
+                      !self.status.isConnected
+                else {
+                    return
+                }
+                self.isConnecting = false
+            }
+        }
+    }
+
     func refresh() {
         updateCoordinatorIfNeeded()
         refreshGeneration += 1
@@ -20,6 +40,11 @@ extension PrivateUsageUploadStore {
                 if !status.isConnected, self.settings.privateUsageUploadEnabled {
                     self.settings.privateUsageUploadEnabled = false
                 }
+                if status.isConnected {
+                    self.isConnecting = false
+                    self.webConnectionWaitTask?.cancel()
+                    self.webConnectionWaitTask = nil
+                }
                 self.status = status.isConnected ? status : .disconnected
             }
         }
@@ -32,6 +57,8 @@ extension PrivateUsageUploadStore {
         errorMessage = nil
         defer {
             isConnecting = false
+            webConnectionWaitTask?.cancel()
+            webConnectionWaitTask = nil
             refresh()
         }
 

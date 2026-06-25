@@ -70,7 +70,7 @@ struct PrivateUsageUploadPreferencesSection: View {
     private var webConnectionPrompt: some View {
         HStack(alignment: .top, spacing: 10) {
             Button(action: openWebConnectionAction) {
-                Label(t(.privateUsageUploadOpenWeb), systemImage: "safari")
+                Label(t(.privateUsageUploadOpenWeb), systemImage: store.isConnecting ? "hourglass" : "safari")
             }
             .buttonStyle(.borderedProminent)
             .font(.system(size: 12, weight: .semibold))
