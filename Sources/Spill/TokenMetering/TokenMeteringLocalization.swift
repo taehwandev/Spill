@@ -393,6 +393,7 @@ enum TokenMeteringL10n {
     static func forbiddenContentLabels(language: TokenMeteringLanguage = .current()) -> [String] {
         [
             "prompts",
+            "transcripts",
             "commands",
             "responses",
             "file_paths",

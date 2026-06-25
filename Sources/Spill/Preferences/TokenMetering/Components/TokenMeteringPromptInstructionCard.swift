@@ -40,7 +40,7 @@ struct TokenMeteringPromptInstructionCard: View {
                 Text(t(.promptInstructionCardDetail))
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(.secondary)
-                    .lineLimit(2)
+                    .lineLimit(3)
                     .fixedSize(horizontal: false, vertical: true)
             }
 

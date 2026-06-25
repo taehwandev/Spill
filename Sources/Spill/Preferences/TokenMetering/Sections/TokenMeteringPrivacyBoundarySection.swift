@@ -16,6 +16,12 @@ struct TokenMeteringPrivacyBoundarySection: View {
                 tint: .indigo
             )
 
+            Text(t(.privacyBoundaryDetail))
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+                .lineSpacing(2)
+                .fixedSize(horizontal: false, vertical: true)
+
             FlowingTokenMeteringLabels(labels: TokenMeteringPreferencesModel.forbiddenContentLabels)
         }
         .padding(10)

@@ -215,6 +215,11 @@ Requirements:
   environment values, secrets, or arbitrary content-like fields.
 - Setup UI should offer a one-step installer path before exposing per-adapter
   snippets.
+- Setup UI and the copied agent install prompt must explicitly explain that
+  supported local JSONL, transcript, or metadata stores may be read locally only
+  for exact token metadata, and that prompts, responses, commands, file paths,
+  logs, diffs, source content, environment values, and secrets are not stored or
+  uploaded.
 - Token metering settings must offer an explicit local history import action
   for Codex, Claude Code, and Antigravity/AGY together. The action is
   user-initiated, not automatic on install, not scoped to the current agent, and

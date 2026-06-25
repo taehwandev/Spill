@@ -445,6 +445,10 @@ Rules:
   user-level hook files for detected tools, but it must be explicit opt-in,
   support dry-run behavior, avoid overwriting unrelated hook entries, and back
   up existing config files before writing.
+- Setup helper output, setup UI, and copied agent-facing install prompts must
+  disclose that known local JSONL, transcript, or metadata stores can be read
+  locally only for exact token metadata, and must repeat that content-like
+  fields are not stored or uploaded.
 - A user request to install, apply, fix, or verify Spill token metering counts
   as opt-in for the one-step helper to install all detected supported adapters
   and merge known user-level hook configs in one pass. The agent-facing prompt

@@ -862,6 +862,11 @@ Codex/Claude hook commands so routine metering setup does not repeatedly ask for
 permission. Codex defaults to the codex tool label.
 Workflow runner permissions are separate from the default Spill metering
 install.
+Installed local importers may read known Codex/Claude JSONL transcript or
+session files and Antigravity/AGY metadata records on this Mac only to extract
+exact token counts, timestamps, model ids, and opaque ids. They never store or
+upload prompts, responses, commands, file paths, transcript text, logs, diffs,
+source files, environment values, or secrets.
 The installer never reads prompts, transcripts, commands, logs, diffs, source
 files, environment values, or secrets.
 `);

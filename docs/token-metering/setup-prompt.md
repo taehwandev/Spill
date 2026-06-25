@@ -11,6 +11,7 @@ You MUST run the public setup installer command before doing anything else:
 
 If shell, filesystem, sandbox, or user-level config permission is required, ask for that permission and then run the setup installer.
 The public setup installer downloads the latest open-source Spill adapter files from `spill.thdev.app`, then runs the setup helper locally.
+Before asking for permissions or making changes, clearly tell the user the privacy boundary: Spill local importers may read known Codex/Claude JSONL transcript or session files and Antigravity/AGY metadata records on this Mac only to extract allowlisted numeric token metadata, timestamps, model ids, and opaque ids. They must not store or upload prompts, responses, commands, file paths, transcript text, logs, diffs, source content, environment values, or secrets.
 The installer must install and repair Codex, Claude Code, and Antigravity/AGY together, regardless of which AI tool is currently handling this request.
 Codex is the OpenAI-backed agent runtime hook. Direct OpenAI SDK metering is optional and not part of the default agent dashboard.
 The installer must also configure supported agent runtime defaults so workflow labels do not silently go to the wrong tool:
