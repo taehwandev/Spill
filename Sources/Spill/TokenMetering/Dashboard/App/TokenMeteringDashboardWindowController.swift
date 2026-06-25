@@ -20,6 +20,7 @@ final class TokenMeteringDashboardWindowController: NSObject, NSWindowDelegate {
     private var window: NSWindow?
     private var deferredRefreshTask: Task<Void, Never>?
     private var aiStatusRefreshTask: Task<Void, Never>?
+    private var isPreparingForTermination = false
 
     init(
         store: TokenUsageDashboardStore,
@@ -102,6 +103,7 @@ final class TokenMeteringDashboardWindowController: NSObject, NSWindowDelegate {
         updateWindowTitle(window)
         window.titlebarAppearsTransparent = true
         window.isReleasedWhenClosed = false
+        window.isRestorable = false
         window.minSize = minimumSize
         window.collectionBehavior = [.moveToActiveSpace]
         window.setFrameAutosaveName(autosaveName)
@@ -116,7 +118,22 @@ final class TokenMeteringDashboardWindowController: NSObject, NSWindowDelegate {
         aiStatusRefreshTask = nil
         deferredRefreshTask?.cancel()
         deferredRefreshTask = nil
+        aiStatusStore.cancelRefresh()
+        guard !isPreparingForTermination else {
+            return
+        }
         closeAction()
+    }
+
+    func prepareForTermination() {
+        isPreparingForTermination = true
+        aiStatusRefreshTask?.cancel()
+        aiStatusRefreshTask = nil
+        deferredRefreshTask?.cancel()
+        deferredRefreshTask = nil
+        aiStatusStore.cancelRefresh()
+        window?.isRestorable = false
+        window?.orderOut(nil)
     }
 
     private func startAIStatusRefreshLoop() {

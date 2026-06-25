@@ -310,6 +310,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         hotKeyController.stop()
         scanCoordinator.stop()
+        aiStatusStore.cancelRefresh()
+        cloudServiceStatusStore.cancelRefresh()
+        preferencesWindowController.prepareForTermination()
         tokenMeteringCoordinator.stop()
         DistributedNotificationCenter.default().removeObserver(
             self,
@@ -324,6 +327,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusRefreshTask?.cancel()
         sleepGuard.stop()
         spillPanelController.hide(animated: false)
+        SpillCrashReporter.markCleanShutdown(processRole: "main_app")
     }
 
     private func toggleSpillBar() {

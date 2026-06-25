@@ -60,6 +60,7 @@ final class MenuBarScanCoordinator {
         let workspaceNotifications: [Notification.Name] = [
             NSWorkspace.didLaunchApplicationNotification,
             NSWorkspace.didTerminateApplicationNotification,
+            NSWorkspace.didWakeNotification,
             NSWorkspace.activeSpaceDidChangeNotification
         ]
 

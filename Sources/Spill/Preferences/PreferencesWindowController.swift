@@ -76,6 +76,7 @@ final class PreferencesWindowController {
         window.title = PreferencesL10n.text(.preferencesWindowTitle, appLanguage: settings.appLanguage)
         window.titlebarAppearsTransparent = true
         window.isReleasedWhenClosed = false
+        window.isRestorable = false
         window.minSize = minimumSize
         window.collectionBehavior = [.moveToActiveSpace]
         window.setFrameAutosaveName(autosaveName)
@@ -85,6 +86,13 @@ final class PreferencesWindowController {
             self?.window?.title = PreferencesL10n.text(.preferencesWindowTitle, appLanguage: appLanguage)
         }
         return window
+    }
+
+    func prepareForTermination() {
+        languageObservation?.cancel()
+        languageObservation = nil
+        window?.isRestorable = false
+        window?.orderOut(nil)
     }
 
     private var defaultWindowFrame: NSRect {

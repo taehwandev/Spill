@@ -37,11 +37,14 @@ final class TokenMeteringDashboardAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        aiStatusStore.cancelRefresh()
+        windowController?.prepareForTermination()
         DistributedNotificationCenter.default().removeObserver(
             self,
             name: TokenMeteringDashboardProcess.settingsDidChangeNotification,
             object: nil
         )
+        SpillCrashReporter.markCleanShutdown(processRole: "token_dashboard")
     }
 
     private static func makeTokenUsageStore() -> TokenUsageStore {
@@ -76,7 +79,7 @@ final class TokenMeteringDashboardAppDelegate: NSObject, NSApplicationDelegate {
                 self?.openMainAppDeveloperOptions()
             },
             closeAction: {
-                NSApp.terminate(nil)
+                TokenMeteringDashboardLifecycle.shared.terminateCurrentDashboardProcess()
             }
         )
         windowController = controller
@@ -210,6 +213,6 @@ final class TokenMeteringDashboardAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func quitDashboard() {
-        NSApp.terminate(nil)
+        TokenMeteringDashboardLifecycle.shared.terminateCurrentDashboardProcess()
     }
 }

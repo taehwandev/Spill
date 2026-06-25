@@ -210,6 +210,7 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
 
         panel.delegate = self
         panel.isReleasedWhenClosed = false
+        panel.isRestorable = false
         // Keep the tray above menu bar/status extras while it is open.
         panel.level = .popUpMenu
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle, .stationary]
