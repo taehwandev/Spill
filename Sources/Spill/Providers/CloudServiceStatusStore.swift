@@ -43,6 +43,14 @@ final class CloudServiceStatusStore: ObservableObject {
         return false
     }
 
+    func cancelRefresh() {
+        refreshTask?.cancel()
+        refreshTask = nil
+        if case .loading(let snapshot) = state {
+            state = .idle(snapshot: snapshot)
+        }
+    }
+
     func refreshIfNeeded(force: Bool = false) {
         guard !isLoading else {
             return

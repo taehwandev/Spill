@@ -9,9 +9,11 @@ enum LocalCommandRunner {
         executablePath: String,
         arguments: [String],
         timeout: TimeInterval,
-        maximumOutputBytes: Int = defaultMaximumOutputBytes
+        maximumOutputBytes: Int = defaultMaximumOutputBytes,
+        shouldCancel: @escaping () -> Bool = { false }
     ) -> String? {
         guard FileManager.default.fileExists(atPath: executablePath),
+              !shouldCancel(),
               processLimit.wait(timeout: .now()) == .success
         else { return nil }
         defer { processLimit.signal() }
@@ -49,7 +51,12 @@ enum LocalCommandRunner {
 
         do { try process.run() } catch { return nil }
 
-        guard terminationSemaphore.wait(timeout: .now() + timeout) == .success else {
+        guard waitForTermination(
+            terminationSemaphore,
+            process: process,
+            timeout: timeout,
+            shouldCancel: shouldCancel
+        ) else {
             terminateProcess(process, terminationSemaphore: terminationSemaphore)
             return nil
         }
@@ -59,6 +66,25 @@ enum LocalCommandRunner {
         outputBuffer.append(pipe.fileHandleForReading.availableData, maximumBytes: maximumOutputBytes)
         let data = outputBuffer.data()
         return String(data: data, encoding: .utf8)
+    }
+
+    private static func waitForTermination(
+        _ terminationSemaphore: DispatchSemaphore,
+        process: Process,
+        timeout: TimeInterval,
+        shouldCancel: () -> Bool
+    ) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if terminationSemaphore.wait(timeout: .now() + .milliseconds(50)) == .success {
+                return true
+            }
+            if shouldCancel() {
+                terminateProcess(process, terminationSemaphore: terminationSemaphore)
+                return false
+            }
+        }
+        return terminationSemaphore.wait(timeout: .now()) == .success
     }
 
     private static func terminateProcess(

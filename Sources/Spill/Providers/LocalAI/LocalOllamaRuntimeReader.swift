@@ -5,14 +5,22 @@ struct LocalOllamaRuntimeSummary: Equatable, Sendable {
 }
 
 enum LocalOllamaRuntimeReader {
-    static func runtimeSummary(executablePath: String?) -> LocalOllamaRuntimeSummary? {
+    static func runtimeSummary(
+        executablePath: String?,
+        shouldCancel: @escaping () -> Bool = { false }
+    ) -> LocalOllamaRuntimeSummary? {
         guard let executablePath,
+              !shouldCancel(),
               let output = LocalCommandRunner.output(
                 executablePath: executablePath,
                 arguments: ["ps"],
-                timeout: 1.0
+                timeout: 1.0,
+                shouldCancel: shouldCancel
               )
         else {
+            return nil
+        }
+        guard !shouldCancel() else {
             return nil
         }
 

@@ -225,16 +225,25 @@ struct LocalAIStatusProvider: SpillStatusProvider {
         Self.statuses().map(\.statusItem)
     }
 
-    static func statuses() -> [LocalAIToolStatus] {
+    static func statuses(shouldCancel: @escaping () -> Bool = { false }) -> [LocalAIToolStatus] {
         let environment = ProcessInfo.processInfo.environment
         let executablePaths = LocalExecutableDetector.installedExecutablePaths(
             for: [.codex, .claude, .antigravity, .ollama],
             environment: environment
         )
+        guard !shouldCancel() else {
+            return []
+        }
         let installedApplicationNames = LocalApplicationDetector.installedApplicationNames(
             for: [.antigravity]
         )
-        let processSnapshots = LocalAIProcessSnapshotReader.currentSnapshots()
+        guard !shouldCancel() else {
+            return []
+        }
+        let processSnapshots = LocalAIProcessSnapshotReader.currentSnapshots(shouldCancel: shouldCancel)
+        guard !shouldCancel() else {
+            return []
+        }
         let processCommands = processSnapshots.map(\.commandLine)
         let processNames = Set(processSnapshots.map(\.executableName))
 
@@ -245,9 +254,10 @@ struct LocalAIStatusProvider: SpillStatusProvider {
             processSnapshots: processSnapshots,
             installedExecutableNames: Set(executablePaths.keys),
             installedApplicationNames: installedApplicationNames,
-            commandMetadata: LocalAICommandMetadataReader.metadata(for: executablePaths),
+            commandMetadata: LocalAICommandMetadataReader.metadata(for: executablePaths, shouldCancel: shouldCancel),
             ollamaRuntime: LocalOllamaRuntimeReader.runtimeSummary(
-                executablePath: executablePaths[LocalAIToolKind.ollama.executableName ?? ""]
+                executablePath: executablePaths[LocalAIToolKind.ollama.executableName ?? ""],
+                shouldCancel: shouldCancel
             )
         )
     }

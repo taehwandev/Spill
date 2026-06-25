@@ -256,6 +256,36 @@ final class LocalAIStatusProviderTests: XCTestCase {
         XCTAssertGreaterThan(output.utf8.count, 64 * 1024)
     }
 
+    func testLocalCommandRunnerStopsProcessWhenCancelled() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer {
+            try? FileManager.default.removeItem(at: directory)
+        }
+
+        let executableURL = directory.appendingPathComponent("slow-output")
+        try """
+        #!/bin/sh
+        sleep 5
+        echo done
+        """.write(to: executableURL, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executableURL.path)
+
+        let startedAt = Date()
+        let output = LocalCommandRunner.output(
+            executablePath: executableURL.path,
+            arguments: [],
+            timeout: 5.0,
+            shouldCancel: {
+                Date().timeIntervalSince(startedAt) > 0.1
+            }
+        )
+
+        XCTAssertNil(output)
+        XCTAssertLessThan(Date().timeIntervalSince(startedAt), 1.5)
+    }
+
     func testDetectedProcessAndOpenAIConfigMapping() {
         let statuses = LocalAIStatusProvider.statuses(
             environment: ["OPENAI_API_KEY": "set"],

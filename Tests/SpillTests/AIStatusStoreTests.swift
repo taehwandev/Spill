@@ -21,4 +21,30 @@ final class AIStatusStoreTests: XCTestCase {
         XCTAssertEqual(store.statuses.first { $0.kind == .codex }?.value, "Running")
         XCTAssertEqual(store.statuses.first { $0.kind == .openAI }?.value, "Configured")
     }
+
+    func testCancelRefreshPreventsBackgroundStatusUpdate() async {
+        let started = expectation(description: "background reader started")
+        let releaseReader = DispatchSemaphore(value: 0)
+        let store = AIStatusStore(
+            statuses: [],
+            reader: { [] },
+            backgroundReader: { shouldCancel in
+                started.fulfill()
+                _ = releaseReader.wait(timeout: .now() + 1)
+                XCTAssertTrue(shouldCancel())
+                return LocalAIStatusProvider.statuses(
+                    environment: ["OPENAI_BASE_URL": "http://localhost"],
+                    processNames: []
+                )
+            }
+        )
+
+        store.refreshInBackground()
+        await fulfillment(of: [started], timeout: 1)
+        store.cancelRefresh()
+        releaseReader.signal()
+
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertEqual(store.statuses, [])
+    }
 }

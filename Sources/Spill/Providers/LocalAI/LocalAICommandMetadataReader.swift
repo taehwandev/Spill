@@ -7,12 +7,19 @@ enum LocalAICommandMetadataReader {
     private static let versionCacheTTL: TimeInterval = 300
     private static let failedVersionCacheTTL: TimeInterval = 15
 
-    static func metadata(for executablePaths: [String: String], now: Date = Date()) -> [LocalAIToolKind: LocalAIToolMetadata] {
+    static func metadata(
+        for executablePaths: [String: String],
+        now: Date = Date(),
+        shouldCancel: @escaping () -> Bool = { false }
+    ) -> [LocalAIToolKind: LocalAIToolMetadata] {
         var metadata = [LocalAIToolKind: LocalAIToolMetadata]()
 
         for kind in LocalAIToolKind.allCases {
+            guard !shouldCancel() else {
+                return metadata
+            }
             guard let executablePath = kind.executableNames.compactMap({ executablePaths[$0] }).first,
-                  let version = version(executablePath: executablePath, now: now)
+                  let version = version(executablePath: executablePath, now: now, shouldCancel: shouldCancel)
             else {
                 continue
             }
@@ -23,7 +30,14 @@ enum LocalAICommandMetadataReader {
         return metadata
     }
 
-    private static func version(executablePath: String, now: Date) -> String? {
+    private static func version(
+        executablePath: String,
+        now: Date,
+        shouldCancel: @escaping () -> Bool
+    ) -> String? {
+        guard !shouldCancel() else {
+            return nil
+        }
         if let cached = cacheLock.withLock({ cachedVersionsByExecutablePath[executablePath] }),
            cached.isValid(at: now, successTTL: versionCacheTTL, failureTTL: failedVersionCacheTTL) {
             return cached.version
@@ -47,8 +61,12 @@ enum LocalAICommandMetadataReader {
         guard let output = LocalCommandRunner.output(
             executablePath: executablePath,
             arguments: ["--version"],
-            timeout: 1.0
+            timeout: 1.0,
+            shouldCancel: shouldCancel
         ) else {
+            guard !shouldCancel() else {
+                return nil
+            }
             cacheLock.withLock {
                 cachedVersionsByExecutablePath[executablePath] = CachedVersion(version: nil, cachedAt: now)
             }

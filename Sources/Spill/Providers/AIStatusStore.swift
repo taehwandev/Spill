@@ -3,11 +3,14 @@ import SwiftUI
 @MainActor
 final class AIStatusStore: ObservableObject {
     typealias Reader = () -> [LocalAIToolStatus]
+    typealias BackgroundReader = @Sendable (@escaping @Sendable () -> Bool) -> [LocalAIToolStatus]
 
     @Published private(set) var statuses: [LocalAIToolStatus]
 
     private let reader: Reader
+    private let backgroundReader: BackgroundReader
     private var backgroundRefreshTask: Task<Void, Never>?
+    private var backgroundRefreshCancellation: LocalAIStatusRefreshCancellation?
     private var isBackgroundRefreshInFlight = false
     private var lastBackgroundRefreshStartedAt: Date?
 
@@ -15,14 +18,26 @@ final class AIStatusStore: ObservableObject {
 
     init(
         statuses: [LocalAIToolStatus] = LocalAIStatusProvider.statuses(environment: [:], processNames: []),
-        reader: @escaping Reader = { LocalAIStatusProvider.statuses() }
+        reader: @escaping Reader = { LocalAIStatusProvider.statuses() },
+        backgroundReader: @escaping @Sendable BackgroundReader = { shouldCancel in
+            LocalAIStatusProvider.statuses(shouldCancel: shouldCancel)
+        }
     ) {
         self.statuses = statuses
         self.reader = reader
+        self.backgroundReader = backgroundReader
     }
 
     func refresh() {
         statuses = reader()
+    }
+
+    func cancelRefresh() {
+        backgroundRefreshCancellation?.cancel()
+        backgroundRefreshCancellation = nil
+        backgroundRefreshTask?.cancel()
+        backgroundRefreshTask = nil
+        isBackgroundRefreshInFlight = false
     }
 
     func refreshInBackground() {
@@ -37,21 +52,43 @@ final class AIStatusStore: ObservableObject {
 
         isBackgroundRefreshInFlight = true
         lastBackgroundRefreshStartedAt = now
-        backgroundRefreshTask = Task { @MainActor [weak self] in
+        let cancellation = LocalAIStatusRefreshCancellation()
+        backgroundRefreshCancellation = cancellation
+        let backgroundReader = backgroundReader
+        backgroundRefreshTask = Task { @MainActor [weak self, cancellation] in
             let statuses = await Task.detached(priority: .utility) {
-                LocalAIStatusProvider.statuses()
+                backgroundReader { cancellation.isCancelled() }
             }.value
 
             guard let self else {
                 return
             }
+            guard self.backgroundRefreshCancellation === cancellation else {
+                return
+            }
+            self.backgroundRefreshCancellation = nil
             self.isBackgroundRefreshInFlight = false
 
-            guard !Task.isCancelled else {
+            guard !Task.isCancelled, !cancellation.isCancelled() else {
                 return
             }
 
             self.statuses = statuses
         }
+    }
+}
+
+private final class LocalAIStatusRefreshCancellation: @unchecked Sendable {
+    private let lock = NSLock()
+    private var cancelled = false
+
+    func cancel() {
+        lock.withLock {
+            cancelled = true
+        }
+    }
+
+    func isCancelled() -> Bool {
+        lock.withLock { cancelled }
     }
 }

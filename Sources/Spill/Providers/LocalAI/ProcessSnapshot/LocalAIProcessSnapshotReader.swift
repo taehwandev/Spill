@@ -1,13 +1,20 @@
 import Foundation
 
 enum LocalAIProcessSnapshotReader {
-    static func currentSnapshots(now: Date = Date()) -> [LocalAIProcessSnapshot] {
+    static func currentSnapshots(
+        now: Date = Date(),
+        shouldCancel: @escaping () -> Bool = { false }
+    ) -> [LocalAIProcessSnapshot] {
         guard let output = LocalCommandRunner.output(
             executablePath: "/bin/ps",
             arguments: ["-axo", "pid=,command="],
             timeout: 1.0,
-            maximumOutputBytes: 2_097_152
+            maximumOutputBytes: 2_097_152,
+            shouldCancel: shouldCancel
         ) else {
+            return []
+        }
+        guard !shouldCancel() else {
             return []
         }
 
@@ -15,6 +22,9 @@ enum LocalAIProcessSnapshotReader {
             .split(whereSeparator: \.isNewline)
             .compactMap { parseLine(String($0)) }
         let candidateSnapshots = snapshots.filter(isKnownAIToolProcess)
+        guard !shouldCancel() else {
+            return []
+        }
 
         let metricsByProcessID = currentMetrics(
             for: candidateSnapshots.map(\.processID),
