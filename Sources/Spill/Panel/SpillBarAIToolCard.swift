@@ -1,16 +1,16 @@
 import SwiftUI
 
-struct SpillBarAIToolTokenUsage: Equatable {
-    let value: String
-    let ratio: Double
-}
-
 struct SpillBarAIToolCard: View {
+    struct TokenUsage: Equatable {
+        let value: String
+        let ratio: Double
+    }
     let status: LocalAIToolStatus
     let serviceStatus: CloudServiceStatusItem?
-    let tokenUsage: SpillBarAIToolTokenUsage
+    let tokenUsage: TokenUsage
     let appLanguage: SpillAppLanguage
     let isServerStatusLoading: Bool
+    @State private var isHovered = false
 
     var body: some View {
         let tint = statusTint
@@ -81,15 +81,22 @@ struct SpillBarAIToolCard: View {
         .frame(height: 72)
         .frame(maxWidth: .infinity)
         .background(
-            hasServerIssue ? cardTint.opacity(0.12) : isRunning ? tint.opacity(0.06) : Color.primary.opacity(0.03),
-            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(
+                    hasServerIssue ? cardTint.opacity(0.12) : isRunning ? tint.opacity(isHovered ? 0.10 : 0.06) : SpillPanelSurface.cardFill(isHovered: isHovered)
+                )
         )
         .overlay {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(
-                    hasServerIssue ? cardTint.opacity(0.36) : isRunning ? tint.opacity(0.12) : Color.primary.opacity(0.04),
+                    hasServerIssue ? cardTint.opacity(0.36) : isRunning ? tint.opacity(isHovered ? 0.18 : 0.12) : Color.primary.opacity(isHovered ? 0.10 : 0.06),
                     lineWidth: hasServerIssue ? 0.8 : 0.5
                 )
+        }
+        .scaleEffect(isHovered ? 1.012 : 1.0)
+        .animation(.spring(response: 0.2, dampingFraction: 0.75), value: isHovered)
+        .onHover { hovering in
+            isHovered = hovering
         }
     }
 
@@ -208,59 +215,59 @@ struct SpillBarAIToolCard: View {
             return AppL10n.text(.checking, appLanguage: appLanguage)
         }
     }
-}
 
-struct AgentActivityWaveView: View {
-    let isActive: Bool
-    let tint: Color
+    private struct AgentActivityWaveView: View {
+        let isActive: Bool
+        let tint: Color
 
-    @State private var bar1: CGFloat = 0.3
-    @State private var bar2: CGFloat = 0.5
-    @State private var bar3: CGFloat = 0.2
-    @State private var bar4: CGFloat = 0.4
+        @State private var bar1: CGFloat = 0.3
+        @State private var bar2: CGFloat = 0.5
+        @State private var bar3: CGFloat = 0.2
+        @State private var bar4: CGFloat = 0.4
 
-    var body: some View {
-        HStack(spacing: 1.5) {
-            bar(height: bar1)
-            bar(height: bar2)
-            bar(height: bar3)
-            bar(height: bar4)
+        var body: some View {
+            HStack(spacing: 1.5) {
+                bar(height: bar1)
+                bar(height: bar2)
+                bar(height: bar3)
+                bar(height: bar4)
+            }
+            .frame(width: 12, height: 9, alignment: .bottom)
+            .onAppear {
+                updateAnimation(isActive: isActive)
+            }
+            .onChange(of: isActive) { _, isActive in
+                updateAnimation(isActive: isActive)
+            }
         }
-        .frame(width: 12, height: 9, alignment: .bottom)
-        .onAppear {
-            updateAnimation(isActive: isActive)
-        }
-        .onChange(of: isActive) { _, isActive in
-            updateAnimation(isActive: isActive)
-        }
-    }
 
-    private func bar(height: CGFloat) -> some View {
-        RoundedRectangle(cornerRadius: 0.75, style: .continuous)
-            .fill(tint)
-            .frame(width: 1.5, height: max(1.5, height * 9))
-    }
+        private func bar(height: CGFloat) -> some View {
+            RoundedRectangle(cornerRadius: 0.75, style: .continuous)
+                .fill(tint)
+                .frame(width: 1.5, height: max(1.5, height * 9))
+        }
 
-    private func updateAnimation(isActive: Bool) {
-        if isActive {
-            withAnimation(.linear(duration: 0.6).repeatForever(autoreverses: true)) {
-                bar1 = 0.95
-            }
-            withAnimation(.linear(duration: 0.75).repeatForever(autoreverses: true)) {
-                bar2 = 0.25
-            }
-            withAnimation(.linear(duration: 0.5).repeatForever(autoreverses: true)) {
-                bar3 = 0.85
-            }
-            withAnimation(.linear(duration: 0.65).repeatForever(autoreverses: true)) {
-                bar4 = 0.35
-            }
-        } else {
-            withAnimation(.linear(duration: 0.15)) {
-                bar1 = 0.15
-                bar2 = 0.15
-                bar3 = 0.15
-                bar4 = 0.15
+        private func updateAnimation(isActive: Bool) {
+            if isActive {
+                withAnimation(.linear(duration: 0.6).repeatForever(autoreverses: true)) {
+                    bar1 = 0.95
+                }
+                withAnimation(.linear(duration: 0.75).repeatForever(autoreverses: true)) {
+                    bar2 = 0.25
+                }
+                withAnimation(.linear(duration: 0.5).repeatForever(autoreverses: true)) {
+                    bar3 = 0.85
+                }
+                withAnimation(.linear(duration: 0.65).repeatForever(autoreverses: true)) {
+                    bar4 = 0.35
+                }
+            } else {
+                withAnimation(.linear(duration: 0.15)) {
+                    bar1 = 0.15
+                    bar2 = 0.15
+                    bar3 = 0.15
+                    bar4 = 0.15
+                }
             }
         }
     }

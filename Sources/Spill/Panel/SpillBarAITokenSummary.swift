@@ -168,19 +168,16 @@ struct SpillBarAITokenSummary: View {
 
     private var tokenSummaryBackground: some View {
         ZStack {
-            VisualEffectView(material: .sidebar, blendingMode: .withinWindow)
-                .opacity(0.2)
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(SpillPanelSurface.cardFill(isHovered: isHovered))
             LinearGradient(
                 colors: [
-                    Color.teal.opacity(isHovered ? 0.08 : 0.04),
-                    Color.blue.opacity(isHovered ? 0.04 : 0.02)
+                    Color.teal.opacity(isHovered ? 0.09 : 0.05),
+                    Color.blue.opacity(isHovered ? 0.05 : 0.02)
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
-            if isHovered {
-                Color.teal.opacity(0.04)
-            }
         }
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
@@ -190,8 +187,8 @@ struct SpillBarAITokenSummary: View {
             .stroke(
                 LinearGradient(
                     colors: isHovered
-                        ? [Color.teal.opacity(0.35), Color.blue.opacity(0.15)]
-                        : [Color.teal.opacity(0.18), Color.blue.opacity(0.05)],
+                        ? [Color.teal.opacity(0.40), Color.blue.opacity(0.20)]
+                        : [Color.teal.opacity(0.22), Color.blue.opacity(0.08)],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 ),

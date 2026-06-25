@@ -24,7 +24,7 @@ struct SpillBarView: View {
     }
 
     var body: some View {
-        ScrollView(.vertical, showsIndicators: false) {
+        ScrollView(.vertical) {
             VStack(spacing: settings.panelSectionSpacing) {
                 header
 
@@ -361,24 +361,16 @@ struct SpillBarView: View {
             .scaleEffect(hoveredStatusModule == module ? 1.012 : 1.0)
             .offset(y: hoveredStatusModule == module ? -1.0 : 0)
             .background(
-                ZStack {
-                    VisualEffectView(material: .sidebar, blendingMode: .withinWindow)
-                        .opacity(0.3)
-                    if hoveredStatusModule == module {
-                        Color.primary.opacity(0.06)
-                    } else {
-                        Color.primary.opacity(0.03)
-                    }
-                }
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(SpillPanelSurface.cardFill(isHovered: hoveredStatusModule == module))
             )
             .overlay {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .stroke(
                         LinearGradient(
                             colors: hoveredStatusModule == module
-                                ? [Color.primary.opacity(0.12), Color.primary.opacity(0.06)]
-                                : [Color.primary.opacity(0.06), Color.primary.opacity(0.02)],
+                                ? [Color.primary.opacity(0.15), Color.primary.opacity(0.08)]
+                                : [Color.primary.opacity(0.08), Color.primary.opacity(0.03)],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         ),
@@ -516,7 +508,14 @@ struct SpillBarView: View {
         .padding(.vertical, 8)
         .frame(minHeight: detailRows.isEmpty ? 60 : 92)
         .frame(maxWidth: .infinity)
-        .background(.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(SpillPanelSurface.insetFill)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Color.primary.opacity(0.05), lineWidth: 0.5)
+        }
     }
 
     private func statusIconBadge(symbolName: String, tint: Color) -> some View {
@@ -1114,8 +1113,6 @@ struct SpillBarView: View {
         return parts.joined(separator: " - ")
     }
 
-}
-
 private struct MetricSparklineSeries {
     let values: [Double]
     let tint: Color
@@ -1387,4 +1384,5 @@ private struct MetricSparklineView: View {
         let tint = series.first?.tint ?? .secondary
         context.stroke(path, with: .color(tint.opacity(0.42)), lineWidth: 1.3)
     }
+}
 }

@@ -132,14 +132,14 @@ struct SpillBarAISection: View {
         )
     }
 
-    private func toolTokenUsage(for kind: LocalAIToolKind) -> SpillBarAIToolTokenUsage {
+    private func toolTokenUsage(for kind: LocalAIToolKind) -> SpillBarAIToolCard.TokenUsage {
         let snapshot = tokenUsageDashboardStore.panelSummary
         let rawValue = tokenUsageRawValue(for: kind)
 
         if let row = snapshot.toolRows.first(where: { $0.id == rawValue }) {
-            return SpillBarAIToolTokenUsage(value: row.value, ratio: row.ratio)
+            return SpillBarAIToolCard.TokenUsage(value: row.value, ratio: row.ratio)
         }
-        return SpillBarAIToolTokenUsage(value: "0", ratio: 0)
+        return SpillBarAIToolCard.TokenUsage(value: "0", ratio: 0)
     }
 
     private func tokenUsageRawValue(for kind: LocalAIToolKind) -> String {
