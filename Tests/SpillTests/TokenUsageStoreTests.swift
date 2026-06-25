@@ -715,8 +715,8 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertFalse(toolTab.contains("tokenUsageDetail"))
         XCTAssertFalse(toolTab.contains(#"\(filter.detail) (\(shareLabel))"#))
         XCTAssertTrue(toolTab.contains("filter.tool?.dashboardTint"))
-        XCTAssertTrue(toolTab.contains("tabAccent.opacity(0.86)"))
-        XCTAssertTrue(toolTab.contains("tabAccent.opacity(0.68)"))
+        XCTAssertTrue(toolTab.contains("tabAccent.opacity(0.14)"))
+        XCTAssertTrue(toolTab.contains("tabAccent.opacity(0.28)"))
         let tabDetailRange = try XCTUnwrap(toolTab.range(of: "Text(detail)"))
         let tabBadgeRange = try XCTUnwrap(toolTab.range(of: "toolShareBadge("))
         let tabLiveDotRange = try XCTUnwrap(toolTab.range(of: "TokenMeteringLiveUpdateDot"))
@@ -897,6 +897,47 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertFalse(panelSizer.contains("onboardingPreviewHeight"))
     }
 
+    func testLongRunningAppShutdownAndWakeContracts() throws {
+        let root = Self.repositoryRootURL()
+        let appDelegate = try String(contentsOf: root.appendingPathComponent("Sources/Spill/App/AppDelegate.swift"))
+        let menuBarScanCoordinator = try String(contentsOf: root.appendingPathComponent("Sources/Spill/MenuBar/MenuBarScanCoordinator.swift"))
+        let panelController = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Panel/SpillPanelController.swift"))
+        let preferencesWindowController = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Preferences/PreferencesWindowController.swift"))
+        let aiStatusStore = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Providers/AIStatusStore.swift"))
+        let cloudServiceStatusStore = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Providers/CloudServiceStatusStore.swift"))
+        let inboxMonitor = try String(contentsOf: root.appendingPathComponent("Sources/Spill/TokenMetering/Storage/Inbox/TokenUsageInboxMonitor.swift"))
+
+        XCTAssertTrue(appDelegate.contains("SpillCrashReporter.markCleanShutdown(processRole: \"main_app\")"))
+        XCTAssertTrue(appDelegate.contains("preferencesWindowController.prepareForTermination()"))
+        XCTAssertTrue(menuBarScanCoordinator.contains("NSWorkspace.didWakeNotification"))
+        XCTAssertTrue(panelController.contains("panel.isRestorable = false"))
+        XCTAssertTrue(preferencesWindowController.contains("window.isRestorable = false"))
+        XCTAssertTrue(preferencesWindowController.contains("func prepareForTermination()"))
+        XCTAssertTrue(aiStatusStore.contains("func cancelRefresh()"))
+        XCTAssertTrue(cloudServiceStatusStore.contains("func cancelRefresh()"))
+        XCTAssertTrue(inboxMonitor.contains("private var isStopped = true"))
+        XCTAssertTrue(inboxMonitor.contains("guard !isStopped, !isDraining else"))
+    }
+
+    @MainActor
+    func testPanelSummaryRefreshDoesNotCancelScheduledDashboardRefresh() async throws {
+        let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
+        let dashboardStore = TokenUsageDashboardStore(
+            usageStore: usageStore,
+            loadsInitialPanelSummary: false
+        )
+        try usageStore.appendEvent(Self.safeEvent(spanID: "span_scheduled_refresh_survives_panel_summary"))
+
+        NotificationCenter.default.post(
+            name: TokenUsageStore.eventsDidChangeNotification,
+            object: usageStore
+        )
+        dashboardStore.refreshPanelSummary()
+
+        try await waitForDashboardStoreRefreshToLoadEvents(dashboardStore, eventCount: 1)
+        XCTAssertEqual(dashboardStore.snapshot.eventCount, 1)
+    }
+
     func testMenuBarScannerPublishesItemsBeforeLoadingIcons() throws {
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let scanner = try String(contentsOf: root.appendingPathComponent("Sources/Spill/MenuBar/AXMenuBarItemScanner.swift"))
@@ -913,6 +954,9 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(collector.contains("drainQueuedInbox()"))
         XCTAssertTrue(collector.contains("runAntigravityActiveImporter()"))
         XCTAssertTrue(collector.contains("TokenUsageAntigravityImporter().importRecentEvents"))
+        XCTAssertTrue(collector.contains("func stop()"))
+        XCTAssertTrue(collector.contains("private var isStopping = false"))
+        XCTAssertTrue(collector.contains("shouldCancel: shouldCancel"))
         XCTAssertFalse(collector.contains("private func importQueuedEventsWhileProcessRuns(_ process: Process)"))
         XCTAssertFalse(collector.contains("while process.isRunning"))
         XCTAssertFalse(collector.contains("Thread.sleep(forTimeInterval: importerDrainInterval)"))
@@ -929,7 +973,7 @@ final class TokenUsageStoreTests: XCTestCase {
         var capturedStartDate: Date?
         let collector = TokenUsageCollectorCoordinator(
             store: store,
-            antigravityImportRunner: { _, startDate in
+            antigravityImportRunner: { _, startDate, _ in
                 lock.withLock {
                     capturedStartDate = startDate
                 }
@@ -972,7 +1016,7 @@ final class TokenUsageStoreTests: XCTestCase {
         let store = TokenUsageStore(fileURL: temporaryEventsURL())
         let collector = TokenUsageCollectorCoordinator(
             store: store,
-            antigravityImportRunner: { _, _ in
+            antigravityImportRunner: { _, _, _ in
                 TokenUsageAntigravityImportSummary(
                     scannedDatabases: 0,
                     scannedGenerationRows: 0,
@@ -1001,6 +1045,37 @@ final class TokenUsageStoreTests: XCTestCase {
         collector.requestCollection(reason: "test")
 
         wait(for: [notification], timeout: 1)
+    }
+
+    func testTokenUsageCollectorStopPreventsQueuedAntigravityImport() {
+        let store = TokenUsageStore(fileURL: temporaryEventsURL())
+        let lock = NSLock()
+        var didRunImporter = false
+        let collector = TokenUsageCollectorCoordinator(
+            store: store,
+            antigravityImportRunner: { _, _, _ in
+                lock.withLock {
+                    didRunImporter = true
+                }
+                return TokenUsageAntigravityImportSummary(
+                    scannedDatabases: 0,
+                    scannedGenerationRows: 0,
+                    parsedUsageEvents: 0,
+                    importedEvents: 0,
+                    skippedDuplicateEvents: 0,
+                    unsupportedRecords: 0,
+                    splitOutputFallbackEvents: 0,
+                    cursorAdvancedDatabases: 0,
+                    failedToWriteEvents: false
+                )
+            }
+        )
+
+        collector.stop()
+        collector.requestCollection(reason: "test")
+
+        Thread.sleep(forTimeInterval: 0.1)
+        XCTAssertFalse(lock.withLock { didRunImporter })
     }
 
     func testAntigravityActiveImporterReadsExactUsageFromConversationDatabase() throws {
@@ -1081,6 +1156,42 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertFalse(diagnostic.contains(databaseURL.path))
     }
 
+    func testAntigravityTemporaryDatabaseCopiesArePrunedOnImport() throws {
+        let rootURL = temporaryDirectoryURL()
+        let conversationsURL = rootURL.appendingPathComponent("conversations", isDirectory: true)
+        let databaseURL = conversationsURL.appendingPathComponent("opaque-conversation.db")
+        let stateURL = rootURL
+            .appendingPathComponent("state", isDirectory: true)
+            .appendingPathComponent("antigravity-active-importer-state.json")
+        try writeAntigravityConversationDatabase(at: databaseURL, rows: [])
+
+        let temporaryDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("spill-agy-import", isDirectory: true)
+        try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
+        let staleURL = temporaryDirectory
+            .appendingPathComponent("stale-\(UUID().uuidString)")
+            .appendingPathExtension("db")
+        try Data("stale".utf8).write(to: staleURL)
+        try FileManager.default.setAttributes(
+            [.modificationDate: Date().addingTimeInterval(-(25 * 60 * 60))],
+            ofItemAtPath: staleURL.path
+        )
+        defer {
+            try? FileManager.default.removeItem(at: staleURL)
+        }
+
+        let importer = TokenUsageAntigravityImporter(
+            conversationsDirectory: conversationsURL,
+            diagnosticsURL: nil,
+            stateURL: stateURL,
+            forceTemporaryCopyFallback: true
+        )
+
+        _ = importer.importRecentEvents(into: TokenUsageStore(fileURL: temporaryEventsURL()), since: .distantPast)
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: staleURL.path))
+    }
+
     func testMenuBarAITokenStatusRefreshesFromSharedStoreChanges() throws {
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let appDelegate = try String(contentsOf: root.appendingPathComponent("Sources/Spill/App/AppDelegate.swift"))
@@ -1143,6 +1254,11 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(lifecycle.contains("terminateDashboardHelperProcesses()"))
         XCTAssertTrue(lifecycle.contains("workspaceApplicationDidTerminate"))
         XCTAssertTrue(lifecycle.contains("runningApplication.terminate()"))
+        XCTAssertTrue(lifecycle.contains("runningApplication.forceTerminate()"))
+        XCTAssertTrue(lifecycle.contains("terminateCurrentDashboardProcess()"))
+        XCTAssertTrue(lifecycle.contains("prepareWindowsForFastTermination()"))
+        XCTAssertTrue(lifecycle.contains("SpillCrashReporter.markUncleanShutdownPending(processRole: \"token_dashboard\")"))
+        XCTAssertTrue(lifecycle.contains("Darwin.kill(processID, SIGKILL)"))
         XCTAssertTrue(lifecycle.contains("dashboardBundleIdentifier(forMainBundleIdentifier"))
         XCTAssertTrue(process.contains(#"static let developerOptionsPreferencesTab = "developer""#))
         XCTAssertTrue(launcher.contains("NSWorkspace.OpenConfiguration"))
@@ -1179,6 +1295,9 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(helperDelegate.contains("openMainAppDeveloperOptions"))
         XCTAssertTrue(helperDelegate.contains("TokenMeteringDashboardProcess.postOpenPreferencesRequest(tab: tab)"))
         XCTAssertTrue(helperDelegate.contains("TokenMeteringWorkspaceOpenCompletion.postOpenPreferencesRequest(tab: tab)"))
+        XCTAssertTrue(helperDelegate.contains("TokenMeteringDashboardLifecycle.shared.terminateCurrentDashboardProcess()"))
+        XCTAssertTrue(helperDelegate.contains("windowController?.prepareForTermination()"))
+        XCTAssertTrue(helperDelegate.contains("aiStatusStore.cancelRefresh()"))
         XCTAssertTrue(helperDelegate.contains("observeSettingsChanges()"))
         XCTAssertTrue(helperDelegate.contains("settingsDidChangeFromMainApp"))
         XCTAssertTrue(helperDelegate.contains("settings.reloadAppLanguageFromDefaults()"))
@@ -1195,10 +1314,18 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(windowController.contains("developerOptionsAction"))
         XCTAssertTrue(windowController.contains("window.delegate = self"))
         XCTAssertTrue(windowController.contains("windowWillClose"))
+        XCTAssertTrue(windowController.contains("window.isRestorable = false"))
+        XCTAssertTrue(windowController.contains("func prepareForTermination()"))
+        XCTAssertTrue(windowController.contains("aiStatusStore.cancelRefresh()"))
         XCTAssertTrue(windowController.contains("scheduleDeferredRefreshAction()"))
         XCTAssertTrue(windowController.contains("deferredRefreshDelayNanoseconds: UInt64 = 1_500_000_000"))
         XCTAssertTrue(windowController.contains("Task.sleep(nanoseconds: delay)"))
         XCTAssertTrue(windowController.contains("!self.store.isDashboardRefreshInProgress"))
+        XCTAssertTrue(appDelegate.contains("SpillCrashReporter.markCleanShutdown(processRole: \"main_app\")"))
+        XCTAssertTrue(appDelegate.contains("tokenMeteringCoordinator.stop()"))
+        XCTAssertTrue(appDelegate.contains("aiStatusStore.cancelRefresh()"))
+        XCTAssertTrue(appDelegate.contains("cloudServiceStatusStore.cancelRefresh()"))
+        XCTAssertTrue(appDelegate.contains("preferencesWindowController.prepareForTermination()"))
 
         XCTAssertTrue(buildScript.contains(#"HELPER_APP_NAME="Spill Token Dashboard.app""#))
         XCTAssertTrue(buildScript.contains(#"HELPER_BUNDLE_ID="${BUNDLE_ID}.TokenDashboard""#))
@@ -1435,7 +1562,7 @@ final class TokenUsageStoreTests: XCTestCase {
     }
 
     @MainActor
-    func testDashboardStoreInitializesPanelSummaryWithoutFullSnapshot() throws {
+    func testDashboardStoreInitializesPanelSummaryWithoutFullSnapshot() async throws {
         let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
         try usageStore.appendEvent(Self.safeEvent(aiTool: .codex, spanID: "span_panel_summary"))
 
@@ -1443,6 +1570,7 @@ final class TokenUsageStoreTests: XCTestCase {
 
         XCTAssertEqual(dashboardStore.snapshot.eventCount, 0)
         XCTAssertEqual(dashboardStore.unfilteredSnapshot.eventCount, 0)
+        try await waitForPanelSummary(dashboardStore, eventCount: 1, totalTokens: 150)
         XCTAssertEqual(dashboardStore.panelSummary.eventCount, 1)
         XCTAssertEqual(dashboardStore.panelSummary.totalTokens, 150)
 
@@ -1529,7 +1657,7 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(dashboardStore.snapshot.calendarDays.contains { day in
             day.id == yesterdayDayID && day.hasEvents
         })
-        XCTAssertEqual(dashboardStore.panelSummary.eventCount, 2)
+        XCTAssertEqual(dashboardStore.panelSummary.eventCount, 1)
 
         dashboardStore.selectCalendarDay(yesterdayDayID)
         try await waitForDashboardStoreRefresh(dashboardStore)
@@ -1538,7 +1666,7 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(dashboardStore.snapshot.eventCount, 1)
         XCTAssertEqual(dashboardStore.snapshot.totalTokens, 200)
         XCTAssertEqual(dashboardStore.snapshot.toolRows.map(\.id), ["claude"])
-        XCTAssertEqual(dashboardStore.panelSummary.eventCount, 2)
+        XCTAssertEqual(dashboardStore.panelSummary.eventCount, 1)
     }
 
     func testDashboardStoreScopeChangesSkipPanelSummaryRefresh() throws {
@@ -1550,7 +1678,7 @@ final class TokenUsageStoreTests: XCTestCase {
             dashboardStore.components(
                 separatedBy: "reusesPeriodFilterTotals: true"
             ).count - 1,
-            7
+            8
         )
         XCTAssertTrue(dashboardStore.contains("let cachedPeriodFilterTotals = reusesPeriodFilterTotals ? periodFilterTotals : [:]"))
         XCTAssertTrue(dashboardStore.contains("dateRange(cachedDateRange, contains: requestedRange)"))
@@ -1581,7 +1709,7 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(dashboardStore.snapshot.eventCount, 0)
         XCTAssertTrue(FileManager.default.fileExists(atPath: queuedURL.path))
 
-        usageStore.importQueuedEvents()
+        _ = usageStore.importQueuedEvents()
         dashboardStore.refresh()
 
         XCTAssertEqual(dashboardStore.snapshot.eventCount, 1)
@@ -1649,11 +1777,23 @@ final class TokenUsageStoreTests: XCTestCase {
         })
         XCTAssertTrue(didScheduleFollowUp)
         XCTAssertEqual(usageStore.loadEvents().map(\.spanID), ["span_jsonl_chunk_1", "span_jsonl_chunk_2"])
+        XCTAssertEqual(
+            try FileManager.default.contentsOfDirectory(at: inboxURL, includingPropertiesForKeys: nil)
+                .filter { $0.pathExtension == "jsonl" }
+                .map(\.lastPathComponent),
+            ["001.jsonl"]
+        )
 
         XCTAssertTrue(usageStore.drainQueuedEventsWithoutLoading(maximumInboxEventCount: 2))
         XCTAssertEqual(
             usageStore.loadEvents().map(\.spanID),
             ["span_jsonl_chunk_1", "span_jsonl_chunk_2", "span_jsonl_chunk_3"]
+        )
+        XCTAssertEqual(
+            try FileManager.default.contentsOfDirectory(at: inboxURL, includingPropertiesForKeys: nil)
+                .filter { $0.pathExtension == "jsonl" }
+                .count,
+            0
         )
     }
 
@@ -1753,6 +1893,7 @@ final class TokenUsageStoreTests: XCTestCase {
         let dashboardStore = dashboardStore(usageStore: usageStore)
 
         XCTAssertEqual(dashboardStore.snapshot.eventCount, 0)
+        try await waitForPanelSummary(dashboardStore, eventCount: 1)
         XCTAssertEqual(dashboardStore.panelSummary.eventCount, 1)
 
         NotificationCenter.default.post(
@@ -1918,14 +2059,43 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(dashboardStore.snapshot.eventCount, 1)
         XCTAssertEqual(dashboardStore.snapshot.totalTokens, 100)
         XCTAssertEqual(dashboardStore.snapshot.toolRows.map(\.id), ["claude"])
-        XCTAssertEqual(dashboardStore.panelSummary.eventCount, 2)
-        XCTAssertEqual(dashboardStore.panelSummary.totalTokens, 1_100)
+        XCTAssertEqual(dashboardStore.panelSummary.eventCount, 1)
+        XCTAssertEqual(dashboardStore.panelSummary.totalTokens, 100)
 
         dashboardStore.setSelectedPeriod(.sevenDays)
         try await waitForDashboardStoreRefresh(dashboardStore)
 
         XCTAssertEqual(dashboardStore.snapshot.eventCount, 2)
         XCTAssertEqual(dashboardStore.snapshot.totalTokens, 1_100)
+    }
+
+    @MainActor
+    func testDashboardStoreTreatsPastOnlyHistoryAsExistingData() async throws {
+        let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        let todayStart = calendar.startOfDay(for: Date())
+        let yesterday = try XCTUnwrap(calendar.date(byAdding: .hour, value: -1, to: todayStart))
+        try usageStore.replaceEvents([
+            Self.safeEvent(
+                aiTool: .codex,
+                spanID: "span_past_only_history",
+                inputTokens: 90,
+                outputTokens: 10,
+                createdAt: ISO8601DateFormatter.tokenUsage.string(from: yesterday)
+            )
+        ])
+        let dashboardStore = TokenUsageDashboardStore(
+            usageStore: usageStore,
+            loadsInitialPanelSummary: false
+        )
+
+        dashboardStore.refreshAsyncIfIdle()
+        try await waitForDashboardStoreRefresh(dashboardStore)
+
+        XCTAssertEqual(dashboardStore.snapshot.eventCount, 0)
+        XCTAssertEqual(dashboardStore.panelSummary.eventCount, 0)
+        XCTAssertTrue(dashboardStore.hasDashboardEvents)
     }
 
     @MainActor
@@ -2075,7 +2245,7 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(dashboardStore.snapshot.totalTokens, 200)
         XCTAssertEqual(dashboardStore.snapshot.toolRows.map(\.id), ["claude"])
         XCTAssertEqual(dashboardStore.unfilteredSnapshot.eventCount, 2)
-        XCTAssertEqual(dashboardStore.panelSummary.eventCount, 3)
+        XCTAssertEqual(dashboardStore.panelSummary.eventCount, 2)
     }
 
     @MainActor
@@ -4427,6 +4597,13 @@ final class TokenUsageStoreTests: XCTestCase {
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
     }
 
+    private static func repositoryRootURL() -> URL {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+    }
+
     @MainActor
     private func dashboardStore(usageStore: TokenUsageStore) -> TokenUsageDashboardStore {
         TokenUsageDashboardStore(usageStore: usageStore)
@@ -4441,6 +4618,36 @@ final class TokenUsageStoreTests: XCTestCase {
             try await Task.sleep(nanoseconds: 50_000_000)
         }
         XCTFail("Dashboard store refresh did not finish")
+    }
+
+    @MainActor
+    private func waitForPanelSummary(
+        _ store: TokenUsageDashboardStore,
+        eventCount: Int,
+        totalTokens: Int? = nil
+    ) async throws {
+        for _ in 0..<20 {
+            if store.panelSummary.eventCount == eventCount,
+               totalTokens == nil || store.panelSummary.totalTokens == totalTokens {
+                return
+            }
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        XCTFail("Dashboard panel summary did not refresh")
+    }
+
+    @MainActor
+    private func waitForDashboardStoreRefreshToLoadEvents(
+        _ store: TokenUsageDashboardStore,
+        eventCount: Int
+    ) async throws {
+        for _ in 0..<30 {
+            if store.snapshot.eventCount == eventCount, !store.isDashboardRefreshInProgress {
+                return
+            }
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        XCTFail("Dashboard store did not load expected events")
     }
 
     private func temporaryInboxURL() -> URL {
