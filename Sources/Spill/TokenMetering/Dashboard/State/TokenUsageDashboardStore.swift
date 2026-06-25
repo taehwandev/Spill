@@ -112,6 +112,7 @@ final class TokenUsageDashboardStore: ObservableObject {
     private var scheduledRefreshTask: Task<Void, Never>?
     private let snapshotBuildQueue = DispatchQueue(label: "app.spill.token-dashboard.snapshot-build", qos: .userInitiated)
     private let snapshotBuildGate = TokenUsageDashboardSnapshotBuildGate()
+    private let panelSummaryRefreshGate = TokenUsageDashboardSnapshotBuildGate()
 
     init(
         usageStore: TokenUsageStore,
@@ -159,7 +160,9 @@ final class TokenUsageDashboardStore: ObservableObject {
         if isOnboardingPreviewEnabled {
             return hasLoadedDashboardEvents
         }
-        return panelSummary.eventCount > 0 || hasLoadedDashboardEvents
+        let hasKnownDashboardHistory = availableDateBounds.earliest != nil
+            || periodFilterTotals.values.contains { $0 > 0 }
+        return panelSummary.eventCount > 0 || hasLoadedDashboardEvents || hasKnownDashboardHistory
     }
 
     var isDashboardRefreshInProgress: Bool {
@@ -184,6 +187,9 @@ final class TokenUsageDashboardStore: ObservableObject {
         scheduledRefreshTask?.cancel()
         scheduledRefreshTask = nil
         snapshotBuildGate.next()
+        if refreshesPanelSummary {
+            panelSummaryRefreshGate.next()
+        }
         let previousEvents = events
         let shouldTrackLiveUpdates = trackLiveUpdates && (
             hasRebuiltSnapshot || (previousEvents.isEmpty && panelSummary.eventCount == 0)
@@ -211,6 +217,7 @@ final class TokenUsageDashboardStore: ObservableObject {
         scheduledRefreshTask?.cancel()
         scheduledRefreshTask = nil
         let generation = snapshotBuildGate.next()
+        let panelSummaryGeneration = refreshesPanelSummary ? panelSummaryRefreshGate.next() : nil
         let previousEvents = events
         let previousSnapshot = snapshot
         let previousUnfilteredSnapshot = unfilteredSnapshot
@@ -225,6 +232,7 @@ final class TokenUsageDashboardStore: ObservableObject {
         let request = snapshotBuildRequest()
         let usesPreviewDataSource = isOnboardingPreviewEnabled
         let usageStore = usageStore
+        let snapshotBuildGate = snapshotBuildGate
         let isAlreadyLoaded = loadState == .loaded
         if !isAlreadyLoaded {
             loadState = usesPreviewDataSource ? .previewingEmpty : .loading
@@ -232,20 +240,36 @@ final class TokenUsageDashboardStore: ObservableObject {
         isRefreshing = true
 
         snapshotBuildQueue.async {
+            guard snapshotBuildGate.isCurrent(generation) else {
+                return
+            }
+
             let loadedEventScope = Self.loadEvents(
                 from: usageStore,
                 for: request,
                 cachedEvents: cachedEvents,
                 cachedDateRange: cachedEventsDateRange
             )
+            guard snapshotBuildGate.isCurrent(generation) else {
+                return
+            }
+
             let loadedEvents = loadedEventScope.events
             let periodFilterTotals = cachedPeriodFilterTotals.isEmpty
                 ? Self.loadPeriodFilterTotals(from: usageStore, for: request)
                 : cachedPeriodFilterTotals
+            guard snapshotBuildGate.isCurrent(generation) else {
+                return
+            }
+
             let panelSummary = refreshesPanelSummary ? Self.loadPanelSummary(from: usageStore, for: request) : nil
             let dateBounds = Self.loadDateBounds(from: usageStore, for: request)
             let buildRequest = request.replacingAvailableDateBounds(dateBounds)
             let calendarMonthSummary = Self.loadCalendarMonthSummary(from: usageStore, for: buildRequest)
+            guard snapshotBuildGate.isCurrent(generation) else {
+                return
+            }
+
             let displayEvents = usesPreviewDataSource ? TokenUsageDashboardPreviewDataSource.onboardingEvents : loadedEvents
             let snapshotOutput = Self.buildSnapshotOutput(
                 events: displayEvents,
@@ -261,6 +285,14 @@ final class TokenUsageDashboardStore: ObservableObject {
                     return
                 }
 
+                let appliedPanelSummary: TokenUsagePanelSummarySnapshot?
+                if let panelSummaryGeneration,
+                   !self.panelSummaryRefreshGate.isCurrent(panelSummaryGeneration) {
+                    appliedPanelSummary = nil
+                } else {
+                    appliedPanelSummary = panelSummary
+                }
+
                 self.applySnapshotPair(
                     snapshotOutput.snapshotPair,
                     loadedEvents: loadedEvents,
@@ -270,7 +302,7 @@ final class TokenUsageDashboardStore: ObservableObject {
                     previousUnfilteredSnapshot: previousUnfilteredSnapshot,
                     loadedEventsDateRange: loadedEventScope.cacheCoverageDateRange,
                     periodFilterTotals: periodFilterTotals,
-                    panelSummary: panelSummary,
+                    panelSummary: appliedPanelSummary,
                     availableDateBounds: dateBounds,
                     snapshotContext: snapshotOutput.context,
                     snapshotContextKey: snapshotOutput.contextKey
@@ -287,16 +319,22 @@ final class TokenUsageDashboardStore: ObservableObject {
     }
 
     func refreshPanelSummary() {
-        scheduledRefreshTask?.cancel()
-        scheduledRefreshTask = nil
-        let summary = usageStore.dashboardSummary(
-            dashboardToolsOnly: !SpillSettings.shared.tokenUsageShowAdvancedTools
-        )
-        panelSummary = TokenUsagePanelSummarySnapshot(
-            summary: summary,
-            language: language
-        )
-        lastError = nil
+        let generation = panelSummaryRefreshGate.next()
+        let request = snapshotBuildRequest()
+        let usageStore = usageStore
+
+        snapshotBuildQueue.async {
+            let panelSummary = Self.loadPanelSummary(from: usageStore, for: request)
+
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.panelSummaryRefreshGate.isCurrent(generation) else {
+                    return
+                }
+
+                self.panelSummary = panelSummary
+                self.lastError = nil
+            }
+        }
     }
 
     private func scheduleRefresh(trackLiveUpdates: Bool = true) {
@@ -371,13 +409,22 @@ final class TokenUsageDashboardStore: ObservableObject {
         let cachedContext = cachedSnapshotContext
         let cachedContextKey = cachedSnapshotContextKey
         let usageStore = usageStore
+        let snapshotBuildGate = snapshotBuildGate
 
         isRefreshing = true
 
         snapshotBuildQueue.async {
+            guard snapshotBuildGate.isCurrent(generation) else {
+                return
+            }
+
             let dateBounds = Self.loadDateBounds(from: usageStore, for: request)
             let buildRequest = request.replacingAvailableDateBounds(dateBounds)
             let calendarMonthSummary = Self.loadCalendarMonthSummary(from: usageStore, for: buildRequest)
+            guard snapshotBuildGate.isCurrent(generation) else {
+                return
+            }
+
             let snapshotOutput = Self.buildSnapshotOutput(
                 events: displayEvents,
                 request: buildRequest,
@@ -672,7 +719,13 @@ final class TokenUsageDashboardStore: ObservableObject {
         from usageStore: TokenUsageStore,
         for request: TokenUsageDashboardBuildRequest
     ) -> TokenUsagePanelSummarySnapshot {
-        let summary = usageStore.dashboardSummary(dashboardToolsOnly: !request.showAdvancedTools)
+        let dayStart = request.calendar.startOfDay(for: request.now)
+        let dayEnd = request.calendar.date(byAdding: .day, value: 1, to: dayStart) ?? request.now
+        let summary = usageStore.dashboardSummary(
+            startingAt: dayStart,
+            endingBefore: dayEnd,
+            dashboardToolsOnly: !request.showAdvancedTools
+        )
         return TokenUsagePanelSummarySnapshot(
             summary: summary,
             language: request.language
@@ -775,13 +828,17 @@ final class TokenUsageDashboardStore: ObservableObject {
         selectedTool = nextTool
         selectedProjectID = nil
         selectedSessionID = nil
-        rebuildSnapshotFromCurrentEventsAsync()
+        refreshAsync(
+            trackLiveUpdates: false,
+            refreshesPanelSummary: false,
+            reusesPeriodFilterTotals: true
+        )
     }
 
     func setSelectedProjectID(_ projectID: String?) {
         selectedProjectID = projectID
         selectedSessionID = nil
-        rebuildSnapshot()
+        rebuildSnapshotFromCurrentEventsAsync()
     }
 
     func setSelectedPeriod(_ period: TokenUsageDashboardPeriod) {
@@ -795,7 +852,7 @@ final class TokenUsageDashboardStore: ObservableObject {
         refreshAsync(
             trackLiveUpdates: false,
             refreshesPanelSummary: false,
-            reusesLoadedEvents: true,
+            reusesLoadedEvents: false,
             reusesPeriodFilterTotals: true
         )
     }
@@ -816,7 +873,7 @@ final class TokenUsageDashboardStore: ObservableObject {
         refreshAsync(
             trackLiveUpdates: false,
             refreshesPanelSummary: false,
-            reusesLoadedEvents: true,
+            reusesLoadedEvents: false,
             reusesPeriodFilterTotals: true
         )
     }
@@ -832,7 +889,7 @@ final class TokenUsageDashboardStore: ObservableObject {
         refreshAsync(
             trackLiveUpdates: false,
             refreshesPanelSummary: false,
-            reusesLoadedEvents: true,
+            reusesLoadedEvents: false,
             reusesPeriodFilterTotals: true
         )
     }
@@ -844,19 +901,19 @@ final class TokenUsageDashboardStore: ObservableObject {
         refreshAsync(
             trackLiveUpdates: false,
             refreshesPanelSummary: false,
-            reusesLoadedEvents: true,
+            reusesLoadedEvents: false,
             reusesPeriodFilterTotals: true
         )
     }
 
     func selectSession(_ sessionID: String) {
         selectedSessionID = sessionID
-        rebuildSnapshot()
+        rebuildSnapshotFromCurrentEventsAsync()
     }
 
     func clearWorkItemSelection() {
         selectedSessionID = nil
-        rebuildSnapshot()
+        rebuildSnapshotFromCurrentEventsAsync()
     }
 
     func updateAlias(for workItemID: String, alias: String) {
@@ -920,7 +977,7 @@ final class TokenUsageDashboardStore: ObservableObject {
         refreshAsync(
             trackLiveUpdates: false,
             refreshesPanelSummary: false,
-            reusesLoadedEvents: true,
+            reusesLoadedEvents: false,
             reusesPeriodFilterTotals: true
         )
     }
@@ -931,7 +988,7 @@ final class TokenUsageDashboardStore: ObservableObject {
         refreshAsync(
             trackLiveUpdates: false,
             refreshesPanelSummary: false,
-            reusesLoadedEvents: true,
+            reusesLoadedEvents: false,
             reusesPeriodFilterTotals: true
         )
     }
@@ -1144,7 +1201,7 @@ final class TokenUsageDashboardStore: ObservableObject {
         do {
             let event = Self.makeLocalSelfTestEvent(index: snapshot.eventCount)
             try usageStore.enqueueInboxEvent(event)
-            usageStore.importQueuedEvents()
+            _ = usageStore.importQueuedEvents()
             refresh()
             selfTestMessage = TokenUsageSelfTestMessage(
                 text: TokenMeteringL10n.text(.queueSelfTestSuccess, language: language),

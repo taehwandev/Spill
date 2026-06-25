@@ -8,6 +8,7 @@ struct TokenMeteringDashboardFilterBar: View {
     let appLanguage: SpillAppLanguage
     let selectedControlAccent: Color
     let selectedControlAccentHighlight: Color
+    @State private var hoveredPeriodID: String? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -56,10 +57,12 @@ struct TokenMeteringDashboardFilterBar: View {
             return selectedCalendarDayTitle
         }
 
-        let formatter = DateFormatter()
-        formatter.locale = Locale.current
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .none
+        let formatter = TokenUsageDashboardSnapshot.cachedDateFormatter(
+            dateStyle: .medium,
+            timeStyle: .none,
+            locale: .current,
+            timeZone: .current
+        )
 
         let now = Date()
         let calendar = Calendar.current
@@ -137,7 +140,9 @@ struct TokenMeteringDashboardFilterBar: View {
     }
 
     private func periodPill(_ filter: TokenUsageDashboardPeriodFilter) -> some View {
-        Button {
+        let isHovered = hoveredPeriodID == filter.id
+        let isSelected = store.selectedCalendarDayID == nil && store.selectedPeriod == filter.period
+        return Button {
             store.setSelectedPeriod(filter.period)
         } label: {
             HStack(spacing: 6) {
@@ -146,21 +151,29 @@ struct TokenMeteringDashboardFilterBar: View {
                     .lineLimit(1)
                 Text(filter.detail)
                     .font(.system(size: 9, weight: .bold, design: .monospaced))
-                    .foregroundStyle(filter.isSelected ? .white.opacity(0.78) : .secondary)
+                    .foregroundStyle(isSelected ? selectedControlAccent.opacity(0.82) : .secondary)
                     .lineLimit(1)
-                    .contentTransition(.numericText())
-                    .animation(.snappy(duration: 0.35), value: filter.detail)
             }
-            .foregroundStyle(filter.isSelected ? .white : .primary)
+            .foregroundStyle(isSelected ? selectedControlAccent : .primary)
             .padding(.horizontal, 10)
             .frame(height: 30)
             .background(
-                filter.isSelected ? selectedControlAccent : Color.primary.opacity(0.045),
+                isSelected
+                    ? selectedControlAccent.opacity(0.14)
+                    : Color.primary.opacity(isHovered ? 0.075 : 0.045),
                 in: RoundedRectangle(cornerRadius: 8, style: .continuous)
             )
             .overlay {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(Color.primary.opacity(0.06), lineWidth: 0.5)
+                    .stroke(
+                        isSelected
+                            ? selectedControlAccent.opacity(0.28)
+                            : Color.primary.opacity(isHovered ? 0.12 : 0.06),
+                        lineWidth: 0.5
+                    )
+            }
+            .onHover { hovering in
+                hoveredPeriodID = hovering ? filter.id : nil
             }
         }
         .buttonStyle(.plain)

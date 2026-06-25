@@ -151,7 +151,7 @@ struct TokenMeteringDashboardView: View {
         ZStack(alignment: .top) {
             HStack(alignment: .top, spacing: 16) {
                 ScrollView(.vertical, showsIndicators: true) {
-                    VStack(alignment: .leading, spacing: 16) {
+                    LazyVStack(alignment: .leading, spacing: 16) {
                         kpiStrip
                         analyticsGrid
                         sessionsTable
@@ -389,43 +389,27 @@ struct TokenMeteringDashboardView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(14)
-                .scaleEffect(isHovered ? 1.015 : 1.0)
-                .offset(y: isHovered ? -2.0 : 0)
                 .background(
-                    ZStack {
-                        VisualEffectView(material: .sidebar, blendingMode: .withinWindow)
-                            .opacity(0.4)
-                        if isHovered {
-                            if kpi.id == "total" {
-                                Color.teal.opacity(0.06)
-                            } else {
-                                Color.primary.opacity(0.05)
-                            }
-                        } else {
-                            Color.primary.opacity(0.02)
-                        }
-                    }
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(
+                            isHovered
+                                ? (kpi.id == "total" ? Color.teal.opacity(0.065) : Color.primary.opacity(0.05))
+                                : Color.primary.opacity(0.026)
+                        )
                 )
                 .overlay {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .stroke(
                             LinearGradient(
                                 colors: isHovered
-                                    ? (kpi.id == "total" ? [Color.teal.opacity(0.35), Color.blue.opacity(0.15)] : [Color.primary.opacity(0.12), Color.primary.opacity(0.04)])
-                                    : [Color.primary.opacity(0.04), Color.primary.opacity(0.02)],
+                                    ? (kpi.id == "total" ? [Color.teal.opacity(0.32), Color.blue.opacity(0.14)] : [Color.primary.opacity(0.12), Color.primary.opacity(0.04)])
+                                    : [Color.primary.opacity(0.05), Color.primary.opacity(0.025)],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             ),
                             lineWidth: 0.6
                         )
                 }
-                .shadow(
-                    color: (kpi.id == "total" ? Color.teal : Color.black).opacity(isHovered ? 0.05 : 0.015),
-                    radius: isHovered ? 6 : 2.5,
-                    y: isHovered ? 3.5 : 1.2
-                )
-                .animation(.spring(response: 0.25, dampingFraction: 0.72), value: hoveredKPI)
                 .onHover { hovering in
                     hoveredKPI = hovering ? kpi.id : nil
                 }

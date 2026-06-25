@@ -234,8 +234,6 @@ struct TokenMeteringDashboardAnalyticsGrid: View {
                                     )
                                 )
                                 .frame(width: Swift.max(CGFloat(6), geometry.size.width * CGFloat(row.ratio)))
-                                .shadow(color: effectiveTint.opacity(isHovered ? 0.35 : 0.0), radius: 3, x: 0, y: 1)
-                                .animation(.snappy(duration: 0.35), value: row.ratio)
                         }
                     }
                     .frame(height: 6)
@@ -246,8 +244,6 @@ struct TokenMeteringDashboardAnalyticsGrid: View {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .fill(isHovered ? Color.primary.opacity(0.02) : Color.clear)
                 )
-                .offset(x: isHovered ? 2 : 0)
-                .animation(.spring(response: 0.22, dampingFraction: 0.75), value: hoveredRowID)
                 .onHover { hovering in
                     hoveredRowID = hovering ? liveUpdateID : nil
                 }

@@ -68,6 +68,25 @@ extension TokenUsageDashboardSnapshot {
         return formatter
     }
 
+    static func cachedDateFormatter(
+        dateStyle: DateFormatter.Style,
+        timeStyle: DateFormatter.Style,
+        locale: Locale,
+        timeZone: TimeZone
+    ) -> DateFormatter {
+        let key = "Spill.StyleFormatter.\(dateStyle).\(timeStyle).\(locale.identifier).\(timeZone.identifier)"
+        if let formatter = Thread.current.threadDictionary[key] as? DateFormatter {
+            return formatter
+        }
+        let formatter = DateFormatter()
+        formatter.dateStyle = dateStyle
+        formatter.timeStyle = timeStyle
+        formatter.locale = locale
+        formatter.timeZone = timeZone
+        Thread.current.threadDictionary[key] = formatter
+        return formatter
+    }
+
     static func formatLocalTimestamp(
         _ date: Date,
         now: Date,
@@ -78,18 +97,16 @@ extension TokenUsageDashboardSnapshot {
         var calendar = calendar
         calendar.timeZone = timeZone
 
-        let formatter = DateFormatter()
-        formatter.locale = locale
-        formatter.timeZone = timeZone
-
+        let template: String
         if calendar.isDate(date, inSameDayAs: now) {
-            formatter.setLocalizedDateFormatFromTemplate("jm")
+            template = "jm"
         } else if calendar.component(.year, from: date) == calendar.component(.year, from: now) {
-            formatter.setLocalizedDateFormatFromTemplate("MMM d jm")
+            template = "MMM d jm"
         } else {
-            formatter.setLocalizedDateFormatFromTemplate("y MMM d jm")
+            template = "y MMM d jm"
         }
 
+        let formatter = cachedLocalizedDateFormatter(template: template, locale: locale, timeZone: timeZone)
         return formatter.string(from: date)
     }
 
@@ -109,25 +126,25 @@ extension TokenUsageDashboardSnapshot {
         locale: Locale,
         timeZone: TimeZone
     ) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = locale
-        formatter.timeZone = timeZone
-        formatter.setLocalizedDateFormatFromTemplate("MMM d")
+        let formatter = cachedLocalizedDateFormatter(template: "MMM d", locale: locale, timeZone: timeZone)
         return formatter.string(from: date)
     }
 
     static func formatCalendarMonth(_ date: Date, locale: Locale, timeZone: TimeZone) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = locale
-        formatter.timeZone = timeZone
-        formatter.setLocalizedDateFormatFromTemplate("yMMMM")
+        let formatter = cachedLocalizedDateFormatter(template: "yMMMM", locale: locale, timeZone: timeZone)
         return formatter.string(from: date)
     }
 
     static func weekdayTitles(locale: Locale) -> [String] {
+        let key = "Spill.WeekdaySymbols.\(locale.identifier)"
+        if let symbols = Thread.current.threadDictionary[key] as? [String] {
+            return symbols
+        }
         let formatter = DateFormatter()
         formatter.locale = locale
-        return formatter.veryShortStandaloneWeekdaySymbols ?? ["S", "M", "T", "W", "T", "F", "S"]
+        let symbols = formatter.veryShortStandaloneWeekdaySymbols ?? ["S", "M", "T", "W", "T", "F", "S"]
+        Thread.current.threadDictionary[key] = symbols
+        return symbols
     }
 
     static func projectTitle(_ projectID: String, language: TokenMeteringLanguage = .current()) -> String {

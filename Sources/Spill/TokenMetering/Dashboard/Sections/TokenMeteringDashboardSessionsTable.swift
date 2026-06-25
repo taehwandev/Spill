@@ -7,6 +7,7 @@ struct TokenMeteringDashboardSessionsTable: View {
     let showsPlaceholder: Bool
     let requestClear: (TokenUsageClearScope) -> Void
     @State private var hoveredSessionID: String? = nil
+    @State private var hoveredProjectFilterID: String? = nil
 
     var body: some View {
         TokenMeteringDashboardPanel(
@@ -71,7 +72,9 @@ struct TokenMeteringDashboardSessionsTable: View {
     }
 
     private func projectFilterPill(_ filter: TokenUsageDashboardProjectFilter) -> some View {
-        Button {
+        let isHovered = hoveredProjectFilterID == filter.id
+        let isSelected = store.selectedProjectID == filter.projectID
+        return Button {
             store.setSelectedProjectID(filter.projectID)
         } label: {
             HStack(spacing: 6) {
@@ -82,19 +85,29 @@ struct TokenMeteringDashboardSessionsTable: View {
                     .lineLimit(1)
                 Text(filter.detail)
                     .font(.system(size: 9, weight: .medium, design: .monospaced))
-                    .foregroundStyle(filter.isSelected ? .white.opacity(0.82) : .secondary)
+                    .foregroundStyle(isSelected ? selectedControlAccent.opacity(0.82) : .secondary)
                     .lineLimit(1)
             }
-            .foregroundStyle(filter.isSelected ? .white : .primary)
+            .foregroundStyle(isSelected ? selectedControlAccent : .primary)
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             .background(
-                filter.isSelected ? selectedControlAccent : Color.primary.opacity(0.035),
+                isSelected
+                    ? selectedControlAccent.opacity(0.14)
+                    : Color.primary.opacity(isHovered ? 0.075 : 0.035),
                 in: Capsule()
             )
             .overlay {
                 Capsule()
-                    .stroke(filter.isSelected ? selectedControlAccent.opacity(0.32) : Color.primary.opacity(0.05), lineWidth: 0.5)
+                    .stroke(
+                        isSelected
+                            ? selectedControlAccent.opacity(0.28)
+                            : Color.primary.opacity(isHovered ? 0.12 : 0.05),
+                        lineWidth: 0.5
+                    )
+            }
+            .onHover { hovering in
+                hoveredProjectFilterID = hovering ? filter.id : nil
             }
         }
         .buttonStyle(.plain)
@@ -145,8 +158,6 @@ struct TokenMeteringDashboardSessionsTable: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
             .foregroundStyle(isSelected ? .white : .primary)
-            .scaleEffect(isHovered ? 1.008 : 1.0)
-            .offset(y: isHovered ? -0.5 : 0)
             .background(
                 ZStack {
                     if isSelected {
@@ -170,12 +181,6 @@ struct TokenMeteringDashboardSessionsTable: View {
                         lineWidth: 0.5
                     )
             }
-            .shadow(
-                color: (isSelected ? selectedControlAccent : Color.black).opacity(isHovered ? 0.03 : 0),
-                radius: isHovered ? 3 : 0,
-                y: isHovered ? 1.5 : 0
-            )
-            .animation(.spring(response: 0.22, dampingFraction: 0.75), value: hoveredSessionID)
             .onHover { hovering in
                 hoveredSessionID = hovering ? session.id : nil
             }

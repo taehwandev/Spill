@@ -46,8 +46,7 @@ struct TokenMeteringDashboardPanel<Content: View>: View {
         .padding(16)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(.ultraThinMaterial)
-                .shadow(color: Color.black.opacity(0.03), radius: 6, x: 0, y: 3)
+                .fill(Color.primary.opacity(0.025))
         )
         .overlay {
             RoundedRectangle(cornerRadius: 12, style: .continuous)

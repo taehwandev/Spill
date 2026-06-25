@@ -19,9 +19,6 @@ struct TokenMeteringLiveUpdateEffect: ViewModifier {
             }
             .animation(.easeOut(duration: 0.34), value: isFlashing)
             .animation(.easeOut(duration: 0.14), value: isActive)
-            .onAppear {
-                triggerFlash()
-            }
             .onChange(of: marker.sequence) { _, _ in
                 triggerFlash()
             }

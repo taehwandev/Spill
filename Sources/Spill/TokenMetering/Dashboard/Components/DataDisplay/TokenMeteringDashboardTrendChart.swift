@@ -93,13 +93,11 @@ struct TokenMeteringDashboardTrendChart: View {
                                                         endPoint: .bottom
                                                     )
                                                 )
-                                                .shadow(color: Color.teal.opacity(isHighlighted ? 0.35 : 0.0), radius: isHighlighted ? 5 : 3, x: 0, y: 1)
 
                                             if isHighlighted {
                                                 Circle()
                                                     .fill(Color.white)
                                                     .frame(width: 3.5, height: 3.5)
-                                                    .shadow(color: Color.teal, radius: 2)
                                                     .padding(.top, 2)
                                             }
                                         }
@@ -107,8 +105,6 @@ struct TokenMeteringDashboardTrendChart: View {
                                     }
                                 }
                                 .frame(height: chartHeight)
-                                .scaleEffect(x: isHighlighted ? 1.15 : 1.0, y: 1.0, anchor: .bottom)
-                                .animation(.spring(response: 0.2, dampingFraction: 0.72), value: isHighlighted)
 
                                 Text(bucket.title)
                                     .font(.system(size: 7.5, weight: isHighlighted ? .bold : .semibold, design: .monospaced))
@@ -120,15 +116,11 @@ struct TokenMeteringDashboardTrendChart: View {
                             .contentShape(Rectangle())
                             .onTapGesture {
                                 if bucket.hasEvents {
-                                    withAnimation(.spring(response: 0.22, dampingFraction: 0.75)) {
-                                        selectedBucketID = bucket.id
-                                    }
+                                    selectedBucketID = bucket.id
                                 }
                             }
                             .onHover { hovering in
-                                withAnimation(.easeOut(duration: 0.12)) {
-                                    hoveredBucketID = hovering ? bucket.id : nil
-                                }
+                                hoveredBucketID = hovering ? bucket.id : nil
                             }
                             .accessibilityLabel(bucket.detail)
                         }

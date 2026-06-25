@@ -221,14 +221,8 @@ extension TokenUsageDashboardSnapshot {
         }
         let maxTokens = max(1, resolvedDayTokenTotals.values.max() ?? 0)
 
-        let dayFormatter = DateFormatter()
-        dayFormatter.locale = locale
-        dayFormatter.timeZone = timeZone
-        dayFormatter.dateFormat = "d"
-        let calendarDayTitleFormatter = DateFormatter()
-        calendarDayTitleFormatter.locale = locale
-        calendarDayTitleFormatter.timeZone = timeZone
-        calendarDayTitleFormatter.setLocalizedDateFormatFromTemplate("MMM d")
+        let dayFormatter = cachedFixedDateFormatter(dateFormat: "d", locale: locale, timeZone: timeZone)
+        let calendarDayTitleFormatter = cachedLocalizedDateFormatter(template: "MMM d", locale: locale, timeZone: timeZone)
 
         var days: [TokenUsageDashboardCalendarDay] = []
         let firstWeekday = calendar.component(.weekday, from: monthStart)

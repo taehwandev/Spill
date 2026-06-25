@@ -21,9 +21,6 @@ struct TokenMeteringLiveUpdateDot: View {
         .frame(width: 7, height: 7)
         .animation(.easeOut(duration: 0.42), value: isPulsing)
         .animation(.easeOut(duration: 0.14), value: isActive)
-        .onAppear {
-            triggerPulse()
-        }
         .onChange(of: marker.sequence) { _, _ in
             triggerPulse()
         }
