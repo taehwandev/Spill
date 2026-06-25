@@ -2,21 +2,21 @@ import AppKit
 
 @MainActor
 final class MenuBarStatusContentView: NSView {
-    private static let sidePadding: CGFloat = 2
-    private static let gap: CGFloat = 4
+    private static let sidePadding: CGFloat = 0
+    private static let gap: CGFloat = 2
     private static let height: CGFloat = 22
     private static let metricChipHeight: CGFloat = 17
     private static let triggerChipHeight: CGFloat = 20
-    private static let iconOnlyChipWidth: CGFloat = 22
-    private static let triggerChipWidth: CGFloat = 30
-    private static let mainWithCaffeineChipWidth: CGFloat = 50
-    private static let compactStackChipMinWidth: CGFloat = 34
-    private static let compactStackHorizontalPadding: CGFloat = 16
+    private static let iconOnlyChipWidth: CGFloat = 20
+    private static let triggerChipWidth: CGFloat = 24
+    private static let mainWithCaffeineChipWidth: CGFloat = 42
+    private static let compactStackChipMinWidth: CGFloat = 32
+    private static let compactStackHorizontalPadding: CGFloat = 12
     fileprivate static let compactStackIconSize: CGFloat = 7
-    private static let verticalChipMinWidth: CGFloat = 33
-    private static let verticalHorizontalPadding: CGFloat = 9
-    private static let compactIconValueMinWidth: CGFloat = 24
-    private static let compactIconValueHorizontalPadding: CGFloat = 7
+    private static let verticalChipMinWidth: CGFloat = 31
+    private static let verticalHorizontalPadding: CGFloat = 7
+    private static let compactIconValueMinWidth: CGFloat = 22
+    private static let compactIconValueHorizontalPadding: CGFloat = 5
     static let defaultTextFontSize: CGFloat = 13.5
     static let minimumTextFontSize: CGFloat = 10
     static let maximumTextFontSize: CGFloat = 15

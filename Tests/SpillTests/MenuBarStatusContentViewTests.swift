@@ -424,14 +424,14 @@ final class MenuBarStatusContentViewTests: XCTestCase {
             trigger: trigger,
             statusSegments: [cpu, memory],
             caffeineSegment: caffeine,
-            maximumWidth: 104
+            maximumWidth: 86
         )
 
         XCTAssertEqual(segments.map(\.kind), [.caffeine, .trigger, .cpu])
         XCTAssertEqual(segments.prefix(2).map(\.kind), [.caffeine, .trigger])
         XCTAssertEqual(segments.first?.visualStyle, .symbolBadge)
         XCTAssertEqual(segments.last?.visualStyle, .valueOnly)
-        XCTAssertLessThanOrEqual(MenuBarStatusContentView.preferredWidth(for: segments), 104)
+        XCTAssertLessThanOrEqual(MenuBarStatusContentView.preferredWidth(for: segments), 86)
     }
 
     func testVisibleSegmentsKeepCaffeineWhenNoStatusCanFit() {

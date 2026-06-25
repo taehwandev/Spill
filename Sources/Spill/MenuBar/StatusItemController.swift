@@ -345,6 +345,20 @@ final class StatusItemController: NSObject {
             return fittedSegments
         }
 
+        let essentialSegments = orderedSegments(
+            trigger: trigger,
+            statusSegments: [],
+            caffeineSegment: compactCaffeineSegment
+        )
+        guard MenuBarStatusContentView.preferredWidth(
+            for: essentialSegments,
+            layoutStyle: layoutStyle,
+            textFontSize: textFontSize,
+            textIsBold: textIsBold
+        ) > maximumWidth else {
+            return essentialSegments
+        }
+
         visibleStatusSegments = statusSegments.map { $0.valueOnlyMenuBarSegment() }
         fittedSegments = orderedSegments(
             trigger: trigger,
@@ -375,20 +389,6 @@ final class StatusItemController: NSObject {
                textIsBold: textIsBold
            ) <= maximumWidth {
             return fittedSegments
-        }
-
-        let essentialSegments = orderedSegments(
-            trigger: trigger,
-            statusSegments: [],
-            caffeineSegment: compactCaffeineSegment
-        )
-        guard MenuBarStatusContentView.preferredWidth(
-            for: essentialSegments,
-            layoutStyle: layoutStyle,
-            textFontSize: textFontSize,
-            textIsBold: textIsBold
-        ) > maximumWidth else {
-            return essentialSegments
         }
 
         return [trigger]
