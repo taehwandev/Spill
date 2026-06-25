@@ -125,7 +125,7 @@ private struct PreferencesSidebarItem: View {
             HStack(spacing: 8) {
                 Image(systemName: imageName)
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(isSelected ? .white : (isHovered ? .primary : .secondary))
+                    .foregroundStyle(isSelected ? .white : (isHovered ? .primary : .primary.opacity(0.65)))
                     .frame(width: 16, height: 16)
                     .scaleEffect(isHovered && !isSelected ? 1.08 : 1.0)
 
@@ -151,7 +151,7 @@ private struct PreferencesSidebarItem: View {
                         .shadow(color: Color.accentColor.opacity(0.24), radius: 4, x: 0, y: 1.5)
                 } else {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(isHovered ? Color.primary.opacity(0.06) : Color.clear)
+                        .fill(isHovered ? Color.primary.opacity(0.08) : Color.clear)
                 }
             }
         }

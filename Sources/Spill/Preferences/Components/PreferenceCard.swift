@@ -42,12 +42,14 @@ struct PreferenceCard<Content: View>: View {
             content
         }
         .padding(16)
-        .background(.ultraThinMaterial)
-        .cornerRadius(12)
-        .shadow(color: Color.black.opacity(0.03), radius: 6, x: 0, y: 3)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color(NSColor.controlBackgroundColor).opacity(0.65))
+        )
+        .shadow(color: Color.black.opacity(0.04), radius: 8, x: 0, y: 4)
         .overlay {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(Color.primary.opacity(0.07), lineWidth: 0.5)
+                .stroke(Color.primary.opacity(0.09), lineWidth: 0.5)
         }
     }
 }

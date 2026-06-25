@@ -9,11 +9,6 @@ struct PowerPreferencesSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 10) {
-                Label(t(.caffeine), systemImage: "cup.and.saucer.fill")
-                Spacer()
-            }
-
             Picker(t(.defaultDuration), selection: $settings.sleepGuardDefaultDuration) {
                 ForEach(settings.availableSleepGuardDurations) { duration in
                     Text(AppL10n.sleepDurationTitle(duration, appLanguage: settings.appLanguage))

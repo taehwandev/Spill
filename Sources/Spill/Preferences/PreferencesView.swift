@@ -45,7 +45,7 @@ struct PreferencesView: View {
                 .padding(.bottom, 14)
 
                 // Scrollable Content
-                ScrollView(.vertical, showsIndicators: false) {
+                ScrollView(.vertical) {
                     detailContent(for: navigationState.selectedTab)
                         .padding(.horizontal, 24)
                         .padding(.bottom, 24)
