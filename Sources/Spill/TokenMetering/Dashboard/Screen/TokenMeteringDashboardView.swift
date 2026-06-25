@@ -56,11 +56,14 @@ struct TokenMeteringDashboardView: View {
     }
 
     private var selectedControlAccent: Color {
-        TokenMeteringDashboardToolPalette.codex
+        store.selectedTool?.dashboardTint ?? TokenMeteringDashboardToolPalette.antigravity
     }
 
     private var selectedControlAccentHighlight: Color {
-        Color(red: 0.06, green: 0.84, blue: 0.88)
+        if let tool = store.selectedTool {
+            return tool.dashboardTint.opacity(1.15)
+        }
+        return TokenMeteringDashboardToolPalette.antigravity.opacity(1.15)
     }
 
     var body: some View {
@@ -366,8 +369,8 @@ struct TokenMeteringDashboardView: View {
                         }
                     }
                     Text(kpi.value)
-                        .font(.system(size: 21, weight: .bold, design: .rounded))
-                        .foregroundStyle(kpi.id == "total" ? .teal : .primary)
+                        .font(.system(size: 23, weight: .heavy, design: .rounded))
+                        .foregroundStyle(kpi.id == "total" ? selectedControlAccent : .primary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.72)
                         .contentTransition(.numericText())
@@ -393,8 +396,8 @@ struct TokenMeteringDashboardView: View {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .fill(
                             isHovered
-                                ? (kpi.id == "total" ? Color.teal.opacity(0.065) : Color.primary.opacity(0.05))
-                                : Color.primary.opacity(0.026)
+                                ? (kpi.id == "total" ? selectedControlAccent.opacity(0.09) : Color.primary.opacity(0.055))
+                                : Color(NSColor.controlBackgroundColor).opacity(0.55)
                         )
                 )
                 .overlay {
@@ -402,8 +405,8 @@ struct TokenMeteringDashboardView: View {
                         .stroke(
                             LinearGradient(
                                 colors: isHovered
-                                    ? (kpi.id == "total" ? [Color.teal.opacity(0.32), Color.blue.opacity(0.14)] : [Color.primary.opacity(0.12), Color.primary.opacity(0.04)])
-                                    : [Color.primary.opacity(0.05), Color.primary.opacity(0.025)],
+                                    ? (kpi.id == "total" ? [selectedControlAccent.opacity(0.36), selectedControlAccent.opacity(0.16)] : [Color.primary.opacity(0.14), Color.primary.opacity(0.05)])
+                                    : [Color.primary.opacity(0.08), Color.primary.opacity(0.04)],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             ),

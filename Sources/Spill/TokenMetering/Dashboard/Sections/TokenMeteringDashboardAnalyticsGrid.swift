@@ -223,12 +223,12 @@ struct TokenMeteringDashboardAnalyticsGrid: View {
 
                     GeometryReader { geometry in
                         ZStack(alignment: .leading) {
-                            RoundedRectangle(cornerRadius: 3, style: .continuous)
-                                .fill(Color.primary.opacity(0.04))
-                            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                .fill(Color.primary.opacity(0.075))
+                            RoundedRectangle(cornerRadius: 4, style: .continuous)
                                 .fill(
                                     LinearGradient(
-                                        colors: isHovered ? [effectiveTint, effectiveTint.opacity(0.7)] : [effectiveTint.opacity(0.85), effectiveTint.opacity(0.55)],
+                                        colors: isHovered ? [effectiveTint, effectiveTint.opacity(0.75)] : [effectiveTint.opacity(0.9), effectiveTint.opacity(0.65)],
                                         startPoint: .leading,
                                         endPoint: .trailing
                                     )
@@ -236,7 +236,7 @@ struct TokenMeteringDashboardAnalyticsGrid: View {
                                 .frame(width: Swift.max(CGFloat(6), geometry.size.width * CGFloat(row.ratio)))
                         }
                     }
-                    .frame(height: 6)
+                    .frame(height: 8)
                 }
                 .padding(.horizontal, 6)
                 .padding(.vertical, 5)
@@ -347,14 +347,14 @@ private struct TokenMeteringDashboardTrendBucketSummary: View {
 
                             GeometryReader { geometry in
                                 ZStack(alignment: .leading) {
-                                    RoundedRectangle(cornerRadius: 2.5, style: .continuous)
-                                        .fill(Color.primary.opacity(0.05))
-                                    RoundedRectangle(cornerRadius: 2.5, style: .continuous)
-                                        .fill(tint.opacity(0.8))
+                                    RoundedRectangle(cornerRadius: 3, style: .continuous)
+                                        .fill(Color.primary.opacity(0.085))
+                                    RoundedRectangle(cornerRadius: 3, style: .continuous)
+                                        .fill(tint.opacity(0.85))
                                         .frame(width: Swift.max(CGFloat(5), geometry.size.width * CGFloat(row.ratio)))
                                 }
                             }
-                            .frame(height: 5)
+                            .frame(height: 6.5)
 
                             Text(row.value)
                                 .font(.system(size: 9.5, weight: .bold, design: .monospaced))
