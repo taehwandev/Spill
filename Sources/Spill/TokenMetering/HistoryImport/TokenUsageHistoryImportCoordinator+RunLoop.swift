@@ -17,6 +17,7 @@ extension TokenUsageHistoryImportCoordinator {
             let mode = toolPlans[tool] ?? .firstImport
             publishToolState(tool, state: .running, message: nil)
             let result = runToolImport(tool, mode: mode)
+            reportFailureIfNeeded(tool, mode: mode, result: result)
 
             let finishedAt = Date()
             let successfulAt = result.state == .completed ? finishedAt : nil
@@ -63,6 +64,18 @@ extension TokenUsageHistoryImportCoordinator {
         case .antigravity:
             return runAntigravityImport(mode: mode)
         }
+    }
+
+    func reportFailureIfNeeded(
+        _ tool: TokenUsageHistoryImportTool,
+        mode: TokenUsageHistoryImportMode,
+        result: TokenUsageHistoryToolResult
+    ) {
+        guard result.state == .failed else {
+            return
+        }
+
+        failureReporter(tool, mode, result)
     }
 
 }

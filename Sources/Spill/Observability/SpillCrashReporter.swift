@@ -13,13 +13,20 @@ enum SpillCrashReporter {
     private static let gitShaInfoKey = "SPILLGitCommitSHA"
     private static let disabledEnvironmentKey = "SPILL_SENTRY_DISABLED"
 
+    static var isReportingEnabled: Bool {
+        ProcessInfo.processInfo.environment[disabledEnvironmentKey] != "1"
+            && ProcessInfo.processInfo.environment["SPILL_SMOKE_TEST"] != "1"
+    }
+
     static func start(processRole: String) {
-        guard ProcessInfo.processInfo.environment[disabledEnvironmentKey] != "1",
-              ProcessInfo.processInfo.environment["SPILL_SMOKE_TEST"] != "1",
+        guard isReportingEnabled,
               let configuration = Configuration.current
         else {
             return
         }
+
+        let lifecycleMarker = LifecycleMarker(processRole: processRole)
+        let previousState = lifecycleMarker.read()
 
         SentrySDK.start { options in
             options.dsn = configuration.dsn
@@ -46,6 +53,27 @@ enum SpillCrashReporter {
                 return event
             }
         }
+
+        if previousState?.state == "running" {
+            capturePreviousUncleanExit(processRole: processRole)
+        }
+        lifecycleMarker.markRunning()
+    }
+
+    static func markCleanShutdown(processRole: String) {
+        guard isReportingEnabled else {
+            return
+        }
+
+        LifecycleMarker(processRole: processRole).markCleanShutdown()
+    }
+
+    static func markUncleanShutdownPending(processRole: String) {
+        guard isReportingEnabled else {
+            return
+        }
+
+        LifecycleMarker(processRole: processRole).markRunning()
     }
 
     private static func sanitizedTags(
@@ -60,6 +88,14 @@ enum SpillCrashReporter {
         }
         return tags
     }
+
+    private static func capturePreviousUncleanExit(processRole: String) {
+        SentrySDK.capture(message: "spill.previous_unclean_exit") { scope in
+            scope.setTag(value: processRole, key: "process_role")
+            scope.setTag(value: "previous_unclean_exit", key: "spill_lifecycle")
+        }
+    }
+
 }
 
 private extension SpillCrashReporter {
@@ -112,6 +148,64 @@ private extension SpillCrashReporter {
                 return nil
             }
             return trimmed
+        }
+    }
+}
+
+private extension SpillCrashReporter {
+    struct LifecycleState: Codable {
+        let state: String
+        let processRole: String
+        let updatedAt: Date
+
+        static func running(processRole: String) -> Self {
+            Self(state: "running", processRole: processRole, updatedAt: Date())
+        }
+
+        static func cleanShutdown(processRole: String) -> Self {
+            Self(state: "clean_shutdown", processRole: processRole, updatedAt: Date())
+        }
+    }
+
+    struct LifecycleMarker {
+        let processRole: String
+
+        func read() -> LifecycleState? {
+            guard let data = try? Data(contentsOf: markerURL) else {
+                return nil
+            }
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            return try? decoder.decode(LifecycleState.self, from: data)
+        }
+
+        func markRunning() {
+            write(.running(processRole: processRole))
+        }
+
+        func markCleanShutdown() {
+            write(.cleanShutdown(processRole: processRole))
+        }
+
+        private var markerURL: URL {
+            AppDirectories.spillApplicationSupportDirectory()
+                .appendingPathComponent("diagnostics", isDirectory: true)
+                .appendingPathComponent("lifecycle-\(processRole).json")
+        }
+
+        private func write(_ state: LifecycleState) {
+            do {
+                try FileManager.default.createDirectory(
+                    at: markerURL.deletingLastPathComponent(),
+                    withIntermediateDirectories: true
+                )
+                let encoder = JSONEncoder()
+                encoder.dateEncodingStrategy = .iso8601
+                let data = try encoder.encode(state)
+                try data.write(to: markerURL, options: [.atomic])
+            } catch {
+                return
+            }
         }
     }
 }

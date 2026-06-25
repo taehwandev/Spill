@@ -1,12 +1,17 @@
 import Foundation
 
-struct TokenUsageHistoryToolResult {
+struct TokenUsageHistoryToolResult: Equatable {
     let state: TokenUsageHistoryImportToolState
     let scannedSources: Int
     let importedEvents: Int
     let skippedDuplicates: Int
     let unsupportedRecords: Int
     let message: String?
+    let failureStage: TokenUsageHistoryImportFailureStage?
+    let failureReason: TokenUsageHistoryImportFailureReason?
+    let exitCode: Int32?
+    let timedOut: Bool
+    let durationSeconds: TimeInterval?
 
     static func completed(
         scannedSources: Int,
@@ -21,7 +26,12 @@ struct TokenUsageHistoryToolResult {
             importedEvents: importedEvents,
             skippedDuplicates: skippedDuplicates,
             unsupportedRecords: unsupportedRecords,
-            message: message
+            message: message,
+            failureStage: nil,
+            failureReason: nil,
+            exitCode: nil,
+            timedOut: false,
+            durationSeconds: nil
         )
     }
 
@@ -32,18 +42,39 @@ struct TokenUsageHistoryToolResult {
             importedEvents: 0,
             skippedDuplicates: 0,
             unsupportedRecords: 0,
-            message: message
+            message: message,
+            failureStage: nil,
+            failureReason: nil,
+            exitCode: nil,
+            timedOut: false,
+            durationSeconds: nil
         )
     }
 
-    static func failed(_ message: String) -> Self {
+    static func failed(
+        _ message: String,
+        failureStage: TokenUsageHistoryImportFailureStage = .unknown,
+        failureReason: TokenUsageHistoryImportFailureReason = .unknownFailed,
+        exitCode: Int32? = nil,
+        timedOut: Bool = false,
+        durationSeconds: TimeInterval? = nil,
+        scannedSources: Int = 0,
+        importedEvents: Int = 0,
+        skippedDuplicates: Int = 0,
+        unsupportedRecords: Int = 0
+    ) -> Self {
         Self(
             state: .failed,
-            scannedSources: 0,
-            importedEvents: 0,
-            skippedDuplicates: 0,
-            unsupportedRecords: 0,
-            message: message
+            scannedSources: scannedSources,
+            importedEvents: importedEvents,
+            skippedDuplicates: skippedDuplicates,
+            unsupportedRecords: unsupportedRecords,
+            message: message,
+            failureStage: failureStage,
+            failureReason: failureReason,
+            exitCode: exitCode,
+            timedOut: timedOut,
+            durationSeconds: durationSeconds
         )
     }
 
@@ -54,7 +85,12 @@ struct TokenUsageHistoryToolResult {
             importedEvents: 0,
             skippedDuplicates: 0,
             unsupportedRecords: 0,
-            message: message
+            message: message,
+            failureStage: nil,
+            failureReason: nil,
+            exitCode: nil,
+            timedOut: false,
+            durationSeconds: nil
         )
     }
 }

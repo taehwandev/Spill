@@ -4,6 +4,7 @@ import Foundation
 final class TokenUsageHistoryImportCoordinator: ObservableObject, @unchecked Sendable {
     typealias ProcessRunner = (TokenUsageHistoryImportProcessContext) -> TokenUsageHistoryImportProcessResult
     typealias AntigravityImportRunner = (TokenUsageStore, Date, @escaping () -> Bool) -> TokenUsageAntigravityImportSummary
+    typealias FailureReporter = (TokenUsageHistoryImportTool, TokenUsageHistoryImportMode, TokenUsageHistoryToolResult) -> Void
 
     static let importerVersion = 1
     static let incrementalLookbackHours = 48
@@ -22,6 +23,7 @@ final class TokenUsageHistoryImportCoordinator: ObservableObject, @unchecked Sen
     let python3ExecutableURLProvider: () -> URL?
     let antigravityImportRunner: AntigravityImportRunner
     let processRunner: ProcessRunner
+    let failureReporter: FailureReporter
     let historyStateDirectory: URL
     var isImportRunning = false
     var isCancellationRequested = false
@@ -50,7 +52,10 @@ final class TokenUsageHistoryImportCoordinator: ObservableObject, @unchecked Sen
         },
         historyStateDirectory: URL = TokenUsageHistoryImportCoordinator.defaultHistoryStateDirectory(),
         antigravityImportRunner: AntigravityImportRunner? = nil,
-        processRunner: @escaping ProcessRunner = TokenUsageHistoryImportProcessRunner.run(context:)
+        processRunner: @escaping ProcessRunner = TokenUsageHistoryImportProcessRunner.run(context:),
+        failureReporter: @escaping FailureReporter = { tool, mode, result in
+            SpillCrashReporter.captureTokenHistoryImportFailure(tool: tool, mode: mode, result: result)
+        }
     ) {
         self.store = store
         self.stateStore = stateStore
@@ -59,6 +64,7 @@ final class TokenUsageHistoryImportCoordinator: ObservableObject, @unchecked Sen
         self.nodeExecutableURLProvider = nodeExecutableURLProvider
         self.python3ExecutableURLProvider = python3ExecutableURLProvider
         self.processRunner = processRunner
+        self.failureReporter = failureReporter
         self.historyStateDirectory = historyStateDirectory
         self.antigravityImportRunner = antigravityImportRunner ?? { store, startDate, shouldCancel in
             TokenUsageAntigravityImporter(

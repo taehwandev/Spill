@@ -37,6 +37,7 @@ enum TokenUsageHistoryImportProcessRunner {
             errorBuffer.append(handle.availableData)
         }
 
+        let startedAt = Date()
         do {
             try process.run()
         } catch {
@@ -46,12 +47,12 @@ enum TokenUsageHistoryImportProcessRunner {
                 exitCode: -1,
                 stdout: "",
                 stderr: "",
-                timedOut: false
+                timedOut: false,
+                durationSeconds: Date().timeIntervalSince(startedAt)
             )
         }
 
         context.processDidStart(process)
-        let startedAt = Date()
         var timedOut = false
         var didRequestTermination = false
 
@@ -85,7 +86,8 @@ enum TokenUsageHistoryImportProcessRunner {
             exitCode: process.isRunning ? -1 : process.terminationStatus,
             stdout: outputBuffer.stringValue,
             stderr: errorBuffer.stringValue,
-            timedOut: timedOut
+            timedOut: timedOut,
+            durationSeconds: Date().timeIntervalSince(startedAt)
         )
     }
 

@@ -8,7 +8,11 @@ extension TokenUsageHistoryImportCoordinator {
             return .unavailable("Codex importer is not installed.")
         }
         guard let nodeURL = nodeExecutableURLProvider() else {
-            return .failed("Node executable is unavailable.")
+            return .failed(
+                "Node executable is unavailable.",
+                failureStage: .locateRuntime,
+                failureReason: .nodeUnavailable
+            )
         }
 
         let arguments = [
@@ -24,12 +28,26 @@ extension TokenUsageHistoryImportCoordinator {
             return .cancelled("Cancelled by user.")
         }
         guard processResult.exitCode == 0, !processResult.timedOut else {
-            return .failed(processResult.timedOut ? "Codex import timed out." : "Codex import failed.")
+            return .failed(
+                processResult.timedOut ? "Codex import timed out." : "Codex import failed.",
+                failureStage: .process,
+                failureReason: processResult.timedOut ? .timeout : .processFailed,
+                exitCode: processResult.exitCode,
+                timedOut: processResult.timedOut,
+                durationSeconds: processResult.durationSeconds
+            )
         }
 
         let summary = ProcessJSONSummary(processResult.stdout)
         guard summary.isValid else {
-            return .failed("Codex import did not return a valid summary.")
+            return .failed(
+                "Codex import did not return a valid summary.",
+                failureStage: .parseSummary,
+                failureReason: .invalidSummary,
+                exitCode: processResult.exitCode,
+                timedOut: processResult.timedOut,
+                durationSeconds: processResult.durationSeconds
+            )
         }
         guard summary.scannedSources > 0 || summary.importedEvents > 0 || summary.skippedDuplicates > 0 else {
             return noHistoryResult(
@@ -55,7 +73,11 @@ extension TokenUsageHistoryImportCoordinator {
             return .unavailable("Claude Code importer is not installed.")
         }
         guard let python3URL = python3ExecutableURLProvider() else {
-            return .failed("Python 3 executable is unavailable.")
+            return .failed(
+                "Python 3 executable is unavailable.",
+                failureStage: .locateRuntime,
+                failureReason: .pythonUnavailable
+            )
         }
 
         let claudeProjectsDir = FileManager.default.homeDirectoryForCurrentUser
@@ -84,12 +106,26 @@ extension TokenUsageHistoryImportCoordinator {
             return .cancelled("Cancelled by user.")
         }
         guard processResult.exitCode == 0, !processResult.timedOut else {
-            return .failed(processResult.timedOut ? "Claude import timed out." : "Claude import failed.")
+            return .failed(
+                processResult.timedOut ? "Claude import timed out." : "Claude import failed.",
+                failureStage: .process,
+                failureReason: processResult.timedOut ? .timeout : .processFailed,
+                exitCode: processResult.exitCode,
+                timedOut: processResult.timedOut,
+                durationSeconds: processResult.durationSeconds
+            )
         }
 
         let summary = ProcessJSONSummary(processResult.stdout)
         guard summary.isValid else {
-            return .failed("Claude import did not return a valid summary.")
+            return .failed(
+                "Claude import did not return a valid summary.",
+                failureStage: .parseSummary,
+                failureReason: .invalidSummary,
+                exitCode: processResult.exitCode,
+                timedOut: processResult.timedOut,
+                durationSeconds: processResult.durationSeconds
+            )
         }
         guard summary.scannedSources > 0 || summary.importedEvents > 0 || summary.skippedDuplicates > 0 else {
             return noHistoryResult(
@@ -134,7 +170,15 @@ extension TokenUsageHistoryImportCoordinator {
             return .cancelled("Cancelled by user.")
         }
         if summary.failedToWriteEvents {
-            return .failed("Antigravity/AGY import failed while writing usage events.")
+            return .failed(
+                "Antigravity/AGY import failed while writing usage events.",
+                failureStage: .write,
+                failureReason: .writeFailed,
+                scannedSources: summary.scannedDatabases,
+                importedEvents: summary.importedEvents,
+                skippedDuplicates: summary.skippedDuplicateEvents,
+                unsupportedRecords: summary.unsupportedRecords
+            )
         }
         guard summary.scannedDatabases > 0 || summary.importedEvents > 0 || summary.skippedDuplicateEvents > 0 else {
             return noHistoryResult(

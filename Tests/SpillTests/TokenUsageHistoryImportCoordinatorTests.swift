@@ -218,7 +218,7 @@ final class TokenUsageHistoryImportCoordinatorTests: XCTestCase {
                 )
             },
             processRunner: { _ in
-                TokenUsageHistoryImportProcessResult(exitCode: 0, stdout: "{}", stderr: "", timedOut: false)
+                TokenUsageHistoryImportProcessResult(exitCode: 0, stdout: "{}", stderr: "", timedOut: false, durationSeconds: 0.1)
             }
         )
 
@@ -269,7 +269,7 @@ final class TokenUsageHistoryImportCoordinatorTests: XCTestCase {
                 )
             },
             processRunner: { _ in
-                TokenUsageHistoryImportProcessResult(exitCode: 0, stdout: "{}", stderr: "", timedOut: false)
+                TokenUsageHistoryImportProcessResult(exitCode: 0, stdout: "{}", stderr: "", timedOut: false, durationSeconds: 0.1)
             }
         )
 
@@ -303,8 +303,9 @@ final class TokenUsageHistoryImportCoordinatorTests: XCTestCase {
     func testOneImporterFailureDoesNotSkipRemainingTools() throws {
         let fixture = try HistoryImportFixture()
         let recorder = HistoryImportRecorder()
+        let failureRecorder = HistoryImportFailureRecorder()
         recorder.codexExitCode = 1
-        let coordinator = fixture.makeCoordinator(recorder: recorder)
+        let coordinator = fixture.makeCoordinator(recorder: recorder, failureReporter: failureRecorder.record(tool:mode:result:))
 
         coordinator.startImport()
         waitForHistoryImport(coordinator)
@@ -313,6 +314,14 @@ final class TokenUsageHistoryImportCoordinatorTests: XCTestCase {
         XCTAssertEqual(recorder.antigravityStartDates.count, 1)
         XCTAssertEqual(coordinator.snapshot.tools.map(\.tool), [.codex, .claude, .antigravity])
         XCTAssertEqual(coordinator.snapshot.tools.map(\.state), [.failed, .completed, .completed])
+        XCTAssertEqual(failureRecorder.reports.map(\.tool), [.codex])
+        XCTAssertEqual(failureRecorder.reports.map(\.mode), [.firstImport])
+        XCTAssertEqual(failureRecorder.reports.map(\.result.state), [.failed])
+        XCTAssertEqual(failureRecorder.reports.first?.result.failureStage, .process)
+        XCTAssertEqual(failureRecorder.reports.first?.result.failureReason, .processFailed)
+        XCTAssertEqual(failureRecorder.reports.first?.result.exitCode, 1)
+        XCTAssertEqual(failureRecorder.reports.first?.result.timedOut, false)
+        XCTAssertNotNil(failureRecorder.reports.first?.result.durationSeconds)
     }
 
     func testEmptySuccessfulProcessOutputIsFailureInsteadOfUnavailable() throws {
@@ -360,6 +369,7 @@ final class TokenUsageHistoryImportCoordinatorTests: XCTestCase {
     func testAntigravityWriteFailureDoesNotMarkFirstImportSuccessful() throws {
         let fixture = try HistoryImportFixture()
         let recorder = HistoryImportRecorder()
+        let failureRecorder = HistoryImportFailureRecorder()
         recorder.antigravitySummary = TokenUsageAntigravityImportSummary(
             scannedDatabases: 1,
             scannedGenerationRows: 200,
@@ -371,7 +381,7 @@ final class TokenUsageHistoryImportCoordinatorTests: XCTestCase {
             cursorAdvancedDatabases: 0,
             failedToWriteEvents: true
         )
-        let coordinator = fixture.makeCoordinator(recorder: recorder)
+        let coordinator = fixture.makeCoordinator(recorder: recorder, failureReporter: failureRecorder.record(tool:mode:result:))
 
         coordinator.startImport()
         waitForHistoryImport(coordinator)
@@ -379,6 +389,36 @@ final class TokenUsageHistoryImportCoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.snapshot.tools.map(\.state), [.completed, .completed, .failed])
         XCTAssertFalse(fixture.stateStore.hasCompletedFirstImport(for: .antigravity))
         XCTAssertNil(fixture.stateStore.lastSuccessfulImportAt(for: .antigravity))
+        XCTAssertEqual(failureRecorder.reports.map(\.tool), [.antigravity])
+        XCTAssertEqual(failureRecorder.reports.first?.result.failureStage, .write)
+        XCTAssertEqual(failureRecorder.reports.first?.result.failureReason, .writeFailed)
+        XCTAssertEqual(failureRecorder.reports.first?.result.scannedSources, 1)
+        XCTAssertEqual(failureRecorder.reports.first?.result.importedEvents, 0)
+        XCTAssertEqual(failureRecorder.reports.first?.result.unsupportedRecords, 0)
+    }
+
+    func testPrepareFailurePersistsLastRunForSelectedTool() throws {
+        let fixture = try HistoryImportFixture()
+        let recorder = HistoryImportRecorder()
+        let failureRecorder = HistoryImportFailureRecorder()
+        try Data("not a directory".utf8).write(to: fixture.historyStateDirectory)
+        let coordinator = fixture.makeCoordinator(
+            recorder: recorder,
+            failureReporter: failureRecorder.record(tool:mode:result:)
+        )
+
+        coordinator.startImport(for: .codex)
+
+        let codex = try XCTUnwrap(coordinator.snapshot.tools.first { $0.tool == .codex })
+        XCTAssertEqual(codex.state, .failed)
+        XCTAssertEqual(codex.message, "Failed to prepare local token history sync.")
+        XCTAssertEqual(failureRecorder.reports.map(\.tool), [.codex])
+        XCTAssertEqual(failureRecorder.reports.first?.result.failureStage, .prepare)
+        XCTAssertEqual(failureRecorder.reports.first?.result.failureReason, .prepareFailed)
+
+        let lastRun = try XCTUnwrap(fixture.stateStore.lastRun(for: .codex))
+        XCTAssertEqual(lastRun.state, .failed)
+        XCTAssertEqual(lastRun.message, "Failed to prepare local token history sync.")
     }
 
     func testHistoryImportPrefersBundledAdapterOverInstalledAdapter() throws {
@@ -1187,7 +1227,8 @@ private final class HistoryImportRecorder: @unchecked Sendable {
             exitCode: exitCode,
             stdout: stdout,
             stderr: "",
-            timedOut: false
+            timedOut: false,
+            durationSeconds: 0.1
         )
     }
 
@@ -1200,6 +1241,31 @@ private final class HistoryImportRecorder: @unchecked Sendable {
             storedAntigravityStartDates.append(startDate)
         }
         return antigravitySummary
+    }
+}
+
+private final class HistoryImportFailureRecorder: @unchecked Sendable {
+    struct Report: Equatable {
+        let tool: TokenUsageHistoryImportTool
+        let mode: TokenUsageHistoryImportMode
+        let result: TokenUsageHistoryToolResult
+    }
+
+    private let lock = NSLock()
+    private var storedReports = [Report]()
+
+    var reports: [Report] {
+        lock.withLock { storedReports }
+    }
+
+    func record(
+        tool: TokenUsageHistoryImportTool,
+        mode: TokenUsageHistoryImportMode,
+        result: TokenUsageHistoryToolResult
+    ) {
+        lock.withLock {
+            storedReports.append(Report(tool: tool, mode: mode, result: result))
+        }
     }
 }
 
@@ -1234,7 +1300,10 @@ private struct HistoryImportFixture {
         stateStore = TokenUsageHistoryImportStateStore(defaults: defaults, keyPrefix: suiteName)
     }
 
-    func makeCoordinator(recorder: HistoryImportRecorder) -> TokenUsageHistoryImportCoordinator {
+    func makeCoordinator(
+        recorder: HistoryImportRecorder,
+        failureReporter: @escaping TokenUsageHistoryImportCoordinator.FailureReporter = { _, _, _ in }
+    ) -> TokenUsageHistoryImportCoordinator {
         recorder.codexImporterPath = codexImporterURL.path
         return TokenUsageHistoryImportCoordinator(
             store: store,
@@ -1245,7 +1314,8 @@ private struct HistoryImportFixture {
             python3ExecutableURLProvider: { URL(fileURLWithPath: "/usr/bin/env") },
             historyStateDirectory: historyStateDirectory,
             antigravityImportRunner: recorder.antigravityResult(store:startDate:shouldCancel:),
-            processRunner: recorder.processResult(context:)
+            processRunner: recorder.processResult(context:),
+            failureReporter: failureReporter
         )
     }
 }

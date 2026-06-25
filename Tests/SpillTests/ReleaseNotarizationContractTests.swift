@@ -82,7 +82,12 @@ final class ReleaseNotarizationContractTests: XCTestCase {
         let package = try read("Package.swift")
         let buildScript = try read("scripts/build-app.sh")
         let entryPoint = try read("Sources/Spill/AppLifecycle/SpillMain.swift")
-        let crashReporter = try read("Sources/Spill/Observability/SpillCrashReporter.swift")
+        let crashReporter = try [
+            "Sources/Spill/Observability/SpillCrashReporter.swift",
+            "Sources/Spill/Observability/SpillCrashReporter+TokenHistoryImport.swift",
+        ]
+        .map(read)
+        .joined(separator: "\n")
 
         XCTAssertTrue(package.contains("https://github.com/getsentry/sentry-cocoa.git"))
         XCTAssertTrue(package.contains(".product(name: \"Sentry\", package: \"sentry-cocoa\")"))
@@ -108,7 +113,25 @@ final class ReleaseNotarizationContractTests: XCTestCase {
         XCTAssertTrue(crashReporter.contains("event.breadcrumbs = []"))
         XCTAssertTrue(crashReporter.contains("event.extra = nil"))
         XCTAssertTrue(crashReporter.contains("tags[\"process_role\"] = processRole"))
+        XCTAssertTrue(crashReporter.contains("capturePreviousUncleanExit(processRole: processRole)"))
+        XCTAssertTrue(crashReporter.contains("SentrySDK.capture(message: \"spill.previous_unclean_exit\""))
+        XCTAssertTrue(crashReporter.contains("LifecycleMarker(processRole: processRole).markCleanShutdown()"))
+        XCTAssertTrue(crashReporter.contains("markUncleanShutdownPending(processRole: String)"))
+        XCTAssertTrue(crashReporter.contains("lifecycle-\\(processRole).json"))
+        XCTAssertTrue(crashReporter.contains("captureTokenHistoryImportFailure"))
+        XCTAssertTrue(crashReporter.contains("SentrySDK.capture(message: \"spill.token_history_import_failed\""))
+        XCTAssertTrue(crashReporter.contains("history_import_tool"))
+        XCTAssertTrue(crashReporter.contains("history_import_stage"))
+        XCTAssertTrue(crashReporter.contains("history_import_timed_out"))
+        XCTAssertTrue(crashReporter.contains("history_import_exit_code"))
+        XCTAssertTrue(crashReporter.contains("history_import_duration"))
+        XCTAssertTrue(crashReporter.contains("history_importer_version"))
+        XCTAssertTrue(crashReporter.contains("usage_event_schema"))
+        XCTAssertTrue(crashReporter.contains("bucketedCount(result.scannedSources)"))
+        XCTAssertTrue(crashReporter.contains("bucketedExitCode(result.exitCode)"))
+        XCTAssertTrue(crashReporter.contains("bucketedDuration(result.durationSeconds)"))
         XCTAssertFalse(crashReporter.contains("token_usage"))
+        XCTAssertFalse(crashReporter.contains("setExtra"))
     }
 
     func testReleaseWorkflowPublishesSentryReleaseWhenConfigured() throws {

@@ -39,6 +39,11 @@ extension TokenUsageHistoryImportCoordinator {
             }
             let finishedAt = Date()
             let selectedSet = Set(selectedTools)
+            let failedResult = TokenUsageHistoryToolResult.failed(
+                "Failed to prepare local token history sync.",
+                failureStage: .prepare,
+                failureReason: .prepareFailed
+            )
             snapshot = snapshotWithUpdatedTools(
                 startedAt: finishedAt,
                 finishedAt: finishedAt,
@@ -47,6 +52,8 @@ extension TokenUsageHistoryImportCoordinator {
                 guard selectedSet.contains(current.tool) else {
                     return current
                 }
+                failureReporter(current.tool, .firstImport, failedResult)
+                stateStore.recordLastRun(for: current.tool, result: failedResult, at: finishedAt)
                 return TokenUsageHistoryImportToolSnapshot(
                     tool: current.tool,
                     mode: .firstImport,
@@ -55,7 +62,7 @@ extension TokenUsageHistoryImportCoordinator {
                     importedEvents: 0,
                     skippedDuplicates: 0,
                     unsupportedRecords: 0,
-                    message: "Failed to prepare local token history sync.",
+                    message: failedResult.message,
                     lastSuccessfulImportAt: stateStore.lastSuccessfulImportAt(for: current.tool),
                     lastRun: stateStore.lastRun(for: current.tool)
                 )
