@@ -1882,7 +1882,7 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(dashboardStore.snapshot.eventCount, 0)
 
         try usageStore.appendEvent(Self.safeEvent())
-        try await Task.sleep(nanoseconds: 350_000_000)
+        try await waitForDashboardStoreRefreshToLoadEvents(dashboardStore, eventCount: 1)
 
         XCTAssertEqual(dashboardStore.snapshot.eventCount, 1)
         XCTAssertEqual(dashboardStore.snapshot.totalTokens, 150)
@@ -1902,7 +1902,7 @@ final class TokenUsageStoreTests: XCTestCase {
             name: TokenUsageCollectorCoordinator.collectionDidFinishNotification,
             object: nil
         )
-        try await Task.sleep(nanoseconds: 350_000_000)
+        try await waitForDashboardStoreRefreshToLoadEvents(dashboardStore, eventCount: 1)
 
         XCTAssertEqual(dashboardStore.snapshot.eventCount, 1)
         XCTAssertEqual(dashboardStore.snapshot.totalTokens, 150)
@@ -1930,8 +1930,7 @@ final class TokenUsageStoreTests: XCTestCase {
             name: TokenUsageCollectorCoordinator.collectionDidFinishNotification,
             object: observedCollector
         )
-        try await Task.sleep(nanoseconds: 350_000_000)
-        XCTAssertEqual(dashboardStore.snapshot.eventCount, 1)
+        try await waitForDashboardStoreRefreshToLoadEvents(dashboardStore, eventCount: 1)
     }
 
     @MainActor
