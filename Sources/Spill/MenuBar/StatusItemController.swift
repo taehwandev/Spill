@@ -194,7 +194,7 @@ final class StatusItemController: NSObject {
             return requestedSegments
         }
 
-        let compactCaffeineSegment = caffeineSegment?.withoutMenuBarValue()
+        let compactCaffeineSegment = caffeineSegment?.badgeMenuBarSegment()
         var visibleStatusSegments = statusSegments.map { $0.valueOnlyMenuBarSegment() }
         var fittedSegments = orderedSegments(
             trigger: trigger,
@@ -603,6 +603,7 @@ enum SleepGuardMenuBarSegmentFactory {
         }
 
         let displayText = isActive && showsRemainingInMenuBar ? remainingLabel : ""
+        let visualStyle: MenuBarStatusSegment.VisualStyle = displayText.isEmpty ? .symbol : .symbolBadge
 
         return MenuBarStatusSegment(
             kind: .caffeine,
@@ -612,7 +613,8 @@ enum SleepGuardMenuBarSegmentFactory {
             displayText: displayText,
             usageRatio: 0,
             state: isActive ? .active : .unavailable,
-            symbolName: isActive ? "cup.and.saucer.fill" : "cup.and.saucer"
+            symbolName: isActive ? "cup.and.saucer.fill" : "cup.and.saucer",
+            visualStyle: visualStyle
         )
     }
 }

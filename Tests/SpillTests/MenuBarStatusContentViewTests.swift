@@ -240,7 +240,8 @@ final class MenuBarStatusContentViewTests: XCTestCase {
         )
 
         XCTAssertEqual(segments.map(\.kind), [.caffeine, .trigger, .cpu, .memory])
-        XCTAssertEqual(segments.first?.value, "")
+        XCTAssertEqual(segments.first?.value, "1h 59m")
+        XCTAssertEqual(segments.first?.visualStyle, .symbolBadge)
         XCTAssertEqual(segments.suffix(2).map(\.value), ["90.0%", "90.0%"])
         XCTAssertEqual(segments.suffix(2).map(\.visualStyle), [.valueOnly, .valueOnly])
         XCTAssertLessThanOrEqual(MenuBarStatusContentView.preferredWidth(for: segments), compactWidth)
@@ -335,6 +336,51 @@ final class MenuBarStatusContentViewTests: XCTestCase {
         XCTAssertEqual(
             MenuBarStatusContentView.segmentKind(at: NSPoint(x: chipCenterX, y: 5), in: segments),
             .memory
+        )
+    }
+
+    func testCompactCpuMemoryStackKeepsMetricIconsVisible() throws {
+        let cpu = makeStatusSegment(kind: .cpu, value: "90.0%").valueOnlyMenuBarSegment()
+        let memory = makeStatusSegment(kind: .memory, value: "90.0%").valueOnlyMenuBarSegment()
+        let view = MenuBarStatusContentView(segments: [cpu, memory])
+        let chip = try XCTUnwrap(view.subviews.first)
+        let icons = chip.subviews.compactMap { $0 as? NSImageView }
+        let labels = chip.subviews.compactMap { $0 as? NSTextField }.map(\.stringValue)
+
+        XCTAssertEqual(icons.count, 2)
+        XCTAssertEqual(labels, ["90.0%", "90.0%"])
+    }
+
+    func testCompactSingleAITokenKeepsIconOverValue() throws {
+        let ai = makeStatusSegment(kind: .ai, value: "1.44M").valueOnlyMenuBarSegment()
+        let view = MenuBarStatusContentView(segments: [ai])
+        let chip = try XCTUnwrap(view.subviews.first)
+
+        XCTAssertEqual(chip.subviews.compactMap { $0 as? NSImageView }.count, 1)
+        XCTAssertEqual(chip.subviews.compactMap { $0 as? NSTextField }.map(\.stringValue), ["1.44M"])
+    }
+
+    func testCompactAITokenCanStackWithAnotherMetric() throws {
+        let memory = makeStatusSegment(kind: .memory, value: "72%").valueOnlyMenuBarSegment()
+        let ai = makeStatusSegment(kind: .ai, value: "1.44M").valueOnlyMenuBarSegment()
+        let view = MenuBarStatusContentView(segments: [memory, ai])
+        let chip = try XCTUnwrap(view.subviews.first)
+
+        XCTAssertEqual(view.subviews.count, 1)
+        XCTAssertEqual(chip.subviews.compactMap { $0 as? NSImageView }.count, 2)
+        XCTAssertEqual(chip.subviews.compactMap { $0 as? NSTextField }.map(\.stringValue), ["72%", "1.44M"])
+    }
+
+    func testCompactCaffeineUsesBadgeInsteadOfDroppingRemainingTime() throws {
+        let caffeine = makeCaffeineSegment(value: "15m", active: true).badgeMenuBarSegment()
+        let view = MenuBarStatusContentView(segments: [caffeine])
+        let chip = try XCTUnwrap(view.subviews.first)
+
+        XCTAssertEqual(chip.subviews.compactMap { $0 as? NSImageView }.count, 1)
+        XCTAssertEqual(chip.subviews.compactMap { $0 as? NSTextField }.map(\.stringValue), ["15"])
+        XCTAssertLessThanOrEqual(
+            MenuBarStatusContentView.preferredWidth(for: [caffeine]),
+            26
         )
     }
 

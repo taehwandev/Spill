@@ -9,11 +9,13 @@ final class MenuBarStatusContentView: NSView {
     private static let triggerChipHeight: CGFloat = 20
     private static let iconOnlyChipWidth: CGFloat = 22
     private static let triggerChipWidth: CGFloat = 30
-    private static let valueOnlyHorizontalPadding: CGFloat = 10
-    private static let compactStackChipMinWidth: CGFloat = 30
-    private static let compactStackHorizontalPadding: CGFloat = 8
+    private static let compactStackChipMinWidth: CGFloat = 34
+    private static let compactStackHorizontalPadding: CGFloat = 16
+    fileprivate static let compactStackIconSize: CGFloat = 7
     private static let verticalChipMinWidth: CGFloat = 33
     private static let verticalHorizontalPadding: CGFloat = 9
+    private static let compactIconValueMinWidth: CGFloat = 24
+    private static let compactIconValueHorizontalPadding: CGFloat = 7
     static let defaultTextFontSize: CGFloat = 13.5
     static let minimumTextFontSize: CGFloat = 10
     static let maximumTextFontSize: CGFloat = 15
@@ -179,9 +181,9 @@ final class MenuBarStatusContentView: NSView {
         }
 
         switch segment.kind {
-        case .cpu, .memory:
+        case .cpu, .memory, .ai:
             return true
-        case .ai, .caffeine, .sleepGuard, .trigger:
+        case .caffeine, .sleepGuard, .trigger:
             return false
         }
     }
@@ -226,6 +228,16 @@ final class MenuBarStatusContentView: NSView {
     fileprivate static func compactStackTextFont(textFontSize: CGFloat, textIsBold: Bool) -> NSFont {
         let size = (normalizedTextFontSize(textFontSize) * 0.61).clamped(to: 7.6...9.4)
         return NSFont.monospacedDigitSystemFont(ofSize: size, weight: textIsBold ? .semibold : .medium)
+    }
+
+    fileprivate static func compactIconValueFont(textFontSize: CGFloat, textIsBold: Bool) -> NSFont {
+        let size = (normalizedTextFontSize(textFontSize) * 0.65).clamped(to: 8.0...9.6)
+        return NSFont.monospacedDigitSystemFont(ofSize: size, weight: textIsBold ? .semibold : .medium)
+    }
+
+    fileprivate static func badgeTextFont(textFontSize: CGFloat, textIsBold: Bool) -> NSFont {
+        let size = (normalizedTextFontSize(textFontSize) * 0.58).clamped(to: 7.2...8.8)
+        return NSFont.monospacedDigitSystemFont(ofSize: size, weight: textIsBold ? .bold : .semibold)
     }
 
     fileprivate static func verticalTitleFont(textFontSize: CGFloat) -> NSFont {
@@ -313,19 +325,28 @@ final class MenuBarStatusContentView: NSView {
         guard !segment.value.isEmpty else {
             return iconOnlyChipWidth
         }
+        if segment.isBadge {
+            return iconOnlyChipWidth
+        }
+
+        if segment.isValueOnly {
+            let textWidth = (segment.value as NSString).size(
+                withAttributes: [.font: compactIconValueFont(textFontSize: textFontSize, textIsBold: textIsBold)]
+            ).width
+            return max(compactIconValueMinWidth, ceil(textWidth) + compactIconValueHorizontalPadding)
+        }
 
         let textWidth = (segment.value as NSString).size(
             withAttributes: [.font: textFont(textFontSize: textFontSize, textIsBold: textIsBold)]
         ).width
-        if segment.isValueOnly {
-            return ceil(textWidth) + valueOnlyHorizontalPadding
-        }
-
         return ceil(textWidth) + 29
     }
 
     private static func chipHeight(for segment: MenuBarStatusSegment) -> CGFloat {
-        segment.kind == .trigger ? triggerChipHeight : metricChipHeight
+        if segment.isValueOnly || segment.isBadge {
+            return height
+        }
+        return segment.kind == .trigger ? triggerChipHeight : metricChipHeight
     }
 
     private func installChips() {
@@ -412,29 +433,59 @@ private final class MenuBarCompactStackMetricChipView: NSView {
 
     private func installLabels() {
         let labels = segments.map(makeLabel(for:))
+        let icons = segments.map(makeIcon(for:))
         segmentLabels = zip(segments, labels).map { (segment: $0.0, label: $0.1) }
-        labels.forEach(addSubview)
+        zip(icons, labels).forEach { icon, label in
+            addSubview(icon)
+            addSubview(label)
+        }
 
         guard labels.count == 2 else {
-            labels.first.map { label in
-                NSLayoutConstraint.activate([
-                    label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 3),
-                    label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -3),
-                    label.centerYAnchor.constraint(equalTo: centerYAnchor)
-                ])
-            }
+            guard let icon = icons.first, let label = labels.first else { return }
+            NSLayoutConstraint.activate([
+                icon.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 3),
+                icon.centerYAnchor.constraint(equalTo: centerYAnchor),
+                icon.widthAnchor.constraint(equalToConstant: MenuBarStatusContentView.compactStackIconSize),
+                icon.heightAnchor.constraint(equalToConstant: MenuBarStatusContentView.compactStackIconSize),
+
+                label.leadingAnchor.constraint(equalTo: icon.trailingAnchor, constant: 1),
+                label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -3),
+                label.centerYAnchor.constraint(equalTo: centerYAnchor)
+            ])
             return
         }
 
         NSLayoutConstraint.activate([
-            labels[0].topAnchor.constraint(equalTo: topAnchor, constant: 1),
-            labels[0].leadingAnchor.constraint(equalTo: leadingAnchor, constant: 3),
-            labels[0].trailingAnchor.constraint(equalTo: trailingAnchor, constant: -3),
+            icons[0].leadingAnchor.constraint(equalTo: leadingAnchor, constant: 3),
+            icons[0].topAnchor.constraint(equalTo: topAnchor, constant: 2),
+            icons[0].widthAnchor.constraint(equalToConstant: MenuBarStatusContentView.compactStackIconSize),
+            icons[0].heightAnchor.constraint(equalToConstant: MenuBarStatusContentView.compactStackIconSize),
 
-            labels[1].bottomAnchor.constraint(equalTo: bottomAnchor, constant: -1),
-            labels[1].leadingAnchor.constraint(equalTo: leadingAnchor, constant: 3),
-            labels[1].trailingAnchor.constraint(equalTo: trailingAnchor, constant: -3)
+            labels[0].leadingAnchor.constraint(equalTo: icons[0].trailingAnchor, constant: 1),
+            labels[0].trailingAnchor.constraint(equalTo: trailingAnchor, constant: -3),
+            labels[0].centerYAnchor.constraint(equalTo: icons[0].centerYAnchor),
+
+            icons[1].leadingAnchor.constraint(equalTo: leadingAnchor, constant: 3),
+            icons[1].bottomAnchor.constraint(equalTo: bottomAnchor, constant: -2),
+            icons[1].widthAnchor.constraint(equalToConstant: MenuBarStatusContentView.compactStackIconSize),
+            icons[1].heightAnchor.constraint(equalToConstant: MenuBarStatusContentView.compactStackIconSize),
+
+            labels[1].leadingAnchor.constraint(equalTo: icons[1].trailingAnchor, constant: 1),
+            labels[1].trailingAnchor.constraint(equalTo: trailingAnchor, constant: -3),
+            labels[1].centerYAnchor.constraint(equalTo: icons[1].centerYAnchor)
         ])
+    }
+
+    private func makeIcon(for segment: MenuBarStatusSegment) -> NSImageView {
+        let icon = NSImageView()
+        icon.translatesAutoresizingMaskIntoConstraints = false
+        icon.imageScaling = .scaleProportionallyDown
+        let config = NSImage.SymbolConfiguration(pointSize: 6.8, weight: .semibold)
+        icon.image = NSImage(systemSymbolName: segment.symbolName, accessibilityDescription: segment.title)?
+            .withSymbolConfiguration(config)
+        icon.symbolConfiguration = config
+        icon.contentTintColor = textColor(for: segment).withAlphaComponent(segment.state == .unavailable ? 0.5 : 0.95)
+        return icon
     }
 
     private func makeLabel(for segment: MenuBarStatusSegment) -> NSTextField {
@@ -688,12 +739,24 @@ private final class MenuBarMetricChipView: NSView {
 
     private func configureValue() {
         valueLabel.translatesAutoresizingMaskIntoConstraints = false
-        valueLabel.stringValue = segment.value
-        valueLabel.font = MenuBarStatusContentView.textFont(
-            textFontSize: textFontSize,
-            textIsBold: textIsBold
-        )
-        valueLabel.alignment = .right
+        valueLabel.stringValue = segment.isBadge ? badgeText(for: segment.value) : segment.value
+        if segment.isBadge {
+            valueLabel.font = MenuBarStatusContentView.badgeTextFont(
+                textFontSize: textFontSize,
+                textIsBold: textIsBold
+            )
+        } else if segment.isValueOnly {
+            valueLabel.font = MenuBarStatusContentView.compactIconValueFont(
+                textFontSize: textFontSize,
+                textIsBold: textIsBold
+            )
+        } else {
+            valueLabel.font = MenuBarStatusContentView.textFont(
+                textFontSize: textFontSize,
+                textIsBold: textIsBold
+            )
+        }
+        valueLabel.alignment = segment.isValueOnly || segment.isBadge ? .center : .right
         valueLabel.lineBreakMode = .byClipping
         valueLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
         valueLabel.setContentHuggingPriority(.required, for: .horizontal)
@@ -701,17 +764,40 @@ private final class MenuBarMetricChipView: NSView {
 
     private func installSubviews() {
         if segment.isValueOnly, !segment.value.isEmpty {
+            addSubview(iconView)
             addSubview(valueLabel)
 
             NSLayoutConstraint.activate([
-                valueLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 5),
-                valueLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -5),
-                valueLabel.centerYAnchor.constraint(equalTo: centerYAnchor)
+                iconView.topAnchor.constraint(equalTo: topAnchor, constant: 1),
+                iconView.centerXAnchor.constraint(equalTo: centerXAnchor),
+                iconView.widthAnchor.constraint(equalToConstant: iconSize),
+                iconView.heightAnchor.constraint(equalToConstant: iconSize),
+
+                valueLabel.topAnchor.constraint(equalTo: iconView.bottomAnchor, constant: -1),
+                valueLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 3),
+                valueLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -3),
+                valueLabel.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -1)
             ])
             return
         }
 
         addSubview(iconView)
+
+        if segment.isBadge, !segment.value.isEmpty {
+            addSubview(valueLabel)
+
+            NSLayoutConstraint.activate([
+                iconView.centerXAnchor.constraint(equalTo: centerXAnchor),
+                iconView.centerYAnchor.constraint(equalTo: centerYAnchor, constant: 1),
+                iconView.widthAnchor.constraint(equalToConstant: iconSize),
+                iconView.heightAnchor.constraint(equalToConstant: iconSize),
+
+                valueLabel.topAnchor.constraint(equalTo: topAnchor, constant: -1),
+                valueLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: 0),
+                valueLabel.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: 0)
+            ])
+            return
+        }
 
         if segment.value.isEmpty {
             NSLayoutConstraint.activate([
@@ -765,20 +851,47 @@ private final class MenuBarMetricChipView: NSView {
     }
 
     private var iconSize: CGFloat {
-        segment.kind == .trigger ? 18 : 13
+        if segment.isValueOnly {
+            return 8.5
+        }
+        return segment.kind == .trigger ? 18 : 13
     }
 
     private var symbolPointSize: CGFloat {
-        segment.kind == .trigger ? 15.5 : 10.5
+        if segment.isValueOnly {
+            return 8
+        }
+        return segment.kind == .trigger ? 15.5 : 10.5
     }
 
     private var hasCustomTriggerIcon: Bool {
         switch segment.visualStyle {
-        case .symbol, .valueOnly:
+        case .symbol, .valueOnly, .symbolBadge:
             return false
         case .trigger:
             return false
         }
+    }
+
+    private func badgeText(for value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return ""
+        }
+
+        if trimmed == "∞" {
+            return trimmed
+        }
+
+        if let hoursRange = trimmed.range(of: #"^\d+h"#, options: .regularExpression) {
+            return String(trimmed[hoursRange])
+        }
+
+        if let minutesRange = trimmed.range(of: #"^\d+"#, options: .regularExpression) {
+            return String(trimmed[minutesRange])
+        }
+
+        return String(trimmed.prefix(2))
     }
 
     private var accessibilityText: String {
@@ -794,6 +907,14 @@ private final class MenuBarMetricChipView: NSView {
 private extension MenuBarStatusSegment {
     var isValueOnly: Bool {
         if case .valueOnly = visualStyle {
+            return true
+        }
+
+        return false
+    }
+
+    var isBadge: Bool {
+        if case .symbolBadge = visualStyle {
             return true
         }
 

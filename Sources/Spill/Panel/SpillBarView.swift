@@ -45,10 +45,6 @@ struct SpillBarView: View {
                 Divider()
                     .background(Color.primary.opacity(0.04))
                 actionSections
-
-                Divider()
-                    .background(Color.primary.opacity(0.04))
-                footer
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
@@ -262,6 +258,7 @@ struct SpillBarView: View {
 
             Spacer(minLength: 8)
 
+            sleepGuardHeaderControl
             statusDot
             headerCommand(symbolName: "gearshape.fill", title: AppL10n.text(.settings, appLanguage: settings.appLanguage), action: settingsAction)
             headerCommand(symbolName: "xmark", title: AppL10n.text(.close, appLanguage: settings.appLanguage), action: dismissAction)
@@ -931,20 +928,152 @@ struct SpillBarView: View {
         }
     }
 
-    private var footer: some View {
-        SpillFooterView(
-            isAccessibilityTrusted: panelState.readiness != .permissionRequired,
-            isScanning: panelState.readiness == .scanning,
-            sleepGuard: sleepGuard,
-            sleepGuardDefaultDuration: settings.sleepGuardDefaultDuration,
-            allowsIndefiniteDuration: settings.sleepGuardAllowsIndefinite,
-            keepsDisplayAwake: settings.sleepGuardKeepsDisplayAwake,
-            setSleepGuardDefaultDuration: { settings.sleepGuardDefaultDuration = $0 },
-            showsPower: true,
-            powerStatus: statusStore.power,
-            showsCountBadge: true,
-            itemCount: panelState.itemCount
+    private var sleepGuardHeaderControl: some View {
+        HStack(spacing: 0) {
+            Button {
+                toggleSleepGuard()
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: sleepGuard.isActive ? "cup.and.saucer.fill" : "cup.and.saucer")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(sleepGuard.isActive ? Color.teal : Color.primary.opacity(0.66))
+
+                    Text(sleepGuardHeaderValue)
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .monospacedDigit()
+                        .lineLimit(1)
+                        .foregroundStyle(sleepGuard.isActive ? Color.primary : Color.primary.opacity(0.66))
+                }
+                .padding(.leading, 8)
+                .padding(.trailing, 5)
+                .frame(height: 28)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(caffeineHelpText)
+            .accessibilityLabel(caffeineHelpText)
+            .accessibilityIdentifier("CaffeineToggle")
+
+            Rectangle()
+                .fill(Color.primary.opacity(0.12))
+                .frame(width: 1, height: 12)
+
+            Menu {
+                sleepGuardMenuItems
+            } label: {
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8, weight: .semibold))
+                    .foregroundStyle(sleepGuard.isActive ? Color.primary : Color.primary.opacity(0.66))
+                    .frame(width: 18, height: 28)
+                    .contentShape(Rectangle())
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .frame(width: 18, height: 28)
+            .accessibilityLabel(AppL10n.text(.chooseCaffeineDuration))
+        }
+        .background(.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .shadow(color: .black.opacity(0.03), radius: 1, y: 0.5)
+        .accessibilityIdentifier("Caffeine")
+    }
+
+    private var sleepGuardHeaderValue: String {
+        sleepGuard.isActive ? sleepGuard.remainingLabel : AppL10n.text(.off)
+    }
+
+    @ViewBuilder
+    private var sleepGuardMenuItems: some View {
+        if sleepGuard.isActive {
+            Button(role: .destructive) {
+                stopSleepGuard(source: "panel_header_menu")
+            } label: {
+                Text(AppL10n.text(.stopCaffeine))
+            }
+
+            Divider()
+        } else {
+            Button(String(format: AppL10n.text(.startDuration), AppL10n.sleepDurationTitle(settings.sleepGuardDefaultDuration))) {
+                startSleepGuard(
+                    duration: settings.sleepGuardDefaultDuration,
+                    updatesDefaultDuration: false,
+                    source: "panel_header_menu_default"
+                )
+            }
+
+            Divider()
+        }
+
+        ForEach(SleepGuardDuration.availableDurations(allowsIndefinite: settings.sleepGuardAllowsIndefinite)) { duration in
+            Button(AppL10n.sleepDurationTitle(duration)) {
+                startSleepGuard(
+                    duration: duration,
+                    updatesDefaultDuration: true,
+                    source: "panel_header_menu_duration"
+                )
+            }
+        }
+    }
+
+    private func toggleSleepGuard() {
+        if sleepGuard.isActive {
+            stopSleepGuard(source: "panel_header")
+            return
+        }
+
+        startSleepGuard(
+            duration: settings.sleepGuardDefaultDuration,
+            updatesDefaultDuration: false,
+            source: "panel_header"
         )
+    }
+
+    private func startSleepGuard(
+        duration: SleepGuardDuration,
+        updatesDefaultDuration: Bool,
+        source: String
+    ) {
+        if updatesDefaultDuration {
+            settings.sleepGuardDefaultDuration = duration
+        }
+
+        let didStart = sleepGuard.start(
+            duration: duration,
+            keepDisplayAwake: settings.sleepGuardKeepsDisplayAwake
+        )
+        SpillTelemetry.shared.track(
+            "sleep_guard_started",
+            props: [
+                "source": source,
+                "duration": duration.rawValue.description,
+                "keep_display_awake": settings.sleepGuardKeepsDisplayAwake ? "true" : "false",
+                "result": didStart ? "success" : "failed"
+            ]
+        )
+    }
+
+    private func stopSleepGuard(source: String) {
+        SpillTelemetry.shared.track("sleep_guard_stopped", props: ["source": source])
+        sleepGuard.stop()
+    }
+
+    private var caffeineHelpText: String {
+        if let errorMessage = sleepGuard.errorMessage {
+            return "\(AppL10n.text(.caffeine)) - \(errorMessage)"
+        }
+
+        guard sleepGuard.isActive else {
+            return AppL10n.text(.caffeineOff)
+        }
+
+        if sleepGuard.activeDuration?.isIndefinite == true {
+            return sleepGuard.keepsDisplayAwake
+                ? AppL10n.text(.caffeineUntilStopped)
+                : AppL10n.text(.caffeineUntilStoppedDisplayMaySleep)
+        }
+
+        return sleepGuard.keepsDisplayAwake
+            ? String(format: AppL10n.text(.caffeineRemainingHelp), sleepGuard.remainingLabel)
+            : String(format: AppL10n.text(.caffeineRemainingDisplayMaySleepHelp), sleepGuard.remainingLabel)
     }
 
     private func statusHelpText(title: String, value: String, subtitle: String?) -> String {

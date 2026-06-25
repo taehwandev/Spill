@@ -40,6 +40,7 @@ final class SleepGuardMenuBarSegmentFactoryTests: XCTestCase {
         XCTAssertEqual(segment?.symbolName, "cup.and.saucer.fill")
         XCTAssertEqual(segment?.value, "15m")
         XCTAssertEqual(segment?.displayText, "15m")
+        XCTAssertEqual(segment?.visualStyle, .symbolBadge)
     }
 
     func testDisabledCaffeineDoesNotCreateSegment() {

@@ -13,6 +13,7 @@ struct MenuBarStatusSegment: Equatable {
     enum VisualStyle: Equatable {
         case symbol
         case valueOnly
+        case symbolBadge
         case trigger(MenuBarTriggerIconStyle)
     }
 
@@ -65,6 +66,21 @@ extension MenuBarStatusSegment {
             symbolName: symbolName,
             visualStyle: visualStyle,
             animates: animates
+        )
+    }
+
+    func badgeMenuBarSegment() -> MenuBarStatusSegment {
+        MenuBarStatusSegment(
+            kind: kind,
+            title: title,
+            shortTitle: shortTitle,
+            value: value,
+            displayText: displayText,
+            usageRatio: usageRatio,
+            state: state,
+            symbolName: symbolName,
+            visualStyle: .symbolBadge,
+            animates: false
         )
     }
 

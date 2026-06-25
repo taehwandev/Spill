@@ -23,7 +23,6 @@ enum SpillPanelContentSizer {
     private static let menuBarActionHeight: CGFloat = 48
     private static let menuBarActionRowSpacing: CGFloat = 6
     private static let inlineActionStateHeight: CGFloat = 48
-    private static let footerHeight: CGFloat = 32
     private static let actionSectionSpacing: CGFloat = 7
 
     static func preferredSize(
@@ -41,8 +40,8 @@ enum SpillPanelContentSizer {
         let contentWidth = max(0, width - horizontalPadding)
         let showsStatusSection = statusModuleCount > 0
         let showsAISection = aiStatusCount > 0 || showsTokenMetering
-        let dividerCount = 2 + (showsStatusSection ? 1 : 0) + (showsAISection ? 1 : 0)
-        let topLevelChildCount = 5
+        let dividerCount = 1 + (showsStatusSection ? 1 : 0) + (showsAISection ? 1 : 0)
+        let topLevelChildCount = 3
             + (showsUpdateBanner ? 1 : 0)
             + (showsStatusSection ? 2 : 0)
             + (showsAISection ? 2 : 0)
@@ -61,7 +60,6 @@ enum SpillPanelContentSizer {
                 contentWidth: contentWidth,
                 iconSpacing: iconSpacing
             )
-            + footerHeight
         let height = boundedHeight(desiredHeight, visibleFrame: visibleFrame)
 
         return NSSize(width: width, height: height)
