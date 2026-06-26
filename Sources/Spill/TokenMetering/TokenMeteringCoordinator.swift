@@ -70,6 +70,7 @@ final class TokenMeteringCoordinator: NSObject {
         isStopped = false
         self.isSmokeTest = isSmokeTest
         self.usageEventsDidChange = usageEventsDidChange
+        TokenMeteringSetupInstaller.refreshInstalledFilesIfPresent()
         observeUsageEvents()
         inboxMonitor.start()
         requestCollection(reason: "app_launch")

@@ -3797,6 +3797,81 @@ final class TokenUsageStoreTests: XCTestCase {
         )
     }
 
+    func testInstalledHookAdapterRefreshOnlyUpdatesExistingFiles() throws {
+        let rootURL = temporaryDirectoryURL()
+        let repoRootURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let sourceURL = repoRootURL.appendingPathComponent("adapters/codex/spill-importer.mjs")
+        let missingURL = rootURL.appendingPathComponent("missing/spill-importer.mjs")
+        XCTAssertFalse(
+            try TokenMeteringAdapterKit.codex.refreshInstallIfPresent(
+                at: missingURL,
+                sourceURL: sourceURL
+            )
+        )
+        XCTAssertFalse(FileManager.default.fileExists(atPath: missingURL.path))
+
+        let installedURL = rootURL.appendingPathComponent("codex/spill-importer.mjs")
+        try FileManager.default.createDirectory(
+            at: installedURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try "stale importer".write(to: installedURL, atomically: true, encoding: .utf8)
+
+        XCTAssertTrue(
+            try TokenMeteringAdapterKit.codex.refreshInstallIfPresent(
+                at: installedURL,
+                sourceURL: sourceURL
+            )
+        )
+        XCTAssertEqual(
+            try String(contentsOf: installedURL, encoding: .utf8),
+            try String(contentsOf: sourceURL, encoding: .utf8)
+        )
+    }
+
+    func testInstalledSetupHelperRefreshOnlyUpdatesExistingFiles() throws {
+        let rootURL = temporaryDirectoryURL()
+        try FileManager.default.createDirectory(at: rootURL, withIntermediateDirectories: true)
+        let sourceURL = rootURL.appendingPathComponent("source.mjs")
+        let missingURL = rootURL.appendingPathComponent("missing.mjs")
+        try "fresh helper".write(to: sourceURL, atomically: true, encoding: .utf8)
+
+        XCTAssertFalse(
+            try TokenMeteringSetupInstaller.refreshInstalledHelperIfPresent(
+                sourceURL: sourceURL,
+                destination: missingURL
+            )
+        )
+        XCTAssertFalse(FileManager.default.fileExists(atPath: missingURL.path))
+
+        let installedURL = rootURL.appendingPathComponent("installed.mjs")
+        try "stale helper".write(to: installedURL, atomically: true, encoding: .utf8)
+        XCTAssertTrue(
+            try TokenMeteringSetupInstaller.refreshInstalledHelperIfPresent(
+                sourceURL: sourceURL,
+                destination: installedURL
+            )
+        )
+        XCTAssertEqual(
+            try String(contentsOf: installedURL, encoding: .utf8),
+            "fresh helper"
+        )
+        let attrs = try FileManager.default.attributesOfItem(atPath: installedURL.path)
+        let permissions = try XCTUnwrap(attrs[.posixPermissions] as? Int)
+        XCTAssertNotEqual(permissions & 0o111, 0)
+    }
+
+    func testTokenMeteringCoordinatorRefreshesInstalledAdaptersOnStart() throws {
+        let source = try Self.source(named: "TokenMeteringCoordinator.swift")
+        XCTAssertTrue(
+            source.contains("TokenMeteringSetupInstaller.refreshInstalledFilesIfPresent()")
+        )
+        XCTAssertLessThan(
+            try XCTUnwrap(source.range(of: "TokenMeteringSetupInstaller.refreshInstalledFilesIfPresent()")?.lowerBound),
+            try XCTUnwrap(source.range(of: "requestCollection(reason: \"app_launch\")")?.lowerBound)
+        )
+    }
+
     func testDashboardSnapshotShowsTokensWithShareBadges() {
         let event = Self.safeEvent(
             aiTool: .claude,

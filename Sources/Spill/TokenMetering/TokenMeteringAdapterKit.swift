@@ -44,23 +44,24 @@ struct TokenMeteringAdapter: Identifiable {
         )
     }
 
-    func install(to destination: URL) throws {
-        guard let url = scriptURL else {
+    func install(to destination: URL, sourceURL: URL? = nil) throws {
+        guard let url = sourceURL ?? scriptURL else {
             throw TokenMeteringAdapterInstallError.scriptNotFound(title)
         }
-        try FileManager.default.createDirectory(
-            at: destination.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-        if FileManager.default.fileExists(atPath: destination.path) {
-            try FileManager.default.removeItem(at: destination)
-        }
-        try FileManager.default.copyItem(at: url, to: destination)
+        try copyExecutableScript(from: url, to: destination)
+    }
 
-        var attrs = try FileManager.default.attributesOfItem(atPath: destination.path)
-        let perms = (attrs[.posixPermissions] as? Int ?? 0o644) | 0o111
-        attrs[.posixPermissions] = perms
-        try FileManager.default.setAttributes(attrs, ofItemAtPath: destination.path)
+    func refreshInstallIfPresent(
+        at destination: URL,
+        sourceURL: URL? = nil,
+        fileManager: FileManager = .default
+    ) throws -> Bool {
+        guard fileManager.fileExists(atPath: destination.path) else {
+            return false
+        }
+
+        try install(to: destination, sourceURL: sourceURL)
+        return true
     }
 }
 
@@ -170,6 +171,14 @@ enum TokenMeteringAdapterKit {
             .appendingPathComponent(adapter.directoryName, isDirectory: true)
             .appendingPathComponent(adapter.scriptFileName)
     }
+
+    static func refreshInstalledHookAdaptersIfPresent(
+        installedURL: (TokenMeteringAdapter) -> URL = TokenMeteringAdapterKit.defaultInstallURL(for:)
+    ) {
+        for adapter in hookAdapters {
+            _ = try? adapter.refreshInstallIfPresent(at: installedURL(adapter))
+        }
+    }
 }
 
 enum TokenMeteringSetupInstaller {
@@ -207,6 +216,34 @@ enum TokenMeteringSetupInstaller {
             .appendingPathComponent(statsScriptFileName)
     }
 
+    static func refreshInstalledFilesIfPresent() {
+        TokenMeteringAdapterKit.refreshInstalledHookAdaptersIfPresent()
+        _ = try? refreshInstalledHelperIfPresent(
+            sourceURL: scriptURL,
+            destination: defaultInstallURL()
+        )
+        _ = try? refreshInstalledHelperIfPresent(
+            sourceURL: statsScriptURL,
+            destination: defaultStatsInstallURL()
+        )
+    }
+
+    @discardableResult
+    static func refreshInstalledHelperIfPresent(
+        sourceURL: URL?,
+        destination: URL,
+        fileManager: FileManager = .default
+    ) throws -> Bool {
+        guard let sourceURL,
+              fileManager.fileExists(atPath: destination.path)
+        else {
+            return false
+        }
+
+        try copyExecutableScript(from: sourceURL, to: destination, fileManager: fileManager)
+        return true
+    }
+
     static func install(to destination: URL = defaultInstallURL()) throws {
         guard let url = scriptURL else {
             throw TokenMeteringAdapterInstallError.scriptNotFound("Setup helper")
@@ -219,32 +256,12 @@ enum TokenMeteringSetupInstaller {
             try adapter.install(to: TokenMeteringAdapterKit.defaultInstallURL(for: adapter))
         }
 
-        try FileManager.default.createDirectory(
-            at: destination.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-        if FileManager.default.fileExists(atPath: destination.path) {
-            try FileManager.default.removeItem(at: destination)
-        }
-        try FileManager.default.copyItem(at: url, to: destination)
-
-        var attrs = try FileManager.default.attributesOfItem(atPath: destination.path)
-        let perms = (attrs[.posixPermissions] as? Int ?? 0o644) | 0o111
-        attrs[.posixPermissions] = perms
-        try FileManager.default.setAttributes(attrs, ofItemAtPath: destination.path)
+        try copyExecutableScript(from: url, to: destination)
 
         let statsDestination = destination
             .deletingLastPathComponent()
             .appendingPathComponent(statsScriptFileName)
-        if FileManager.default.fileExists(atPath: statsDestination.path) {
-            try FileManager.default.removeItem(at: statsDestination)
-        }
-        try FileManager.default.copyItem(at: statsURL, to: statsDestination)
-
-        var statsAttrs = try FileManager.default.attributesOfItem(atPath: statsDestination.path)
-        let statsPerms = (statsAttrs[.posixPermissions] as? Int ?? 0o644) | 0o111
-        statsAttrs[.posixPermissions] = statsPerms
-        try FileManager.default.setAttributes(statsAttrs, ofItemAtPath: statsDestination.path)
+        try copyExecutableScript(from: statsURL, to: statsDestination)
     }
 
     static func setupCommand(installedAt scriptURL: URL = defaultInstallURL()) -> String {
@@ -256,6 +273,41 @@ enum TokenMeteringSetupInstaller {
 private enum ShellQuoting {
     static func singleQuoted(_ value: String) -> String {
         "'\(value.replacingOccurrences(of: "'", with: "'\\''"))'"
+    }
+}
+
+private func copyExecutableScript(
+    from sourceURL: URL,
+    to destination: URL,
+    fileManager: FileManager = .default
+) throws {
+    try fileManager.createDirectory(
+        at: destination.deletingLastPathComponent(),
+        withIntermediateDirectories: true
+    )
+
+    let temporaryURL = destination
+        .deletingLastPathComponent()
+        .appendingPathComponent(".\(destination.lastPathComponent).tmp-\(UUID().uuidString)")
+    try fileManager.copyItem(at: sourceURL, to: temporaryURL)
+    do {
+        var attrs = try fileManager.attributesOfItem(atPath: temporaryURL.path)
+        let perms = (attrs[.posixPermissions] as? Int ?? 0o644) | 0o111
+        attrs[.posixPermissions] = perms
+        try fileManager.setAttributes(attrs, ofItemAtPath: temporaryURL.path)
+
+        if fileManager.fileExists(atPath: destination.path) {
+            _ = try fileManager.replaceItemAt(
+                destination,
+                withItemAt: temporaryURL,
+                options: .usingNewMetadataOnly
+            )
+        } else {
+            try fileManager.moveItem(at: temporaryURL, to: destination)
+        }
+    } catch {
+        try? fileManager.removeItem(at: temporaryURL)
+        throw error
     }
 }
 
