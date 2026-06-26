@@ -86,7 +86,7 @@ extension PrivateUsageUploadCoordinator {
         }
 
         try await verifyDeviceConnection(credential)
-        return try await performUpload(isEnabled: isEnabled, now: now)
+        return try await performManualSync(isEnabled: isEnabled, now: now)
     }
 
     func runAutomaticUploadIfNeeded(
@@ -104,7 +104,12 @@ extension PrivateUsageUploadCoordinator {
         }
 
         do {
-            let result = try await performUpload(isEnabled: isEnabled, now: now)
+            let credential = try credentialStore.loadCredential()
+            let result = try await performUpload(
+                isEnabled: isEnabled,
+                now: now,
+                earliestBucketStart: credential?.createdAt
+            )
             markAutomaticAttempt(dayID: attemptDayID)
             return result
         } catch {

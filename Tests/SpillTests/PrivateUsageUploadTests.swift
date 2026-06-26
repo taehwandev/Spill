@@ -477,7 +477,7 @@ final class PrivateUsageUploadTests: XCTestCase {
                 deviceID: "device_server",
                 credential: "spill_device_v1_secret",
                 tokenType: "spill_device_v1",
-                createdAt: now
+                createdAt: yesterday
             )
         )
         try credentialStore.saveKeyWrappingSecret(
@@ -507,6 +507,124 @@ final class PrivateUsageUploadTests: XCTestCase {
         XCTAssertEqual(relayClient.uploadedKeyEnvelopeCounts, [1])
     }
 
+    func testAutomaticUploadDoesNotDrainHistoryFromBeforeDeviceConnection() async throws {
+        let timeZone = try XCTUnwrap(TimeZone(identifier: "UTC"))
+        let calendar = fixedCalendar(timeZone: timeZone)
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 10, hour: 9)))
+        let historicalDay = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 7, hour: 12)))
+        let connectedDay = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 9, hour: 12)))
+        let connectedAt = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 9, hour: 9)))
+        let usageStore = makeUsageStore()
+        try usageStore.replaceEvents([
+            makeEvent(
+                spanID: "span_history",
+                runID: "run_history",
+                aiTool: .codex,
+                taskType: "code_generation",
+                stage: "implement",
+                model: "gpt-5",
+                input: 30,
+                output: 10,
+                createdAt: historicalDay
+            ),
+            makeEvent(
+                spanID: "span_connected",
+                runID: "run_connected",
+                aiTool: .claude,
+                taskType: "testing",
+                stage: "verify",
+                model: "claude-opus-4",
+                input: 3,
+                output: 4,
+                createdAt: connectedDay
+            )
+        ])
+        let credentialStore = InMemoryPrivateUsageCredentialStore()
+        try credentialStore.saveCredential(
+            PrivateUsageDeviceCredential(
+                deviceID: "device_server",
+                credential: "spill_device_v1_secret",
+                tokenType: "spill_device_v1",
+                createdAt: connectedAt
+            )
+        )
+        try credentialStore.saveKeyWrappingSecret(
+            PrivateUsageKeyWrappingSecret(rawValue: testWrappingSecret)
+        )
+        let relayClient = FakePrivateUsageRelayClient()
+        let sealer = RecordingPrivateUsageSealer()
+        let coordinator = PrivateUsageUploadCoordinator(
+            usageStore: usageStore,
+            credentialStore: credentialStore,
+            stateStore: PrivateUsageUploadStateStore(defaults: makeDefaults()),
+            relayClient: relayClient,
+            bucketBuilder: PrivateUsageDailyBucketBuilder(
+                calendar: calendar,
+                timeZone: timeZone,
+                sealer: sealer
+            ),
+            sealer: sealer
+        )
+
+        let result = await coordinator.runAutomaticUploadIfNeeded(isEnabled: true, now: now)
+
+        XCTAssertEqual(result?.accepted, 1)
+        XCTAssertEqual(relayClient.uploadedBucketKeys, [["2026-06-09:daily"]])
+    }
+
+    func testManualSyncDrainsMultipleUploadBatchesBehindOneUserAction() async throws {
+        let timeZone = try XCTUnwrap(TimeZone(identifier: "UTC"))
+        let calendar = fixedCalendar(timeZone: timeZone)
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 10, hour: 9)))
+        let usageStore = makeUsageStore()
+        let events = try (1...35).map { offset in
+            makeEvent(
+                spanID: "span_manual_\(offset)",
+                runID: "run_manual_\(offset)",
+                aiTool: .codex,
+                taskType: "code_generation",
+                stage: "implement",
+                model: "gpt-5",
+                input: 1,
+                output: 1,
+                createdAt: try XCTUnwrap(calendar.date(byAdding: .day, value: -offset, to: now))
+            )
+        }
+        try usageStore.replaceEvents(events)
+        let credentialStore = InMemoryPrivateUsageCredentialStore()
+        try credentialStore.saveCredential(
+            PrivateUsageDeviceCredential(
+                deviceID: "device_server",
+                credential: "spill_device_v1_secret",
+                tokenType: "spill_device_v1",
+                createdAt: now
+            )
+        )
+        try credentialStore.saveKeyWrappingSecret(
+            PrivateUsageKeyWrappingSecret(rawValue: testWrappingSecret)
+        )
+        let relayClient = FakePrivateUsageRelayClient()
+        let sealer = RecordingPrivateUsageSealer()
+        let coordinator = PrivateUsageUploadCoordinator(
+            usageStore: usageStore,
+            credentialStore: credentialStore,
+            stateStore: PrivateUsageUploadStateStore(defaults: makeDefaults()),
+            relayClient: relayClient,
+            bucketBuilder: PrivateUsageDailyBucketBuilder(
+                calendar: calendar,
+                timeZone: timeZone,
+                sealer: sealer
+            ),
+            sealer: sealer
+        )
+
+        let result = try await coordinator.syncNow(isEnabled: true, now: now)
+
+        XCTAssertEqual(result.accepted, 35)
+        XCTAssertEqual(result.attemptedBucketCount, 35)
+        XCTAssertEqual(relayClient.uploadedBucketCounts, [31, 4])
+    }
+
     func testAutomaticUploadCanRetrySameDayAfterFailure() async throws {
         let timeZone = try XCTUnwrap(TimeZone(identifier: "UTC"))
         let calendar = fixedCalendar(timeZone: timeZone)
@@ -532,7 +650,7 @@ final class PrivateUsageUploadTests: XCTestCase {
                 deviceID: "device_server",
                 credential: "spill_device_v1_secret",
                 tokenType: "spill_device_v1",
-                createdAt: now
+                createdAt: yesterday
             )
         )
         try credentialStore.saveKeyWrappingSecret(
@@ -1087,6 +1205,7 @@ private final class InMemoryPrivateUsageCredentialStore: PrivateUsageCredentialS
 private final class FakePrivateUsageRelayClient: PrivateUsageRelayClienting, @unchecked Sendable {
     private let lock = NSLock()
     private(set) var uploadedBucketCounts = [Int]()
+    private(set) var uploadedBucketKeys = [[String]]()
     private(set) var uploadedKeyEnvelopeCounts = [Int]()
     private(set) var exchangedGrantCodes = [String]()
     private(set) var exchangedDeviceNames = [String?]()
@@ -1125,6 +1244,7 @@ private final class FakePrivateUsageRelayClient: PrivateUsageRelayClienting, @un
         }
         lock.withLock {
             uploadedBucketCounts.append(buckets.count)
+            uploadedBucketKeys.append(buckets.map(\.bucketKey))
             uploadedKeyEnvelopeCounts.append(keyEnvelopes.count)
         }
         return PrivateUsageUploadResponse(

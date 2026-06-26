@@ -1,4 +1,3 @@
-import CryptoKit
 import Foundation
 
 struct PrivateUsageDailyBucketBuilder: Sendable {
@@ -27,13 +26,18 @@ struct PrivateUsageDailyBucketBuilder: Sendable {
         events: [TokenUsageEvent],
         acknowledgedHashesByBucketKey: [String: String],
         now: Date = Date(),
-        limit: Int = 31
+        limit: Int = 31,
+        earliestBucketStart: Date? = nil
     ) throws -> [PrivateUsageEncryptedBucket] {
         guard limit > 0 else {
             return []
         }
 
-        let aggregates = makeDailyAggregates(events: events, now: now)
+        let aggregates = makeDailyAggregates(
+            events: events,
+            now: now,
+            earliestBucketStart: earliestBucketStart
+        )
         var buckets = [PrivateUsageEncryptedBucket]()
         buckets.reserveCapacity(min(aggregates.count, limit))
 
@@ -70,9 +74,11 @@ struct PrivateUsageDailyBucketBuilder: Sendable {
 
     func makeDailyAggregates(
         events: [TokenUsageEvent],
-        now: Date = Date()
+        now: Date = Date(),
+        earliestBucketStart: Date? = nil
     ) -> [PrivateUsageDailyAggregate] {
         let todayStart = calendar.startOfDay(for: now)
+        let earliestDayStart = earliestBucketStart.map { calendar.startOfDay(for: $0) }
         let groupedEvents = Dictionary(grouping: events.compactMap { event -> (Date, TokenUsageEvent)? in
             guard let date = ISO8601DateFormatter.parseTokenUsageDate(from: event.createdAt),
                   date < todayStart
@@ -80,7 +86,14 @@ struct PrivateUsageDailyBucketBuilder: Sendable {
                 return nil
             }
 
-            return (calendar.startOfDay(for: date), event)
+            let dayStart = calendar.startOfDay(for: date)
+            if let earliestDayStart,
+               dayStart < earliestDayStart
+            {
+                return nil
+            }
+
+            return (dayStart, event)
         }) { dayStart, _ in
             dayStart
         }
@@ -174,25 +187,4 @@ struct PrivateUsageDailyBucketBuilder: Sendable {
         totals[key] = current
     }
 
-    static func localDayID(for date: Date, timeZone: TimeZone = .autoupdatingCurrent) -> String {
-        let formatter = DateFormatter()
-        formatter.calendar = Calendar(identifier: .gregorian)
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = timeZone
-        formatter.dateFormat = "yyyy-MM-dd"
-        return formatter.string(from: date)
-    }
-
-    static func localTimestamp(for date: Date, timeZone: TimeZone = .autoupdatingCurrent) -> String {
-        let formatter = DateFormatter()
-        formatter.calendar = Calendar(identifier: .gregorian)
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = timeZone
-        formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSXXXXX"
-        return formatter.string(from: date)
-    }
-
-    static func sha256Hex(_ data: Data) -> String {
-        SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
-    }
 }

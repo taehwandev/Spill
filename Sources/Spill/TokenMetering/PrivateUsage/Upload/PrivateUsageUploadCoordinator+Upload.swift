@@ -1,9 +1,13 @@
 import Foundation
 
 extension PrivateUsageUploadCoordinator {
+    private static let uploadBatchLimit = 31
+    private static let manualSyncMaxBatches = 12
+
     func performUpload(
         isEnabled: Bool,
-        now: Date
+        now: Date,
+        earliestBucketStart: Date? = nil
     ) async throws -> PrivateUsageUploadRunResult {
         guard isEnabled else {
             throw PrivateUsageUploadError.uploadDisabled
@@ -14,7 +18,12 @@ extension PrivateUsageUploadCoordinator {
         }
 
         let state = stateStore.load()
-        let buckets = try dirtyBuckets(state: state, now: now, limit: 31)
+        let buckets = try dirtyBuckets(
+            state: state,
+            now: now,
+            limit: Self.uploadBatchLimit,
+            earliestBucketStart: earliestBucketStart
+        )
         guard !buckets.isEmpty else {
             return PrivateUsageUploadRunResult(
                 accepted: 0,
@@ -68,13 +77,41 @@ extension PrivateUsageUploadCoordinator {
     func dirtyBuckets(
         state: PrivateUsageUploadPersistence,
         now: Date,
-        limit: Int
+        limit: Int,
+        earliestBucketStart: Date? = nil
     ) throws -> [PrivateUsageEncryptedBucket] {
         try bucketBuilder.makeDirtyDailyBuckets(
             events: usageStore.loadEvents(),
             acknowledgedHashesByBucketKey: state.acknowledgedCiphertextHashesByBucketKey,
             now: now,
-            limit: limit
+            limit: limit,
+            earliestBucketStart: earliestBucketStart
+        )
+    }
+
+    func performManualSync(
+        isEnabled: Bool,
+        now: Date
+    ) async throws -> PrivateUsageUploadRunResult {
+        var accepted = 0
+        var attemptedBucketCount = 0
+        var uploadedAt: Date?
+
+        for _ in 0..<Self.manualSyncMaxBatches {
+            let result = try await performUpload(isEnabled: isEnabled, now: now)
+            accepted += result.accepted
+            attemptedBucketCount += result.attemptedBucketCount
+            uploadedAt = result.uploadedAt ?? uploadedAt
+
+            if result.attemptedBucketCount < Self.uploadBatchLimit {
+                break
+            }
+        }
+
+        return PrivateUsageUploadRunResult(
+            accepted: accepted,
+            attemptedBucketCount: attemptedBucketCount,
+            uploadedAt: uploadedAt
         )
     }
 
