@@ -88,6 +88,7 @@ NODE
 
 CLAUDE_TRANSCRIPT="$ADAPTER_TMP_DIR/claude-transcript.jsonl"
 CLAUDE_PAYLOAD="$ADAPTER_TMP_DIR/claude-payload.json"
+CLAUDE_LABEL_FILE="$ADAPTER_TMP_DIR/claude-label.json"
 CLAUDE_TRANSCRIPT="$CLAUDE_TRANSCRIPT" CLAUDE_PAYLOAD="$CLAUDE_PAYLOAD" node --input-type=module <<'NODE'
 import { writeFile } from 'node:fs/promises';
 
@@ -117,6 +118,7 @@ NODE
 
 SPILL_TOKEN_USAGE_SESSION_STATE_DIR="$ADAPTER_TMP_DIR/session-state-initial" \
 SPILL_TOKEN_USAGE_INBOX_DIR="$INBOX_DIR" \
+SPILL_TOKEN_USAGE_LABEL_FILE="$CLAUDE_LABEL_FILE" \
 SPILL_TOKEN_USAGE_TASK_TYPE="git_commit" \
 SPILL_TOKEN_USAGE_STAGE="summarize" \
 python3 "$ROOT_DIR/Sources/Spill/Resources/adapters/claude-code/spill-hook.py" <"$CLAUDE_PAYLOAD"
@@ -126,6 +128,7 @@ mkdir -p "$CLAUDE_DUP_INBOX"
 for i in 1 2; do
     SPILL_TOKEN_USAGE_SESSION_STATE_DIR="$ADAPTER_TMP_DIR/session-state-dup-$i" \
     SPILL_TOKEN_USAGE_INBOX_DIR="$CLAUDE_DUP_INBOX" \
+    SPILL_TOKEN_USAGE_LABEL_FILE="$CLAUDE_LABEL_FILE" \
     SPILL_TOKEN_USAGE_TASK_TYPE="git_commit" \
     SPILL_TOKEN_USAGE_STAGE="summarize" \
     python3 "$ROOT_DIR/Sources/Spill/Resources/adapters/claude-code/spill-hook.py" <"$CLAUDE_PAYLOAD"
