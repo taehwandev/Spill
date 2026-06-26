@@ -212,6 +212,7 @@ final class LocalAIStatusProviderTests: XCTestCase {
         #!/bin/sh
         echo "codex 9.8.8"
         """.write(to: executableURL, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executableURL.path)
 
         let cachedFailure = LocalAICommandMetadataReader.metadata(
             for: ["codex": executableURL.path],
