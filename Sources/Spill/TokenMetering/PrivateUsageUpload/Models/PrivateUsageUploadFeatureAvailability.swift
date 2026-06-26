@@ -8,6 +8,8 @@ enum PrivateUsageUploadFeatureAvailability {
         isEnabled()
     }
 
+    static let isWebConnectionEntryPointEnabledInCurrentBuild = false
+
     static func isEnabled(
         processEnvironment: [String: String] = ProcessInfo.processInfo.environment,
         bundleInfo: [String: Any]? = Bundle.main.infoDictionary

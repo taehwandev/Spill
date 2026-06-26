@@ -30,7 +30,9 @@ struct PrivateUsageUploadPreferencesSection: View {
                 .lineSpacing(2)
                 .fixedSize(horizontal: false, vertical: true)
 
-            if !status.isConnected {
+            if !status.isConnected,
+               PrivateUsageUploadFeatureAvailability.isWebConnectionEntryPointEnabledInCurrentBuild
+            {
                 webConnectionPrompt
             }
 
