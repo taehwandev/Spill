@@ -3703,7 +3703,7 @@ final class TokenUsageStoreTests: XCTestCase {
 
         let success = try decodedJSONObject(from: Data(contentsOf: successURL))
         XCTAssertEqual(success["kind"] as? String, "success")
-        XCTAssertEqual(success["total_tokens"] as? Int, 132)
+        XCTAssertEqual(success["total_tokens"] as? Int, 32)
         XCTAssertNil(success["run_id"])
         XCTAssertNil(success["span_id"])
         XCTAssertFalse(FileManager.default.fileExists(atPath: mismatchURL.path))
@@ -3711,7 +3711,7 @@ final class TokenUsageStoreTests: XCTestCase {
         let events = try antigravityEventObjects(in: inboxURL)
         XCTAssertEqual(events.count, 1)
         XCTAssertEqual(events.first?["ai_tool"] as? String, "claude")
-        XCTAssertEqual(events.first?["input_tokens"] as? Int, 125)
+        XCTAssertEqual(events.first?["input_tokens"] as? Int, 25)
         XCTAssertEqual(events.first?["output_tokens"] as? Int, 7)
         let stateURL = sessionStateURL.appendingPathComponent("claudeDiag01.json")
         let state = try String(contentsOf: stateURL)
@@ -3745,9 +3745,54 @@ final class TokenUsageStoreTests: XCTestCase {
         )
 
         let refreshedEvents = try antigravityEventObjects(in: inboxURL)
-        XCTAssertEqual(refreshedEvents.count, 2)
-        XCTAssertEqual(refreshedEvents.compactMap { $0["total_tokens"] as? Int }.sorted(), [21, 132])
+        XCTAssertEqual(refreshedEvents.count, 3)
+        XCTAssertEqual(refreshedEvents.compactMap { $0["total_tokens"] as? Int }.sorted(), [9, 11, 32])
         XCTAssertFalse(FileManager.default.fileExists(atPath: emptyURL.path))
+    }
+
+    func testClaudeHookDoesNotApplyCurrentLabelToMultipleNewTurns() throws {
+        let inboxURL = temporaryInboxURL()
+        let diagnosticsURL = temporaryDiagnosticsURL()
+        let sessionStateURL = temporaryDiagnosticsURL()
+            .deletingLastPathComponent()
+            .appendingPathComponent("claude-session-state")
+        let labelURL = diagnosticsURL
+            .deletingLastPathComponent()
+            .appendingPathComponent("label-context", isDirectory: true)
+            .appendingPathComponent("claude.json")
+        try FileManager.default.createDirectory(
+            at: labelURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try """
+        {"ai_tool":"claude","task_type":"analysis","stage":"classify","updated_at":"2026-06-26T00:00:00.000Z","expires_at":"2099-01-01T00:00:00.000Z"}
+
+        """.write(to: labelURL, atomically: true, encoding: .utf8)
+
+        let transcriptURL = diagnosticsURL
+            .deletingLastPathComponent()
+            .appendingPathComponent("claude-multi-turn-transcript.jsonl")
+        let transcript = [
+            #"{"message":{"role":"user"}}"#,
+            #"{"timestamp":"2026-06-26T00:00:01.000Z","requestId":"req_read","message":{"id":"msg_read","role":"assistant","model":"claude-sonnet-4","usage":{"input_tokens":20,"cache_read_input_tokens":100,"output_tokens":5},"content":[{"type":"tool_use","name":"Read"}]}}"#,
+            #"{"message":{"role":"user"}}"#,
+            #"{"timestamp":"2026-06-26T00:01:01.000Z","requestId":"req_edit","message":{"id":"msg_edit","role":"assistant","model":"claude-sonnet-4","usage":{"input_tokens":30,"cache_read_input_tokens":200,"output_tokens":7},"content":[{"type":"tool_use","name":"Edit"}]}}"#,
+        ].joined(separator: "\n")
+        try "\(transcript)\n".write(to: transcriptURL, atomically: true, encoding: .utf8)
+
+        let payload = #"{"session_id":"claudeMulti01","transcript_path":"\#(transcriptURL.path)"}"#
+        try runClaudeHook(
+            rawInput: payload,
+            inboxURL: inboxURL,
+            diagnosticsURL: diagnosticsURL,
+            sessionStateURL: sessionStateURL
+        )
+
+        let events = try antigravityEventObjects(in: inboxURL)
+        XCTAssertEqual(events.count, 2)
+        XCTAssertEqual(events.compactMap { $0["total_tokens"] as? Int }.sorted(), [25, 37])
+        XCTAssertFalse(events.contains { $0["stage"] as? String == "classify" })
+        XCTAssertEqual(Set(events.compactMap { $0["stage"] as? String }), Set(["summarize", "implement"]))
     }
 
     func testAdapterHookConfigsUseExactRuntimeHookShapes() throws {

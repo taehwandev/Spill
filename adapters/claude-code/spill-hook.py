@@ -2,15 +2,15 @@
 """
 Spill token metering adapter for Claude Code.
 
-Reads the Stop hook payload from stdin, extracts all turns' token usage
-from the Claude Code transcript, and enqueues one JSON event file in the
+Reads the Stop hook payload from stdin, extracts new turns' token usage
+from the Claude Code transcript, and enqueues safe JSON event files in the
 Spill local queue.
 
-Token counting: sums exact input token categories exposed by Claude Code:
-input_tokens, cache_creation_input_tokens, cache_read_input_tokens, and
-output_tokens across all turns. When a runtime omits top-level usage totals but
-exposes exact per-iteration usage, the hook falls back to those iteration
-totals.
+Token counting: sums input_tokens and cache_creation_input_tokens (fresh and
+cache-write) plus output_tokens per turn. cache_read_input_tokens is excluded
+to match the Codex measurement baseline. When a runtime omits top-level usage
+totals but exposes exact per-iteration usage, the hook falls back to those
+iteration totals.
 
 Install: add to ~/.claude/settings.json (or .claude/settings.json) Stop hooks:
   {
@@ -304,7 +304,7 @@ def _usage_totals(usage: dict, include_iterations: bool = True) -> tuple[int, in
     output_tokens = _safe_usage_token(usage.get("output_tokens"))
 
     if input_tokens > 0 or cache_creation_tokens > 0 or cache_read_tokens > 0 or output_tokens > 0:
-        return input_tokens + cache_creation_tokens + cache_read_tokens, output_tokens
+        return input_tokens + cache_creation_tokens, output_tokens
 
     if not include_iterations:
         return 0, 0
@@ -469,6 +469,16 @@ def _infer_stage(tool_names: set) -> str:
     return 'summarize'
 
 
+def _turn_tool_names(turn: dict) -> set[str]:
+    names: set[str] = set()
+    for item in turn.get("content", []):
+        if isinstance(item, dict) and item.get("type") == "tool_use":
+            name = item.get("name", "")
+            if name:
+                names.add(name)
+    return names
+
+
 def _turn_from_record(obj: dict):
     msg = obj.get("message", {})
     if not isinstance(msg, dict) or msg.get("role", "") != "assistant":
@@ -569,6 +579,121 @@ def _read_transcript_turns(transcript_path: str, byte_offset: int) -> tuple[list
 
     all_turns.extend(current_group)
     return _deduplicate_transcript_turns(all_turns), end_offset, start_offset
+
+
+def _turns_after_prior_cumulative(
+    turns: list[dict],
+    previous_input: int,
+    previous_output: int,
+    read_start_offset: int,
+) -> list[dict]:
+    if read_start_offset > 0 or (previous_input <= 0 and previous_output <= 0):
+        return turns
+
+    filtered: list[dict] = []
+    running_input = 0
+    running_output = 0
+    for turn in turns:
+        turn_input, turn_output = _usage_totals(turn.get("usage", {}))
+        next_input = running_input + turn_input
+        next_output = running_output + turn_output
+        if next_input > previous_input or next_output > previous_output:
+            filtered.append(turn)
+        running_input = next_input
+        running_output = next_output
+    return filtered
+
+
+def _event_for_live_turn(
+    run_id: str,
+    turn: dict,
+    payload: dict,
+    allow_current_label: bool,
+    allow_timestamp_fallback: bool,
+):
+    turn_input, turn_output = _usage_totals(turn.get("usage", {}))
+    total = turn_input + turn_output
+    if total <= 0:
+        return None
+
+    timestamp = turn.get("timestamp", "")
+    if not timestamp:
+        if not allow_timestamp_fallback:
+            return None
+        timestamp = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+    raw_model = turn.get("model", "")
+    model = raw_model if _MODEL_ID.match(raw_model) else "claude-unknown"
+    tool_names = _turn_tool_names(turn)
+    inferred_task_type = _infer_task_type(tool_names)
+    inferred_stage = _infer_stage(tool_names)
+    label = _label_timeline_for_timestamp(timestamp)
+
+    task_type = label.get("task_type") if _SAFE_SLUG.match(label.get("task_type", "")) else ""
+    stage = label.get("stage") if _SAFE_SLUG.match(label.get("stage", "")) else ""
+    project_id = label.get("project_id") if _OPAQUE_ID.match(label.get("project_id", "")) else ""
+
+    if allow_current_label:
+        if not task_type:
+            task_type = _safe_label(
+                payload,
+                ("task_type", "taskType"),
+                ("SPILL_TOKEN_USAGE_TASK_TYPE", "SPILL_WORKFLOW_TASK_TYPE"),
+                inferred_task_type,
+            )
+        if not stage:
+            stage = _safe_label(
+                payload,
+                ("stage", "workflow_stage", "workflowStage"),
+                ("SPILL_TOKEN_USAGE_STAGE", "SPILL_WORKFLOW_STAGE"),
+                inferred_stage,
+            )
+        if not project_id:
+            project_id = _safe_project_id(payload)
+    else:
+        if not task_type:
+            task_type = inferred_task_type
+        if not stage:
+            stage = inferred_stage
+        if not project_id:
+            project_id = "project_global"
+
+    span_id = _stable_span_id(
+        run_id,
+        model,
+        str(turn.get("request_id", "")),
+        str(turn.get("turn_index", "")),
+        timestamp,
+        str(turn_input),
+        str(turn_output),
+    )
+
+    return {
+        "schema_version": 1,
+        "device_id": "device_local",
+        "project_id": project_id,
+        "artifact_id": "artifact_global",
+        "run_id": run_id,
+        "span_id": span_id,
+        "ai_tool": "claude",
+        "task_type": task_type,
+        "stage": stage,
+        "model": model,
+        "input_tokens": turn_input,
+        "output_tokens": turn_output,
+        "total_tokens": total,
+        "token_breakdown": {
+            "system": 0,
+            "user": 0,
+            "history": 0,
+            "repo_context": 0,
+            "tool_output": 0,
+            "generated_output": turn_output,
+            "unknown": turn_input,
+        },
+        "latency_ms": 0,
+        "created_at": timestamp,
+    }
 
 
 def main() -> None:
@@ -741,18 +866,8 @@ def _run_for_payload(payload: dict, scan_subagents: bool = True, allow_timestamp
         )
         return _SCAN_SKIPPED if reason == "no_new_token_delta" else _SCAN_UNSUPPORTED
 
-    # Collect tool names from all turns (name field only, not inputs).
-    tool_names: set[str] = set()
-    for turn in all_turns:
-        for item in turn.get("content", []):
-            if isinstance(item, dict) and item.get("type") == "tool_use":
-                name = item.get("name", "")
-                if name:
-                    tool_names.add(name)
-
-    # Input total includes Claude's exact uncached, cache-write, and cache-read
-    # token categories when present. cache_read is a lower-cost input category,
-    # but it is still exact runtime usage and should not disappear from totals.
+    # Input total includes fresh (uncached) and cache-write token categories.
+    # cache_read_input_tokens is excluded to match the Codex measurement baseline.
     session_fresh = 0
     session_output = 0
     for turn in all_turns:
@@ -770,24 +885,35 @@ def _run_for_payload(payload: dict, scan_subagents: bool = True, allow_timestamp
         )
         return _SCAN_UNSUPPORTED
 
-    raw_model = all_turns[-1].get("model", "")
-    model = raw_model if _MODEL_ID.match(raw_model) else "claude-unknown"
-
     is_incremental_read = read_start_offset > 0
     if is_incremental_read:
-        fresh = session_fresh
-        output = session_output
-        next_fresh = prev_fresh + fresh
-        next_output = prev_output + output
+        next_fresh = prev_fresh + session_fresh
+        next_output = prev_output + session_output
     else:
         # Full-scan fallback for first run, old state files, or transcript truncation.
-        fresh = session_fresh - prev_fresh
-        output = session_output - prev_output
         next_fresh = session_fresh
         next_output = session_output
-    total = fresh + output
 
-    if total <= 0:
+    turns_to_emit = _turns_after_prior_cumulative(
+        all_turns,
+        prev_fresh,
+        prev_output,
+        read_start_offset,
+    )
+    allow_current_label = len(turns_to_emit) == 1
+    events = [
+        event
+        for turn in turns_to_emit
+        if (event := _event_for_live_turn(
+            run_id,
+            turn,
+            payload,
+            allow_current_label=allow_current_label,
+            allow_timestamp_fallback=allow_timestamp_fallback,
+        )) is not None
+    ]
+
+    if not events:
         _save_session_state(run_id, next_fresh, next_output, transcript_byte_offset)
         _write_diagnostic_file(
             EMPTY_DIAGNOSTIC_FILE_NAME,
@@ -798,74 +924,10 @@ def _run_for_payload(payload: dict, scan_subagents: bool = True, allow_timestamp
         )
         return _SCAN_SKIPPED
 
-    # span_id encodes the emitted interval so the event identity matches delta tokens.
-    span_id = _stable_span_id(
-        run_id,
-        model,
-        str(prev_fresh),
-        str(prev_output),
-        str(next_fresh),
-        str(next_output),
-    )
-    _last_ts = all_turns[-1].get("timestamp", "")
-    if _last_ts:
-        now = _last_ts
-    elif allow_timestamp_fallback:
-        now = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.000Z")
-    else:
-        _write_diagnostic_file(
-            EMPTY_DIAGNOSTIC_FILE_NAME,
-            "no_usage_hook_call",
-            "missing_event_timestamp",
-            payload,
-            meaning="Claude history scan found exact usage but no source timestamp, so the event was not assigned to import time.",
-        )
-        return _SCAN_UNSUPPORTED
-    inferred_task_type = _infer_task_type(tool_names)
-    inferred_stage = _infer_stage(tool_names)
-    task_type = _safe_label(
-        payload,
-        ("task_type", "taskType"),
-        ("SPILL_TOKEN_USAGE_TASK_TYPE", "SPILL_WORKFLOW_TASK_TYPE"),
-        inferred_task_type,
-    )
-    stage = _safe_label(
-        payload,
-        ("stage", "workflow_stage", "workflowStage"),
-        ("SPILL_TOKEN_USAGE_STAGE", "SPILL_WORKFLOW_STAGE"),
-        inferred_stage,
-    )
-
-    event = {
-        "schema_version": 1,
-        "device_id": "device_local",
-        "project_id": _safe_project_id(payload),
-        "artifact_id": "artifact_global",
-        "run_id": run_id,
-        "span_id": span_id,
-        "ai_tool": "claude",
-        "task_type": task_type,
-        "stage": stage,
-        "model": model,
-        "input_tokens": fresh,
-        "output_tokens": output,
-        "total_tokens": total,
-        "token_breakdown": {
-            "system": 0,
-            "user": 0,
-            "history": 0,
-            "repo_context": 0,
-            "tool_output": 0,
-            "generated_output": output,
-            "unknown": fresh,
-        },
-        "latency_ms": 0,
-        "created_at": now,
-    }
-
-    _enqueue_event(event)
+    for event in events:
+        _enqueue_event(event)
     _save_session_state(run_id, next_fresh, next_output, transcript_byte_offset)
-    _write_success_diagnostic(event)
+    _write_success_diagnostic(events[-1])
     _consume_label_file()
     if scan_subagents:
         _scan_session_subagents(transcript_path)
