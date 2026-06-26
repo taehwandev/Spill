@@ -847,9 +847,9 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(dashboardView.contains("settingsAction: @escaping () -> Void = {}"))
         XCTAssertTrue(dashboardView.contains("refreshAction()"))
         XCTAssertTrue(collector.contains("drainQueuedInbox()"))
-        XCTAssertTrue(collector.contains("Local runtime"))
+        XCTAssertTrue(collector.contains("Drain app-owned queued inbox events"))
         XCTAssertTrue(collector.contains("runAntigravityActiveImporter()"))
-        XCTAssertTrue(collector.contains("AGY is different: it has no runtime hook"))
+        XCTAssertTrue(collector.contains("AGY and Claude Code use native active importers"))
         XCTAssertFalse(collector.contains("runLocalImportersIfAvailable()"))
         XCTAssertFalse(collector.contains("runCodexImporterIfAvailable()"))
         XCTAssertFalse(collector.contains("runClaudeTranscriptScanIfAvailable()"))
@@ -955,10 +955,13 @@ final class TokenUsageStoreTests: XCTestCase {
 
         XCTAssertTrue(collector.contains("drainQueuedInbox()"))
         XCTAssertTrue(collector.contains("runAntigravityActiveImporter()"))
+        XCTAssertTrue(collector.contains("runClaudeCodeActiveImporter()"))
         XCTAssertTrue(collector.contains("TokenUsageAntigravityImporter().importRecentEvents"))
+        XCTAssertTrue(collector.contains("TokenUsageClaudeCodeImporter().importRecentSessions"))
         XCTAssertTrue(collector.contains("func stop()"))
         XCTAssertTrue(collector.contains("private var isStopping = false"))
         XCTAssertTrue(collector.contains("shouldCancel: shouldCancel"))
+        // Process management must stay in the importer, not bleed into the coordinator.
         XCTAssertFalse(collector.contains("private func importQueuedEventsWhileProcessRuns(_ process: Process)"))
         XCTAssertFalse(collector.contains("while process.isRunning"))
         XCTAssertFalse(collector.contains("Thread.sleep(forTimeInterval: importerDrainInterval)"))
@@ -991,7 +994,8 @@ final class TokenUsageStoreTests: XCTestCase {
                     failedToWriteEvents: false
                 )
             },
-            antigravityLookbackInterval: 3600
+            antigravityLookbackInterval: 3600,
+            claudeCodeImportRunner: { _, _ in TokenUsageClaudeCodeImportSummary(scannedFiles: 0, parsedTurns: 0, importedEvents: 0, skippedDuplicateEvents: 0, cursorAdvancedFiles: 0, failedToWriteEvents: false) }
         )
         let beforeRequest = Date()
         let notification = expectation(description: "collection finished notification")
@@ -1014,6 +1018,44 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(startDate?.timeIntervalSince(beforeRequest.addingTimeInterval(-3600)) ?? 0, 0, accuracy: 2)
     }
 
+    func testTokenUsageCollectorRunsClaudeCodeActiveImporter() {
+        let store = TokenUsageStore(fileURL: temporaryEventsURL())
+        let lock = NSLock()
+        var didRunImporter = false
+        let collector = TokenUsageCollectorCoordinator(
+            store: store,
+            antigravityImportRunner: { _, _, _ in
+                TokenUsageAntigravityImportSummary(
+                    scannedDatabases: 0,
+                    scannedGenerationRows: 0,
+                    parsedUsageEvents: 0,
+                    importedEvents: 0,
+                    skippedDuplicateEvents: 0,
+                    unsupportedRecords: 0,
+                    splitOutputFallbackEvents: 0,
+                    cursorAdvancedDatabases: 0,
+                    failedToWriteEvents: false
+                )
+            },
+            claudeCodeImportRunner: { _, _ in
+                lock.withLock { didRunImporter = true }
+                return TokenUsageClaudeCodeImportSummary(scannedFiles: 0, parsedTurns: 0, importedEvents: 0, skippedDuplicateEvents: 0, cursorAdvancedFiles: 0, failedToWriteEvents: false)
+            }
+        )
+        let notification = expectation(description: "collection finished")
+        let observer = NotificationCenter.default.addObserver(
+            forName: TokenUsageCollectorCoordinator.collectionDidFinishNotification,
+            object: collector,
+            queue: .main
+        ) { _ in notification.fulfill() }
+        defer { NotificationCenter.default.removeObserver(observer) }
+
+        collector.requestCollection(reason: "test")
+        wait(for: [notification], timeout: 1)
+
+        XCTAssertTrue(lock.withLock { didRunImporter })
+    }
+
     func testTokenUsageCollectorPostsCollectionFinishedNotification() {
         let store = TokenUsageStore(fileURL: temporaryEventsURL())
         let collector = TokenUsageCollectorCoordinator(
@@ -1030,7 +1072,8 @@ final class TokenUsageStoreTests: XCTestCase {
                     cursorAdvancedDatabases: 0,
                     failedToWriteEvents: false
                 )
-            }
+            },
+            claudeCodeImportRunner: { _, _ in TokenUsageClaudeCodeImportSummary(scannedFiles: 0, parsedTurns: 0, importedEvents: 0, skippedDuplicateEvents: 0, cursorAdvancedFiles: 0, failedToWriteEvents: false) }
         )
         let notification = expectation(description: "collection finished notification")
         let observer = NotificationCenter.default.addObserver(
@@ -1047,6 +1090,72 @@ final class TokenUsageStoreTests: XCTestCase {
         collector.requestCollection(reason: "test")
 
         wait(for: [notification], timeout: 1)
+    }
+
+    func testClaudeCodeActiveImporterParsesHookTranscriptShapeAndIterations() throws {
+        let rootURL = temporaryDirectoryURL()
+        let projectsURL = rootURL.appendingPathComponent("projects", isDirectory: true)
+        let projectURL = projectsURL.appendingPathComponent("project-opaque", isDirectory: true)
+        try FileManager.default.createDirectory(at: projectURL, withIntermediateDirectories: true)
+
+        let transcriptURL = projectURL.appendingPathComponent("11111111111111111111111111111111.jsonl")
+        let transcript = [
+            #"{"message":{"role":"user"}}"#,
+            #"{"timestamp":"2026-06-26T00:00:01.000Z","requestId":"req_read","message":{"id":"msg_read","role":"assistant","model":"claude-sonnet-4","usage":{"input_tokens":20,"cache_creation_input_tokens":5,"cache_read_input_tokens":100,"output_tokens":7},"content":[{"type":"tool_use","name":"Read"}]}}"#,
+            #"{"timestamp":"2026-06-26T00:00:30.000Z","requestId":"req_cache_read","message":{"id":"msg_cache_read","role":"assistant","model":"claude-sonnet-4","usage":{"cache_read_input_tokens":100},"content":[]}}"#,
+            #"{"timestamp":"2026-06-26T00:01:01.000Z","message":{"id":"msg_iter","role":"assistant","model":"claude-sonnet-4","usage":{"iterations":[{"usage":{"input_tokens":6,"cache_creation":{"ephemeral_1h_input_tokens":2},"cache_read_input_tokens":1,"output_tokens":3}}]},"content":[{"type":"tool_use","name":"Edit"}]}}"#,
+        ].joined(separator: "\n")
+        try "\(transcript)\n".write(to: transcriptURL, atomically: true, encoding: .utf8)
+
+        let store = TokenUsageStore(fileURL: temporaryEventsURL())
+        let importer = TokenUsageClaudeCodeImporter(
+            projectsDirectory: projectsURL,
+            labelTimelineURL: rootURL.appendingPathComponent("missing-labels.jsonl"),
+            stateURL: rootURL.appendingPathComponent("claude-active-state.json")
+        )
+
+        let summary = importer.importRecentSessions(into: store)
+        XCTAssertEqual(summary.scannedFiles, 1)
+        XCTAssertEqual(summary.parsedTurns, 2)
+        XCTAssertEqual(summary.importedEvents, 2)
+        XCTAssertEqual(store.loadEvents().map(\.totalTokens).sorted(), [11, 32])
+        XCTAssertEqual(store.loadEvents().map(\.inputTokens).sorted(), [8, 25])
+        XCTAssertEqual(Set(store.loadEvents().map(\.stage.rawValue)), ["summarize"])
+        let state = try decodedJSONObject(from: Data(contentsOf: rootURL.appendingPathComponent("claude-active-state.json")))
+        let nextTurnIndices = try XCTUnwrap(state["next_turn_index_by_source"] as? [String: Any])
+        XCTAssertEqual(nextTurnIndices.values.compactMap { $0 as? Int }, [3])
+        XCTAssertEqual(TokenUsageClaudeCodeImporter.safeModel("unsafe model!"), "claude-unknown")
+
+        let secondSummary = importer.importRecentSessions(into: store)
+        XCTAssertEqual(secondSummary.importedEvents, 0)
+        XCTAssertEqual(store.loadEvents().count, 2)
+    }
+
+    func testClaudeCodeActiveImporterLeavesSubagentTranscriptFilesForStopHook() throws {
+        let rootURL = temporaryDirectoryURL()
+        let projectsURL = rootURL.appendingPathComponent("projects", isDirectory: true)
+        let subagentsURL = projectsURL
+            .appendingPathComponent("project-opaque", isDirectory: true)
+            .appendingPathComponent("subagents", isDirectory: true)
+        try FileManager.default.createDirectory(at: subagentsURL, withIntermediateDirectories: true)
+
+        let transcriptURL = subagentsURL.appendingPathComponent("agent-a2805a322318cb80e.jsonl")
+        try """
+        {"timestamp":"2026-06-26T00:00:01.000Z","message":{"id":"msg_subagent","role":"assistant","model":"claude-sonnet-4","usage":{"input_tokens":12,"output_tokens":4},"content":[]}}
+
+        """.write(to: transcriptURL, atomically: true, encoding: .utf8)
+
+        let store = TokenUsageStore(fileURL: temporaryEventsURL())
+        let importer = TokenUsageClaudeCodeImporter(
+            projectsDirectory: projectsURL,
+            labelTimelineURL: rootURL.appendingPathComponent("missing-labels.jsonl"),
+            stateURL: rootURL.appendingPathComponent("claude-active-state.json")
+        )
+
+        let summary = importer.importRecentSessions(into: store)
+        XCTAssertEqual(summary.scannedFiles, 0)
+        XCTAssertEqual(summary.importedEvents, 0)
+        XCTAssertEqual(store.loadEvents(), [])
     }
 
     func testTokenUsageCollectorStopPreventsQueuedAntigravityImport() {
@@ -1070,7 +1179,8 @@ final class TokenUsageStoreTests: XCTestCase {
                     cursorAdvancedDatabases: 0,
                     failedToWriteEvents: false
                 )
-            }
+            },
+            claudeCodeImportRunner: { _, _ in TokenUsageClaudeCodeImportSummary(scannedFiles: 0, parsedTurns: 0, importedEvents: 0, skippedDuplicateEvents: 0, cursorAdvancedFiles: 0, failedToWriteEvents: false) }
         )
 
         collector.stop()

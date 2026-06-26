@@ -114,6 +114,25 @@ Routing and executable evidence:
   missed-gate recovery.
 - Wrapper evidence under `.agentplaybook/` is local runtime evidence, not source.
 
+Claude Code native active importer:
+
+- The primary token metering path for Claude Code is the native Swift importer
+  (`TokenUsageClaudeCodeImporter`) that reads `~/.claude/projects/**/*.jsonl`
+  directly. The Python Stop hook is a secondary source; both must produce
+  identical `span_id` values so dedup works across both.
+- Before editing any file under
+  `Sources/Spill/TokenMetering/Importers/ClaudeCode/`, read
+  `.agents/design/claude-code-importer.md`. It defines the span_id formula,
+  turn_index persistence rules, state migration contract, and discovery
+  constraints that all agents must follow.
+- Key invariants to never violate:
+  - `span_id = "span-" + sha256(session_id:model:request_id:turn_index:timestamp:input:output)[:12]`
+  - `turn_index` is persistent across cycles via `nextTurnIndexBySource` — never reset to 0 per cycle.
+  - State keys use `sha256(sessionID)[:24]`, NOT file paths.
+  - Discovery has no date lookback; the coordinator must NOT pass a short `since:` window.
+  - Session ID regex is `^[0-9a-f-]{32,}$` (UUID format, not a loose alphanumeric pattern).
+  - Legacy state files (missing `next_turn_index_by_source`) must return a fresh empty state.
+
 Before PRD, ARD, task breakdown, or implementation work:
 
 1. Read `.agents/README.md`.

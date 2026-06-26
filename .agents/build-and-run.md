@@ -197,12 +197,12 @@ Important tool labels:
 Runtime hook input contracts differ by tool:
 
 - Codex imports exact token-count records from the Codex session importer.
-- Claude Code Stop hooks receive a safe payload with `transcript_path`; the
-  adapter reads exact numeric usage from the transcript and writes safe events.
-  Note: Claude Code subagent runs write their transcripts under a `subagents/`
-  subdirectory. The adapter must check for and parse these subagent transcript
-  files (e.g., `subagents/agent-*.jsonl`) in addition to the main `transcript_path`
-  to prevent subagent token counts from being omitted.
+- Claude Code uses a native Swift active importer (`TokenUsageClaudeCodeImporter`)
+  that reads `~/.claude/projects/**/*.jsonl` directly via byte-offset cursors.
+  The Python Stop hook is a secondary source; both produce the same `span_id`
+  formula so dedup works. See `.agents/design/claude-code-importer.md` for the
+  complete architecture. The Stop hook also handles subagent transcripts under
+  `subagents/agent-*.jsonl`.
 - Antigravity/AGY uses the local active importer. The setup helper removes
   managed Spill AGY `PostInvocation` entries so hook command logs cannot be
   mistaken for usage evidence. Note: AGY does not suffer from subagent omissions

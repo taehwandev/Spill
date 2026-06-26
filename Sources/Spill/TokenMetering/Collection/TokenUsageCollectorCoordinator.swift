@@ -6,11 +6,18 @@ final class TokenUsageCollectorCoordinator: TokenUsageExternalCollecting, @unche
         Date,
         @escaping () -> Bool
     ) -> TokenUsageAntigravityImportSummary
+    // Claude uses byte-offset cursors inside transcript files, so collection can
+    // scan all known sessions while importing only newly appended turns.
+    typealias ClaudeCodeImportRunner = (
+        TokenUsageStore,
+        @escaping () -> Bool
+    ) -> TokenUsageClaudeCodeImportSummary
 
     static let collectionDidFinishNotification = Notification.Name("app.spill.token-usage-collector.collection-did-finish")
 
     private let store: TokenUsageStore
     private let antigravityImportRunner: AntigravityImportRunner
+    private let claudeCodeImportRunner: ClaudeCodeImportRunner
     private let antigravityLookbackInterval: TimeInterval
     private let queue = DispatchQueue(label: "app.spill.token-usage-collector")
     private let lock = NSLock()
@@ -21,7 +28,8 @@ final class TokenUsageCollectorCoordinator: TokenUsageExternalCollecting, @unche
     init(
         store: TokenUsageStore,
         antigravityImportRunner: AntigravityImportRunner? = nil,
-        antigravityLookbackInterval: TimeInterval = 24 * 60 * 60
+        antigravityLookbackInterval: TimeInterval = 24 * 60 * 60,
+        claudeCodeImportRunner: ClaudeCodeImportRunner? = nil
     ) {
         self.store = store
         self.antigravityImportRunner = antigravityImportRunner ?? { store, startDate, shouldCancel in
@@ -32,6 +40,12 @@ final class TokenUsageCollectorCoordinator: TokenUsageExternalCollecting, @unche
             )
         }
         self.antigravityLookbackInterval = antigravityLookbackInterval
+        self.claudeCodeImportRunner = claudeCodeImportRunner ?? { store, shouldCancel in
+            TokenUsageClaudeCodeImporter().importRecentSessions(
+                into: store,
+                shouldCancel: shouldCancel
+            )
+        }
     }
 
     func requestCollection(reason: String) {
@@ -71,10 +85,9 @@ final class TokenUsageCollectorCoordinator: TokenUsageExternalCollecting, @unche
                 return
             }
 
-            // The collector only drains app-owned queued events. Local runtime
-            // history scans are user-initiated through TokenUsageHistoryImportCoordinator.
-            // AGY is different: it has no runtime hook, so its active importer is
-            // the real-time local collection path.
+            // Drain app-owned queued inbox events (Stop hook writes, history imports).
+            // AGY and Claude Code use native active importers that write directly to
+            // the store, so they do not produce inbox files.
             drainQueuedInbox()
 
             guard !shouldStop else {
@@ -83,6 +96,13 @@ final class TokenUsageCollectorCoordinator: TokenUsageExternalCollecting, @unche
             }
 
             runAntigravityActiveImporter()
+
+            guard !shouldStop else {
+                finishCollection()
+                return
+            }
+
+            runClaudeCodeActiveImporter()
 
             let shouldRunAgain = lock.withLock {
                 if isStopping {
@@ -109,6 +129,12 @@ final class TokenUsageCollectorCoordinator: TokenUsageExternalCollecting, @unche
     private func runAntigravityActiveImporter() {
         let startDate = Date().addingTimeInterval(-antigravityLookbackInterval)
         _ = antigravityImportRunner(store, startDate) { [weak self] in
+            self?.shouldStop ?? true
+        }
+    }
+
+    private func runClaudeCodeActiveImporter() {
+        _ = claudeCodeImportRunner(store) { [weak self] in
             self?.shouldStop ?? true
         }
     }
