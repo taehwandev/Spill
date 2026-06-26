@@ -2862,6 +2862,40 @@ final class TokenUsageStoreTests: XCTestCase {
         )
     }
 
+    func testTokenUsageDateParserHandlesCanonicalAndOffsetTimestamps() throws {
+        let formatter = ISO8601DateFormatter.tokenUsage
+        let plainFormatter = ISO8601DateFormatter()
+        plainFormatter.formatOptions = [.withInternetDateTime]
+        let canonical = try XCTUnwrap(ISO8601DateFormatter.parseTokenUsageDate(from: "2026-06-06T12:34:56.789Z"))
+        XCTAssertEqual(
+            canonical.timeIntervalSince1970,
+            try XCTUnwrap(formatter.date(from: "2026-06-06T12:34:56.789Z")).timeIntervalSince1970,
+            accuracy: 0.001
+        )
+
+        let plain = try XCTUnwrap(ISO8601DateFormatter.parseTokenUsageDate(from: "2026-06-06T12:34:56Z"))
+        XCTAssertEqual(
+            plain.timeIntervalSince1970,
+            try XCTUnwrap(plainFormatter.date(from: "2026-06-06T12:34:56Z")).timeIntervalSince1970,
+            accuracy: 0.001
+        )
+
+        let positiveOffset = try XCTUnwrap(ISO8601DateFormatter.parseTokenUsageDate(from: "2026-06-06T09:30:00.000+09:00"))
+        XCTAssertEqual(
+            positiveOffset.timeIntervalSince1970,
+            try XCTUnwrap(formatter.date(from: "2026-06-06T00:30:00.000Z")).timeIntervalSince1970,
+            accuracy: 0.001
+        )
+
+        let negativeOffset = try XCTUnwrap(ISO8601DateFormatter.parseTokenUsageDate(from: "2026-06-05T23:30:00.000-05:00"))
+        XCTAssertEqual(
+            negativeOffset.timeIntervalSince1970,
+            try XCTUnwrap(formatter.date(from: "2026-06-06T04:30:00.000Z")).timeIntervalSince1970,
+            accuracy: 0.001
+        )
+        XCTAssertNil(ISO8601DateFormatter.parseTokenUsageDate(from: "not-a-date"))
+    }
+
     func testStoreBackfillsDashboardBreakdownColumnsForExistingSQLiteRows() throws {
         let store = TokenUsageStore(fileURL: temporaryEventsURL())
         let databaseURL = store.eventsDatabaseURL
