@@ -688,10 +688,11 @@ final class TokenUsageHistoryImportCoordinatorTests: XCTestCase {
             ]
         )
 
-        XCTAssertTrue(output.stdout.contains(#""imported_events":2"#), output.stdout)
+        XCTAssertTrue(output.stdout.contains(#""imported_events":1"#), output.stdout)
+        XCTAssertTrue(output.stdout.contains(#""unsupported_cumulative_only":1"#), output.stdout)
         let events = try inboxEvents(in: inboxURL)
-        XCTAssertEqual(events.map { $0["input_tokens"] as? Int }, [30, 7])
-        XCTAssertEqual(events.map { $0["output_tokens"] as? Int }, [10, 4])
+        XCTAssertEqual(events.map { $0["input_tokens"] as? Int }, [7])
+        XCTAssertEqual(events.map { $0["output_tokens"] as? Int }, [4])
     }
 
     func testCodexImporterPrefersLastUsageWhenCumulativeTotalDiverges() throws {
@@ -791,7 +792,7 @@ final class TokenUsageHistoryImportCoordinatorTests: XCTestCase {
 
         XCTAssertTrue(output.stdout.contains(#""imported_events":0"#), output.stdout)
         XCTAssertTrue(output.stdout.contains(#""unsupported_records":1"#), output.stdout)
-        XCTAssertTrue(output.stdout.contains(#""unsupported_cumulative_without_cursor":1"#), output.stdout)
+        XCTAssertTrue(output.stdout.contains(#""unsupported_cumulative_only":1"#), output.stdout)
         XCTAssertEqual(try inboxEvents(in: inboxURL).count, 0)
     }
 
@@ -842,11 +843,11 @@ final class TokenUsageHistoryImportCoordinatorTests: XCTestCase {
 
         XCTAssertTrue(output.stdout.contains(#""imported_events":0"#), output.stdout)
         XCTAssertTrue(output.stdout.contains(#""unsupported_records":1"#), output.stdout)
-        XCTAssertTrue(output.stdout.contains(#""unsupported_cumulative_without_cursor":1"#), output.stdout)
+        XCTAssertTrue(output.stdout.contains(#""unsupported_cumulative_only":1"#), output.stdout)
         XCTAssertEqual(try inboxEvents(in: inboxURL).count, 0)
     }
 
-    func testCodexImporterCumulativeDeltaSpanDoesNotDependOnTimestamp() throws {
+    func testCodexImporterSkipsCumulativeOnlyRecordsInsteadOfEmittingDeltas() throws {
         try XCTSkipUnless(Self.isNodeAvailable(), "node is unavailable")
 
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
@@ -900,8 +901,9 @@ final class TokenUsageHistoryImportCoordinatorTests: XCTestCase {
             executable: "/usr/bin/env",
             arguments: commonArguments
         )
-        XCTAssertTrue(firstOutput.stdout.contains(#""imported_events":1"#), firstOutput.stdout)
-        XCTAssertTrue(firstOutput.stdout.contains(#""cumulative_delta":1"#), firstOutput.stdout)
+        XCTAssertTrue(firstOutput.stdout.contains(#""imported_events":0"#), firstOutput.stdout)
+        XCTAssertTrue(firstOutput.stdout.contains(#""unsupported_cumulative_only":1"#), firstOutput.stdout)
+        XCTAssertTrue(firstOutput.stdout.contains(#""cumulative_delta":0"#), firstOutput.stdout)
 
         try? FileManager.default.removeItem(at: stateURL)
         try writeFixture(currentTimestamp: secondTimestamp)
@@ -909,13 +911,67 @@ final class TokenUsageHistoryImportCoordinatorTests: XCTestCase {
             executable: "/usr/bin/env",
             arguments: commonArguments + ["--reconcile-existing"]
         )
-        XCTAssertTrue(secondOutput.stdout.contains(#""imported_events":1"#), secondOutput.stdout)
-        XCTAssertTrue(secondOutput.stdout.contains(#""cumulative_delta":1"#), secondOutput.stdout)
+        XCTAssertTrue(secondOutput.stdout.contains(#""imported_events":0"#), secondOutput.stdout)
+        XCTAssertTrue(secondOutput.stdout.contains(#""unsupported_cumulative_only":1"#), secondOutput.stdout)
+        XCTAssertTrue(secondOutput.stdout.contains(#""cumulative_delta":0"#), secondOutput.stdout)
 
         let events = try inboxEvents(in: inboxURL)
-        XCTAssertEqual(events.count, 2)
-        XCTAssertEqual(events.map { $0["total_tokens"] as? Int }, [40, 40])
-        XCTAssertEqual(events.first?["span_id"] as? String, events.last?["span_id"] as? String)
+        XCTAssertEqual(events.count, 0)
+    }
+
+    func testCodexImporterSkipsCumulativeOutlierAcrossSharedSessionRolloutFiles() throws {
+        try XCTSkipUnless(Self.isNodeAvailable(), "node is unavailable")
+
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let importerURL = root.appendingPathComponent("adapters/codex/spill-importer.mjs")
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SpillCodexSharedSessionOutlier-\(UUID().uuidString)", isDirectory: true)
+        let sessionDir = tempURL
+            .appendingPathComponent("codex/sessions/2026/06/18", isDirectory: true)
+        let inboxURL = tempURL.appendingPathComponent("events-inbox", isDirectory: true)
+        try FileManager.default.createDirectory(at: sessionDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: inboxURL, withIntermediateDirectories: true)
+        let firstSessionURL = sessionDir.appendingPathComponent("rollout-a.jsonl")
+        let secondSessionURL = sessionDir.appendingPathComponent("rollout-b.jsonl")
+        let timestamp = Self.iso8601String(Date())
+        let sessionMeta = #"{"type":"session_meta","originator":"codex_cli","session_id":"shared-session","model":"gpt-5"}"#
+        try """
+        \(sessionMeta)
+        {"timestamp":"\(timestamp)","type":"event_msg","payload":{"type":"token_count","info":{"model":"gpt-5","total_token_usage":{"input_tokens":4095000,"output_tokens":1000,"total_tokens":4096000}}}}
+
+        """.write(to: firstSessionURL, atomically: true, encoding: .utf8)
+        try """
+        \(sessionMeta)
+        {"timestamp":"\(timestamp)","type":"event_msg","payload":{"type":"token_count","info":{"model":"gpt-5","total_token_usage":{"input_tokens":468990000,"output_tokens":10000,"total_tokens":469000000}}}}
+
+        """.write(to: secondSessionURL, atomically: true, encoding: .utf8)
+
+        let output = try runProcess(
+            executable: "/usr/bin/env",
+            arguments: [
+                "node",
+                importerURL.path,
+                "--codex-home",
+                tempURL.appendingPathComponent("codex", isDirectory: true).path,
+                "--all",
+                "--json",
+                "--transport",
+                "file",
+                "--inbox",
+                inboxURL.path,
+                "--events",
+                tempURL.appendingPathComponent("events.json").path,
+                "--state",
+                tempURL.appendingPathComponent("state.json").path,
+                "--label-file",
+                tempURL.appendingPathComponent("label.json").path,
+            ]
+        )
+
+        XCTAssertTrue(output.stdout.contains(#""imported_events":0"#), output.stdout)
+        XCTAssertTrue(output.stdout.contains(#""unsupported_cumulative_only":2"#), output.stdout)
+        XCTAssertTrue(output.stdout.contains(#""cumulative_delta":0"#), output.stdout)
+        XCTAssertEqual(try inboxEvents(in: inboxURL).count, 0)
     }
 
     func testCodexImporterKeepsLastOnlySpanStableAcrossAllAndIncremental() throws {
@@ -958,16 +1014,17 @@ final class TokenUsageHistoryImportCoordinatorTests: XCTestCase {
             executable: "/usr/bin/env",
             arguments: commonArguments + ["--all"]
         )
-        XCTAssertTrue(allOutput.stdout.contains(#""imported_events":2"#), allOutput.stdout)
-        XCTAssertTrue(allOutput.stdout.contains(#""unsupported_records":1"#), allOutput.stdout)
-        XCTAssertEqual(try inboxEvents(in: inboxURL).count, 2)
+        XCTAssertTrue(allOutput.stdout.contains(#""imported_events":1"#), allOutput.stdout)
+        XCTAssertTrue(allOutput.stdout.contains(#""unsupported_records":2"#), allOutput.stdout)
+        XCTAssertTrue(allOutput.stdout.contains(#""unsupported_cumulative_only":2"#), allOutput.stdout)
+        XCTAssertEqual(try inboxEvents(in: inboxURL).count, 1)
 
         let incrementalOutput = try runProcess(
             executable: "/usr/bin/env",
             arguments: commonArguments + ["--after", Self.iso8601String(afterDate)]
         )
         XCTAssertTrue(incrementalOutput.stdout.contains(#""imported_events":0"#), incrementalOutput.stdout)
-        XCTAssertEqual(try inboxEvents(in: inboxURL).count, 2)
+        XCTAssertEqual(try inboxEvents(in: inboxURL).count, 1)
     }
 
     func testCodexImporterReconcileExistingReemitsStoredSpans() throws {
