@@ -48,6 +48,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
         language: TokenMeteringLanguage,
         localAliases: [String: String],
         showAdvancedTools: Bool,
+        visibleTools: Set<TokenUsageAITool>? = nil,
         now: Date,
         proposedCalendarMonthStart: Date?,
         calendar: Calendar,
@@ -73,6 +74,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
             language: language,
             localAliases: localAliases,
             showAdvancedTools: showAdvancedTools,
+            visibleTools: visibleTools,
             now: now,
             proposedCalendarMonthStart: proposedCalendarMonthStart,
             calendar: calendar,
@@ -95,6 +97,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
         language: TokenMeteringLanguage,
         localAliases: [String: String],
         showAdvancedTools: Bool,
+        visibleTools: Set<TokenUsageAITool>? = nil,
         now: Date,
         proposedCalendarMonthStart: Date?,
         calendar: Calendar,
@@ -125,6 +128,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
             language: language,
             localAliases: localAliases,
             showAdvancedTools: showAdvancedTools,
+            visibleTools: visibleTools,
             now: now,
             calendarMonthStart: displayCalendarMonth,
             resolvedCalendarMonthStart: displayCalendarMonth,
@@ -148,6 +152,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
                 language: language,
                 localAliases: localAliases,
                 showAdvancedTools: showAdvancedTools,
+                visibleTools: visibleTools,
                 now: now,
                 calendarMonthStart: displayCalendarMonth,
                 resolvedCalendarMonthStart: displayCalendarMonth,
@@ -177,6 +182,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
         language: TokenMeteringLanguage = .current(),
         localAliases: [String: String] = [:],
         showAdvancedTools: Bool = false,
+        visibleTools: Set<TokenUsageAITool>? = nil,
         now: Date = Date(),
         calendarMonthStart: Date? = nil,
         periodFilterTotals: [TokenUsageDashboardPeriod: Int]? = nil,
@@ -201,6 +207,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
             language: language,
             localAliases: localAliases,
             showAdvancedTools: showAdvancedTools,
+            visibleTools: visibleTools,
             now: now,
             calendarMonthStart: calendarMonthStart,
             resolvedCalendarMonthStart: nil,
@@ -224,6 +231,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
         language: TokenMeteringLanguage = .current(),
         localAliases: [String: String] = [:],
         showAdvancedTools: Bool = false,
+        visibleTools: Set<TokenUsageAITool>? = nil,
         now: Date = Date(),
         calendarMonthStart: Date? = nil,
         resolvedCalendarMonthStart: Date? = nil,
@@ -235,7 +243,9 @@ struct TokenUsageDashboardSnapshot: Equatable {
         timeZone: TimeZone = .autoupdatingCurrent,
         calendarDayTotals: [String: Int]? = nil
     ) {
-        let dashboardEvents = context.dashboardEvents
+        let dashboardEvents = context.dashboardEvents.filter { event in
+            visibleTools?.contains(event.event.aiTool) ?? true
+        }
         let selectedDayID = selectedCalendarDayID.flatMap { Self.date(forDayID: $0, calendar: calendar) == nil ? nil : $0 }
         self.selectedCalendarDayID = selectedDayID
         selectedCalendarDayTitle = selectedDayID.flatMap {
@@ -251,7 +261,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
         overallLastUpdated = lastUpdatedDates.overall
 
         let selectedDashboardTool = selectedTool.flatMap { tool in
-            tool.isDashboardTool ? tool : nil
+            tool.isDashboardTool && (visibleTools?.contains(tool) ?? true) ? tool : nil
         }
         let periodEvents = Self.filteredParsedEvents(
             dashboardEvents,
@@ -301,6 +311,9 @@ struct TokenUsageDashboardSnapshot: Equatable {
         let capturedTotalTokens = focusedEvents.reduce(0) { $0 + $1.event.totalTokens }
         totalTokens = capturedTotalTokens
         let visibleCapturedToolTokens = Self.toolTotals(events: focusedEvents)
+            .filter { tool, _ in
+                visibleTools?.contains(tool) ?? true
+            }
         workflowUsage = Self.workflowUsage(events: focusedEvents, totalTokens: capturedTotalTokens, language: language)
 
         periodFilters = TokenUsageDashboardPeriod.allCases.map { period in
@@ -330,6 +343,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
             totals: allToolTotals,
             totalEvents: toolFilterEvents.count,
             showAdvancedTools: showAdvancedTools,
+            visibleTools: visibleTools,
             language: language
         )
 
@@ -406,7 +420,8 @@ struct TokenUsageDashboardSnapshot: Equatable {
             periodOffset: periodOffset,
             calendar: calendar,
             locale: locale,
-            timeZone: timeZone
+            timeZone: timeZone,
+            visibleTools: visibleTools
         )
 
         // Comparison period tokens (nil when navigating to offset period, work item is selected, or period is .all)

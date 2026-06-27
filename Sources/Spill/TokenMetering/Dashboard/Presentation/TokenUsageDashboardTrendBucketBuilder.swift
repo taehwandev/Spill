@@ -9,7 +9,8 @@ enum TokenUsageDashboardTrendBucketBuilder {
         periodOffset: Int = 0,
         calendar: Calendar,
         locale: Locale,
-        timeZone: TimeZone
+        timeZone: TimeZone,
+        visibleTools: Set<TokenUsageAITool>? = nil
     ) -> [TokenUsageDashboardTrendBucket] {
         switch selectedPeriod {
         case .today:
@@ -23,7 +24,8 @@ enum TokenUsageDashboardTrendBucketBuilder {
                 periodOffset: periodOffset,
                 calendar: calendar,
                 locale: locale,
-                timeZone: timeZone
+                timeZone: timeZone,
+                visibleTools: visibleTools
             )
         case .thirtyDays:
             return dailyBuckets(
@@ -34,7 +36,8 @@ enum TokenUsageDashboardTrendBucketBuilder {
                 periodOffset: periodOffset,
                 calendar: calendar,
                 locale: locale,
-                timeZone: timeZone
+                timeZone: timeZone,
+                visibleTools: visibleTools
             )
         case .all:
             return monthlyBuckets(
@@ -42,7 +45,8 @@ enum TokenUsageDashboardTrendBucketBuilder {
                 language: language,
                 calendar: calendar,
                 locale: locale,
-                timeZone: timeZone
+                timeZone: timeZone,
+                visibleTools: visibleTools
             )
         }
     }
@@ -55,7 +59,8 @@ enum TokenUsageDashboardTrendBucketBuilder {
         periodOffset: Int = 0,
         calendar: Calendar,
         locale: Locale,
-        timeZone: TimeZone
+        timeZone: TimeZone,
+        visibleTools: Set<TokenUsageAITool>?
     ) -> [TokenUsageDashboardTrendBucket] {
         let baseStart = TokenUsageDashboardSnapshot.periodStartDate(
             dayCount: dayCount,
@@ -63,7 +68,12 @@ enum TokenUsageDashboardTrendBucketBuilder {
             calendar: calendar
         )
         let start = calendar.date(byAdding: .day, value: periodOffset * dayCount, to: baseStart) ?? baseStart
-        let summariesByDay = Self.summariesByBucket(events: events, language: language, bucketID: \.dayBucket)
+        let summariesByDay = Self.summariesByBucket(
+            events: events,
+            language: language,
+            visibleTools: visibleTools,
+            bucketID: \.dayBucket
+        )
         let maxTokens = max(1, summariesByDay.values.map(\.totalTokens).max() ?? 0)
 
         let titleFormatter = TokenUsageDashboardSnapshot.cachedFixedDateFormatter(
@@ -104,7 +114,8 @@ enum TokenUsageDashboardTrendBucketBuilder {
         language: TokenMeteringLanguage,
         calendar: Calendar,
         locale: Locale,
-        timeZone: TimeZone
+        timeZone: TimeZone,
+        visibleTools: Set<TokenUsageAITool>?
     ) -> [TokenUsageDashboardTrendBucket] {
         var datedEvents: [TokenUsageDashboardParsedEvent] = []
         var firstDate: Date?
@@ -126,7 +137,12 @@ enum TokenUsageDashboardTrendBucketBuilder {
 
         let startMonth = monthStart(for: firstDate, calendar: calendar)
         let endMonth = monthStart(for: lastDate, calendar: calendar)
-        let summariesByMonth = Self.summariesByBucket(events: datedEvents, language: language, bucketID: \.monthBucket)
+        let summariesByMonth = Self.summariesByBucket(
+            events: datedEvents,
+            language: language,
+            visibleTools: visibleTools,
+            bucketID: \.monthBucket
+        )
         let maxTokens = max(1, summariesByMonth.values.map(\.totalTokens).max() ?? 0)
 
         let sameYear = calendar.component(.year, from: startMonth) == calendar.component(.year, from: endMonth)
@@ -171,6 +187,7 @@ enum TokenUsageDashboardTrendBucketBuilder {
     private static func summariesByBucket<BucketID: Hashable>(
         events: [TokenUsageDashboardParsedEvent],
         language: TokenMeteringLanguage,
+        visibleTools: Set<TokenUsageAITool>?,
         bucketID: (TokenUsageDashboardParsedEvent) -> BucketID
     ) -> [BucketID: BucketSummary] {
         var summaries = [BucketID: BucketSummary]()
@@ -179,7 +196,7 @@ enum TokenUsageDashboardTrendBucketBuilder {
         }
         return summaries.mapValues { summary in
             var summary = summary
-            summary.finalizeToolRows(language: language)
+            summary.finalizeToolRows(language: language, visibleTools: visibleTools)
             return summary
         }
     }
@@ -199,9 +216,12 @@ enum TokenUsageDashboardTrendBucketBuilder {
             toolTotals[event.aiTool, default: 0] += event.totalTokens
         }
 
-        mutating func finalizeToolRows(language: TokenMeteringLanguage) {
+        mutating func finalizeToolRows(language: TokenMeteringLanguage, visibleTools: Set<TokenUsageAITool>?) {
+            let visibleToolTotals = toolTotals.filter { tool, _ in
+                visibleTools?.contains(tool) ?? true
+            }
             toolRows = TokenUsageDashboardRowBuilder.rows(
-                tokenValues: toolTotals,
+                tokenValues: visibleToolTotals,
                 totalTokens: totalTokens,
                 id: { $0.rawValue },
                 label: { $0.dashboardLabel(language: language) }

@@ -17,6 +17,7 @@ final class TokenMeteringDashboardWindowController: NSObject, NSWindowDelegate {
     private let settingsAction: () -> Void
     private let developerOptionsAction: () -> Void
     private let closeAction: () -> Void
+    private let syncsVisibleAIToolsInView: Bool
     private var window: NSWindow?
     private var deferredRefreshTask: Task<Void, Never>?
     private var aiStatusRefreshTask: Task<Void, Never>?
@@ -30,7 +31,8 @@ final class TokenMeteringDashboardWindowController: NSObject, NSWindowDelegate {
         refreshAction: @escaping () -> Void = {},
         settingsAction: @escaping () -> Void = {},
         developerOptionsAction: @escaping () -> Void = {},
-        closeAction: @escaping () -> Void = {}
+        closeAction: @escaping () -> Void = {},
+        syncsVisibleAIToolsInView: Bool = true
     ) {
         self.store = store
         self.cloudServiceStatusStore = cloudServiceStatusStore
@@ -40,6 +42,7 @@ final class TokenMeteringDashboardWindowController: NSObject, NSWindowDelegate {
         self.settingsAction = settingsAction
         self.developerOptionsAction = developerOptionsAction
         self.closeAction = closeAction
+        self.syncsVisibleAIToolsInView = syncsVisibleAIToolsInView
         super.init()
     }
 
@@ -89,6 +92,7 @@ final class TokenMeteringDashboardWindowController: NSObject, NSWindowDelegate {
             refreshAction: refreshAction,
             settingsAction: settingsAction,
             developerOptionsAction: developerOptionsAction,
+            syncsVisibleAITools: syncsVisibleAIToolsInView,
             titleDidChange: { [weak self] in
                 self?.updateWindowTitle()
             }

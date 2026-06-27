@@ -476,6 +476,47 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(unsupportedSelection.toolFilters.first?.isSelected == true)
     }
 
+    func testDashboardSnapshotShowsOnlyVisibleInstalledAgentTools() {
+        let codex = Self.safeEvent(
+            aiTool: .codex,
+            spanID: "span_visible_codex",
+            inputTokens: 100,
+            outputTokens: 10
+        )
+        let claude = Self.safeEvent(
+            aiTool: .claude,
+            spanID: "span_hidden_claude",
+            inputTokens: 200,
+            outputTokens: 20
+        )
+        let antigravity = Self.safeEvent(
+            aiTool: .antigravity,
+            spanID: "span_visible_antigravity",
+            inputTokens: 300,
+            outputTokens: 30
+        )
+
+        let snapshot = TokenUsageDashboardSnapshot(
+            events: [codex, claude, antigravity],
+            visibleTools: [.codex, .antigravity]
+        )
+
+        XCTAssertEqual(snapshot.eventCount, 2)
+        XCTAssertEqual(snapshot.totalTokens, 440)
+        XCTAssertEqual(snapshot.toolRows.map(\.title), ["Antigravity (agy)", "Codex"])
+        XCTAssertEqual(snapshot.toolFilters.compactMap(\.tool), [.codex, .antigravity])
+        XCTAssertNil(snapshot.toolFilters.first { $0.tool == .claude })
+
+        let hiddenSelection = TokenUsageDashboardSnapshot(
+            events: [codex, claude],
+            selectedTool: .claude,
+            visibleTools: [.codex]
+        )
+        XCTAssertEqual(hiddenSelection.totalTokens, 110)
+        XCTAssertTrue(hiddenSelection.toolFilters.first?.isSelected == true)
+        XCTAssertNil(hiddenSelection.toolFilters.first { $0.tool == .claude })
+    }
+
     func testDashboardSnapshotAggregatesModelRows() {
         let codex = Self.safeEvent(
             aiTool: .codex,
@@ -625,6 +666,7 @@ final class TokenUsageStoreTests: XCTestCase {
         let setupSection = try Self.source(named: "TokenMeteringSetupSection.swift")
         let promptCard = try Self.source(named: "TokenMeteringPromptInstructionCard.swift")
         let localSyncSection = try Self.source(named: "TokenMeteringLocalSyncSettingsSection.swift")
+        let aiToolVisibilitySection = try Self.source(named: "TokenMeteringAIToolVisibilitySection.swift")
         let privacyBoundarySection = try Self.source(named: "TokenMeteringPrivacyBoundarySection.swift")
 
         XCTAssertTrue(preferencesSection.contains("TokenMeteringSetupSection("))
@@ -638,6 +680,10 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(localSyncSection.contains("t(.menuBarTokenDisplayModeDetail)"))
         XCTAssertTrue(preferencesSection.contains("localSyncAndDisplaySettingsSection"))
         XCTAssertTrue(preferencesSection.contains("TokenMeteringLocalSyncSettingsSection("))
+        XCTAssertTrue(preferencesSection.contains("aiToolVisibilitySection"))
+        XCTAssertTrue(preferencesSection.contains("TokenMeteringAIToolVisibilitySection("))
+        XCTAssertTrue(aiToolVisibilitySection.contains("aiStatusStore.statuses.map(\\.kind)"))
+        XCTAssertTrue(aiToolVisibilitySection.contains("settings.setLocalAITool(kind, isVisible: $0)"))
         XCTAssertTrue(preferencesSection.contains("privacyBoundarySection"))
         XCTAssertTrue(privacyBoundarySection.contains("t(.privacyBoundaryDetail)"))
         XCTAssertTrue(privacyBoundarySection.contains("TokenMeteringPreferencesModel.forbiddenContentLabels"))
@@ -2267,6 +2313,62 @@ final class TokenUsageStoreTests: XCTestCase {
     }
 
     @MainActor
+    func testDashboardStoreReloadsPeriodFilterTotalsWhenVisibleAIToolsChange() async throws {
+        let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        let todayStart = calendar.startOfDay(for: Date())
+        let today = try XCTUnwrap(calendar.date(byAdding: .hour, value: 1, to: todayStart))
+        let sixDaysAgo = try XCTUnwrap(calendar.date(byAdding: .day, value: -6, to: todayStart))
+        try usageStore.replaceEvents([
+            Self.safeEvent(
+                aiTool: .codex,
+                spanID: "span_visible_tools_today_codex",
+                inputTokens: 80,
+                outputTokens: 20,
+                createdAt: ISO8601DateFormatter.tokenUsage.string(from: today)
+            ),
+            Self.safeEvent(
+                aiTool: .claude,
+                spanID: "span_visible_tools_today_claude",
+                inputTokens: 160,
+                outputTokens: 40,
+                createdAt: ISO8601DateFormatter.tokenUsage.string(from: today)
+            ),
+            Self.safeEvent(
+                aiTool: .codex,
+                spanID: "span_visible_tools_week_codex",
+                inputTokens: 24,
+                outputTokens: 6,
+                createdAt: ISO8601DateFormatter.tokenUsage.string(from: sixDaysAgo)
+            ),
+            Self.safeEvent(
+                aiTool: .claude,
+                spanID: "span_visible_tools_week_claude",
+                inputTokens: 56,
+                outputTokens: 14,
+                createdAt: ISO8601DateFormatter.tokenUsage.string(from: sixDaysAgo)
+            )
+        ])
+        let dashboardStore = TokenUsageDashboardStore(
+            usageStore: usageStore,
+            loadsInitialPanelSummary: false
+        )
+
+        dashboardStore.refreshAsyncIfIdle()
+        try await waitForDashboardStoreRefresh(dashboardStore)
+
+        XCTAssertEqual(dashboardStore.snapshot.eventCount, 2)
+        XCTAssertEqual(dashboardStore.snapshot.periodFilters.map(\.detail), ["300", "400", "400", "400"])
+
+        dashboardStore.setVisibleAITools([.codex])
+        try await waitForDashboardPeriodDetails(dashboardStore, details: ["100", "130", "130", "130"])
+
+        XCTAssertEqual(dashboardStore.snapshot.eventCount, 1)
+        XCTAssertEqual(dashboardStore.snapshot.periodFilters.map(\.detail), ["100", "130", "130", "130"])
+    }
+
+    @MainActor
     func testDashboardStorePreviousPeriodUsesDatabaseBoundsOutsideLoadedScope() async throws {
         let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
         var calendar = Calendar(identifier: .gregorian)
@@ -2826,6 +2928,16 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(dashboardTotals[.thirtyDays], 690)
         XCTAssertEqual(dashboardTotals[.all], 1_140)
 
+        let visibleToolTotals = store.allPeriodTotalTokens(
+            now: now,
+            calendar: calendar,
+            visibleTools: [.codex]
+        )
+        XCTAssertEqual(visibleToolTotals[.today], 120)
+        XCTAssertEqual(visibleToolTotals[.sevenDays], 120)
+        XCTAssertEqual(visibleToolTotals[.thirtyDays], 120)
+        XCTAssertEqual(visibleToolTotals[.all], 570)
+
         let allToolTotals = store.allPeriodTotalTokens(
             now: now,
             calendar: calendar,
@@ -2928,6 +3040,17 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertNil(dashboardSummary.toolTotals["openai"])
         XCTAssertEqual(dashboardSummary.taskTotals["analysis"], 150)
         XCTAssertEqual(dashboardSummary.taskTotals["code_review"], 280)
+
+        let visibleSummary = store.dashboardSummary(
+            startingAt: start,
+            endingBefore: end,
+            visibleTools: [.codex]
+        )
+        XCTAssertEqual(visibleSummary.eventCount, 1)
+        XCTAssertEqual(visibleSummary.totalTokens, 150)
+        XCTAssertEqual(visibleSummary.toolTotals["codex"], 150)
+        XCTAssertNil(visibleSummary.toolTotals["claude"])
+        XCTAssertNil(visibleSummary.toolTotals["openai"])
 
         let fullSummary = store.dashboardSummary(startingAt: start, endingBefore: end, dashboardToolsOnly: false)
         XCTAssertEqual(fullSummary.eventCount, 3)
@@ -4917,6 +5040,20 @@ final class TokenUsageStoreTests: XCTestCase {
             try await Task.sleep(nanoseconds: 50_000_000)
         }
         XCTFail("Dashboard store did not load expected events")
+    }
+
+    @MainActor
+    private func waitForDashboardPeriodDetails(
+        _ store: TokenUsageDashboardStore,
+        details: [String]
+    ) async throws {
+        for _ in 0..<30 {
+            if store.snapshot.periodFilters.map(\.detail) == details, !store.isDashboardRefreshInProgress {
+                return
+            }
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        XCTFail("Dashboard store did not load expected period filter totals")
     }
 
     private func temporaryInboxURL() -> URL {

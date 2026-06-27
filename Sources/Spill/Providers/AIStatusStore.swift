@@ -7,6 +7,7 @@ final class AIStatusStore: ObservableObject {
     typealias BackgroundReader = @Sendable (@escaping @Sendable () -> Bool) -> [LocalAIToolStatus]
 
     @Published private(set) var statuses: [LocalAIToolStatus]
+    @Published private(set) var hasCompletedRefresh = false
 
     private let reader: Reader
     private let backgroundReader: BackgroundReader
@@ -38,6 +39,7 @@ final class AIStatusStore: ObservableObject {
 
     func refresh() {
         statuses = reader()
+        hasCompletedRefresh = true
     }
 
     func cancelRefresh() {
@@ -82,6 +84,7 @@ final class AIStatusStore: ObservableObject {
             }
 
             self.statuses = statuses
+            self.hasCompletedRefresh = true
         }
     }
 }

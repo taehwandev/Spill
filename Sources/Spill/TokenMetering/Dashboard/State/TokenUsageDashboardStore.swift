@@ -23,6 +23,7 @@ private struct TokenUsageDashboardContextCacheKey: Equatable {
     let totalTokens: Int
     let eventFingerprint: Int
     let showAdvancedTools: Bool
+    let visibleAITools: [String]?
     let calendarIdentifier: String
     let calendarTimeZone: String
     let firstWeekday: Int
@@ -45,6 +46,7 @@ private struct TokenUsageDashboardContextCacheKey: Equatable {
         totalTokens = total
         eventFingerprint = hasher.finalize()
         showAdvancedTools = request.showAdvancedTools
+        visibleAITools = request.visibleAITools?.map(\.rawValue).sorted()
         calendarIdentifier = String(describing: request.calendar.identifier)
         calendarTimeZone = request.calendar.timeZone.identifier
         firstWeekday = request.calendar.firstWeekday
@@ -104,6 +106,7 @@ final class TokenUsageDashboardStore: ObservableObject {
     private var availableDateBounds = TokenUsageDashboardDateBounds.empty
     private var cachedSnapshotContext: TokenUsageDashboardSnapshotBuildContext?
     private var cachedSnapshotContextKey: TokenUsageDashboardContextCacheKey?
+    private var visibleAITools: Set<TokenUsageAITool>?
     private var eventsDidChangeObserver: NSObjectProtocol?
     private var distributedEventsDidChangeObserver: NSObjectProtocol?
     private var collectionDidFinishObserver: NSObjectProtocol?
@@ -155,7 +158,8 @@ final class TokenUsageDashboardStore: ObservableObject {
     var hasDashboardEvents: Bool {
         let showAdvancedTools = SpillSettings.shared.tokenUsageShowAdvancedTools
         let hasLoadedDashboardEvents = displayEvents(for: events).contains { event in
-            showAdvancedTools || event.aiTool.isDashboardTool
+            (showAdvancedTools || event.aiTool.isDashboardTool)
+                && (visibleAITools?.contains(event.aiTool) ?? true)
         }
         if isOnboardingPreviewEnabled {
             return hasLoadedDashboardEvents
@@ -367,7 +371,8 @@ final class TokenUsageDashboardStore: ObservableObject {
         let displayEvents = displayEvents(for: events)
         let nextDateBounds = usageStore.dashboardDateBounds(
             selectedTool: selectedTool,
-            dashboardToolsOnly: !SpillSettings.shared.tokenUsageShowAdvancedTools
+            dashboardToolsOnly: !SpillSettings.shared.tokenUsageShowAdvancedTools,
+            visibleTools: visibleAITools
         )
         let request = snapshotBuildRequest().replacingAvailableDateBounds(nextDateBounds)
         let calendarMonthSummary = Self.loadCalendarMonthSummary(from: usageStore, for: request)
@@ -526,6 +531,7 @@ final class TokenUsageDashboardStore: ObservableObject {
             language: language,
             localAliases: SpillSettings.shared.tokenUsageLocalAliases,
             showAdvancedTools: SpillSettings.shared.tokenUsageShowAdvancedTools,
+            visibleAITools: visibleAITools,
             now: Date(),
             proposedCalendarMonthStart: calendarMonthStart,
             calendar: calendar,
@@ -565,6 +571,7 @@ final class TokenUsageDashboardStore: ObservableObject {
             language: request.language,
             localAliases: request.localAliases,
             showAdvancedTools: request.showAdvancedTools,
+            visibleTools: request.visibleAITools,
             now: request.now,
             proposedCalendarMonthStart: request.proposedCalendarMonthStart,
             calendar: request.calendar,
@@ -679,7 +686,8 @@ final class TokenUsageDashboardStore: ObservableObject {
     ) -> TokenUsageDashboardDateBounds {
         usageStore.dashboardDateBounds(
             selectedTool: request.selectedTool,
-            dashboardToolsOnly: !request.showAdvancedTools
+            dashboardToolsOnly: !request.showAdvancedTools,
+            visibleTools: request.visibleAITools
         )
     }
 
@@ -696,7 +704,8 @@ final class TokenUsageDashboardStore: ObservableObject {
             startingAt: monthStart,
             endingBefore: endDate,
             calendar: request.calendar,
-            dashboardToolsOnly: !request.showAdvancedTools
+            dashboardToolsOnly: !request.showAdvancedTools,
+            visibleTools: request.visibleAITools
         )
         return TokenUsageDashboardCalendarMonthSummary(
             monthStart: monthStart,
@@ -711,7 +720,8 @@ final class TokenUsageDashboardStore: ObservableObject {
         usageStore.allPeriodTotalTokens(
             now: request.now,
             calendar: request.calendar,
-            dashboardToolsOnly: !request.showAdvancedTools
+            dashboardToolsOnly: !request.showAdvancedTools,
+            visibleTools: request.visibleAITools
         )
     }
 
@@ -724,7 +734,8 @@ final class TokenUsageDashboardStore: ObservableObject {
         let summary = usageStore.dashboardSummary(
             startingAt: dayStart,
             endingBefore: dayEnd,
-            dashboardToolsOnly: !request.showAdvancedTools
+            dashboardToolsOnly: !request.showAdvancedTools,
+            visibleTools: request.visibleAITools
         )
         return TokenUsagePanelSummarySnapshot(
             summary: summary,
@@ -820,7 +831,9 @@ final class TokenUsageDashboardStore: ObservableObject {
     }
 
     func setSelectedTool(_ tool: TokenUsageAITool?) {
-        let nextTool = tool?.isDashboardTool == true ? tool : nil
+        let nextTool = tool.flatMap { candidate in
+            candidate.isDashboardTool && (visibleAITools?.contains(candidate) ?? true) ? candidate : nil
+        }
         guard selectedTool != nextTool else {
             return
         }
@@ -833,6 +846,30 @@ final class TokenUsageDashboardStore: ObservableObject {
             refreshesPanelSummary: false,
             reusesPeriodFilterTotals: true
         )
+    }
+
+    func setVisibleAITools(_ tools: Set<TokenUsageAITool>?) {
+        let nextTools = tools.map { Set($0.filter(\.isDashboardTool)) }
+        guard visibleAITools != nextTools else {
+            return
+        }
+
+        visibleAITools = nextTools
+        if let nextTools, let selectedTool, !nextTools.contains(selectedTool) {
+            self.selectedTool = nil
+            selectedProjectID = nil
+            selectedSessionID = nil
+        }
+        if hasRebuiltSnapshot {
+            refreshAsync(
+                trackLiveUpdates: false,
+                reusesLoadedEvents: true,
+                reusesPeriodFilterTotals: false
+            )
+        } else {
+            refreshPanelSummary()
+            rebuildSnapshotFromCurrentEventsAsync()
+        }
     }
 
     func setSelectedProjectID(_ projectID: String?) {
@@ -1562,6 +1599,7 @@ private struct TokenUsageDashboardBuildRequest {
     let language: TokenMeteringLanguage
     let localAliases: [String: String]
     let showAdvancedTools: Bool
+    let visibleAITools: Set<TokenUsageAITool>?
     let now: Date
     let proposedCalendarMonthStart: Date?
     let calendar: Calendar
@@ -1582,6 +1620,7 @@ private extension TokenUsageDashboardBuildRequest {
             language: language,
             localAliases: localAliases,
             showAdvancedTools: showAdvancedTools,
+            visibleAITools: visibleAITools,
             now: now,
             proposedCalendarMonthStart: proposedCalendarMonthStart,
             calendar: calendar,

@@ -45,7 +45,8 @@ extension TokenUsageStore {
     func allPeriodTotalTokens(
         now: Date,
         calendar: Calendar,
-        dashboardToolsOnly: Bool = true
+        dashboardToolsOnly: Bool = true,
+        visibleTools: Set<TokenUsageAITool>? = nil
     ) -> [TokenUsageDashboardPeriod: Int] {
         lock.withLock {
             let database: OpaquePointer
@@ -55,7 +56,13 @@ extension TokenUsageStore {
                 return [:]
             }
             defer { sqlite3_close(database) }
-            return loadAllPeriodTotalTokens(now: now, calendar: calendar, dashboardToolsOnly: dashboardToolsOnly, database: database)
+            return loadAllPeriodTotalTokens(
+                now: now,
+                calendar: calendar,
+                dashboardToolsOnly: dashboardToolsOnly,
+                visibleTools: visibleTools,
+                database: database
+            )
         }
     }
 
@@ -79,7 +86,8 @@ extension TokenUsageStore {
     func dashboardSummary(
         startingAt startDate: Date,
         endingBefore endDate: Date,
-        dashboardToolsOnly: Bool = true
+        dashboardToolsOnly: Bool = true,
+        visibleTools: Set<TokenUsageAITool>? = nil
     ) -> TokenUsageDashboardSummary {
         lock.withLock {
             let database: OpaquePointer
@@ -94,6 +102,7 @@ extension TokenUsageStore {
                 startingAt: startDate,
                 endingBefore: endDate,
                 dashboardToolsOnly: dashboardToolsOnly,
+                visibleTools: visibleTools,
                 database: database
             )
         }
@@ -101,7 +110,8 @@ extension TokenUsageStore {
 
     func dashboardDateBounds(
         selectedTool: TokenUsageAITool? = nil,
-        dashboardToolsOnly: Bool = true
+        dashboardToolsOnly: Bool = true,
+        visibleTools: Set<TokenUsageAITool>? = nil
     ) -> TokenUsageDashboardDateBounds {
         lock.withLock {
             let database: OpaquePointer
@@ -115,6 +125,7 @@ extension TokenUsageStore {
             return loadDashboardDateBounds(
                 selectedTool: selectedTool,
                 dashboardToolsOnly: dashboardToolsOnly,
+                visibleTools: visibleTools,
                 database: database
             )
         }
@@ -124,7 +135,8 @@ extension TokenUsageStore {
         startingAt startDate: Date,
         endingBefore endDate: Date,
         calendar: Calendar,
-        dashboardToolsOnly: Bool = true
+        dashboardToolsOnly: Bool = true,
+        visibleTools: Set<TokenUsageAITool>? = nil
     ) -> [String: Int] {
         lock.withLock {
             let database: OpaquePointer
@@ -140,6 +152,7 @@ extension TokenUsageStore {
                 endingBefore: endDate,
                 calendar: calendar,
                 dashboardToolsOnly: dashboardToolsOnly,
+                visibleTools: visibleTools,
                 database: database
             )
         }

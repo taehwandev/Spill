@@ -33,6 +33,7 @@ final class TokenMeteringCoordinator: NSObject {
     private var lastMenuBarTokenCollectionAt: Date?
     private var usageEventsDidChange: (@MainActor () -> Void)?
     private var cancellables = Set<AnyCancellable>()
+    private var visibleAIToolsSyncTask: Task<Void, Never>?
     private var hasStarted = false
     private var isStopped = false
 
@@ -71,7 +72,9 @@ final class TokenMeteringCoordinator: NSObject {
         self.isSmokeTest = isSmokeTest
         self.usageEventsDidChange = usageEventsDidChange
         TokenMeteringSetupInstaller.refreshInstalledFilesIfPresent()
+        syncVisibleAIToolsFromStatusStore()
         observeUsageEvents()
+        observeAIToolVisibility()
         inboxMonitor.start()
         requestCollection(reason: "app_launch")
         configureBridge()
@@ -89,6 +92,8 @@ final class TokenMeteringCoordinator: NSObject {
         bridgeServer.stop()
         historyImportCoordinator.cancelImport()
         aiStatusStore.cancelRefresh()
+        visibleAIToolsSyncTask?.cancel()
+        visibleAIToolsSyncTask = nil
         privateUsageUploadTask?.cancel()
         privateUsageUploadTask = nil
         cancellables.removeAll()
@@ -117,6 +122,7 @@ final class TokenMeteringCoordinator: NSObject {
     }
 
     func refreshPanelSummary() {
+        syncVisibleAIToolsFromStatusStore()
         dashboardStore.refreshPanelSummary()
     }
 
@@ -245,6 +251,63 @@ final class TokenMeteringCoordinator: NSObject {
             name: TokenUsageStore.distributedEventsDidChangeNotification,
             object: nil
         )
+    }
+
+    private func observeAIToolVisibility() {
+        settings.$hiddenTokenUsageAITools
+            .dropFirst()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.scheduleVisibleAIToolsSync()
+            }
+            .store(in: &cancellables)
+
+        settings.$hiddenLocalAIToolKinds
+            .dropFirst()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.scheduleVisibleAIToolsSync()
+            }
+            .store(in: &cancellables)
+
+        aiStatusStore.$statuses
+            .dropFirst()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.scheduleVisibleAIToolsSync()
+            }
+            .store(in: &cancellables)
+
+        aiStatusStore.$hasCompletedRefresh
+            .dropFirst()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.scheduleVisibleAIToolsSync()
+            }
+            .store(in: &cancellables)
+    }
+
+    private func scheduleVisibleAIToolsSync() {
+        visibleAIToolsSyncTask?.cancel()
+        visibleAIToolsSyncTask = Task { @MainActor [weak self] in
+            await Task.yield()
+            guard let self, !Task.isCancelled else {
+                return
+            }
+
+            self.visibleAIToolsSyncTask = nil
+            self.syncVisibleAIToolsFromStatusStore()
+        }
+    }
+
+    private func syncVisibleAIToolsFromStatusStore() {
+        let baseTools: Set<TokenUsageAITool>
+        if aiStatusStore.hasCompletedRefresh || !aiStatusStore.statuses.isEmpty {
+            baseTools = Set(aiStatusStore.statuses.compactMap(\.kind.tokenUsageDashboardTool))
+        } else {
+            baseTools = Set(TokenUsageAITool.dashboardTools)
+        }
+        dashboardStore.setVisibleAITools(baseTools.subtracting(settings.hiddenTokenUsageAITools))
     }
 
     private func registerPrivateUsageConnectionURLHandler() {
@@ -396,7 +459,8 @@ final class TokenMeteringCoordinator: NSObject {
                     "token_dashboard",
                     TokenMeteringDashboardProcess.tokenMeteringPreferencesTab
                 )
-            }
+            },
+            syncsVisibleAIToolsInView: false
         )
         dashboardWindowController = controller
         return controller

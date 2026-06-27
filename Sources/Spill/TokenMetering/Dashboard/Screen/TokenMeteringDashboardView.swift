@@ -18,9 +18,12 @@ struct TokenMeteringDashboardView: View {
     @State private var aliasText = ""
     @State private var resolvedLanguage: TokenMeteringLanguage
     @State private var hoveredKPI: String? = nil
+    @State private var aiToolVisibilityObserver: NSObjectProtocol?
+    @State private var visibleAIToolsSyncTask: Task<Void, Never>?
     private let refreshAction: () -> Void
     private let settingsAction: () -> Void
     private let developerOptionsAction: () -> Void
+    private let syncsVisibleAITools: Bool
     private let titleDidChange: () -> Void
 
     init(
@@ -31,6 +34,7 @@ struct TokenMeteringDashboardView: View {
         refreshAction: @escaping () -> Void = {},
         settingsAction: @escaping () -> Void = {},
         developerOptionsAction: @escaping () -> Void = {},
+        syncsVisibleAITools: Bool = true,
         titleDidChange: @escaping () -> Void = {}
     ) {
         self.store = store
@@ -41,6 +45,7 @@ struct TokenMeteringDashboardView: View {
         self.refreshAction = refreshAction
         self.settingsAction = settingsAction
         self.developerOptionsAction = developerOptionsAction
+        self.syncsVisibleAITools = syncsVisibleAITools
         self.titleDidChange = titleDidChange
     }
 
@@ -102,8 +107,19 @@ struct TokenMeteringDashboardView: View {
             titleDidChange()
             store.setLanguage(language)
             syncOnboardingPreviewFromSettings()
+            if syncsVisibleAITools {
+                installAIToolVisibilityObserver()
+            }
             aiStatusStore.refreshInBackground()
+            if syncsVisibleAITools {
+                syncVisibleAIToolsFromStatusStore()
+            }
             store.refreshAsyncIfIdle()
+        }
+        .onDisappear {
+            visibleAIToolsSyncTask?.cancel()
+            visibleAIToolsSyncTask = nil
+            removeAIToolVisibilityObserver()
         }
         .onChange(of: settings.appLanguage) { _, appLanguage in
             let language = TokenMeteringLanguage.current(appLanguage: appLanguage)
@@ -113,6 +129,18 @@ struct TokenMeteringDashboardView: View {
         }
         .onChange(of: settings.tokenUsageDashboardOnboardingPreviewEnabled) { _, _ in
             syncOnboardingPreviewFromSettings()
+        }
+        .onChange(of: settings.hiddenTokenUsageAITools) { _, _ in
+            scheduleVisibleAIToolsSync()
+        }
+        .onChange(of: settings.hiddenLocalAIToolKinds) { _, _ in
+            scheduleVisibleAIToolsSync()
+        }
+        .onChange(of: aiStatusStore.statuses) { _, _ in
+            scheduleVisibleAIToolsSync()
+        }
+        .onChange(of: aiStatusStore.hasCompletedRefresh) { _, _ in
+            scheduleVisibleAIToolsSync()
         }
         .onChange(of: store.selectedSessionID) { _, newID in
             if let newID {
@@ -285,6 +313,58 @@ struct TokenMeteringDashboardView: View {
         )
     }
 
+    private func syncVisibleAIToolsFromStatusStore() {
+        let baseTools: Set<TokenUsageAITool>
+        if aiStatusStore.hasCompletedRefresh || !aiStatusStore.statuses.isEmpty {
+            baseTools = Set(aiStatusStore.statuses.compactMap(\.kind.tokenUsageDashboardTool))
+        } else {
+            baseTools = Set(TokenUsageAITool.dashboardTools)
+        }
+        store.setVisibleAITools(baseTools.subtracting(settings.hiddenTokenUsageAITools))
+    }
+
+    private func scheduleVisibleAIToolsSync() {
+        guard syncsVisibleAITools else {
+            return
+        }
+
+        visibleAIToolsSyncTask?.cancel()
+        visibleAIToolsSyncTask = Task { @MainActor in
+            await Task.yield()
+            guard !Task.isCancelled else {
+                return
+            }
+
+            visibleAIToolsSyncTask = nil
+            syncVisibleAIToolsFromStatusStore()
+        }
+    }
+
+    private func installAIToolVisibilityObserver() {
+        guard aiToolVisibilityObserver == nil else {
+            return
+        }
+
+        aiToolVisibilityObserver = DistributedNotificationCenter.default().addObserver(
+            forName: SpillSettings.aiToolVisibilityDidChangeNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            Task { @MainActor in
+                settings.reloadAIToolVisibilityFromDefaults()
+                scheduleVisibleAIToolsSync()
+            }
+        }
+    }
+
+    private func removeAIToolVisibilityObserver() {
+        guard let aiToolVisibilityObserver else {
+            return
+        }
+        DistributedNotificationCenter.default().removeObserver(aiToolVisibilityObserver)
+        self.aiToolVisibilityObserver = nil
+    }
+
     private var topFilterBar: some View {
         TokenMeteringDashboardFilterBar(
             store: store,
@@ -315,6 +395,9 @@ struct TokenMeteringDashboardView: View {
     private func refreshLocalTokenData() {
         refreshAction()
         aiStatusStore.refreshInBackground()
+        if syncsVisibleAITools {
+            syncVisibleAIToolsFromStatusStore()
+        }
         store.refreshAsync()
     }
 
@@ -498,6 +581,7 @@ struct TokenMeteringDashboardView: View {
     private var agentStatusPanel: some View {
         TokenMeteringDashboardAgentStatusPanel(
             aiStatusStore: aiStatusStore,
+            settings: settings,
             language: currentLanguage,
             appLanguage: settings.appLanguage
         )

@@ -98,6 +98,7 @@ extension TokenUsageDashboardSnapshot {
         totals: [TokenUsageAITool: Int],
         totalEvents: Int,
         showAdvancedTools: Bool,
+        visibleTools: Set<TokenUsageAITool>?,
         language: TokenMeteringLanguage
     ) -> [TokenUsageDashboardToolFilter] {
         let allTotal = totals.values.reduce(0, +)
@@ -116,7 +117,10 @@ extension TokenUsageDashboardSnapshot {
         let toolsToShow: [TokenUsageAITool] = showAdvancedTools
             ? TokenUsageAITool.allCases
             : TokenUsageAITool.dashboardTools
-        let toolFilters = toolsToShow.map { tool in
+        let visibleToolsToShow = visibleTools.map { allowedTools in
+            toolsToShow.filter { allowedTools.contains($0) }
+        } ?? toolsToShow
+        let toolFilters = visibleToolsToShow.map { tool in
             let tokens = totals[tool, default: 0]
             let ratio = TokenUsageDashboardSnapshot.chartRatio(
                 tokens: tokens,

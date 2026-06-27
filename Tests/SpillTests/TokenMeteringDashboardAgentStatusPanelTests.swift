@@ -6,7 +6,9 @@ final class TokenMeteringDashboardAgentStatusPanelTests: XCTestCase {
         let source = try Self.source(named: "TokenMeteringDashboardAgentStatusPanel.swift")
 
         XCTAssertTrue(source.contains("private static let summaryColumns"))
-        XCTAssertTrue(source.contains("let summary = TokenMeteringDashboardAgentStatusSummary.make(statuses: aiStatusStore.statuses)"))
+        XCTAssertTrue(source.contains("@ObservedObject var settings: SpillSettings"))
+        XCTAssertTrue(source.contains("let summary = TokenMeteringDashboardAgentStatusSummary.make(statuses: visibleStatuses)"))
+        XCTAssertTrue(source.contains("settings.isLocalAIToolVisible(status.kind)"))
         XCTAssertFalse(source.contains("private var summary: TokenMeteringDashboardAgentStatusSummary"))
         XCTAssertFalse(source.contains("private var summaryColumns: [GridItem]"))
     }

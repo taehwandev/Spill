@@ -6,12 +6,14 @@ extension TokenUsageStore {
         startingAt startDate: Date? = nil,
         endingBefore endDate: Date? = nil,
         dashboardToolsOnly: Bool,
+        visibleTools: Set<TokenUsageAITool>? = nil,
         database: OpaquePointer
     ) -> TokenUsageDashboardSummary {
         let totals = loadDashboardCountAndTotal(
             startingAt: startDate,
             endingBefore: endDate,
             dashboardToolsOnly: dashboardToolsOnly,
+            visibleTools: visibleTools,
             database: database
         )
         return TokenUsageDashboardSummary(
@@ -22,6 +24,7 @@ extension TokenUsageStore {
                 startingAt: startDate,
                 endingBefore: endDate,
                 dashboardToolsOnly: dashboardToolsOnly,
+                visibleTools: visibleTools,
                 database: database
             ),
             taskTotals: loadGroupedTokenTotals(
@@ -29,12 +32,14 @@ extension TokenUsageStore {
                 startingAt: startDate,
                 endingBefore: endDate,
                 dashboardToolsOnly: dashboardToolsOnly,
+                visibleTools: visibleTools,
                 database: database
             ),
             sourceTotals: loadSourceTokenTotals(
                 startingAt: startDate,
                 endingBefore: endDate,
                 dashboardToolsOnly: dashboardToolsOnly,
+                visibleTools: visibleTools,
                 database: database
             )
         )
@@ -43,13 +48,17 @@ extension TokenUsageStore {
     func loadDashboardDateBounds(
         selectedTool: TokenUsageAITool?,
         dashboardToolsOnly: Bool,
+        visibleTools: Set<TokenUsageAITool>? = nil,
         database: OpaquePointer
     ) -> TokenUsageDashboardDateBounds {
         var conditions = [String]()
         if selectedTool != nil {
             conditions.append("ai_tool = ?")
-        } else if dashboardToolsOnly {
-            conditions.append("ai_tool IN ('codex', 'claude', 'antigravity')")
+        } else if let toolCondition = Self.dashboardToolCondition(
+            dashboardToolsOnly: dashboardToolsOnly,
+            visibleTools: visibleTools
+        ) {
+            conditions.append(toolCondition)
         }
 
         var sql = """
@@ -87,12 +96,13 @@ extension TokenUsageStore {
         startingAt startDate: Date? = nil,
         endingBefore endDate: Date? = nil,
         dashboardToolsOnly: Bool,
+        visibleTools: Set<TokenUsageAITool>? = nil,
         database: OpaquePointer
     ) -> (eventCount: Int, totalTokens: Int) {
         let sql = """
         SELECT COUNT(*), COALESCE(SUM(total_tokens), 0)
         FROM token_usage_events
-        \(Self.dashboardWhereClause(startingAt: startDate, endingBefore: endDate, dashboardToolsOnly: dashboardToolsOnly))
+        \(Self.dashboardWhereClause(startingAt: startDate, endingBefore: endDate, dashboardToolsOnly: dashboardToolsOnly, visibleTools: visibleTools))
         """
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
@@ -118,12 +128,13 @@ extension TokenUsageStore {
         startingAt startDate: Date? = nil,
         endingBefore endDate: Date? = nil,
         dashboardToolsOnly: Bool,
+        visibleTools: Set<TokenUsageAITool>? = nil,
         database: OpaquePointer
     ) -> [String: Int] {
         let sql = """
         SELECT \(column), COALESCE(SUM(total_tokens), 0)
         FROM token_usage_events
-        \(Self.dashboardWhereClause(startingAt: startDate, endingBefore: endDate, dashboardToolsOnly: dashboardToolsOnly))
+        \(Self.dashboardWhereClause(startingAt: startDate, endingBefore: endDate, dashboardToolsOnly: dashboardToolsOnly, visibleTools: visibleTools))
         GROUP BY \(column)
         """
         var statement: OpaquePointer?
@@ -153,6 +164,7 @@ extension TokenUsageStore {
         startingAt startDate: Date? = nil,
         endingBefore endDate: Date? = nil,
         dashboardToolsOnly: Bool,
+        visibleTools: Set<TokenUsageAITool>? = nil,
         database: OpaquePointer
     ) -> [String: Int] {
         let sql = """
@@ -165,7 +177,7 @@ extension TokenUsageStore {
             COALESCE(SUM(source_generated_output), 0),
             COALESCE(SUM(source_unknown), 0)
         FROM token_usage_events
-        \(Self.dashboardWhereClause(startingAt: startDate, endingBefore: endDate, dashboardToolsOnly: dashboardToolsOnly))
+        \(Self.dashboardWhereClause(startingAt: startDate, endingBefore: endDate, dashboardToolsOnly: dashboardToolsOnly, visibleTools: visibleTools))
         """
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,

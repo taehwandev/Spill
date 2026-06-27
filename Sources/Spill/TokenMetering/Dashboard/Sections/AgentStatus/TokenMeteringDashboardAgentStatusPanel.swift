@@ -2,6 +2,7 @@ import SwiftUI
 
 struct TokenMeteringDashboardAgentStatusPanel: View {
     @ObservedObject var aiStatusStore: AIStatusStore
+    @ObservedObject var settings: SpillSettings
     let language: TokenMeteringLanguage
     let appLanguage: SpillAppLanguage
     @State private var showsDetails = false
@@ -12,7 +13,7 @@ struct TokenMeteringDashboardAgentStatusPanel: View {
     ]
 
     var body: some View {
-        let summary = TokenMeteringDashboardAgentStatusSummary.make(statuses: aiStatusStore.statuses)
+        let summary = TokenMeteringDashboardAgentStatusSummary.make(statuses: visibleStatuses)
 
         TokenMeteringDashboardRailPanel(
             title: t(.agentConnectionStatus),
@@ -34,6 +35,12 @@ struct TokenMeteringDashboardAgentStatusPanel: View {
                     compactAgentStatus(summary)
                 }
             }
+        }
+    }
+
+    private var visibleStatuses: [LocalAIToolStatus] {
+        aiStatusStore.statuses.filter { status in
+            settings.isLocalAIToolVisible(status.kind)
         }
     }
 

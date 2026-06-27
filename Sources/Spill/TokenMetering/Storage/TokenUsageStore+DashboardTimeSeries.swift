@@ -6,6 +6,7 @@ extension TokenUsageStore {
         now: Date,
         calendar: Calendar,
         dashboardToolsOnly: Bool,
+        visibleTools: Set<TokenUsageAITool>? = nil,
         database: OpaquePointer
     ) -> [TokenUsageDashboardPeriod: Int] {
         let todayRange = TokenUsageDashboardSnapshot.cutoffDateRange(for: .today, periodOffset: 0, now: now, calendar: calendar)
@@ -20,11 +21,18 @@ extension TokenUsageStore {
                 .today: 0,
                 .sevenDays: 0,
                 .thirtyDays: 0,
-                .all: loadDashboardCountAndTotal(dashboardToolsOnly: dashboardToolsOnly, database: database).totalTokens
+                .all: loadDashboardCountAndTotal(
+                    dashboardToolsOnly: dashboardToolsOnly,
+                    visibleTools: visibleTools,
+                    database: database
+                ).totalTokens
             ]
         }
 
-        let toolFilter = dashboardToolsOnly ? " AND ai_tool IN ('codex', 'claude', 'antigravity')" : ""
+        let toolFilter = Self.dashboardToolCondition(
+            dashboardToolsOnly: dashboardToolsOnly,
+            visibleTools: visibleTools
+        ).map { " AND \($0)" } ?? ""
         let sql = """
         SELECT
           COALESCE(SUM(CASE WHEN created_at >= ? AND created_at < ? THEN total_tokens ELSE 0 END), 0),
@@ -103,6 +111,7 @@ extension TokenUsageStore {
         endingBefore endDate: Date,
         calendar: Calendar,
         dashboardToolsOnly: Bool,
+        visibleTools: Set<TokenUsageAITool>? = nil,
         database: OpaquePointer
     ) -> [String: Int] {
         var sql = """
@@ -110,8 +119,11 @@ extension TokenUsageStore {
         FROM token_usage_events
         WHERE created_at >= ? AND created_at < ?
         """
-        if dashboardToolsOnly {
-            sql += " AND ai_tool IN ('codex', 'claude', 'antigravity')"
+        if let toolCondition = Self.dashboardToolCondition(
+            dashboardToolsOnly: dashboardToolsOnly,
+            visibleTools: visibleTools
+        ) {
+            sql += " AND \(toolCondition)"
         }
 
         var statement: OpaquePointer?
@@ -140,28 +152,66 @@ extension TokenUsageStore {
         return totals
     }
 
-    static func dashboardToolWhereClause(dashboardToolsOnly: Bool) -> String {
-        dashboardToolsOnly
-            ? "WHERE ai_tool IN ('codex', 'claude', 'antigravity')"
-            : ""
+    static func dashboardToolWhereClause(
+        dashboardToolsOnly: Bool,
+        visibleTools: Set<TokenUsageAITool>? = nil
+    ) -> String {
+        guard let condition = dashboardToolCondition(
+            dashboardToolsOnly: dashboardToolsOnly,
+            visibleTools: visibleTools
+        ) else {
+            return ""
+        }
+        return "WHERE \(condition)"
     }
 
     static func dashboardWhereClause(
         startingAt startDate: Date?,
         endingBefore endDate: Date?,
-        dashboardToolsOnly: Bool
+        dashboardToolsOnly: Bool,
+        visibleTools: Set<TokenUsageAITool>? = nil
     ) -> String {
         var conditions = [String]()
         if startDate != nil, endDate != nil {
             conditions.append("created_at >= ? AND created_at < ?")
         }
-        if dashboardToolsOnly {
-            conditions.append("ai_tool IN ('codex', 'claude', 'antigravity')")
+        if let toolCondition = dashboardToolCondition(
+            dashboardToolsOnly: dashboardToolsOnly,
+            visibleTools: visibleTools
+        ) {
+            conditions.append(toolCondition)
         }
         guard !conditions.isEmpty else {
             return ""
         }
         return "WHERE \(conditions.joined(separator: " AND "))"
+    }
+
+    static func dashboardToolCondition(
+        dashboardToolsOnly: Bool,
+        visibleTools: Set<TokenUsageAITool>? = nil
+    ) -> String? {
+        let tools: [TokenUsageAITool]?
+        if let visibleTools {
+            tools = visibleTools
+                .filter { !dashboardToolsOnly || $0.isDashboardTool }
+                .sorted { $0.rawValue < $1.rawValue }
+        } else if dashboardToolsOnly {
+            tools = TokenUsageAITool.dashboardTools
+        } else {
+            tools = nil
+        }
+
+        guard let tools else {
+            return nil
+        }
+        guard !tools.isEmpty else {
+            return "0=1"
+        }
+        let rawValues = tools
+            .map { "'\($0.rawValue)'" }
+            .joined(separator: ", ")
+        return "ai_tool IN (\(rawValues))"
     }
 
     static func bindDashboardDateRange(
