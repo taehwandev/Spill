@@ -860,15 +860,14 @@ final class TokenUsageDashboardStore: ObservableObject {
             selectedProjectID = nil
             selectedSessionID = nil
         }
-        if hasRebuiltSnapshot {
+        if hasRebuiltSnapshot || isRefreshing {
             refreshAsync(
                 trackLiveUpdates: false,
-                reusesLoadedEvents: true,
+                reusesLoadedEvents: hasRebuiltSnapshot && !isRefreshing,
                 reusesPeriodFilterTotals: false
             )
         } else {
             refreshPanelSummary()
-            rebuildSnapshotFromCurrentEventsAsync()
         }
     }
 

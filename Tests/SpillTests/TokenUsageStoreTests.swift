@@ -2369,6 +2369,47 @@ final class TokenUsageStoreTests: XCTestCase {
     }
 
     @MainActor
+    func testDashboardStoreVisibleToolsBeforeFirstLoadDoesNotBlockInitialRefresh() async throws {
+        let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        let todayStart = calendar.startOfDay(for: Date())
+        let today = try XCTUnwrap(calendar.date(byAdding: .hour, value: 1, to: todayStart))
+        try usageStore.replaceEvents([
+            Self.safeEvent(
+                aiTool: .codex,
+                spanID: "span_visible_tools_initial_codex",
+                inputTokens: 80,
+                outputTokens: 20,
+                createdAt: ISO8601DateFormatter.tokenUsage.string(from: today)
+            ),
+            Self.safeEvent(
+                aiTool: .claude,
+                spanID: "span_visible_tools_initial_claude",
+                inputTokens: 160,
+                outputTokens: 40,
+                createdAt: ISO8601DateFormatter.tokenUsage.string(from: today)
+            )
+        ])
+        let dashboardStore = TokenUsageDashboardStore(
+            usageStore: usageStore,
+            loadsInitialPanelSummary: false
+        )
+
+        dashboardStore.setVisibleAITools([.codex])
+        try await waitForPanelSummary(dashboardStore, eventCount: 1, totalTokens: 100)
+
+        XCTAssertEqual(dashboardStore.loadState, .idle)
+        XCTAssertEqual(dashboardStore.snapshot.eventCount, 0)
+
+        dashboardStore.refreshAsyncIfIdle()
+        try await waitForDashboardStoreRefreshToLoadEvents(dashboardStore, eventCount: 1)
+
+        XCTAssertEqual(dashboardStore.snapshot.totalTokens, 100)
+        XCTAssertEqual(dashboardStore.snapshot.toolRows.map(\.id), ["codex"])
+    }
+
+    @MainActor
     func testDashboardStorePreviousPeriodUsesDatabaseBoundsOutsideLoadedScope() async throws {
         let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
         var calendar = Calendar(identifier: .gregorian)
