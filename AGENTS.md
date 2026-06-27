@@ -1,3 +1,83 @@
+<!-- BEGIN MANAGED AGENTPLAYBOOK ROUTING -->
+## AgentPlaybook Active Routing
+
+This managed block is the active shared AgentPlaybook workflow link for this
+repository. Keep repo-local instructions in this file as the source of truth for
+project paths, commands, domain rules, and product policy. If an older
+AgentPlaybook section appears elsewhere in this file, this managed block wins
+for shared workflow routing while repo-specific rules still win for local facts.
+
+Resolve the shared root before running shared scripts:
+
+```bash
+AGENTPLAYBOOK_ROOT="${AGENTPLAYBOOK_HOME:-$HOME/Documents/KeyFlowVault/AgentPlaybook}"
+```
+
+Shared entrypoints:
+
+```text
+${AGENTPLAYBOOK_ROOT}/AGENTS.md
+${AGENTPLAYBOOK_ROOT}/index.md
+${AGENTPLAYBOOK_ROOT}/scripts/agent-entry.py
+${AGENTPLAYBOOK_ROOT}/scripts/project-discover.py
+${AGENTPLAYBOOK_ROOT}/scripts/agent-hook.py
+${AGENTPLAYBOOK_ROOT}/scripts/workflow.py
+${AGENTPLAYBOOK_ROOT}/scripts/agent-preflight.py
+${AGENTPLAYBOOK_ROOT}/scripts/agent-finish-check.py
+```
+
+Before project work, read repo-local guidance first, then use AgentPlaybook only
+to select the smallest relevant shared cards. Do not copy, vendor, or download a
+second AgentPlaybook root unless the user explicitly approves after seeing the
+existing root path. Do not commit personal absolute AgentPlaybook paths; use
+`${AGENTPLAYBOOK_HOME}` for shared local installs or a repo-pinned root only
+when the repo intentionally owns one.
+
+For every multi-step task, run the start hook before selecting shared docs,
+editing, reviewing, committing, or reporting completion:
+
+```bash
+python3 "${AGENTPLAYBOOK_ROOT}/scripts/agent-hook.py" start --project "$(pwd)" --rules "${AGENTPLAYBOOK_ROOT}" --command <command> --request "<USER_REQUEST>"
+```
+
+Use the returned route manifest as the task checklist. Run the review hook after
+the scoped diff is ready, and run the finish hook before final report, commit,
+release, or handoff. Pass evidence for every required route gate. Missing route,
+preflight, review, finish, or gate evidence is non-compliant even when the final
+files look correct.
+
+Request intake is mandatory for requirement analysis and modifications, even
+when the task does not create a PRD. Before editing, present a short alignment
+checkpoint to the user when assumptions affect behavior, scope, safety, cost,
+data, or external state: what is clear, what is uncertain or different between
+user intent and agent interpretation, whether PRD/ARD is being created or
+skipped, and the exact question or assumption that unblocks work. Skipping a PRD
+is not permission to skip this checkpoint.
+
+If the route, repo workflow, or user asks for Grill-Me, use the actual Grill-Me
+skill/service/session as the question drill. Do not replace Grill-Me with ad hoc
+internal questions. Record the Grill-Me or alignment evidence in the finish
+check when the route requires it.
+
+For code work, decide whether to use subagents only after the target project,
+owned files, boundaries, forbidden files, and verification commands are clear.
+Use subagents for separable research, review, or implementation streams; keep
+small single-boundary changes in the main agent. Record the split decision in
+the route gates when requested.
+
+If a required gate or hook fails, do not finalize. Return to the first missed
+gate only and retry that same scope once. If it fails again, run the shared
+retrospective-learning workflow and record the durable lesson before handoff or
+another attempt.
+
+VibeGuard is required before documentation, code, configuration, dependency,
+data, deployment, or credential changes and again before finishing. Run it with
+the selected AgentPlaybook root as the rule source. Do not run VibeGuard `setup`
+or `update` blindly; preserve existing guardrails unless the user explicitly
+chooses a refresh/setup mode. Human-visible gate status must use only
+`🐱🟢 SUCCESS` or `🐱🔴 FAIL`.
+<!-- END MANAGED AGENTPLAYBOOK ROUTING -->
+
 # Agent Entry Point
 
 Repo-local Spill instructions remain the source of truth for product direction,

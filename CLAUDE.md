@@ -1,3 +1,13 @@
+<!-- BEGIN MANAGED AGENTPLAYBOOK POINTER -->
+## AgentPlaybook Pointer
+
+Read this repository's `AGENTS.md` first for the active shared AgentPlaybook
+routing block. Keep this file for runtime-specific or domain-specific details
+only. If this file mentions older AgentPlaybook commands, `AGENTS.md` wins for
+shared workflow routing while this file still wins for its specific runtime or
+local domain notes.
+<!-- END MANAGED AGENTPLAYBOOK POINTER -->
+
 # Claude Instructions
 
 Follow `AGENTS.md`.
