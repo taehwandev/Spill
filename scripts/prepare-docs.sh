@@ -45,7 +45,6 @@ mkdir -p "$OUTPUT_DIR/token-metering/adapters"
 cp -R "$ROOT_DIR/Sources/Spill/Resources/adapters"/. "$OUTPUT_DIR/token-metering/adapters"/
 cp "$ROOT_DIR/scripts/spill-token-metering-setup.mjs" "$OUTPUT_DIR/token-metering/adapters/setup/spill-token-metering-setup.mjs"
 cp "$ROOT_DIR/scripts/spill-token-metering-stats.mjs" "$OUTPUT_DIR/token-metering/adapters/setup/spill-token-metering-stats.mjs"
-cp "$ROOT_DIR/scripts/spill-codex-session-importer.mjs" "$OUTPUT_DIR/token-metering/adapters/codex/spill-importer.mjs"
 
 replace_placeholder "$OUTPUT_DIR/index.html" "__SPILL_WEB_APTABASE_APP_KEY__" "$WEB_APTABASE_APP_KEY"
 

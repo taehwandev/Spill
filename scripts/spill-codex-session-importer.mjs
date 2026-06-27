@@ -292,9 +292,9 @@ async function parseSessionFile(path, after, state) {
   const sessionKey = counters.sessionID || path;
   const cursorKey = opaqueHash(sessionKey);
   const cursor = state.sessionCursors[cursorKey];
-  const delta = usageDelta(latest.usage, cursor);
+  const delta = usageDelta(latest.usage);
   const nextCursor = cursorFromUsage(latest.usage);
-  if (nextCursor) {
+  if (shouldAdvanceCursor(cursor, nextCursor)) {
     state.sessionCursors[cursorKey] = nextCursor;
   }
   if (!delta) return [];
@@ -339,16 +339,11 @@ function usageRecordFromTokenCount(info) {
   };
 }
 
-function usageDelta(record, cursor) {
+function usageDelta(record) {
   let inputTokens = 0;
   let outputTokens = 0;
 
-  if (cursor && record.total.hasAny && record.total.totalTokens >= (cursor.totalTokens ?? 0)) {
-    inputTokens = Math.max(0, record.total.inputTokens - cursor.inputTokens);
-    outputTokens =
-      Math.max(0, record.total.outputTokens - cursor.outputTokens) +
-      Math.max(0, record.total.reasoningTokens - cursor.reasoningTokens);
-  } else if (record.last.hasAny) {
+  if (record.last.hasAny) {
     inputTokens = record.last.inputTokens;
     outputTokens = record.last.outputTokens + record.last.reasoningTokens;
   } else {
@@ -360,13 +355,19 @@ function usageDelta(record, cursor) {
 }
 
 function cursorFromUsage(record) {
-  if (!record.total.hasAny) return null;
+  if (!record.total.hasAny || record.total.totalTokens <= 0) return null;
   return {
     inputTokens: record.total.inputTokens,
     outputTokens: record.total.outputTokens,
     reasoningTokens: record.total.reasoningTokens,
     totalTokens: record.total.totalTokens,
   };
+}
+
+function shouldAdvanceCursor(currentCursor, nextCursor) {
+  if (!nextCursor) return false;
+  if (!currentCursor) return true;
+  return nextCursor.totalTokens >= (currentCursor.totalTokens ?? 0);
 }
 
 function tokenUsage(value) {

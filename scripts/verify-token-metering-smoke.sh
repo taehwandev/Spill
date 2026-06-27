@@ -354,6 +354,77 @@ if (event.task_type !== "code_generation" || event.stage !== "implement") {
 }
 NODE
 
+CODEX_CUMULATIVE_GUARD_HOME="$ADAPTER_TMP_DIR/codex-cumulative-guard-home"
+CODEX_CUMULATIVE_GUARD_INBOX="$ADAPTER_TMP_DIR/codex-cumulative-guard-inbox"
+CODEX_CUMULATIVE_GUARD_SESSION_DIR="$CODEX_CUMULATIVE_GUARD_HOME/sessions/2026/06/05"
+mkdir -p "$CODEX_CUMULATIVE_GUARD_SESSION_DIR" "$CODEX_CUMULATIVE_GUARD_INBOX"
+CODEX_CUMULATIVE_GUARD_SESSION="$CODEX_CUMULATIVE_GUARD_SESSION_DIR/rollout-spill-cumulative-guard.jsonl"
+CODEX_CUMULATIVE_GUARD_SESSION="$CODEX_CUMULATIVE_GUARD_SESSION" node --input-type=module <<'NODE'
+import { writeFile } from 'node:fs/promises';
+
+const timestamp = new Date().toISOString();
+const lines = [
+  {
+    timestamp,
+    type: "session_meta",
+    originator: "codex_cli_rs",
+    session_id: "codexCumulativeGuardRun01",
+    model: "gpt-5-codex",
+  },
+  {
+    timestamp,
+    type: "event_msg",
+    payload: {
+      type: "token_count",
+      info: {
+        model: "gpt-5-codex",
+        last_token_usage: {
+          input_tokens: 200000,
+          cached_input_tokens: 0,
+          output_tokens: 12741,
+          reasoning_output_tokens: 0,
+          total_tokens: 212741,
+        },
+        total_token_usage: {
+          input_tokens: 5092481,
+          cached_input_tokens: 0,
+          output_tokens: 20285,
+          reasoning_output_tokens: 0,
+          total_tokens: 5112766,
+        },
+      },
+    },
+  },
+].map((line) => JSON.stringify(line)).join("\n");
+
+await writeFile(process.env.CODEX_CUMULATIVE_GUARD_SESSION, `${lines}\n`);
+NODE
+
+node "$ROOT_DIR/scripts/spill-codex-session-importer.mjs" \
+    --codex-home "$CODEX_CUMULATIVE_GUARD_HOME" \
+    --transport file \
+    --inbox "$CODEX_CUMULATIVE_GUARD_INBOX" \
+    --events "$ADAPTER_TMP_DIR/codex-cumulative-guard-events.json" \
+    --state "$ADAPTER_TMP_DIR/codex-cumulative-guard-state.json" \
+    --task-type git_commit \
+    --stage summarize \
+    --since-hours 1 \
+    --json >/dev/null
+
+CODEX_CUMULATIVE_GUARD_INBOX="$CODEX_CUMULATIVE_GUARD_INBOX" node --input-type=module <<'NODE'
+import { readFile, readdir } from 'node:fs/promises';
+import { join } from 'node:path';
+
+const files = (await readdir(process.env.CODEX_CUMULATIVE_GUARD_INBOX)).filter((file) => file.endsWith(".json"));
+if (files.length !== 1) {
+  throw new Error(`expected one Codex cumulative guard event, found ${files.length}`);
+}
+const event = JSON.parse(await readFile(join(process.env.CODEX_CUMULATIVE_GUARD_INBOX, files[0]), "utf8"));
+if (event.total_tokens !== 212741 || event.input_tokens !== 200000 || event.output_tokens !== 12741) {
+  throw new Error(`expected Codex last usage 200000/12741/212741, found ${event.input_tokens}/${event.output_tokens}/${event.total_tokens}`);
+}
+NODE
+
 CODEX_FALLBACK_HOME="$ADAPTER_TMP_DIR/codex-fallback-home"
 CODEX_FALLBACK_INBOX="$ADAPTER_TMP_DIR/codex-fallback-inbox"
 CODEX_FALLBACK_STATE="$ADAPTER_TMP_DIR/codex-fallback-state.json"
