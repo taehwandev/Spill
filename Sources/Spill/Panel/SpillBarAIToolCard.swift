@@ -7,7 +7,7 @@ struct SpillBarAIToolCard: View {
     }
     let status: LocalAIToolStatus
     let serviceStatus: CloudServiceStatusItem?
-    let tokenUsage: TokenUsage
+    let tokenUsage: TokenUsage?
     let appLanguage: SpillAppLanguage
     let isServerStatusLoading: Bool
     @State private var isHovered = false
@@ -45,6 +45,35 @@ struct SpillBarAIToolCard: View {
             Divider()
                 .opacity(0.4)
 
+            tokenUsageRow(tint: tint)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 7)
+        .frame(height: 72)
+        .frame(maxWidth: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(
+                    hasServerIssue ? cardTint.opacity(0.12) : isRunning ? tint.opacity(isHovered ? 0.10 : 0.06) : SpillPanelSurface.cardFill(isHovered: isHovered)
+                )
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(
+                    hasServerIssue ? cardTint.opacity(0.36) : isRunning ? tint.opacity(isHovered ? 0.18 : 0.12) : Color.primary.opacity(isHovered ? 0.10 : 0.06),
+                    lineWidth: hasServerIssue ? 0.8 : 0.5
+                )
+        }
+        .scaleEffect(isHovered ? 1.012 : 1.0)
+        .animation(.spring(response: 0.2, dampingFraction: 0.75), value: isHovered)
+        .onHover { hovering in
+            isHovered = hovering
+        }
+    }
+
+    @ViewBuilder
+    private func tokenUsageRow(tint: Color) -> some View {
+        if let tokenUsage {
             HStack(alignment: .center, spacing: 4) {
                 Image(systemName: "chart.bar.xaxis")
                     .font(.system(size: 8))
@@ -75,28 +104,11 @@ struct SpillBarAIToolCard: View {
                     .frame(height: 14)
                     .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 3, style: .continuous))
             }
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 7)
-        .frame(height: 72)
-        .frame(maxWidth: .infinity)
-        .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(
-                    hasServerIssue ? cardTint.opacity(0.12) : isRunning ? tint.opacity(isHovered ? 0.10 : 0.06) : SpillPanelSurface.cardFill(isHovered: isHovered)
-                )
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(
-                    hasServerIssue ? cardTint.opacity(0.36) : isRunning ? tint.opacity(isHovered ? 0.18 : 0.12) : Color.primary.opacity(isHovered ? 0.10 : 0.06),
-                    lineWidth: hasServerIssue ? 0.8 : 0.5
-                )
-        }
-        .scaleEffect(isHovered ? 1.012 : 1.0)
-        .animation(.spring(response: 0.2, dampingFraction: 0.75), value: isHovered)
-        .onHover { hovering in
-            isHovered = hovering
+        } else {
+            HStack {
+                aiProcessStateChip
+                Spacer(minLength: 4)
+            }
         }
     }
 

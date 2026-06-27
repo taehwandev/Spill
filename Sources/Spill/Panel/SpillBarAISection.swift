@@ -23,9 +23,9 @@ struct SpillBarAISection: View {
                 tokenMeteringDetailAction: tokenMeteringDetailAction
             )
 
-            if !aiStatusStore.statuses.isEmpty {
+            if !visibleStatuses.isEmpty {
                 LazyVGrid(columns: aiToolColumns, alignment: .leading, spacing: 7) {
-                    ForEach(aiStatusStore.statuses) { status in
+                    ForEach(visibleStatuses) { status in
                         let serviceStatus = serviceStatus(for: status.kind)
                         let helpText = aiToolHelpText(status, serviceStatus: serviceStatus)
 
@@ -66,7 +66,7 @@ struct SpillBarAISection: View {
                 .tracking(1.2)
                 .foregroundStyle(.secondary.opacity(0.7))
 
-            if !aiStatusStore.statuses.isEmpty {
+            if !visibleStatuses.isEmpty {
                 Text(AppL10n.aiProcessSummary(
                     runningToolCount: runningToolCount,
                     processCount: runningProcessCount,
@@ -109,7 +109,7 @@ struct SpillBarAISection: View {
 
     private var activeToolsCloudSnapshot: CloudServiceStatusSnapshot? {
         guard let snapshot = cloudServiceStatusStore.snapshot else { return nil }
-        let activeKinds = Set(aiStatusStore.statuses.flatMap {
+        let activeKinds = Set(visibleStatuses.flatMap {
             CloudServiceStatusPresentation.serviceKinds(for: $0.kind)
         })
         guard !activeKinds.isEmpty else { return snapshot }
@@ -118,11 +118,17 @@ struct SpillBarAISection: View {
     }
 
     private var runningToolCount: Int {
-        aiStatusStore.statuses.filter(\.hasRunningProcesses).count
+        visibleStatuses.filter(\.hasRunningProcesses).count
     }
 
     private var runningProcessCount: Int {
-        aiStatusStore.statuses.reduce(0) { $0 + $1.processSummary.processCount }
+        visibleStatuses.reduce(0) { $0 + $1.processSummary.processCount }
+    }
+
+    private var visibleStatuses: [LocalAIToolStatus] {
+        aiStatusStore.statuses.filter { status in
+            settings.isLocalAIToolVisible(status.kind)
+        }
     }
 
     private func serviceStatus(for kind: LocalAIToolKind) -> CloudServiceStatusItem? {
@@ -132,14 +138,14 @@ struct SpillBarAISection: View {
         )
     }
 
-    private func toolTokenUsage(for kind: LocalAIToolKind) -> SpillBarAIToolCard.TokenUsage {
+    private func toolTokenUsage(for kind: LocalAIToolKind) -> SpillBarAIToolCard.TokenUsage? {
         let snapshot = tokenUsageDashboardStore.panelSummary
         let rawValue = tokenUsageRawValue(for: kind)
 
         if let row = snapshot.toolRows.first(where: { $0.id == rawValue }) {
             return SpillBarAIToolCard.TokenUsage(value: row.value, ratio: row.ratio)
         }
-        return SpillBarAIToolCard.TokenUsage(value: "0", ratio: 0)
+        return nil
     }
 
     private func tokenUsageRawValue(for kind: LocalAIToolKind) -> String {

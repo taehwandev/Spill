@@ -19,6 +19,7 @@ struct SpillBarAITokenSummary: View {
     private var tokenSummary: some View {
         let snapshot = tokenUsageDashboardStore.panelSummary
         let displayTotalTokens = snapshot.totalTokens
+        let visibleToolRows = visibleToolRows(from: snapshot.toolRows)
         let topTask = snapshot.taskRows.first
         let topSource = snapshot.sourceRows.first
 
@@ -47,8 +48,8 @@ struct SpillBarAITokenSummary: View {
                         .minimumScaleFactor(0.72)
                         .foregroundStyle(.secondary)
 
-                    if displayTotalTokens > 0 {
-                        toolDistributionBar(rows: snapshot.toolRows)
+                    if displayTotalTokens > 0, !visibleToolRows.isEmpty {
+                        toolDistributionBar(rows: visibleToolRows)
                     }
                 }
 
@@ -166,6 +167,15 @@ struct SpillBarAITokenSummary: View {
         }
     }
 
+    private func visibleToolRows(from rows: [TokenUsageDashboardBarRow]) -> [TokenUsageDashboardBarRow] {
+        rows.filter { row in
+            guard let tool = TokenUsageAITool(rawValue: row.id.lowercased()) else {
+                return true
+            }
+            return settings.isTokenUsageAIToolVisible(tool)
+        }
+    }
+
     private var tokenSummaryBackground: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -199,11 +209,13 @@ struct SpillBarAITokenSummary: View {
     @ViewBuilder
     private func toolDistributionBar(rows: [TokenUsageDashboardBarRow]) -> some View {
         let activeTools = rows.filter { $0.ratio > 0 }
+        let visibleRatioTotal = activeTools.reduce(0) { $0 + $1.ratio }
         if !activeTools.isEmpty {
             GeometryReader { barGeo in
                 HStack(spacing: 2) {
                     ForEach(activeTools) { row in
                         let color = toolColor(for: row.id)
+                        let normalizedRatio = visibleRatioTotal > 0 ? row.ratio / visibleRatioTotal : row.ratio
                         RoundedRectangle(cornerRadius: 1.5, style: .continuous)
                             .fill(
                                 LinearGradient(
@@ -212,7 +224,7 @@ struct SpillBarAITokenSummary: View {
                                     endPoint: .bottom
                                 )
                             )
-                            .frame(width: Swift.max(CGFloat(2), (barGeo.size.width - CGFloat((activeTools.count - 1) * 2)) * CGFloat(row.ratio)))
+                            .frame(width: Swift.max(CGFloat(2), (barGeo.size.width - CGFloat((activeTools.count - 1) * 2)) * CGFloat(normalizedRatio)))
                     }
                 }
             }
