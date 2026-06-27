@@ -169,7 +169,7 @@ final class ReleaseNotarizationContractTests: XCTestCase {
         XCTAssertTrue(readme.contains("sendDefaultPii=false"))
     }
 
-    func testReleaseBuildCanHideConfiguredPrivateUsageUploadSurface() throws {
+    func testReleaseBuildCanGatePrivateUsageUploadSurface() throws {
         let uploadModels = try privateUsageUploadModelSources()
         let preferencesSection = try read("Sources/Spill/Preferences/TokenMeteringPreferencesSection.swift")
         let privateUsageUploadSection = try read("Sources/Spill/Preferences/TokenMetering/Sections/PrivateUsageUploadPreferencesSection.swift")
@@ -179,9 +179,10 @@ final class ReleaseNotarizationContractTests: XCTestCase {
         XCTAssertTrue(uploadModels.contains("SPILL_PRIVATE_USAGE_FEATURE_ENABLED"))
         XCTAssertTrue(uploadModels.contains("SPILLPrivateUsageFeatureEnabled"))
         XCTAssertTrue(uploadModels.contains("return false"))
-        XCTAssertTrue(uploadModels.contains("isWebConnectionEntryPointEnabledInCurrentBuild = false"))
         XCTAssertTrue(preferencesSection.contains("if PrivateUsageUploadFeatureAvailability.isEnabledInCurrentBuild"))
-        XCTAssertTrue(privateUsageUploadSection.contains("PrivateUsageUploadFeatureAvailability.isWebConnectionEntryPointEnabledInCurrentBuild"))
+        XCTAssertTrue(privateUsageUploadSection.contains("if !status.isConnected"))
+        XCTAssertTrue(privateUsageUploadSection.contains("webConnectionPrompt"))
+        XCTAssertFalse(privateUsageUploadSection.contains("isWebConnectionEntryPointEnabledInCurrentBuild"))
         XCTAssertTrue(privateUsageUploadSection.contains(".disabled(webConnectionURL == nil)"))
         XCTAssertTrue(tokenMeteringCoordinator.contains("guard PrivateUsageUploadFeatureAvailability.isEnabledInCurrentBuild else"))
         XCTAssertTrue(tokenMeteringCoordinator.contains("isEnabled: settings.privateUsageUploadEnabled"))
