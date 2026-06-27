@@ -13,6 +13,7 @@ final class PreferencesWindowController {
     private let updateStore: UpdateCheckStore
     private let tokenUsageStore: TokenUsageStore
     private let tokenHistoryImportCoordinator: TokenUsageHistoryImportCoordinator
+    private let aiStatusStore: AIStatusStore
     private let showPanelAction: () -> Void
     private let openTokenDashboardAction: () -> Void
     private let navigationState = PreferencesNavigationState()
@@ -25,6 +26,7 @@ final class PreferencesWindowController {
         updateStore: UpdateCheckStore,
         tokenUsageStore: TokenUsageStore,
         tokenHistoryImportCoordinator: TokenUsageHistoryImportCoordinator,
+        aiStatusStore: AIStatusStore,
         showPanelAction: @escaping () -> Void,
         openTokenDashboardAction: @escaping () -> Void
     ) {
@@ -33,6 +35,7 @@ final class PreferencesWindowController {
         self.updateStore = updateStore
         self.tokenUsageStore = tokenUsageStore
         self.tokenHistoryImportCoordinator = tokenHistoryImportCoordinator
+        self.aiStatusStore = aiStatusStore
         self.showPanelAction = showPanelAction
         self.openTokenDashboardAction = openTokenDashboardAction
     }
@@ -63,6 +66,7 @@ final class PreferencesWindowController {
             navigationState: navigationState,
             tokenUsageStore: tokenUsageStore,
             tokenHistoryImportCoordinator: tokenHistoryImportCoordinator,
+            aiStatusStore: aiStatusStore,
             showPanelAction: showPanelAction,
             openTokenDashboardAction: openTokenDashboardAction
         )

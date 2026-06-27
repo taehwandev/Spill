@@ -7,6 +7,7 @@ struct PreferencesView: View {
     @ObservedObject var navigationState: PreferencesNavigationState
     let tokenUsageStore: TokenUsageStore
     @ObservedObject var tokenHistoryImportCoordinator: TokenUsageHistoryImportCoordinator
+    @ObservedObject var aiStatusStore: AIStatusStore
     let showPanelAction: () -> Void
     let openTokenDashboardAction: () -> Void
     @State private var accessibilityTrusted = AccessibilityPermission.isTrusted
@@ -105,6 +106,7 @@ private extension PreferencesView {
                     settings: settings,
                     tokenUsageStore: tokenUsageStore,
                     tokenHistoryImportCoordinator: tokenHistoryImportCoordinator,
+                    aiStatusStore: aiStatusStore,
                     openDashboardAction: openTokenDashboardAction
                 )
             }

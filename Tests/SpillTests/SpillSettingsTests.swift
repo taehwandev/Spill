@@ -64,6 +64,34 @@ final class SpillSettingsTests: XCTestCase {
         XCTAssertTrue(reloadedSettings.privateUsageUploadEnabled)
     }
 
+    func testHiddenTokenUsageAIToolsPersistAndNormalizeUnknownValues() {
+        let defaults = makeDefaults()
+        defaults.set(["claude", "openai", "unknown", "claude"], forKey: "hiddenTokenUsageAITools")
+
+        let settings = SpillSettings(defaults: defaults)
+
+        XCTAssertTrue(settings.isTokenUsageAIToolVisible(.codex))
+        XCTAssertFalse(settings.isTokenUsageAIToolVisible(.claude))
+        XCTAssertTrue(settings.isTokenUsageAIToolVisible(.openAI))
+        XCTAssertEqual(settings.hiddenTokenUsageAITools, [.claude])
+
+        settings.setTokenUsageAITool(.antigravity, isVisible: false)
+        settings.setTokenUsageAITool(.claude, isVisible: true)
+        settings.setLocalAITool(.ollama, isVisible: false)
+
+        XCTAssertTrue(settings.isTokenUsageAIToolVisible(.claude))
+        XCTAssertFalse(settings.isTokenUsageAIToolVisible(.antigravity))
+        XCTAssertFalse(settings.isLocalAIToolVisible(.antigravity))
+        XCTAssertFalse(settings.isLocalAIToolVisible(.ollama))
+        XCTAssertEqual(defaults.stringArray(forKey: "hiddenTokenUsageAITools"), ["antigravity"])
+        XCTAssertEqual(defaults.stringArray(forKey: "hiddenLocalAIToolKinds"), ["antigravity", "ollama"])
+
+        let reloadedSettings = SpillSettings(defaults: defaults)
+        XCTAssertTrue(reloadedSettings.isTokenUsageAIToolVisible(.claude))
+        XCTAssertFalse(reloadedSettings.isTokenUsageAIToolVisible(.antigravity))
+        XCTAssertFalse(reloadedSettings.isLocalAIToolVisible(.ollama))
+    }
+
     func testPrivateUsageUploadOptionIsScopedByEnvironment() {
         let defaults = makeDefaults()
         let settings = SpillSettings(defaults: defaults)

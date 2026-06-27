@@ -204,6 +204,11 @@ enum TokenMeteringTextKey: String {
     case setupApplyWhereDetail
     case promptInstructionCardTitle
     case promptInstructionCardDetail
+    case aiToolVisibilityTitle
+    case aiToolVisibilityDetail
+    case aiToolVisibilityState
+    case aiToolVisibilityVisible
+    case aiToolVisibilityHidden
     case menuBarTokenDisplayModeTitle
     case menuBarTokenDisplayModeDetail
     case copyInstallPrompt

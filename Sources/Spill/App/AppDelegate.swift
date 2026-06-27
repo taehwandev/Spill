@@ -60,6 +60,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         updateStore: updateCheckStore,
         tokenUsageStore: tokenMeteringCoordinator.usageStore,
         tokenHistoryImportCoordinator: tokenMeteringCoordinator.historyImportCoordinator,
+        aiStatusStore: aiStatusStore,
         showPanelAction: { [weak self] in
             self?.showSpillBar(source: "preferences")
         },

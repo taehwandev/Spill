@@ -5,6 +5,7 @@ struct TokenMeteringPreferencesSection: View {
     @ObservedObject var settings: SpillSettings
     let tokenUsageStore: TokenUsageStore
     @ObservedObject var tokenHistoryImportCoordinator: TokenUsageHistoryImportCoordinator
+    @ObservedObject var aiStatusStore: AIStatusStore
     let openDashboardAction: () -> Void
     @StateObject private var privateUsageUploadStore: PrivateUsageUploadStore
     @State private var copiedTarget: String?
@@ -14,11 +15,13 @@ struct TokenMeteringPreferencesSection: View {
         settings: SpillSettings,
         tokenUsageStore: TokenUsageStore,
         tokenHistoryImportCoordinator: TokenUsageHistoryImportCoordinator,
+        aiStatusStore: AIStatusStore,
         openDashboardAction: @escaping () -> Void
     ) {
         self.settings = settings
         self.tokenUsageStore = tokenUsageStore
         self.tokenHistoryImportCoordinator = tokenHistoryImportCoordinator
+        self.aiStatusStore = aiStatusStore
         self.openDashboardAction = openDashboardAction
         _privateUsageUploadStore = StateObject(
             wrappedValue: PrivateUsageUploadStore(
@@ -63,6 +66,8 @@ struct TokenMeteringPreferencesSection: View {
             // Local sync status & display settings
             localSyncAndDisplaySettingsSection
 
+            aiToolVisibilitySection
+
             // Local & Cloud Sync Mode List
             VStack(spacing: 8) {
                 ForEach(TokenMeteringPreferencesModel.modes) { mode in
@@ -98,6 +103,14 @@ private extension TokenMeteringPreferencesSection {
             copyInboxPathAction: { path in
                 copyToClipboard(path, target: "inbox")
             }
+        )
+    }
+
+    private var aiToolVisibilitySection: some View {
+        TokenMeteringAIToolVisibilitySection(
+            settings: settings,
+            aiStatusStore: aiStatusStore,
+            language: currentLanguage
         )
     }
 

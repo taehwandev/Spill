@@ -121,6 +121,7 @@ enum SpillAppLanguage: String, CaseIterable, Identifiable {
 @MainActor
 final class SpillSettings: ObservableObject {
     static let shared = SpillSettings(defaults: sharedDefaults())
+    static let aiToolVisibilityDidChangeNotification = Notification.Name("dev.spill.Spill.aiToolVisibilityDidChange")
 
     static func sharedDefaults(
         bundleIdentifier: String? = Bundle.main.bundleIdentifier,
@@ -344,6 +345,28 @@ final class SpillSettings: ObservableObject {
         didSet { defaults.set(tokenUsageShowAdvancedTools, forKey: Keys.tokenUsageShowAdvancedTools) }
     }
 
+    @Published var hiddenTokenUsageAITools: Set<TokenUsageAITool> {
+        didSet {
+            defaults.set(
+                hiddenTokenUsageAITools
+                    .map(\.rawValue)
+                    .sorted(),
+                forKey: Keys.hiddenTokenUsageAITools
+            )
+        }
+    }
+
+    @Published var hiddenLocalAIToolKinds: Set<LocalAIToolKind> {
+        didSet {
+            defaults.set(
+                hiddenLocalAIToolKinds
+                    .map(\.rawValue)
+                    .sorted(),
+                forKey: Keys.hiddenLocalAIToolKinds
+            )
+        }
+    }
+
     @Published var menuBarTokenDisplayMode: MenuBarTokenDisplayMode {
         didSet { defaults.set(menuBarTokenDisplayMode.rawValue, forKey: Keys.menuBarTokenDisplayMode) }
     }
@@ -494,6 +517,18 @@ final class SpillSettings: ObservableObject {
         tokenUsageBridgeEnabled = defaults.object(forKey: Keys.tokenUsageBridgeEnabled) as? Bool ?? false
         tokenUsageLocalAliases = defaults.dictionary(forKey: Keys.tokenUsageLocalAliases) as? [String: String] ?? [:]
         tokenUsageShowAdvancedTools = defaults.object(forKey: Keys.tokenUsageShowAdvancedTools) as? Bool ?? false
+        let persistedHiddenTokenUsageAITools = Self.normalizedTokenUsageAITools(
+            from: defaults.stringArray(forKey: Keys.hiddenTokenUsageAITools)
+        )
+        let persistedHiddenLocalAIToolKinds = Self.normalizedLocalAIToolKinds(
+            from: defaults.stringArray(forKey: Keys.hiddenLocalAIToolKinds)
+        )
+        hiddenTokenUsageAITools = persistedHiddenTokenUsageAITools.union(
+            persistedHiddenLocalAIToolKinds.compactMap(\.tokenUsageDashboardTool)
+        )
+        hiddenLocalAIToolKinds = persistedHiddenLocalAIToolKinds.union(
+            persistedHiddenTokenUsageAITools.compactMap(\.localAIToolKind)
+        )
         let menuBarTokenDisplayModeRaw = defaults.string(forKey: Keys.menuBarTokenDisplayMode) ?? MenuBarTokenDisplayMode.daily.rawValue
         menuBarTokenDisplayMode = MenuBarTokenDisplayMode(rawValue: menuBarTokenDisplayModeRaw) ?? .daily
         let privateUsageEnvironment = PrivateUsageUploadEnvironment.resolvedFromConfiguration()
@@ -536,6 +571,57 @@ final class SpillSettings: ObservableObject {
 
     func showItem(_ item: MenuBarItemSnapshot) {
         hiddenItemKeys.remove(item.stableKey)
+    }
+
+    func setTokenUsageAITool(_ tool: TokenUsageAITool, isVisible: Bool) {
+        guard tool.isDashboardTool else {
+            return
+        }
+
+        if isVisible {
+            hiddenTokenUsageAITools.remove(tool)
+        } else {
+            hiddenTokenUsageAITools.insert(tool)
+        }
+        if let kind = tool.localAIToolKind {
+            setLocalAITool(kind, isVisible: isVisible, postsVisibilityChange: false)
+        }
+        postAIToolVisibilityDidChange()
+    }
+
+    func isTokenUsageAIToolVisible(_ tool: TokenUsageAITool) -> Bool {
+        !hiddenTokenUsageAITools.contains(tool)
+    }
+
+    func setLocalAITool(_ kind: LocalAIToolKind, isVisible: Bool) {
+        setLocalAITool(kind, isVisible: isVisible, postsVisibilityChange: true)
+    }
+
+    func isLocalAIToolVisible(_ kind: LocalAIToolKind) -> Bool {
+        !hiddenLocalAIToolKinds.contains(kind)
+    }
+
+    func reloadAIToolVisibilityFromDefaults() {
+        defaults.synchronize()
+        let persistedHiddenTokenUsageAITools = Self.normalizedTokenUsageAITools(
+            from: defaults.stringArray(forKey: Keys.hiddenTokenUsageAITools)
+        )
+        let persistedHiddenLocalAIToolKinds = Self.normalizedLocalAIToolKinds(
+            from: defaults.stringArray(forKey: Keys.hiddenLocalAIToolKinds)
+        )
+        let nextHiddenTokenUsageAITools = persistedHiddenTokenUsageAITools.union(
+            persistedHiddenLocalAIToolKinds.compactMap(\.tokenUsageDashboardTool)
+        )
+        let nextHiddenLocalAIToolKinds = persistedHiddenLocalAIToolKinds.union(
+            persistedHiddenTokenUsageAITools.compactMap(\.localAIToolKind)
+        )
+
+        if hiddenTokenUsageAITools != nextHiddenTokenUsageAITools {
+            hiddenTokenUsageAITools = nextHiddenTokenUsageAITools
+        }
+        if hiddenLocalAIToolKinds != nextHiddenLocalAIToolKinds {
+            hiddenLocalAIToolKinds = nextHiddenLocalAIToolKinds
+        }
     }
 
     func clearSelectedItems() {
@@ -765,6 +851,43 @@ final class SpillSettings: ObservableObject {
         return value.clamped(to: 10...15)
     }
 
+    private static func normalizedTokenUsageAITools(from rawValues: [String]?) -> Set<TokenUsageAITool> {
+        Set(
+            rawValues?
+                .compactMap(TokenUsageAITool.init(rawValue:))
+                .filter(\.isDashboardTool) ?? []
+        )
+    }
+
+    private static func normalizedLocalAIToolKinds(from rawValues: [String]?) -> Set<LocalAIToolKind> {
+        Set(rawValues?.compactMap(LocalAIToolKind.init(rawValue:)) ?? [])
+    }
+
+    private func setLocalAITool(_ kind: LocalAIToolKind, isVisible: Bool, postsVisibilityChange: Bool) {
+        if isVisible {
+            hiddenLocalAIToolKinds.remove(kind)
+        } else {
+            hiddenLocalAIToolKinds.insert(kind)
+        }
+        if let tool = kind.tokenUsageDashboardTool {
+            if isVisible {
+                hiddenTokenUsageAITools.remove(tool)
+            } else {
+                hiddenTokenUsageAITools.insert(tool)
+            }
+        }
+        if postsVisibilityChange {
+            postAIToolVisibilityDidChange()
+        }
+    }
+
+    private func postAIToolVisibilityDidChange() {
+        DistributedNotificationCenter.default().post(
+            name: Self.aiToolVisibilityDidChangeNotification,
+            object: nil
+        )
+    }
+
     private static func privateUsageUploadEnabled(
         defaults: UserDefaults,
         environment: PrivateUsageUploadEnvironment
@@ -818,6 +941,8 @@ private enum Keys {
     static let tokenUsageBridgeEnabled = "tokenUsageBridgeEnabled"
     static let tokenUsageLocalAliases = "tokenUsageLocalAliases"
     static let tokenUsageShowAdvancedTools = "tokenUsageShowAdvancedTools"
+    static let hiddenTokenUsageAITools = "hiddenTokenUsageAITools"
+    static let hiddenLocalAIToolKinds = "hiddenLocalAIToolKinds"
     static let menuBarTokenDisplayMode = "menuBarTokenDisplayMode"
     static let privateUsageUploadEnvironment = "privateUsageUploadEnvironment"
     static let privateUsageUploadEnabled = "privateUsageUploadEnabled"
