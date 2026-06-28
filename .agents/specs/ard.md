@@ -407,8 +407,28 @@ Rules:
   to a hardcoded production URL.
 - Deep-link connection handling may be registered in app builds, but it stores
   only the write-only device credential returned by the configured relay.
+- Private Usage Upload secrets use one Keychain generic-password item per
+  environment. That item contains the device upload credential, browser
+  key-wrapping secret, and local bucket sealing-key ring as a JSON bundle. The
+  app may migrate older per-secret Keychain items into that bundle, then delete
+  the legacy items best-effort. This keeps macOS authorization prompts to one
+  connection item instead of one prompt per secret.
+- Preferences, panel, and dashboard entry paths must not synchronously read that
+  Keychain bundle or compute dirty upload buckets on the main actor. Connection
+  state, queued-bucket counts, and migration checks must refresh through
+  background tasks so opening Token Metering settings stays responsive.
 - Automatic and manual uploads still require a saved connection and explicit
   `privateUsageUploadEnabled` setting.
+- Automatic upload and Manual Sync Now must request the local token collection
+  and inbox drain path before building encrypted daily buckets. This freshness
+  pass must remain local-only, use existing exact-usage importers/queue drains,
+  and must not inspect prompts, transcripts, source files, shell history, or
+  arbitrary logs to infer usage.
+- Automatic upload keeps the daily completed-bucket cadence. Manual Sync Now may
+  include the current local day's partial aggregate so explicit user sync can
+  update the web dashboard's work-item list without waiting for the next day.
+  Current-day partial uploads must use the same daily bucket identity and be
+  replaceable through the existing encrypted bucket upsert path.
 - Missing relay configuration fails closed through the unavailable relay client.
   It must not trigger local data loss, prompt inspection, or raw event upload.
 

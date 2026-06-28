@@ -142,7 +142,9 @@ production web and relay URLs are configured. Spill appends only fixed
 connection hints (`source=macos` and `callback_url=spill://private-usage/connect`)
 when opening the web connection page; prompts, responses, commands, file paths,
 logs, diffs, source content, environment values, and secrets are not added to
-the URL or upload payload.
+the URL or upload payload. A connected device stores its upload credential,
+browser key-wrapping secret, and local sealing-key ring in one environment-scoped
+Keychain item so macOS should not ask for separate authorization for each secret.
 
 This writes:
 
@@ -173,7 +175,6 @@ Developer ID release example:
 ```bash
 SPILL_VERSION=2026.21.2 \
 SPILL_BUILD_PRIVATE_USAGE_ENVIRONMENT=production \
-SPILL_BUILD_PRIVATE_USAGE_RELAY_URL=<private-usage-relay-url> \
 SPILL_BUILD_PRIVATE_USAGE_WEB_URL=<web-connect-device-url> \
 SPILL_SIGN_IDENTITY="Developer ID Application: Example Name (TEAMID)" \
 ./scripts/package-release.sh
@@ -187,7 +188,6 @@ outside the repository and pass its ignored path only to the notarization script
 ```bash
 SPILL_VERSION=2026.21.2 \
 SPILL_BUILD_PRIVATE_USAGE_ENVIRONMENT=production \
-SPILL_BUILD_PRIVATE_USAGE_RELAY_URL=<private-usage-relay-url> \
 SPILL_BUILD_PRIVATE_USAGE_WEB_URL=<web-connect-device-url> \
 SPILL_SIGN_IDENTITY="Developer ID Application: Example Name (TEAMID)" \
 ./scripts/build-app.sh

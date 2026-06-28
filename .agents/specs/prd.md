@@ -556,6 +556,11 @@ Requirements:
   or deep link.
 - The app receives a write-only device upload credential, not OAuth access or
   refresh tokens.
+- The native app should avoid repeated macOS Keychain prompts during connection,
+  app restart, Preferences open, and manual sync. A connected device should store
+  its upload credential, browser key-wrapping secret, and local sealing-key ring
+  as one environment-scoped Keychain bundle item instead of separate items that
+  each require user authorization.
 - Private Usage Upload is opt-in.
 - The app uploads only end-to-end encrypted, pre-aggregated usage buckets
   through a Spill relay API.
@@ -563,7 +568,13 @@ Requirements:
 - The native app never downloads cloud usage data.
 - MVP upload cadence is daily and opportunistic: previous-day sealed buckets
   upload the next time the user is active and network is available.
-- Manual Sync Now performs one explicit upload attempt.
+- Before an automatic upload or Manual Sync Now builds encrypted daily buckets,
+  the app runs the lightweight local token collection/inbox drain path once so
+  locally queued exact-usage events are reflected before server sync.
+- Manual Sync Now performs one explicit upload attempt after that local freshness
+  pass and may include the current local day's partial daily bucket. The partial
+  bucket uses the same daily bucket key and is safely replaced by later manual
+  syncs or the next completed daily sync.
 - Multi-day backlogs, such as weekends or offline periods, remain queued locally
   and may upload later in one or more batches.
 - The web dashboard shows per-device statistics and combined account totals

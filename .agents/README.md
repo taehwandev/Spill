@@ -1,11 +1,11 @@
 <!-- BEGIN MANAGED AGENTPLAYBOOK POINTER -->
 ## AgentPlaybook Pointer
 
-Read this repository's `AGENTS.md` first for the active shared AgentPlaybook
-routing block. Keep this file for runtime-specific or domain-specific details
-only. If this file mentions older AgentPlaybook commands, `AGENTS.md` wins for
-shared workflow routing while this file still wins for its specific runtime or
-local domain notes.
+Read this repository's `AGENTS.md` first. It contains the active shared
+AgentPlaybook routing block and repo-local priority rules. Keep this file thin:
+only runtime-specific notes should live here, and shared workflow or skill
+guidance must route through `AGENTS.md`.
+
 <!-- END MANAGED AGENTPLAYBOOK POINTER -->
 
 # Spill Agent Docs
@@ -37,21 +37,6 @@ helpers here.
 - `templates/`: Feature-run artifact templates.
 - `scripts/`: Repo-local verification and smoke-check entry points.
 
-## Shared Workflow Source
-
-Use the shared AgentPlaybook workflow cards directly:
-
-- `${AGENTPLAYBOOK_HOME}/workflows/agent-task-lifecycle.md`
-- `${AGENTPLAYBOOK_HOME}/workflows/request-triage.md`
-- `${AGENTPLAYBOOK_HOME}/workflows/ambiguity-gate.md`
-- `${AGENTPLAYBOOK_HOME}/workflows/product-architecture-delivery.md`
-- `${AGENTPLAYBOOK_HOME}/workflows/feature-implementation.md`
-- `${AGENTPLAYBOOK_HOME}/workflows/development-cycle.md`
-- `${AGENTPLAYBOOK_HOME}/workflows/multi-agent-collaboration.md`
-- `${AGENTPLAYBOOK_HOME}/workflows/multi-perspective-review.md`
-- `${AGENTPLAYBOOK_HOME}/workflows/release-readiness.md`
-- `${AGENTPLAYBOOK_HOME}/workflows/documentation-update.md`
-
 ## Current Product Direction
 
 Spill is a compact macOS control tray, not a menu bar hack.
@@ -82,14 +67,6 @@ The app should not:
 7. Follow AgentPlaybook for general agent discipline, editing safety, reviews, and verification policy.
 8. Write repository docs, task artifacts, comments, and scripts in English.
 9. For UI-scoped work, inspect the Stitch source in `design/stitch.md` before implementing SwiftUI changes.
-
-## Shared Workflow Commands
-
-Resolve AgentPlaybook routes through the local helper:
-
-```bash
-python3 .agents/scripts/workflow.py route review --request "<USER_REQUEST>"
-```
 
 ## Repo Verification Commands
 
