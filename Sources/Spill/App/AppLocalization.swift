@@ -79,6 +79,7 @@ enum AppTextKey: String {
     case openStatusPage
     case tokenMetering
     case local
+    case webSyncEnabled
     case tokens
     case details
     case openLocalTokenMeteringDetails
@@ -663,6 +664,7 @@ enum AppL10n {
             .openStatusPage: "Open %@ status page",
             .tokenMetering: "Token Metering",
             .local: "Local",
+            .webSyncEnabled: "Web sync on",
             .tokens: "tokens",
             .details: "Details",
             .openLocalTokenMeteringDetails: "Open local token metering details",
@@ -883,6 +885,7 @@ enum AppL10n {
             .openStatusPage: "%@ 상태 페이지 열기",
             .tokenMetering: "토큰 미터링",
             .local: "로컬",
+            .webSyncEnabled: "웹 동기화 켜짐",
             .tokens: "토큰",
             .details: "상세",
             .openLocalTokenMeteringDetails: "로컬 토큰 미터링 상세 열기",
@@ -1103,6 +1106,7 @@ enum AppL10n {
             .openStatusPage: "%@ のステータスページを開く",
             .tokenMetering: "トークン計測",
             .local: "ローカル",
+            .webSyncEnabled: "Web同期オン",
             .tokens: "トークン",
             .details: "詳細",
             .openLocalTokenMeteringDetails: "ローカルトークン計測の詳細を開く",

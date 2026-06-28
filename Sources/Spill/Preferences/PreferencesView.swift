@@ -10,6 +10,7 @@ struct PreferencesView: View {
     @ObservedObject var aiStatusStore: AIStatusStore
     let showPanelAction: () -> Void
     let openTokenDashboardAction: () -> Void
+    let preparePrivateUsageUploadAction: @MainActor () async -> Void
     @State private var accessibilityTrusted = AccessibilityPermission.isTrusted
     @State private var loginItemError: String?
 
@@ -107,7 +108,8 @@ private extension PreferencesView {
                     tokenUsageStore: tokenUsageStore,
                     tokenHistoryImportCoordinator: tokenHistoryImportCoordinator,
                     aiStatusStore: aiStatusStore,
-                    openDashboardAction: openTokenDashboardAction
+                    openDashboardAction: openTokenDashboardAction,
+                    preparePrivateUsageUploadAction: preparePrivateUsageUploadAction
                 )
             }
         case "windows":

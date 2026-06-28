@@ -170,63 +170,6 @@ struct TokenMeteringDashboardDetailPanel: View {
             emptyText: t(.noStageData),
             idPrefix: "stage"
         )
-
-        detailSourceBreakdownSection(snapshot: detailSnapshot)
-    }
-
-    private func detailSourceBreakdownSection(snapshot detailSnapshot: TokenUsageDashboardSnapshot) -> some View {
-        let hasDetailedSources = detailSnapshot.sourceRows.contains { row in
-            row.id != "unknown" && row.ratio > 0
-        }
-        let isRuntimeTotalOnly = !hasDetailedSources && detailSnapshot.totalTokens > 0
-
-        return VStack(alignment: .leading, spacing: 7) {
-            HStack(spacing: 6) {
-                Text(t(.sourceBreakdown))
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(.secondary)
-
-                Spacer()
-
-                if isRuntimeTotalOnly {
-                    HStack(spacing: 4) {
-                        Text(t(.cumulativeOnlyBadge))
-                            .font(.system(size: 8, weight: .bold))
-                            .foregroundStyle(.orange)
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 1.5)
-                            .background(Color.orange.opacity(0.12), in: Capsule())
-
-                        TokenMeteringInfoButton(
-                            title: t(.cumulativeOnlyInfoTitle),
-                            detail: t(.cumulativeOnlyInfoDetail)
-                        )
-                    }
-                }
-            }
-
-            let rows = detailSnapshot.sourceRows.filter { $0.id != "unknown" }
-            let totalRatio = rows.reduce(0.0) { $0 + $1.ratio }
-            if !rows.isEmpty && totalRatio > 0 {
-                VStack(spacing: 8) {
-                    TokenMeteringDashboardSegmentedRatioBar(rows: rows, showsLegend: false)
-                        .frame(height: 20)
-                        .padding(.vertical, 2)
-                    compactSummaryRows(rows.prefix(5), emptyText: t(.noSourceBreakdown), idPrefix: "source")
-                }
-            } else {
-                TokenMeteringDashboardEmptyMessage(
-                    title: t(.noSourceBreakdown),
-                    detail: isRuntimeTotalOnly ? t(.cumulativeOnlyInfoDetail) : t(.waitingForEvents)
-                )
-            }
-        }
-        .padding(10)
-        .background(Color.primary.opacity(0.025), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(Color.primary.opacity(0.04), lineWidth: 0.5)
-        }
     }
 
     private func detailDiagnosticsSection(session: TokenUsageDashboardSessionRow) -> some View {

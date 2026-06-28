@@ -16,10 +16,6 @@ struct TokenMeteringDashboardLoadingAnalyticsGrid: View {
     let stageSubtitle: String
     let stageInfoTitle: String
     let stageInfoDetail: String
-    let sourceTitle: String
-    let sourceSubtitle: String
-    let sourceInfoTitle: String
-    let sourceInfoDetail: String
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -33,15 +29,17 @@ struct TokenMeteringDashboardLoadingAnalyticsGrid: View {
                 }
             }
 
-            HStack(alignment: .top, spacing: 14) {
-                TokenMeteringDashboardLoadingDistributionPanel(
-                    title: aiToolTitle,
-                    subtitle: aiToolSubtitle,
-                    infoTitle: aiToolInfoTitle,
-                    infoDetail: aiToolInfoDetail,
-                    tint: .teal
-                )
+            TokenMeteringDashboardLoadingDistributionPanel(
+                title: aiToolTitle,
+                subtitle: aiToolSubtitle,
+                infoTitle: aiToolInfoTitle,
+                infoDetail: aiToolInfoDetail,
+                tint: .teal,
+                minimumHeight: 180,
+                placeholderHeight: 118
+            )
 
+            HStack(alignment: .top, spacing: 14) {
                 TokenMeteringDashboardLoadingDistributionPanel(
                     title: workflowTitle,
                     subtitle: workflowSubtitle,
@@ -49,23 +47,13 @@ struct TokenMeteringDashboardLoadingAnalyticsGrid: View {
                     infoDetail: workflowInfoDetail,
                     tint: .blue
                 )
-            }
 
-            HStack(alignment: .top, spacing: 14) {
                 TokenMeteringDashboardLoadingDistributionPanel(
                     title: stageTitle,
                     subtitle: stageSubtitle,
                     infoTitle: stageInfoTitle,
                     infoDetail: stageInfoDetail,
                     tint: .purple
-                )
-
-                TokenMeteringDashboardLoadingDistributionPanel(
-                    title: sourceTitle,
-                    subtitle: sourceSubtitle,
-                    infoTitle: sourceInfoTitle,
-                    infoDetail: sourceInfoDetail,
-                    tint: .orange
                 )
             }
         }
@@ -79,16 +67,19 @@ private struct TokenMeteringDashboardLoadingDistributionPanel: View {
     let infoTitle: String
     let infoDetail: String
     let tint: Color
+    var minimumHeight: CGFloat = 260
+    var placeholderHeight: CGFloat = 160
 
     var body: some View {
         TokenMeteringDashboardPanel(
             title: title,
             subtitle: subtitle,
             infoTitle: infoTitle,
-            infoDetail: infoDetail
+            infoDetail: infoDetail,
+            minimumHeight: minimumHeight
         ) {
             TokenMeteringDashboardChartPlaceholder(tint: tint)
-                .frame(height: 160)
+                .frame(height: placeholderHeight)
         }
     }
 }

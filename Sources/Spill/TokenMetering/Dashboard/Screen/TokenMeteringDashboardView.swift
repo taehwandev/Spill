@@ -259,7 +259,7 @@ struct TokenMeteringDashboardView: View {
                     Text(t(.dashboardTitle))
                         .font(.system(size: 18, weight: .bold))
                     alphaBadge
-                    localOnlyBadge
+                    syncStateBadge
                 }
 
                 HStack(spacing: 6) {
@@ -673,20 +673,33 @@ struct TokenMeteringDashboardView: View {
             }
     }
 
-    private var localOnlyBadge: some View {
-        Text(t(.localOnly).uppercased())
+    private var isPrivateUsageUploadActive: Bool {
+        PrivateUsageUploadFeatureAvailability.isEnabledInCurrentBuild
+            && settings.privateUsageUploadEnabled
+    }
+
+    private var syncStateBadgeText: String {
+        isPrivateUsageUploadActive ? t(.webSyncEnabled) : t(.localOnly)
+    }
+
+    private var syncStateBadgeColor: Color {
+        isPrivateUsageUploadActive ? .blue : .green
+    }
+
+    private var syncStateBadge: some View {
+        Text(syncStateBadgeText.uppercased())
             .font(.system(size: 8, weight: .bold))
             .tracking(0.8)
-            .foregroundStyle(.green.opacity(0.85))
+            .foregroundStyle(syncStateBadgeColor.opacity(0.85))
             .padding(.horizontal, 6)
             .frame(height: 17)
             .background(
                 Capsule(style: .continuous)
-                    .fill(Color.green.opacity(0.08))
+                    .fill(syncStateBadgeColor.opacity(0.08))
             )
             .overlay {
                 Capsule(style: .continuous)
-                    .stroke(Color.green.opacity(0.15), lineWidth: 0.5)
+                    .stroke(syncStateBadgeColor.opacity(0.15), lineWidth: 0.5)
             }
     }
 

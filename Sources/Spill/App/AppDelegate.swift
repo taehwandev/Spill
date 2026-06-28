@@ -66,6 +66,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         },
         openTokenDashboardAction: { [weak self] in
             self?.openTokenDashboard(source: "preferences")
+        },
+        preparePrivateUsageUploadAction: { [weak self] in
+            guard let self else {
+                return
+            }
+            await self.tokenMeteringCoordinator.preparePrivateUsageUpload()
         }
     )
     private var statusItemController: StatusItemController?

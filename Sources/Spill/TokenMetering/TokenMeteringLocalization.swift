@@ -127,6 +127,7 @@ enum TokenMeteringTextKey: String {
     case queueTest
     case waitingForEvents
     case localOnly
+    case webSyncEnabled
 
     case periodToday
     case periodSevenDays
@@ -279,6 +280,7 @@ enum TokenMeteringTextKey: String {
     case privateUsageUploadSyncNow
     case privateUsageUploadDisconnect
     case privateUsageUploadConnectedMessage
+    case privateUsageUploadConnectedDetail
     case privateUsageUploadUploadedMessage
     case privateUsageUploadNoQueuedMessage
     case privateUsageUploadDisconnectedMessage
@@ -298,16 +300,6 @@ enum TokenMeteringTextKey: String {
     case privateUsageUploadKeychainWriteFailedMessage
     case privateUsageUploadEncryptionFailedMessage
     case privateUsageUploadKeyWrappingFailedMessage
-
-    case modeLocalOnlyTitle
-    case modeLocalOnlyState
-    case modeLocalOnlyDetail
-    case modeCloudAggregateTitle
-    case modeCloudAggregateState
-    case modeCloudAggregateDetail
-    case modeCloudDetailedTitle
-    case modeCloudDetailedState
-    case modeCloudDetailedDetail
 
     case clearFailed
     case queueSelfTestSuccess

@@ -1,7 +1,7 @@
 import AppKit
 import Foundation
 
-struct TokenMeteringAdapter: Identifiable {
+struct TokenMeteringAdapter: Identifiable, Sendable {
     let aiTool: TokenUsageAITool
     let title: String
     let subtitle: String

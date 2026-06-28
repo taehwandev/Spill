@@ -7,26 +7,32 @@ struct TokenMeteringPreferencesSection: View {
     @ObservedObject var tokenHistoryImportCoordinator: TokenUsageHistoryImportCoordinator
     @ObservedObject var aiStatusStore: AIStatusStore
     let openDashboardAction: () -> Void
+    let preparePrivateUsageUploadAction: @MainActor () async -> Void
     @StateObject private var privateUsageUploadStore: PrivateUsageUploadStore
     @State private var copiedTarget: String?
     @State private var adapterStatuses: [String: TokenMeteringAdapterConnectionStatus] = [:]
+    @State private var adapterStatusRefreshTask: Task<Void, Never>?
+    @State private var adapterStatusRefreshGeneration = 0
 
     init(
         settings: SpillSettings,
         tokenUsageStore: TokenUsageStore,
         tokenHistoryImportCoordinator: TokenUsageHistoryImportCoordinator,
         aiStatusStore: AIStatusStore,
-        openDashboardAction: @escaping () -> Void
+        openDashboardAction: @escaping () -> Void,
+        preparePrivateUsageUploadAction: @escaping @MainActor () async -> Void = {}
     ) {
         self.settings = settings
         self.tokenUsageStore = tokenUsageStore
         self.tokenHistoryImportCoordinator = tokenHistoryImportCoordinator
         self.aiStatusStore = aiStatusStore
         self.openDashboardAction = openDashboardAction
+        self.preparePrivateUsageUploadAction = preparePrivateUsageUploadAction
         _privateUsageUploadStore = StateObject(
             wrappedValue: PrivateUsageUploadStore(
                 settings: settings,
-                usageStore: tokenUsageStore
+                usageStore: tokenUsageStore,
+                prepareForUpload: preparePrivateUsageUploadAction
             )
         )
     }
@@ -68,13 +74,6 @@ struct TokenMeteringPreferencesSection: View {
 
             aiToolVisibilitySection
 
-            // Local & Cloud Sync Mode List
-            VStack(spacing: 8) {
-                ForEach(TokenMeteringPreferencesModel.modes) { mode in
-                    TokenMeteringModeRow(mode: mode)
-                }
-            }
-
             if PrivateUsageUploadFeatureAvailability.isEnabledInCurrentBuild {
                 privateUsageUploadSection
             }
@@ -84,6 +83,10 @@ struct TokenMeteringPreferencesSection: View {
         .onAppear {
             refreshAdapterStatuses()
             refreshPrivateUsageUploadIfAvailable()
+        }
+        .onDisappear {
+            adapterStatusRefreshTask?.cancel()
+            adapterStatusRefreshTask = nil
         }
         .onReceive(NotificationCenter.default.publisher(for: TokenUsageStore.eventsDidChangeNotification)) { _ in
             refreshPrivateUsageUploadIfAvailable()
@@ -149,6 +152,11 @@ private extension TokenMeteringPreferencesSection {
     }
 
     private func openPrivateUsageWebConnection() {
+        guard !privateUsageUploadStore.status.isConnected else {
+            privateUsageUploadStore.refresh()
+            return
+        }
+
         guard let url = privateUsageWebConnectionURL else {
             return
         }
@@ -162,11 +170,27 @@ private extension TokenMeteringPreferencesSection {
     }
 
     private func refreshAdapterStatuses() {
-        adapterStatuses = Dictionary(
-            uniqueKeysWithValues: TokenMeteringAdapterKit.hookAdapters.map { adapter in
-                (adapter.id, TokenMeteringAdapterConnectionDiagnostics.status(for: adapter))
+        adapterStatusRefreshTask?.cancel()
+        adapterStatusRefreshGeneration += 1
+        let generation = adapterStatusRefreshGeneration
+        adapterStatusRefreshTask = Task {
+            let statuses = await Task.detached(priority: .utility) {
+                Dictionary(
+                    uniqueKeysWithValues: TokenMeteringAdapterKit.hookAdapters.map { adapter in
+                        (adapter.id, TokenMeteringAdapterConnectionDiagnostics.status(for: adapter))
+                    }
+                )
+            }.value
+
+            await MainActor.run {
+                guard !Task.isCancelled,
+                      adapterStatusRefreshGeneration == generation
+                else {
+                    return
+                }
+                adapterStatuses = statuses
             }
-        )
+        }
     }
 
     private var historyImportSection: some View {

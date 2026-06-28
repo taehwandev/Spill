@@ -151,12 +151,7 @@ struct SpillBarAITokenSummary: View {
                 .font(.system(size: 11.5, weight: .semibold))
                 .lineLimit(1)
 
-            Text(AppL10n.text(.local, appLanguage: settings.appLanguage))
-                .font(.system(size: 8.5, weight: .bold))
-                .padding(.horizontal, 5)
-                .frame(height: 17)
-                .foregroundStyle(.teal)
-                .background(.teal.opacity(0.12), in: Capsule())
+            tokenSyncBadge
 
             Text(settings.menuBarTokenDisplayMode.title(appLanguage: settings.appLanguage))
                 .font(.system(size: 8.5, weight: .semibold))
@@ -165,6 +160,31 @@ struct SpillBarAITokenSummary: View {
                 .foregroundStyle(.secondary)
                 .background(Color.primary.opacity(0.06), in: Capsule())
         }
+    }
+
+    private var tokenSyncBadge: some View {
+        Text(tokenSyncBadgeText)
+            .font(.system(size: 8.5, weight: .bold))
+            .padding(.horizontal, 5)
+            .frame(height: 17)
+            .foregroundStyle(tokenSyncBadgeColor)
+            .background(tokenSyncBadgeColor.opacity(0.12), in: Capsule())
+    }
+
+    private var tokenSyncBadgeText: String {
+        AppL10n.text(
+            isPrivateUsageUploadActive ? .webSyncEnabled : .local,
+            appLanguage: settings.appLanguage
+        )
+    }
+
+    private var tokenSyncBadgeColor: Color {
+        isPrivateUsageUploadActive ? .blue : .teal
+    }
+
+    private var isPrivateUsageUploadActive: Bool {
+        PrivateUsageUploadFeatureAvailability.isEnabledInCurrentBuild
+            && settings.privateUsageUploadEnabled
     }
 
     private func visibleToolRows(from rows: [TokenUsageDashboardBarRow]) -> [TokenUsageDashboardBarRow] {

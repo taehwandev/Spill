@@ -84,13 +84,19 @@ fi
 validate_private_usage_url() {
     local name="$1"
     local value="$2"
+    local required="${3:-$PRIVATE_USAGE_REQUIRES_CONFIGURATION}"
 
-    if [[ -z "$value" && "$PRIVATE_USAGE_REQUIRES_CONFIGURATION" != "true" ]]; then
+    if [[ -z "$value" && "$required" != "true" ]]; then
         return
     fi
 
     if [[ -z "$value" ]]; then
-        echo "$name is required when SPILL_BUILD_PRIVATE_USAGE_FEATURE_ENABLED=1." >&2
+        echo "$name is required for this build configuration." >&2
+        exit 2
+    fi
+
+    if [[ "$name" == "SPILL_BUILD_PRIVATE_USAGE_RELAY_URL" && "$value" =~ ^https?://[^/]*\.supabase\.co([/:?#]|$) ]]; then
+        echo "$name must use a Spill-controlled relay API URL, not a Supabase project URL." >&2
         exit 2
     fi
 
@@ -198,8 +204,8 @@ if [[ -n "$SPARKLE_PUBLIC_ED_KEY" ]]; then
     <false/>"
 fi
 
-validate_private_usage_url "SPILL_BUILD_PRIVATE_USAGE_RELAY_URL" "$PRIVATE_USAGE_RELAY_URL"
-validate_private_usage_url "SPILL_BUILD_PRIVATE_USAGE_WEB_URL" "$PRIVATE_USAGE_WEB_URL"
+validate_private_usage_url "SPILL_BUILD_PRIVATE_USAGE_RELAY_URL" "$PRIVATE_USAGE_RELAY_URL" false
+validate_private_usage_url "SPILL_BUILD_PRIVATE_USAGE_WEB_URL" "$PRIVATE_USAGE_WEB_URL" "$PRIVATE_USAGE_REQUIRES_CONFIGURATION"
 
 if [[ -z "$DEVELOPER_OPTIONS_ENABLED" ]]; then
     if [[ "$SIGN_IDENTITY" == "-" ]]; then
@@ -365,6 +371,14 @@ cat > "$HELPER_CONTENTS_DIR/Info.plist" <<PLIST
     <string>$VERSION</string>
     <key>CFBundleVersion</key>
     <string>$BUILD_NUMBER</string>
+    <key>SPILLPrivateUsageEnvironment</key>
+    <string>$PRIVATE_USAGE_ENVIRONMENT</string>
+    <key>SPILLPrivateUsageRelayURL</key>
+    <string>$PRIVATE_USAGE_RELAY_URL</string>
+    <key>SPILLPrivateUsageWebURL</key>
+    <string>$PRIVATE_USAGE_WEB_URL</string>
+    <key>SPILLPrivateUsageFeatureEnabled</key>
+    <$PRIVATE_USAGE_FEATURE_ENABLED/>
     <key>SPILLDeveloperOptionsEnabled</key>
     <$DEVELOPER_OPTIONS_ENABLED/>
     <key>LSApplicationCategoryType</key>

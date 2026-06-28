@@ -30,7 +30,9 @@ struct PrivateUsageUploadPreferencesSection: View {
                 .lineSpacing(2)
                 .fixedSize(horizontal: false, vertical: true)
 
-            if !status.isConnected {
+            if status.isConnected {
+                webConnectionConnectedState
+            } else {
                 webConnectionPrompt
             }
 
@@ -81,6 +83,29 @@ struct PrivateUsageUploadPreferencesSection: View {
                 .foregroundStyle(.secondary)
                 .lineSpacing(2)
                 .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var webConnectionConnectedState: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Label(
+                settings.privateUsageUploadEnabled
+                    ? t(.privateUsageUploadStateEnabled)
+                    : t(.privateUsageUploadStateConnected),
+                systemImage: "checkmark.circle.fill"
+            )
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(settings.privateUsageUploadEnabled ? .green : .teal)
+
+            Text(
+                settings.privateUsageUploadEnabled
+                    ? t(.privateUsageUploadConnectedMessage)
+                    : t(.privateUsageUploadConnectedDetail)
+            )
+            .font(.system(size: 11))
+            .foregroundStyle(.secondary)
+            .lineSpacing(2)
+            .fixedSize(horizontal: false, vertical: true)
         }
     }
 

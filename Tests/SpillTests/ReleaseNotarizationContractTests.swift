@@ -59,9 +59,16 @@ final class ReleaseNotarizationContractTests: XCTestCase {
         XCTAssertTrue(buildScript.contains("<key>SPILLPrivateUsageWebURL</key>"))
         XCTAssertTrue(buildScript.contains("<key>SPILLPrivateUsageFeatureEnabled</key>"))
         XCTAssertTrue(buildScript.contains("<$PRIVATE_USAGE_FEATURE_ENABLED/>"))
+        XCTAssertEqual(occurrences(of: "<key>SPILLPrivateUsageEnvironment</key>", in: buildScript), 2)
+        XCTAssertEqual(occurrences(of: "<key>SPILLPrivateUsageRelayURL</key>", in: buildScript), 2)
+        XCTAssertEqual(occurrences(of: "<key>SPILLPrivateUsageWebURL</key>", in: buildScript), 2)
+        XCTAssertEqual(occurrences(of: "<key>SPILLPrivateUsageFeatureEnabled</key>", in: buildScript), 2)
+        XCTAssertEqual(occurrences(of: "<$PRIVATE_USAGE_FEATURE_ENABLED/>", in: buildScript), 2)
         XCTAssertTrue(buildScript.contains("SPILL_BUILD_PRIVATE_USAGE_FEATURE_ENABLED"))
         XCTAssertTrue(buildScript.contains("PRIVATE_USAGE_REQUIRES_CONFIGURATION=false"))
         XCTAssertTrue(buildScript.contains("is required when SPILL_BUILD_PRIVATE_USAGE_FEATURE_ENABLED=1"))
+        XCTAssertTrue(buildScript.contains("must use a Spill-controlled relay API URL"))
+        XCTAssertTrue(buildScript.contains("validate_private_usage_url \"SPILL_BUILD_PRIVATE_USAGE_RELAY_URL\" \"$PRIVATE_USAGE_RELAY_URL\" false"))
         XCTAssertTrue(buildScript.contains("PRIVATE_USAGE_RELAY_URL=\"${SPILL_BUILD_PRIVATE_USAGE_RELAY_URL:-}\""))
         XCTAssertTrue(buildScript.contains("PRIVATE_USAGE_WEB_URL=\"${SPILL_BUILD_PRIVATE_USAGE_WEB_URL:-}\""))
         XCTAssertFalse(buildScript.contains("DEFAULT_PRIVATE_USAGE_WEB_URL"))
@@ -72,6 +79,7 @@ final class ReleaseNotarizationContractTests: XCTestCase {
         XCTAssertTrue(envExample.contains("SPILL_BUILD_PRIVATE_USAGE_RELAY_URL="))
         XCTAssertFalse(envExample.contains("SPILL_BUILD_PRIVATE_USAGE_WEB_URL=http"))
         XCTAssertFalse(envExample.contains("SPILL_BUILD_PRIVATE_USAGE_RELAY_URL=http"))
+        XCTAssertTrue(envExample.contains("Supabase project URL directly"))
         XCTAssertTrue(uploadModels.contains("#else\n        return .production\n        #endif"))
         XCTAssertTrue(uploadModels.contains("SPILL_PRIVATE_USAGE_WEB_URL"))
         XCTAssertTrue(uploadModels.contains("SPILLPrivateUsageWebURL"))
@@ -87,9 +95,17 @@ final class ReleaseNotarizationContractTests: XCTestCase {
         let crashReporter = try [
             "Sources/Spill/Observability/SpillCrashReporter.swift",
             "Sources/Spill/Observability/SpillCrashReporter+TokenHistoryImport.swift",
+            "Sources/Spill/Observability/SpillCrashReporter+PrivateUsageUpload.swift",
         ]
         .map(read)
         .joined(separator: "\n")
+        let privateUsageUploadStoreActions = try read(
+            "Sources/Spill/TokenMetering/PrivateUsage/Upload/PrivateUsageUploadStore+Actions.swift"
+        )
+        let privateUsageUploadConnection = try read(
+            "Sources/Spill/TokenMetering/PrivateUsage/Upload/PrivateUsageUploadCoordinator+Connection.swift"
+        )
+        let tokenMeteringCoordinator = try read("Sources/Spill/TokenMetering/TokenMeteringCoordinator.swift")
 
         XCTAssertTrue(package.contains("https://github.com/getsentry/sentry-cocoa.git"))
         XCTAssertTrue(package.contains(".product(name: \"Sentry\", package: \"sentry-cocoa\")"))
@@ -132,6 +148,30 @@ final class ReleaseNotarizationContractTests: XCTestCase {
         XCTAssertTrue(crashReporter.contains("bucketedCount(result.scannedSources)"))
         XCTAssertTrue(crashReporter.contains("bucketedExitCode(result.exitCode)"))
         XCTAssertTrue(crashReporter.contains("bucketedDuration(result.durationSeconds)"))
+        XCTAssertTrue(crashReporter.contains("capturePrivateUsageUploadFailure"))
+        XCTAssertTrue(crashReporter.contains("SentrySDK.capture(message: \"spill.private_usage_upload_failed\""))
+        XCTAssertTrue(crashReporter.contains("private_usage_operation"))
+        XCTAssertTrue(crashReporter.contains("private_usage_error"))
+        XCTAssertTrue(crashReporter.contains("private_usage_relay_status"))
+        XCTAssertTrue(crashReporter.contains("private_usage_relay_reason"))
+        XCTAssertTrue(crashReporter.contains("private_usage_revoked"))
+        XCTAssertTrue(crashReporter.contains("shouldCapturePrivateUsageUploadFailure"))
+        XCTAssertTrue(crashReporter.contains("safeRelayReason"))
+        XCTAssertTrue(privateUsageUploadStoreActions.contains(
+            "SpillCrashReporter.capturePrivateUsageUploadFailure(operation: .connect, error: error)"
+        ))
+        XCTAssertTrue(privateUsageUploadStoreActions.contains(
+            "SpillCrashReporter.capturePrivateUsageUploadFailure(operation: .manualSync, error: error)"
+        ))
+        XCTAssertTrue(privateUsageUploadStoreActions.contains(
+            "SpillCrashReporter.capturePrivateUsageUploadFailure(operation: .disconnect, error: error)"
+        ))
+        XCTAssertTrue(privateUsageUploadConnection.contains(
+            "SpillCrashReporter.capturePrivateUsageUploadFailure(operation: .automaticUpload, error: error)"
+        ))
+        XCTAssertTrue(tokenMeteringCoordinator.contains(
+            "SpillCrashReporter.capturePrivateUsageUploadFailure(operation: .connectDeepLink, error: error)"
+        ))
         XCTAssertFalse(crashReporter.contains("token_usage"))
         XCTAssertFalse(crashReporter.contains("setExtra"))
     }
@@ -180,8 +220,10 @@ final class ReleaseNotarizationContractTests: XCTestCase {
         XCTAssertTrue(uploadModels.contains("SPILLPrivateUsageFeatureEnabled"))
         XCTAssertTrue(uploadModels.contains("return false"))
         XCTAssertTrue(preferencesSection.contains("if PrivateUsageUploadFeatureAvailability.isEnabledInCurrentBuild"))
-        XCTAssertTrue(privateUsageUploadSection.contains("if !status.isConnected"))
+        XCTAssertTrue(privateUsageUploadSection.contains("if status.isConnected"))
+        XCTAssertTrue(privateUsageUploadSection.contains("webConnectionConnectedState"))
         XCTAssertTrue(privateUsageUploadSection.contains("webConnectionPrompt"))
+        XCTAssertTrue(privateUsageUploadSection.contains("t(.privateUsageUploadConnectedDetail)"))
         XCTAssertFalse(privateUsageUploadSection.contains("isWebConnectionEntryPointEnabledInCurrentBuild"))
         XCTAssertTrue(privateUsageUploadSection.contains(".disabled(webConnectionURL == nil)"))
         XCTAssertTrue(tokenMeteringCoordinator.contains("guard PrivateUsageUploadFeatureAvailability.isEnabledInCurrentBuild else"))
@@ -313,6 +355,10 @@ final class ReleaseNotarizationContractTests: XCTestCase {
 
     private func read(_ relativePath: String) throws -> String {
         try String(contentsOf: root.appendingPathComponent(relativePath), encoding: .utf8)
+    }
+
+    private func occurrences(of needle: String, in haystack: String) -> Int {
+        haystack.components(separatedBy: needle).count - 1
     }
 
     private func privateUsageUploadModelSources() throws -> String {

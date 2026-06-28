@@ -21,19 +21,21 @@ struct TokenMeteringDashboardAnalyticsGrid: View {
                     trendChart
                 }
 
-                HStack(alignment: .top, spacing: 14) {
-                    distributionPanel(
-                        rows: store.snapshot.toolRows,
-                        title: t(.aiToolDistribution),
-                        subtitle: t(.aiToolDistributionSubtitle),
-                        infoTitle: t(.aiToolInfoTitle),
-                        infoDetail: t(.aiToolInfoDetail),
-                        emptyTitle: t(.noAIToolData),
-                        idPrefix: "tool_chart",
-                        tint: .teal,
-                        rowTint: aiToolTint
-                    )
+                distributionPanel(
+                    rows: store.snapshot.toolRows,
+                    title: t(.aiToolDistribution),
+                    subtitle: t(.aiToolDistributionSubtitle),
+                    infoTitle: t(.aiToolInfoTitle),
+                    infoDetail: t(.aiToolInfoDetail),
+                    emptyTitle: t(.noAIToolData),
+                    idPrefix: "tool_chart",
+                    tint: .teal,
+                    rowTint: aiToolTint,
+                    panelMinimumHeight: 180,
+                    rowsMinimumHeight: 118
+                )
 
+                HStack(alignment: .top, spacing: 14) {
                     distributionPanel(
                         rows: store.snapshot.taskRows,
                         title: t(.workflowBreakdown),
@@ -44,9 +46,7 @@ struct TokenMeteringDashboardAnalyticsGrid: View {
                         idPrefix: "task_chart",
                         tint: .blue
                     )
-                }
 
-                HStack(alignment: .top, spacing: 14) {
                     distributionPanel(
                         rows: store.snapshot.stageRows,
                         title: t(.stageBreakdown),
@@ -56,17 +56,6 @@ struct TokenMeteringDashboardAnalyticsGrid: View {
                         emptyTitle: t(.noStageData),
                         idPrefix: "stage_chart",
                         tint: .purple
-                    )
-
-                    distributionPanel(
-                        rows: store.snapshot.sourceRows.filter { $0.id != "unknown" },
-                        title: t(.sourceBreakdown),
-                        subtitle: t(.sourceBreakdownSubtitle),
-                        infoTitle: t(.sourceInfoTitle),
-                        infoDetail: t(.sourceInfoDetail),
-                        emptyTitle: t(.noSourceBreakdown),
-                        idPrefix: "source_chart",
-                        tint: .orange
                     )
                 }
             }
@@ -150,11 +139,7 @@ struct TokenMeteringDashboardAnalyticsGrid: View {
             stageTitle: t(.stageBreakdown),
             stageSubtitle: t(.stageBreakdownSubtitle),
             stageInfoTitle: t(.stageInfoTitle),
-            stageInfoDetail: t(.stageInfoDetail),
-            sourceTitle: t(.sourceBreakdown),
-            sourceSubtitle: t(.sourceBreakdownSubtitle),
-            sourceInfoTitle: t(.sourceInfoTitle),
-            sourceInfoDetail: t(.sourceInfoDetail)
+            stageInfoDetail: t(.stageInfoDetail)
         )
     }
 
@@ -176,13 +161,16 @@ struct TokenMeteringDashboardAnalyticsGrid: View {
         emptyTitle: String,
         idPrefix: String,
         tint: Color,
-        rowTint: ((TokenUsageDashboardBarRow) -> Color)? = nil
+        rowTint: ((TokenUsageDashboardBarRow) -> Color)? = nil,
+        panelMinimumHeight: CGFloat = 260,
+        rowsMinimumHeight: CGFloat = 210
     ) -> some View {
         TokenMeteringDashboardPanel(
             title: title,
             subtitle: subtitle,
             infoTitle: infoTitle,
-            infoDetail: infoDetail
+            infoDetail: infoDetail,
+            minimumHeight: panelMinimumHeight
         ) {
             let totalRatio = rows.reduce(0.0) { $0 + $1.ratio }
             if rows.isEmpty || totalRatio == 0 {
@@ -190,7 +178,7 @@ struct TokenMeteringDashboardAnalyticsGrid: View {
             } else {
                 compactChartRows(rows, idPrefix: idPrefix, tint: tint, rowTint: rowTint)
                     .padding(.top, 10)
-                    .frame(minHeight: 210, alignment: .topLeading)
+                    .frame(minHeight: rowsMinimumHeight, alignment: .topLeading)
             }
         }
     }
@@ -201,7 +189,7 @@ struct TokenMeteringDashboardAnalyticsGrid: View {
         tint: Color,
         rowTint: ((TokenUsageDashboardBarRow) -> Color)?
     ) -> some View {
-        let visibleRows = Array(rows.filter { $0.ratio > 0 }.prefix(5))
+        let visibleRows = rows.filter { $0.ratio > 0 }
 
         return VStack(alignment: .leading, spacing: 6) {
             ForEach(visibleRows) { row in

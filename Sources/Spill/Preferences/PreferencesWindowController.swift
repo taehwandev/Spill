@@ -16,6 +16,7 @@ final class PreferencesWindowController {
     private let aiStatusStore: AIStatusStore
     private let showPanelAction: () -> Void
     private let openTokenDashboardAction: () -> Void
+    private let preparePrivateUsageUploadAction: @MainActor () async -> Void
     private let navigationState = PreferencesNavigationState()
     private var window: NSWindow?
     private var languageObservation: AnyCancellable?
@@ -28,7 +29,8 @@ final class PreferencesWindowController {
         tokenHistoryImportCoordinator: TokenUsageHistoryImportCoordinator,
         aiStatusStore: AIStatusStore,
         showPanelAction: @escaping () -> Void,
-        openTokenDashboardAction: @escaping () -> Void
+        openTokenDashboardAction: @escaping () -> Void,
+        preparePrivateUsageUploadAction: @escaping @MainActor () async -> Void = {}
     ) {
         self.settings = settings
         self.scanner = scanner
@@ -38,6 +40,7 @@ final class PreferencesWindowController {
         self.aiStatusStore = aiStatusStore
         self.showPanelAction = showPanelAction
         self.openTokenDashboardAction = openTokenDashboardAction
+        self.preparePrivateUsageUploadAction = preparePrivateUsageUploadAction
     }
 
     func show(selectedTab: String? = nil) {
@@ -68,7 +71,8 @@ final class PreferencesWindowController {
             tokenHistoryImportCoordinator: tokenHistoryImportCoordinator,
             aiStatusStore: aiStatusStore,
             showPanelAction: showPanelAction,
-            openTokenDashboardAction: openTokenDashboardAction
+            openTokenDashboardAction: openTokenDashboardAction,
+            preparePrivateUsageUploadAction: preparePrivateUsageUploadAction
         )
         let window = NSWindow(
             contentRect: defaultWindowFrame,

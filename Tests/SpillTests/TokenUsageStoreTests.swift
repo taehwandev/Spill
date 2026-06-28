@@ -7,14 +7,7 @@ import XCTest
 private let TEST_SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
 final class TokenUsageStoreTests: XCTestCase {
-    func testPreferencesModelSeparatesLocalAndCloudOptInModes() {
-        let modes = TokenMeteringPreferencesModel.modes
-
-        XCTAssertEqual(modes.map(\.id), ["local_only", "cloud_aggregate", "cloud_detailed"])
-        XCTAssertEqual(modes.filter(\.isActive).map(\.id), ["local_only"])
-        XCTAssertEqual(modes[0].title, TokenMeteringL10n.text(.modeLocalOnlyTitle))
-        XCTAssertEqual(modes[1].state, TokenMeteringL10n.text(.modeCloudAggregateState))
-        XCTAssertEqual(modes[2].state, TokenMeteringL10n.text(.modeCloudDetailedState))
+    func testPreferencesModelKeepsForbiddenContentLabels() {
         XCTAssertEqual(
             TokenMeteringPreferencesModel.forbiddenContentLabels,
             TokenMeteringL10n.forbiddenContentLabels()
@@ -49,7 +42,12 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(TokenMeteringL10n.text(.relativePreviousWeek, language: .english), "prev week")
         XCTAssertEqual(TokenMeteringL10n.text(.runs, language: .korean), "작업 단위")
         XCTAssertEqual(TokenMeteringL10n.text(.previewBadge, language: .english), "ALPHA")
+        XCTAssertEqual(TokenMeteringL10n.text(.webSyncEnabled, language: .korean), "웹 동기화 켜짐")
         XCTAssertEqual(TokenMeteringL10n.text(.privateUsageUploadTitle, language: .korean), "비공개 사용량 업로드")
+        XCTAssertEqual(
+            TokenMeteringL10n.text(.privateUsageUploadConnectedDetail, language: .korean),
+            "이 Mac은 연결되어 있습니다. 아래에서 업로드를 켜면 암호화된 일별 합계를 동기화하고, 연결 해제로 저장된 연결을 교체할 수 있습니다."
+        )
         XCTAssertEqual(TokenMeteringL10n.text(.privateUsageUploadSyncNow, language: .japanese), "今すぐ同期")
         XCTAssertEqual(TokenMeteringL10n.text(.localDataDeleteOptions, language: .korean), "로컬 데이터 삭제")
         XCTAssertEqual(TokenMeteringL10n.text(.reviewLocalDataDelete, language: .korean), "삭제 전 확인")
@@ -621,6 +619,10 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertFalse(dashboardView.contains("scope: .tool(tool)"))
         XCTAssertFalse(dashboardView.contains("scope: .period(period)"))
         XCTAssertTrue(sessionsTable.contains(".contextMenu"))
+        XCTAssertFalse(dashboardView.contains("localOnlyBadge"))
+        XCTAssertTrue(dashboardView.contains("syncStateBadge"))
+        XCTAssertTrue(dashboardView.contains("settings.privateUsageUploadEnabled"))
+        XCTAssertTrue(dashboardView.contains("t(.webSyncEnabled)"))
         XCTAssertTrue(sessionsTable.contains("if SpillBuildOptions.developerOptionsEnabled"))
         XCTAssertTrue(sessionsTable.contains("requestClear(.workItem(session.id))"))
         XCTAssertFalse(dashboardView.contains("requestClear(.workItem(detailSession.id))"))
@@ -710,7 +712,9 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(dashboardView.contains("title: t(.workflowUsage)"))
         XCTAssertTrue(analyticsGrid.contains("title: t(.workflowBreakdown)"))
         XCTAssertTrue(analyticsGrid.contains("title: t(.stageBreakdown)"))
-        XCTAssertTrue(analyticsGrid.contains("title: t(.sourceBreakdown)"))
+        XCTAssertFalse(analyticsGrid.contains("title: t(.sourceBreakdown)"))
+        XCTAssertFalse(detailPanel.contains("detailSourceBreakdownSection"))
+        XCTAssertFalse(detailPanel.contains("t(.sourceBreakdown)"))
         XCTAssertTrue(sessionsTable.contains("projectFilterBar"))
         XCTAssertTrue(sessionsTable.contains("projectFilterPill(filter)"))
         XCTAssertTrue(sessionsTable.contains("store.setSelectedProjectID(filter.projectID)"))
@@ -773,7 +777,9 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(analyticsGrid.contains("rowTint: aiToolTint"))
         XCTAssertTrue(analyticsGrid.contains("metricValueBadge("))
         XCTAssertTrue(analyticsGrid.contains(".padding(.top, 10)"))
-        XCTAssertTrue(analyticsGrid.contains(".frame(minHeight: 210, alignment: .topLeading)"))
+        XCTAssertTrue(analyticsGrid.contains(".frame(minHeight: rowsMinimumHeight, alignment: .topLeading)"))
+        XCTAssertFalse(analyticsGrid.contains("maximumRows"))
+        XCTAssertFalse(analyticsGrid.contains(".prefix(maximumRows)"))
         XCTAssertTrue(analyticsGrid.contains("TokenUsageAITool(rawValue: row.id.lowercased())?.dashboardTint ?? .secondary"))
         XCTAssertTrue(toolColor.contains("extension TokenUsageAITool"))
         XCTAssertTrue(toolColor.contains("enum TokenMeteringDashboardToolPalette"))
@@ -868,6 +874,11 @@ final class TokenUsageStoreTests: XCTestCase {
         let dashboardProcess = try Self.source(named: "TokenMeteringDashboardProcess.swift")
         let tokenMeteringCoordinator = try Self.source(named: "TokenMeteringCoordinator.swift")
         let collector = try Self.source(named: "TokenUsageCollectorCoordinator.swift")
+        let preferencesView = try Self.source(named: "PreferencesView.swift")
+        let preferencesWindowController = try Self.source(named: "PreferencesWindowController.swift")
+        let tokenMeteringPreferencesSection = try Self.source(named: "TokenMeteringPreferencesSection.swift")
+        let privateUsageUploadStore = try Self.source(named: "PrivateUsageUploadStore.swift")
+        let privateUsageUploadActions = try Self.source(named: "PrivateUsageUploadStore+Actions.swift")
 
         XCTAssertTrue(appDelegate.contains("let wasPanelVisible = spillPanelController.isVisible"))
         XCTAssertTrue(appDelegate.contains("spillPanelController.hide(animated: false)"))
@@ -882,6 +893,23 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(appDelegate.contains("tokenMeteringCoordinator.requestCollection(reason: \"panel_open\")"))
         XCTAssertTrue(tokenMeteringCoordinator.contains("self?.requestCollection(reason: \"dashboard_refresh\")"))
         XCTAssertTrue(appDelegate.contains("tokenMeteringCoordinator.requestCollection(reason: \"manual_refresh\")"))
+        XCTAssertTrue(tokenMeteringCoordinator.contains("func preparePrivateUsageUpload() async"))
+        XCTAssertTrue(tokenMeteringCoordinator.contains("await collectorCoordinator.requestCollectionAndWait(reason: \"private_usage_upload\")"))
+        XCTAssertLessThan(
+            try XCTUnwrap(tokenMeteringCoordinator.range(of: "await preparePrivateUsageUpload()")?.lowerBound),
+            try XCTUnwrap(tokenMeteringCoordinator.range(of: "coordinator.runAutomaticUploadIfNeeded")?.lowerBound)
+        )
+        XCTAssertTrue(appDelegate.contains("preparePrivateUsageUploadAction"))
+        XCTAssertTrue(appDelegate.contains("await self.tokenMeteringCoordinator.preparePrivateUsageUpload()"))
+        XCTAssertTrue(preferencesView.contains("preparePrivateUsageUploadAction"))
+        XCTAssertTrue(preferencesWindowController.contains("preparePrivateUsageUploadAction"))
+        XCTAssertTrue(tokenMeteringPreferencesSection.contains("preparePrivateUsageUploadAction"))
+        XCTAssertTrue(privateUsageUploadStore.contains("let prepareForUpload"))
+        XCTAssertTrue(privateUsageUploadActions.contains("await prepareForUpload()"))
+        XCTAssertLessThan(
+            try XCTUnwrap(privateUsageUploadActions.range(of: "await prepareForUpload()")?.lowerBound),
+            try XCTUnwrap(privateUsageUploadActions.range(of: "coordinator.syncNow(")?.lowerBound)
+        )
         XCTAssertTrue(tokenMeteringCoordinator.contains("TokenMeteringDashboardProcess.tokenMeteringPreferencesTab"))
         XCTAssertTrue(appDelegate.contains("observeDashboardPreferenceRequests()"))
         XCTAssertTrue(appDelegate.contains("showPreferencesFromDashboardRequest"))
@@ -894,6 +922,7 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(dashboardView.contains("refreshAction()"))
         XCTAssertTrue(collector.contains("drainQueuedInbox()"))
         XCTAssertTrue(collector.contains("Drain app-owned queued inbox events"))
+        XCTAssertTrue(collector.contains("func requestCollectionAndWait(reason: String) async"))
         XCTAssertTrue(collector.contains("runAntigravityActiveImporter()"))
         XCTAssertTrue(collector.contains("AGY and Claude Code use native active importers"))
         XCTAssertFalse(collector.contains("runLocalImportersIfAvailable()"))
@@ -931,6 +960,9 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(spillBarAISection.contains("status.kind.dashboardTint"))
         XCTAssertTrue(spillBarAITokenSummary.contains("TokenUsageAITool(rawValue: toolID.lowercased())?.dashboardTint"))
         XCTAssertFalse(spillBarAITokenSummary.contains("case \"antigravity\":"))
+        XCTAssertTrue(spillBarAITokenSummary.contains("tokenSyncBadge"))
+        XCTAssertTrue(spillBarAITokenSummary.contains("settings.privateUsageUploadEnabled"))
+        XCTAssertTrue(spillBarAITokenSummary.contains(".webSyncEnabled"))
         XCTAssertTrue(spillBarAIToolCard.contains("status.kind.dashboardTint"))
         XCTAssertFalse(spillBarAIToolCard.contains("status.hasRunningProcesses ? .teal"))
         XCTAssertTrue(spillBarAITokenSummary.contains("setupPreview"))
@@ -1136,6 +1168,50 @@ final class TokenUsageStoreTests: XCTestCase {
         collector.requestCollection(reason: "test")
 
         wait(for: [notification], timeout: 1)
+    }
+
+    func testTokenUsageCollectorRequestCollectionAndWaitAwaitsImporters() async {
+        let store = TokenUsageStore(fileURL: temporaryEventsURL())
+        let lock = NSLock()
+        var didRunAntigravityImporter = false
+        var didRunClaudeCodeImporter = false
+        let collector = TokenUsageCollectorCoordinator(
+            store: store,
+            antigravityImportRunner: { _, _, _ in
+                lock.withLock {
+                    didRunAntigravityImporter = true
+                }
+                return TokenUsageAntigravityImportSummary(
+                    scannedDatabases: 0,
+                    scannedGenerationRows: 0,
+                    parsedUsageEvents: 0,
+                    importedEvents: 0,
+                    skippedDuplicateEvents: 0,
+                    unsupportedRecords: 0,
+                    splitOutputFallbackEvents: 0,
+                    cursorAdvancedDatabases: 0,
+                    failedToWriteEvents: false
+                )
+            },
+            claudeCodeImportRunner: { _, _ in
+                lock.withLock {
+                    didRunClaudeCodeImporter = true
+                }
+                return TokenUsageClaudeCodeImportSummary(
+                    scannedFiles: 0,
+                    parsedTurns: 0,
+                    importedEvents: 0,
+                    skippedDuplicateEvents: 0,
+                    cursorAdvancedFiles: 0,
+                    failedToWriteEvents: false
+                )
+            }
+        )
+
+        await collector.requestCollectionAndWait(reason: "test")
+
+        XCTAssertTrue(lock.withLock { didRunAntigravityImporter })
+        XCTAssertTrue(lock.withLock { didRunClaudeCodeImporter })
     }
 
     func testClaudeCodeActiveImporterParsesHookTranscriptShapeAndIterations() throws {

@@ -1,4 +1,4 @@
-struct TokenMeteringAdapterConnectionStatus: Equatable {
+struct TokenMeteringAdapterConnectionStatus: Equatable, Sendable {
     let scriptInstalled: Bool
     let hookConfigured: Bool
 

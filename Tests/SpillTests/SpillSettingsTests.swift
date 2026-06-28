@@ -473,6 +473,8 @@ final class SpillSettingsTests: XCTestCase {
         XCTAssertEqual(AppL10n.text(.showSpillPanel, appLanguage: .english), "Show Spill Panel")
         XCTAssertEqual(AppL10n.text(.showSpillPanel, appLanguage: .korean), "Spill 패널 보기")
         XCTAssertEqual(AppL10n.text(.statusDetails, appLanguage: .japanese), "状態詳細")
+        XCTAssertEqual(AppL10n.text(.webSyncEnabled, appLanguage: .english), "Web sync on")
+        XCTAssertEqual(AppL10n.text(.webSyncEnabled, appLanguage: .korean), "웹 동기화 켜짐")
         XCTAssertEqual(AppL10n.sleepDurationTitle(.fifteenMinutes, appLanguage: .korean), "15분")
         XCTAssertEqual(AppL10n.statusModuleTitle(.memory, appLanguage: .japanese), "メモリ")
         XCTAssertEqual(
