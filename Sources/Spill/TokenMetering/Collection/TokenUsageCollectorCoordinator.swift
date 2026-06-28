@@ -24,6 +24,7 @@ final class TokenUsageCollectorCoordinator: TokenUsageExternalCollecting, @unche
     private var isCollecting = false
     private var hasPendingRequest = false
     private var isStopping = false
+    private var collectionCompletionHandlers: [@Sendable () -> Void] = []
 
     init(
         store: TokenUsageStore,
@@ -49,9 +50,26 @@ final class TokenUsageCollectorCoordinator: TokenUsageExternalCollecting, @unche
     }
 
     func requestCollection(reason: String) {
+        requestCollection(reason: reason, completion: nil)
+    }
+
+    func requestCollectionAndWait(reason: String) async {
+        await withCheckedContinuation { continuation in
+            requestCollection(reason: reason) {
+                continuation.resume()
+            }
+        }
+    }
+
+    private func requestCollection(reason: String, completion: (@Sendable () -> Void)?) {
+        var completionToRun: (@Sendable () -> Void)?
         let shouldStart = lock.withLock {
             guard !isStopping else {
+                completionToRun = completion
                 return false
+            }
+            if let completion {
+                collectionCompletionHandlers.append(completion)
             }
             if isCollecting {
                 hasPendingRequest = true
@@ -63,6 +81,7 @@ final class TokenUsageCollectorCoordinator: TokenUsageExternalCollecting, @unche
         }
 
         guard shouldStart else {
+            completionToRun?()
             return
         }
 
@@ -159,9 +178,15 @@ final class TokenUsageCollectorCoordinator: TokenUsageExternalCollecting, @unche
     }
 
     private func finishCollection() {
-        lock.withLock {
+        let completions = lock.withLock {
             isCollecting = false
             hasPendingRequest = false
+            let completions = collectionCompletionHandlers
+            collectionCompletionHandlers.removeAll()
+            return completions
+        }
+        for completion in completions {
+            completion()
         }
         NotificationCenter.default.post(name: Self.collectionDidFinishNotification, object: self)
     }

@@ -79,6 +79,7 @@ final class TokenMeteringCoordinator: NSObject {
         requestCollection(reason: "app_launch")
         configureBridge()
         registerPrivateUsageConnectionURLHandler()
+        observePrivateUsageUploadOpportunities()
         schedulePrivateUsageUploadIfNeeded()
     }
 
@@ -119,6 +120,15 @@ final class TokenMeteringCoordinator: NSObject {
         }
 
         collectorCoordinator.requestCollection(reason: reason)
+    }
+
+    func preparePrivateUsageUpload() async {
+        if isSmokeTest,
+           ProcessInfo.processInfo.environment["SPILL_SMOKE_ENABLE_TOKEN_COLLECTORS"] != "1" {
+            return
+        }
+
+        await collectorCoordinator.requestCollectionAndWait(reason: "private_usage_upload")
     }
 
     func refreshPanelSummary() {
@@ -287,6 +297,26 @@ final class TokenMeteringCoordinator: NSObject {
             .store(in: &cancellables)
     }
 
+    private func observePrivateUsageUploadOpportunities() {
+        guard !isSmokeTest else {
+            return
+        }
+
+        NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.schedulePrivateUsageUploadIfNeeded()
+            }
+            .store(in: &cancellables)
+
+        NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didWakeNotification)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.schedulePrivateUsageUploadIfNeeded()
+            }
+            .store(in: &cancellables)
+    }
+
     private func scheduleVisibleAIToolsSync() {
         visibleAIToolsSyncTask?.cancel()
         visibleAIToolsSyncTask = Task { @MainActor [weak self] in
@@ -345,17 +375,23 @@ final class TokenMeteringCoordinator: NSObject {
             return
         }
 
+        let environment = settings.privateUsageUploadEnvironment
         let coordinator = PrivateUsageUploadCoordinator.live(
             usageStore: usageStore,
-            environment: settings.privateUsageUploadEnvironment
+            environment: environment
         )
 
         do {
             _ = try await coordinator.exchangeGrantCode(connectionCode)
             settings.privateUsageUploadEnabled = true
+            PrivateUsageConnectionResultNotification.postSuccess(environment: environment)
             schedulePrivateUsageUploadIfNeeded()
         } catch {
-            return
+            SpillCrashReporter.capturePrivateUsageUploadFailure(operation: .connectDeepLink, error: error)
+            PrivateUsageConnectionResultNotification.postFailure(
+                environment: environment,
+                error: error
+            )
         }
     }
 
@@ -385,6 +421,18 @@ final class TokenMeteringCoordinator: NSObject {
                 usageStore: usageStore,
                 environment: settings.privateUsageUploadEnvironment
             )
+            guard coordinator.automaticUploadIsDue(
+                isEnabled: settings.privateUsageUploadEnabled,
+                now: Date()
+            ) else {
+                return
+            }
+
+            await preparePrivateUsageUpload()
+            guard !Task.isCancelled else {
+                return
+            }
+
             _ = await coordinator.runAutomaticUploadIfNeeded(
                 isEnabled: settings.privateUsageUploadEnabled
             )

@@ -27,7 +27,8 @@ struct PrivateUsageDailyBucketBuilder: Sendable {
         acknowledgedHashesByBucketKey: [String: String],
         now: Date = Date(),
         limit: Int = 31,
-        earliestBucketStart: Date? = nil
+        earliestBucketStart: Date? = nil,
+        includeCurrentDay: Bool = false
     ) throws -> [PrivateUsageEncryptedBucket] {
         guard limit > 0 else {
             return []
@@ -36,7 +37,8 @@ struct PrivateUsageDailyBucketBuilder: Sendable {
         let aggregates = makeDailyAggregates(
             events: events,
             now: now,
-            earliestBucketStart: earliestBucketStart
+            earliestBucketStart: earliestBucketStart,
+            includeCurrentDay: includeCurrentDay
         )
         var buckets = [PrivateUsageEncryptedBucket]()
         buckets.reserveCapacity(min(aggregates.count, limit))
@@ -75,13 +77,14 @@ struct PrivateUsageDailyBucketBuilder: Sendable {
     func makeDailyAggregates(
         events: [TokenUsageEvent],
         now: Date = Date(),
-        earliestBucketStart: Date? = nil
+        earliestBucketStart: Date? = nil,
+        includeCurrentDay: Bool = false
     ) -> [PrivateUsageDailyAggregate] {
         let todayStart = calendar.startOfDay(for: now)
         let earliestDayStart = earliestBucketStart.map { calendar.startOfDay(for: $0) }
         let groupedEvents = Dictionary(grouping: events.compactMap { event -> (Date, TokenUsageEvent)? in
             guard let date = ISO8601DateFormatter.parseTokenUsageDate(from: event.createdAt),
-                  date < todayStart
+                  date < todayStart || (includeCurrentDay && date <= now)
             else {
                 return nil
             }
@@ -105,7 +108,7 @@ struct PrivateUsageDailyBucketBuilder: Sendable {
 
             let dayEvents = groupedDayEvents.map(\.1)
             let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? todayStart
-            guard dayEnd <= todayStart else {
+            guard includeCurrentDay || dayEnd <= todayStart else {
                 return nil
             }
 
@@ -141,6 +144,8 @@ struct PrivateUsageDailyBucketBuilder: Sendable {
         var taskTypeTotals = [String: PrivateUsageTokenTotals]()
         var stageTotals = [String: PrivateUsageTokenTotals]()
         var workflowUsageTotals = PrivateUsageWorkflowUsageTotals.zero
+        var workItems = [String: PrivateUsageWorkItemAggregate]()
+        let bucketDay = Self.localDayID(for: dayStart, timeZone: timeZone)
 
         for event in events {
             totals.add(event)
@@ -148,6 +153,7 @@ struct PrivateUsageDailyBucketBuilder: Sendable {
             add(event, to: &modelTotals, key: event.model)
             add(event, to: &taskTypeTotals, key: event.taskType.rawValue)
             add(event, to: &stageTotals, key: event.stage.rawValue)
+            add(event, bucketDay: bucketDay, to: &workItems)
             workflowUsageTotals.add(event)
             sourceTotals["system", default: 0] += event.tokenBreakdown.system
             sourceTotals["user", default: 0] += event.tokenBreakdown.user
@@ -158,7 +164,6 @@ struct PrivateUsageDailyBucketBuilder: Sendable {
             sourceTotals["unknown", default: 0] += event.tokenBreakdown.unknown
         }
 
-        let bucketDay = Self.localDayID(for: dayStart, timeZone: timeZone)
         return PrivateUsageDailyAggregate(
             schemaVersion: 1,
             bucketKind: "daily",
@@ -173,11 +178,19 @@ struct PrivateUsageDailyBucketBuilder: Sendable {
             modelTotals: modelTotals,
             taskTypeTotals: taskTypeTotals,
             stageTotals: stageTotals,
-            workflowUsageTotals: workflowUsageTotals
+            workflowUsageTotals: workflowUsageTotals,
+            workItems: workItems.values.sorted { lhs, rhs in
+                lhs.totals.totalTokens == rhs.totals.totalTokens
+                    ? lhs.id < rhs.id
+                    : lhs.totals.totalTokens > rhs.totals.totalTokens
+            }
         )
     }
 
-    private func add(
+}
+
+private extension PrivateUsageDailyBucketBuilder {
+    func add(
         _ event: TokenUsageEvent,
         to totals: inout [String: PrivateUsageTokenTotals],
         key: String
@@ -187,4 +200,61 @@ struct PrivateUsageDailyBucketBuilder: Sendable {
         totals[key] = current
     }
 
+    func add(
+        _ event: TokenUsageEvent,
+        bucketDay: String,
+        to workItems: inout [String: PrivateUsageWorkItemAggregate]
+    ) {
+        let id = Self.workItemID(for: event, bucketDay: bucketDay)
+        var current = workItems[id] ?? PrivateUsageWorkItemAggregate(
+            id: id,
+            aiTool: event.aiTool.rawValue,
+            taskType: event.taskType.rawValue,
+            stage: event.stage.rawValue,
+            model: Self.modelKey(event.model),
+            totals: .zero,
+            firstEventAt: event.createdAt,
+            lastEventAt: event.createdAt
+        )
+        current.add(event)
+        workItems[id] = current
+    }
+
+    static func workItemID(for event: TokenUsageEvent, bucketDay: String) -> String {
+        [
+            "work",
+            event.aiTool.rawValue,
+            event.taskType.rawValue,
+            event.stage.rawValue,
+            modelKey(event.model),
+            bucketDay
+        ].map(safeIDPart).joined(separator: "_")
+    }
+
+    static func modelKey(_ model: String) -> String {
+        let normalized = model.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if normalized.isEmpty ||
+            normalized == "unknown" ||
+            normalized == "unknown_model" ||
+            normalized == "model_unknown" ||
+            normalized == "unavailable"
+        {
+            return "model_unavailable"
+        }
+        return model.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    static func safeIDPart(_ value: String) -> String {
+        let normalized = value.lowercased()
+        let scalars = normalized.unicodeScalars.map { scalar -> Character in
+            if (48...57).contains(scalar.value) || (97...122).contains(scalar.value) {
+                return Character(scalar)
+            }
+            return "_"
+        }
+        let collapsed = String(scalars)
+            .split(separator: "_", omittingEmptySubsequences: true)
+            .joined(separator: "_")
+        return collapsed.isEmpty ? "unknown" : collapsed
+    }
 }

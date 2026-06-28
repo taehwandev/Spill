@@ -67,6 +67,7 @@ extension PrivateUsageUploadStore {
             settings.privateUsageUploadEnabled = true
             message = TokenMeteringL10n.text(.privateUsageUploadConnectedMessage)
         } catch {
+            SpillCrashReporter.capturePrivateUsageUploadFailure(operation: .connect, error: error)
             errorMessage = Self.safeMessage(for: error)
         }
     }
@@ -82,6 +83,8 @@ extension PrivateUsageUploadStore {
         }
 
         do {
+            await prepareForUpload()
+            updateCoordinatorIfNeeded()
             let result = try await coordinator.syncNow(
                 isEnabled: settings.privateUsageUploadEnabled
             )
@@ -91,6 +94,7 @@ extension PrivateUsageUploadStore {
                 message = TokenMeteringL10n.text(.privateUsageUploadNoQueuedMessage)
             }
         } catch {
+            SpillCrashReporter.capturePrivateUsageUploadFailure(operation: .manualSync, error: error)
             if Self.isRevokedConnection(error) {
                 settings.privateUsageUploadEnabled = false
             }
@@ -106,6 +110,7 @@ extension PrivateUsageUploadStore {
             message = TokenMeteringL10n.text(.privateUsageUploadDisconnectedMessage)
             errorMessage = nil
         } catch {
+            SpillCrashReporter.capturePrivateUsageUploadFailure(operation: .disconnect, error: error)
             errorMessage = Self.safeMessage(for: error)
         }
         refresh()

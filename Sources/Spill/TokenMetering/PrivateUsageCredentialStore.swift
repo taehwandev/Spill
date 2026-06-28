@@ -8,15 +8,40 @@ protocol PrivateUsageCredentialStoring: Sendable {
     func loadKeyWrappingSecret() throws -> PrivateUsageKeyWrappingSecret?
     func saveKeyWrappingSecret(_ secret: PrivateUsageKeyWrappingSecret) throws
     func clearKeyWrappingSecret() throws
+    func saveConnection(credential: PrivateUsageDeviceCredential, keyWrappingSecret: PrivateUsageKeyWrappingSecret) throws
+    func clearConnection() throws
     func loadSealingKeyData() throws -> Data?
     func saveSealingKeyData(_ data: Data) throws
 }
 
+extension PrivateUsageCredentialStoring {
+    func saveConnection(credential: PrivateUsageDeviceCredential, keyWrappingSecret: PrivateUsageKeyWrappingSecret) throws {
+        try saveKeyWrappingSecret(keyWrappingSecret)
+        try saveCredential(credential)
+    }
+
+    func clearConnection() throws {
+        try clearCredential()
+        try clearKeyWrappingSecret()
+    }
+}
+
 final class PrivateUsageKeychainCredentialStore: PrivateUsageCredentialStoring, @unchecked Sendable {
     private enum Account {
-        static let credential = "device-credential"
-        static let keyWrappingSecret = "browser-key-wrap-secret"
-        static let sealingKey = "bucket-sealing-key"
+        static let bundle = "private-usage-credential-bundle-v1"
+        static let legacyCredential = "device-credential"
+        static let legacyKeyWrappingSecret = "browser-key-wrap-secret"
+        static let legacySealingKey = "bucket-sealing-key"
+    }
+
+    private struct StoredBundle: Codable {
+        var credential: PrivateUsageDeviceCredential?
+        var keyWrappingSecret: PrivateUsageKeyWrappingSecret?
+        var sealingKeyData: Data?
+
+        var isEmpty: Bool {
+            credential == nil && keyWrappingSecret == nil && sealingKeyData == nil
+        }
     }
 
     private let service: String
@@ -34,46 +59,82 @@ final class PrivateUsageKeychainCredentialStore: PrivateUsageCredentialStoring, 
     }
 
     func loadCredential() throws -> PrivateUsageDeviceCredential? {
-        guard let data = try loadData(account: Account.credential) else {
-            return nil
-        }
-
-        do {
-            return try decoder.decode(PrivateUsageDeviceCredential.self, from: data)
-        } catch {
-            throw PrivateUsageUploadError.keychainReadFailed
-        }
+        try loadBundle().credential
     }
 
     func saveCredential(_ credential: PrivateUsageDeviceCredential) throws {
-        do {
-            try saveData(encoder.encode(credential), account: Account.credential)
-        } catch let error as PrivateUsageUploadError {
-            throw error
-        } catch {
-            throw PrivateUsageUploadError.keychainWriteFailed
-        }
+        var bundle = try loadBundle()
+        bundle.credential = credential
+        try saveBundle(bundle)
     }
 
     func clearCredential() throws {
-        try deleteData(account: Account.credential)
+        var bundle = try loadBundle()
+        bundle.credential = nil
+        try saveBundle(bundle)
     }
 
     func loadKeyWrappingSecret() throws -> PrivateUsageKeyWrappingSecret? {
-        guard let data = try loadData(account: Account.keyWrappingSecret) else {
-            return nil
+        try loadBundle().keyWrappingSecret
+    }
+
+    func saveKeyWrappingSecret(_ secret: PrivateUsageKeyWrappingSecret) throws {
+        var bundle = try loadBundle()
+        bundle.keyWrappingSecret = secret
+        try saveBundle(bundle)
+    }
+
+    func clearKeyWrappingSecret() throws {
+        var bundle = try loadBundle()
+        bundle.keyWrappingSecret = nil
+        try saveBundle(bundle)
+    }
+
+    func saveConnection(credential: PrivateUsageDeviceCredential, keyWrappingSecret: PrivateUsageKeyWrappingSecret) throws {
+        var bundle = try loadBundle()
+        bundle.credential = credential
+        bundle.keyWrappingSecret = keyWrappingSecret
+        try saveBundle(bundle)
+    }
+
+    func clearConnection() throws {
+        var bundle = try loadBundle()
+        bundle.credential = nil
+        bundle.keyWrappingSecret = nil
+        try saveBundle(bundle)
+    }
+
+    func loadSealingKeyData() throws -> Data? {
+        try loadBundle().sealingKeyData
+    }
+
+    func saveSealingKeyData(_ data: Data) throws {
+        var bundle = try loadBundle()
+        bundle.sealingKeyData = data
+        try saveBundle(bundle)
+    }
+}
+
+private extension PrivateUsageKeychainCredentialStore {
+    private func loadBundle() throws -> StoredBundle {
+        guard let data = try loadData(account: Account.bundle) else {
+            return try migrateLegacyBundle()
         }
 
         do {
-            return try decoder.decode(PrivateUsageKeyWrappingSecret.self, from: data)
+            return try decoder.decode(StoredBundle.self, from: data)
         } catch {
             throw PrivateUsageUploadError.keychainReadFailed
         }
     }
 
-    func saveKeyWrappingSecret(_ secret: PrivateUsageKeyWrappingSecret) throws {
+    private func saveBundle(_ bundle: StoredBundle) throws {
         do {
-            try saveData(encoder.encode(secret), account: Account.keyWrappingSecret)
+            if bundle.isEmpty {
+                try deleteData(account: Account.bundle)
+            } else {
+                try saveData(encoder.encode(bundle), account: Account.bundle)
+            }
         } catch let error as PrivateUsageUploadError {
             throw error
         } catch {
@@ -81,16 +142,35 @@ final class PrivateUsageKeychainCredentialStore: PrivateUsageCredentialStoring, 
         }
     }
 
-    func clearKeyWrappingSecret() throws {
-        try deleteData(account: Account.keyWrappingSecret)
-    }
+    private func migrateLegacyBundle() throws -> StoredBundle {
+        var bundle = StoredBundle()
 
-    func loadSealingKeyData() throws -> Data? {
-        try loadData(account: Account.sealingKey)
-    }
+        if let credentialData = try loadData(account: Account.legacyCredential) {
+            do {
+                bundle.credential = try decoder.decode(PrivateUsageDeviceCredential.self, from: credentialData)
+            } catch {
+                throw PrivateUsageUploadError.keychainReadFailed
+            }
+        }
 
-    func saveSealingKeyData(_ data: Data) throws {
-        try saveData(data, account: Account.sealingKey)
+        if let secretData = try loadData(account: Account.legacyKeyWrappingSecret) {
+            do {
+                bundle.keyWrappingSecret = try decoder.decode(PrivateUsageKeyWrappingSecret.self, from: secretData)
+            } catch {
+                throw PrivateUsageUploadError.keychainReadFailed
+            }
+        }
+
+        bundle.sealingKeyData = try loadData(account: Account.legacySealingKey)
+
+        if !bundle.isEmpty {
+            try saveBundle(bundle)
+            try? deleteData(account: Account.legacyCredential)
+            try? deleteData(account: Account.legacyKeyWrappingSecret)
+            try? deleteData(account: Account.legacySealingKey)
+        }
+
+        return bundle
     }
 
     private func loadData(account: String) throws -> Data? {

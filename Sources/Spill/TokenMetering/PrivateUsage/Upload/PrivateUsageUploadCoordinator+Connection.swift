@@ -14,14 +14,12 @@ extension PrivateUsageUploadCoordinator {
             deviceName: PrivateUsageDeviceName.current(),
             deviceKeyFingerprint: connectionCode.keyWrappingSecret.keyID
         )
-        try credentialStore.saveKeyWrappingSecret(connectionCode.keyWrappingSecret)
-        try credentialStore.saveCredential(credential)
+        try credentialStore.saveConnection(credential: credential, keyWrappingSecret: connectionCode.keyWrappingSecret)
         return credential
     }
 
     func clearConnection() throws {
-        try credentialStore.clearCredential()
-        try credentialStore.clearKeyWrappingSecret()
+        try credentialStore.clearConnection()
     }
 
     func status(
@@ -93,30 +91,28 @@ extension PrivateUsageUploadCoordinator {
         isEnabled: Bool,
         now: Date = Date()
     ) async -> PrivateUsageUploadRunResult? {
-        guard isEnabled else {
-            return nil
-        }
-
         let attemptDayID = PrivateUsageDailyBucketBuilder.localDayID(for: now)
-        let state = stateStore.load()
-        guard state.lastAutomaticAttemptDayID != attemptDayID else {
+        guard automaticUploadIsDue(isEnabled: isEnabled, now: now) else {
             return nil
         }
 
         do {
-            let credential = try credentialStore.loadCredential()
+            guard let credential = try credentialStore.loadCredential() else {
+                return nil
+            }
+            markAutomaticAttempt(dayID: attemptDayID)
             let result = try await performUpload(
                 isEnabled: isEnabled,
                 now: now,
-                earliestBucketStart: credential?.createdAt
+                earliestBucketStart: credential.createdAt
             )
-            markAutomaticAttempt(dayID: attemptDayID)
             return result
         } catch {
             if let uploadError = error as? PrivateUsageUploadError,
                uploadError.isRevokedConnection {
                 try? clearConnection()
             }
+            SpillCrashReporter.capturePrivateUsageUploadFailure(operation: .automaticUpload, error: error)
             return nil
         }
     }

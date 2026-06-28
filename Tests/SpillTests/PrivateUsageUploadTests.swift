@@ -151,6 +151,19 @@ final class PrivateUsageUploadTests: XCTestCase {
         XCTAssertEqual(aggregate.workflowUsageTotals.untracked.eventCount, 1)
         XCTAssertEqual(aggregate.workflowUsageTotals.untracked.totalTokens, 10)
         XCTAssertEqual(aggregate.sourceTotals["unknown"], 285)
+        XCTAssertEqual(aggregate.workItems.count, 3)
+        XCTAssertEqual(
+            aggregate.workItems.first { $0.id == "work_codex_code_generation_implement_gpt_5_2026_06_07" }?.totals.totalTokens,
+            200
+        )
+        XCTAssertEqual(
+            aggregate.workItems.first { $0.id == "work_claude_testing_verify_claude_opus_4_2026_06_07" }?.totals.totalTokens,
+            75
+        )
+        XCTAssertEqual(
+            aggregate.workItems.first { $0.id == "work_codex_uncategorized_summarize_gpt_5_2026_06_07" }?.totals.totalTokens,
+            10
+        )
 
         let plaintextString = try XCTUnwrap(String(data: plaintext, encoding: .utf8))
         XCTAssertFalse(plaintextString.contains("span_a1"))
@@ -187,6 +200,7 @@ final class PrivateUsageUploadTests: XCTestCase {
         let aggregate = try JSONDecoder().decode(PrivateUsageDailyAggregate.self, from: payload)
 
         XCTAssertEqual(aggregate.workflowUsageTotals, .zero)
+        XCTAssertEqual(aggregate.workItems, [])
     }
 
     func testDailyBucketBuilderSkipsAcknowledgedUnchangedBucket() throws {
@@ -226,6 +240,66 @@ final class PrivateUsageUploadTests: XCTestCase {
         )
 
         XCTAssertTrue(secondBuckets.isEmpty)
+    }
+
+    func testDailyBucketBuilderReuploadsLegacyAcknowledgedBucketWhenWorkItemsAreAdded() throws {
+        let timeZone = try XCTUnwrap(TimeZone(identifier: "UTC"))
+        let calendar = fixedCalendar(timeZone: timeZone)
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 8, hour: 9)))
+        let yesterday = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 7, hour: 12)))
+        let sealer = RecordingPrivateUsageSealer()
+        let builder = PrivateUsageDailyBucketBuilder(
+            calendar: calendar,
+            timeZone: timeZone,
+            sealer: sealer
+        )
+        let event = makeEvent(
+            spanID: "span_legacy_ack",
+            runID: "run_legacy_ack",
+            aiTool: .codex,
+            taskType: "code_generation",
+            stage: "implement",
+            model: "gpt-5",
+            input: 11,
+            output: 13,
+            createdAt: yesterday
+        )
+        let legacyPlaintext = Data("""
+        {
+          "bucket_end_at":"2026-06-08T00:00:00.000Z",
+          "bucket_key":"2026-06-07:daily",
+          "bucket_kind":"daily",
+          "bucket_start_at":"2026-06-07T00:00:00.000Z",
+          "generated_at":"2026-06-08T09:00:00.000Z",
+          "model_totals":{"gpt-5":{"event_count":1,"input_tokens":11,"latency_ms":0,"output_tokens":13,"total_tokens":24}},
+          "schema_version":1,
+          "source_totals":{"generated_output":0,"history":0,"repo_context":0,"system":0,"tool_output":0,"unknown":24,"user":0},
+          "stage_totals":{"implement":{"event_count":1,"input_tokens":11,"latency_ms":0,"output_tokens":13,"total_tokens":24}},
+          "task_type_totals":{"code_generation":{"event_count":1,"input_tokens":11,"latency_ms":0,"output_tokens":13,"total_tokens":24}},
+          "timezone":"UTC",
+          "tool_totals":{"codex":{"event_count":1,"input_tokens":11,"latency_ms":0,"output_tokens":13,"total_tokens":24}},
+          "totals":{"event_count":1,"input_tokens":11,"latency_ms":0,"output_tokens":13,"total_tokens":24},
+          "workflow_usage_totals":{"assisted":{"event_count":1,"input_tokens":11,"latency_ms":0,"output_tokens":13,"total_tokens":24},"untracked":{"event_count":0,"input_tokens":0,"latency_ms":0,"output_tokens":0,"total_tokens":0}}
+        }
+        """.utf8)
+        let legacySealed = try sealer.seal(legacyPlaintext, bucketKey: "2026-06-07:daily")
+        let legacyHash = PrivateUsageDailyBucketBuilder.sha256Hex(Data(legacySealed.ciphertext.utf8))
+
+        let buckets = try builder.makeDirtyDailyBuckets(
+            events: [event],
+            acknowledgedHashesByBucketKey: ["2026-06-07:daily": legacyHash],
+            now: now
+        )
+
+        XCTAssertEqual(buckets.count, 1)
+        XCTAssertEqual(buckets.first?.bucketKey, "2026-06-07:daily")
+        let plaintext = try XCTUnwrap(sealer.plaintexts.last)
+        let aggregate = try JSONDecoder().decode(PrivateUsageDailyAggregate.self, from: plaintext)
+        XCTAssertEqual(aggregate.workItems.count, 1)
+        XCTAssertEqual(
+            aggregate.workItems.first?.id,
+            "work_codex_code_generation_implement_gpt_5_2026_06_07"
+        )
     }
 
     func testRelayClientExchangesGrantAndUploadsWithDeviceBearer() async throws {
@@ -333,6 +407,164 @@ final class PrivateUsageUploadTests: XCTestCase {
         XCTAssertEqual(relayClient.exchangedGrantCodes, ["grant_secret"])
         XCTAssertEqual(relayClient.exchangedKeyFingerprints, [storedSecret.keyID])
         XCTAssertFalse(relayClient.exchangedGrantCodes.contains { $0.contains(testWrappingSecret) })
+        XCTAssertEqual(credentialStore.saveConnectionCallCount(), 1)
+        XCTAssertEqual(credentialStore.saveCredentialCallCount(), 0)
+        XCTAssertEqual(credentialStore.saveKeyWrappingSecretCallCount(), 0)
+    }
+
+    @MainActor
+    func testUploadStoreDefersSavedConnectionUntilAsyncRefreshCompletes() async throws {
+        let now = try XCTUnwrap(ISO8601DateFormatter.parseTokenUsageDate(from: "2026-06-08T10:00:00.000Z"))
+        let credentialStore = InMemoryPrivateUsageCredentialStore(credentialLoadDelay: 0.05)
+        try credentialStore.saveCredential(
+            PrivateUsageDeviceCredential(
+                deviceID: "device_server",
+                credential: "spill_device_v1_secret",
+                tokenType: "spill_device_v1",
+                createdAt: now
+            )
+        )
+        let relayClient = FakePrivateUsageRelayClient()
+        let coordinator = makeCoordinator(
+            credentialStore: credentialStore,
+            relayClient: relayClient,
+            environment: .production
+        )
+        let settings = SpillSettings(defaults: makeDefaults())
+        settings.privateUsageUploadEnvironment = .production
+        settings.privateUsageUploadEnabled = true
+
+        let store = PrivateUsageUploadStore(
+            settings: settings,
+            usageStore: makeUsageStore(),
+            coordinator: coordinator
+        )
+
+        XCTAssertFalse(store.status.isConnected)
+        try await waitForPrivateUsageStore(store) { $0.status.isConnected }
+        XCTAssertTrue(store.status.isConnected)
+        XCTAssertTrue(store.status.isEnabled)
+    }
+
+    @MainActor
+    func testUploadStoreReflectsDeepLinkConnectionSuccessNotification() async throws {
+        let credentialStore = InMemoryPrivateUsageCredentialStore()
+        let relayClient = FakePrivateUsageRelayClient()
+        let coordinator = makeCoordinator(
+            credentialStore: credentialStore,
+            relayClient: relayClient,
+            environment: .production
+        )
+        let settings = SpillSettings(defaults: makeDefaults())
+        settings.privateUsageUploadEnvironment = .production
+        let store = PrivateUsageUploadStore(
+            settings: settings,
+            usageStore: makeUsageStore(),
+            coordinator: coordinator
+        )
+
+        store.beginWebConnectionAttempt(timeout: 30)
+        try credentialStore.saveCredential(
+            PrivateUsageDeviceCredential(
+                deviceID: "device_server",
+                credential: "spill_device_v1_secret",
+                tokenType: "spill_device_v1",
+                createdAt: Date()
+            )
+        )
+        PrivateUsageConnectionResultNotification.postSuccess(environment: .production)
+
+        try await waitForPrivateUsageStore(store) { $0.status.isConnected && !$0.isConnecting }
+        XCTAssertTrue(settings.privateUsageUploadEnabled)
+        XCTAssertEqual(store.message, TokenMeteringL10n.text(.privateUsageUploadConnectedMessage))
+        XCTAssertNil(store.errorMessage)
+        XCTAssertTrue(relayClient.checkedConnectionDeviceIDs.contains("device_server"))
+    }
+
+    @MainActor
+    func testUploadStoreReflectsDeepLinkConnectionFailureNotification() async throws {
+        let coordinator = makeCoordinator(environment: .production)
+        let settings = SpillSettings(defaults: makeDefaults())
+        settings.privateUsageUploadEnvironment = .production
+        let store = PrivateUsageUploadStore(
+            settings: settings,
+            usageStore: makeUsageStore(),
+            coordinator: coordinator
+        )
+
+        store.beginWebConnectionAttempt(timeout: 30)
+        PrivateUsageConnectionResultNotification.postFailure(
+            environment: .production,
+            errorMessage: "Connection expired."
+        )
+
+        try await waitForPrivateUsageStore(store) { !$0.isConnecting && $0.errorMessage == "Connection expired." }
+        XCTAssertFalse(settings.privateUsageUploadEnabled)
+        XCTAssertFalse(store.status.isConnected)
+        XCTAssertNil(store.message)
+    }
+
+    @MainActor
+    func testUploadStoreRunsLocalFreshnessPassBeforeManualSync() async throws {
+        let timeZone = try XCTUnwrap(TimeZone(identifier: "UTC"))
+        let calendar = fixedCalendar(timeZone: timeZone)
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 8, hour: 9)))
+        let yesterday = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 7, hour: 12)))
+        let usageStore = makeUsageStore()
+        try usageStore.replaceEvents([
+            makeEvent(
+                spanID: "span_manual_prepare",
+                runID: "run_manual_prepare",
+                aiTool: .codex,
+                taskType: "code_generation",
+                stage: "implement",
+                model: "gpt-5",
+                input: 11,
+                output: 13,
+                createdAt: yesterday
+            )
+        ])
+        let credentialStore = InMemoryPrivateUsageCredentialStore()
+        try credentialStore.saveCredential(
+            PrivateUsageDeviceCredential(
+                deviceID: "device_server",
+                credential: "spill_device_v1_secret",
+                tokenType: "spill_device_v1",
+                createdAt: now
+            )
+        )
+        try credentialStore.saveKeyWrappingSecret(try PrivateUsageKeyWrappingSecret(rawValue: testWrappingSecret))
+        let relayClient = FakePrivateUsageRelayClient()
+        let sealer = RecordingPrivateUsageSealer()
+        let coordinator = PrivateUsageUploadCoordinator(
+            usageStore: usageStore,
+            credentialStore: credentialStore,
+            stateStore: PrivateUsageUploadStateStore(defaults: makeDefaults()),
+            relayClient: relayClient,
+            bucketBuilder: PrivateUsageDailyBucketBuilder(
+                calendar: calendar,
+                timeZone: timeZone,
+                sealer: sealer
+            ),
+            sealer: sealer
+        )
+        let settings = SpillSettings(defaults: makeDefaults())
+        settings.privateUsageUploadEnabled = true
+        var didPrepare = false
+        let store = PrivateUsageUploadStore(
+            settings: settings,
+            usageStore: usageStore,
+            coordinator: coordinator,
+            prepareForUpload: {
+                didPrepare = true
+            }
+        )
+
+        await store.syncNow()
+
+        XCTAssertTrue(didPrepare)
+        XCTAssertEqual(relayClient.uploadedBucketCounts, [1])
+        XCTAssertEqual(store.message, TokenMeteringL10n.text(.privateUsageUploadUploadedMessage))
     }
 
     func testCoordinatorAcksUploadedBucketsAndAvoidsReupload() async throws {
@@ -390,6 +622,118 @@ final class PrivateUsageUploadTests: XCTestCase {
         XCTAssertEqual(relayClient.uploadedBucketCounts, [1])
         XCTAssertEqual(relayClient.uploadedKeyEnvelopeCounts, [1])
         XCTAssertEqual(coordinator.status(isEnabled: true, now: now).queuedBucketCount, 0)
+    }
+
+    func testManualSyncUploadsCurrentDayPartialBucketWithWorkItems() async throws {
+        let timeZone = try XCTUnwrap(TimeZone(identifier: "UTC"))
+        let calendar = fixedCalendar(timeZone: timeZone)
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 8, hour: 9)))
+        let today = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 8, hour: 8)))
+        let usageStore = makeUsageStore()
+        try usageStore.replaceEvents([
+            makeEvent(
+                spanID: "span_current_manual",
+                runID: "run_current_manual",
+                aiTool: .codex,
+                taskType: "code_generation",
+                stage: "implement",
+                model: "gpt-5",
+                input: 11,
+                output: 13,
+                createdAt: today
+            )
+        ])
+        let credentialStore = InMemoryPrivateUsageCredentialStore()
+        try credentialStore.saveCredential(
+            PrivateUsageDeviceCredential(
+                deviceID: "device_server",
+                credential: "spill_device_v1_secret",
+                tokenType: "spill_device_v1",
+                createdAt: now
+            )
+        )
+        try credentialStore.saveKeyWrappingSecret(
+            PrivateUsageKeyWrappingSecret(rawValue: testWrappingSecret)
+        )
+        let relayClient = FakePrivateUsageRelayClient()
+        let sealer = RecordingPrivateUsageSealer()
+        let coordinator = PrivateUsageUploadCoordinator(
+            usageStore: usageStore,
+            credentialStore: credentialStore,
+            stateStore: PrivateUsageUploadStateStore(defaults: makeDefaults()),
+            relayClient: relayClient,
+            bucketBuilder: PrivateUsageDailyBucketBuilder(
+                calendar: calendar,
+                timeZone: timeZone,
+                sealer: sealer
+            ),
+            sealer: sealer
+        )
+
+        let result = try await coordinator.syncNow(isEnabled: true, now: now)
+
+        XCTAssertEqual(result.accepted, 1)
+        XCTAssertEqual(relayClient.uploadedBucketKeys, [["2026-06-08:daily"]])
+        let plaintext = try XCTUnwrap(sealer.plaintexts.last)
+        let aggregate = try JSONDecoder().decode(PrivateUsageDailyAggregate.self, from: plaintext)
+        XCTAssertEqual(aggregate.workItems.count, 1)
+        XCTAssertEqual(
+            aggregate.workItems.first?.id,
+            "work_codex_code_generation_implement_gpt_5_2026_06_08"
+        )
+    }
+
+    func testAutomaticUploadKeepsCurrentDayForNextDailyWindow() async throws {
+        let timeZone = try XCTUnwrap(TimeZone(identifier: "UTC"))
+        let calendar = fixedCalendar(timeZone: timeZone)
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 8, hour: 9)))
+        let today = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 8, hour: 8)))
+        let usageStore = makeUsageStore()
+        try usageStore.replaceEvents([
+            makeEvent(
+                spanID: "span_current_auto",
+                runID: "run_current_auto",
+                aiTool: .codex,
+                taskType: "code_generation",
+                stage: "implement",
+                model: "gpt-5",
+                input: 11,
+                output: 13,
+                createdAt: today
+            )
+        ])
+        let credentialStore = InMemoryPrivateUsageCredentialStore()
+        try credentialStore.saveCredential(
+            PrivateUsageDeviceCredential(
+                deviceID: "device_server",
+                credential: "spill_device_v1_secret",
+                tokenType: "spill_device_v1",
+                createdAt: today
+            )
+        )
+        try credentialStore.saveKeyWrappingSecret(
+            PrivateUsageKeyWrappingSecret(rawValue: testWrappingSecret)
+        )
+        let relayClient = FakePrivateUsageRelayClient()
+        let sealer = RecordingPrivateUsageSealer()
+        let coordinator = PrivateUsageUploadCoordinator(
+            usageStore: usageStore,
+            credentialStore: credentialStore,
+            stateStore: PrivateUsageUploadStateStore(defaults: makeDefaults()),
+            relayClient: relayClient,
+            bucketBuilder: PrivateUsageDailyBucketBuilder(
+                calendar: calendar,
+                timeZone: timeZone,
+                sealer: sealer
+            ),
+            sealer: sealer
+        )
+
+        let result = await coordinator.runAutomaticUploadIfNeeded(isEnabled: true, now: now)
+
+        XCTAssertEqual(result?.accepted, 0)
+        XCTAssertTrue(relayClient.uploadedBucketCounts.isEmpty)
+        XCTAssertTrue(sealer.plaintexts.isEmpty)
     }
 
     func testCoordinatorRejectsPartialRelayAcceptanceWithoutAcknowledgingBuckets() async throws {
@@ -625,10 +969,11 @@ final class PrivateUsageUploadTests: XCTestCase {
         XCTAssertEqual(relayClient.uploadedBucketCounts, [31, 4])
     }
 
-    func testAutomaticUploadCanRetrySameDayAfterFailure() async throws {
+    func testAutomaticUploadDoesNotRetrySameDayAfterFailure() async throws {
         let timeZone = try XCTUnwrap(TimeZone(identifier: "UTC"))
         let calendar = fixedCalendar(timeZone: timeZone)
         let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 8, hour: 9)))
+        let nextDay = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 9, hour: 9)))
         let yesterday = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 7, hour: 12)))
         let usageStore = makeUsageStore()
         try usageStore.replaceEvents([
@@ -676,12 +1021,14 @@ final class PrivateUsageUploadTests: XCTestCase {
         let failedResult = await coordinator.runAutomaticUploadIfNeeded(isEnabled: true, now: now)
         relayClient.uploadError = nil
         let retryResult = await coordinator.runAutomaticUploadIfNeeded(isEnabled: true, now: now)
+        let nextDayResult = await coordinator.runAutomaticUploadIfNeeded(isEnabled: true, now: nextDay)
 
         XCTAssertNil(failedResult)
-        XCTAssertEqual(retryResult?.accepted, 1)
+        XCTAssertNil(retryResult)
+        XCTAssertEqual(nextDayResult?.accepted, 1)
         XCTAssertEqual(relayClient.uploadedBucketCounts, [1])
         XCTAssertNil(stateStore.load().lastFailedUploadAt)
-        XCTAssertEqual(stateStore.load().lastAutomaticAttemptDayID, "2026-06-08")
+        XCTAssertEqual(stateStore.load().lastAutomaticAttemptDayID, "2026-06-09")
     }
 
     func testEnvironmentSeparatesRelayKeychainAndLocalUploadState() {
@@ -895,6 +1242,16 @@ final class PrivateUsageUploadTests: XCTestCase {
             Optional("https://relay.example.com/functions/v1/private-usage-relay")
         )
         XCTAssertEqual(
+            PrivateUsageRelayEndpoint.relayURL(
+                environment: .production,
+                processEnvironment: [
+                    PrivateUsageRelayEndpoint.relayURLOverrideEnvironmentKey: "https://otggbleddlmzamgpqxjm.supabase.co/functions/v1/private-usage-relay"
+                ],
+                bundleInfo: bundleInfo
+            )?.absoluteString,
+            nil
+        )
+        XCTAssertEqual(
             PrivateUsageWebConnection.connectDeviceURL(
                 processEnvironment: [
                     PrivateUsageWebConnection.webURLOverrideEnvironmentKey: "http://localhost/#/connect-device"
@@ -912,6 +1269,29 @@ final class PrivateUsageUploadTests: XCTestCase {
                 bundleInfo: bundleInfo
             )?.absoluteString,
             Optional("http://localhost:54321/functions/v1/private-usage-relay")
+        )
+    }
+
+    func testPrivateUsageRelayURLDerivesFromConfiguredWebOrigin() {
+        XCTAssertEqual(
+            PrivateUsageRelayEndpoint.relayURL(
+                environment: .production,
+                processEnvironment: [:],
+                bundleInfo: [
+                    PrivateUsageWebConnection.webURLInfoDictionaryKey: "https://spill.example.test/#/connect-device"
+                ]
+            )?.absoluteString,
+            Optional("https://spill.example.test/api/private-usage-relay")
+        )
+        XCTAssertEqual(
+            PrivateUsageRelayEndpoint.relayURL(
+                environment: .development,
+                processEnvironment: [
+                    PrivateUsageWebConnection.webURLOverrideEnvironmentKey: "http://localhost:5173/"
+                ],
+                bundleInfo: nil
+            )?.absoluteString,
+            Optional("http://localhost:5173/api/private-usage-relay")
         )
     }
 
@@ -946,7 +1326,7 @@ final class PrivateUsageUploadTests: XCTestCase {
                     PrivateUsageRelayEndpoint.relayURLOverrideEnvironmentKey: "http://example.com/functions/v1/private-usage-relay"
                 ],
                 bundleInfo: [
-                    PrivateUsageRelayEndpoint.relayURLInfoDictionaryKey: "ftp://localhost/functions/v1/private-usage-relay"
+                    PrivateUsageRelayEndpoint.relayURLInfoDictionaryKey: "https://otggbleddlmzamgpqxjm.supabase.co/functions/v1/private-usage-relay"
                 ]
             )
         )
@@ -1041,6 +1421,43 @@ final class PrivateUsageUploadTests: XCTestCase {
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
         return defaults
+    }
+
+    private func makeCoordinator(
+        credentialStore: InMemoryPrivateUsageCredentialStore = InMemoryPrivateUsageCredentialStore(),
+        relayClient: FakePrivateUsageRelayClient = FakePrivateUsageRelayClient(),
+        environment: PrivateUsageUploadEnvironment = .development
+    ) -> PrivateUsageUploadCoordinator {
+        let sealer = RecordingPrivateUsageSealer()
+        return PrivateUsageUploadCoordinator(
+            usageStore: makeUsageStore(),
+            credentialStore: credentialStore,
+            stateStore: PrivateUsageUploadStateStore(
+                defaults: makeDefaults(),
+                environment: environment
+            ),
+            relayClient: relayClient,
+            bucketBuilder: PrivateUsageDailyBucketBuilder(sealer: sealer),
+            sealer: sealer
+        )
+    }
+
+    @MainActor
+    private func waitForPrivateUsageStore(
+        _ store: PrivateUsageUploadStore,
+        timeout: TimeInterval = 1,
+        predicate: @escaping @MainActor (PrivateUsageUploadStore) -> Bool,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) async throws {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if predicate(store) {
+                return
+            }
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        XCTFail("Timed out waiting for private usage store state.", file: file, line: line)
     }
 
     private func makeEvent(
@@ -1147,16 +1564,28 @@ private final class PrivateUsageRequestRecorder: @unchecked Sendable {
 
 private final class InMemoryPrivateUsageCredentialStore: PrivateUsageCredentialStoring, @unchecked Sendable {
     private let lock = NSLock()
+    private let credentialLoadDelay: TimeInterval
     private var credential: PrivateUsageDeviceCredential?
     private var keyWrappingSecret: PrivateUsageKeyWrappingSecret?
     private var sealingKeyData: Data? = Data(repeating: 1, count: 32)
+    private var credentialSaveCount = 0
+    private var keyWrappingSecretSaveCount = 0
+    private var connectionSaveCount = 0
+
+    init(credentialLoadDelay: TimeInterval = 0) {
+        self.credentialLoadDelay = credentialLoadDelay
+    }
 
     func loadCredential() throws -> PrivateUsageDeviceCredential? {
-        lock.withLock { credential }
+        if credentialLoadDelay > 0 {
+            Thread.sleep(forTimeInterval: credentialLoadDelay)
+        }
+        return lock.withLock { credential }
     }
 
     func saveCredential(_ credential: PrivateUsageDeviceCredential) throws {
         lock.withLock {
+            credentialSaveCount += 1
             self.credential = credential
         }
     }
@@ -1173,6 +1602,7 @@ private final class InMemoryPrivateUsageCredentialStore: PrivateUsageCredentialS
 
     func saveKeyWrappingSecret(_ secret: PrivateUsageKeyWrappingSecret) throws {
         lock.withLock {
+            keyWrappingSecretSaveCount += 1
             keyWrappingSecret = secret
         }
     }
@@ -1191,6 +1621,26 @@ private final class InMemoryPrivateUsageCredentialStore: PrivateUsageCredentialS
         lock.withLock {
             sealingKeyData = data
         }
+    }
+
+    func saveConnection(credential: PrivateUsageDeviceCredential, keyWrappingSecret: PrivateUsageKeyWrappingSecret) throws {
+        lock.withLock {
+            connectionSaveCount += 1
+            self.credential = credential
+            self.keyWrappingSecret = keyWrappingSecret
+        }
+    }
+
+    func saveCredentialCallCount() -> Int {
+        lock.withLock { credentialSaveCount }
+    }
+
+    func saveKeyWrappingSecretCallCount() -> Int {
+        lock.withLock { keyWrappingSecretSaveCount }
+    }
+
+    func saveConnectionCallCount() -> Int {
+        lock.withLock { connectionSaveCount }
     }
 
     func storedKeyRing() throws -> [String: Any]? {

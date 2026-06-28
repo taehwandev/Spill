@@ -26,6 +26,19 @@ extension PrivateUsageUploadCoordinator {
         }
     }
 
+    func automaticUploadIsDue(
+        isEnabled: Bool,
+        now: Date
+    ) -> Bool {
+        guard isEnabled else {
+            return false
+        }
+
+        let attemptDayID = PrivateUsageDailyBucketBuilder.localDayID(for: now)
+        let state = stateStore.load()
+        return state.lastAutomaticAttemptDayID != attemptDayID
+    }
+
     func recordFailure(_ error: Error, at date: Date) {
         lock.withLock {
             var state = stateStore.load()

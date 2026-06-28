@@ -7,7 +7,8 @@ extension PrivateUsageUploadCoordinator {
     func performUpload(
         isEnabled: Bool,
         now: Date,
-        earliestBucketStart: Date? = nil
+        earliestBucketStart: Date? = nil,
+        includeCurrentDay: Bool = false
     ) async throws -> PrivateUsageUploadRunResult {
         guard isEnabled else {
             throw PrivateUsageUploadError.uploadDisabled
@@ -22,7 +23,8 @@ extension PrivateUsageUploadCoordinator {
             state: state,
             now: now,
             limit: Self.uploadBatchLimit,
-            earliestBucketStart: earliestBucketStart
+            earliestBucketStart: earliestBucketStart,
+            includeCurrentDay: includeCurrentDay
         )
         guard !buckets.isEmpty else {
             return PrivateUsageUploadRunResult(
@@ -78,14 +80,16 @@ extension PrivateUsageUploadCoordinator {
         state: PrivateUsageUploadPersistence,
         now: Date,
         limit: Int,
-        earliestBucketStart: Date? = nil
+        earliestBucketStart: Date? = nil,
+        includeCurrentDay: Bool = false
     ) throws -> [PrivateUsageEncryptedBucket] {
         try bucketBuilder.makeDirtyDailyBuckets(
             events: usageStore.loadEvents(),
             acknowledgedHashesByBucketKey: state.acknowledgedCiphertextHashesByBucketKey,
             now: now,
             limit: limit,
-            earliestBucketStart: earliestBucketStart
+            earliestBucketStart: earliestBucketStart,
+            includeCurrentDay: includeCurrentDay
         )
     }
 
@@ -98,7 +102,11 @@ extension PrivateUsageUploadCoordinator {
         var uploadedAt: Date?
 
         for _ in 0..<Self.manualSyncMaxBatches {
-            let result = try await performUpload(isEnabled: isEnabled, now: now)
+            let result = try await performUpload(
+                isEnabled: isEnabled,
+                now: now,
+                includeCurrentDay: true
+            )
             accepted += result.accepted
             attemptedBucketCount += result.attemptedBucketCount
             uploadedAt = result.uploadedAt ?? uploadedAt

@@ -9,15 +9,29 @@ enum PrivateUsageWebConnection {
         processEnvironment: [String: String] = ProcessInfo.processInfo.environment,
         bundleInfo: [String: Any]? = Bundle.main.infoDictionary
     ) -> URL? {
+        guard let url = configuredWebURL(
+            processEnvironment: processEnvironment,
+            bundleInfo: bundleInfo
+        ) else {
+            return nil
+        }
+
+        return appendingConnectionParameters(to: url)
+    }
+
+    static func configuredWebURL(
+        processEnvironment: [String: String] = ProcessInfo.processInfo.environment,
+        bundleInfo: [String: Any]? = Bundle.main.infoDictionary
+    ) -> URL? {
         if let override = processEnvironment[webURLOverrideEnvironmentKey],
            let url = sanitizedConnectDeviceURL(override)
         {
-            return appendingConnectionParameters(to: url)
+            return url
         }
         if let configuredURL = bundleInfo?[webURLInfoDictionaryKey] as? String,
            let url = sanitizedConnectDeviceURL(configuredURL)
         {
-            return appendingConnectionParameters(to: url)
+            return url
         }
 
         return nil

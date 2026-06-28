@@ -3,27 +3,37 @@ import Foundation
 enum PrivateUsageRelayEndpoint {
     static let relayURLOverrideEnvironmentKey = "SPILL_PRIVATE_USAGE_RELAY_URL"
     static let relayURLInfoDictionaryKey = "SPILLPrivateUsageRelayURL"
+    private static let defaultRelayPath = "/api/private-usage-relay"
 
     static func relayURL(
         environment: PrivateUsageUploadEnvironment,
         processEnvironment: [String: String] = ProcessInfo.processInfo.environment,
         bundleInfo: [String: Any]? = Bundle.main.infoDictionary
     ) -> URL? {
-        if let override = processEnvironment[relayURLOverrideEnvironmentKey],
-           let url = sanitizedRelayURL(override)
-        {
-            return url
+        if let override = configuredString(processEnvironment[relayURLOverrideEnvironmentKey]) {
+            return sanitizedRelayURL(override)
         }
-        if let configuredURL = bundleInfo?[relayURLInfoDictionaryKey] as? String,
-           let url = sanitizedRelayURL(configuredURL)
-        {
-            return url
+        if let configuredURL = configuredString(bundleInfo?[relayURLInfoDictionaryKey] as? String) {
+            return sanitizedRelayURL(configuredURL)
         }
 
-        return nil
+        guard let webURL = PrivateUsageWebConnection.configuredWebURL(
+            processEnvironment: processEnvironment,
+            bundleInfo: bundleInfo
+        ) else {
+            return nil
+        }
+
+        return derivedRelayURL(from: webURL)
     }
 
     static func isSafeRelayURL(_ url: URL) -> Bool {
+        if let host = url.host?.lowercased(),
+           host == "supabase.co" || host.hasSuffix(".supabase.co")
+        {
+            return false
+        }
+
         if url.scheme == "https" {
             return true
         }
@@ -44,5 +54,33 @@ enum PrivateUsageRelayEndpoint {
         }
 
         return url
+    }
+
+    private static func derivedRelayURL(from webURL: URL) -> URL? {
+        guard let scheme = webURL.scheme,
+              let host = webURL.host
+        else {
+            return nil
+        }
+
+        var components = URLComponents()
+        components.scheme = scheme
+        components.host = host
+        components.port = webURL.port
+        components.path = defaultRelayPath
+
+        guard let url = components.url, isSafeRelayURL(url) else {
+            return nil
+        }
+        return url
+    }
+
+    private static func configuredString(_ value: String?) -> String? {
+        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty
+        else {
+            return nil
+        }
+        return value
     }
 }
