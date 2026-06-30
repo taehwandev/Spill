@@ -3,7 +3,7 @@ import Foundation
 
 @MainActor
 final class UpdateCheckStore: ObservableObject {
-    static let defaultInstallCommand = #"/bin/bash -c "$(curl -fsSL https://spill.thdev.app/install.sh)""#
+    static let defaultInstallCommand = "curl -L -O https://github.com/taehwandev/Spill/releases/latest/download/Spill-macos.dmg && open Spill-macos.dmg"
 
     @Published private(set) var state: UpdateCheckState
 

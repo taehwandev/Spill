@@ -8,7 +8,7 @@ This repository currently contains an MVP shell:
 
 - menu bar status item
 - generated app icon applied to bundled `.app` builds
-- GitHub Release and GitHub Pages distribution automation
+- GitHub Release distribution automation
 - click-to-toggle floating Spill Bar anchored to the status item
 - optional CPU, memory, and active Caffeine menu bar glance chips, with an opt-in Caffeine countdown
 - CPU, memory, and storage panel rows with compact sparklines
@@ -35,7 +35,7 @@ The current Spill Bar can detect some visible menu bar extras when Accessibility
 
 ## Hosted web portal
 
-The hosted account web portal for `spill.thdev.app` lives in the private
+The hosted account web portal for `https://spill.thdev.app/` lives in the private
 `taehwandev/Spill-web` repository. This public repository keeps the open-source
 macOS app, local token-metering contracts, installer documents, and privacy
 requirements. Browser-delivered web code is not a security boundary; hosted
@@ -133,12 +133,27 @@ remains optional and local metering works without login. Bundles that should
 support Sign In and Connect should set
 `SPILL_BUILD_PRIVATE_USAGE_FEATURE_ENABLED=1` so packaging validates
 `SPILL_BUILD_PRIVATE_USAGE_ENVIRONMENT=production`,
-`SPILL_BUILD_PRIVATE_USAGE_WEB_URL`, and `SPILL_BUILD_PRIVATE_USAGE_RELAY_URL`.
+`SPILL_BUILD_PRIVATE_USAGE_WEB_URL`, and any configured
+`SPILL_BUILD_PRIVATE_USAGE_RELAY_URL`.
 Bundles that do not support the web connection can leave the flag at `0`; the
 login/sync UI is hidden and the web/relay URLs can remain empty.
 The GitHub release workflow reads `SPILL_BUILD_PRIVATE_USAGE_FEATURE_ENABLED`
 from repository variables and defaults to `0`. Set it to `1` only when the
-production web and relay URLs are configured. Spill appends only fixed
+production web and relay URLs are configured. For production at
+`https://spill.thdev.app/`, configure these GitHub Actions repository
+variables:
+
+- `SPILL_BUILD_PRIVATE_USAGE_FEATURE_ENABLED`: `1`.
+- `SPILL_BUILD_PRIVATE_USAGE_WEB_URL`: `https://spill.thdev.app/`.
+- `SPILL_BUILD_PRIVATE_USAGE_RELAY_URL`:
+  `https://spill.thdev.app/api/private-usage-relay`.
+
+The relay variable is public configuration, not a secret. It must point at the
+Spill-controlled web relay proxy, not directly at a Supabase project URL. When
+the relay variable is empty, the app derives the same `/api/private-usage-relay`
+path from `SPILL_BUILD_PRIVATE_USAGE_WEB_URL`.
+
+Spill appends only fixed
 connection hints (`source=macos` and `callback_url=spill://private-usage/connect`)
 when opening the web connection page; prompts, responses, commands, file paths,
 logs, diffs, source content, environment values, and secrets are not added to
@@ -174,8 +189,10 @@ Developer ID release example:
 
 ```bash
 SPILL_VERSION=2026.21.2 \
+SPILL_BUILD_PRIVATE_USAGE_FEATURE_ENABLED=1 \
 SPILL_BUILD_PRIVATE_USAGE_ENVIRONMENT=production \
-SPILL_BUILD_PRIVATE_USAGE_WEB_URL=<web-connect-device-url> \
+SPILL_BUILD_PRIVATE_USAGE_WEB_URL=https://spill.thdev.app/ \
+SPILL_BUILD_PRIVATE_USAGE_RELAY_URL=https://spill.thdev.app/api/private-usage-relay \
 SPILL_SIGN_IDENTITY="Developer ID Application: Example Name (TEAMID)" \
 ./scripts/package-release.sh
 ```
@@ -187,8 +204,10 @@ outside the repository and pass its ignored path only to the notarization script
 
 ```bash
 SPILL_VERSION=2026.21.2 \
+SPILL_BUILD_PRIVATE_USAGE_FEATURE_ENABLED=1 \
 SPILL_BUILD_PRIVATE_USAGE_ENVIRONMENT=production \
-SPILL_BUILD_PRIVATE_USAGE_WEB_URL=<web-connect-device-url> \
+SPILL_BUILD_PRIVATE_USAGE_WEB_URL=https://spill.thdev.app/ \
+SPILL_BUILD_PRIVATE_USAGE_RELAY_URL=https://spill.thdev.app/api/private-usage-relay \
 SPILL_SIGN_IDENTITY="Developer ID Application: Example Name (TEAMID)" \
 ./scripts/build-app.sh
 
@@ -256,6 +275,10 @@ ID signing and notarization, configure the Apple signing secrets as well:
 - `SPARKLE_PUBLIC_ED_KEY`: Sparkle public EdDSA key embedded as `SUPublicEDKey`.
 - `SPARKLE_PRIVATE_ED_KEY`: Sparkle private EdDSA key used by `generate_appcast`.
 
+These are GitHub Actions secrets because they contain signing material,
+passwords, private keys, or values that should not be printed in workflow logs.
+Do not paste the values into source files, release notes, or issue comments.
+
 If the Developer ID certificate secrets are present, the workflow signs with that
 identity. Notarization uses the App Store Connect API key values in a separate
 script step; the `.p8` content is written only to a temporary `mktemp` directory
@@ -266,11 +289,8 @@ manifest and open the DMG externally.
 
 Optional telemetry secrets:
 
-- `SPILL_APTABASE_APP_KEY`: shared analytics key. It is embedded in release app
-  bundles and is also used by the landing page when more specific keys are
-  absent.
-- `SPILL_WEB_APTABASE_APP_KEY`: optional landing page analytics key injected
-  during Pages deployment.
+- `SPILL_APTABASE_APP_KEY`: optional app analytics key embedded in release app
+  bundles.
 
 Optional Sentry crash and hang diagnostics:
 
@@ -291,19 +311,27 @@ symbolicated. Crash and app-hang reports are configured with
 performance sampling; do not use Sentry for token events, prompts, arbitrary
 local file paths, or support logs.
 
-### Download Site
+### Hosted Web And Download Site
 
-The static distribution site source lives in `docs/`. The `Deploy Site` workflow
-runs `scripts/prepare-docs.sh`, injects optional telemetry keys from GitHub
-Secrets, and deploys `.build/docs` to GitHub Pages. The site links to the latest
-stable release asset:
+The hosted web portal, landing surface, and public token-metering setup paths
+are deployed from the private `taehwandev/Spill-web` repository at
+`https://spill.thdev.app/`. This repository no longer deploys GitHub Pages.
+
+The web download flow should link to the latest stable release asset:
 
 - `https://github.com/taehwandev/Spill/releases/latest/download/Spill-macos.dmg`
 
-The deploy workflow attempts to enable GitHub Pages with the GitHub Actions
-source and publishes the site for `spill.thdev.app`. If repository policy blocks
-automatic enablement, enable GitHub Pages manually with the GitHub Actions source
-and set the custom domain to `spill.thdev.app`.
+Public token-metering documents remain in `docs/token-metering/` as the
+open-source contract source. `Spill-web` must publish those files and bundled
+adapter helpers under `/token-metering/` before release builds point users at the
+hosted setup command.
+
+When editing `docs/token-metering/install.sh`, `setup-prompt.md`, or
+`runtime-instruction.md` in this repository, also update the mirror files in
+`../Spill-web/docs/token-metering/` and
+`../Spill-web/web/public/token-metering/`. The web repository has the inverse
+check in its token-metering guide so installer, prompt, and public deployment
+paths stay synchronized across both repositories.
 
 ## Verify
 

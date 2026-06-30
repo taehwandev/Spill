@@ -72,6 +72,10 @@ procedure. This checklist is the Spill-specific quick gate before closeout.
 
 - [ ] `git push origin main`
 - [ ] `git push origin v<version>`
+- [ ] GitHub Actions repository variables are set for production private usage
+      upload: `SPILL_BUILD_PRIVATE_USAGE_FEATURE_ENABLED=1`,
+      `SPILL_BUILD_PRIVATE_USAGE_WEB_URL=https://spill.thdev.app/`, and
+      `SPILL_BUILD_PRIVATE_USAGE_RELAY_URL=https://spill.thdev.app/api/private-usage-relay`.
 - [ ] GitHub Secrets include `SPILL_APTABASE_APP_KEY` when public metrics are
       expected. `SPILL_WEB_APTABASE_APP_KEY` and
       `SPILL_INSTALLER_APTABASE_APP_KEY` are optional separate-key overrides.
@@ -93,7 +97,8 @@ procedure. This checklist is the Spill-specific quick gate before closeout.
 - [ ] Latest stable ZIP URL resolves.
 - [ ] Latest `update.json` URL resolves.
 - [ ] Latest `appcast.xml` URL resolves.
-- [ ] `https://spill.thdev.app/` resolves.
+- [ ] `https://spill.thdev.app/` resolves when the hosted web portal is part
+      of the release scope.
 - [ ] Sparkle-enabled Check for Updates can download and replace the app from an
       older build.
 - [ ] Manual fallback Check for Updates can discover the new release from an

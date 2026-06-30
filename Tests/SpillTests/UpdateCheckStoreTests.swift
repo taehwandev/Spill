@@ -19,7 +19,7 @@ final class UpdateCheckStoreTests: XCTestCase {
         XCTAssertFalse(store.canOpenUpdate)
     }
 
-    func testCopyInstallCommandUsesPublicInstallScriptWhenUpdateIsAvailable() async throws {
+    func testCopyInstallCommandUsesStableReleaseDownloadWhenUpdateIsAvailable() async throws {
         let data = """
         {
           "latestVersion": "2026.20.2",
@@ -47,7 +47,10 @@ final class UpdateCheckStoreTests: XCTestCase {
         store.copyInstallCommand(source: "test")
 
         XCTAssertEqual(copiedText, UpdateCheckStore.defaultInstallCommand)
-        XCTAssertEqual(store.installCommand, #"/bin/bash -c "$(curl -fsSL https://spill.thdev.app/install.sh)""#)
+        XCTAssertEqual(
+            store.installCommand,
+            "curl -L -O https://github.com/taehwandev/Spill/releases/latest/download/Spill-macos.dmg && open Spill-macos.dmg"
+        )
     }
 
     func testOpenUpdatePrefersInstallerPackageWhenAvailable() async throws {
