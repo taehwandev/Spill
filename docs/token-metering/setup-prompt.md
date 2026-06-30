@@ -108,8 +108,10 @@ First-class runtime totals use raw exact token usage for comparable tool
 summaries. Claude Code adapters must include `cache_read_input_tokens` together
 with `input_tokens` and `cache_creation_input_tokens` in the normalized Spill
 `input_tokens` value. Codex `input_tokens` already includes cached input reads.
-Do not drop cache-read tokens to approximate cost; cost weighting belongs in a
-separate display or analysis layer.
+Codex `reasoning_output_tokens` is a subset of `output_tokens`; preserve it as
+pricing/accounting detail but do not add it again to normalized `output_tokens`
+or `total_tokens`. Do not drop cache-read tokens to approximate cost; cost
+weighting belongs in a separate display or analysis layer.
 For Antigravity/AGY specifically, verify that the active importer can read exact
 numeric usage fields from recent AGY conversation metadata and can import a safe
 normalized event. If AGY metadata does not expose exact token fields, the

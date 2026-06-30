@@ -67,9 +67,12 @@ Runtime input normalization:
   summaries. Claude Code adapters must include
   `cache_read_input_tokens` together with `input_tokens` and
   `cache_creation_input_tokens` in the normalized Spill `input_tokens` value.
-  Codex `input_tokens` already includes cached input reads. Do not drop
-  cache-read tokens to approximate cost; cost weighting belongs in a separate
-  display or analysis layer.
+  Codex `input_tokens` already includes cached input reads. Codex
+  `reasoning_output_tokens` is a subset of `output_tokens`; preserve it as
+  pricing/accounting detail but do not add it again to normalized
+  `output_tokens` or `total_tokens`. Do not drop cache-read tokens to
+  approximate cost; cost weighting belongs in a separate display or analysis
+  layer.
 - Antigravity/AGY uses Spill's local active importer as its approved metering
   path. The importer reads known AGY conversation metadata records read-only and
   extracts only exact numeric usage fields, safe model ids, and opaque ids.

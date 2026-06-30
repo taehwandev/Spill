@@ -1742,6 +1742,11 @@ final class TokenUsageStoreTests: XCTestCase {
             inputTokens: 125,
             outputTokens: 7,
             generatedOutput: 7,
+            tokenAccounting: TokenUsageAccounting(
+                uncachedInputTokens: 20,
+                cacheCreationInputTokens: 5,
+                cacheReadInputTokens: 100
+            ),
             projectID: "project_new",
             taskType: .reviewResponse,
             stage: .implement
@@ -1760,6 +1765,9 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(event.totalTokens, 132)
         XCTAssertEqual(event.tokenBreakdown.generatedOutput, 7)
         XCTAssertEqual(event.tokenBreakdown.unknown, 125)
+        XCTAssertEqual(event.tokenAccounting?.uncachedInputTokens, 20)
+        XCTAssertEqual(event.tokenAccounting?.cacheCreationInputTokens, 5)
+        XCTAssertEqual(event.tokenAccounting?.cacheReadInputTokens, 100)
     }
 
     @MainActor
@@ -3767,6 +3775,7 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(prompt.contains("runtime-specific exact-count input shapes"))
         XCTAssertTrue(prompt.contains("Claude Code adapters must include cache_read_input_tokens"))
         XCTAssertTrue(prompt.contains("Codex input_tokens already includes cached input reads"))
+        XCTAssertTrue(prompt.contains("Codex reasoning_output_tokens is a subset of output_tokens"))
         XCTAssertTrue(prompt.contains("cost weighting belongs in a separate display or analysis layer"))
         XCTAssertTrue(prompt.contains("Do not install AGY PostInvocation, Stop, or lifecycle hooks"))
         XCTAssertTrue(prompt.contains("remove managed Spill AGY hook entries"))
@@ -3937,7 +3946,8 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(setup.contains("shared runtime hook input schema"))
         XCTAssertTrue(setup.contains("Claude Code adapters must include `cache_read_input_tokens`"))
         XCTAssertTrue(setup.contains("Codex `input_tokens` already includes cached input reads"))
-        XCTAssertTrue(setup.contains("cost weighting belongs in a\nseparate display or analysis layer"))
+        XCTAssertTrue(setup.contains("Codex `reasoning_output_tokens` is a subset of `output_tokens`"))
+        XCTAssertTrue(setup.contains("cost\nweighting belongs in a separate display or analysis layer"))
         XCTAssertTrue(setup.contains("active importer can read exact\nnumeric usage fields"))
         XCTAssertFalse(setup.contains("antigravity-last-empty.json"))
         XCTAssertFalse(setup.contains("antigravity-last-mismatch.json"))
@@ -3976,7 +3986,8 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(runtime.contains("Runtime hook input formats are allowed to differ by tool"))
         XCTAssertTrue(runtime.contains("Claude Code adapters must include\n  `cache_read_input_tokens`"))
         XCTAssertTrue(runtime.contains("Codex `input_tokens` already includes cached input reads"))
-        XCTAssertTrue(runtime.contains("cost weighting belongs in a separate\n  display or analysis layer"))
+        XCTAssertTrue(runtime.contains("Codex\n  `reasoning_output_tokens` is a subset of `output_tokens`"))
+        XCTAssertTrue(runtime.contains("approximate cost; cost weighting belongs in a separate display or analysis\n  layer"))
         XCTAssertTrue(runtime.contains("Antigravity/AGY uses Spill's local active importer"))
         XCTAssertTrue(runtime.contains("Do not install AGY runtime hooks"))
         XCTAssertTrue(runtime.contains("write a local-only diagnostic"))
