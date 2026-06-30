@@ -560,7 +560,7 @@ final class TokenUsageHistoryImportCoordinatorTests: XCTestCase {
         XCTAssertEqual(accounting.count, 3)
         XCTAssertEqual(accounting.first?["uncached_input_tokens"] as? Int, 6)
         XCTAssertEqual(accounting.first?["cache_read_input_tokens"] as? Int, 4)
-        XCTAssertEqual(accounting.first?["reasoning_output_tokens"] as? Int, 0)
+        XCTAssertEqual(accounting.first?["reasoning_output_tokens"] as? Int, 1)
 
         let secondOutput = try runProcess(
             executable: "/usr/bin/env",
@@ -1349,7 +1349,7 @@ final class TokenUsageHistoryImportCoordinatorTests: XCTestCase {
 
     private static var codexTokenCountFixture: String {
         """
-        {"timestamp":"2026-06-18T00:00:00.000Z","type":"event_msg","payload":{"type":"token_count","info":{"model":"gpt-5","last_token_usage":{"input_tokens":10,"cached_input_tokens":4,"output_tokens":2,"total_tokens":12},"total_token_usage":{"input_tokens":10,"cached_input_tokens":4,"output_tokens":2,"total_tokens":12}}}}
+        {"timestamp":"2026-06-18T00:00:00.000Z","type":"event_msg","payload":{"type":"token_count","info":{"model":"gpt-5","last_token_usage":{"input_tokens":10,"cached_input_tokens":4,"output_tokens":2,"reasoning_output_tokens":1,"total_tokens":12},"total_token_usage":{"input_tokens":10,"cached_input_tokens":4,"output_tokens":2,"reasoning_output_tokens":1,"total_tokens":12}}}}
         {"timestamp":"2026-06-18T00:01:00.000Z","type":"event_msg","payload":{"type":"token_count","info":{"model":"gpt-5","last_token_usage":{"input_tokens":5,"output_tokens":3,"total_tokens":8},"total_token_usage":{"input_tokens":15,"output_tokens":5,"total_tokens":20}}}}
         {"timestamp":"2026-06-18T00:02:00.000Z","type":"event_msg","payload":{"type":"token_count","info":{"model":"gpt-5","last_token_usage":{"input_tokens":7,"output_tokens":4,"total_tokens":11}}}}
 

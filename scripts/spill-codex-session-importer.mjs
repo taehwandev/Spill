@@ -489,7 +489,7 @@ function usageDelta(record) {
 
   if (record.last.hasAny) {
     inputTokens = record.last.inputTokens;
-    outputTokens = record.last.outputTokens + record.last.reasoningTokens;
+    outputTokens = record.last.outputTokens;
   } else {
     return null;
   }

@@ -176,14 +176,14 @@ const lines = [
           cached_input_tokens: 0,
           output_tokens: 6,
           reasoning_output_tokens: 4,
-          total_tokens: 27,
+          total_tokens: 23,
         },
         total_token_usage: {
           input_tokens: 17,
           cached_input_tokens: 0,
           output_tokens: 6,
           reasoning_output_tokens: 4,
-          total_tokens: 27,
+          total_tokens: 23,
         },
       },
     },
@@ -277,7 +277,7 @@ const records = [
     input_tokens: 120,
     output_tokens: 20,
     reasoning_output_tokens: 5,
-    total_tokens: 145,
+    total_tokens: 140,
     total: { input_tokens: 330, output_tokens: 45, reasoning_output_tokens: 5, total_tokens: 375 },
   },
 ];
@@ -346,8 +346,8 @@ if (files.length !== 1) {
   throw new Error(`expected one latest Codex usage event after two importer runs, found ${files.length}`);
 }
 const event = JSON.parse(await readFile(join(process.env.CODEX_REGRESSION_INBOX, files[0]), "utf8"));
-if (event.total_tokens !== 145 || event.input_tokens !== 120 || event.output_tokens !== 25) {
-  throw new Error(`expected latest Codex last usage 120/25/145, found ${event.input_tokens}/${event.output_tokens}/${event.total_tokens}`);
+if (event.total_tokens !== 140 || event.input_tokens !== 120 || event.output_tokens !== 20) {
+  throw new Error(`expected latest Codex last usage 120/20/140, found ${event.input_tokens}/${event.output_tokens}/${event.total_tokens}`);
 }
 if (event.task_type !== "code_generation" || event.stage !== "implement") {
   throw new Error(`expected code_generation/implement, found ${event.task_type}/${event.stage}`);
