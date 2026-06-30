@@ -331,13 +331,11 @@ final class TokenMeteringCoordinator: NSObject {
     }
 
     private func syncVisibleAIToolsFromStatusStore() {
-        let baseTools: Set<TokenUsageAITool>
-        if aiStatusStore.hasCompletedRefresh || !aiStatusStore.statuses.isEmpty {
-            baseTools = Set(aiStatusStore.statuses.compactMap(\.kind.tokenUsageDashboardTool))
-        } else {
-            baseTools = Set(TokenUsageAITool.dashboardTools)
-        }
-        dashboardStore.setVisibleAITools(baseTools.subtracting(settings.hiddenTokenUsageAITools))
+        dashboardStore.setVisibleAITools(
+            TokenUsageDashboardToolVisibility.visibleTools(
+                hiddenTools: settings.hiddenTokenUsageAITools
+            )
+        )
     }
 
     private func registerPrivateUsageConnectionURLHandler() {

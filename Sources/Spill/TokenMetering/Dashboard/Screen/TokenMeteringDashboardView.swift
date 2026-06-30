@@ -314,13 +314,11 @@ struct TokenMeteringDashboardView: View {
     }
 
     private func syncVisibleAIToolsFromStatusStore() {
-        let baseTools: Set<TokenUsageAITool>
-        if aiStatusStore.hasCompletedRefresh || !aiStatusStore.statuses.isEmpty {
-            baseTools = Set(aiStatusStore.statuses.compactMap(\.kind.tokenUsageDashboardTool))
-        } else {
-            baseTools = Set(TokenUsageAITool.dashboardTools)
-        }
-        store.setVisibleAITools(baseTools.subtracting(settings.hiddenTokenUsageAITools))
+        store.setVisibleAITools(
+            TokenUsageDashboardToolVisibility.visibleTools(
+                hiddenTools: settings.hiddenTokenUsageAITools
+            )
+        )
     }
 
     private func scheduleVisibleAIToolsSync() {

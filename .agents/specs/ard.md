@@ -358,6 +358,45 @@ Rules:
   adapters may define custom reusable categories that match
   `^[a-z][a-z0-9_]{1,40}$`.
 
+### ARD-005B2: Token Usage Display Is Store-Driven
+
+Decision:
+
+Dashboard, panel, and menu bar token usage surfaces derive usage visibility from
+the app-owned `TokenUsageStore` plus explicit user visibility settings. They
+must not use current AI process detection as a gate for whether stored usage for
+Codex, Claude Code, or Antigravity/AGY is visible.
+
+Rationale:
+
+Process presence answers "is this tool running now?" Token usage answers "what
+exact usage has been recorded?" These signals have different lifecycles. A user
+can have valid stored Codex usage after the Codex process exits, while a manual
+upload or refresh may make stale display state appear fixed. Coupling usage
+display to process detection makes local metering look broken even when the
+store is current.
+
+Rules:
+
+- First-class dashboard tools are Codex, Claude Code, and Antigravity/AGY unless
+  the user explicitly hides one through token usage visibility settings.
+- AI process status panels may read `AIStatusStore`, but token totals, tool
+  tabs, panel summaries, Work Items, and dashboard filters must read
+  `TokenUsageStore` and visibility preferences instead of live process state.
+- Manual Private Usage Upload Sync Now is an upload and freshness action for
+  encrypted web backup. It must not be required for local token usage to appear
+  in the native panel, menu bar, or local dashboard.
+- Dashboard, panel, and menu bar refresh actions may request lightweight local
+  collection or event inbox drains, but visible usage must refresh from the
+  app-owned store through direct reads or store-change notifications.
+- If the read-only stats helper shows usage records while native UI is empty or
+  stale, investigate store drain, notification propagation, dashboard filter
+  state, and user-hidden tool settings before changing importers, upload sync,
+  or token schemas.
+- Display mismatch diagnosis must preserve the token metering privacy boundary:
+  do not inspect prompts, responses, commands, file paths, logs, transcripts,
+  source content, shell history, environment values, or secrets.
+
 ### ARD-005B1: Explicit Local History Import Reconciles Known Runtime Stores
 
 Decision:

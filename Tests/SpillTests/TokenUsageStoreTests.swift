@@ -2444,6 +2444,23 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(dashboardStore.snapshot.periodFilters.map(\.detail), ["100", "130", "130", "130"])
     }
 
+    func testDashboardToolVisibilityKeepsUsageIndependentOfProcessDetection() {
+        XCTAssertEqual(
+            TokenUsageDashboardToolVisibility.visibleTools(hiddenTools: []),
+            Set(TokenUsageAITool.dashboardTools)
+        )
+
+        XCTAssertEqual(
+            TokenUsageDashboardToolVisibility.visibleTools(hiddenTools: [.codex]),
+            Set([.claude, .antigravity])
+        )
+
+        XCTAssertEqual(
+            TokenUsageDashboardToolVisibility.visibleTools(hiddenTools: [.openAI, .unknown]),
+            Set(TokenUsageAITool.dashboardTools)
+        )
+    }
+
     @MainActor
     func testDashboardStoreVisibleToolsBeforeFirstLoadDoesNotBlockInitialRefresh() async throws {
         let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
