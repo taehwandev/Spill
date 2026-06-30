@@ -592,6 +592,13 @@ Requirements:
   for local cost estimates, grouped alongside existing totals by tool, model,
   task, stage, workflow coverage, and Work Item. The app still uploads only
   aggregate token counts and safe labels, never raw events or content-like data.
+- Private Usage Upload shared summaries are the plaintext, member-readable
+  aggregate contract for dashboards that cannot decrypt sealed buckets. They
+  must preserve the same safe Work Item aggregate list as encrypted buckets:
+  Work Item id, AI tool, task type, stage, model, totals, first event time, and
+  last event time. They must not include prompt text, responses, commands, file
+  paths, repo names, branch names, terminal output, logs, diffs, source content,
+  environment values, secrets, raw event ids, `run_id`, or `span_id`.
 - Multi-day backlogs, such as weekends or offline periods, remain queued locally
   and may upload later in one or more batches.
 - The web dashboard shows per-device statistics and combined account totals

@@ -218,13 +218,16 @@ final class PrivateUsageUploadTests: XCTestCase {
         XCTAssertEqual(summary.summaryVersion, 1)
         XCTAssertEqual(summary.totals.totalTokens, 25)
         XCTAssertEqual(summary.toolTotals["codex"]?.eventCount, 1)
+        XCTAssertEqual(summary.workItems.count, 1)
+        XCTAssertEqual(summary.workItems.first?.id, "work__codex__code_generation__implement__gpt_5__2026_06_08")
+        XCTAssertEqual(summary.workItems.first?.totals.totalTokens, 25)
 
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         let payload = try encoder.encode(summary)
         let payloadString = try XCTUnwrap(String(data: payload, encoding: .utf8))
 
-        XCTAssertFalse(payloadString.contains("work_items"))
+        XCTAssertTrue(payloadString.contains("work_items"))
         XCTAssertFalse(payloadString.contains("span_shared"))
         XCTAssertFalse(payloadString.contains("run_shared"))
         XCTAssertFalse(payloadString.contains("ciphertext"))

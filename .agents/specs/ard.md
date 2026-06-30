@@ -491,6 +491,15 @@ Rules:
   grouped tool, model, task, stage, workflow, and Work Item totals. Unknown or
   legacy rows without accounting are counted as unclassified input so model
   pricing can remain honest without pretending cache splits were known.
+- Dirty shared summaries are a plaintext aggregate mirror for member-readable
+  dashboards and fallback views. They must include the same safe Work Item
+  aggregate list as the encrypted daily aggregate so dashboards do not lose
+  Work Item rows when they render shared summaries instead of decrypted buckets.
+  Allowed Work Item fields are limited to id, AI tool, task type, stage, model,
+  token totals, first event timestamp, and last event timestamp. Shared
+  summaries must reject or omit prompt text, responses, commands, file paths,
+  repo names, branch names, terminal output, logs, diffs, source content,
+  environment values, secrets, raw event ids, `run_id`, and `span_id`.
 - Automatic upload keeps the daily completed-bucket cadence. Manual Sync Now may
   include the current local day's partial aggregate so explicit user sync can
   update the web dashboard's work-item list without waiting for the next day.
