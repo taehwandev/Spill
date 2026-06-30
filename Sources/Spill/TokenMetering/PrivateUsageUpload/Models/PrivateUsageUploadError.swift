@@ -17,7 +17,10 @@ enum PrivateUsageUploadError: Error, Equatable {
 extension PrivateUsageUploadError {
     var isRevokedConnection: Bool {
         if case let .relay(status, reason) = self {
-            return status == 403 || reason == "device_forbidden" || reason == "connection_required"
+            return status == 403 ||
+                reason == "device_forbidden" ||
+                reason == "grant_forbidden" ||
+                reason == "connection_required"
         }
 
         return false

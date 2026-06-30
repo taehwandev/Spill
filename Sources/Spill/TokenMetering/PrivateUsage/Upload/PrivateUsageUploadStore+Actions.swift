@@ -3,6 +3,7 @@ import Foundation
 extension PrivateUsageUploadStore {
     func beginWebConnectionAttempt(timeout: TimeInterval = 180) {
         isConnecting = true
+        pendingConnectedMessage = false
         message = nil
         errorMessage = nil
         webConnectionWaitTask?.cancel()
@@ -30,6 +31,7 @@ extension PrivateUsageUploadStore {
         refreshTask?.cancel()
         refreshTask = Task { [weak self] in
             let status = await coordinator.statusAsync(isEnabled: isEnabled)
+            let hasCredential = (try? coordinator.credentialStore.loadCredential()) != nil
             await MainActor.run {
                 guard let self,
                       !Task.isCancelled,
@@ -37,15 +39,33 @@ extension PrivateUsageUploadStore {
                 else {
                     return
                 }
-                if !status.isConnected, self.settings.privateUsageUploadEnabled {
+                let resolvedStatus = status.isConnected && !hasCredential
+                    ? PrivateUsageUploadStatus.disconnected
+                    : status
+                if !resolvedStatus.isConnected, self.settings.privateUsageUploadEnabled {
                     self.settings.privateUsageUploadEnabled = false
                 }
-                if status.isConnected {
+                if !resolvedStatus.isConnected,
+                   self.pendingConnectedMessage ||
+                   self.message == TokenMeteringL10n.text(.privateUsageUploadConnectedMessage) {
+                    self.pendingConnectedMessage = false
+                    self.message = nil
+                }
+                if resolvedStatus.isConnected {
+                    if self.pendingConnectedMessage {
+                        self.message = TokenMeteringL10n.text(.privateUsageUploadConnectedMessage)
+                        self.pendingConnectedMessage = false
+                    }
                     self.isConnecting = false
                     self.webConnectionWaitTask?.cancel()
                     self.webConnectionWaitTask = nil
                 }
-                self.status = status.isConnected ? status : .disconnected
+                self.status = resolvedStatus.isConnected ? resolvedStatus : .disconnected
+                if !self.status.isConnected,
+                   self.message == TokenMeteringL10n.text(.privateUsageUploadConnectedMessage) {
+                    self.pendingConnectedMessage = false
+                    self.message = nil
+                }
             }
         }
     }
@@ -53,6 +73,7 @@ extension PrivateUsageUploadStore {
     func connect(grantCode: String) async {
         updateCoordinatorIfNeeded()
         isConnecting = true
+        pendingConnectedMessage = false
         message = nil
         errorMessage = nil
         defer {
@@ -65,6 +86,7 @@ extension PrivateUsageUploadStore {
         do {
             _ = try await coordinator.exchangeGrantCode(grantCode)
             settings.privateUsageUploadEnabled = true
+            pendingConnectedMessage = false
             message = TokenMeteringL10n.text(.privateUsageUploadConnectedMessage)
         } catch {
             SpillCrashReporter.capturePrivateUsageUploadFailure(operation: .connect, error: error)
@@ -74,6 +96,9 @@ extension PrivateUsageUploadStore {
 
     func syncNow() async {
         updateCoordinatorIfNeeded()
+        guard !isSyncing else {
+            return
+        }
         isSyncing = true
         message = nil
         errorMessage = nil

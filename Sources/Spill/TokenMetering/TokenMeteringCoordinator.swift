@@ -419,9 +419,10 @@ final class TokenMeteringCoordinator: NSObject {
                 usageStore: usageStore,
                 environment: settings.privateUsageUploadEnvironment
             )
+            let uploadNow = Date()
             guard coordinator.automaticUploadIsDue(
                 isEnabled: settings.privateUsageUploadEnabled,
-                now: Date()
+                now: uploadNow
             ) else {
                 return
             }
@@ -432,7 +433,8 @@ final class TokenMeteringCoordinator: NSObject {
             }
 
             _ = await coordinator.runAutomaticUploadIfNeeded(
-                isEnabled: settings.privateUsageUploadEnabled
+                isEnabled: settings.privateUsageUploadEnabled,
+                now: uploadNow
             )
         }
     }

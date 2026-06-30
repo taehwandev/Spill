@@ -153,15 +153,15 @@ final class PrivateUsageUploadTests: XCTestCase {
         XCTAssertEqual(aggregate.sourceTotals["unknown"], 285)
         XCTAssertEqual(aggregate.workItems.count, 3)
         XCTAssertEqual(
-            aggregate.workItems.first { $0.id == "work_codex_code_generation_implement_gpt_5_2026_06_07" }?.totals.totalTokens,
+            aggregate.workItems.first { $0.id == "work__codex__code_generation__implement__gpt_5__2026_06_07" }?.totals.totalTokens,
             200
         )
         XCTAssertEqual(
-            aggregate.workItems.first { $0.id == "work_claude_testing_verify_claude_opus_4_2026_06_07" }?.totals.totalTokens,
+            aggregate.workItems.first { $0.id == "work__claude__testing__verify__claude_opus_4__2026_06_07" }?.totals.totalTokens,
             75
         )
         XCTAssertEqual(
-            aggregate.workItems.first { $0.id == "work_codex_uncategorized_summarize_gpt_5_2026_06_07" }?.totals.totalTokens,
+            aggregate.workItems.first { $0.id == "work__codex__uncategorized__summarize__gpt_5__2026_06_07" }?.totals.totalTokens,
             10
         )
 
@@ -170,6 +170,103 @@ final class PrivateUsageUploadTests: XCTestCase {
         XCTAssertFalse(plaintextString.contains("run_a1"))
         XCTAssertFalse(plaintextString.contains("span_c1"))
         XCTAssertFalse(plaintextString.contains("span_today"))
+    }
+
+    func testDailyBucketBuilderKeepsDistinctWorkItemsWhenLabelsContainUnderscores() throws {
+        let timeZone = try XCTUnwrap(TimeZone(identifier: "UTC"))
+        let calendar = fixedCalendar(timeZone: timeZone)
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 9, hour: 9)))
+        let yesterday = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 8, hour: 12)))
+        let sealer = RecordingPrivateUsageSealer()
+        let builder = PrivateUsageDailyBucketBuilder(
+            calendar: calendar,
+            timeZone: timeZone,
+            sealer: sealer
+        )
+
+        _ = try builder.makeDirtyDailyBuckets(
+            events: [
+                makeEvent(
+                    spanID: "span_component_a",
+                    runID: "run_component_a",
+                    aiTool: .codex,
+                    taskType: "code_generation",
+                    stage: "implement",
+                    model: "gpt-5",
+                    input: 10,
+                    output: 1,
+                    createdAt: yesterday
+                ),
+                makeEvent(
+                    spanID: "span_component_b",
+                    runID: "run_component_b",
+                    aiTool: .codex,
+                    taskType: "code",
+                    stage: "generation_implement",
+                    model: "gpt-5",
+                    input: 20,
+                    output: 2,
+                    createdAt: yesterday
+                )
+            ],
+            acknowledgedHashesByBucketKey: [:],
+            now: now
+        )
+
+        let plaintext = try XCTUnwrap(sealer.plaintexts.first)
+        let aggregate = try JSONDecoder().decode(PrivateUsageDailyAggregate.self, from: plaintext)
+
+        XCTAssertEqual(aggregate.workItems.count, 2)
+        XCTAssertNotEqual(aggregate.workItems[0].id, aggregate.workItems[1].id)
+        XCTAssertEqual(aggregate.workItems.map(\.totals.totalTokens).sorted(), [11, 22])
+    }
+
+    func testDailyBucketBuilderOrdersFractionalAndWholeSecondTimestampsByDate() throws {
+        let timeZone = try XCTUnwrap(TimeZone(identifier: "UTC"))
+        let calendar = fixedCalendar(timeZone: timeZone)
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 9, hour: 9)))
+        let sealer = RecordingPrivateUsageSealer()
+        let builder = PrivateUsageDailyBucketBuilder(
+            calendar: calendar,
+            timeZone: timeZone,
+            sealer: sealer
+        )
+
+        _ = try builder.makeDirtyDailyBuckets(
+            events: [
+                makeEvent(
+                    spanID: "span_whole_second",
+                    runID: "run_whole_second",
+                    aiTool: .codex,
+                    taskType: "testing",
+                    stage: "verify",
+                    model: "gpt-5",
+                    input: 10,
+                    output: 0,
+                    createdAtString: "2026-06-08T10:30:00Z"
+                ),
+                makeEvent(
+                    spanID: "span_fractional",
+                    runID: "run_fractional",
+                    aiTool: .codex,
+                    taskType: "testing",
+                    stage: "verify",
+                    model: "gpt-5",
+                    input: 20,
+                    output: 0,
+                    createdAtString: "2026-06-08T10:30:00.001Z"
+                )
+            ],
+            acknowledgedHashesByBucketKey: [:],
+            now: now
+        )
+
+        let plaintext = try XCTUnwrap(sealer.plaintexts.first)
+        let aggregate = try JSONDecoder().decode(PrivateUsageDailyAggregate.self, from: plaintext)
+        let workItem = try XCTUnwrap(aggregate.workItems.first)
+
+        XCTAssertEqual(workItem.firstEventAt, "2026-06-08T10:30:00Z")
+        XCTAssertEqual(workItem.lastEventAt, "2026-06-08T10:30:00.001Z")
     }
 
     func testDailyAggregateDecodesLegacyPayloadWithoutWorkflowUsageTotals() throws {
@@ -298,7 +395,7 @@ final class PrivateUsageUploadTests: XCTestCase {
         XCTAssertEqual(aggregate.workItems.count, 1)
         XCTAssertEqual(
             aggregate.workItems.first?.id,
-            "work_codex_code_generation_implement_gpt_5_2026_06_07"
+            "work__codex__code_generation__implement__gpt_5__2026_06_07"
         )
     }
 
@@ -482,6 +579,53 @@ final class PrivateUsageUploadTests: XCTestCase {
     }
 
     @MainActor
+    func testUploadStoreClearsConnectedMessageWhenRefreshFindsRevokedConnection() async throws {
+        let credentialStore = InMemoryPrivateUsageCredentialStore()
+        let relayClient = FakePrivateUsageRelayClient()
+        relayClient.connectionCheckError = PrivateUsageUploadError.relay(
+            status: 403,
+            reason: "device_forbidden"
+        )
+        let coordinator = makeCoordinator(
+            credentialStore: credentialStore,
+            relayClient: relayClient,
+            environment: .production
+        )
+        let settings = SpillSettings(defaults: makeDefaults())
+        settings.privateUsageUploadEnvironment = .production
+        let store = PrivateUsageUploadStore(
+            settings: settings,
+            usageStore: makeUsageStore(),
+            coordinator: coordinator
+        )
+
+        store.beginWebConnectionAttempt(timeout: 30)
+        try credentialStore.saveCredential(
+            PrivateUsageDeviceCredential(
+                deviceID: "device_server",
+                credential: "spill_device_v1_secret",
+                tokenType: "spill_device_v1",
+                createdAt: Date()
+            )
+        )
+        try credentialStore.saveKeyWrappingSecret(
+            PrivateUsageKeyWrappingSecret(rawValue: testWrappingSecret)
+        )
+        PrivateUsageConnectionResultNotification.postSuccess(environment: .production)
+
+        try await waitForPrivateUsageStore(store) {
+            !$0.status.isConnected &&
+                !$0.settings.privateUsageUploadEnabled &&
+                $0.message == nil &&
+                relayClient.checkedConnectionDeviceIDs.contains("device_server")
+        }
+
+        XCTAssertNil(store.message)
+        XCTAssertNil(try credentialStore.loadCredential())
+        XCTAssertNil(try credentialStore.loadKeyWrappingSecret())
+    }
+
+    @MainActor
     func testUploadStoreReflectsDeepLinkConnectionFailureNotification() async throws {
         let coordinator = makeCoordinator(environment: .production)
         let settings = SpillSettings(defaults: makeDefaults())
@@ -565,6 +709,74 @@ final class PrivateUsageUploadTests: XCTestCase {
         XCTAssertTrue(didPrepare)
         XCTAssertEqual(relayClient.uploadedBucketCounts, [1])
         XCTAssertEqual(store.message, TokenMeteringL10n.text(.privateUsageUploadUploadedMessage))
+    }
+
+    @MainActor
+    func testUploadStoreIgnoresSyncNowWhileSyncIsAlreadyRunning() async throws {
+        let timeZone = try XCTUnwrap(TimeZone(identifier: "UTC"))
+        let calendar = fixedCalendar(timeZone: timeZone)
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 8, hour: 9)))
+        let yesterday = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 7, hour: 12)))
+        let usageStore = makeUsageStore()
+        try usageStore.replaceEvents([
+            makeEvent(
+                spanID: "span_manual_reentry",
+                runID: "run_manual_reentry",
+                aiTool: .codex,
+                taskType: "code_generation",
+                stage: "implement",
+                model: "gpt-5",
+                input: 11,
+                output: 13,
+                createdAt: yesterday
+            )
+        ])
+        let credentialStore = InMemoryPrivateUsageCredentialStore()
+        try credentialStore.saveCredential(
+            PrivateUsageDeviceCredential(
+                deviceID: "device_server",
+                credential: "spill_device_v1_secret",
+                tokenType: "spill_device_v1",
+                createdAt: now
+            )
+        )
+        try credentialStore.saveKeyWrappingSecret(try PrivateUsageKeyWrappingSecret(rawValue: testWrappingSecret))
+        let relayClient = FakePrivateUsageRelayClient()
+        let sealer = RecordingPrivateUsageSealer()
+        let coordinator = PrivateUsageUploadCoordinator(
+            usageStore: usageStore,
+            credentialStore: credentialStore,
+            stateStore: PrivateUsageUploadStateStore(defaults: makeDefaults()),
+            relayClient: relayClient,
+            bucketBuilder: PrivateUsageDailyBucketBuilder(
+                calendar: calendar,
+                timeZone: timeZone,
+                sealer: sealer
+            ),
+            sealer: sealer
+        )
+        let settings = SpillSettings(defaults: makeDefaults())
+        settings.privateUsageUploadEnabled = true
+        var prepareCallCount = 0
+        let store = PrivateUsageUploadStore(
+            settings: settings,
+            usageStore: usageStore,
+            coordinator: coordinator,
+            prepareForUpload: {
+                prepareCallCount += 1
+                try? await Task.sleep(nanoseconds: 50_000_000)
+            }
+        )
+
+        let firstSync = Task { @MainActor in
+            await store.syncNow()
+        }
+        try await waitForPrivateUsageStore(store) { $0.isSyncing }
+        await store.syncNow()
+        await firstSync.value
+
+        XCTAssertEqual(prepareCallCount, 1)
+        XCTAssertEqual(relayClient.uploadedBucketCounts, [1])
     }
 
     func testCoordinatorAcksUploadedBucketsAndAvoidsReupload() async throws {
@@ -679,7 +891,7 @@ final class PrivateUsageUploadTests: XCTestCase {
         XCTAssertEqual(aggregate.workItems.count, 1)
         XCTAssertEqual(
             aggregate.workItems.first?.id,
-            "work_codex_code_generation_implement_gpt_5_2026_06_08"
+            "work__codex__code_generation__implement__gpt_5__2026_06_08"
         )
     }
 
@@ -969,11 +1181,10 @@ final class PrivateUsageUploadTests: XCTestCase {
         XCTAssertEqual(relayClient.uploadedBucketCounts, [31, 4])
     }
 
-    func testAutomaticUploadDoesNotRetrySameDayAfterFailure() async throws {
+    func testAutomaticUploadRetriesSameDayAfterTransientFailure() async throws {
         let timeZone = try XCTUnwrap(TimeZone(identifier: "UTC"))
         let calendar = fixedCalendar(timeZone: timeZone)
         let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 8, hour: 9)))
-        let nextDay = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 9, hour: 9)))
         let yesterday = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 7, hour: 12)))
         let usageStore = makeUsageStore()
         try usageStore.replaceEvents([
@@ -1021,14 +1232,14 @@ final class PrivateUsageUploadTests: XCTestCase {
         let failedResult = await coordinator.runAutomaticUploadIfNeeded(isEnabled: true, now: now)
         relayClient.uploadError = nil
         let retryResult = await coordinator.runAutomaticUploadIfNeeded(isEnabled: true, now: now)
-        let nextDayResult = await coordinator.runAutomaticUploadIfNeeded(isEnabled: true, now: nextDay)
+        let afterSuccessResult = await coordinator.runAutomaticUploadIfNeeded(isEnabled: true, now: now)
 
         XCTAssertNil(failedResult)
-        XCTAssertNil(retryResult)
-        XCTAssertEqual(nextDayResult?.accepted, 1)
+        XCTAssertEqual(retryResult?.accepted, 1)
+        XCTAssertNil(afterSuccessResult)
         XCTAssertEqual(relayClient.uploadedBucketCounts, [1])
         XCTAssertNil(stateStore.load().lastFailedUploadAt)
-        XCTAssertEqual(stateStore.load().lastAutomaticAttemptDayID, "2026-06-09")
+        XCTAssertEqual(stateStore.load().lastAutomaticAttemptDayID, "2026-06-08")
     }
 
     func testEnvironmentSeparatesRelayKeychainAndLocalUploadState() {
@@ -1076,6 +1287,42 @@ final class PrivateUsageUploadTests: XCTestCase {
         relayClient.connectionCheckError = PrivateUsageUploadError.relay(
             status: 403,
             reason: "device_forbidden"
+        )
+        let sealer = RecordingPrivateUsageSealer()
+        let coordinator = PrivateUsageUploadCoordinator(
+            usageStore: makeUsageStore(),
+            credentialStore: credentialStore,
+            stateStore: PrivateUsageUploadStateStore(defaults: makeDefaults()),
+            relayClient: relayClient,
+            bucketBuilder: PrivateUsageDailyBucketBuilder(sealer: sealer),
+            sealer: sealer
+        )
+
+        let status = await coordinator.statusAsync(isEnabled: true, now: now)
+
+        XCTAssertFalse(status.isConnected)
+        XCTAssertNil(try credentialStore.loadCredential())
+        XCTAssertNil(try credentialStore.loadKeyWrappingSecret())
+    }
+
+    func testStatusCheckClearsGrantForbiddenCredential() async throws {
+        let now = try XCTUnwrap(ISO8601DateFormatter.parseTokenUsageDate(from: "2026-06-08T10:00:00.000Z"))
+        let credentialStore = InMemoryPrivateUsageCredentialStore()
+        try credentialStore.saveCredential(
+            PrivateUsageDeviceCredential(
+                deviceID: "device_server",
+                credential: "spill_device_v1_secret",
+                tokenType: "spill_device_v1",
+                createdAt: now
+            )
+        )
+        try credentialStore.saveKeyWrappingSecret(
+            PrivateUsageKeyWrappingSecret(rawValue: testWrappingSecret)
+        )
+        let relayClient = FakePrivateUsageRelayClient()
+        relayClient.connectionCheckError = PrivateUsageUploadError.relay(
+            status: 200,
+            reason: "grant_forbidden"
         )
         let sealer = RecordingPrivateUsageSealer()
         let coordinator = PrivateUsageUploadCoordinator(
@@ -1496,6 +1743,45 @@ final class PrivateUsageUploadTests: XCTestCase {
             ),
             latencyMS: 0,
             createdAt: ISO8601DateFormatter.tokenUsage.string(from: createdAt)
+        )
+    }
+
+    private func makeEvent(
+        spanID: String,
+        runID: String,
+        aiTool: TokenUsageAITool,
+        taskType: TokenUsageTaskType,
+        stage: TokenUsageStage,
+        model: String,
+        input: Int,
+        output: Int,
+        createdAtString: String
+    ) -> TokenUsageEvent {
+        TokenUsageEvent(
+            schemaVersion: 1,
+            deviceID: "device_local",
+            projectID: "project_global",
+            artifactID: "artifact_global",
+            runID: runID,
+            spanID: spanID,
+            aiTool: aiTool,
+            taskType: taskType,
+            stage: stage,
+            model: model,
+            inputTokens: input,
+            outputTokens: output,
+            totalTokens: input + output,
+            tokenBreakdown: TokenUsageBreakdown(
+                system: 0,
+                user: 0,
+                history: 0,
+                repoContext: 0,
+                toolOutput: 0,
+                generatedOutput: 0,
+                unknown: input + output
+            ),
+            latencyMS: 0,
+            createdAt: createdAtString
         )
     }
 }

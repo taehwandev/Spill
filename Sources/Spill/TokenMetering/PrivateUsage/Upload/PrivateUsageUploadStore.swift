@@ -15,9 +15,10 @@ final class PrivateUsageUploadStore: ObservableObject {
     let prepareForUpload: @MainActor () async -> Void
     var coordinator: PrivateUsageUploadCoordinator
     var coordinatorEnvironment: PrivateUsageUploadEnvironment
-    var refreshTask: Task<Void, Never>?
-    var webConnectionWaitTask: Task<Void, Never>?
+    nonisolated(unsafe) var refreshTask: Task<Void, Never>?
+    nonisolated(unsafe) var webConnectionWaitTask: Task<Void, Never>?
     var refreshGeneration = 0
+    var pendingConnectedMessage = false
     private var cancellables = Set<AnyCancellable>()
 
     init(
@@ -72,10 +73,11 @@ private extension PrivateUsageUploadStore {
         webConnectionWaitTask = nil
         message = nil
         errorMessage = nil
+        pendingConnectedMessage = false
 
         if payload.didSucceed {
             settings.privateUsageUploadEnabled = true
-            message = TokenMeteringL10n.text(.privateUsageUploadConnectedMessage)
+            pendingConnectedMessage = true
         } else {
             errorMessage = payload.errorMessage
         }

@@ -116,7 +116,7 @@ struct PrivateUsageDailyBucketBuilder: Sendable {
                 dayStart: dayStart,
                 dayEnd: dayEnd,
                 events: dayEvents.sorted { lhs, rhs in
-                    lhs.createdAt < rhs.createdAt
+                    Self.isTimestamp(lhs.createdAt, before: rhs.createdAt)
                 },
                 generatedAt: now
             )
@@ -228,7 +228,7 @@ private extension PrivateUsageDailyBucketBuilder {
             event.stage.rawValue,
             modelKey(event.model),
             bucketDay
-        ].map(safeIDPart).joined(separator: "_")
+        ].map(safeIDPart).joined(separator: "__")
     }
 
     static func modelKey(_ model: String) -> String {
@@ -256,5 +256,15 @@ private extension PrivateUsageDailyBucketBuilder {
             .split(separator: "_", omittingEmptySubsequences: true)
             .joined(separator: "_")
         return collapsed.isEmpty ? "unknown" : collapsed
+    }
+
+    static func isTimestamp(_ lhs: String, before rhs: String) -> Bool {
+        guard let lhsDate = ISO8601DateFormatter.parseTokenUsageDate(from: lhs),
+              let rhsDate = ISO8601DateFormatter.parseTokenUsageDate(from: rhs)
+        else {
+            return lhs < rhs
+        }
+
+        return lhsDate < rhsDate
     }
 }

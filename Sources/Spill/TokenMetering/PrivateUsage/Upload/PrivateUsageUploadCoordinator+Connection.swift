@@ -100,12 +100,12 @@ extension PrivateUsageUploadCoordinator {
             guard let credential = try credentialStore.loadCredential() else {
                 return nil
             }
-            markAutomaticAttempt(dayID: attemptDayID)
             let result = try await performUpload(
                 isEnabled: isEnabled,
                 now: now,
                 earliestBucketStart: credential.createdAt
             )
+            markAutomaticAttempt(dayID: attemptDayID)
             return result
         } catch {
             if let uploadError = error as? PrivateUsageUploadError,

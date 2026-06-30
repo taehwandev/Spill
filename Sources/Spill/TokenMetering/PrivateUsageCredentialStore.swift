@@ -47,6 +47,7 @@ final class PrivateUsageKeychainCredentialStore: PrivateUsageCredentialStoring, 
     private let service: String
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
+    private let lock = NSLock()
 
     init(service: String = "dev.spill.private-usage") {
         self.service = service
@@ -59,59 +60,79 @@ final class PrivateUsageKeychainCredentialStore: PrivateUsageCredentialStoring, 
     }
 
     func loadCredential() throws -> PrivateUsageDeviceCredential? {
-        try loadBundle().credential
+        try lock.withLock {
+            try loadBundle().credential
+        }
     }
 
     func saveCredential(_ credential: PrivateUsageDeviceCredential) throws {
-        var bundle = try loadBundle()
-        bundle.credential = credential
-        try saveBundle(bundle)
+        try lock.withLock {
+            var bundle = try loadBundle()
+            bundle.credential = credential
+            try saveBundle(bundle)
+        }
     }
 
     func clearCredential() throws {
-        var bundle = try loadBundle()
-        bundle.credential = nil
-        try saveBundle(bundle)
+        try lock.withLock {
+            var bundle = try loadBundle()
+            bundle.credential = nil
+            try saveBundle(bundle)
+        }
     }
 
     func loadKeyWrappingSecret() throws -> PrivateUsageKeyWrappingSecret? {
-        try loadBundle().keyWrappingSecret
+        try lock.withLock {
+            try loadBundle().keyWrappingSecret
+        }
     }
 
     func saveKeyWrappingSecret(_ secret: PrivateUsageKeyWrappingSecret) throws {
-        var bundle = try loadBundle()
-        bundle.keyWrappingSecret = secret
-        try saveBundle(bundle)
+        try lock.withLock {
+            var bundle = try loadBundle()
+            bundle.keyWrappingSecret = secret
+            try saveBundle(bundle)
+        }
     }
 
     func clearKeyWrappingSecret() throws {
-        var bundle = try loadBundle()
-        bundle.keyWrappingSecret = nil
-        try saveBundle(bundle)
+        try lock.withLock {
+            var bundle = try loadBundle()
+            bundle.keyWrappingSecret = nil
+            try saveBundle(bundle)
+        }
     }
 
     func saveConnection(credential: PrivateUsageDeviceCredential, keyWrappingSecret: PrivateUsageKeyWrappingSecret) throws {
-        var bundle = try loadBundle()
-        bundle.credential = credential
-        bundle.keyWrappingSecret = keyWrappingSecret
-        try saveBundle(bundle)
+        try lock.withLock {
+            var bundle = try loadBundle()
+            bundle.credential = credential
+            bundle.keyWrappingSecret = keyWrappingSecret
+            try saveBundle(bundle)
+        }
     }
 
     func clearConnection() throws {
-        var bundle = try loadBundle()
-        bundle.credential = nil
-        bundle.keyWrappingSecret = nil
-        try saveBundle(bundle)
+        try lock.withLock {
+            var bundle = try loadBundle()
+            bundle.credential = nil
+            bundle.keyWrappingSecret = nil
+            try saveBundle(bundle)
+        }
     }
 
     func loadSealingKeyData() throws -> Data? {
-        try loadBundle().sealingKeyData
+        try lock.withLock {
+            try loadBundle().sealingKeyData
+        }
     }
 
     func saveSealingKeyData(_ data: Data) throws {
-        var bundle = try loadBundle()
-        bundle.sealingKeyData = data
-        try saveBundle(bundle)
+        try lock.withLock {
+            var bundle = try loadBundle()
+            bundle.sealingKeyData = data
+            try saveBundle(bundle)
+        }
     }
 }
 

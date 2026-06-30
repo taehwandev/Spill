@@ -1,3 +1,5 @@
+import Foundation
+
 struct PrivateUsageWorkItemAggregate: Codable, Equatable, Sendable {
     let id: String
     let aiTool: String
@@ -41,11 +43,23 @@ struct PrivateUsageWorkItemAggregate: Codable, Equatable, Sendable {
 
     mutating func add(_ event: TokenUsageEvent) {
         totals.add(event)
-        if event.createdAt < firstEventAt {
+        if Self.isTimestamp(event.createdAt, before: firstEventAt) {
             firstEventAt = event.createdAt
         }
-        if event.createdAt > lastEventAt {
+        if Self.isTimestamp(lastEventAt, before: event.createdAt) {
             lastEventAt = event.createdAt
         }
+    }
+}
+
+private extension PrivateUsageWorkItemAggregate {
+    static func isTimestamp(_ lhs: String, before rhs: String) -> Bool {
+        guard let lhsDate = ISO8601DateFormatter.parseTokenUsageDate(from: lhs),
+              let rhsDate = ISO8601DateFormatter.parseTokenUsageDate(from: rhs)
+        else {
+            return lhs < rhs
+        }
+
+        return lhsDate < rhsDate
     }
 }
