@@ -3,6 +3,7 @@ import Foundation
 extension PrivateUsageUploadCoordinator {
     func acknowledge(
         buckets: [PrivateUsageEncryptedBucket],
+        sharedSummaries: [PrivateUsageSharedSummary],
         uploadedAt: Date
     ) {
         lock.withLock {
@@ -10,10 +11,15 @@ extension PrivateUsageUploadCoordinator {
             for bucket in buckets {
                 state.acknowledgedCiphertextHashesByBucketKey[bucket.bucketKey] = bucket.ciphertextHash
             }
+            for summary in sharedSummaries {
+                if let summaryHash = try? summary.canonicalHash() {
+                    state.acknowledgedSharedSummaryHashesByBucketKey[summary.bucketKey] = summaryHash
+                }
+            }
             state.lastSuccessfulUploadAt = ISO8601DateFormatter.tokenUsage.string(from: uploadedAt)
             state.lastFailedUploadAt = nil
             state.lastFailureReason = nil
-            state.lastAckedBucketKey = buckets.last?.bucketKey ?? state.lastAckedBucketKey
+            state.lastAckedBucketKey = buckets.last?.bucketKey ?? sharedSummaries.last?.bucketKey ?? state.lastAckedBucketKey
             stateStore.save(state)
         }
     }

@@ -19,6 +19,7 @@ protocol PrivateUsageRelayClienting: Sendable {
     func uploadBuckets(
         credential: PrivateUsageDeviceCredential,
         buckets: [PrivateUsageEncryptedBucket],
+        sharedSummaries: [PrivateUsageSharedSummary],
         keyEnvelopes: [PrivateUsageKeyEnvelope]
     ) async throws -> PrivateUsageUploadResponse
 
@@ -40,6 +41,7 @@ struct PrivateUsageUnavailableRelayClient: PrivateUsageRelayClienting {
     func uploadBuckets(
         credential: PrivateUsageDeviceCredential,
         buckets: [PrivateUsageEncryptedBucket],
+        sharedSummaries: [PrivateUsageSharedSummary],
         keyEnvelopes: [PrivateUsageKeyEnvelope]
     ) async throws -> PrivateUsageUploadResponse {
         throw PrivateUsageUploadError.invalidRelayURL
@@ -95,6 +97,7 @@ final class PrivateUsageRelayClient: PrivateUsageRelayClienting, @unchecked Send
     func uploadBuckets(
         credential: PrivateUsageDeviceCredential,
         buckets: [PrivateUsageEncryptedBucket],
+        sharedSummaries: [PrivateUsageSharedSummary],
         keyEnvelopes: [PrivateUsageKeyEnvelope]
     ) async throws -> PrivateUsageUploadResponse {
         var request = try makeJSONRequest(path: "upload-buckets")
@@ -102,7 +105,8 @@ final class PrivateUsageRelayClient: PrivateUsageRelayClienting, @unchecked Send
         request.httpBody = try encoder.encode(
             PrivateUsageUploadBucketsRequest(
                 keyEnvelopes: keyEnvelopes,
-                buckets: buckets
+                buckets: buckets,
+                sharedSummaries: sharedSummaries
             )
         )
 

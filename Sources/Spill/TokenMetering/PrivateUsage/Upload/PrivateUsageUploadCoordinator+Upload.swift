@@ -26,34 +26,52 @@ extension PrivateUsageUploadCoordinator {
             earliestBucketStart: earliestBucketStart,
             includeCurrentDay: includeCurrentDay
         )
-        guard !buckets.isEmpty else {
+        let sharedSummaries = try dirtySharedSummaries(
+            state: state,
+            now: now,
+            limit: Self.uploadBatchLimit,
+            earliestBucketStart: earliestBucketStart,
+            includeCurrentDay: includeCurrentDay
+        )
+        guard !buckets.isEmpty || !sharedSummaries.isEmpty else {
             return PrivateUsageUploadRunResult(
                 accepted: 0,
                 attemptedBucketCount: 0,
+                attemptedSharedSummaryCount: 0,
                 uploadedAt: nil
             )
         }
-        guard let wrappingSecret = try credentialStore.loadKeyWrappingSecret() else {
-            throw PrivateUsageUploadError.missingKeyWrappingSecret
+        let keyEnvelopes: [PrivateUsageKeyEnvelope]
+        if buckets.isEmpty {
+            keyEnvelopes = []
+        } else {
+            guard let wrappingSecret = try credentialStore.loadKeyWrappingSecret() else {
+                throw PrivateUsageUploadError.missingKeyWrappingSecret
+            }
+            keyEnvelopes = try sealer.keyEnvelopes(for: wrappingSecret)
         }
-        let keyEnvelopes = try sealer.keyEnvelopes(for: wrappingSecret)
 
         do {
             let response = try await relayClient.uploadBuckets(
                 credential: credential,
                 buckets: buckets,
+                sharedSummaries: sharedSummaries,
                 keyEnvelopes: keyEnvelopes
             )
-            guard response.accepted == buckets.count else {
+            guard response.accepted == buckets.count,
+                  response.acceptedSharedSummaries == sharedSummaries.count
+            else {
                 throw PrivateUsageUploadError.invalidRelayResponse
             }
             let uploadedAt = response.uploadedAt
                 .flatMap(ISO8601DateFormatter.parseTokenUsageDate(from:))
                 ?? now
-            acknowledge(buckets: buckets, uploadedAt: uploadedAt)
+            acknowledge(buckets: buckets, sharedSummaries: sharedSummaries, uploadedAt: uploadedAt)
             return PrivateUsageUploadRunResult(
                 accepted: response.accepted,
+                acceptedSharedSummaryCount: response.acceptedSharedSummaries,
                 attemptedBucketCount: buckets.count,
+                attemptedSharedSummaryCount: sharedSummaries.count,
                 uploadedAt: uploadedAt
             )
         } catch {
@@ -93,12 +111,31 @@ extension PrivateUsageUploadCoordinator {
         )
     }
 
+    func dirtySharedSummaries(
+        state: PrivateUsageUploadPersistence,
+        now: Date,
+        limit: Int,
+        earliestBucketStart: Date? = nil,
+        includeCurrentDay: Bool = false
+    ) throws -> [PrivateUsageSharedSummary] {
+        try bucketBuilder.makeDirtySharedSummaries(
+            events: usageStore.loadEvents(),
+            acknowledgedHashesByBucketKey: state.acknowledgedSharedSummaryHashesByBucketKey,
+            now: now,
+            limit: limit,
+            earliestBucketStart: earliestBucketStart,
+            includeCurrentDay: includeCurrentDay
+        )
+    }
+
     func performManualSync(
         isEnabled: Bool,
         now: Date
     ) async throws -> PrivateUsageUploadRunResult {
         var accepted = 0
+        var acceptedSharedSummaryCount = 0
         var attemptedBucketCount = 0
+        var attemptedSharedSummaryCount = 0
         var uploadedAt: Date?
 
         for _ in 0..<Self.manualSyncMaxBatches {
@@ -108,17 +145,23 @@ extension PrivateUsageUploadCoordinator {
                 includeCurrentDay: true
             )
             accepted += result.accepted
+            acceptedSharedSummaryCount += result.acceptedSharedSummaryCount
             attemptedBucketCount += result.attemptedBucketCount
+            attemptedSharedSummaryCount += result.attemptedSharedSummaryCount
             uploadedAt = result.uploadedAt ?? uploadedAt
 
-            if result.attemptedBucketCount < Self.uploadBatchLimit {
+            if result.attemptedBucketCount < Self.uploadBatchLimit &&
+                result.attemptedSharedSummaryCount < Self.uploadBatchLimit
+            {
                 break
             }
         }
 
         return PrivateUsageUploadRunResult(
             accepted: accepted,
+            acceptedSharedSummaryCount: acceptedSharedSummaryCount,
             attemptedBucketCount: attemptedBucketCount,
+            attemptedSharedSummaryCount: attemptedSharedSummaryCount,
             uploadedAt: uploadedAt
         )
     }

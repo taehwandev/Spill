@@ -28,9 +28,14 @@ extension PrivateUsageUploadCoordinator {
     ) -> PrivateUsageUploadStatus {
         let credential = try? credentialStore.loadCredential()
         let state = stateStore.load()
-        let queuedCount = credential == nil
-            ? 0
-            : ((try? dirtyBuckets(state: state, now: now, limit: 31).count) ?? 0)
+        let queuedCount: Int
+        if credential == nil {
+            queuedCount = 0
+        } else {
+            let dirtyBucketCount = (try? dirtyBuckets(state: state, now: now, limit: 31).count) ?? 0
+            let dirtySummaryCount = (try? dirtySharedSummaries(state: state, now: now, limit: 31).count) ?? 0
+            queuedCount = max(dirtyBucketCount, dirtySummaryCount)
+        }
 
         return PrivateUsageUploadStatus(
             isConnected: credential != nil,

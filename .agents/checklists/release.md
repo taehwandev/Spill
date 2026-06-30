@@ -74,8 +74,8 @@ procedure. This checklist is the Spill-specific quick gate before closeout.
 - [ ] `git push origin v<version>`
 - [ ] GitHub Actions repository variables are set for production private usage
       upload: `SPILL_BUILD_PRIVATE_USAGE_FEATURE_ENABLED=1`,
-      `SPILL_BUILD_PRIVATE_USAGE_WEB_URL=https://spill.thdev.app/`, and
-      `SPILL_BUILD_PRIVATE_USAGE_RELAY_URL=https://spill.thdev.app/api/private-usage-relay`.
+      `SPILL_BUILD_PRIVATE_USAGE_WEB_URL=https://spill.thdev.app/`. The app
+      derives the relay URL from the web origin.
 - [ ] GitHub Secrets include `SPILL_APTABASE_APP_KEY` when public metrics are
       expected. `SPILL_WEB_APTABASE_APP_KEY` and
       `SPILL_INSTALLER_APTABASE_APP_KEY` are optional separate-key overrides.

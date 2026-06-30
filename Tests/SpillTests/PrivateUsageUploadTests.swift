@@ -184,6 +184,53 @@ final class PrivateUsageUploadTests: XCTestCase {
         XCTAssertFalse(plaintextString.contains("span_today"))
     }
 
+    func testSharedSummaryBuilderPublishesOnlyAllowlistedAggregateFields() throws {
+        let timeZone = try XCTUnwrap(TimeZone(identifier: "UTC"))
+        let calendar = fixedCalendar(timeZone: timeZone)
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 9, hour: 9)))
+        let yesterday = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 8, hour: 12)))
+        let builder = PrivateUsageDailyBucketBuilder(
+            calendar: calendar,
+            timeZone: timeZone,
+            sealer: RecordingPrivateUsageSealer()
+        )
+
+        let summaries = try builder.makeDirtySharedSummaries(
+            events: [
+                makeEvent(
+                    spanID: "span_shared",
+                    runID: "run_shared",
+                    aiTool: .codex,
+                    taskType: "code_generation",
+                    stage: "implement",
+                    model: "gpt-5",
+                    input: 10,
+                    output: 15,
+                    createdAt: yesterday
+                )
+            ],
+            acknowledgedHashesByBucketKey: [:],
+            now: now
+        )
+
+        let summary = try XCTUnwrap(summaries.first)
+        XCTAssertEqual(summary.bucketKey, "2026-06-08:daily")
+        XCTAssertEqual(summary.summaryVersion, 1)
+        XCTAssertEqual(summary.totals.totalTokens, 25)
+        XCTAssertEqual(summary.toolTotals["codex"]?.eventCount, 1)
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let payload = try encoder.encode(summary)
+        let payloadString = try XCTUnwrap(String(data: payload, encoding: .utf8))
+
+        XCTAssertFalse(payloadString.contains("work_items"))
+        XCTAssertFalse(payloadString.contains("span_shared"))
+        XCTAssertFalse(payloadString.contains("run_shared"))
+        XCTAssertFalse(payloadString.contains("ciphertext"))
+        XCTAssertFalse(payloadString.contains("wrapped_key"))
+    }
+
     func testDailyBucketBuilderKeepsDistinctWorkItemsWhenLabelsContainUnderscores() throws {
         let timeZone = try XCTUnwrap(TimeZone(identifier: "UTC"))
         let calendar = fixedCalendar(timeZone: timeZone)
@@ -457,6 +504,7 @@ final class PrivateUsageUploadTests: XCTestCase {
                     ciphertextHash: String(repeating: "a", count: 64)
                 )
             ],
+            sharedSummaries: [],
             keyEnvelopes: [
                 PrivateUsageKeyEnvelope(
                     keyVersion: 1,
@@ -486,6 +534,7 @@ final class PrivateUsageUploadTests: XCTestCase {
         XCTAssertFalse(uploadBodyString.contains(testWrappingSecret))
         let uploadJSON = try JSONSerialization.jsonObject(with: uploadBody) as? [String: Any]
         XCTAssertEqual((uploadJSON?["key_envelopes"] as? [[String: Any]])?.count, 1)
+        XCTAssertEqual((uploadJSON?["shared_summaries"] as? [[String: Any]])?.count, 0)
     }
 
     func testConnectionCodeRequiresLocalWrappingSecret() {
@@ -844,7 +893,82 @@ final class PrivateUsageUploadTests: XCTestCase {
         XCTAssertEqual(firstResult.attemptedBucketCount, 1)
         XCTAssertEqual(secondResult.accepted, 0)
         XCTAssertEqual(relayClient.uploadedBucketCounts, [1])
+        XCTAssertEqual(relayClient.uploadedSharedSummaryCounts, [1])
         XCTAssertEqual(relayClient.uploadedKeyEnvelopeCounts, [1])
+        XCTAssertEqual(coordinator.status(isEnabled: true, now: now).queuedBucketCount, 0)
+    }
+
+    func testCoordinatorUploadsSharedSummaryWhenEncryptedBucketWasAlreadyAcknowledged() async throws {
+        let timeZone = try XCTUnwrap(TimeZone(identifier: "UTC"))
+        let calendar = fixedCalendar(timeZone: timeZone)
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 8, hour: 9)))
+        let yesterday = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 7, hour: 12)))
+        let usageStore = makeUsageStore()
+        try usageStore.replaceEvents([
+            makeEvent(
+                spanID: "span_legacy_ack",
+                runID: "run_legacy_ack",
+                aiTool: .codex,
+                taskType: "code_generation",
+                stage: "implement",
+                model: "gpt-5",
+                input: 11,
+                output: 13,
+                createdAt: yesterday
+            )
+        ])
+        let credentialStore = InMemoryPrivateUsageCredentialStore()
+        try credentialStore.saveCredential(
+            PrivateUsageDeviceCredential(
+                deviceID: "device_server",
+                credential: "spill_device_v1_secret",
+                tokenType: "spill_device_v1",
+                createdAt: now
+            )
+        )
+        try credentialStore.saveKeyWrappingSecret(
+            PrivateUsageKeyWrappingSecret(rawValue: testWrappingSecret)
+        )
+        let sealer = RecordingPrivateUsageSealer()
+        let bucketBuilder = PrivateUsageDailyBucketBuilder(
+            calendar: calendar,
+            timeZone: timeZone,
+            sealer: sealer
+        )
+        let alreadyUploadedBucket = try XCTUnwrap(
+            try bucketBuilder.makeDirtyDailyBuckets(
+                events: usageStore.loadEvents(),
+                acknowledgedHashesByBucketKey: [:],
+                now: now
+            ).first
+        )
+        let stateStore = PrivateUsageUploadStateStore(defaults: makeDefaults())
+        stateStore.save(
+            PrivateUsageUploadPersistence(
+                acknowledgedCiphertextHashesByBucketKey: [
+                    alreadyUploadedBucket.bucketKey: alreadyUploadedBucket.ciphertextHash
+                ]
+            )
+        )
+        let relayClient = FakePrivateUsageRelayClient()
+        let coordinator = PrivateUsageUploadCoordinator(
+            usageStore: usageStore,
+            credentialStore: credentialStore,
+            stateStore: stateStore,
+            relayClient: relayClient,
+            bucketBuilder: bucketBuilder,
+            sealer: sealer
+        )
+
+        let result = try await coordinator.syncNow(isEnabled: true, now: now)
+
+        XCTAssertEqual(result.accepted, 0)
+        XCTAssertEqual(result.acceptedSharedSummaryCount, 1)
+        XCTAssertEqual(result.attemptedBucketCount, 0)
+        XCTAssertEqual(result.attemptedSharedSummaryCount, 1)
+        XCTAssertEqual(relayClient.uploadedBucketCounts, [0])
+        XCTAssertEqual(relayClient.uploadedSharedSummaryKeys, [["2026-06-07:daily"]])
+        XCTAssertEqual(relayClient.uploadedKeyEnvelopeCounts, [0])
         XCTAssertEqual(coordinator.status(isEnabled: true, now: now).queuedBucketCount, 0)
     }
 
@@ -1944,6 +2068,8 @@ private final class FakePrivateUsageRelayClient: PrivateUsageRelayClienting, @un
     private let lock = NSLock()
     private(set) var uploadedBucketCounts = [Int]()
     private(set) var uploadedBucketKeys = [[String]]()
+    private(set) var uploadedSharedSummaryCounts = [Int]()
+    private(set) var uploadedSharedSummaryKeys = [[String]]()
     private(set) var uploadedKeyEnvelopeCounts = [Int]()
     private(set) var exchangedGrantCodes = [String]()
     private(set) var exchangedDeviceNames = [String?]()
@@ -1975,6 +2101,7 @@ private final class FakePrivateUsageRelayClient: PrivateUsageRelayClienting, @un
     func uploadBuckets(
         credential: PrivateUsageDeviceCredential,
         buckets: [PrivateUsageEncryptedBucket],
+        sharedSummaries: [PrivateUsageSharedSummary],
         keyEnvelopes: [PrivateUsageKeyEnvelope]
     ) async throws -> PrivateUsageUploadResponse {
         if let uploadError {
@@ -1983,10 +2110,13 @@ private final class FakePrivateUsageRelayClient: PrivateUsageRelayClienting, @un
         lock.withLock {
             uploadedBucketCounts.append(buckets.count)
             uploadedBucketKeys.append(buckets.map(\.bucketKey))
+            uploadedSharedSummaryCounts.append(sharedSummaries.count)
+            uploadedSharedSummaryKeys.append(sharedSummaries.map(\.bucketKey))
             uploadedKeyEnvelopeCounts.append(keyEnvelopes.count)
         }
         return PrivateUsageUploadResponse(
             accepted: acceptedOverride ?? buckets.count,
+            acceptedSharedSummaries: sharedSummaries.count,
             uploadedAt: "2026-06-08T00:00:00.000Z"
         )
     }

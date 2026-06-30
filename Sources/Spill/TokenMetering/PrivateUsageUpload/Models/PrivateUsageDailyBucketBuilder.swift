@@ -74,6 +74,44 @@ struct PrivateUsageDailyBucketBuilder: Sendable {
         return buckets
     }
 
+    func makeDirtySharedSummaries(
+        events: [TokenUsageEvent],
+        acknowledgedHashesByBucketKey: [String: String],
+        now: Date = Date(),
+        limit: Int = 31,
+        earliestBucketStart: Date? = nil,
+        includeCurrentDay: Bool = false
+    ) throws -> [PrivateUsageSharedSummary] {
+        guard limit > 0 else {
+            return []
+        }
+
+        let aggregates = makeDailyAggregates(
+            events: events,
+            now: now,
+            earliestBucketStart: earliestBucketStart,
+            includeCurrentDay: includeCurrentDay
+        )
+        var summaries = [PrivateUsageSharedSummary]()
+        summaries.reserveCapacity(min(aggregates.count, limit))
+
+        for aggregate in aggregates {
+            let summary = PrivateUsageSharedSummary(aggregate: aggregate)
+            let summaryHash = try summary.canonicalHash()
+            if acknowledgedHashesByBucketKey[summary.bucketKey] == summaryHash {
+                continue
+            }
+
+            summaries.append(summary)
+
+            if summaries.count >= limit {
+                break
+            }
+        }
+
+        return summaries
+    }
+
     func makeDailyAggregates(
         events: [TokenUsageEvent],
         now: Date = Date(),
