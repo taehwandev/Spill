@@ -311,6 +311,7 @@ final class AXMenuBarItemScanner: ObservableObject {
                     bundleIdentifier: request.bundleIdentifier,
                     processIdentifier: request.processIdentifier
                 ) {
+                    MenuBarIconImageCache.shared.prepareImage(for: imageData)
                     loaded[request.id] = (request.key, imageData)
                 } else {
                     missingKeys.insert(request.key)
