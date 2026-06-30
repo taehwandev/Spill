@@ -91,6 +91,11 @@ final class PrivateUsageUploadTests: XCTestCase {
                     model: "gpt-5",
                     input: 120,
                     output: 80,
+                    tokenAccounting: TokenUsageAccounting(
+                        uncachedInputTokens: 40,
+                        cacheReadInputTokens: 80,
+                        reasoningOutputTokens: 10
+                    ),
                     createdAt: yesterdayNoon
                 ),
                 makeEvent(
@@ -141,6 +146,13 @@ final class PrivateUsageUploadTests: XCTestCase {
         let aggregate = try JSONDecoder().decode(PrivateUsageDailyAggregate.self, from: plaintext)
         XCTAssertEqual(aggregate.totals.eventCount, 3)
         XCTAssertEqual(aggregate.totals.totalTokens, 285)
+        XCTAssertEqual(aggregate.totals.accounting.accountedEventCount, 1)
+        XCTAssertEqual(aggregate.totals.accounting.unclassifiedEventCount, 2)
+        XCTAssertEqual(aggregate.totals.accounting.uncachedInputTokens, 40)
+        XCTAssertEqual(aggregate.totals.accounting.cacheReadInputTokens, 80)
+        XCTAssertEqual(aggregate.totals.accounting.unclassifiedInputTokens, 59)
+        XCTAssertEqual(aggregate.totals.accounting.reasoningOutputTokens, 10)
+        XCTAssertEqual(aggregate.modelTotals["gpt-5"]?.accounting.cacheReadInputTokens, 80)
         XCTAssertEqual(aggregate.toolTotals["codex"]?.totalTokens, 210)
         XCTAssertEqual(aggregate.toolTotals["claude"]?.totalTokens, 75)
         XCTAssertEqual(aggregate.modelTotals["gpt-5"]?.totalTokens, 210)
@@ -1702,6 +1714,7 @@ final class PrivateUsageUploadTests: XCTestCase {
         model: String,
         input: Int,
         output: Int,
+        tokenAccounting: TokenUsageAccounting? = nil,
         createdAt: Date
     ) -> TokenUsageEvent {
         TokenUsageEvent(
@@ -1727,6 +1740,7 @@ final class PrivateUsageUploadTests: XCTestCase {
                 generatedOutput: 0,
                 unknown: input + output
             ),
+            tokenAccounting: tokenAccounting,
             latencyMS: 0,
             createdAt: ISO8601DateFormatter.tokenUsage.string(from: createdAt)
         )
@@ -1741,6 +1755,7 @@ final class PrivateUsageUploadTests: XCTestCase {
         model: String,
         input: Int,
         output: Int,
+        tokenAccounting: TokenUsageAccounting? = nil,
         createdAtString: String
     ) -> TokenUsageEvent {
         TokenUsageEvent(
@@ -1766,6 +1781,7 @@ final class PrivateUsageUploadTests: XCTestCase {
                 generatedOutput: 0,
                 unknown: input + output
             ),
+            tokenAccounting: tokenAccounting,
             latencyMS: 0,
             createdAt: createdAtString
         )

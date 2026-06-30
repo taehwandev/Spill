@@ -556,6 +556,11 @@ final class TokenUsageHistoryImportCoordinatorTests: XCTestCase {
         XCTAssertEqual(events.map { $0["input_tokens"] as? Int }, [10, 5, 7])
         XCTAssertEqual(events.map { $0["output_tokens"] as? Int }, [2, 3, 4])
         XCTAssertEqual(try inboxEventFileCount(in: inboxURL), 1)
+        let accounting = try inboxAccountingRecords(in: inboxURL)
+        XCTAssertEqual(accounting.count, 3)
+        XCTAssertEqual(accounting.first?["uncached_input_tokens"] as? Int, 6)
+        XCTAssertEqual(accounting.first?["cache_read_input_tokens"] as? Int, 4)
+        XCTAssertEqual(accounting.first?["reasoning_output_tokens"] as? Int, 0)
 
         let secondOutput = try runProcess(
             executable: "/usr/bin/env",
@@ -1344,7 +1349,7 @@ final class TokenUsageHistoryImportCoordinatorTests: XCTestCase {
 
     private static var codexTokenCountFixture: String {
         """
-        {"timestamp":"2026-06-18T00:00:00.000Z","type":"event_msg","payload":{"type":"token_count","info":{"model":"gpt-5","last_token_usage":{"input_tokens":10,"output_tokens":2,"total_tokens":12},"total_token_usage":{"input_tokens":10,"output_tokens":2,"total_tokens":12}}}}
+        {"timestamp":"2026-06-18T00:00:00.000Z","type":"event_msg","payload":{"type":"token_count","info":{"model":"gpt-5","last_token_usage":{"input_tokens":10,"cached_input_tokens":4,"output_tokens":2,"total_tokens":12},"total_token_usage":{"input_tokens":10,"cached_input_tokens":4,"output_tokens":2,"total_tokens":12}}}}
         {"timestamp":"2026-06-18T00:01:00.000Z","type":"event_msg","payload":{"type":"token_count","info":{"model":"gpt-5","last_token_usage":{"input_tokens":5,"output_tokens":3,"total_tokens":8},"total_token_usage":{"input_tokens":15,"output_tokens":5,"total_tokens":20}}}}
         {"timestamp":"2026-06-18T00:02:00.000Z","type":"event_msg","payload":{"type":"token_count","info":{"model":"gpt-5","last_token_usage":{"input_tokens":7,"output_tokens":4,"total_tokens":11}}}}
 
@@ -1451,6 +1456,25 @@ final class TokenUsageHistoryImportCoordinatorTests: XCTestCase {
         )
         .filter { $0.pathExtension == "json" || $0.pathExtension == "jsonl" }
         .count
+    }
+
+    private func inboxAccountingRecords(in inboxURL: URL) throws -> [[String: Any]] {
+        let files = try FileManager.default.contentsOfDirectory(
+            at: inboxURL,
+            includingPropertiesForKeys: nil
+        )
+        .filter { $0.pathExtension == "accounting" }
+        .sorted { $0.lastPathComponent < $1.lastPathComponent }
+
+        return try files.flatMap { url -> [[String: Any]] in
+            let contents = try String(contentsOf: url)
+            return try contents
+                .split(whereSeparator: \.isNewline)
+                .map { line in
+                    let lineData = Data(String(line).utf8)
+                    return try XCTUnwrap(JSONSerialization.jsonObject(with: lineData) as? [String: Any])
+                }
+        }
     }
 }
 

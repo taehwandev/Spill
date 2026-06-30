@@ -128,6 +128,20 @@ extension TokenUsageStore {
             generatedOutput: Int(sqlite3_column_int64(statement, offset + 19)),
             unknown: Int(sqlite3_column_int64(statement, offset + 20))
         )
+        let tokenAccounting: TokenUsageAccounting?
+        if let uncachedInputTokens = optionalColumnInt(statement, offset + 21),
+           let cacheCreationInputTokens = optionalColumnInt(statement, offset + 22),
+           let cacheReadInputTokens = optionalColumnInt(statement, offset + 23),
+           let reasoningOutputTokens = optionalColumnInt(statement, offset + 24) {
+            tokenAccounting = TokenUsageAccounting(
+                uncachedInputTokens: uncachedInputTokens,
+                cacheCreationInputTokens: cacheCreationInputTokens,
+                cacheReadInputTokens: cacheReadInputTokens,
+                reasoningOutputTokens: reasoningOutputTokens
+            )
+        } else {
+            tokenAccounting = nil
+        }
         let event = TokenUsageEvent(
             schemaVersion: 1,
             deviceID: deviceID,
@@ -143,6 +157,7 @@ extension TokenUsageStore {
             outputTokens: outputTokens,
             totalTokens: totalTokens,
             tokenBreakdown: tokenBreakdown,
+            tokenAccounting: tokenAccounting,
             latencyMS: latencyMS,
             createdAt: createdAt
         )
@@ -159,6 +174,13 @@ extension TokenUsageStore {
             return nil
         }
         return String(cString: text)
+    }
+
+    static func optionalColumnInt(_ statement: OpaquePointer, _ index: Int32) -> Int? {
+        guard sqlite3_column_type(statement, index) != SQLITE_NULL else {
+            return nil
+        }
+        return Int(sqlite3_column_int64(statement, index))
     }
 
 }

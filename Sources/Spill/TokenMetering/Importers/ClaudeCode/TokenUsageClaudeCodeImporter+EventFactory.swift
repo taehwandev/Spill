@@ -55,6 +55,7 @@ extension TokenUsageClaudeCodeImporter {
                 generatedOutput: outputTokens,
                 unknown: inputTokens
             ),
+            tokenAccounting: turn.tokenAccounting,
             latencyMS: 0,
             createdAt: ISO8601DateFormatter.tokenUsage.string(from: createdAt)
         )

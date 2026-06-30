@@ -48,6 +48,160 @@ const SHELL_TOOL_NAMES = new Set([
   "terminal",
 ]);
 
+const codexSessionEventSupport = {
+  accountingRecordForEvent(event, delta) {
+    return {
+      schema_version: 1,
+      span_id: event.span_id,
+      ai_tool: event.ai_tool,
+      uncached_input_tokens: delta.uncachedInputTokens,
+      cache_creation_input_tokens: delta.cacheCreationInputTokens,
+      cache_read_input_tokens: delta.cacheReadInputTokens,
+      reasoning_output_tokens: delta.reasoningOutputTokens,
+    };
+  },
+
+  toSpillEvent({
+    sourcePath,
+    sessionID,
+    eventIndex,
+    timestamp,
+    model,
+    inputTokens,
+    outputTokens,
+    cumulativeTotal,
+    projectID,
+    taskType,
+    stage,
+  }) {
+    const totalTokens = inputTokens + outputTokens;
+    const sessionKey = sessionID || sourcePath;
+    const cumulativeKey = cumulativeTotal > 0 ? String(cumulativeTotal) : String(eventIndex);
+    const spanHash = opaqueHash(`${sourcePath}:${sessionKey}:${cumulativeKey}:${timestamp.toISOString()}`);
+    const runHash = opaqueHash(sessionKey);
+
+    return {
+      schema_version: 1,
+      device_id: "device_local",
+      project_id: optionalOpaqueID(projectID) ?? "project_global",
+      artifact_id: "artifact_codex",
+      run_id: `run_${runHash}`,
+      span_id: `span_${spanHash}`,
+      ai_tool: "codex",
+      task_type: taskType,
+      stage,
+      model: safeModel(model),
+      input_tokens: inputTokens,
+      output_tokens: outputTokens,
+      total_tokens: totalTokens,
+      token_breakdown: {
+        system: 0,
+        user: 0,
+        history: 0,
+        repo_context: 0,
+        tool_output: 0,
+        generated_output: outputTokens,
+        unknown: inputTokens,
+      },
+      latency_ms: 0,
+      created_at: timestamp.toISOString(),
+    };
+  }
+};
+
+const codexSessionTransportSupport = {
+  async readBridgeSpanIDs(url) {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        const response = await fetch(url, {
+          headers: { "Connection": "close" },
+        });
+        if (!response.ok) return new Set();
+        const envelope = await response.json();
+        const events = Array.isArray(envelope.events) ? envelope.events : [];
+        return new Set(events.map((event) => event.span_id).filter((spanID) => typeof spanID === "string"));
+      } catch {
+        if (attempt < 2) {
+          await sleep(100 * (attempt + 1));
+          continue;
+        }
+        if (strict) fail("bridge_unavailable", false);
+        return new Set();
+      }
+    }
+    return new Set();
+  },
+
+  async postEvent(url, event) {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        const response = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Connection": "close",
+          },
+          body: JSON.stringify(event),
+        });
+        if (!response.ok) fail(`bridge_http_${response.status}`, false);
+        return;
+      } catch {
+        if (attempt < 2) {
+          await sleep(100 * (attempt + 1));
+          continue;
+        }
+        fail("bridge_unavailable", false);
+      }
+    }
+  },
+
+  async appendInboxEvent(path, event, accounting = null) {
+    await mkdir(path, { recursive: true, mode: 0o700 });
+    const id = randomUUID();
+    const temporaryPath = join(path, `.${id}.tmp`);
+    const finalPath = join(path, `${id}.json`);
+    const accountingTemporaryPath = join(path, `.${id}.accounting.tmp`);
+    const accountingFinalPath = join(path, `${id}.accounting`);
+    await writeFile(temporaryPath, JSON.stringify(event), {
+      encoding: "utf8",
+      mode: 0o600,
+      flag: "wx",
+    });
+    if (accounting) {
+      await writeFile(accountingTemporaryPath, `${JSON.stringify(accounting)}\n`, {
+        encoding: "utf8",
+        mode: 0o600,
+        flag: "wx",
+      });
+      await rename(accountingTemporaryPath, accountingFinalPath);
+    }
+    await rename(temporaryPath, finalPath);
+  }
+};
+
+const codexSessionStateSupport = {
+  async readState(path) {
+    try {
+      const parsed = JSON.parse(await readFile(path, "utf8"));
+      if (parsed && Array.isArray(parsed.sentSpanIDs)) {
+        return {
+          updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : "",
+          sentSpanIDs: parsed.sentSpanIDs.filter((value) => typeof value === "string"),
+          sessionCursors: plainObject(parsed.sessionCursors) ? parsed.sessionCursors : {},
+        };
+      }
+    } catch {
+      // Missing or corrupt state should not block local metering.
+    }
+    return { updatedAt: "", sentSpanIDs: [], sessionCursors: {} };
+  },
+
+  async writeState(path, state) {
+    await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+    await writeFile(path, `${JSON.stringify(state, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+  }
+};
+
 const options = parseArgs(process.argv.slice(2));
 const codexHome = options.codexHome ?? process.env.CODEX_HOME ?? join(homedir(), ".codex");
 const port = process.env.SPILL_TOKEN_USAGE_PORT || DEFAULT_PORT;
@@ -128,25 +282,12 @@ if (Number.isNaN(afterDate.getTime())) {
   fail("invalid_after", true);
 }
 
-if (watch) {
-  while (true) {
-    await importOnce().catch((error) => {
-      if (strict) {
-        throw error;
-      }
-    });
-    await sleep(intervalMS);
-  }
-} else {
-  await importOnce();
-}
-
 async function importOnce() {
-  const state = await readState(statePath);
+  const state = await codexSessionStateSupport.readState(statePath);
   const storedSpans = dryRun
     ? new Set()
     : transport === "http"
-      ? await readBridgeSpanIDs(endpoint)
+      ? await codexSessionTransportSupport.readBridgeSpanIDs(endpoint)
       : await readLocalSpanIDs(eventsPath, inboxPath);
   const sources = await discoverCodexSessionFiles(codexHome, afterDate);
   let scannedFiles = 0;
@@ -156,8 +297,9 @@ async function importOnce() {
 
   for (const source of sources) {
     scannedFiles += 1;
-    const events = await parseSessionFile(source, afterDate, state);
-    for (const event of events) {
+    const records = await parseSessionFile(source, afterDate, state);
+    for (const record of records) {
+      const event = record.event;
       if (state.sentSpanIDs.includes(event.span_id) || storedSpans.has(event.span_id)) {
         skippedSeen += 1;
         continue;
@@ -169,9 +311,9 @@ async function importOnce() {
         importedEvents += 1;
       } else {
         if (transport === "http") {
-          await postEvent(endpoint, event);
+          await codexSessionTransportSupport.postEvent(endpoint, event);
         } else {
-          await appendInboxEvent(inboxPath, event);
+          await codexSessionTransportSupport.appendInboxEvent(inboxPath, event, record.accounting);
         }
         importedEvents += 1;
         storedSpans.add(event.span_id);
@@ -186,7 +328,7 @@ async function importOnce() {
 
   state.updatedAt = new Date().toISOString();
   if (!dryRun) {
-    await writeState(statePath, state);
+    await codexSessionStateSupport.writeState(statePath, state);
     if (runtimeLabel.hasLabel && (importedEvents > 0 || markedExisting > 0 || skippedSeen > 0)) {
       await unlink(labelPath).catch(() => {});
     }
@@ -302,8 +444,7 @@ async function parseSessionFile(path, after, state) {
   counters.eventIndex += 1;
   const fallbackLabel = fallbackLabelFromTools(counters.toolNames);
   const eventLabel = labelForTimestamp(runtimeLabel, latest.timestamp);
-  return [
-    toSpillEvent({
+  const event = codexSessionEventSupport.toSpillEvent({
       sourcePath: path,
       sessionID: counters.sessionID,
       eventIndex: counters.eventIndex,
@@ -315,8 +456,11 @@ async function parseSessionFile(path, after, state) {
       projectID: eventLabel.projectID,
       taskType: taskTypeOverride ?? eventLabel.taskType ?? fallbackLabel.taskType,
       stage: stageOverride ?? eventLabel.stage ?? fallbackLabel.stage,
-    }),
-  ];
+  });
+  return [{
+    event,
+    accounting: codexSessionEventSupport.accountingRecordForEvent(event, delta),
+  }];
 }
 
 function captureSessionMeta(line, counters) {
@@ -351,7 +495,15 @@ function usageDelta(record) {
   }
 
   if (inputTokens === 0 && outputTokens === 0) return null;
-  return { inputTokens, outputTokens };
+  const cacheReadInputTokens = Math.min(record.last.cachedInputTokens, inputTokens);
+  return {
+    inputTokens,
+    outputTokens,
+    cacheReadInputTokens,
+    uncachedInputTokens: Math.max(0, inputTokens - cacheReadInputTokens),
+    cacheCreationInputTokens: 0,
+    reasoningOutputTokens: record.last.reasoningTokens,
+  };
 }
 
 function cursorFromUsage(record) {
@@ -462,111 +614,6 @@ function allKnownReadOrShell(values) {
   return true;
 }
 
-function toSpillEvent({
-  sourcePath,
-  sessionID,
-  eventIndex,
-  timestamp,
-  model,
-  inputTokens,
-  outputTokens,
-  cumulativeTotal,
-  projectID,
-  taskType,
-  stage,
-}) {
-  const totalTokens = inputTokens + outputTokens;
-  const sessionKey = sessionID || sourcePath;
-  const cumulativeKey = cumulativeTotal > 0 ? String(cumulativeTotal) : String(eventIndex);
-  const spanHash = opaqueHash(`${sourcePath}:${sessionKey}:${cumulativeKey}:${timestamp.toISOString()}`);
-  const runHash = opaqueHash(sessionKey);
-
-  return {
-    schema_version: 1,
-    device_id: "device_local",
-    project_id: optionalOpaqueID(projectID) ?? "project_global",
-    artifact_id: "artifact_codex",
-    run_id: `run_${runHash}`,
-    span_id: `span_${spanHash}`,
-    ai_tool: "codex",
-    task_type: taskType,
-    stage,
-    model: safeModel(model),
-    input_tokens: inputTokens,
-    output_tokens: outputTokens,
-    total_tokens: totalTokens,
-    token_breakdown: {
-      system: 0,
-      user: 0,
-      history: 0,
-      repo_context: 0,
-      tool_output: 0,
-      generated_output: outputTokens,
-      unknown: inputTokens,
-    },
-    latency_ms: 0,
-    created_at: timestamp.toISOString(),
-  };
-}
-
-async function readBridgeSpanIDs(url) {
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    try {
-      const response = await fetch(url, {
-        headers: { "Connection": "close" },
-      });
-      if (!response.ok) return new Set();
-      const envelope = await response.json();
-      const events = Array.isArray(envelope.events) ? envelope.events : [];
-      return new Set(events.map((event) => event.span_id).filter((spanID) => typeof spanID === "string"));
-    } catch {
-      if (attempt < 2) {
-        await sleep(100 * (attempt + 1));
-        continue;
-      }
-      if (strict) fail("bridge_unavailable", false);
-      return new Set();
-    }
-  }
-  return new Set();
-}
-
-async function postEvent(url, event) {
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    try {
-      const response = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Connection": "close",
-        },
-        body: JSON.stringify(event),
-      });
-      if (!response.ok) fail(`bridge_http_${response.status}`, false);
-      return;
-    } catch {
-      if (attempt < 2) {
-        await sleep(100 * (attempt + 1));
-        continue;
-      }
-      fail("bridge_unavailable", false);
-    }
-  }
-}
-
-async function appendInboxEvent(path, event) {
-  await mkdir(path, { recursive: true, mode: 0o700 });
-  const id = randomUUID();
-  const temporaryPath = join(path, `.${id}.tmp`);
-  const finalPath = join(path, `${id}.json`);
-  await writeFile(temporaryPath, JSON.stringify(event), {
-    encoding: "utf8",
-    mode: 0o600,
-    flag: "wx",
-  });
-  await rename(temporaryPath, finalPath);
-}
-
 async function readLocalSpanIDs(eventsFile, inboxFile) {
   return new Set([
     ...await readJSONArraySpanIDs(eventsFile),
@@ -625,22 +672,6 @@ async function readQueuedInboxSpanIDs(path) {
   return spanIDs;
 }
 
-async function readState(path) {
-  try {
-    const parsed = JSON.parse(await readFile(path, "utf8"));
-    if (parsed && Array.isArray(parsed.sentSpanIDs)) {
-      return {
-        updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : "",
-        sentSpanIDs: parsed.sentSpanIDs.filter((value) => typeof value === "string"),
-        sessionCursors: plainObject(parsed.sessionCursors) ? parsed.sessionCursors : {},
-      };
-    }
-  } catch {
-    // Missing or corrupt state should not block local metering.
-  }
-  return { updatedAt: "", sentSpanIDs: [], sessionCursors: {} };
-}
-
 async function readRuntimeLabel(path, expectedTool) {
   let parsed = null;
   try {
@@ -690,11 +721,6 @@ function optionalOpaqueID(value) {
   return typeof value === "string" && /^[A-Za-z0-9_-]{6,64}$/.test(value)
     ? value
     : null;
-}
-
-async function writeState(path, state) {
-  await mkdir(dirname(path), { recursive: true, mode: 0o700 });
-  await writeFile(path, `${JSON.stringify(state, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
 }
 
 async function safeReadDir(path) {
@@ -851,6 +877,19 @@ function normalizedTransport(value) {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+if (watch) {
+  while (true) {
+    await importOnce().catch((error) => {
+      if (strict) {
+        throw error;
+      }
+    });
+    await sleep(intervalMS);
+  }
+} else {
+  await importOnce();
 }
 
 function fail(code, alwaysExit) {

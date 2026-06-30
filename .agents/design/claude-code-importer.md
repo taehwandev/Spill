@@ -64,6 +64,11 @@ Do NOT hash the session ID for run_id.
 - Store `input_tokens + cache_creation_input_tokens + cache_read_input_tokens`
   as the event `input_tokens`. This matches the Codex measurement baseline
   because Codex `input_tokens` already includes cached input reads.
+- Preserve `input_tokens`, `cache_creation_input_tokens`, and
+  `cache_read_input_tokens` as local-only token accounting buckets when writing
+  to the app-owned store or inbox sidecar. These buckets are not allowed in the
+  strict usage event JSON, but they are required for model-specific cost
+  estimates and encrypted aggregate sync.
 - Keep `cache_read_input_tokens` out of the `span_id` input component. The
   identity component is `span_input = input_tokens +
   cache_creation_input_tokens`. This preserves stable event identity when

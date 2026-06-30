@@ -45,6 +45,11 @@ extension TokenUsageInboxReader {
 
         for url in result.consumedURLs where !rewrittenURLs.contains(url) {
             try? FileManager.default.removeItem(at: url)
+            try? FileManager.default.removeItem(at: accountingInboxURL(for: url))
         }
+    }
+
+    private func accountingInboxURL(for eventURL: URL) -> URL {
+        eventURL.deletingPathExtension().appendingPathExtension("accounting")
     }
 }

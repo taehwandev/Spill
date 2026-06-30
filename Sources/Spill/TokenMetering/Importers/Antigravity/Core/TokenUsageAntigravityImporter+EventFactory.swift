@@ -43,6 +43,10 @@ extension TokenUsageAntigravityImporter {
                 generatedOutput: outputTokens,
                 unknown: inputTokens
             ),
+            tokenAccounting: TokenUsageAccounting(
+                uncachedInputTokens: record.usage.uncachedInputTokens,
+                cacheReadInputTokens: record.usage.cachedInputTokens
+            ),
             latencyMS: 0,
             createdAt: ISO8601DateFormatter.tokenUsage.string(from: record.createdAt)
         )

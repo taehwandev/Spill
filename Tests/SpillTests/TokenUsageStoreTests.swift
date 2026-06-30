@@ -1242,6 +1242,17 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(summary.importedEvents, 3)
         XCTAssertEqual(store.loadEvents().map(\.totalTokens).sorted(), [12, 100, 132])
         XCTAssertEqual(store.loadEvents().map(\.inputTokens).sorted(), [9, 100, 125])
+        let readTurn = try XCTUnwrap(store.loadEvents().first { $0.outputTokens == 7 })
+        XCTAssertEqual(readTurn.tokenAccounting?.uncachedInputTokens, 20)
+        XCTAssertEqual(readTurn.tokenAccounting?.cacheCreationInputTokens, 5)
+        XCTAssertEqual(readTurn.tokenAccounting?.cacheReadInputTokens, 100)
+        let cacheOnlyTurn = try XCTUnwrap(store.loadEvents().first { $0.inputTokens == 100 && $0.outputTokens == 0 })
+        XCTAssertEqual(cacheOnlyTurn.tokenAccounting?.uncachedInputTokens, 0)
+        XCTAssertEqual(cacheOnlyTurn.tokenAccounting?.cacheReadInputTokens, 100)
+        let iterationTurn = try XCTUnwrap(store.loadEvents().first { $0.outputTokens == 3 })
+        XCTAssertEqual(iterationTurn.tokenAccounting?.uncachedInputTokens, 6)
+        XCTAssertEqual(iterationTurn.tokenAccounting?.cacheCreationInputTokens, 2)
+        XCTAssertEqual(iterationTurn.tokenAccounting?.cacheReadInputTokens, 1)
         XCTAssertEqual(Set(store.loadEvents().map(\.stage.rawValue)), ["summarize"])
         let state = try decodedJSONObject(from: Data(contentsOf: rootURL.appendingPathComponent("claude-active-state.json")))
         let nextTurnIndices = try XCTUnwrap(state["next_turn_index_by_source"] as? [String: Any])
@@ -1377,6 +1388,9 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(event.totalTokens, 210)
         XCTAssertEqual(event.tokenBreakdown.unknown, 176)
         XCTAssertEqual(event.tokenBreakdown.generatedOutput, 34)
+        XCTAssertEqual(event.tokenAccounting?.uncachedInputTokens, 120)
+        XCTAssertEqual(event.tokenAccounting?.cacheReadInputTokens, 56)
+        XCTAssertEqual(event.tokenAccounting?.cacheCreationInputTokens, 0)
 
         let duplicateSummary = importer.importRecentEvents(into: store, since: Date(timeIntervalSince1970: 0))
         XCTAssertEqual(duplicateSummary.scannedGenerationRows, 0)
@@ -3475,6 +3489,69 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: batchURL.path))
     }
 
+    func testStoreDrainsAccountingSidecarWithQueuedJSONLInboxBatchEvents() throws {
+        let eventsURL = temporaryEventsURL()
+        let inboxURL = temporaryInboxURL()
+        let store = TokenUsageStore(fileURL: eventsURL, inboxURL: inboxURL)
+        let event = Self.safeEvent(
+            aiTool: .codex,
+            spanID: "span_jsonl_accounting_01",
+            inputTokens: 20,
+            outputTokens: 5
+        )
+        try FileManager.default.createDirectory(
+            at: inboxURL,
+            withIntermediateDirectories: true
+        )
+        let batchURL = inboxURL.appendingPathComponent("001.jsonl")
+        let accountingURL = inboxURL.appendingPathComponent("001.accounting")
+        let eventLine = String(data: try TokenUsageSanitizer.eventData(event), encoding: .utf8) ?? ""
+        try Data((eventLine + "\n").utf8)
+            .write(to: batchURL)
+        try Data(
+            """
+            {"schema_version":1,"span_id":"span_jsonl_accounting_01","ai_tool":"codex","uncached_input_tokens":12,"cache_creation_input_tokens":0,"cache_read_input_tokens":8,"reasoning_output_tokens":2}
+
+            """.utf8
+        ).write(to: accountingURL)
+
+        let events = store.importQueuedEvents()
+
+        XCTAssertEqual(events.map(\.spanID), ["span_jsonl_accounting_01"])
+        XCTAssertEqual(events.first?.tokenAccounting?.uncachedInputTokens, 12)
+        XCTAssertEqual(events.first?.tokenAccounting?.cacheReadInputTokens, 8)
+        XCTAssertEqual(events.first?.tokenAccounting?.reasoningOutputTokens, 2)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: batchURL.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: accountingURL.path))
+
+        let encoded = try decodedJSONObject(from: TokenUsageSanitizer.eventData(events[0]))
+        XCTAssertNil(encoded["uncached_input_tokens"])
+        XCTAssertNil(encoded["token_accounting"])
+        XCTAssertNil(encoded["accounting"])
+    }
+
+    func testStorePersistsTokenAccountingColumns() throws {
+        let store = TokenUsageStore(fileURL: temporaryEventsURL())
+        let event = Self.safeEvent(
+            aiTool: .claude,
+            spanID: "span_accounting_roundtrip",
+            inputTokens: 125,
+            outputTokens: 7,
+            tokenAccounting: TokenUsageAccounting(
+                uncachedInputTokens: 20,
+                cacheCreationInputTokens: 5,
+                cacheReadInputTokens: 100
+            )
+        )
+
+        try store.appendEvent(event)
+
+        let loaded = try XCTUnwrap(store.loadEvents().first)
+        XCTAssertEqual(loaded.tokenAccounting?.uncachedInputTokens, 20)
+        XCTAssertEqual(loaded.tokenAccounting?.cacheCreationInputTokens, 5)
+        XCTAssertEqual(loaded.tokenAccounting?.cacheReadInputTokens, 100)
+    }
+
     func testStoreCanEnqueueInboxEventAtomically() throws {
         let eventsURL = temporaryEventsURL()
         let inboxURL = temporaryInboxURL()
@@ -4136,6 +4213,11 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(events.first?["ai_tool"] as? String, "claude")
         XCTAssertEqual(events.first?["input_tokens"] as? Int, 125)
         XCTAssertEqual(events.first?["output_tokens"] as? Int, 7)
+        let accounting = try accountingObjects(in: inboxURL)
+        XCTAssertEqual(accounting.count, 1)
+        XCTAssertEqual(accounting.first?["uncached_input_tokens"] as? Int, 20)
+        XCTAssertEqual(accounting.first?["cache_creation_input_tokens"] as? Int, 5)
+        XCTAssertEqual(accounting.first?["cache_read_input_tokens"] as? Int, 100)
         let stateURL = sessionStateURL.appendingPathComponent("claudeDiag01.json")
         let state = try String(contentsOf: stateURL)
         XCTAssertTrue(state.contains(#""byte_offset""#))
@@ -4170,6 +4252,7 @@ final class TokenUsageStoreTests: XCTestCase {
         let refreshedEvents = try antigravityEventObjects(in: inboxURL)
         XCTAssertEqual(refreshedEvents.count, 3)
         XCTAssertEqual(refreshedEvents.compactMap { $0["total_tokens"] as? Int }.sorted(), [9, 12, 132])
+        XCTAssertEqual(try accountingObjects(in: inboxURL).count, 3)
         XCTAssertFalse(FileManager.default.fileExists(atPath: emptyURL.path))
     }
 
@@ -4854,6 +4937,7 @@ final class TokenUsageStoreTests: XCTestCase {
         outputTokens: Int = 50,
         generatedOutput: Int? = nil,
         tokenBreakdown overrideTokenBreakdown: TokenUsageBreakdown? = nil,
+        tokenAccounting: TokenUsageAccounting? = nil,
         projectID: String = "project_local",
         taskType: TokenUsageTaskType = .analysis,
         stage: TokenUsageStage = .plan,
@@ -4911,6 +4995,7 @@ final class TokenUsageStoreTests: XCTestCase {
             outputTokens: outputTokens,
             totalTokens: totalTokens,
             tokenBreakdown: tokenBreakdown,
+            tokenAccounting: tokenAccounting,
             latencyMS: latencyMS,
             createdAt: resolvedCreatedAt
         )
@@ -5312,6 +5397,26 @@ final class TokenUsageStoreTests: XCTestCase {
             .filter { $0.pathExtension == "json" }
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
         return try files.map { try decodedJSONObject(from: Data(contentsOf: $0)) }
+    }
+
+    private func accountingObjects(in inboxURL: URL) throws -> [[String: Any]] {
+        guard FileManager.default.fileExists(atPath: inboxURL.path) else {
+            return []
+        }
+        let files = try FileManager.default.contentsOfDirectory(
+            at: inboxURL,
+            includingPropertiesForKeys: nil
+        )
+            .filter { $0.pathExtension == "accounting" }
+            .sorted { $0.lastPathComponent < $1.lastPathComponent }
+        return try files.flatMap { url -> [[String: Any]] in
+            let contents = try String(contentsOf: url)
+            return try contents
+                .split(whereSeparator: \.isNewline)
+                .map { line in
+                    try XCTUnwrap(JSONSerialization.jsonObject(with: Data(String(line).utf8)) as? [String: Any])
+                }
+        }
     }
 
     private func jsonData(_ object: Any) throws -> Data {

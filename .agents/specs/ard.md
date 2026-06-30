@@ -364,6 +364,15 @@ Rules:
   For Codex, `input_tokens` already includes cached input reads. Cost-weighted
   views may apply model-specific cache discounts later, but storage and
   default usage comparison must keep the raw exact counts.
+- Runtime importers preserve pricing-relevant token accounting separately from
+  the strict usage event JSON. The strict event schema remains limited to raw
+  `input_tokens`, `output_tokens`, `total_tokens`, and `token_breakdown`.
+  App-owned storage may attach local-only accounting fields for uncached input,
+  cache-creation input, cache-read input, unclassified input fallback, and
+  reasoning output. External file adapters that cannot write SQLite directly
+  may write a same-basename `.accounting` sidecar beside the `.json`/`.jsonl`
+  inbox event file; the sidecar may contain only span id, safe tool label, and
+  numeric accounting buckets.
 - Event identity is separate from display totals. When changing a runtime
   measurement baseline, importers should preserve stable event identity where
   possible and repair numeric totals in place instead of duplicating historical
@@ -476,6 +485,12 @@ Rules:
   pass must remain local-only, use existing exact-usage importers/queue drains,
   and must not inspect prompts, transcripts, source files, shell history, or
   arbitrary logs to infer usage.
+- Dirty daily buckets must aggregate the same local-only accounting buckets
+  used by local cost views. The encrypted plaintext includes accounting totals
+  inside each aggregate token-total object, including top-level totals and
+  grouped tool, model, task, stage, workflow, and Work Item totals. Unknown or
+  legacy rows without accounting are counted as unclassified input so model
+  pricing can remain honest without pretending cache splits were known.
 - Automatic upload keeps the daily completed-bucket cadence. Manual Sync Now may
   include the current local day's partial aggregate so explicit user sync can
   update the web dashboard's work-item list without waiting for the next day.

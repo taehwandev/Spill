@@ -29,7 +29,11 @@ final class TokenUsageStore: @unchecked Sendable {
     source_repo_context,
     source_tool_output,
     source_generated_output,
-    source_unknown
+    source_unknown,
+    accounting_uncached_input_tokens,
+    accounting_cache_creation_input_tokens,
+    accounting_cache_read_input_tokens,
+    accounting_reasoning_output_tokens
     """
 
     let fileURL: URL

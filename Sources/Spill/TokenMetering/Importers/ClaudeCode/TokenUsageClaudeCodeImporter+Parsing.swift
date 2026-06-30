@@ -10,6 +10,34 @@ extension TokenUsageClaudeCodeImporter {
         let inputTokens: Int
         let spanInputTokens: Int
         let outputTokens: Int
+        let tokenAccounting: TokenUsageAccounting
+    }
+
+    private struct UsageAmounts {
+        var input: Int
+        var spanInput: Int
+        var output: Int
+        var accounting: TokenUsageAccounting
+
+        static let zero = UsageAmounts(
+            input: 0,
+            spanInput: 0,
+            output: 0,
+            accounting: TokenUsageAccounting(uncachedInputTokens: 0)
+        )
+
+        mutating func add(_ other: UsageAmounts) {
+            input += other.input
+            spanInput += other.spanInput
+            output += other.output
+            accounting = TokenUsageAccounting(
+                uncachedInputTokens: accounting.uncachedInputTokens + other.accounting.uncachedInputTokens,
+                cacheCreationInputTokens: accounting.cacheCreationInputTokens
+                    + other.accounting.cacheCreationInputTokens,
+                cacheReadInputTokens: accounting.cacheReadInputTokens + other.accounting.cacheReadInputTokens,
+                reasoningOutputTokens: accounting.reasoningOutputTokens + other.accounting.reasoningOutputTokens
+            )
+        }
     }
 
     func parseTurns(
@@ -104,40 +132,44 @@ extension TokenUsageClaudeCodeImporter {
             turnIndex: turnIndex,
             inputTokens: inputTokens,
             spanInputTokens: spanInputTokens,
-            outputTokens: outputTokens
+            outputTokens: outputTokens,
+            tokenAccounting: usageAmounts.accounting
         ), true)
     }
 
     private func usageAmounts(
         _ usage: [String: Any],
         includeIterations: Bool = true
-    ) -> (input: Int, spanInput: Int, output: Int) {
+    ) -> UsageAmounts {
         let inputTokens = safeUsageToken(usage["input_tokens"])
         let cacheCreationTokens = cacheCreationTokens(from: usage)
         let cacheReadTokens = safeUsageToken(usage["cache_read_input_tokens"])
         let outputTokens = safeUsageToken(usage["output_tokens"])
 
         if inputTokens > 0 || cacheCreationTokens > 0 || cacheReadTokens > 0 || outputTokens > 0 {
-            return (
-                inputTokens + cacheCreationTokens + cacheReadTokens,
-                inputTokens + cacheCreationTokens,
-                outputTokens
+            return UsageAmounts(
+                input: inputTokens + cacheCreationTokens + cacheReadTokens,
+                spanInput: inputTokens + cacheCreationTokens,
+                output: outputTokens,
+                accounting: TokenUsageAccounting(
+                    uncachedInputTokens: inputTokens,
+                    cacheCreationInputTokens: cacheCreationTokens,
+                    cacheReadInputTokens: cacheReadTokens
+                )
             )
         }
 
         guard includeIterations,
               let iterations = usage["iterations"] as? [Any]
         else {
-            return (0, 0, 0)
+            return .zero
         }
 
-        return iterations.reduce(into: (input: 0, spanInput: 0, output: 0)) { totals, item in
+        return iterations.reduce(into: UsageAmounts.zero) { totals, item in
             guard let object = item as? [String: Any] else { return }
             let nestedUsage = (object["usage"] as? [String: Any]) ?? object
             let nestedAmounts = usageAmounts(nestedUsage, includeIterations: false)
-            totals.input += nestedAmounts.input
-            totals.spanInput += nestedAmounts.spanInput
-            totals.output += nestedAmounts.output
+            totals.add(nestedAmounts)
         }
     }
 

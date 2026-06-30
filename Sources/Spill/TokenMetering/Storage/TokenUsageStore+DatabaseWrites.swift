@@ -42,10 +42,7 @@ extension TokenUsageStore {
         }
     }
 
-    func insertEvent(_ event: TokenUsageEvent, database: OpaquePointer) throws -> Int {
-        try event.validate()
-
-        let sql = """
+    private static let insertEventSQL = """
         INSERT INTO token_usage_events (
             span_id,
             device_id,
@@ -67,9 +64,13 @@ extension TokenUsageStore {
             source_tool_output,
             source_generated_output,
             source_unknown,
+            accounting_uncached_input_tokens,
+            accounting_cache_creation_input_tokens,
+            accounting_cache_read_input_tokens,
+            accounting_reasoning_output_tokens,
             total_tokens,
             payload_json
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(span_id) DO UPDATE SET
             input_tokens = excluded.input_tokens,
             output_tokens = excluded.output_tokens,
@@ -81,6 +82,22 @@ extension TokenUsageStore {
             source_tool_output = excluded.source_tool_output,
             source_generated_output = excluded.source_generated_output,
             source_unknown = excluded.source_unknown,
+            accounting_uncached_input_tokens = COALESCE(
+                excluded.accounting_uncached_input_tokens,
+                token_usage_events.accounting_uncached_input_tokens
+            ),
+            accounting_cache_creation_input_tokens = COALESCE(
+                excluded.accounting_cache_creation_input_tokens,
+                token_usage_events.accounting_cache_creation_input_tokens
+            ),
+            accounting_cache_read_input_tokens = COALESCE(
+                excluded.accounting_cache_read_input_tokens,
+                token_usage_events.accounting_cache_read_input_tokens
+            ),
+            accounting_reasoning_output_tokens = COALESCE(
+                excluded.accounting_reasoning_output_tokens,
+                token_usage_events.accounting_reasoning_output_tokens
+            ),
             total_tokens = excluded.total_tokens,
             payload_json = json_set(
                 CAST(token_usage_events.payload_json AS TEXT),
@@ -109,11 +126,31 @@ extension TokenUsageStore {
                 OR token_usage_events.source_tool_output != excluded.source_tool_output
                 OR token_usage_events.source_generated_output != excluded.source_generated_output
                 OR token_usage_events.source_unknown != excluded.source_unknown
+                OR (
+                    excluded.accounting_uncached_input_tokens IS NOT NULL
+                    AND IFNULL(token_usage_events.accounting_uncached_input_tokens, -1) != excluded.accounting_uncached_input_tokens
+                )
+                OR (
+                    excluded.accounting_cache_creation_input_tokens IS NOT NULL
+                    AND IFNULL(token_usage_events.accounting_cache_creation_input_tokens, -1) != excluded.accounting_cache_creation_input_tokens
+                )
+                OR (
+                    excluded.accounting_cache_read_input_tokens IS NOT NULL
+                    AND IFNULL(token_usage_events.accounting_cache_read_input_tokens, -1) != excluded.accounting_cache_read_input_tokens
+                )
+                OR (
+                    excluded.accounting_reasoning_output_tokens IS NOT NULL
+                    AND IFNULL(token_usage_events.accounting_reasoning_output_tokens, -1) != excluded.accounting_reasoning_output_tokens
+                )
                 OR token_usage_events.total_tokens != excluded.total_tokens
             )
         """
+
+    func insertEvent(_ event: TokenUsageEvent, database: OpaquePointer) throws -> Int {
+        try event.validate()
+
         var statement: OpaquePointer?
-        guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
+        guard sqlite3_prepare_v2(database, Self.insertEventSQL, -1, &statement, nil) == SQLITE_OK,
               let statement
         else {
             throw TokenUsageStoreError.databaseWriteFailed
@@ -121,6 +158,15 @@ extension TokenUsageStore {
         defer { sqlite3_finalize(statement) }
 
         let payload = try TokenUsageSanitizer.eventData(event)
+        bindInsertEvent(event, payload: payload, to: statement)
+
+        guard sqlite3_step(statement) == SQLITE_DONE else {
+            throw TokenUsageStoreError.databaseWriteFailed
+        }
+        return Int(sqlite3_changes(database))
+    }
+
+    private func bindInsertEvent(_ event: TokenUsageEvent, payload: Data, to statement: OpaquePointer) {
         sqlite3_bind_text(statement, 1, event.spanID, -1, SQLITE_TRANSIENT)
         sqlite3_bind_text(statement, 2, event.deviceID, -1, SQLITE_TRANSIENT)
         sqlite3_bind_text(statement, 3, event.projectID, -1, SQLITE_TRANSIENT)
@@ -147,15 +193,22 @@ extension TokenUsageStore {
         sqlite3_bind_int64(statement, 18, sqlite3_int64(event.tokenBreakdown.toolOutput))
         sqlite3_bind_int64(statement, 19, sqlite3_int64(event.tokenBreakdown.generatedOutput))
         sqlite3_bind_int64(statement, 20, sqlite3_int64(event.tokenBreakdown.unknown))
-        sqlite3_bind_int64(statement, 21, sqlite3_int64(event.totalTokens))
+        bindOptionalInt(event.tokenAccounting?.uncachedInputTokens, to: statement, at: 21)
+        bindOptionalInt(event.tokenAccounting?.cacheCreationInputTokens, to: statement, at: 22)
+        bindOptionalInt(event.tokenAccounting?.cacheReadInputTokens, to: statement, at: 23)
+        bindOptionalInt(event.tokenAccounting?.reasoningOutputTokens, to: statement, at: 24)
+        sqlite3_bind_int64(statement, 25, sqlite3_int64(event.totalTokens))
         _ = payload.withUnsafeBytes { buffer in
-            sqlite3_bind_blob(statement, 22, buffer.baseAddress, Int32(buffer.count), SQLITE_TRANSIENT)
+            sqlite3_bind_blob(statement, 26, buffer.baseAddress, Int32(buffer.count), SQLITE_TRANSIENT)
         }
+    }
 
-        guard sqlite3_step(statement) == SQLITE_DONE else {
-            throw TokenUsageStoreError.databaseWriteFailed
+    private func bindOptionalInt(_ value: Int?, to statement: OpaquePointer, at index: Int32) {
+        if let value {
+            sqlite3_bind_int64(statement, index, sqlite3_int64(value))
+        } else {
+            sqlite3_bind_null(statement, index)
         }
-        return Int(sqlite3_changes(database))
     }
 
 }

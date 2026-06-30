@@ -109,7 +109,11 @@ extension TokenUsageStore {
             ("source_repo_context", "INTEGER"),
             ("source_tool_output", "INTEGER"),
             ("source_generated_output", "INTEGER"),
-            ("source_unknown", "INTEGER")
+            ("source_unknown", "INTEGER"),
+            ("accounting_uncached_input_tokens", "INTEGER"),
+            ("accounting_cache_creation_input_tokens", "INTEGER"),
+            ("accounting_cache_read_input_tokens", "INTEGER"),
+            ("accounting_reasoning_output_tokens", "INTEGER")
         ]
 
         for column in requiredColumns where !existingColumns.contains(column.name) {

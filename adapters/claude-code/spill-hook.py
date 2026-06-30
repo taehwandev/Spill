@@ -219,31 +219,72 @@ def _label_timeline_for_timestamp(timestamp: str) -> dict:
     }
 
 
-def _enqueue_event(event: dict) -> None:
+def _accounting_record_for_event(event: dict, accounting=None):
+    if not accounting:
+        return None
+    return {
+        "schema_version": 1,
+        "span_id": event["span_id"],
+        "ai_tool": event["ai_tool"],
+        "uncached_input_tokens": accounting.get("uncached_input_tokens", 0),
+        "cache_creation_input_tokens": accounting.get("cache_creation_input_tokens", 0),
+        "cache_read_input_tokens": accounting.get("cache_read_input_tokens", 0),
+        "reasoning_output_tokens": accounting.get("reasoning_output_tokens", 0),
+    }
+
+
+def _event_record(event: dict, accounting=None) -> dict:
+    return {
+        "event": event,
+        "accounting": _accounting_record_for_event(event, accounting),
+    }
+
+
+def _enqueue_event(event: dict, accounting=None) -> None:
     INBOX_DIR.mkdir(parents=True, exist_ok=True)
     event_id = uuid.uuid4().hex
     temporary_path = INBOX_DIR / f".{event_id}.tmp"
     final_path = INBOX_DIR / f"{event_id}.json"
+    accounting_temporary_path = INBOX_DIR / f".{event_id}.accounting.tmp"
+    accounting_final_path = INBOX_DIR / f"{event_id}.accounting"
 
     with open(temporary_path, "x") as f:
         f.write(json.dumps(event, separators=(",", ":")))
     os.chmod(temporary_path, 0o600)
+    accounting_record = _accounting_record_for_event(event, accounting)
+    if accounting_record:
+        with open(accounting_temporary_path, "x") as f:
+            f.write(json.dumps(accounting_record, separators=(",", ":")))
+            f.write("\n")
+        os.chmod(accounting_temporary_path, 0o600)
+        os.replace(accounting_temporary_path, accounting_final_path)
     os.replace(temporary_path, final_path)
 
 
-def _enqueue_events(events: list[dict]) -> None:
-    if not events:
+def _enqueue_events(records: list[dict]) -> None:
+    if not records:
         return
     INBOX_DIR.mkdir(parents=True, exist_ok=True)
     event_id = uuid.uuid4().hex
     temporary_path = INBOX_DIR / f".{event_id}.tmp"
     final_path = INBOX_DIR / f"{event_id}.jsonl"
+    accounting_temporary_path = INBOX_DIR / f".{event_id}.accounting.tmp"
+    accounting_final_path = INBOX_DIR / f"{event_id}.accounting"
 
     with open(temporary_path, "x") as f:
-        for event in events:
+        for record in records:
+            event = record.get("event", record)
             f.write(json.dumps(event, separators=(",", ":")))
             f.write("\n")
     os.chmod(temporary_path, 0o600)
+    accounting_records = [record.get("accounting") for record in records if record.get("accounting")]
+    if accounting_records:
+        with open(accounting_temporary_path, "x") as f:
+            for accounting_record in accounting_records:
+                f.write(json.dumps(accounting_record, separators=(",", ":")))
+                f.write("\n")
+        os.chmod(accounting_temporary_path, 0o600)
+        os.replace(accounting_temporary_path, accounting_final_path)
     os.replace(temporary_path, final_path)
 
 
@@ -329,6 +370,47 @@ def _usage_amounts(usage: dict, include_iterations: bool = True) -> tuple[int, i
         total_span_input += nested_span_input
         total_output += nested_output
     return total_input, total_span_input, total_output
+
+
+def _usage_accounting(usage: dict, include_iterations: bool = True) -> dict:
+    zero = {
+        "uncached_input_tokens": 0,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "reasoning_output_tokens": 0,
+    }
+    if not isinstance(usage, dict):
+        return zero
+
+    input_tokens = _safe_usage_token(usage.get("input_tokens"))
+    cache_creation_tokens = _cache_creation_tokens(usage)
+    cache_read_tokens = _safe_usage_token(usage.get("cache_read_input_tokens"))
+    output_tokens = _safe_usage_token(usage.get("output_tokens"))
+
+    if input_tokens > 0 or cache_creation_tokens > 0 or cache_read_tokens > 0 or output_tokens > 0:
+        return {
+            "uncached_input_tokens": input_tokens,
+            "cache_creation_input_tokens": cache_creation_tokens,
+            "cache_read_input_tokens": cache_read_tokens,
+            "reasoning_output_tokens": 0,
+        }
+
+    if not include_iterations:
+        return zero
+
+    iterations = usage.get("iterations")
+    if not isinstance(iterations, list):
+        return zero
+
+    totals = dict(zero)
+    for item in iterations:
+        if not isinstance(item, dict):
+            continue
+        nested_usage = item.get("usage") if isinstance(item.get("usage"), dict) else item
+        nested = _usage_accounting(nested_usage, include_iterations=False)
+        for key in totals:
+            totals[key] += nested[key]
+    return totals
 
 
 def _usage_totals(usage: dict, include_iterations: bool = True) -> tuple[int, int]:
@@ -798,7 +880,7 @@ def _run_history_payload(payload: dict, enqueue_event=_enqueue_event, flush_even
             str(turn_output),
         )
 
-        enqueue_event({
+        event = {
             "schema_version": 1,
             "device_id": "device_local",
             "project_id": project_id,
@@ -823,7 +905,8 @@ def _run_history_payload(payload: dict, enqueue_event=_enqueue_event, flush_even
             },
             "latency_ms": 0,
             "created_at": timestamp,
-        })
+        }
+        enqueue_event(event, _usage_accounting(turn.get("usage", {})))
         emitted_any = True
         result["imported_events"] += 1
 
@@ -913,7 +996,7 @@ def _run_for_payload(payload: dict, scan_subagents: bool = True, allow_timestamp
     )
     allow_current_label = len(turns_to_emit) == 1
     events = [
-        event
+        (turn, event)
         for turn in turns_to_emit
         if (event := _event_for_live_turn(
             run_id,
@@ -935,10 +1018,10 @@ def _run_for_payload(payload: dict, scan_subagents: bool = True, allow_timestamp
         )
         return _SCAN_SKIPPED
 
-    for event in events:
-        _enqueue_event(event)
+    for turn, event in events:
+        _enqueue_event(event, _usage_accounting(turn.get("usage", {})))
     _save_session_state(run_id, next_fresh, next_output, transcript_byte_offset)
-    _write_success_diagnostic(events[-1])
+    _write_success_diagnostic(events[-1][1])
     _consume_label_file()
     if scan_subagents:
         _scan_session_subagents(transcript_path)
@@ -979,8 +1062,8 @@ def scan_main(scan_dir: str, since_hours) -> dict:
     unsupported_records = 0
     pending_events: list[dict] = []
 
-    def enqueue_history_event(event: dict) -> None:
-        pending_events.append(event)
+    def enqueue_history_event(event: dict, accounting=None) -> None:
+        pending_events.append(_event_record(event, accounting))
         if len(pending_events) >= 5000:
             _enqueue_events(pending_events)
             pending_events.clear()

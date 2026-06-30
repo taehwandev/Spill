@@ -55,6 +55,8 @@ extension TokenUsageAntigravityImporter {
             ?? "antigravity-unknown"
         return UsageRecord(
             inputTokens: input,
+            uncachedInputTokens: uncachedInput,
+            cachedInputTokens: cachedInput,
             outputTokens: output,
             model: model,
             usedSplitOutputFallback: usedSplitOutputFallback

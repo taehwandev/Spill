@@ -284,6 +284,13 @@ Requirements:
   Claude totals can be compared with Codex totals, whose input counts already
   include cached reads. Cost estimates may apply cache pricing weights later,
   but the stored/default usage total is raw tokens.
+- Cost estimates must be computed from model-specific pricing and exact token
+  accounting buckets, not from a flat total-token multiplier. Local storage and
+  encrypted Private Usage Upload aggregates should preserve uncached input,
+  cache-creation input, cache-read input, unclassified input, and reasoning
+  output buckets when runtimes expose them so dashboard or web pricing layers
+  can apply provider/model-specific rates without changing the raw usage
+  baseline.
 - Token detail categories such as system, user, history, repo context, tool
   output, generated output, and unknown are secondary measurement-quality
   statistics. They are useful only when the runtime or adapter supplies exact
@@ -581,6 +588,10 @@ Requirements:
   pass and may include the current local day's partial daily bucket. The partial
   bucket uses the same daily bucket key and is safely replaced by later manual
   syncs or the next completed daily sync.
+- Encrypted daily buckets include the same token accounting bucket totals used
+  for local cost estimates, grouped alongside existing totals by tool, model,
+  task, stage, workflow coverage, and Work Item. The app still uploads only
+  aggregate token counts and safe labels, never raw events or content-like data.
 - Multi-day backlogs, such as weekends or offline periods, remain queued locally
   and may upload later in one or more batches.
 - The web dashboard shows per-device statistics and combined account totals

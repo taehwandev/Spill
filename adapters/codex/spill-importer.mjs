@@ -48,6 +48,46 @@ const SHELL_TOOL_NAMES = new Set([
   "terminal",
 ]);
 
+const codexEventSupport = {};
+const codexTransportSupport = {};
+const codexStateLabelSupport = {
+  async readState(path) {
+    try {
+      const parsed = JSON.parse(await readFile(path, "utf8"));
+      if (parsed && Array.isArray(parsed.sentSpanIDs)) {
+        return {
+          updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : "",
+          sentSpanIDs: parsed.sentSpanIDs.filter((value) => typeof value === "string"),
+          sessionCursors: plainObject(parsed.sessionCursors) ? parsed.sessionCursors : {},
+        };
+      }
+    } catch {
+      // Missing or corrupt state should not block local metering.
+    }
+    return { updatedAt: "", sentSpanIDs: [], sessionCursors: {} };
+  },
+
+  parseRuntimeLabel(parsed, expectedTool) {
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    const tool = typeof parsed.ai_tool === "string" ? parsed.ai_tool : "";
+    if (tool && tool !== "unknown" && tool !== expectedTool) return {};
+
+    const updatedAt = optionalDate(parsed.updated_at);
+    const expiresAt = optionalDate(parsed.expires_at);
+    if (typeof parsed.updated_at === "string" && parsed.updated_at.length > 0 && !updatedAt) return {};
+    if (typeof parsed.expires_at === "string" && parsed.expires_at.length > 0 && !expiresAt) return {};
+
+    return {
+      taskType: optionalWorkflowSlug(parsed.task_type),
+      stage: optionalWorkflowSlug(parsed.stage),
+      projectID: optionalOpaqueID(parsed.project_id),
+      hasLabel: Boolean(optionalWorkflowSlug(parsed.task_type) || optionalWorkflowSlug(parsed.stage)),
+      updatedAt,
+      expiresAt,
+    };
+  },
+};
+
 const options = parseArgs(process.argv.slice(2));
 const codexHome = options.codexHome ?? process.env.CODEX_HOME ?? join(homedir(), ".codex");
 const port = process.env.SPILL_TOKEN_USAGE_PORT || DEFAULT_PORT;
@@ -132,26 +172,13 @@ if (Number.isNaN(afterDate.getTime())) {
   fail("invalid_after", true);
 }
 
-if (watch) {
-  while (true) {
-    await importOnce().catch((error) => {
-      if (strict) {
-        throw error;
-      }
-    });
-    await sleep(intervalMS);
-  }
-} else {
-  await importOnce();
-}
-
 async function importOnce() {
-  const state = await readState(statePath);
+  const state = await codexStateLabelSupport.readState(statePath);
   const sentSpans = new Set(state.sentSpanIDs);
   const storedSpans = dryRun
     ? new Set()
     : transport === "http"
-      ? await readBridgeSpanIDs(endpoint)
+      ? await codexTransportSupport.readBridgeSpanIDs(endpoint)
       : await readLocalSpanIDs(eventsPath, inboxPath);
   const emittedSpans = new Set();
   const sources = await discoverCodexSessionFiles(codexHome, afterDate);
@@ -166,13 +193,13 @@ async function importOnce() {
     unsupportedCumulativeOnlyEvents: 0,
   };
   let usedRuntimeLabel = false;
-  let pendingFileEvents = [];
+  let pendingFileRecords = [];
 
   async function flushPendingFileEvents() {
-    if (pendingFileEvents.length === 0) return;
-    const events = pendingFileEvents;
-    pendingFileEvents = [];
-    await appendInboxEvents(inboxPath, events);
+    if (pendingFileRecords.length === 0) return;
+    const records = pendingFileRecords;
+    pendingFileRecords = [];
+    await codexTransportSupport.appendInboxEvents(inboxPath, records);
   }
 
   for (const source of sources) {
@@ -193,10 +220,10 @@ async function importOnce() {
         importedEvents += 1;
       } else {
         if (transport === "http") {
-          await postEvent(endpoint, event);
+          await codexTransportSupport.postEvent(endpoint, event);
         } else {
-          pendingFileEvents.push(event);
-          if (pendingFileEvents.length >= 5000) {
+          pendingFileRecords.push(record);
+          if (pendingFileRecords.length >= 5000) {
             await flushPendingFileEvents();
           }
         }
@@ -314,7 +341,7 @@ async function parseSessionFile(path, after, state, unsupportedRecords = { count
       }
       tokenCountOrdinal += 1;
 
-      const timestamp = parseEventTimestamp(parsed.timestamp);
+      const timestamp = codexEventSupport.parseEventTimestamp(parsed.timestamp);
       if (!timestamp) {
         unsupportedRecords.count += 1;
         continue;
@@ -367,8 +394,7 @@ async function parseSessionFile(path, after, state, unsupportedRecords = { count
       (!taskTypeOverride && eventLabel.taskType) ||
         (!stageOverride && eventLabel.stage),
     );
-    parsedRecords.push({
-      event: toSpillEvent({
+    const event = codexEventSupport.toSpillEvent({
         sourcePath: path,
         sessionID: counters.sessionID,
         eventIndex: record.eventIndex,
@@ -381,7 +407,10 @@ async function parseSessionFile(path, after, state, unsupportedRecords = { count
         projectID: eventLabel.projectID,
         taskType: taskTypeOverride ?? eventLabel.taskType ?? fallbackLabel.taskType,
         stage: stageOverride ?? eventLabel.stage ?? fallbackLabel.stage,
-      }),
+    });
+    parsedRecords.push({
+      event,
+      accounting: codexEventSupport.accountingRecordForEvent(event, delta),
       usedRuntimeLabel,
     });
   }
@@ -393,11 +422,11 @@ async function parseSessionFile(path, after, state, unsupportedRecords = { count
   return parsedRecords;
 }
 
-function parseEventTimestamp(value) {
+codexEventSupport.parseEventTimestamp = function(value) {
   if (typeof value !== "string" || value.length === 0) return null;
   const timestamp = new Date(value);
   return Number.isNaN(timestamp.getTime()) ? null : timestamp;
-}
+};
 
 function captureSessionMeta(line, counters) {
   if (!rawJSONField(line, "originator")?.toLowerCase().startsWith("codex")) return;
@@ -433,7 +462,16 @@ function usageDelta(record) {
   }
 
   if (inputTokens === 0 && outputTokens === 0) return null;
-  return { inputTokens, outputTokens, source };
+  const cacheReadInputTokens = Math.min(record.last.cachedInputTokens, inputTokens);
+  return {
+    inputTokens,
+    outputTokens,
+    cacheReadInputTokens,
+    uncachedInputTokens: Math.max(0, inputTokens - cacheReadInputTokens),
+    cacheCreationInputTokens: 0,
+    reasoningOutputTokens: record.last.reasoningTokens,
+    source,
+  };
 }
 
 function cursorFromUsage(record) {
@@ -445,6 +483,18 @@ function cursorFromUsage(record) {
     totalTokens: record.total.totalTokens,
   };
 }
+
+codexEventSupport.accountingRecordForEvent = function(event, delta) {
+  return {
+    schema_version: 1,
+    span_id: event.span_id,
+    ai_tool: event.ai_tool,
+    uncached_input_tokens: delta.uncachedInputTokens,
+    cache_creation_input_tokens: delta.cacheCreationInputTokens,
+    cache_read_input_tokens: delta.cacheReadInputTokens,
+    reasoning_output_tokens: delta.reasoningOutputTokens,
+  };
+};
 
 function shouldAdvanceCursor(currentCursor, nextCursor) {
   if (!nextCursor) return false;
@@ -518,7 +568,7 @@ function fallbackLabelFromTools() {
   return { taskType: "uncategorized", stage: "summarize" };
 }
 
-function toSpillEvent({
+codexEventSupport.toSpillEvent = function({
   sourcePath,
   sessionID,
   eventIndex,
@@ -567,9 +617,9 @@ function toSpillEvent({
     latency_ms: 0,
     created_at: timestamp.toISOString(),
   };
-}
+};
 
-async function readBridgeSpanIDs(url) {
+codexTransportSupport.readBridgeSpanIDs = async function(url) {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
       const response = await fetch(url, {
@@ -589,9 +639,9 @@ async function readBridgeSpanIDs(url) {
     }
   }
   return new Set();
-}
+};
 
-async function postEvent(url, event) {
+codexTransportSupport.postEvent = async function(url, event) {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
       const response = await fetch(url, {
@@ -612,22 +662,37 @@ async function postEvent(url, event) {
       fail("bridge_unavailable", false);
     }
   }
-}
+};
 
-async function appendInboxEvents(path, events) {
-  if (!Array.isArray(events) || events.length === 0) return;
+codexTransportSupport.appendInboxEvents = async function(path, records) {
+  if (!Array.isArray(records) || records.length === 0) return;
   await mkdir(path, { recursive: true, mode: 0o700 });
   const id = randomUUID();
   const temporaryPath = join(path, `.${id}.tmp`);
   const finalPath = join(path, `${id}.jsonl`);
+  const accountingTemporaryPath = join(path, `.${id}.accounting.tmp`);
+  const accountingFinalPath = join(path, `${id}.accounting`);
+  const events = records.map((record) => record.event ?? record).filter(Boolean);
+  const accountingRecords = records.map((record) => record.accounting).filter(Boolean);
   const body = `${events.map((event) => JSON.stringify(event)).join("\n")}\n`;
   await writeFile(temporaryPath, body, {
     encoding: "utf8",
     mode: 0o600,
     flag: "wx",
   });
+  if (accountingRecords.length > 0) {
+    const accountingBody = `${accountingRecords.map((record) => JSON.stringify(record)).join("\n")}\n`;
+    await writeFile(accountingTemporaryPath, accountingBody, {
+      encoding: "utf8",
+      mode: 0o600,
+      flag: "wx",
+    });
+  }
+  if (accountingRecords.length > 0) {
+    await rename(accountingTemporaryPath, accountingFinalPath);
+  }
   await rename(temporaryPath, finalPath);
-}
+};
 
 async function readLocalSpanIDs(eventsFile, inboxFile) {
   return new Set([
@@ -692,22 +757,6 @@ async function readQueuedInboxSpanIDs(path) {
   return spanIDs;
 }
 
-async function readState(path) {
-  try {
-    const parsed = JSON.parse(await readFile(path, "utf8"));
-    if (parsed && Array.isArray(parsed.sentSpanIDs)) {
-      return {
-        updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : "",
-        sentSpanIDs: parsed.sentSpanIDs.filter((value) => typeof value === "string"),
-        sessionCursors: plainObject(parsed.sessionCursors) ? parsed.sessionCursors : {},
-      };
-    }
-  } catch {
-    // Missing or corrupt state should not block local metering.
-  }
-  return { updatedAt: "", sentSpanIDs: [], sessionCursors: {} };
-}
-
 async function readRuntimeLabelTimeline(path, expectedTool) {
   const entries = [];
   const current = await readRuntimeLabel(path, expectedTool);
@@ -721,7 +770,7 @@ async function readRuntimeLabelTimeline(path, expectedTool) {
     for (const line of raw.split(/\r?\n/)) {
       if (!line.trim()) continue;
       try {
-        const entry = parseRuntimeLabel(JSON.parse(line), expectedTool);
+        const entry = codexStateLabelSupport.parseRuntimeLabel(JSON.parse(line), expectedTool);
         if (entry?.hasLabel) entries.push(entry);
       } catch {
         // Ignore corrupt timeline lines; labels are optional metadata.
@@ -736,30 +785,10 @@ async function readRuntimeLabelTimeline(path, expectedTool) {
 
 async function readRuntimeLabel(path, expectedTool) {
   try {
-    return parseRuntimeLabel(JSON.parse(await readFile(path, "utf8")), expectedTool) ?? {};
+    return codexStateLabelSupport.parseRuntimeLabel(JSON.parse(await readFile(path, "utf8")), expectedTool) ?? {};
   } catch {
     return {};
   }
-}
-
-function parseRuntimeLabel(parsed, expectedTool) {
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
-  const tool = typeof parsed.ai_tool === "string" ? parsed.ai_tool : "";
-  if (tool && tool !== "unknown" && tool !== expectedTool) return {};
-
-  const updatedAt = optionalDate(parsed.updated_at);
-  const expiresAt = optionalDate(parsed.expires_at);
-  if (typeof parsed.updated_at === "string" && parsed.updated_at.length > 0 && !updatedAt) return {};
-  if (typeof parsed.expires_at === "string" && parsed.expires_at.length > 0 && !expiresAt) return {};
-
-  return {
-    taskType: optionalWorkflowSlug(parsed.task_type),
-    stage: optionalWorkflowSlug(parsed.stage),
-    projectID: optionalOpaqueID(parsed.project_id),
-    hasLabel: Boolean(optionalWorkflowSlug(parsed.task_type) || optionalWorkflowSlug(parsed.stage)),
-    updatedAt,
-    expiresAt,
-  };
 }
 
 function labelForTimestamp(labelTimeline, timestamp) {
@@ -958,6 +987,19 @@ function normalizedTransport(value) {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+if (watch) {
+  while (true) {
+    await importOnce().catch((error) => {
+      if (strict) {
+        throw error;
+      }
+    });
+    await sleep(intervalMS);
+  }
+} else {
+  await importOnce();
 }
 
 function fail(code, alwaysExit) {

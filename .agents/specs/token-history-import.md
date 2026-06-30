@@ -224,6 +224,14 @@ Tool-specific partitioning:
   using the cache-read-excluding identity input in `span_id`; repeated imports
   should update numeric token fields for the same row rather than create a
   duplicate historical event.
+- Codex, Claude, and AGY importers must preserve exact pricing-relevant bucket
+  splits when the runtime exposes them. Raw event `input_tokens` remains the
+  comparable total. Separate local-only accounting records carry uncached input,
+  cache-creation input, cache-read input, and reasoning output. File-based
+  adapters may write these numbers in a same-basename `.accounting` sidecar
+  beside the strict `.json`/`.jsonl` inbox event file; the sidecar is not part
+  of the strict usage event schema and must never contain prompts, responses,
+  paths, logs, source, commands, or other content-like data.
 - AGY history is partitioned by opaque conversation or generation identifiers
   exposed by the active importer. Records without exact token fields are
   skipped and counted as unsupported; they must not be estimated.

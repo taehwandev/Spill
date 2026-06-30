@@ -26,6 +26,8 @@ extension TokenUsageAntigravityImporter {
 
     struct UsageRecord {
         let inputTokens: Int
+        let uncachedInputTokens: Int
+        let cachedInputTokens: Int
         let outputTokens: Int
         let model: String
         let usedSplitOutputFallback: Bool
