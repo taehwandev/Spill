@@ -278,6 +278,12 @@ Requirements:
   event count, average event size, peak event size, model breakdown, task
   breakdown, stage breakdown, and workflow label coverage as the primary
   analytical statistics.
+- First-class tool comparisons must use raw exact token usage on the same
+  baseline across runtimes. Claude Code cache-read tokens are part of raw input
+  usage and must be included with uncached input and cache-creation tokens so
+  Claude totals can be compared with Codex totals, whose input counts already
+  include cached reads. Cost estimates may apply cache pricing weights later,
+  but the stored/default usage total is raw tokens.
 - Token detail categories such as system, user, history, repo context, tool
   output, generated output, and unknown are secondary measurement-quality
   statistics. They are useful only when the runtime or adapter supplies exact

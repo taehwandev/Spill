@@ -216,7 +216,14 @@ Tool-specific partitioning:
   new event. Codex cached-input policy is a separate measurement decision and
   must not be changed by history import.
 - Claude history is partitioned by transcript source, including subagent
-  sources, with per-source byte offsets and aggregate counters.
+  sources, with per-source byte offsets and aggregate counters. Claude raw
+  input usage must include `input_tokens`, `cache_creation_input_tokens`, and
+  `cache_read_input_tokens`; omitting cache-read tokens makes Claude
+  incomparable with Codex, whose `input_tokens` already include cached reads.
+  Claude event identity must remain stable across this measurement repair by
+  using the cache-read-excluding identity input in `span_id`; repeated imports
+  should update numeric token fields for the same row rather than create a
+  duplicate historical event.
 - AGY history is partitioned by opaque conversation or generation identifiers
   exposed by the active importer. Records without exact token fields are
   skipped and counted as unsupported; they must not be estimated.

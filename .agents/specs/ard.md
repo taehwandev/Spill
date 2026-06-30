@@ -357,6 +357,19 @@ Rules:
   Spill publishes recommended labels, but AI runtimes, workflow hooks, and
   adapters may define custom reusable categories that match
   `^[a-z][a-z0-9_]{1,40}$`.
+- First-class tool comparisons use raw exact token totals. Runtime adapters must
+  normalize provider-specific cache fields into comparable raw input/output
+  totals before storage. For Claude Code, raw `input_tokens` means
+  `input_tokens + cache_creation_input_tokens + cache_read_input_tokens`.
+  For Codex, `input_tokens` already includes cached input reads. Cost-weighted
+  views may apply model-specific cache discounts later, but storage and
+  default usage comparison must keep the raw exact counts.
+- Event identity is separate from display totals. When changing a runtime
+  measurement baseline, importers should preserve stable event identity where
+  possible and repair numeric totals in place instead of duplicating historical
+  rows. Claude Code uses `input_tokens + cache_creation_input_tokens` as its
+  `span_id` input component while storing cache-read-inclusive raw
+  `input_tokens`.
 
 ### ARD-005B2: Token Usage Display Is Store-Driven
 

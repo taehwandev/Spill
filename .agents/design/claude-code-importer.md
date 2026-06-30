@@ -47,7 +47,7 @@ span_id = "span-" + sha256(":".join([
     request_id,           # from JSONL top-level requestId field
     str(turn_index),      # see turn_index rules below
     timestamp,            # raw ISO8601 string from JSONL timestamp field
-    str(input_tokens),    # input_tokens + cache_creation_input_tokens
+    str(span_input),      # input_tokens + cache_creation_input_tokens
     str(output_tokens),   # output_tokens
 ]))[:12]
 ```
@@ -61,10 +61,16 @@ Do NOT hash the session ID for run_id.
 
 ### cache token rules
 
-- Include `cache_creation_input_tokens` in `input_tokens` (both in storage and
-  in the span_id formula).
-- Exclude `cache_read_input_tokens` from `input_tokens`. This matches Python's
-  `_usage_totals` and the Codex measurement baseline.
+- Store `input_tokens + cache_creation_input_tokens + cache_read_input_tokens`
+  as the event `input_tokens`. This matches the Codex measurement baseline
+  because Codex `input_tokens` already includes cached input reads.
+- Keep `cache_read_input_tokens` out of the `span_id` input component. The
+  identity component is `span_input = input_tokens +
+  cache_creation_input_tokens`. This preserves stable event identity when
+  repairing older Claude rows that undercounted raw input by omitting
+  cache-read tokens. Both Python Stop hook and Swift importer must use this
+  same identity formula. This applies to every Python emission path, including
+  live Stop-hook events and `--scan-dir` history imports.
 
 ### turn_index
 
