@@ -1467,10 +1467,9 @@ final class PrivateUsageUploadTests: XCTestCase {
         )
     }
 
-    func testPrivateUsageURLsUseBundleInfoAfterRuntimeEnv() {
+    func testPrivateUsageURLsUseConfiguredWebOriginOnly() {
         let bundleInfo: [String: Any] = [
-            PrivateUsageWebConnection.webURLInfoDictionaryKey: "https://preview.example.com/#/connect-device",
-            PrivateUsageRelayEndpoint.relayURLInfoDictionaryKey: "https://relay.example.com/functions/v1/private-usage-relay"
+            PrivateUsageWebConnection.webURLInfoDictionaryKey: "https://preview.example.com/#/connect-device"
         ]
 
         XCTAssertEqual(
@@ -1486,17 +1485,7 @@ final class PrivateUsageUploadTests: XCTestCase {
                 processEnvironment: [:],
                 bundleInfo: bundleInfo
             )?.absoluteString,
-            Optional("https://relay.example.com/functions/v1/private-usage-relay")
-        )
-        XCTAssertEqual(
-            PrivateUsageRelayEndpoint.relayURL(
-                environment: .production,
-                processEnvironment: [
-                    PrivateUsageRelayEndpoint.relayURLOverrideEnvironmentKey: "https://otggbleddlmzamgpqxjm.supabase.co/functions/v1/private-usage-relay"
-                ],
-                bundleInfo: bundleInfo
-            )?.absoluteString,
-            nil
+            Optional("https://preview.example.com/api/private-usage-relay")
         )
         XCTAssertEqual(
             PrivateUsageWebConnection.connectDeviceURL(
@@ -1511,11 +1500,11 @@ final class PrivateUsageUploadTests: XCTestCase {
             PrivateUsageRelayEndpoint.relayURL(
                 environment: .production,
                 processEnvironment: [
-                    PrivateUsageRelayEndpoint.relayURLOverrideEnvironmentKey: "http://localhost:54321/functions/v1/private-usage-relay"
+                    PrivateUsageWebConnection.webURLOverrideEnvironmentKey: "http://localhost/#/connect-device"
                 ],
                 bundleInfo: bundleInfo
             )?.absoluteString,
-            Optional("http://localhost:54321/functions/v1/private-usage-relay")
+            Optional("http://localhost/api/private-usage-relay")
         )
     }
 
@@ -1565,15 +1554,12 @@ final class PrivateUsageUploadTests: XCTestCase {
         )
     }
 
-    func testPrivateUsageRelayURLRejectsUnsafeOverrides() {
+    func testPrivateUsageRelayURLRejectsSupabaseDerivedOrigin() {
         XCTAssertNil(
             PrivateUsageRelayEndpoint.relayURL(
                 environment: .production,
                 processEnvironment: [
-                    PrivateUsageRelayEndpoint.relayURLOverrideEnvironmentKey: "http://example.com/functions/v1/private-usage-relay"
-                ],
-                bundleInfo: [
-                    PrivateUsageRelayEndpoint.relayURLInfoDictionaryKey: "https://otggbleddlmzamgpqxjm.supabase.co/functions/v1/private-usage-relay"
+                    PrivateUsageWebConnection.webURLOverrideEnvironmentKey: "https://otggbleddlmzamgpqxjm.supabase.co"
                 ]
             )
         )

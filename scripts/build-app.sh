@@ -57,7 +57,6 @@ case "$PRIVATE_USAGE_FEATURE_ENABLED" in
 esac
 
 PRIVATE_USAGE_ENVIRONMENT="${SPILL_BUILD_PRIVATE_USAGE_ENVIRONMENT:-}"
-PRIVATE_USAGE_RELAY_URL="${SPILL_BUILD_PRIVATE_USAGE_RELAY_URL:-}"
 PRIVATE_USAGE_WEB_URL="${SPILL_BUILD_PRIVATE_USAGE_WEB_URL:-}"
 DEVELOPER_OPTIONS_ENABLED="${SPILL_DEVELOPER_OPTIONS_ENABLED:-}"
 
@@ -92,11 +91,6 @@ validate_private_usage_url() {
 
     if [[ -z "$value" ]]; then
         echo "$name is required for this build configuration." >&2
-        exit 2
-    fi
-
-    if [[ "$name" == "SPILL_BUILD_PRIVATE_USAGE_RELAY_URL" && "$value" =~ ^https?://[^/]*\.supabase\.co([/:?#]|$) ]]; then
-        echo "$name must use a Spill-controlled relay API URL, not a Supabase project URL." >&2
         exit 2
     fi
 
@@ -204,7 +198,6 @@ if [[ -n "$SPARKLE_PUBLIC_ED_KEY" ]]; then
     <false/>"
 fi
 
-validate_private_usage_url "SPILL_BUILD_PRIVATE_USAGE_RELAY_URL" "$PRIVATE_USAGE_RELAY_URL" false
 validate_private_usage_url "SPILL_BUILD_PRIVATE_USAGE_WEB_URL" "$PRIVATE_USAGE_WEB_URL" "$PRIVATE_USAGE_REQUIRES_CONFIGURATION"
 
 if [[ -z "$DEVELOPER_OPTIONS_ENABLED" ]]; then
@@ -316,8 +309,6 @@ cat > "$CONTENTS_DIR/Info.plist" <<PLIST
     </array>
     <key>SPILLPrivateUsageEnvironment</key>
     <string>$PRIVATE_USAGE_ENVIRONMENT</string>
-    <key>SPILLPrivateUsageRelayURL</key>
-    <string>$PRIVATE_USAGE_RELAY_URL</string>
     <key>SPILLPrivateUsageWebURL</key>
     <string>$PRIVATE_USAGE_WEB_URL</string>
     <key>SPILLPrivateUsageFeatureEnabled</key>
@@ -373,8 +364,6 @@ cat > "$HELPER_CONTENTS_DIR/Info.plist" <<PLIST
     <string>$BUILD_NUMBER</string>
     <key>SPILLPrivateUsageEnvironment</key>
     <string>$PRIVATE_USAGE_ENVIRONMENT</string>
-    <key>SPILLPrivateUsageRelayURL</key>
-    <string>$PRIVATE_USAGE_RELAY_URL</string>
     <key>SPILLPrivateUsageWebURL</key>
     <string>$PRIVATE_USAGE_WEB_URL</string>
     <key>SPILLPrivateUsageFeatureEnabled</key>

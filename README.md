@@ -133,25 +133,20 @@ remains optional and local metering works without login. Bundles that should
 support Sign In and Connect should set
 `SPILL_BUILD_PRIVATE_USAGE_FEATURE_ENABLED=1` so packaging validates
 `SPILL_BUILD_PRIVATE_USAGE_ENVIRONMENT=production`,
-`SPILL_BUILD_PRIVATE_USAGE_WEB_URL`, and any configured
-`SPILL_BUILD_PRIVATE_USAGE_RELAY_URL`.
+and `SPILL_BUILD_PRIVATE_USAGE_WEB_URL`.
 Bundles that do not support the web connection can leave the flag at `0`; the
-login/sync UI is hidden and the web/relay URLs can remain empty.
+login/sync UI is hidden and the web URL can remain empty.
 The GitHub release workflow reads `SPILL_BUILD_PRIVATE_USAGE_FEATURE_ENABLED`
 from repository variables and defaults to `0`. Set it to `1` only when the
-production web and relay URLs are configured. For production at
-`https://spill.thdev.app/`, configure these GitHub Actions repository
-variables:
+production web URL is configured. For production at `https://spill.thdev.app/`,
+configure these GitHub Actions repository variables:
 
 - `SPILL_BUILD_PRIVATE_USAGE_FEATURE_ENABLED`: `1`.
 - `SPILL_BUILD_PRIVATE_USAGE_WEB_URL`: `https://spill.thdev.app/`.
-- `SPILL_BUILD_PRIVATE_USAGE_RELAY_URL`:
-  `https://spill.thdev.app/api/private-usage-relay`.
 
-The relay variable is public configuration, not a secret. It must point at the
-Spill-controlled web relay proxy, not directly at a Supabase project URL. When
-the relay variable is empty, the app derives the same `/api/private-usage-relay`
-path from `SPILL_BUILD_PRIVATE_USAGE_WEB_URL`.
+The relay endpoint is not a separate build variable. The app derives
+`/api/private-usage-relay` from `SPILL_BUILD_PRIVATE_USAGE_WEB_URL`, which keeps
+local and release builds tied to the same web origin.
 
 Spill appends only fixed
 connection hints (`source=macos` and `callback_url=spill://private-usage/connect`)
@@ -192,7 +187,6 @@ SPILL_VERSION=2026.21.2 \
 SPILL_BUILD_PRIVATE_USAGE_FEATURE_ENABLED=1 \
 SPILL_BUILD_PRIVATE_USAGE_ENVIRONMENT=production \
 SPILL_BUILD_PRIVATE_USAGE_WEB_URL=https://spill.thdev.app/ \
-SPILL_BUILD_PRIVATE_USAGE_RELAY_URL=https://spill.thdev.app/api/private-usage-relay \
 SPILL_SIGN_IDENTITY="Developer ID Application: Example Name (TEAMID)" \
 ./scripts/package-release.sh
 ```
@@ -207,7 +201,6 @@ SPILL_VERSION=2026.21.2 \
 SPILL_BUILD_PRIVATE_USAGE_FEATURE_ENABLED=1 \
 SPILL_BUILD_PRIVATE_USAGE_ENVIRONMENT=production \
 SPILL_BUILD_PRIVATE_USAGE_WEB_URL=https://spill.thdev.app/ \
-SPILL_BUILD_PRIVATE_USAGE_RELAY_URL=https://spill.thdev.app/api/private-usage-relay \
 SPILL_SIGN_IDENTITY="Developer ID Application: Example Name (TEAMID)" \
 ./scripts/build-app.sh
 

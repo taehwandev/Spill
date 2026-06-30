@@ -1,8 +1,6 @@
 import Foundation
 
 enum PrivateUsageRelayEndpoint {
-    static let relayURLOverrideEnvironmentKey = "SPILL_PRIVATE_USAGE_RELAY_URL"
-    static let relayURLInfoDictionaryKey = "SPILLPrivateUsageRelayURL"
     private static let defaultRelayPath = "/api/private-usage-relay"
 
     static func relayURL(
@@ -10,13 +8,6 @@ enum PrivateUsageRelayEndpoint {
         processEnvironment: [String: String] = ProcessInfo.processInfo.environment,
         bundleInfo: [String: Any]? = Bundle.main.infoDictionary
     ) -> URL? {
-        if let override = configuredString(processEnvironment[relayURLOverrideEnvironmentKey]) {
-            return sanitizedRelayURL(override)
-        }
-        if let configuredURL = configuredString(bundleInfo?[relayURLInfoDictionaryKey] as? String) {
-            return sanitizedRelayURL(configuredURL)
-        }
-
         guard let webURL = PrivateUsageWebConnection.configuredWebURL(
             processEnvironment: processEnvironment,
             bundleInfo: bundleInfo
@@ -45,17 +36,6 @@ enum PrivateUsageRelayEndpoint {
         return false
     }
 
-    private static func sanitizedRelayURL(_ rawValue: String) -> URL? {
-        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let url = URL(string: trimmed),
-              isSafeRelayURL(url)
-        else {
-            return nil
-        }
-
-        return url
-    }
-
     private static func derivedRelayURL(from webURL: URL) -> URL? {
         guard let scheme = webURL.scheme,
               let host = webURL.host
@@ -73,14 +53,5 @@ enum PrivateUsageRelayEndpoint {
             return nil
         }
         return url
-    }
-
-    private static func configuredString(_ value: String?) -> String? {
-        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !value.isEmpty
-        else {
-            return nil
-        }
-        return value
     }
 }
