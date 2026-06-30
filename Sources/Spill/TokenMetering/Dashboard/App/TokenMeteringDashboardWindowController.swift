@@ -13,6 +13,7 @@ final class TokenMeteringDashboardWindowController: NSObject, NSWindowDelegate {
     private let settings: SpillSettings
     private let deferredRefreshDelayNanoseconds: UInt64 = 1_500_000_000
     private let aiStatusRefreshIntervalNanoseconds: UInt64 = 8_000_000_000
+    private let tokenDataRefreshIntervalNanoseconds: UInt64 = 15_000_000_000
     private let refreshAction: () -> Void
     private let settingsAction: () -> Void
     private let developerOptionsAction: () -> Void
@@ -21,6 +22,7 @@ final class TokenMeteringDashboardWindowController: NSObject, NSWindowDelegate {
     private var window: NSWindow?
     private var deferredRefreshTask: Task<Void, Never>?
     private var aiStatusRefreshTask: Task<Void, Never>?
+    private var tokenDataRefreshTask: Task<Void, Never>?
     private var isPreparingForTermination = false
 
     init(
@@ -57,12 +59,15 @@ final class TokenMeteringDashboardWindowController: NSObject, NSWindowDelegate {
         window.makeKey()
         aiStatusStore.refreshInBackground()
         startAIStatusRefreshLoop()
+        startTokenDataRefreshLoop()
         if isReusingWindow {
             store.refreshAsyncIfIdle()
         }
         scheduleDeferredRefreshAction()
     }
+}
 
+extension TokenMeteringDashboardWindowController {
     private func scheduleDeferredRefreshAction() {
         deferredRefreshTask?.cancel()
         deferredRefreshTask = Task { @MainActor [weak self] in
@@ -72,13 +77,65 @@ final class TokenMeteringDashboardWindowController: NSObject, NSWindowDelegate {
             } catch {
                 return
             }
-            guard let self, !self.store.isDashboardRefreshInProgress else {
+            guard let self else {
                 return
             }
-            self.refreshAction()
+            self.requestTokenDataRefresh()
         }
     }
 
+    private func startAIStatusRefreshLoop() {
+        aiStatusRefreshTask?.cancel()
+        aiStatusRefreshTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(
+                        nanoseconds: self?.aiStatusRefreshIntervalNanoseconds ?? 8_000_000_000
+                    )
+                } catch {
+                    return
+                }
+
+                guard let self, self.window?.isVisible == true else {
+                    return
+                }
+
+                self.aiStatusStore.refreshInBackground()
+            }
+        }
+    }
+
+    private func startTokenDataRefreshLoop() {
+        tokenDataRefreshTask?.cancel()
+        tokenDataRefreshTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(
+                        nanoseconds: self?.tokenDataRefreshIntervalNanoseconds ?? 15_000_000_000
+                    )
+                } catch {
+                    return
+                }
+
+                guard let self, self.window?.isVisible == true else {
+                    return
+                }
+
+                self.requestTokenDataRefresh()
+            }
+        }
+    }
+
+    private func requestTokenDataRefresh() {
+        refreshAction()
+        guard !store.isDashboardRefreshInProgress else {
+            return
+        }
+        store.refreshAsync()
+    }
+}
+
+extension TokenMeteringDashboardWindowController {
     private func ensureWindow() -> NSWindow {
         if let window {
             return window
@@ -118,10 +175,7 @@ final class TokenMeteringDashboardWindowController: NSObject, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
-        aiStatusRefreshTask?.cancel()
-        aiStatusRefreshTask = nil
-        deferredRefreshTask?.cancel()
-        deferredRefreshTask = nil
+        cancelRefreshTasks()
         aiStatusStore.cancelRefresh()
         guard !isPreparingForTermination else {
             return
@@ -131,34 +185,19 @@ final class TokenMeteringDashboardWindowController: NSObject, NSWindowDelegate {
 
     func prepareForTermination() {
         isPreparingForTermination = true
-        aiStatusRefreshTask?.cancel()
-        aiStatusRefreshTask = nil
-        deferredRefreshTask?.cancel()
-        deferredRefreshTask = nil
+        cancelRefreshTasks()
         aiStatusStore.cancelRefresh()
         window?.isRestorable = false
         window?.orderOut(nil)
     }
 
-    private func startAIStatusRefreshLoop() {
+    private func cancelRefreshTasks() {
         aiStatusRefreshTask?.cancel()
-        aiStatusRefreshTask = Task { @MainActor [weak self] in
-            while !Task.isCancelled {
-                do {
-                    try await Task.sleep(
-                        nanoseconds: self?.aiStatusRefreshIntervalNanoseconds ?? 8_000_000_000
-                    )
-                } catch {
-                    return
-                }
-
-                guard let self, self.window?.isVisible == true else {
-                    return
-                }
-
-                self.aiStatusStore.refreshInBackground()
-            }
-        }
+        aiStatusRefreshTask = nil
+        tokenDataRefreshTask?.cancel()
+        tokenDataRefreshTask = nil
+        deferredRefreshTask?.cancel()
+        deferredRefreshTask = nil
     }
 
     private func updateWindowTitle(_ window: NSWindow? = nil) {
@@ -168,7 +207,9 @@ final class TokenMeteringDashboardWindowController: NSObject, NSWindowDelegate {
             language: TokenMeteringLanguage.current(appLanguage: settings.appLanguage)
         )
     }
+}
 
+extension TokenMeteringDashboardWindowController {
     private var defaultWindowFrame: NSRect {
         let visibleFrame = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1024, height: 768)
         let size = fittedSize(for: visibleFrame)
