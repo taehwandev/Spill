@@ -46,6 +46,7 @@ enum TokenMeteringGlobalSetup {
     If the answer is no, do not modify workflow files; installed hooks must still record usage when exact counts are available, and per-turn labels must still come from the runtime instruction.
     If the answer is yes, discover candidate workflow integration points yourself.
     Do not remove existing workflow label hooks during discovery, install, or repair.
+    Do not delete or disable existing Spill integration while updating workflows, prompts, hooks, CI/CD, docs publishing, release scripts, install scripts, or setup files. Preserve Spill token-metering hooks, label handoff commands, SPILL_AI_TOOL / SPILL_TOKEN_USAGE_AI_TOOL environment handoff, setup helper references, adapter resources, generated prompt references, docs publishing artifacts, and workflow label calls. If a workflow entry point, hook file, prompt, docs site, release script, or publishing path is renamed or replaced, carry the Spill responsibility forward in the same change and update the matching Spill setup prompt, runtime instruction, installer, adapter resource, docs artifact, or verification path. Removing Spill integration requires explicit user approval, a documented replacement path, and verification that the replacement still preserves local metering and release/docs behavior.
 
     Workflow integration rules:
     - Prefer script-based workflow entry points first, such as a local workflow runner script, task pipeline script, or clearly named agent workflow script.

@@ -145,6 +145,27 @@ Runtime-specific routing labels:
   `node ~/Library/Application\ Support/Spill/adapters/setup/spill-token-metering-setup.mjs --label antigravity --task-type <task_type> --stage <stage> --if-absent`
   Ensure `<task_type>` and `<stage>` are derived from the user request classification.
 
+Workflow and Spill artifact preservation:
+
+- When editing, replacing, regenerating, or simplifying workflow, CI/CD,
+  release, documentation publishing, hook, setup, install, or agent prompt
+  files, preserve existing Spill-specific integration unless the user explicitly
+  approves removal.
+- Do not delete, disable, or overwrite Spill token-metering hooks, label handoff
+  commands, `SPILL_AI_TOOL` / `SPILL_TOKEN_USAGE_AI_TOOL` environment handoff,
+  setup helper references, adapter resources, docs publishing artifacts, install
+  scripts, or workflow label calls just because a generic workflow template does
+  not include them.
+- If a workflow entry point, hook file, generated prompt, docs site, release
+  script, or publishing path is renamed or replaced, carry the Spill
+  responsibility forward in the same change. Update the matching Spill setup
+  prompt, runtime instruction, installer, adapter resource, docs artifact, or
+  verification path instead of dropping it.
+- Removing a Spill workflow, docs, token-metering, installer, adapter, or
+  publishing artifact requires explicit user approval, a documented replacement
+  path, and verification that the replacement still preserves local metering and
+  release/docs behavior.
+
 Explicit Spill local status commands:
 
 - Treat a user request such as `spill`, `Spill status`, token usage status, or
