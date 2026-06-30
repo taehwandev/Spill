@@ -96,8 +96,8 @@ extension TokenUsageStore {
                 '$.token_breakdown.generated_output', excluded.source_generated_output,
                 '$.token_breakdown.unknown', excluded.source_unknown
             )
-        WHERE token_usage_events.ai_tool = 'codex'
-            AND excluded.ai_tool = 'codex'
+        WHERE token_usage_events.ai_tool IN ('codex', 'claude')
+            AND excluded.ai_tool = token_usage_events.ai_tool
             AND (
                 token_usage_events.input_tokens != excluded.input_tokens
                 OR token_usage_events.output_tokens != excluded.output_tokens

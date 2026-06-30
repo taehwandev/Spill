@@ -63,6 +63,13 @@ Runtime input normalization:
   `tokens.input`/`tokens.output`, `usageMetadata.totalTokenCount`, or a
   normalized `spill_token_usage` object. The adapter may accept these input
   shapes, but it must still write only the strict Spill event keys.
+- First-class runtime totals use raw exact token usage for comparable tool
+  summaries. Claude Code adapters must include
+  `cache_read_input_tokens` together with `input_tokens` and
+  `cache_creation_input_tokens` in the normalized Spill `input_tokens` value.
+  Codex `input_tokens` already includes cached input reads. Do not drop
+  cache-read tokens to approximate cost; cost weighting belongs in a separate
+  display or analysis layer.
 - Antigravity/AGY uses Spill's local active importer as its approved metering
   path. The importer reads known AGY conversation metadata records read-only and
   extracts only exact numeric usage fields, safe model ids, and opaque ids.

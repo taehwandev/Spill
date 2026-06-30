@@ -3,8 +3,7 @@ import Foundation
 
 extension TokenUsageClaudeCodeImporter {
     func event(from turn: AssistantTurn, labelTimeline: LabelTimeline) -> TokenUsageEvent? {
-        // Exclude cache_read_input_tokens to match Codex measurement baseline.
-        let inputTokens = turn.inputTokens + turn.cacheCreationTokens
+        let inputTokens = turn.inputTokens
         let outputTokens = turn.outputTokens
         guard let totalTokens = Self.safeAdd(inputTokens, outputTokens),
               totalTokens > 0
@@ -17,7 +16,7 @@ extension TokenUsageClaudeCodeImporter {
         let model = Self.safeModel(turn.model)
 
         // Match Python Stop hook formula exactly:
-        // "span-" + sha256(":".join([run_id, model, request_id, str(turn_index), timestamp, str(input), str(output)]))[:12]
+        // "span-" + sha256(":".join([run_id, model, request_id, str(turn_index), timestamp, str(span_input), str(output)]))[:12]
         let runID = turn.sessionID
         let spanSource = [
             runID,
@@ -25,7 +24,7 @@ extension TokenUsageClaudeCodeImporter {
             turn.requestId,
             String(turn.turnIndex),
             turn.timestamp,
-            String(inputTokens),
+            String(turn.spanInputTokens),
             String(outputTokens),
         ].joined(separator: ":")
         let spanID = "span-" + SHA256.hash(data: Data(spanSource.utf8))

@@ -6,9 +6,9 @@ Reads the Stop hook payload from stdin, extracts new turns' token usage
 from the Claude Code transcript, and enqueues safe JSON event files in the
 Spill local queue.
 
-Token counting: sums input_tokens and cache_creation_input_tokens (fresh and
-cache-write) plus output_tokens per turn. cache_read_input_tokens is excluded
-to match the Codex measurement baseline. When a runtime omits top-level usage
+Token counting: sums input_tokens, cache_creation_input_tokens, and
+cache_read_input_tokens plus output_tokens per turn so Claude Code raw usage
+matches the Codex measurement baseline. When a runtime omits top-level usage
 totals but exposes exact per-iteration usage, the hook falls back to those
 iteration totals.
 
@@ -294,9 +294,9 @@ def _cache_creation_tokens(usage: dict) -> int:
     return sum(_safe_usage_token(value) for value in detail.values())
 
 
-def _usage_totals(usage: dict, include_iterations: bool = True) -> tuple[int, int]:
+def _usage_amounts(usage: dict, include_iterations: bool = True) -> tuple[int, int, int]:
     if not isinstance(usage, dict):
-        return 0, 0
+        return 0, 0, 0
 
     input_tokens = _safe_usage_token(usage.get("input_tokens"))
     cache_creation_tokens = _cache_creation_tokens(usage)
@@ -304,25 +304,36 @@ def _usage_totals(usage: dict, include_iterations: bool = True) -> tuple[int, in
     output_tokens = _safe_usage_token(usage.get("output_tokens"))
 
     if input_tokens > 0 or cache_creation_tokens > 0 or cache_read_tokens > 0 or output_tokens > 0:
-        return input_tokens + cache_creation_tokens, output_tokens
+        return (
+            input_tokens + cache_creation_tokens + cache_read_tokens,
+            input_tokens + cache_creation_tokens,
+            output_tokens,
+        )
 
     if not include_iterations:
-        return 0, 0
+        return 0, 0, 0
 
     iterations = usage.get("iterations")
     if not isinstance(iterations, list):
-        return 0, 0
+        return 0, 0, 0
 
     total_input = 0
+    total_span_input = 0
     total_output = 0
     for item in iterations:
         if not isinstance(item, dict):
             continue
         nested_usage = item.get("usage") if isinstance(item.get("usage"), dict) else item
-        nested_input, nested_output = _usage_totals(nested_usage, include_iterations=False)
+        nested_input, nested_span_input, nested_output = _usage_amounts(nested_usage, include_iterations=False)
         total_input += nested_input
+        total_span_input += nested_span_input
         total_output += nested_output
-    return total_input, total_output
+    return total_input, total_span_input, total_output
+
+
+def _usage_totals(usage: dict, include_iterations: bool = True) -> tuple[int, int]:
+    input_tokens, _, output_tokens = _usage_amounts(usage, include_iterations=include_iterations)
+    return input_tokens, output_tokens
 
 
 def _write_diagnostic_file(filename: str, kind: str, reason: str, payload: dict = None, meaning: str = "") -> None:
@@ -611,7 +622,7 @@ def _event_for_live_turn(
     allow_current_label: bool,
     allow_timestamp_fallback: bool,
 ):
-    turn_input, turn_output = _usage_totals(turn.get("usage", {}))
+    turn_input, turn_span_input, turn_output = _usage_amounts(turn.get("usage", {}))
     total = turn_input + turn_output
     if total <= 0:
         return None
@@ -664,7 +675,7 @@ def _event_for_live_turn(
         str(turn.get("request_id", "")),
         str(turn.get("turn_index", "")),
         timestamp,
-        str(turn_input),
+        str(turn_span_input),
         str(turn_output),
     )
 
@@ -758,7 +769,7 @@ def _run_history_payload(payload: dict, enqueue_event=_enqueue_event, flush_even
     session_output = 0
     emitted_any = False
     for turn in all_turns:
-        turn_input, turn_output = _usage_totals(turn.get("usage", {}))
+        turn_input, turn_span_input, turn_output = _usage_amounts(turn.get("usage", {}))
         session_fresh += turn_input
         session_output += turn_output
         total = turn_input + turn_output
@@ -780,9 +791,10 @@ def _run_history_payload(payload: dict, enqueue_event=_enqueue_event, flush_even
         span_id = _stable_span_id(
             run_id,
             model,
+            str(turn.get("request_id", "")),
             str(turn.get("turn_index", "")),
             timestamp,
-            str(turn_input),
+            str(turn_span_input),
             str(turn_output),
         )
 
@@ -866,8 +878,7 @@ def _run_for_payload(payload: dict, scan_subagents: bool = True, allow_timestamp
         )
         return _SCAN_SKIPPED if reason == "no_new_token_delta" else _SCAN_UNSUPPORTED
 
-    # Input total includes fresh (uncached) and cache-write token categories.
-    # cache_read_input_tokens is excluded to match the Codex measurement baseline.
+    # Input total includes fresh, cache-write, and cache-read token categories.
     session_fresh = 0
     session_output = 0
     for turn in all_turns:

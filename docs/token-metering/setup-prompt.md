@@ -104,6 +104,12 @@ Required runtime setup after install:
 The installed adapters must force one strict Spill output event schema, not one
 shared runtime hook input schema. Each runtime may expose usage differently, so
 adapters normalize supported exact-count input shapes into the Spill event keys.
+First-class runtime totals use raw exact token usage for comparable tool
+summaries. Claude Code adapters must include `cache_read_input_tokens` together
+with `input_tokens` and `cache_creation_input_tokens` in the normalized Spill
+`input_tokens` value. Codex `input_tokens` already includes cached input reads.
+Do not drop cache-read tokens to approximate cost; cost weighting belongs in a
+separate display or analysis layer.
 For Antigravity/AGY specifically, verify that the active importer can read exact
 numeric usage fields from recent AGY conversation metadata and can import a safe
 normalized event. If AGY metadata does not expose exact token fields, the

@@ -8,7 +8,7 @@ extension TokenUsageClaudeCodeImporter {
         let model: String
         let turnIndex: Int
         let inputTokens: Int
-        let cacheCreationTokens: Int
+        let spanInputTokens: Int
         let outputTokens: Int
     }
 
@@ -75,7 +75,10 @@ extension TokenUsageClaudeCodeImporter {
             return nil
         }
 
-        let (inputTokens, outputTokens) = usageTotals(usage)
+        let usageAmounts = usageAmounts(usage)
+        let inputTokens = usageAmounts.input
+        let spanInputTokens = usageAmounts.spanInput
+        let outputTokens = usageAmounts.output
         guard inputTokens + outputTokens > 0 else {
             return (nil, true)
         }
@@ -100,33 +103,41 @@ extension TokenUsageClaudeCodeImporter {
             model: stringValue(message?["model"]) ?? stringValue(object["model"]) ?? "claude-unknown",
             turnIndex: turnIndex,
             inputTokens: inputTokens,
-            cacheCreationTokens: 0,
+            spanInputTokens: spanInputTokens,
             outputTokens: outputTokens
         ), true)
     }
 
-    private func usageTotals(_ usage: [String: Any], includeIterations: Bool = true) -> (input: Int, output: Int) {
+    private func usageAmounts(
+        _ usage: [String: Any],
+        includeIterations: Bool = true
+    ) -> (input: Int, spanInput: Int, output: Int) {
         let inputTokens = safeUsageToken(usage["input_tokens"])
         let cacheCreationTokens = cacheCreationTokens(from: usage)
         let cacheReadTokens = safeUsageToken(usage["cache_read_input_tokens"])
         let outputTokens = safeUsageToken(usage["output_tokens"])
 
         if inputTokens > 0 || cacheCreationTokens > 0 || cacheReadTokens > 0 || outputTokens > 0 {
-            return (inputTokens + cacheCreationTokens, outputTokens)
+            return (
+                inputTokens + cacheCreationTokens + cacheReadTokens,
+                inputTokens + cacheCreationTokens,
+                outputTokens
+            )
         }
 
         guard includeIterations,
               let iterations = usage["iterations"] as? [Any]
         else {
-            return (0, 0)
+            return (0, 0, 0)
         }
 
-        return iterations.reduce(into: (input: 0, output: 0)) { totals, item in
+        return iterations.reduce(into: (input: 0, spanInput: 0, output: 0)) { totals, item in
             guard let object = item as? [String: Any] else { return }
             let nestedUsage = (object["usage"] as? [String: Any]) ?? object
-            let nestedTotals = usageTotals(nestedUsage, includeIterations: false)
-            totals.input += nestedTotals.input
-            totals.output += nestedTotals.output
+            let nestedAmounts = usageAmounts(nestedUsage, includeIterations: false)
+            totals.input += nestedAmounts.input
+            totals.spanInput += nestedAmounts.spanInput
+            totals.output += nestedAmounts.output
         }
     }
 

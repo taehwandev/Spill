@@ -1238,10 +1238,10 @@ final class TokenUsageStoreTests: XCTestCase {
 
         let summary = importer.importRecentSessions(into: store)
         XCTAssertEqual(summary.scannedFiles, 1)
-        XCTAssertEqual(summary.parsedTurns, 2)
-        XCTAssertEqual(summary.importedEvents, 2)
-        XCTAssertEqual(store.loadEvents().map(\.totalTokens).sorted(), [11, 32])
-        XCTAssertEqual(store.loadEvents().map(\.inputTokens).sorted(), [8, 25])
+        XCTAssertEqual(summary.parsedTurns, 3)
+        XCTAssertEqual(summary.importedEvents, 3)
+        XCTAssertEqual(store.loadEvents().map(\.totalTokens).sorted(), [12, 100, 132])
+        XCTAssertEqual(store.loadEvents().map(\.inputTokens).sorted(), [9, 100, 125])
         XCTAssertEqual(Set(store.loadEvents().map(\.stage.rawValue)), ["summarize"])
         let state = try decodedJSONObject(from: Data(contentsOf: rootURL.appendingPathComponent("claude-active-state.json")))
         let nextTurnIndices = try XCTUnwrap(state["next_turn_index_by_source"] as? [String: Any])
@@ -1250,7 +1250,7 @@ final class TokenUsageStoreTests: XCTestCase {
 
         let secondSummary = importer.importRecentSessions(into: store)
         XCTAssertEqual(secondSummary.importedEvents, 0)
-        XCTAssertEqual(store.loadEvents().count, 2)
+        XCTAssertEqual(store.loadEvents().count, 3)
     }
 
     func testClaudeCodeActiveImporterLeavesSubagentTranscriptFilesForStopHook() throws {
@@ -1708,6 +1708,44 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(event.stage, .verify)
         XCTAssertEqual(event.inputTokens, 20)
         XCTAssertEqual(event.outputTokens, 4)
+    }
+
+    func testAppendEventsWithoutLoadingRepairsClaudeDuplicateSpanTokenCountsAndPreservesMetadata() throws {
+        let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
+        let existing = Self.safeEvent(
+            aiTool: .claude,
+            spanID: "span_claude_reconciled_history",
+            inputTokens: 25,
+            outputTokens: 7,
+            generatedOutput: 7,
+            projectID: "project_existing",
+            taskType: .analysis,
+            stage: .plan
+        )
+        let incoming = Self.safeEvent(
+            aiTool: .claude,
+            spanID: "span_claude_reconciled_history",
+            inputTokens: 125,
+            outputTokens: 7,
+            generatedOutput: 7,
+            projectID: "project_new",
+            taskType: .reviewResponse,
+            stage: .implement
+        )
+
+        try usageStore.appendEvent(existing)
+        let insertedCount = try usageStore.appendEventsWithoutLoading([incoming])
+        let event = try XCTUnwrap(usageStore.loadEvents().first)
+
+        XCTAssertEqual(insertedCount, 1)
+        XCTAssertEqual(event.projectID, "project_existing")
+        XCTAssertEqual(event.taskType, .analysis)
+        XCTAssertEqual(event.stage, .plan)
+        XCTAssertEqual(event.inputTokens, 125)
+        XCTAssertEqual(event.outputTokens, 7)
+        XCTAssertEqual(event.totalTokens, 132)
+        XCTAssertEqual(event.tokenBreakdown.generatedOutput, 7)
+        XCTAssertEqual(event.tokenBreakdown.unknown, 125)
     }
 
     @MainActor
@@ -3650,6 +3688,9 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(prompt.contains("unavailable detail attribution"))
         XCTAssertTrue(prompt.contains("Workflow runner permissions are separate"))
         XCTAssertTrue(prompt.contains("runtime-specific exact-count input shapes"))
+        XCTAssertTrue(prompt.contains("Claude Code adapters must include cache_read_input_tokens"))
+        XCTAssertTrue(prompt.contains("Codex input_tokens already includes cached input reads"))
+        XCTAssertTrue(prompt.contains("cost weighting belongs in a separate display or analysis layer"))
         XCTAssertTrue(prompt.contains("Do not install AGY PostInvocation, Stop, or lifecycle hooks"))
         XCTAssertTrue(prompt.contains("remove managed Spill AGY hook entries"))
         XCTAssertTrue(prompt.contains("antigravity-active-importer-last.json"))
@@ -3817,6 +3858,9 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertFalse(setup.contains("PostInvocation[]"))
         XCTAssertTrue(setup.contains("force one strict Spill output event schema"))
         XCTAssertTrue(setup.contains("shared runtime hook input schema"))
+        XCTAssertTrue(setup.contains("Claude Code adapters must include `cache_read_input_tokens`"))
+        XCTAssertTrue(setup.contains("Codex `input_tokens` already includes cached input reads"))
+        XCTAssertTrue(setup.contains("cost weighting belongs in a\nseparate display or analysis layer"))
         XCTAssertTrue(setup.contains("active importer can read exact\nnumeric usage fields"))
         XCTAssertFalse(setup.contains("antigravity-last-empty.json"))
         XCTAssertFalse(setup.contains("antigravity-last-mismatch.json"))
@@ -3853,6 +3897,9 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(runtime.contains("Runtime input normalization"))
         XCTAssertTrue(runtime.contains("strict contract is the Spill output event schema"))
         XCTAssertTrue(runtime.contains("Runtime hook input formats are allowed to differ by tool"))
+        XCTAssertTrue(runtime.contains("Claude Code adapters must include\n  `cache_read_input_tokens`"))
+        XCTAssertTrue(runtime.contains("Codex `input_tokens` already includes cached input reads"))
+        XCTAssertTrue(runtime.contains("cost weighting belongs in a separate\n  display or analysis layer"))
         XCTAssertTrue(runtime.contains("Antigravity/AGY uses Spill's local active importer"))
         XCTAssertTrue(runtime.contains("Do not install AGY runtime hooks"))
         XCTAssertTrue(runtime.contains("write a local-only diagnostic"))
@@ -4079,7 +4126,7 @@ final class TokenUsageStoreTests: XCTestCase {
 
         let success = try decodedJSONObject(from: Data(contentsOf: successURL))
         XCTAssertEqual(success["kind"] as? String, "success")
-        XCTAssertEqual(success["total_tokens"] as? Int, 32)
+        XCTAssertEqual(success["total_tokens"] as? Int, 132)
         XCTAssertNil(success["run_id"])
         XCTAssertNil(success["span_id"])
         XCTAssertFalse(FileManager.default.fileExists(atPath: mismatchURL.path))
@@ -4087,7 +4134,7 @@ final class TokenUsageStoreTests: XCTestCase {
         let events = try antigravityEventObjects(in: inboxURL)
         XCTAssertEqual(events.count, 1)
         XCTAssertEqual(events.first?["ai_tool"] as? String, "claude")
-        XCTAssertEqual(events.first?["input_tokens"] as? Int, 25)
+        XCTAssertEqual(events.first?["input_tokens"] as? Int, 125)
         XCTAssertEqual(events.first?["output_tokens"] as? Int, 7)
         let stateURL = sessionStateURL.appendingPathComponent("claudeDiag01.json")
         let state = try String(contentsOf: stateURL)
@@ -4122,7 +4169,7 @@ final class TokenUsageStoreTests: XCTestCase {
 
         let refreshedEvents = try antigravityEventObjects(in: inboxURL)
         XCTAssertEqual(refreshedEvents.count, 3)
-        XCTAssertEqual(refreshedEvents.compactMap { $0["total_tokens"] as? Int }.sorted(), [9, 11, 32])
+        XCTAssertEqual(refreshedEvents.compactMap { $0["total_tokens"] as? Int }.sorted(), [9, 12, 132])
         XCTAssertFalse(FileManager.default.fileExists(atPath: emptyURL.path))
     }
 
@@ -4166,7 +4213,7 @@ final class TokenUsageStoreTests: XCTestCase {
 
         let events = try antigravityEventObjects(in: inboxURL)
         XCTAssertEqual(events.count, 2)
-        XCTAssertEqual(events.compactMap { $0["total_tokens"] as? Int }.sorted(), [25, 37])
+        XCTAssertEqual(events.compactMap { $0["total_tokens"] as? Int }.sorted(), [125, 237])
         XCTAssertFalse(events.contains { $0["stage"] as? String == "classify" })
         XCTAssertEqual(Set(events.compactMap { $0["stage"] as? String }), Set(["summarize", "implement"]))
     }

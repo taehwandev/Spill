@@ -1171,6 +1171,61 @@ final class TokenUsageHistoryImportCoordinatorTests: XCTestCase {
         XCTAssertTrue(output.stdout.contains(#""unsupported_records":2"#), output.stdout)
     }
 
+    func testClaudeHistoryScanSpanMatchesNativeImporterFormula() throws {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let hookURL = root.appendingPathComponent("adapters/claude-code/spill-hook.py")
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SpillClaudeHistorySpan-\(UUID().uuidString)", isDirectory: true)
+        let projectsURL = tempURL.appendingPathComponent("projects", isDirectory: true)
+        let projectURL = projectsURL.appendingPathComponent("project-opaque", isDirectory: true)
+        let inboxURL = tempURL.appendingPathComponent("inbox", isDirectory: true)
+        try FileManager.default.createDirectory(at: projectURL, withIntermediateDirectories: true)
+
+        let transcriptURL = projectURL.appendingPathComponent("11111111111111111111111111111111.jsonl")
+        try """
+        {"message":{"role":"user","content":"ignored"}}
+        {"timestamp":"2026-06-18T00:00:00.000Z","requestId":"req_111111111111111111111111","message":{"id":"msg_111111111111111111111111","role":"assistant","model":"claude-sonnet-4","usage":{"input_tokens":20,"cache_creation_input_tokens":5,"cache_read_input_tokens":100,"output_tokens":7},"content":[]}}
+
+        """.write(to: transcriptURL, atomically: true, encoding: .utf8)
+
+        let store = TokenUsageStore(fileURL: tempURL.appendingPathComponent("events.sqlite3"))
+        let importer = TokenUsageClaudeCodeImporter(
+            projectsDirectory: projectsURL,
+            labelTimelineURL: tempURL.appendingPathComponent("missing-labels.jsonl"),
+            stateURL: tempURL.appendingPathComponent("claude-active-state.json")
+        )
+        let nativeSummary = importer.importRecentSessions(into: store)
+        let nativeEvent = try XCTUnwrap(store.loadEvents().first)
+
+        XCTAssertEqual(nativeSummary.importedEvents, 1)
+        XCTAssertEqual(nativeEvent.inputTokens, 125)
+        XCTAssertEqual(nativeEvent.totalTokens, 132)
+
+        let output = try runProcess(
+            executable: "/usr/bin/env",
+            arguments: [
+                "python3",
+                hookURL.path,
+                "--scan-dir",
+                projectsURL.path,
+                "--all",
+                "--json",
+            ],
+            environment: [
+                "SPILL_TOKEN_USAGE_INBOX_DIR": inboxURL.path,
+                "SPILL_TOKEN_USAGE_SESSION_STATE_DIR": tempURL.appendingPathComponent("history-state", isDirectory: true).path,
+                "SPILL_TOKEN_USAGE_DIAGNOSTICS_DIR": tempURL.appendingPathComponent("diagnostics", isDirectory: true).path,
+                "SPILL_TOKEN_USAGE_LABEL_FILE": tempURL.appendingPathComponent("label.json").path,
+            ]
+        )
+
+        XCTAssertTrue(output.stdout.contains(#""imported_events":1"#), output.stdout)
+        let historyEvent = try XCTUnwrap(inboxEvents(in: inboxURL).first)
+        XCTAssertEqual(historyEvent["span_id"] as? String, nativeEvent.spanID)
+        XCTAssertEqual(historyEvent["input_tokens"] as? Int, 125)
+        XCTAssertEqual(historyEvent["total_tokens"] as? Int, 132)
+    }
+
     func testClaudeHistoryUsesTurnTimestampsAndTimelineLabelsOnlyInsideCoveredWindows() throws {
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let hookURL = root.appendingPathComponent("adapters/claude-code/spill-hook.py")
