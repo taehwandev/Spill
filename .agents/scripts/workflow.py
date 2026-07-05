@@ -62,6 +62,7 @@ EXCLUDED_DIRS = {
 LOCALIZED_CONTENT_FILES = {
     "Sources/Spill/Settings/SpillSettings.swift",
     "Sources/Spill/App/AppLocalization.swift",
+    "Sources/Spill/Preferences/PreferencesLegalLocalization.swift",
     "Sources/Spill/Preferences/PreferencesLocalization.swift",
     "Sources/Spill/TokenMetering/TokenMeteringLocalization.swift",
     "Sources/Spill/TokenMetering/TokenMeteringDashboardView.swift",
