@@ -45,6 +45,10 @@ extension TokenUsageStore {
             try execute("DROP INDEX IF EXISTS idx_token_usage_events_project_created_at", database: database)
             try execute("PRAGMA user_version = 2", database: database)
         }
+        if userVersion < 3 {
+            try removeContentDuplicateEvents(database: database)
+            try execute("PRAGMA user_version = 3", database: database)
+        }
 
         try execute(
             """

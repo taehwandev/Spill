@@ -39,4 +39,14 @@ struct PrivateUsageTokenAccountingTotals: Codable, Equatable, Sendable {
             unclassifiedInputTokens += event.inputTokens
         }
     }
+
+    mutating func add(_ totals: PrivateUsageTokenAccountingTotals) {
+        accountedEventCount += totals.accountedEventCount
+        unclassifiedEventCount += totals.unclassifiedEventCount
+        uncachedInputTokens += totals.uncachedInputTokens
+        cacheCreationInputTokens += totals.cacheCreationInputTokens
+        cacheReadInputTokens += totals.cacheReadInputTokens
+        unclassifiedInputTokens += totals.unclassifiedInputTokens
+        reasoningOutputTokens += totals.reasoningOutputTokens
+    }
 }

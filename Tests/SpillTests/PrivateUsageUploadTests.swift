@@ -234,6 +234,55 @@ final class PrivateUsageUploadTests: XCTestCase {
         XCTAssertFalse(payloadString.contains("wrapped_key"))
     }
 
+    func testSharedSummaryBuilderCompactsRelayBoundedDimensions() throws {
+        let timeZone = try XCTUnwrap(TimeZone(identifier: "UTC"))
+        let calendar = fixedCalendar(timeZone: timeZone)
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 9, hour: 9)))
+        let yesterday = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 8, hour: 12)))
+        let builder = PrivateUsageDailyBucketBuilder(
+            calendar: calendar,
+            timeZone: timeZone,
+            sealer: RecordingPrivateUsageSealer()
+        )
+        let events = try (1...260).map { index in
+            let createdAt = try XCTUnwrap(calendar.date(byAdding: .second, value: index, to: yesterday))
+            return makeEvent(
+                spanID: "span_\(index)",
+                runID: "run_\(index)",
+                aiTool: .codex,
+                taskType: "code_generation",
+                stage: "implement",
+                model: String(format: "model%03d", index),
+                input: 1,
+                output: 0,
+                createdAt: createdAt
+            )
+        }
+
+        let summaries = try builder.makeDirtySharedSummaries(
+            events: events,
+            acknowledgedHashesByBucketKey: [:],
+            now: now
+        )
+
+        let summary = try XCTUnwrap(summaries.first)
+        XCTAssertEqual(summary.totals.eventCount, 260)
+        XCTAssertEqual(summary.totals.totalTokens, 260)
+        XCTAssertEqual(summary.modelTotals.count, 128)
+        XCTAssertEqual(summary.modelTotals["other"]?.eventCount, 133)
+        XCTAssertEqual(summary.modelTotals["other"]?.totalTokens, 133)
+        XCTAssertEqual(summary.workItems.count, 256)
+
+        let overflowItem = try XCTUnwrap(summary.workItems.first { $0.id == "work__codex__other__2026_06_08" })
+        XCTAssertEqual(overflowItem.aiTool, "codex")
+        XCTAssertEqual(overflowItem.taskType, "uncategorized")
+        XCTAssertEqual(overflowItem.stage, "summarize")
+        XCTAssertEqual(overflowItem.model, "other")
+        XCTAssertEqual(overflowItem.totals.eventCount, 5)
+        XCTAssertEqual(overflowItem.totals.totalTokens, 5)
+        XCTAssertEqual(try summary.canonicalHash().count, 64)
+    }
+
     func testDailyBucketBuilderKeepsDistinctWorkItemsWhenLabelsContainUnderscores() throws {
         let timeZone = try XCTUnwrap(TimeZone(identifier: "UTC"))
         let calendar = fixedCalendar(timeZone: timeZone)

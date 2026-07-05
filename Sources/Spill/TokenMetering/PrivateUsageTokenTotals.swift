@@ -61,4 +61,13 @@ struct PrivateUsageTokenTotals: Codable, Equatable, Sendable {
         latencyMS += event.latencyMS
         accounting.add(event)
     }
+
+    mutating func add(_ totals: PrivateUsageTokenTotals) {
+        eventCount += totals.eventCount
+        inputTokens += totals.inputTokens
+        outputTokens += totals.outputTokens
+        totalTokens += totals.totalTokens
+        latencyMS += totals.latencyMS
+        accounting.add(totals.accounting)
+    }
 }

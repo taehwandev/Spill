@@ -120,7 +120,8 @@ struct PrivateUsageDailyBucketBuilder: Sendable {
     ) -> [PrivateUsageDailyAggregate] {
         let todayStart = calendar.startOfDay(for: now)
         let earliestDayStart = earliestBucketStart.map { calendar.startOfDay(for: $0) }
-        let groupedEvents = Dictionary(grouping: events.compactMap { event -> (Date, TokenUsageEvent)? in
+        let deduplicatedEvents = Self.deduplicateByContent(events)
+        let groupedEvents = Dictionary(grouping: deduplicatedEvents.compactMap { event -> (Date, TokenUsageEvent)? in
             guard let date = ISO8601DateFormatter.parseTokenUsageDate(from: event.createdAt),
                   date < todayStart || (includeCurrentDay && date <= now)
             else {
@@ -294,6 +295,40 @@ private extension PrivateUsageDailyBucketBuilder {
             .split(separator: "_", omittingEmptySubsequences: true)
             .joined(separator: "_")
         return collapsed.isEmpty ? "unknown" : collapsed
+    }
+
+    static func deduplicateByContent(_ events: [TokenUsageEvent]) -> [TokenUsageEvent] {
+        struct ContentKey: Hashable {
+            let runID: String
+            let createdAt: String
+            let inputTokens: Int
+            let outputTokens: Int
+        }
+        var best = [ContentKey: TokenUsageEvent]()
+        var noKey = [TokenUsageEvent]()
+        for event in events {
+            guard !event.runID.isEmpty else {
+                noKey.append(event)
+                continue
+            }
+            let key = ContentKey(
+                runID: event.runID,
+                createdAt: event.createdAt,
+                inputTokens: event.inputTokens,
+                outputTokens: event.outputTokens
+            )
+            if let existing = best[key] {
+                if existing.tokenAccounting == nil, event.tokenAccounting != nil {
+                    best[key] = event
+                }
+            } else {
+                best[key] = event
+            }
+        }
+        let deduped = (Array(best.values) + noKey).sorted {
+            isTimestamp($0.createdAt, before: $1.createdAt)
+        }
+        return deduped
     }
 
     static func isTimestamp(_ lhs: String, before rhs: String) -> Bool {

@@ -141,6 +141,31 @@ extension TokenUsageStore {
         }
     }
 
+    func removeContentDuplicateEvents(database: OpaquePointer) throws {
+        // For each group sharing (run_id, created_at, input_tokens, output_tokens),
+        // keep the has-accounting event first, then lowest rowid. Events without a
+        // run_id are skipped — they can't be safely matched on content alone.
+        let sql = """
+        DELETE FROM token_usage_events
+        WHERE rowid IN (
+            SELECT rowid FROM (
+                SELECT
+                    rowid,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY run_id, created_at, input_tokens, output_tokens
+                        ORDER BY
+                            CASE WHEN accounting_uncached_input_tokens IS NOT NULL THEN 0 ELSE 1 END,
+                            rowid
+                    ) AS rn
+                FROM token_usage_events
+                WHERE run_id IS NOT NULL AND run_id != ''
+            )
+            WHERE rn > 1
+        )
+        """
+        try execute(sql, database: database)
+    }
+
     func updateDashboardColumns(for event: TokenUsageEvent, database: OpaquePointer) throws {
         let sql = """
         UPDATE token_usage_events
