@@ -255,7 +255,7 @@ final class MenuBarStatusContentView: NSView {
         return textFontSize.clamped(to: minimumTextFontSize...maximumTextFontSize)
     }
 
-    fileprivate static func textFont(textFontSize: CGFloat, textIsBold: Bool) -> NSFont {
+    static func textFont(textFontSize: CGFloat, textIsBold: Bool) -> NSFont {
         NSFont.monospacedDigitSystemFont(
             ofSize: normalizedTextFontSize(textFontSize),
             weight: textIsBold ? .semibold : .light
@@ -267,12 +267,12 @@ final class MenuBarStatusContentView: NSView {
         return NSFont.monospacedDigitSystemFont(ofSize: size, weight: textIsBold ? .semibold : .medium)
     }
 
-    fileprivate static func compactIconValueFont(textFontSize: CGFloat, textIsBold: Bool) -> NSFont {
+    static func compactIconValueFont(textFontSize: CGFloat, textIsBold: Bool) -> NSFont {
         let size = (normalizedTextFontSize(textFontSize) * 0.65).clamped(to: 8.0...9.6)
         return NSFont.monospacedDigitSystemFont(ofSize: size, weight: textIsBold ? .semibold : .medium)
     }
 
-    fileprivate static func badgeTextFont(textFontSize: CGFloat, textIsBold: Bool) -> NSFont {
+    static func badgeTextFont(textFontSize: CGFloat, textIsBold: Bool) -> NSFont {
         let size = (normalizedTextFontSize(textFontSize) * 0.58).clamped(to: 7.2...8.8)
         return NSFont.monospacedDigitSystemFont(ofSize: size, weight: textIsBold ? .bold : .semibold)
     }
@@ -354,7 +354,7 @@ final class MenuBarStatusContentView: NSView {
         }
     }
 
-    fileprivate static func compactBadgeText(for value: String) -> String {
+    static func compactBadgeText(for value: String) -> String {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             return ""
@@ -517,17 +517,18 @@ private final class MenuBarMainTriggerChipView: NSView {
 
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
-        configureIcon()
         refreshColors()
     }
 
     private func configureIcon() {
         triggerIconView.translatesAutoresizingMaskIntoConstraints = false
         triggerIconView.imageScaling = .scaleProportionallyDown
-        let config = NSImage.SymbolConfiguration(pointSize: 15.5, weight: .semibold)
-        triggerIconView.image = NSImage(systemSymbolName: trigger.symbolName, accessibilityDescription: trigger.title)?
-            .withSymbolConfiguration(config)
-        triggerIconView.symbolConfiguration = config
+        triggerIconView.image = MenuBarSymbolImageCache.image(
+            named: trigger.symbolName,
+            accessibilityDescription: trigger.title,
+            pointSize: 15.5
+        )
+        triggerIconView.symbolConfiguration = nil
 
         guard let caffeine else {
             return
@@ -535,13 +536,12 @@ private final class MenuBarMainTriggerChipView: NSView {
 
         caffeineIconView.translatesAutoresizingMaskIntoConstraints = false
         caffeineIconView.imageScaling = .scaleProportionallyDown
-        let caffeineConfig = NSImage.SymbolConfiguration(pointSize: 13.5, weight: .semibold)
-        caffeineIconView.image = NSImage(
-            systemSymbolName: caffeine.symbolName,
-            accessibilityDescription: caffeine.title
-        )?
-            .withSymbolConfiguration(caffeineConfig)
-        caffeineIconView.symbolConfiguration = caffeineConfig
+        caffeineIconView.image = MenuBarSymbolImageCache.image(
+            named: caffeine.symbolName,
+            accessibilityDescription: caffeine.title,
+            pointSize: 13.5
+        )
+        caffeineIconView.symbolConfiguration = nil
     }
 
     private func configureBadge() {
@@ -720,10 +720,12 @@ private final class MenuBarCompactStackMetricChipView: NSView {
         let icon = NSImageView()
         icon.translatesAutoresizingMaskIntoConstraints = false
         icon.imageScaling = .scaleProportionallyDown
-        let config = NSImage.SymbolConfiguration(pointSize: 6.8, weight: .semibold)
-        icon.image = NSImage(systemSymbolName: segment.symbolName, accessibilityDescription: segment.title)?
-            .withSymbolConfiguration(config)
-        icon.symbolConfiguration = config
+        icon.image = MenuBarSymbolImageCache.image(
+            named: segment.symbolName,
+            accessibilityDescription: segment.title,
+            pointSize: 6.8
+        )
+        icon.symbolConfiguration = nil
         icon.contentTintColor = textColor(for: segment).withAlphaComponent(segment.state == .unavailable ? 0.5 : 0.95)
         return icon
     }
@@ -868,266 +870,7 @@ private final class MenuBarVerticalMetricChipView: NSView {
     }
 }
 
-@MainActor
-private final class MenuBarMetricChipView: NSView {
-    private let segment: MenuBarStatusSegment
-    private let textFontSize: CGFloat
-    private let textIsBold: Bool
-    private let iconView = NSImageView()
-    private let valueLabel = NSTextField(labelWithString: "")
-    private var animationTimer: Timer?
-    private var animationPhase: CGFloat = 0
-
-    init(segment: MenuBarStatusSegment, textFontSize: CGFloat, textIsBold: Bool) {
-        self.segment = segment
-        self.textFontSize = textFontSize
-        self.textIsBold = textIsBold
-        super.init(frame: .zero)
-
-        translatesAutoresizingMaskIntoConstraints = false
-        configureIcon()
-        configureValue()
-        installSubviews()
-        refreshColors()
-        startAnimationIfNeeded()
-
-        setAccessibilityLabel(accessibilityText)
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    override func viewDidMoveToSuperview() {
-        super.viewDidMoveToSuperview()
-        if superview == nil {
-            animationTimer?.invalidate()
-            animationTimer = nil
-        }
-    }
-
-    override func viewDidChangeEffectiveAppearance() {
-        super.viewDidChangeEffectiveAppearance()
-        configureIcon()
-        refreshColors()
-    }
-
-    private func configureIcon() {
-        iconView.translatesAutoresizingMaskIntoConstraints = false
-        iconView.imageScaling = .scaleProportionallyDown
-        if case let .trigger(style) = segment.visualStyle,
-           let image = MenuBarTriggerIconRenderer.image(
-               style: style,
-               tintColor: statusColor,
-               usageRatio: segment.usageRatio,
-               phase: animationPhase,
-               size: iconSize
-           )
-        {
-            iconView.image = image
-            iconView.symbolConfiguration = nil
-            return
-        }
-
-        let config = NSImage.SymbolConfiguration(pointSize: symbolPointSize, weight: .semibold)
-        iconView.image = NSImage(systemSymbolName: resolvedSymbolName, accessibilityDescription: segment.title)?
-            .withSymbolConfiguration(config)
-        iconView.symbolConfiguration = config
-    }
-
-    private func startAnimationIfNeeded() {
-        guard shouldAnimateTrigger else {
-            return
-        }
-
-        let timer = Timer(timeInterval: 1.0 / 12.0, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                self?.advanceAnimationFrame()
-            }
-        }
-        RunLoop.main.add(timer, forMode: .common)
-        animationTimer = timer
-    }
-
-    private func advanceAnimationFrame() {
-        animationPhase += animationStep
-        if animationPhase >= 1 {
-            animationPhase.formTruncatingRemainder(dividingBy: 1)
-        }
-
-        configureIcon()
-    }
-
-    private var animationStep: CGFloat {
-        let loadBoost = CGFloat(segment.usageRatio.clamped(to: 0...1)) * 0.055
-        switch segment.state {
-        case .warning:
-            return 0.105 + loadBoost
-        case .active, .refreshing:
-            return 0.075 + loadBoost
-        case .normal:
-            return 0.045 + loadBoost
-        case .unavailable:
-            return 0.03
-        }
-    }
-
-    private var shouldAnimateTrigger: Bool {
-        segment.animates && hasCustomTriggerIcon
-    }
-
-    private func configureValue() {
-        valueLabel.translatesAutoresizingMaskIntoConstraints = false
-        valueLabel.stringValue = segment.isBadge ? badgeText(for: segment.value) : segment.value
-        if segment.isBadge {
-            valueLabel.font = MenuBarStatusContentView.badgeTextFont(
-                textFontSize: textFontSize,
-                textIsBold: textIsBold
-            )
-        } else if segment.isValueOnly {
-            valueLabel.font = MenuBarStatusContentView.compactIconValueFont(
-                textFontSize: textFontSize,
-                textIsBold: textIsBold
-            )
-        } else {
-            valueLabel.font = MenuBarStatusContentView.textFont(
-                textFontSize: textFontSize,
-                textIsBold: textIsBold
-            )
-        }
-        valueLabel.alignment = segment.isValueOnly || segment.isBadge ? .center : .right
-        valueLabel.lineBreakMode = .byClipping
-        valueLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
-        valueLabel.setContentHuggingPriority(.required, for: .horizontal)
-    }
-
-    private func installSubviews() {
-        if segment.isValueOnly, !segment.value.isEmpty {
-            addSubview(iconView)
-            addSubview(valueLabel)
-
-            NSLayoutConstraint.activate([
-                iconView.topAnchor.constraint(equalTo: topAnchor, constant: 1),
-                iconView.centerXAnchor.constraint(equalTo: centerXAnchor),
-                iconView.widthAnchor.constraint(equalToConstant: iconSize),
-                iconView.heightAnchor.constraint(equalToConstant: iconSize),
-
-                valueLabel.topAnchor.constraint(equalTo: iconView.bottomAnchor, constant: -1),
-                valueLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 3),
-                valueLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -3),
-                valueLabel.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -1)
-            ])
-            return
-        }
-
-        addSubview(iconView)
-
-        if segment.isBadge, !segment.value.isEmpty {
-            addSubview(valueLabel)
-
-            NSLayoutConstraint.activate([
-                iconView.centerXAnchor.constraint(equalTo: centerXAnchor),
-                iconView.centerYAnchor.constraint(equalTo: centerYAnchor, constant: 1),
-                iconView.widthAnchor.constraint(equalToConstant: iconSize),
-                iconView.heightAnchor.constraint(equalToConstant: iconSize),
-
-                valueLabel.topAnchor.constraint(equalTo: topAnchor, constant: -1),
-                valueLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: 0),
-                valueLabel.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: 0)
-            ])
-            return
-        }
-
-        if segment.value.isEmpty {
-            NSLayoutConstraint.activate([
-                iconView.centerXAnchor.constraint(equalTo: centerXAnchor),
-                iconView.centerYAnchor.constraint(equalTo: centerYAnchor),
-                iconView.widthAnchor.constraint(equalToConstant: iconSize),
-                iconView.heightAnchor.constraint(equalToConstant: iconSize)
-            ])
-            return
-        }
-
-        addSubview(valueLabel)
-
-        NSLayoutConstraint.activate([
-            iconView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 5.5),
-            iconView.centerYAnchor.constraint(equalTo: centerYAnchor),
-            iconView.widthAnchor.constraint(equalToConstant: iconSize),
-            iconView.heightAnchor.constraint(equalToConstant: iconSize),
-
-            valueLabel.leadingAnchor.constraint(equalTo: iconView.trailingAnchor, constant: 3.5),
-            valueLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -5.5),
-            valueLabel.centerYAnchor.constraint(equalTo: centerYAnchor)
-        ])
-    }
-
-    private func refreshColors() {
-        let color = statusColor
-        valueLabel.textColor = segment.state == .unavailable ? .secondaryLabelColor : .labelColor
-        if hasCustomTriggerIcon {
-            iconView.contentTintColor = nil
-        } else {
-            iconView.contentTintColor = color.withAlphaComponent(segment.state == .unavailable ? 0.5 : 1.0)
-        }
-    }
-
-    private var statusColor: NSColor {
-        switch segment.state {
-        case .normal:
-            return .labelColor
-        case .active, .refreshing:
-            return .systemTeal
-        case .warning:
-            return .systemOrange
-        case .unavailable:
-            return .tertiaryLabelColor
-        }
-    }
-
-    private var resolvedSymbolName: String {
-        segment.symbolName
-    }
-
-    private var iconSize: CGFloat {
-        if segment.isValueOnly {
-            return 8.5
-        }
-        return segment.kind == .trigger ? 18 : 13
-    }
-
-    private var symbolPointSize: CGFloat {
-        if segment.isValueOnly {
-            return 8
-        }
-        return segment.kind == .trigger ? 15.5 : 10.5
-    }
-
-    private var hasCustomTriggerIcon: Bool {
-        switch segment.visualStyle {
-        case .symbol, .valueOnly, .symbolBadge:
-            return false
-        case .trigger:
-            return false
-        }
-    }
-
-    private func badgeText(for value: String) -> String {
-        MenuBarStatusContentView.compactBadgeText(for: value)
-    }
-
-    private var accessibilityText: String {
-        guard !segment.value.isEmpty else {
-            return segment.title
-        }
-
-        return "\(segment.title) \(segment.value)"
-    }
-
-}
-
-private extension MenuBarStatusSegment {
+extension MenuBarStatusSegment {
     var isValueOnly: Bool {
         if case .valueOnly = visualStyle {
             return true

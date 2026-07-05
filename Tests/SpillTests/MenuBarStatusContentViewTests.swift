@@ -204,6 +204,33 @@ final class MenuBarStatusContentViewTests: XCTestCase {
         XCTAssertEqual(icons.last?.contentTintColor, .labelColor)
     }
 
+    func testMainChipAppearanceChangeDoesNotRecreateSymbolImages() throws {
+        let trigger = makeTriggerSegment()
+        let caffeine = makeCaffeineSegment()
+        let view = MenuBarStatusContentView(segments: [caffeine, trigger], groupsMainCaffeine: true)
+        let chip = try XCTUnwrap(view.subviews.first)
+        let icons = chip.subviews.compactMap { $0 as? NSImageView }
+        XCTAssertEqual(icons.count, 2)
+        let initialImages = try icons.map { try XCTUnwrap($0.image) }
+
+        chip.viewDidChangeEffectiveAppearance()
+
+        XCTAssertTrue(icons[0].image === initialImages[0])
+        XCTAssertTrue(icons[1].image === initialImages[1])
+    }
+
+    func testMetricChipAppearanceChangeDoesNotRecreateSymbolImage() throws {
+        let cpu = makeStatusSegment(kind: .cpu, value: "20.0%")
+        let view = MenuBarStatusContentView(segments: [cpu])
+        let chip = try XCTUnwrap(view.subviews.first)
+        let icon = try XCTUnwrap(chip.subviews.compactMap { $0 as? NSImageView }.first)
+        let initialImage = try XCTUnwrap(icon.image)
+
+        chip.viewDidChangeEffectiveAppearance()
+
+        XCTAssertTrue(icon.image === initialImage)
+    }
+
     func testDefaultLayoutKeepsCaffeineAndTriggerSeparate() throws {
         let trigger = makeTriggerSegment()
         let caffeine = makeCaffeineSegment()
