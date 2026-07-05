@@ -123,7 +123,9 @@ private extension TokenMeteringPreferencesSection {
             store: privateUsageUploadStore,
             language: currentLanguage,
             webConnectionURL: privateUsageWebConnectionURL,
-            openWebConnectionAction: openPrivateUsageWebConnection
+            webDashboardURL: privateUsageWebDashboardURL,
+            openWebConnectionAction: openPrivateUsageWebConnection,
+            openWebDashboardAction: openPrivateUsageWebDashboard
         )
     }
 
@@ -167,6 +169,18 @@ private extension TokenMeteringPreferencesSection {
 
     private var privateUsageWebConnectionURL: URL? {
         PrivateUsageWebConnection.connectDeviceURL()
+    }
+
+    private func openPrivateUsageWebDashboard() {
+        guard let url = privateUsageWebDashboardURL else {
+            return
+        }
+
+        NSWorkspace.shared.open(url)
+    }
+
+    private var privateUsageWebDashboardURL: URL? {
+        PrivateUsageWebConnection.dashboardURL()
     }
 
     private func refreshAdapterStatuses() {

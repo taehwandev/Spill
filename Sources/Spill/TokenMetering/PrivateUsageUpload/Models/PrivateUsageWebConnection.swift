@@ -19,6 +19,20 @@ enum PrivateUsageWebConnection {
         return appendingConnectionParameters(to: url)
     }
 
+    static func dashboardURL(
+        processEnvironment: [String: String] = ProcessInfo.processInfo.environment,
+        bundleInfo: [String: Any]? = Bundle.main.infoDictionary
+    ) -> URL? {
+        guard let url = configuredWebURL(
+            processEnvironment: processEnvironment,
+            bundleInfo: bundleInfo
+        ) else {
+            return nil
+        }
+
+        return appendingPath("/dashboard", to: url)
+    }
+
     static func configuredWebURL(
         processEnvironment: [String: String] = ProcessInfo.processInfo.environment,
         bundleInfo: [String: Any]? = Bundle.main.infoDictionary
@@ -55,6 +69,17 @@ enum PrivateUsageWebConnection {
         }
 
         return nil
+    }
+
+    private static func appendingPath(_ path: String, to url: URL) -> URL {
+        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            return url
+        }
+
+        components.percentEncodedQuery = nil
+        components.percentEncodedFragment = nil
+        components.path = path
+        return components.url ?? url
     }
 
     private static func appendingConnectionParameters(to url: URL) -> URL {

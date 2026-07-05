@@ -270,6 +270,8 @@ enum TokenMeteringTextKey: String {
     case privateUsageUploadEnvironmentProductionDetail
     case privateUsageUploadOpenWeb
     case privateUsageUploadOpenWebDetail
+    case privateUsageUploadOpenDashboard
+    case privateUsageUploadOpenDashboardDetail
     case privateUsageUploadToggleTitle
     case privateUsageUploadToggleDetail
     case privateUsageUploadQueued

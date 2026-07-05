@@ -280,6 +280,14 @@ struct TokenMeteringDashboardView: View {
                 serviceStatusButton
 
                 Button {
+                    openWebDashboard()
+                } label: {
+                    Label(t(.privateUsageUploadOpenDashboard), systemImage: "safari")
+                }
+                .disabled(PrivateUsageWebConnection.dashboardURL() == nil)
+                .help(t(.privateUsageUploadOpenDashboardDetail))
+
+                Button {
                     refreshLocalTokenData()
                 } label: {
                     Label(t(.refresh), systemImage: (store.loadState == .loading || store.isRefreshing) ? "arrow.triangle.2.circlepath" : "arrow.clockwise")
@@ -297,6 +305,14 @@ struct TokenMeteringDashboardView: View {
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 14)
+    }
+
+    private func openWebDashboard() {
+        guard let url = PrivateUsageWebConnection.dashboardURL() else {
+            return
+        }
+
+        NSWorkspace.shared.open(url)
     }
 
     private func syncOnboardingPreviewFromSettings() {

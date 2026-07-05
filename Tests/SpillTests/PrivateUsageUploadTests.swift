@@ -1823,6 +1823,33 @@ final class PrivateUsageUploadTests: XCTestCase {
         )
     }
 
+    func testWebDashboardURLUsesConfiguredSafeWebOrigin() {
+        XCTAssertNil(PrivateUsageWebConnection.dashboardURL(processEnvironment: [:], bundleInfo: nil))
+        XCTAssertEqual(
+            PrivateUsageWebConnection.dashboardURL(
+                processEnvironment: [
+                    PrivateUsageWebConnection.webURLOverrideEnvironmentKey: "https://web.example.test/#/connect-device"
+                ]
+            )?.absoluteString,
+            Optional("https://web.example.test/dashboard")
+        )
+        XCTAssertEqual(
+            PrivateUsageWebConnection.dashboardURL(
+                processEnvironment: [
+                    PrivateUsageWebConnection.webURLOverrideEnvironmentKey: "http://localhost:5173/"
+                ]
+            )?.absoluteString,
+            Optional("http://localhost:5173/dashboard")
+        )
+        XCTAssertNil(
+            PrivateUsageWebConnection.dashboardURL(
+                processEnvironment: [
+                    PrivateUsageWebConnection.webURLOverrideEnvironmentKey: "http://example.com/#/dashboard"
+                ]
+            )
+        )
+    }
+
     func testPrivateUsageEnvironmentUsesRuntimeEnvBeforeBundleInfo() {
         XCTAssertEqual(
             PrivateUsageUploadEnvironment.resolvedFromConfiguration(

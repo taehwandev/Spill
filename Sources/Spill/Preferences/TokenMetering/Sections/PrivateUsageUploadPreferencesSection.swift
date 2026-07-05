@@ -5,7 +5,9 @@ struct PrivateUsageUploadPreferencesSection: View {
     @ObservedObject var store: PrivateUsageUploadStore
     let language: TokenMeteringLanguage
     let webConnectionURL: URL?
+    let webDashboardURL: URL?
     let openWebConnectionAction: () -> Void
+    let openWebDashboardAction: () -> Void
 
     var body: some View {
         let status = store.status
@@ -32,6 +34,7 @@ struct PrivateUsageUploadPreferencesSection: View {
 
             if status.isConnected {
                 webConnectionConnectedState
+                webDashboardLink
             } else {
                 webConnectionPrompt
             }
@@ -111,6 +114,16 @@ private extension PrivateUsageUploadPreferencesSection {
             .lineSpacing(2)
             .fixedSize(horizontal: false, vertical: true)
         }
+    }
+
+    private var webDashboardLink: some View {
+        Button(action: openWebDashboardAction) {
+            Label(t(.privateUsageUploadOpenDashboard), systemImage: "safari")
+        }
+        .buttonStyle(.bordered)
+        .font(.system(size: 12, weight: .semibold))
+        .disabled(webDashboardURL == nil)
+        .help(t(.privateUsageUploadOpenDashboardDetail))
     }
 
     private func statusMessage(_ message: String, systemImage: String, color: Color) -> some View {

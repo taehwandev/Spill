@@ -78,6 +78,73 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(TokenMeteringL10n.taskLabel("ux_copy_review", language: .english), "Ux Copy Review")
     }
 
+    func testBrandLockupIsSharedAcrossAppSurfaces() throws {
+        let root = Self.repositoryRootURL()
+        let package = try String(contentsOf: root.appendingPathComponent("Package.swift"))
+        let brandLockupView = try Self.source(named: "SpillBrandLockupView.swift")
+        let spillBarView = try Self.source(named: "SpillBarView.swift")
+        let preferencesSidebarView = try Self.source(named: "PreferencesSidebarView.swift")
+        let dashboardView = try Self.source(named: "TokenMeteringDashboardView.swift")
+        let wordmarkURL = root.appendingPathComponent("Sources/Spill/Resources/Brand/spill-logo-wordmark.png")
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: wordmarkURL.path))
+        XCTAssertTrue(package.contains(".process(\"Resources/Brand\")"))
+        XCTAssertTrue(brandLockupView.contains("struct SpillBrandLockupView"))
+        XCTAssertTrue(brandLockupView.contains("Bundle.module.image(forResource: \"spill-logo-wordmark\")"))
+        XCTAssertTrue(brandLockupView.contains("Image(nsImage: image)"))
+        XCTAssertTrue(spillBarView.contains("SpillBrandLockupView("))
+        XCTAssertTrue(spillBarView.contains("private var headerSubtitle: String?"))
+        XCTAssertTrue(spillBarView.contains("if panelState.readiness == .ready"))
+        XCTAssertTrue(spillBarView.contains("return nil"))
+        XCTAssertTrue(preferencesSidebarView.contains("SpillBrandLockupView("))
+        XCTAssertTrue(dashboardView.contains("SpillBrandLockupView("))
+        XCTAssertTrue(dashboardView.contains("subtitle: t(.dashboardTitle)"))
+        XCTAssertFalse(dashboardView.contains("Image(systemName: \"chart.bar.xaxis\")"))
+    }
+
+    func testWebDashboardLinkIsAvailableFromSettingsAndLocalDashboard() throws {
+        let preferencesSection = try String(contentsOf: Self.repositoryRootURL().appendingPathComponent("Sources/Spill/Preferences/TokenMeteringPreferencesSection.swift"))
+        let uploadSection = try Self.source(named: "PrivateUsageUploadPreferencesSection.swift")
+        let dashboardView = try Self.source(named: "TokenMeteringDashboardView.swift")
+        let webConnection = try Self.source(named: "PrivateUsageWebConnection.swift")
+
+        XCTAssertTrue(webConnection.contains("static func dashboardURL("))
+        XCTAssertTrue(webConnection.contains("appendingPath(\"/dashboard\""))
+        XCTAssertTrue(preferencesSection.contains("openWebDashboardAction: openPrivateUsageWebDashboard"))
+        XCTAssertTrue(uploadSection.contains("Label(t(.privateUsageUploadOpenDashboard), systemImage: \"safari\")"))
+        XCTAssertTrue(uploadSection.contains("PreferencesSyncLegalLinksView(language: preferencesLanguage)"))
+        XCTAssertTrue(dashboardView.contains("private func openWebDashboard()"))
+        XCTAssertTrue(dashboardView.contains("Label(t(.privateUsageUploadOpenDashboard), systemImage: \"safari\")"))
+        XCTAssertEqual(TokenMeteringL10n.text(.privateUsageUploadOpenDashboard, language: .korean), "웹 대시보드 열기")
+        XCTAssertEqual(TokenMeteringL10n.text(.privateUsageUploadOpenDashboard, language: .english), "Open Web Dashboard")
+        XCTAssertEqual(TokenMeteringL10n.text(.privateUsageUploadOpenDashboard, language: .japanese), "Webダッシュボードを開く")
+    }
+
+    func testLegalLinksAreAvailableFromGeneralSettingsAndSyncUpload() throws {
+        let generalSection = try Self.source(named: "GeneralPreferencesSection.swift")
+        let uploadSection = try Self.source(named: "PrivateUsageUploadPreferencesSection.swift")
+        let legalLinkSource = try Self.source(named: "PreferencesLegalLink.swift")
+        let legalLinksCard = try Self.source(named: "PreferencesLegalLinksCard.swift")
+        let syncLegalLinksView = try Self.source(named: "PreferencesSyncLegalLinksView.swift")
+        let legalButtons = try Self.source(named: "PreferencesLegalLinkButtons.swift")
+
+        XCTAssertTrue(generalSection.contains("legalAndPrivacyCard"))
+        XCTAssertTrue(generalSection.contains("PreferencesLegalLinksCard(language: language)"))
+        XCTAssertTrue(uploadSection.contains("PreferencesSyncLegalLinksView(language: preferencesLanguage)"))
+        XCTAssertTrue(legalLinksCard.contains("PreferenceCard("))
+        XCTAssertTrue(syncLegalLinksView.contains("source: \"preferences_private_usage_upload\""))
+        XCTAssertTrue(legalButtons.contains("link.open(source: source)"))
+        XCTAssertTrue(legalLinkSource.contains("https://spill.thdev.app/privacy"))
+        XCTAssertTrue(legalLinkSource.contains("https://spill.thdev.app/terms"))
+        XCTAssertTrue(legalLinkSource.contains("legal_link_clicked"))
+        XCTAssertEqual(PreferencesLegalL10n.text(.legalAndPrivacy, appLanguage: .korean), "개인정보 및 약관")
+        XCTAssertEqual(PreferencesLegalL10n.text(.privacyPolicy, appLanguage: .english), "Privacy Policy")
+        XCTAssertEqual(PreferencesLegalL10n.text(.termsOfService, appLanguage: .japanese), "利用規約")
+        XCTAssertEqual(PreferencesLegalL10n.text(.syncDataHandling, appLanguage: .korean), "동기화 데이터 처리 안내")
+        XCTAssertEqual(PreferencesLegalL10n.text(.syncDataLegalDetail, appLanguage: .korean), "동기화는 이 Mac을 연결한 뒤 암호화된 일별 사용량 합계와 기기 메타데이터만 업로드합니다. 켜기 전에 처리방침과 약관을 확인하세요.")
+        XCTAssertEqual(PreferencesLegalL10n.text(.legalAndPrivacyDetail, appLanguage: .english), "Review how Spill handles app data, optional encrypted sync, and service terms.")
+    }
+
     func testTokenMeteringDashboardCopyAvoidsInternalTerminology() {
         let dashboardKeys: [TokenMeteringTextKey] = [
             .dashboardTitle,
