@@ -133,13 +133,17 @@ final class SleepGuardController: ObservableObject {
             return "∞"
         }
 
-        let minutes = max(1, Int(ceil(Double(remainingSeconds) / 60.0)))
-        if minutes >= 60 {
-            let hours = minutes / 60
-            let remainder = minutes % 60
-            return remainder == 0 ? "\(hours)h" : "\(hours)h \(remainder)m"
+        if remainingSeconds < 60 {
+            return "\(remainingSeconds)s"
         }
 
+        if remainingSeconds >= 3_600 {
+            let hours = remainingSeconds / 3_600
+            let minutes = (remainingSeconds % 3_600) / 60
+            return "\(hours):\(String(format: "%02d", minutes))"
+        }
+
+        let minutes = max(1, Int(ceil(Double(remainingSeconds) / 60.0)))
         return "\(minutes)m"
     }
 

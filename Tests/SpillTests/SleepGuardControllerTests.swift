@@ -38,6 +38,51 @@ final class SleepGuardControllerTests: XCTestCase {
         XCTAssertEqual(controller.remainingLabel, "29m")
     }
 
+    func testRemainingLabelUsesClockFormatForHourDurations() {
+        var now = Date(timeIntervalSince1970: 100)
+        let fakeManager = FakeSleepAssertionManager()
+        let controller = SleepGuardController(
+            assertionManager: fakeManager,
+            now: { now },
+            automaticallySchedulesTimer: false
+        )
+
+        XCTAssertTrue(controller.start(duration: .twoHours, keepDisplayAwake: false))
+
+        XCTAssertEqual(controller.remainingSeconds, 7_200)
+        XCTAssertEqual(controller.remainingLabel, "2:00")
+
+        now.addTimeInterval(60)
+        controller.refreshRemaining()
+
+        XCTAssertEqual(controller.remainingSeconds, 7_140)
+        XCTAssertEqual(controller.remainingLabel, "1:59")
+    }
+
+    func testRemainingLabelUsesSecondsBelowOneMinute() {
+        var now = Date(timeIntervalSince1970: 100)
+        let fakeManager = FakeSleepAssertionManager()
+        let controller = SleepGuardController(
+            assertionManager: fakeManager,
+            now: { now },
+            automaticallySchedulesTimer: false
+        )
+
+        XCTAssertTrue(controller.start(duration: .fiveMinutes, keepDisplayAwake: false))
+
+        now.addTimeInterval(241)
+        controller.refreshRemaining()
+
+        XCTAssertEqual(controller.remainingSeconds, 59)
+        XCTAssertEqual(controller.remainingLabel, "59s")
+
+        now.addTimeInterval(58)
+        controller.refreshRemaining()
+
+        XCTAssertEqual(controller.remainingSeconds, 1)
+        XCTAssertEqual(controller.remainingLabel, "1s")
+    }
+
     func testStopReleasesAssertions() {
         let fakeManager = FakeSleepAssertionManager()
         let controller = SleepGuardController(assertionManager: fakeManager, automaticallySchedulesTimer: false)
