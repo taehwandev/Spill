@@ -29,19 +29,17 @@ struct PreferencesSidebarView: View {
     }
 
     private var brandHeader: some View {
-        HStack(spacing: 10) {
-            SpillBrandIconView()
-                .frame(width: 32, height: 32)
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text("Spill")
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(.primary)
-                Text("v\(currentVersion)")
-                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(.secondary)
-            }
-        }
+        SpillBrandLockupView(
+            subtitle: "v\(currentVersion)",
+            iconSize: 32,
+            titleFontSize: 15,
+            titleWeight: .bold,
+            subtitleFontSize: 12,
+            subtitleWeight: .semibold,
+            subtitleDesign: .monospaced,
+            subtitleColor: .secondary,
+            spacing: 10
+        )
         .padding(.horizontal, 16)
         .padding(.top, 20)
         .padding(.bottom, 16)

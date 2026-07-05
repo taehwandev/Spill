@@ -242,19 +242,16 @@ struct SpillBarView: View {
 
     private var header: some View {
         HStack(spacing: 12) {
-            SpillBrandIconView()
-                .frame(width: 34, height: 34)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Spill")
-                    .font(.system(size: 13, weight: .semibold))
-                    .lineLimit(1)
-
-                Text(headerSubtitle)
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(panelState.actionFeedback?.tint ?? .secondary)
-                    .lineLimit(1)
-            }
+            SpillBrandLockupView(
+                subtitle: headerSubtitle,
+                iconSize: 34,
+                titleFontSize: 13,
+                titleWeight: .semibold,
+                subtitleFontSize: 10,
+                subtitleWeight: .medium,
+                subtitleColor: panelState.actionFeedback?.tint ?? .secondary,
+                spacing: 12
+            )
 
             Spacer(minLength: 8)
 
@@ -293,13 +290,17 @@ struct SpillBarView: View {
             .accessibilityLabel(panelState.readiness.accessibilityLabel)
     }
 
-    private var headerSubtitle: String {
+    private var headerSubtitle: String? {
         if let actionFeedback = panelState.actionFeedback {
             return actionFeedback.message
         }
 
         if panelState.onboardingPreviewEnabled {
             return AppL10n.text(.onboardingPreviewTitle, appLanguage: settings.appLanguage)
+        }
+
+        if panelState.readiness == .ready {
+            return nil
         }
 
         return panelState.readiness.subtitle(appLanguage: settings.appLanguage)

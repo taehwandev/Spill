@@ -24,6 +24,7 @@ let package = Package(
             ],
             resources: [
                 .copy("Resources/adapters"),
+                .process("Resources/Brand"),
                 .process("Resources/Localization")
             ],
             linkerSettings: [

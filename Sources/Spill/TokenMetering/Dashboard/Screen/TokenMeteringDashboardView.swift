@@ -237,27 +237,19 @@ struct TokenMeteringDashboardView: View {
 
     private var topHeader: some View {
         HStack(spacing: 14) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.teal, Color.teal.opacity(0.75)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .shadow(color: Color.teal.opacity(0.3), radius: 4, x: 0, y: 2)
-
-                Image(systemName: "chart.bar.xaxis")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(.white)
-            }
-            .frame(width: 36, height: 36)
-
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 8) {
-                    Text(t(.dashboardTitle))
-                        .font(.system(size: 18, weight: .bold))
+                    SpillBrandLockupView(
+                        subtitle: t(.dashboardTitle),
+                        iconSize: 36,
+                        titleFontSize: 18,
+                        titleWeight: .bold,
+                        subtitleFontSize: 11,
+                        subtitleWeight: .semibold,
+                        subtitleColor: .secondary,
+                        spacing: 14
+                    )
+
                     alphaBadge
                     syncStateBadge
                 }
@@ -279,6 +271,7 @@ struct TokenMeteringDashboardView: View {
                             .lineLimit(1)
                     }
                 }
+                .padding(.leading, 50)
             }
 
             Spacer(minLength: 16)
