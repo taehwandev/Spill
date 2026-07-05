@@ -479,15 +479,15 @@ final class SpillSettingsTests: XCTestCase {
         XCTAssertEqual(AppL10n.statusModuleTitle(.memory, appLanguage: .japanese), "メモリ")
         XCTAssertEqual(
             AppL10n.eventsSummary(eventCount: 2, task: "코드 작성 10", source: "출력 5", appLanguage: .korean),
-            "이벤트 2개 / 코드 작성 10 / 출력 5"
+            "기록 2개 / 코드 작성 10 / 출력 5"
         )
         XCTAssertEqual(
             AppL10n.eventsSummary(eventCount: 10_000, task: "Analysis 10K", source: "AI response 1K", appLanguage: .english),
-            "10,000 events / Analysis 10K / AI response 1K"
+            "10,000 records / Analysis 10K / AI response 1K"
         )
         XCTAssertEqual(
             AppL10n.eventsSummary(eventCount: 115_328, task: "분석 10K", source: "응답 1K", appLanguage: .korean),
-            "이벤트 115,328개 / 분석 10K / 응답 1K"
+            "기록 115,328개 / 분석 10K / 응답 1K"
         )
         XCTAssertEqual(AppL10n.text(.scanningMenuBarItems, appLanguage: .korean), "메뉴 막대 항목 스캔 중...")
         XCTAssertEqual(AppL10n.windowActionTitle(.restore, appLanguage: .japanese), "復元")
