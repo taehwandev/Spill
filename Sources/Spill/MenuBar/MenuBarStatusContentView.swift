@@ -364,6 +364,10 @@ final class MenuBarStatusContentView: NSView {
             return trimmed
         }
 
+        if trimmed.range(of: #"^\d+:\d{2}$"#, options: .regularExpression) != nil {
+            return trimmed
+        }
+
         if let hoursRange = trimmed.range(of: #"^\d+h"#, options: .regularExpression) {
             return String(trimmed[hoursRange])
         }
@@ -592,7 +596,7 @@ private final class MenuBarMainTriggerChipView: NSView {
         NSLayoutConstraint.activate([
             badgeLabel.topAnchor.constraint(equalTo: topAnchor, constant: -1),
             badgeLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: 1),
-            badgeLabel.leadingAnchor.constraint(greaterThanOrEqualTo: caffeineIconView.centerXAnchor, constant: -2)
+            badgeLabel.leadingAnchor.constraint(greaterThanOrEqualTo: caffeineIconView.leadingAnchor, constant: -1)
         ])
     }
 

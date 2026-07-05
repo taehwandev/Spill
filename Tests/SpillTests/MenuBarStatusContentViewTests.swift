@@ -551,6 +551,44 @@ final class MenuBarStatusContentViewTests: XCTestCase {
         )
     }
 
+    func testCompactCaffeinePreservesClockRemainingTimeBadge() throws {
+        let caffeine = makeCaffeineSegment(value: "1:59", active: true).badgeMenuBarSegment()
+        let view = MenuBarStatusContentView(segments: [caffeine])
+        let chip = try XCTUnwrap(view.subviews.first)
+
+        XCTAssertEqual(chip.subviews.compactMap { $0 as? NSImageView }.count, 1)
+        XCTAssertEqual(chip.subviews.compactMap { $0 as? NSTextField }.map(\.stringValue), ["1:59"])
+        XCTAssertLessThanOrEqual(
+            MenuBarStatusContentView.preferredWidth(for: [caffeine]),
+            26
+        )
+    }
+
+    func testMainCaffeineBadgePreservesClockRemainingTime() throws {
+        let trigger = makeTriggerSegment()
+        let caffeine = makeCaffeineSegment(value: "1:59", active: true).badgeMenuBarSegment()
+        let view = MenuBarStatusContentView(
+            segments: [caffeine, trigger],
+            groupsMainCaffeine: true
+        )
+        let chip = try XCTUnwrap(view.subviews.first)
+        let label = try XCTUnwrap(chip.subviews.compactMap { $0 as? NSTextField }.first)
+        view.frame = NSRect(
+            x: 0,
+            y: 0,
+            width: MenuBarStatusContentView.preferredWidth(
+                for: [caffeine, trigger],
+                groupsMainCaffeine: true
+            ),
+            height: 22
+        )
+        view.layoutSubtreeIfNeeded()
+
+        XCTAssertEqual(view.subviews.count, 1)
+        XCTAssertEqual(label.stringValue, "1:59")
+        XCTAssertGreaterThanOrEqual(label.frame.width + 0.5, label.intrinsicContentSize.width)
+    }
+
     func testStackedLayoutRendersTitleOverValueChips() {
         let cpu = makeStatusSegment(kind: .cpu, value: "5%")
         let memory = makeStatusSegment(kind: .memory, value: "20%")
