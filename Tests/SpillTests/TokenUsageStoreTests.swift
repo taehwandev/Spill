@@ -3533,6 +3533,76 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(dateRows, [["2026-06-06T04:30:00.000Z"]])
     }
 
+    func testContentDuplicateBackfillSkipsRowsWithoutTokenColumns() throws {
+        let store = TokenUsageStore(fileURL: temporaryEventsURL())
+        let databaseURL = store.eventsDatabaseURL
+
+        try FileManager.default.createDirectory(
+            at: databaseURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        let database = try openSQLiteDatabase(databaseURL)
+        defer { sqlite3_close(database) }
+        try executeSQLite(
+            """
+            CREATE TABLE token_usage_events (
+                span_id TEXT PRIMARY KEY NOT NULL,
+                device_id TEXT,
+                project_id TEXT,
+                artifact_id TEXT,
+                run_id TEXT,
+                created_at TEXT NOT NULL,
+                ai_tool TEXT NOT NULL,
+                task_type TEXT,
+                stage TEXT,
+                model TEXT,
+                input_tokens INTEGER,
+                output_tokens INTEGER,
+                latency_ms INTEGER,
+                total_tokens INTEGER NOT NULL,
+                payload_json BLOB NOT NULL
+            )
+            """,
+            database: database
+        )
+        try executeSQLite("PRAGMA user_version = 2", database: database)
+        for spanID in ["span_null_tokens_a", "span_null_tokens_b"] {
+            try executeSQLite(
+                """
+                INSERT INTO token_usage_events (
+                    span_id,
+                    run_id,
+                    created_at,
+                    ai_tool,
+                    total_tokens,
+                    payload_json
+                ) VALUES (
+                    '\(spanID)',
+                    'run_null_tokens',
+                    '2026-06-05T00:00:00.000Z',
+                    'codex',
+                    100,
+                    X'7B'
+                )
+                """,
+                database: database
+            )
+        }
+
+        XCTAssertTrue(store.loadEvents().isEmpty)
+
+        let rows = try sqliteRows(
+            databaseURL: databaseURL,
+            sql: """
+            SELECT span_id
+            FROM token_usage_events
+            ORDER BY span_id
+            """,
+            columnCount: 1
+        )
+        XCTAssertEqual(rows, [["span_null_tokens_a"], ["span_null_tokens_b"]])
+    }
+
     func testStoreDrainsQueuedInboxEventsAndDeduplicates() throws {
         let eventsURL = temporaryEventsURL()
         let inboxURL = temporaryInboxURL()
@@ -4316,7 +4386,7 @@ final class TokenUsageStoreTests: XCTestCase {
             .appendingPathComponent("claude-transcript.jsonl")
         let transcript = [
             #"{"message":{"role":"user"}}"#,
-            #"{"message":{"role":"assistant","model":"claude-sonnet-4","usage":{"input_tokens":20,"cache_creation_input_tokens":5,"cache_read_input_tokens":100,"output_tokens":7},"content":[{"type":"tool_use","name":"Read"}]}}"#,
+            #"{"requestId":"req_diag_read","message":{"role":"assistant","model":"claude-sonnet-4","usage":{"input_tokens":20,"cache_creation_input_tokens":5,"cache_read_input_tokens":100,"output_tokens":7},"content":[{"type":"tool_use","name":"Read"}]}}"#,
         ].joined(separator: "\n")
         try "\(transcript)\n".write(to: transcriptURL, atomically: true, encoding: .utf8)
         let payload = #"{"session_id":"claudeDiag01","transcript_path":"\#(transcriptURL.path)"}"#
@@ -4348,7 +4418,24 @@ final class TokenUsageStoreTests: XCTestCase {
         let stateURL = sessionStateURL.appendingPathComponent("claudeDiag01.json")
         let state = try String(contentsOf: stateURL)
         XCTAssertTrue(state.contains(#""byte_offset""#))
+        XCTAssertTrue(state.contains(#""emitted_request_ids""#))
+        XCTAssertTrue(state.contains(#""req_diag_read""#))
         XCTAssertFalse(state.contains(transcriptURL.path))
+
+        var resetState = try decodedJSONObject(from: Data(contentsOf: stateURL))
+        resetState["fresh"] = 0
+        resetState["output"] = 0
+        resetState["byte_offset"] = 0
+        try jsonData(resetState).write(to: stateURL)
+
+        try runClaudeHook(
+            rawInput: payload,
+            inboxURL: inboxURL,
+            diagnosticsURL: diagnosticsURL,
+            sessionStateURL: sessionStateURL
+        )
+
+        XCTAssertEqual(try antigravityEventObjects(in: inboxURL).count, 1)
 
         try runClaudeHook(
             rawInput: payload,

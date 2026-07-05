@@ -144,7 +144,7 @@ extension TokenUsageStore {
     func removeContentDuplicateEvents(database: OpaquePointer) throws {
         // For each group sharing (run_id, created_at, input_tokens, output_tokens),
         // keep the has-accounting event first, then lowest rowid. Events without a
-        // run_id are skipped — they can't be safely matched on content alone.
+        // run_id or token columns are skipped — they can't be safely matched on content alone.
         let sql = """
         DELETE FROM token_usage_events
         WHERE rowid IN (
@@ -159,6 +159,8 @@ extension TokenUsageStore {
                     ) AS rn
                 FROM token_usage_events
                 WHERE run_id IS NOT NULL AND run_id != ''
+                    AND input_tokens IS NOT NULL
+                    AND output_tokens IS NOT NULL
             )
             WHERE rn > 1
         )

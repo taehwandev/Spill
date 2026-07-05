@@ -505,20 +505,38 @@ def _state_int(data: dict, key: str) -> int:
     return max(0, value)
 
 
-def _load_session_state(run_id: str) -> tuple[int, int, int]:
-    """Return (prev_fresh, prev_output, byte_offset) for this run."""
+def _state_request_ids(data: dict) -> set[str]:
+    values = data.get("emitted_request_ids", [])
+    if not isinstance(values, list):
+        return set()
+    return {value for value in values if isinstance(value, str) and value}
+
+
+def _load_session_state(run_id: str) -> tuple[int, int, int, set[str]]:
+    """Return (prev_fresh, prev_output, byte_offset, emitted_request_ids) for this run."""
     state_path = SESSION_STATE_DIR / f"{run_id}.json"
     try:
         data = json.loads(state_path.read_text())
         if isinstance(data, dict):
             fresh = _state_int(data, "fresh") or _state_int(data, "input")
-            return fresh, _state_int(data, "output"), _state_int(data, "byte_offset")
+            return (
+                fresh,
+                _state_int(data, "output"),
+                _state_int(data, "byte_offset"),
+                _state_request_ids(data),
+            )
     except Exception:
         pass
-    return 0, 0, 0
+    return 0, 0, 0, set()
 
 
-def _save_session_state(run_id: str, fresh: int, output: int, byte_offset: int) -> None:
+def _save_session_state(
+    run_id: str,
+    fresh: int,
+    output: int,
+    byte_offset: int,
+    emitted_request_ids=None,
+) -> None:
     try:
         SESSION_STATE_DIR.mkdir(parents=True, exist_ok=True)
         state_path = SESSION_STATE_DIR / f"{run_id}.json"
@@ -527,10 +545,16 @@ def _save_session_state(run_id: str, fresh: int, output: int, byte_offset: int) 
             "fresh": max(0, fresh),
             "output": max(0, output),
             "byte_offset": max(0, byte_offset),
+            "emitted_request_ids": sorted(emitted_request_ids or set()),
         }))
         os.replace(tmp_path, state_path)
     except Exception:
         pass
+
+
+def _request_id_for_turn(turn: dict) -> str:
+    request_id = turn.get("request_id", "")
+    return request_id if isinstance(request_id, str) else ""
 
 
 def _consume_label_file() -> None:
@@ -828,7 +852,7 @@ def _run_history_payload(payload: dict, enqueue_event=_enqueue_event, flush_even
         result["unsupported_records"] += 1
         return result
 
-    prev_fresh, prev_output, previous_byte_offset = _load_session_state(run_id)
+    prev_fresh, prev_output, previous_byte_offset, emitted_request_ids = _load_session_state(run_id)
     try:
         all_turns, transcript_byte_offset, read_start_offset = _read_transcript_turns(
             transcript_path,
@@ -840,7 +864,7 @@ def _run_history_payload(payload: dict, enqueue_event=_enqueue_event, flush_even
 
     if not all_turns:
         if transcript_byte_offset > previous_byte_offset:
-            _save_session_state(run_id, prev_fresh, prev_output, transcript_byte_offset)
+            _save_session_state(run_id, prev_fresh, prev_output, transcript_byte_offset, emitted_request_ids)
         if previous_byte_offset > 0:
             result["skipped_seen"] += 1
         else:
@@ -850,6 +874,7 @@ def _run_history_payload(payload: dict, enqueue_event=_enqueue_event, flush_even
     session_fresh = 0
     session_output = 0
     emitted_any = False
+    next_emitted_request_ids = set(emitted_request_ids)
     for turn in all_turns:
         turn_input, turn_span_input, turn_output = _usage_amounts(turn.get("usage", {}))
         session_fresh += turn_input
@@ -862,6 +887,10 @@ def _run_history_payload(payload: dict, enqueue_event=_enqueue_event, flush_even
         timestamp = turn.get("timestamp", "")
         if not timestamp:
             result["unsupported_records"] += 1
+            continue
+        request_id = _request_id_for_turn(turn)
+        if request_id and request_id in emitted_request_ids:
+            result["skipped_seen"] += 1
             continue
 
         raw_model = turn.get("model", "")
@@ -907,6 +936,8 @@ def _run_history_payload(payload: dict, enqueue_event=_enqueue_event, flush_even
             "created_at": timestamp,
         }
         enqueue_event(event, _usage_accounting(turn.get("usage", {})))
+        if request_id:
+            next_emitted_request_ids.add(request_id)
         emitted_any = True
         result["imported_events"] += 1
 
@@ -918,9 +949,10 @@ def _run_history_payload(payload: dict, enqueue_event=_enqueue_event, flush_even
             prev_fresh + session_fresh if read_start_offset > 0 else session_fresh,
             prev_output + session_output if read_start_offset > 0 else session_output,
             transcript_byte_offset,
+            next_emitted_request_ids,
         )
     elif transcript_byte_offset > previous_byte_offset:
-        _save_session_state(run_id, prev_fresh, prev_output, transcript_byte_offset)
+        _save_session_state(run_id, prev_fresh, prev_output, transcript_byte_offset, next_emitted_request_ids)
 
     return result
 
@@ -938,7 +970,7 @@ def _run_for_payload(payload: dict, scan_subagents: bool = True, allow_timestamp
         _write_diagnostic_file(MISMATCH_DIAGNOSTIC_FILE_NAME, "runtime_payload_mismatch", "transcript_unavailable", payload)
         return _SCAN_UNSUPPORTED
 
-    prev_fresh, prev_output, previous_byte_offset = _load_session_state(run_id)
+    prev_fresh, prev_output, previous_byte_offset, emitted_request_ids = _load_session_state(run_id)
     try:
         all_turns, transcript_byte_offset, read_start_offset = _read_transcript_turns(
             transcript_path,
@@ -950,7 +982,7 @@ def _run_for_payload(payload: dict, scan_subagents: bool = True, allow_timestamp
 
     if not all_turns:
         if transcript_byte_offset > previous_byte_offset:
-            _save_session_state(run_id, prev_fresh, prev_output, transcript_byte_offset)
+            _save_session_state(run_id, prev_fresh, prev_output, transcript_byte_offset, emitted_request_ids)
         reason = "no_new_token_delta" if previous_byte_offset > 0 else "no_assistant_usage"
         _write_diagnostic_file(
             EMPTY_DIAGNOSTIC_FILE_NAME,
@@ -994,6 +1026,11 @@ def _run_for_payload(payload: dict, scan_subagents: bool = True, allow_timestamp
         prev_output,
         read_start_offset,
     )
+    turns_to_emit = [
+        turn
+        for turn in turns_to_emit
+        if not (request_id := _request_id_for_turn(turn)) or request_id not in emitted_request_ids
+    ]
     allow_current_label = len(turns_to_emit) == 1
     events = [
         (turn, event)
@@ -1007,8 +1044,9 @@ def _run_for_payload(payload: dict, scan_subagents: bool = True, allow_timestamp
         )) is not None
     ]
 
+    next_emitted_request_ids = set(emitted_request_ids)
     if not events:
-        _save_session_state(run_id, next_fresh, next_output, transcript_byte_offset)
+        _save_session_state(run_id, next_fresh, next_output, transcript_byte_offset, next_emitted_request_ids)
         _write_diagnostic_file(
             EMPTY_DIAGNOSTIC_FILE_NAME,
             "no_usage_hook_call",
@@ -1020,7 +1058,10 @@ def _run_for_payload(payload: dict, scan_subagents: bool = True, allow_timestamp
 
     for turn, event in events:
         _enqueue_event(event, _usage_accounting(turn.get("usage", {})))
-    _save_session_state(run_id, next_fresh, next_output, transcript_byte_offset)
+        request_id = _request_id_for_turn(turn)
+        if request_id:
+            next_emitted_request_ids.add(request_id)
+    _save_session_state(run_id, next_fresh, next_output, transcript_byte_offset, next_emitted_request_ids)
     _write_success_diagnostic(events[-1][1])
     _consume_label_file()
     if scan_subagents:

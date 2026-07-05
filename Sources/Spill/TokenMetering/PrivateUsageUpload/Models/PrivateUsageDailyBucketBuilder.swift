@@ -154,9 +154,7 @@ struct PrivateUsageDailyBucketBuilder: Sendable {
             return makeAggregate(
                 dayStart: dayStart,
                 dayEnd: dayEnd,
-                events: dayEvents.sorted { lhs, rhs in
-                    Self.isTimestamp(lhs.createdAt, before: rhs.createdAt)
-                },
+                events: dayEvents.sorted(by: Self.eventPrecedes),
                 generatedAt: now
             )
         }
@@ -325,10 +323,33 @@ private extension PrivateUsageDailyBucketBuilder {
                 best[key] = event
             }
         }
-        let deduped = (Array(best.values) + noKey).sorted {
-            isTimestamp($0.createdAt, before: $1.createdAt)
-        }
+        let deduped = (Array(best.values) + noKey).sorted(by: eventPrecedes)
         return deduped
+    }
+
+    static func eventPrecedes(_ lhs: TokenUsageEvent, _ rhs: TokenUsageEvent) -> Bool {
+        if lhs.createdAt != rhs.createdAt {
+            return isTimestamp(lhs.createdAt, before: rhs.createdAt)
+        }
+        if lhs.runID != rhs.runID {
+            return lhs.runID < rhs.runID
+        }
+        if lhs.spanID != rhs.spanID {
+            return lhs.spanID < rhs.spanID
+        }
+        if lhs.aiTool.rawValue != rhs.aiTool.rawValue {
+            return lhs.aiTool.rawValue < rhs.aiTool.rawValue
+        }
+        if lhs.model != rhs.model {
+            return lhs.model < rhs.model
+        }
+        if lhs.taskType.rawValue != rhs.taskType.rawValue {
+            return lhs.taskType.rawValue < rhs.taskType.rawValue
+        }
+        if lhs.stage.rawValue != rhs.stage.rawValue {
+            return lhs.stage.rawValue < rhs.stage.rawValue
+        }
+        return lhs.totalTokens < rhs.totalTokens
     }
 
     static func isTimestamp(_ lhs: String, before rhs: String) -> Bool {
