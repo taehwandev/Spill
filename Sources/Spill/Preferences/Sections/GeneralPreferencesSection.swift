@@ -16,6 +16,7 @@ struct GeneralPreferencesSection: View {
             languageSettingsCard
             permissionsCard
             updatesCard
+            legalAndPrivacyCard
 
             Divider()
                 .background(Color.primary.opacity(0.04))
@@ -87,6 +88,10 @@ private extension GeneralPreferencesSection {
         PreferenceCard(title: t(.updates), symbolName: "arrow.down.circle.fill", iconColor: .orange) {
             UpdatePreferencesSection(store: updateStore)
         }
+    }
+
+    private var legalAndPrivacyCard: some View {
+        PreferencesLegalLinksCard(language: language)
     }
 
     private var launchAtLoginBinding: Binding<Bool> {

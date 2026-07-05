@@ -48,6 +48,8 @@ struct PrivateUsageUploadPreferencesSection: View {
             .toggleStyle(.switch)
             .disabled(!status.isConnected)
 
+            PreferencesSyncLegalLinksView(language: preferencesLanguage)
+
             PrivateUsageUploadMetricsRow(status: status, language: language)
 
             PrivateUsageUploadActionsRow(
@@ -68,7 +70,9 @@ struct PrivateUsageUploadPreferencesSection: View {
         .padding(10)
         .background(tokenMeteringOptionBackground)
     }
+}
 
+private extension PrivateUsageUploadPreferencesSection {
     private var webConnectionPrompt: some View {
         HStack(alignment: .top, spacing: 10) {
             Button(action: openWebConnectionAction) {
@@ -123,6 +127,17 @@ struct PrivateUsageUploadPreferencesSection: View {
 
     private func t(_ key: TokenMeteringTextKey) -> String {
         TokenMeteringL10n.text(key, language: language)
+    }
+
+    private var preferencesLanguage: SpillAppLanguage {
+        switch language {
+        case .english:
+            return .english
+        case .korean:
+            return .korean
+        case .japanese:
+            return .japanese
+        }
     }
 }
 
