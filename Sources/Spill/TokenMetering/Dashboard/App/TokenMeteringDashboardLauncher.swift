@@ -105,6 +105,16 @@ final class TokenMeteringDashboardLauncher {
 }
 
 enum TokenMeteringWorkspaceOpenCompletion {
+    nonisolated static func runOnMainActor(
+        _ completion: (@MainActor @Sendable () -> Void)?
+    ) -> @Sendable (NSRunningApplication?, Error?) -> Void {
+        { _, _ in
+            Task { @MainActor in
+                completion?()
+            }
+        }
+    }
+
     nonisolated static func handleOpenResult(
         fallback: @escaping @MainActor @Sendable () -> Void,
         completion: @escaping @MainActor @Sendable () -> Void

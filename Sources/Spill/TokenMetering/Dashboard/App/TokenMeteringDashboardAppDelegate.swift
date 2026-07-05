@@ -126,7 +126,7 @@ final class TokenMeteringDashboardAppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func openMainAppIfNeeded(completion: (@Sendable () -> Void)? = nil) {
+    private func openMainAppIfNeeded(completion: (@MainActor @Sendable () -> Void)? = nil) {
         guard !isSmokeTest,
               let mainAppURL = TokenMeteringDashboardProcess.mainAppURLForDashboardHelper(),
               let mainBundleIdentifier = TokenMeteringDashboardProcess.mainBundleIdentifierForDashboardHelper()
@@ -145,9 +145,8 @@ final class TokenMeteringDashboardAppDelegate: NSObject, NSApplicationDelegate {
 
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.activates = false
-        NSWorkspace.shared.openApplication(at: mainAppURL, configuration: configuration) { _, _ in
-            completion?()
-        }
+        let completionHandler = TokenMeteringWorkspaceOpenCompletion.runOnMainActor(completion)
+        NSWorkspace.shared.openApplication(at: mainAppURL, configuration: configuration, completionHandler: completionHandler)
     }
 
     private func observeSettingsChanges() {
