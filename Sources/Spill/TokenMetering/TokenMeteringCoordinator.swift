@@ -146,13 +146,17 @@ final class TokenMeteringCoordinator: NSObject {
             return
         }
 
-        menuBarTokenDayStart = dayStart
         let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? now
-        menuBarTokenTotal = usageStore.totalTokens(
+        guard let totals = usageStore.menuBarTokenTotals(
             startingAt: dayStart,
             endingBefore: dayEnd
-        )
-        menuBarAllTimeTokenTotal = usageStore.allTimeTotalTokens()
+        ) else {
+            return
+        }
+
+        menuBarTokenDayStart = dayStart
+        menuBarTokenTotal = totals.dailyTokens
+        menuBarAllTimeTokenTotal = totals.allTimeTokens
     }
 
     func requestMenuBarTokenUsageCollectionIfNeeded(now: Date = Date()) {

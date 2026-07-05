@@ -1,7 +1,48 @@
 import Foundation
 import SQLite3
 
+struct TokenUsageMenuBarTotals: Equatable, Sendable {
+    let dailyTokens: Int
+    let allTimeTokens: Int
+}
+
 extension TokenUsageStore {
+    func menuBarTokenTotals(
+        startingAt startDate: Date,
+        endingBefore endDate: Date,
+        dashboardToolsOnly: Bool = true
+    ) -> TokenUsageMenuBarTotals? {
+        lock.withLock {
+            let database: OpaquePointer
+            do {
+                database = try openDatabase()
+            } catch {
+                return nil
+            }
+            defer { sqlite3_close(database) }
+
+            guard
+                let daily = loadDashboardCountAndTotalIfAvailable(
+                    startingAt: startDate,
+                    endingBefore: endDate,
+                    dashboardToolsOnly: dashboardToolsOnly,
+                    database: database
+                ),
+                let allTime = loadDashboardCountAndTotalIfAvailable(
+                    dashboardToolsOnly: dashboardToolsOnly,
+                    database: database
+                )
+            else {
+                return nil
+            }
+
+            return TokenUsageMenuBarTotals(
+                dailyTokens: daily.totalTokens,
+                allTimeTokens: allTime.totalTokens
+            )
+        }
+    }
+
     func totalTokens(
         startingAt startDate: Date,
         endingBefore endDate: Date,

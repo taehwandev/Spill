@@ -1524,7 +1524,8 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(tokenMeteringCoordinator.contains("tokenUsageEventsDidChangeFromDistributedNotification"))
         XCTAssertTrue(tokenMeteringCoordinator.contains("private var shouldRefreshMenuBarTokenTotal"))
         XCTAssertTrue(tokenMeteringCoordinator.contains("settings.enabledMenuBarStatusItems.contains(.ai)"))
-        XCTAssertTrue(tokenMeteringCoordinator.contains("usageStore.totalTokens("))
+        XCTAssertTrue(tokenMeteringCoordinator.contains("usageStore.menuBarTokenTotals("))
+        XCTAssertTrue(tokenMeteringCoordinator.contains("guard let totals"))
         XCTAssertTrue(tokenMeteringCoordinator.contains("startingAt: dayStart"))
         XCTAssertTrue(tokenMeteringCoordinator.contains("menuBarTokenCollectionInterval"))
         XCTAssertTrue(appDelegate.contains("requestMenuBarTokenUsageCollectionIfNeeded()"))
@@ -1535,6 +1536,44 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(dashboardStore.contains("TokenUsageStore.distributedEventsDidChangeNotification"))
         XCTAssertTrue(dashboardStore.contains("private var scheduledRefreshTask"))
         XCTAssertTrue(dashboardStore.contains("private func scheduleRefresh"))
+    }
+
+    @MainActor
+    func testMenuBarAITokenStatusKeepsLastValueWhenStoreReadTemporarilyFails() throws {
+        let eventsURL = temporaryEventsURL()
+        let storeDirectoryURL = eventsURL.deletingLastPathComponent()
+        let store = TokenUsageStore(fileURL: eventsURL)
+        let now = try Self.date("2026-07-05T10:15:00.000Z")
+        try store.appendEvent(Self.safeEvent(
+            spanID: "span_menu_bar_cache_survives_read_failure",
+            createdAt: ISO8601DateFormatter.tokenUsage.string(from: now)
+        ))
+
+        let defaultsName = "spill.tests.menu-bar-cache.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: defaultsName))
+        defer {
+            defaults.removePersistentDomain(forName: defaultsName)
+        }
+        let coordinator = TokenMeteringCoordinator(
+            settings: SpillSettings(defaults: defaults),
+            cloudServiceStatusStore: CloudServiceStatusStore(),
+            usageStore: store
+        )
+
+        coordinator.refreshMenuBarTokenTotal(now: now, force: true)
+        XCTAssertEqual(coordinator.menuBarTokenTotal, 150)
+        XCTAssertEqual(coordinator.menuBarAllTimeTokenTotal, 150)
+
+        try FileManager.default.removeItem(at: storeDirectoryURL)
+        try Data().write(to: storeDirectoryURL)
+        defer {
+            try? FileManager.default.removeItem(at: storeDirectoryURL)
+        }
+
+        coordinator.refreshMenuBarTokenTotal(now: now.addingTimeInterval(60), force: true)
+
+        XCTAssertEqual(coordinator.menuBarTokenTotal, 150)
+        XCTAssertEqual(coordinator.menuBarAllTimeTokenTotal, 150)
     }
 
     func testTokenDashboardHelperProcessContracts() throws {

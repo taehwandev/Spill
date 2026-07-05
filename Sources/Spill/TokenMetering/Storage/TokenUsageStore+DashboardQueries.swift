@@ -99,6 +99,22 @@ extension TokenUsageStore {
         visibleTools: Set<TokenUsageAITool>? = nil,
         database: OpaquePointer
     ) -> (eventCount: Int, totalTokens: Int) {
+        loadDashboardCountAndTotalIfAvailable(
+            startingAt: startDate,
+            endingBefore: endDate,
+            dashboardToolsOnly: dashboardToolsOnly,
+            visibleTools: visibleTools,
+            database: database
+        ) ?? (0, 0)
+    }
+
+    func loadDashboardCountAndTotalIfAvailable(
+        startingAt startDate: Date? = nil,
+        endingBefore endDate: Date? = nil,
+        dashboardToolsOnly: Bool,
+        visibleTools: Set<TokenUsageAITool>? = nil,
+        database: OpaquePointer
+    ) -> (eventCount: Int, totalTokens: Int)? {
         let sql = """
         SELECT COUNT(*), COALESCE(SUM(total_tokens), 0)
         FROM token_usage_events
@@ -108,13 +124,13 @@ extension TokenUsageStore {
         guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
               let statement
         else {
-            return (0, 0)
+            return nil
         }
         defer { sqlite3_finalize(statement) }
         Self.bindDashboardDateRange(startingAt: startDate, endingBefore: endDate, statement: statement)
 
         guard sqlite3_step(statement) == SQLITE_ROW else {
-            return (0, 0)
+            return nil
         }
 
         return (
