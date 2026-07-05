@@ -117,6 +117,9 @@ extension PrivateUsageUploadCoordinator {
                uploadError.isRevokedConnection {
                 try? clearConnection()
             }
+            if error is CancellationError || (error as? URLError)?.code == .cancelled {
+                return nil
+            }
             SpillCrashReporter.capturePrivateUsageUploadFailure(operation: .automaticUpload, error: error)
             return nil
         }

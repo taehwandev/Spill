@@ -7,6 +7,7 @@ enum PrivateUsageUploadError: Error, Equatable {
     case missingKeyWrappingSecret
     case invalidRelayURL
     case invalidRelayResponse
+    case relayTransportFailed
     case relay(status: Int, reason: String?)
     case keychainReadFailed
     case keychainWriteFailed
@@ -44,6 +45,8 @@ extension PrivateUsageUploadError {
             return TokenMeteringL10n.text(.privateUsageUploadRelayURLUnavailableMessage)
         case .invalidRelayResponse:
             return TokenMeteringL10n.text(.privateUsageUploadInvalidRelayResponseMessage)
+        case .relayTransportFailed:
+            return TokenMeteringL10n.text(.privateUsageUploadRelayUnavailableMessage)
         case let .relay(status, reason):
             if status == 403 || reason == "device_forbidden" || reason == "grant_forbidden" {
                 return TokenMeteringL10n.text(.privateUsageUploadConnectionExpiredMessage)

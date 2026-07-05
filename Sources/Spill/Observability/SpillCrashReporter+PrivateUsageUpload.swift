@@ -67,6 +67,7 @@ private extension SpillCrashReporter {
              .missingKeyWrappingSecret,
              .invalidRelayURL,
              .invalidRelayResponse,
+             .relayTransportFailed,
              .relay,
              .keychainReadFailed,
              .keychainWriteFailed,
@@ -121,6 +122,8 @@ private extension SpillCrashReporter {
             return "invalid_relay_url"
         case .invalidRelayResponse:
             return "invalid_relay_response"
+        case .relayTransportFailed:
+            return "relay_transport_failed"
         case .relay:
             return "relay"
         case .keychainReadFailed:

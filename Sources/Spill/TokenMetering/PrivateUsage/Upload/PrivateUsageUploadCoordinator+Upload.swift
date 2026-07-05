@@ -74,6 +74,10 @@ extension PrivateUsageUploadCoordinator {
                 attemptedSharedSummaryCount: sharedSummaries.count,
                 uploadedAt: uploadedAt
             )
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let error as URLError where error.code == .cancelled {
+            throw CancellationError()
         } catch {
             if let uploadError = error as? PrivateUsageUploadError,
                uploadError.isRevokedConnection

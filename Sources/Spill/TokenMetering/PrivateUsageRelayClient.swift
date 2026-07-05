@@ -138,7 +138,20 @@ final class PrivateUsageRelayClient: PrivateUsageRelayClienting, @unchecked Send
     }
 
     private func send<Response: Decodable>(_ request: URLRequest) async throws -> Response {
-        let (data, response) = try await transport.data(request)
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await transport.data(request)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let error as URLError where error.code == .cancelled {
+            throw CancellationError()
+        } catch let error as PrivateUsageUploadError {
+            throw error
+        } catch {
+            throw PrivateUsageUploadError.relayTransportFailed
+        }
+
         guard let httpResponse = response as? HTTPURLResponse else {
             throw PrivateUsageUploadError.invalidRelayResponse
         }

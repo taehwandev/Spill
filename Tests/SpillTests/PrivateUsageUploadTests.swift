@@ -589,6 +589,89 @@ final class PrivateUsageUploadTests: XCTestCase {
         XCTAssertEqual((uploadJSON?["shared_summaries"] as? [[String: Any]])?.count, 0)
     }
 
+    func testRelayClientMapsTransportFailuresToTypedRelayError() async throws {
+        let transport = PrivateUsageRelayTransport { _ in
+            throw URLError(.timedOut)
+        }
+        let client = PrivateUsageRelayClient(
+            relayURL: URL(string: "http://localhost:54321/functions/v1/private-usage-relay")!,
+            transport: transport
+        )
+
+        do {
+            _ = try await client.uploadBuckets(
+                credential: PrivateUsageDeviceCredential(
+                    deviceID: "device_server",
+                    credential: "spill_device_v1_secret",
+                    tokenType: "spill_device_v1",
+                    createdAt: Date()
+                ),
+                buckets: [],
+                sharedSummaries: [],
+                keyEnvelopes: []
+            )
+            XCTFail("Expected transport failure to be mapped")
+        } catch {
+            XCTAssertEqual(error as? PrivateUsageUploadError, .relayTransportFailed)
+        }
+    }
+
+    func testRelayClientPreservesCancellationErrors() async throws {
+        let transport = PrivateUsageRelayTransport { _ in
+            throw CancellationError()
+        }
+        let client = PrivateUsageRelayClient(
+            relayURL: URL(string: "http://localhost:54321/functions/v1/private-usage-relay")!,
+            transport: transport
+        )
+
+        do {
+            _ = try await client.uploadBuckets(
+                credential: PrivateUsageDeviceCredential(
+                    deviceID: "device_server",
+                    credential: "spill_device_v1_secret",
+                    tokenType: "spill_device_v1",
+                    createdAt: Date()
+                ),
+                buckets: [],
+                sharedSummaries: [],
+                keyEnvelopes: []
+            )
+            XCTFail("Expected cancellation to be preserved")
+        } catch {
+            XCTAssertTrue(error is CancellationError)
+            XCTAssertNil(error as? PrivateUsageUploadError)
+        }
+    }
+
+    func testRelayClientTreatsURLSessionCancellationAsCancellation() async throws {
+        let transport = PrivateUsageRelayTransport { _ in
+            throw URLError(.cancelled)
+        }
+        let client = PrivateUsageRelayClient(
+            relayURL: URL(string: "http://localhost:54321/functions/v1/private-usage-relay")!,
+            transport: transport
+        )
+
+        do {
+            _ = try await client.uploadBuckets(
+                credential: PrivateUsageDeviceCredential(
+                    deviceID: "device_server",
+                    credential: "spill_device_v1_secret",
+                    tokenType: "spill_device_v1",
+                    createdAt: Date()
+                ),
+                buckets: [],
+                sharedSummaries: [],
+                keyEnvelopes: []
+            )
+            XCTFail("Expected URLSession cancellation to be preserved")
+        } catch {
+            XCTAssertTrue(error is CancellationError)
+            XCTAssertNil(error as? PrivateUsageUploadError)
+        }
+    }
+
     func testConnectionCodeRequiresLocalWrappingSecret() {
         XCTAssertThrowsError(try PrivateUsageConnectionCode(rawValue: "grant_secret")) { error in
             XCTAssertEqual(error as? PrivateUsageUploadError, .invalidConnectionCode)
@@ -1249,6 +1332,122 @@ final class PrivateUsageUploadTests: XCTestCase {
         XCTAssertNil(secondResult)
         XCTAssertEqual(relayClient.uploadedBucketCounts, [1])
         XCTAssertEqual(relayClient.uploadedKeyEnvelopeCounts, [1])
+    }
+
+    func testAutomaticUploadCancellationDoesNotRecordFailureOrAttempt() async throws {
+        let timeZone = try XCTUnwrap(TimeZone(identifier: "UTC"))
+        let calendar = fixedCalendar(timeZone: timeZone)
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 8, hour: 9)))
+        let yesterday = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 7, hour: 12)))
+        let usageStore = makeUsageStore()
+        try usageStore.replaceEvents([
+            makeEvent(
+                spanID: "span_auto_cancel",
+                runID: "run_auto_cancel",
+                aiTool: .codex,
+                taskType: "testing",
+                stage: "verify",
+                model: "gpt-5",
+                input: 3,
+                output: 4,
+                createdAt: yesterday
+            )
+        ])
+        let credentialStore = InMemoryPrivateUsageCredentialStore()
+        try credentialStore.saveCredential(
+            PrivateUsageDeviceCredential(
+                deviceID: "device_server",
+                credential: "spill_device_v1_secret",
+                tokenType: "spill_device_v1",
+                createdAt: yesterday
+            )
+        )
+        try credentialStore.saveKeyWrappingSecret(
+            PrivateUsageKeyWrappingSecret(rawValue: testWrappingSecret)
+        )
+        let relayClient = FakePrivateUsageRelayClient()
+        relayClient.uploadError = CancellationError()
+        let sealer = RecordingPrivateUsageSealer()
+        let stateStore = PrivateUsageUploadStateStore(defaults: makeDefaults())
+        let coordinator = PrivateUsageUploadCoordinator(
+            usageStore: usageStore,
+            credentialStore: credentialStore,
+            stateStore: stateStore,
+            relayClient: relayClient,
+            bucketBuilder: PrivateUsageDailyBucketBuilder(
+                calendar: calendar,
+                timeZone: timeZone,
+                sealer: sealer
+            ),
+            sealer: sealer
+        )
+
+        let result = await coordinator.runAutomaticUploadIfNeeded(isEnabled: true, now: now)
+        let state = stateStore.load()
+
+        XCTAssertNil(result)
+        XCTAssertNil(state.lastFailedUploadAt)
+        XCTAssertNil(state.lastFailureReason)
+        XCTAssertNil(state.lastAutomaticAttemptDayID)
+        XCTAssertTrue(relayClient.uploadedBucketCounts.isEmpty)
+    }
+
+    func testAutomaticUploadURLSessionCancellationDoesNotRecordFailureOrAttempt() async throws {
+        let timeZone = try XCTUnwrap(TimeZone(identifier: "UTC"))
+        let calendar = fixedCalendar(timeZone: timeZone)
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 8, hour: 9)))
+        let yesterday = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 7, hour: 12)))
+        let usageStore = makeUsageStore()
+        try usageStore.replaceEvents([
+            makeEvent(
+                spanID: "span_auto_url_cancel",
+                runID: "run_auto_url_cancel",
+                aiTool: .codex,
+                taskType: "testing",
+                stage: "verify",
+                model: "gpt-5",
+                input: 3,
+                output: 4,
+                createdAt: yesterday
+            )
+        ])
+        let credentialStore = InMemoryPrivateUsageCredentialStore()
+        try credentialStore.saveCredential(
+            PrivateUsageDeviceCredential(
+                deviceID: "device_server",
+                credential: "spill_device_v1_secret",
+                tokenType: "spill_device_v1",
+                createdAt: yesterday
+            )
+        )
+        try credentialStore.saveKeyWrappingSecret(
+            PrivateUsageKeyWrappingSecret(rawValue: testWrappingSecret)
+        )
+        let relayClient = FakePrivateUsageRelayClient()
+        relayClient.uploadError = URLError(.cancelled)
+        let sealer = RecordingPrivateUsageSealer()
+        let stateStore = PrivateUsageUploadStateStore(defaults: makeDefaults())
+        let coordinator = PrivateUsageUploadCoordinator(
+            usageStore: usageStore,
+            credentialStore: credentialStore,
+            stateStore: stateStore,
+            relayClient: relayClient,
+            bucketBuilder: PrivateUsageDailyBucketBuilder(
+                calendar: calendar,
+                timeZone: timeZone,
+                sealer: sealer
+            ),
+            sealer: sealer
+        )
+
+        let result = await coordinator.runAutomaticUploadIfNeeded(isEnabled: true, now: now)
+        let state = stateStore.load()
+
+        XCTAssertNil(result)
+        XCTAssertNil(state.lastFailedUploadAt)
+        XCTAssertNil(state.lastFailureReason)
+        XCTAssertNil(state.lastAutomaticAttemptDayID)
+        XCTAssertTrue(relayClient.uploadedBucketCounts.isEmpty)
     }
 
     func testAutomaticUploadDoesNotDrainHistoryFromBeforeDeviceConnection() async throws {
