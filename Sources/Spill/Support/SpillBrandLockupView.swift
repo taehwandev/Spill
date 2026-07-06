@@ -41,7 +41,7 @@ struct SpillBrandLockupView: View {
 
     @ViewBuilder
     private var wordmark: some View {
-        if let image = Bundle.module.image(forResource: "spill-logo-wordmark") {
+        if let image = SpillResourceBundle.image(named: "spill-logo-wordmark") {
             Image(nsImage: image)
                 .resizable()
                 .scaledToFit()

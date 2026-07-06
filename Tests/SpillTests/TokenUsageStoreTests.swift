@@ -90,7 +90,8 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: wordmarkURL.path))
         XCTAssertTrue(package.contains(".process(\"Resources/Brand\")"))
         XCTAssertTrue(brandLockupView.contains("struct SpillBrandLockupView"))
-        XCTAssertTrue(brandLockupView.contains("Bundle.module.image(forResource: \"spill-logo-wordmark\")"))
+        XCTAssertTrue(brandLockupView.contains("SpillResourceBundle.image(named: \"spill-logo-wordmark\")"))
+        XCTAssertFalse(brandLockupView.contains("Bundle.module.image(forResource: \"spill-logo-wordmark\")"))
         XCTAssertTrue(brandLockupView.contains("Image(nsImage: image)"))
         XCTAssertTrue(spillBarView.contains("SpillBrandLockupView("))
         XCTAssertTrue(spillBarView.contains("private var headerSubtitle: String?"))
@@ -100,6 +101,25 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(dashboardView.contains("SpillBrandLockupView("))
         XCTAssertTrue(dashboardView.contains("subtitle: t(.dashboardTitle)"))
         XCTAssertFalse(dashboardView.contains("Image(systemName: \"chart.bar.xaxis\")"))
+    }
+
+    func testBrandResourceBundleResolverUsesPackagedAppResourceLocationBeforeDebugFallback() {
+        let appBundleURL = URL(fileURLWithPath: "/Applications/Spill.app")
+        let resourceURL = appBundleURL
+            .appendingPathComponent("Contents", isDirectory: true)
+            .appendingPathComponent("Resources", isDirectory: true)
+        let candidates = SpillResourceBundle.packagedResourceBundleCandidateURLs(
+            mainBundleURL: appBundleURL,
+            mainResourceURL: resourceURL
+        )
+
+        XCTAssertEqual(
+            candidates.first?.path,
+            "/Applications/Spill.app/Contents/Resources/Spill_Spill.bundle"
+        )
+        XCTAssertTrue(
+            candidates.contains(appBundleURL.appendingPathComponent("Spill_Spill.bundle", isDirectory: true))
+        )
     }
 
     func testWebDashboardLinkIsAvailableFromSettingsAndLocalDashboard() throws {
