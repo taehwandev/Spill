@@ -28,10 +28,11 @@ extension TokenUsageAntigravityImporter {
         }
 
         let usageFields = varintFieldTotals(in: usage)
-        // Observed AGY gen_metadata usage fields: 2 = uncached input,
-        // 5 = cached input, 3 = aggregate output. Some records also expose
-        // split output components in 9/10; use those only when aggregate
-        // output is absent so known aggregate totals remain the source of truth.
+        // Observed local AGY gen_metadata usage fields, not a public AGY
+        // protobuf contract: 2 = uncached input, 5 = cached input,
+        // 3 = aggregate output. Some records also expose split output
+        // components in 9/10; use those only when aggregate output is absent
+        // so known aggregate totals remain the source of truth.
         let uncachedInput = safeToken(usageFields[2])
         let cachedInput = safeToken(usageFields[5])
         let aggregateOutput = safeToken(usageFields[3])

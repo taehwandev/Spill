@@ -34,6 +34,8 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(TokenMeteringL10n.hookConfigTarget("~/.claude/settings.json", language: .korean), "연결 설정 -> ~/.claude/settings.json")
         XCTAssertEqual(TokenMeteringL10n.text(.sourceBreakdown, language: .english), "Token Detail")
         XCTAssertEqual(TokenMeteringL10n.text(.sourceBreakdown, language: .korean), "토큰 세부 내역")
+        XCTAssertEqual(TokenMeteringL10n.text(.inputAccounting, language: .korean), "원시 입력 회계")
+        XCTAssertTrue(TokenMeteringL10n.text(.inputAccountingInfoDetail, language: .english).contains("Codex input already includes cache reads"))
         XCTAssertEqual(TokenMeteringL10n.text(.folderFilterHeader, language: .korean), "폴더 필터")
         XCTAssertEqual(TokenMeteringL10n.folderTitle("abcd1234", language: .english), "Folder abcd1234")
         XCTAssertEqual(TokenMeteringL10n.text(.sourceUnavailable, language: .korean), "세부 미분류")
@@ -412,6 +414,60 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(snapshot.sourceRows.contains { $0.title == TokenMeteringL10n.text(.sourceGeneratedOutput) && $0.value == "50 (33.3%)" })
         XCTAssertEqual(snapshot.sessions.first?.title, "Analysis - Plan")
         XCTAssertNil(snapshot.selectedSession)
+    }
+
+    func testDashboardSnapshotShowsRawInputAccountingSeparateFromWorkflowLabels() {
+        let codex = Self.safeEvent(
+            aiTool: .codex,
+            spanID: "span_codex_unsplit_input",
+            inputTokens: 60,
+            outputTokens: 10,
+            generatedOutput: 10
+        )
+        let claude = Self.safeEvent(
+            aiTool: .claude,
+            spanID: "span_claude_split_input",
+            inputTokens: 125,
+            outputTokens: 7,
+            generatedOutput: 7,
+            tokenAccounting: TokenUsageAccounting(
+                uncachedInputTokens: 20,
+                cacheCreationInputTokens: 5,
+                cacheReadInputTokens: 100
+            )
+        )
+        let antigravity = Self.safeEvent(
+            aiTool: .antigravity,
+            spanID: "span_agy_split_input",
+            inputTokens: 90,
+            outputTokens: 15,
+            generatedOutput: 15,
+            tokenAccounting: TokenUsageAccounting(
+                uncachedInputTokens: 50,
+                cacheReadInputTokens: 40
+            )
+        )
+
+        let snapshot = TokenUsageDashboardSnapshot(events: [codex, claude, antigravity], language: .english)
+        let rowsByID = Dictionary(uniqueKeysWithValues: snapshot.inputAccounting.rows.map { ($0.id, $0) })
+
+        XCTAssertEqual(snapshot.kpis.first { $0.id == "input" }?.value, "275")
+        XCTAssertEqual(rowsByID["cache_read_input"]?.value, "140 (50.9%)")
+        XCTAssertEqual(rowsByID["uncached_input"]?.value, "70 (25.5%)")
+        XCTAssertEqual(rowsByID["unclassified_input"]?.value, "60 (21.8%)")
+        XCTAssertEqual(rowsByID["cache_creation_input"]?.value, "5 (1.8%)")
+        XCTAssertEqual(snapshot.taskRows.map(\.id), ["analysis"])
+
+        let codexSnapshot = TokenUsageDashboardSnapshot(events: [codex, claude], selectedTool: .codex, language: .english)
+        XCTAssertEqual(codexSnapshot.inputAccounting.rows.map(\.id), ["unclassified_input"])
+        XCTAssertEqual(codexSnapshot.inputAccounting.rows.first?.value, "60 (100.0%)")
+
+        let claudeSnapshot = TokenUsageDashboardSnapshot(events: [codex, claude], selectedTool: .claude, language: .english)
+        let claudeRowsByID = Dictionary(uniqueKeysWithValues: claudeSnapshot.inputAccounting.rows.map { ($0.id, $0) })
+        XCTAssertEqual(claudeRowsByID["cache_read_input"]?.value, "100 (80.0%)")
+        XCTAssertEqual(claudeRowsByID["uncached_input"]?.value, "20 (16.0%)")
+        XCTAssertEqual(claudeRowsByID["cache_creation_input"]?.value, "5 (4.0%)")
+        XCTAssertNil(claudeRowsByID["unclassified_input"])
     }
 
     func testDashboardSnapshotFiltersByAITool() {
@@ -1904,6 +1960,54 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(event.tokenAccounting?.uncachedInputTokens, 20)
         XCTAssertEqual(event.tokenAccounting?.cacheCreationInputTokens, 5)
         XCTAssertEqual(event.tokenAccounting?.cacheReadInputTokens, 100)
+    }
+
+    func testAppendEventsWithoutLoadingRepairsAntigravityDuplicateSpanAccountingAndPreservesMetadata() throws {
+        let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
+        let existing = Self.safeEvent(
+            aiTool: .antigravity,
+            spanID: "span_agy_reconciled_history",
+            inputTokens: 120,
+            outputTokens: 20,
+            generatedOutput: 20,
+            projectID: "project_existing",
+            taskType: .analysis,
+            stage: .plan,
+            model: "antigravity-old"
+        )
+        let incoming = Self.safeEvent(
+            aiTool: .antigravity,
+            spanID: "span_agy_reconciled_history",
+            inputTokens: 176,
+            outputTokens: 34,
+            generatedOutput: 34,
+            tokenAccounting: TokenUsageAccounting(
+                uncachedInputTokens: 120,
+                cacheReadInputTokens: 56
+            ),
+            projectID: "project_new",
+            taskType: .debugging,
+            stage: .implement,
+            model: "antigravity-new"
+        )
+
+        try usageStore.appendEvent(existing)
+        let insertedCount = try usageStore.appendEventsWithoutLoading([incoming])
+        let event = try XCTUnwrap(usageStore.loadEvents().first)
+
+        XCTAssertEqual(insertedCount, 1)
+        XCTAssertEqual(event.projectID, "project_existing")
+        XCTAssertEqual(event.taskType, .analysis)
+        XCTAssertEqual(event.stage, .plan)
+        XCTAssertEqual(event.model, "antigravity-old")
+        XCTAssertEqual(event.inputTokens, 176)
+        XCTAssertEqual(event.outputTokens, 34)
+        XCTAssertEqual(event.totalTokens, 210)
+        XCTAssertEqual(event.tokenBreakdown.generatedOutput, 34)
+        XCTAssertEqual(event.tokenBreakdown.unknown, 176)
+        XCTAssertEqual(event.tokenAccounting?.uncachedInputTokens, 120)
+        XCTAssertEqual(event.tokenAccounting?.cacheCreationInputTokens, 0)
+        XCTAssertEqual(event.tokenAccounting?.cacheReadInputTokens, 56)
     }
 
     @MainActor
@@ -4352,7 +4456,8 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(antigravityImporter.contains("SELECT idx, data FROM gen_metadata ORDER BY idx"))
         XCTAssertTrue(antigravityImporter.contains("SQLITE_OPEN_READONLY | SQLITE_OPEN_FULLMUTEX"))
         XCTAssertTrue(antigravityImporter.contains("artifactID: \"artifact_global\""))
-        XCTAssertTrue(antigravityImporter.contains("Observed AGY gen_metadata usage fields"))
+        XCTAssertTrue(antigravityImporter.contains("Observed local AGY gen_metadata usage fields"))
+        XCTAssertTrue(antigravityImporter.contains("not a public AGY"))
         XCTAssertTrue(antigravityImporter.contains("Observed AGY model fields"))
         XCTAssertTrue(antigravityImporter.contains("antigravity-active-importer-last.json"))
         XCTAssertTrue(antigravityImporter.contains("opaqueHash"))

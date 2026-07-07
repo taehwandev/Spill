@@ -11,6 +11,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
     let toolRows: [TokenUsageDashboardBarRow]
     let modelRows: [TokenUsageDashboardBarRow]
     let workflowUsage: TokenUsageDashboardWorkflowUsage
+    let inputAccounting: TokenUsageDashboardInputAccounting
     let taskRows: [TokenUsageDashboardBarRow]
     let stageRows: [TokenUsageDashboardBarRow]
     let sourceRows: [TokenUsageDashboardBarRow]
@@ -349,6 +350,11 @@ struct TokenUsageDashboardSnapshot: Equatable {
 
         let inputTokens = focusedEvents.reduce(0) { $0 + $1.event.inputTokens }
         let outputTokens = focusedEvents.reduce(0) { $0 + $1.event.outputTokens }
+        inputAccounting = Self.inputAccounting(
+            events: focusedEvents,
+            inputTokens: inputTokens,
+            language: language
+        )
 
         kpis = [
             TokenUsageDashboardKPI(

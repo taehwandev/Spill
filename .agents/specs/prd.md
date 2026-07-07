@@ -291,6 +291,14 @@ Requirements:
   output buckets when runtimes expose them so dashboard or web pricing layers
   can apply provider/model-specific rates without changing the raw usage
   baseline.
+- Dashboard usage surfaces must distinguish raw usage totals from accounting
+  buckets and workflow labels. Input/output totals answer token direction.
+  `task_type`/`stage` answer workflow grouping. Accounting buckets explain the
+  exact runtime-reported split behind raw input, including the Codex/Claude
+  asymmetry: Codex input may already include cache reads as one raw input
+  number, while Claude exposes fresh input, cache writes, and cache reads
+  separately. If a split is unavailable, the input remains valid raw usage and
+  is shown as unclassified/unsplit accounting, not inferred from content.
 - Token detail categories such as system, user, history, repo context, tool
   output, generated output, and unknown are secondary measurement-quality
   statistics. They are useful only when the runtime or adapter supplies exact
@@ -347,6 +355,10 @@ Dashboard UX requirements:
 - The first dashboard read should answer whether usage was large, whether the
   cost came mostly from input or output, which model/tool/work type/stage
   dominated, and whether workflow labels covered the selected records.
+- The dashboard should expose raw input accounting as a separate display from
+  token detail and workflow labels. The copy must state that cache discounts and
+  cost weighting belong in cost analysis/display, not in raw metering storage or
+  default usage totals.
 - Top AI tool filter tabs may show each tool's share of the current All-tool
   token scope, but the share must be secondary to the tool name. The percentage
   belongs on the tab's second line with the token detail, not in the primary

@@ -201,6 +201,40 @@ extension TokenUsageDashboardSnapshot {
         return totals
     }
 
+    static func inputAccounting(
+        events: [TokenUsageDashboardParsedEvent],
+        inputTokens: Int,
+        language: TokenMeteringLanguage
+    ) -> TokenUsageDashboardInputAccounting {
+        var totals: [TokenUsageInputAccountingCategory: Int] = [:]
+        for parsedEvent in events {
+            let event = parsedEvent.event
+            guard event.inputTokens > 0 else {
+                continue
+            }
+
+            guard let accounting = event.tokenAccounting else {
+                totals[.unclassifiedInput, default: 0] += event.inputTokens
+                continue
+            }
+
+            totals[.uncachedInput, default: 0] += accounting.uncachedInputTokens
+            totals[.cacheCreationInput, default: 0] += accounting.cacheCreationInputTokens
+            totals[.cacheReadInput, default: 0] += accounting.cacheReadInputTokens
+            let unclassifiedInput = max(0, event.inputTokens - accounting.measuredInputTokens)
+            totals[.unclassifiedInput, default: 0] += unclassifiedInput
+        }
+
+        let rows = TokenUsageDashboardRowBuilder.rows(
+            candidates: TokenUsageInputAccountingCategory.allCases,
+            totalTokens: inputTokens,
+            tokens: { totals[$0, default: 0] },
+            id: { $0.rawValue },
+            label: { $0.label(language: language) }
+        )
+        return TokenUsageDashboardInputAccounting(rows: rows)
+    }
+
     static func sessionRows(
         events: [TokenUsageDashboardParsedEvent],
         language: TokenMeteringLanguage,

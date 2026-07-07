@@ -364,6 +364,11 @@ Rules:
   For Codex, `input_tokens` already includes cached input reads. Cost-weighted
   views may apply model-specific cache discounts later, but storage and
   default usage comparison must keep the raw exact counts.
+- Dashboard presentation may aggregate local-only accounting buckets into
+  display rows for fresh input, cache creation, cache read, and unsplit input.
+  These rows are a display/analysis aid only. They must not alter
+  `input_tokens`, `output_tokens`, `total_tokens`, event identity, workflow
+  label grouping, or default tool comparisons.
 - Runtime importers preserve pricing-relevant token accounting separately from
   the strict usage event JSON. The strict event schema remains limited to raw
   `input_tokens`, `output_tokens`, `total_tokens`, and `token_breakdown`.
@@ -445,6 +450,10 @@ Rules:
   report per-tool results.
 - Importers may parse only exact numeric usage records and safe opaque metadata
   from known runtime stores.
+- Repeated imports for Codex, Claude Code, and Antigravity/AGY may repair raw
+  numeric totals and local-only accounting buckets for an existing stable
+  `span_id`; they must preserve existing workflow labels, local grouping
+  metadata, and display aliases instead of creating duplicate historical rows.
 - Event identity, cursors, same-day reconciliation, checkpointing, and
   duplicate handling are specified in `specs/token-history-import.md`.
 - Local history import only writes the app-owned local usage store and local
@@ -576,6 +585,11 @@ Rules:
   only. The importer may read known AGY conversation metadata records
   read-only, but must store only safe shape booleans plus usage numbers, never
   raw environment values or content-like fields.
+- AGY metadata field numbers used by the active importer are observed local
+  implementation details, not an AGY public protobuf contract. If AGY changes
+  those shapes, the importer must skip unsupported records or wait for an
+  explicit parser update; it must not infer token counts or labels from
+  content.
 - Claude Code Stop hooks use a separate contract. The expected stdin payload is
   a safe object with `transcript_path`; the adapter may read exact numeric usage
   from that transcript but must not store transcript paths or transcript

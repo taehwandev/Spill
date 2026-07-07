@@ -1421,6 +1421,7 @@ final class TokenUsageDashboardStore: ObservableObject {
         appendChangedRows(to: &ids, previous: previousSnapshot.toolRows, next: nextSnapshot.toolRows, prefix: "tool")
         appendChangedRows(to: &ids, previous: previousSnapshot.modelRows, next: nextSnapshot.modelRows, prefix: "model")
         appendChangedRows(to: &ids, previous: previousSnapshot.workflowUsage.rows, next: nextSnapshot.workflowUsage.rows, prefix: "workflow_usage")
+        appendChangedRows(to: &ids, previous: previousSnapshot.inputAccounting.rows, next: nextSnapshot.inputAccounting.rows, prefix: "input_accounting")
         appendChangedRows(to: &ids, previous: previousSnapshot.taskRows, next: nextSnapshot.taskRows, prefix: "task")
         appendChangedRows(to: &ids, previous: previousSnapshot.stageRows, next: nextSnapshot.stageRows, prefix: "stage")
         appendChangedRows(to: &ids, previous: previousSnapshot.sourceRows, next: nextSnapshot.sourceRows, prefix: "source")

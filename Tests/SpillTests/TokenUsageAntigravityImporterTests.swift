@@ -6,7 +6,7 @@ import XCTest
 private let TEST_AGY_SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
 final class TokenUsageAntigravityImporterTests: XCTestCase {
-    func testStableSpanIdentityIgnoresTokenCountChangesForSameGenerationRecord() throws {
+    func testStableSpanIdentityRepairsTokenCountChangesForSameGenerationRecord() throws {
         let rootURL = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: rootURL) }
 
@@ -64,11 +64,15 @@ final class TokenUsageAntigravityImporterTests: XCTestCase {
         let events = store.loadEvents()
 
         XCTAssertEqual(secondSummary.parsedUsageEvents, 1)
-        XCTAssertEqual(secondSummary.importedEvents, 0)
-        XCTAssertEqual(secondSummary.skippedDuplicateEvents, 1)
+        XCTAssertEqual(secondSummary.importedEvents, 1)
+        XCTAssertEqual(secondSummary.skippedDuplicateEvents, 0)
         XCTAssertEqual(events.count, 1)
         XCTAssertEqual(events[0].spanID, firstEvent.spanID)
-        XCTAssertEqual(events[0].totalTokens, 210)
+        XCTAssertEqual(events[0].inputTokens, 352)
+        XCTAssertEqual(events[0].outputTokens, 68)
+        XCTAssertEqual(events[0].totalTokens, 420)
+        XCTAssertEqual(events[0].tokenAccounting?.uncachedInputTokens, 240)
+        XCTAssertEqual(events[0].tokenAccounting?.cacheReadInputTokens, 112)
     }
 
     func testRepeatedUsageVarintFieldsAreSummed() throws {

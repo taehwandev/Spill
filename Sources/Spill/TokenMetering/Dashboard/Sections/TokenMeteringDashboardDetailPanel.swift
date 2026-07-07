@@ -158,6 +158,13 @@ struct TokenMeteringDashboardDetailPanel: View {
         )
 
         workItemPopoverSection(
+            title: t(.inputAccounting),
+            rows: detailSnapshot.inputAccounting.rows.prefix(4),
+            emptyText: t(.noInputAccountingData),
+            idPrefix: "input_accounting"
+        )
+
+        workItemPopoverSection(
             title: t(.workflowBreakdown),
             rows: detailSnapshot.taskRows.prefix(4),
             emptyText: t(.noWorkflowData),

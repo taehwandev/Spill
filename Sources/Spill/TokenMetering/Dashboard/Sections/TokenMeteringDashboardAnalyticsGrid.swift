@@ -35,6 +35,19 @@ struct TokenMeteringDashboardAnalyticsGrid: View {
                     rowsMinimumHeight: 118
                 )
 
+                distributionPanel(
+                    rows: store.snapshot.inputAccounting.rows,
+                    title: t(.inputAccounting),
+                    subtitle: t(.inputAccountingSubtitle),
+                    infoTitle: t(.inputAccountingInfoTitle),
+                    infoDetail: t(.inputAccountingInfoDetail),
+                    emptyTitle: t(.noInputAccountingData),
+                    idPrefix: "input_accounting",
+                    tint: .indigo,
+                    panelMinimumHeight: 180,
+                    rowsMinimumHeight: 118
+                )
+
                 HStack(alignment: .top, spacing: 14) {
                     distributionPanel(
                         rows: store.snapshot.taskRows,

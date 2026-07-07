@@ -93,6 +93,7 @@ enum TokenMeteringTextKey: String {
     case noTrendData
     case trendHoverGuide
     case noAIToolData
+    case noInputAccountingData
     case noWorkflowData
     case noStageData
     case noSourceBreakdown
@@ -158,6 +159,14 @@ enum TokenMeteringTextKey: String {
     case runsInfoDetail
     case totalTokens
     case input
+    case inputAccounting
+    case inputAccountingSubtitle
+    case inputAccountingInfoTitle
+    case inputAccountingInfoDetail
+    case inputAccountingUncached
+    case inputAccountingCacheCreation
+    case inputAccountingCacheRead
+    case inputAccountingUnclassified
     case output
     case avgLatency
     case latencyUnavailable
