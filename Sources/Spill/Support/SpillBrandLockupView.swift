@@ -3,6 +3,7 @@ import SwiftUI
 
 struct SpillBrandLockupView: View {
     let subtitle: String?
+    var markStyle: MenuBarTriggerIconStyle?
     var iconSize: CGFloat = 34
     var titleFontSize: CGFloat = 13
     var titleWeight: Font.Weight = .semibold
@@ -20,8 +21,10 @@ struct SpillBrandLockupView: View {
         let wordmarkHeight = titleFontSize * wordmarkHeightMultiplier
 
         HStack(spacing: spacing) {
-            SpillBrandIconView()
-                .frame(width: iconSize, height: iconSize)
+            if let markStyle {
+                brandMark(markStyle)
+                    .frame(width: iconSize, height: iconSize)
+            }
 
             VStack(alignment: .leading, spacing: 2) {
                 wordmark
@@ -37,6 +40,16 @@ struct SpillBrandLockupView: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(Text(accessibilityLabelText))
+    }
+
+    @ViewBuilder
+    private func brandMark(_ markStyle: MenuBarTriggerIconStyle) -> some View {
+        switch markStyle {
+        case .spill:
+            SpillBrandIconView()
+        case .symbolizedS:
+            SpillBrandSMarkView()
+        }
     }
 
     @ViewBuilder

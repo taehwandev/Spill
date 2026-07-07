@@ -31,6 +31,7 @@ struct PreferencesSidebarView: View {
     private var brandHeader: some View {
         SpillBrandLockupView(
             subtitle: "v\(currentVersion)",
+            markStyle: nil,
             iconSize: 32,
             titleFontSize: 15,
             titleWeight: .bold,

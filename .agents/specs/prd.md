@@ -108,7 +108,8 @@ Spill is not:
 Requirements:
 
 - A small fixed-width Spill icon appears in the menu bar as the primary Main
-  item.
+  item. The droplet remains the default trigger mark, and users may choose the
+  symbolized Spill S mark as an alternate trigger mark.
 - By default, enabled menu bar values render in one horizontal status item with
   the Spill trigger, preserving the classic compact menu bar presentation.
 - Compact rendering and functional group splitting are independent Preferences
@@ -125,7 +126,7 @@ Requirements:
 - Left click toggles Spill Panel.
 - Right click or Control-click opens a native menu with:
   - Show/Hide Spill Panel
-  - Open Local Token Dashboard
+  - Open Spill - AI Token Metering
   - Refresh
   - Check for Updates
   - Preferences

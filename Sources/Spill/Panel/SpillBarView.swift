@@ -61,6 +61,9 @@ struct SpillBarView: View {
         }
     }
 
+}
+
+extension SpillBarView {
     private func updatePendingDismiss(_ pendingDismiss: Bool) {
         pendingDismissWorkItem?.cancel()
         pendingDismissWorkItem = nil
@@ -152,6 +155,9 @@ struct SpillBarView: View {
         }
     }
 
+}
+
+extension SpillBarView {
     private var updateBannerSymbolName: String {
         switch updateStore.state {
         case .checking:
@@ -240,10 +246,14 @@ struct SpillBarView: View {
         }
     }
 
+}
+
+extension SpillBarView {
     private var header: some View {
         HStack(spacing: 12) {
             SpillBrandLockupView(
                 subtitle: headerSubtitle,
+                markStyle: nil,
                 iconSize: 34,
                 titleFontSize: 13,
                 titleWeight: .semibold,
@@ -318,6 +328,9 @@ struct SpillBarView: View {
         }
     }
 
+}
+
+extension SpillBarView {
     private func statusMetricRow(for module: SpillStatusModule) -> some View {
         let status = statusStore.meterSnapshot(for: module)
         let title = AppL10n.statusModuleTitle(module, appLanguage: settings.appLanguage)
@@ -413,6 +426,9 @@ struct SpillBarView: View {
         .accessibilityLabel(title)
     }
 
+}
+
+extension SpillBarView {
     private var aiSection: some View {
         SpillBarAISection(
             panelStore: panelStore,
@@ -531,6 +547,9 @@ struct SpillBarView: View {
         .frame(width: 30, height: 30)
     }
 
+}
+
+extension SpillBarView {
     private func inlineRows(for module: SpillStatusModule) -> [SpillStatusDetailRow] {
         let rows = statusStore.detailRows(for: module)
 
@@ -622,6 +641,9 @@ struct SpillBarView: View {
         }
     }
 
+}
+
+extension SpillBarView {
     private func peakUsageRatio(for module: SpillStatusModule, currentRatio: Double) -> Double {
         let historyPeak = statusStore.history(for: module).max() ?? currentRatio
         return max(historyPeak, currentRatio).clamped(to: 0...1)
@@ -716,6 +738,9 @@ struct SpillBarView: View {
         return subtitle
     }
 
+}
+
+extension SpillBarView {
     private func performWindowAction(_ action: SpillAction) {
         panelStore.send(.performWindowAction(action))
     }
@@ -779,6 +804,9 @@ struct SpillBarView: View {
         }
     }
 
+}
+
+extension SpillBarView {
     private var windowActionGrid: some View {
         HStack(alignment: .top, spacing: 20) {
             // Left Column: Directional / Sizing Positions
@@ -861,6 +889,9 @@ struct SpillBarView: View {
         }
     }
 
+}
+
+extension SpillBarView {
     private var menuBarActionGrid: some View {
         LazyVGrid(columns: menuBarActionGridColumns, alignment: .leading, spacing: 6) {
             ForEach(panelState.actionItems) { item in
@@ -928,6 +959,9 @@ struct SpillBarView: View {
         }
     }
 
+}
+
+extension SpillBarView {
     private var sleepGuardHeaderControl: some View {
         HStack(spacing: 0) {
             Button {
@@ -1014,6 +1048,9 @@ struct SpillBarView: View {
         }
     }
 
+}
+
+extension SpillBarView {
     private func toggleSleepGuard() {
         if sleepGuard.isActive {
             stopSleepGuard(source: "panel_header")
@@ -1096,6 +1133,9 @@ struct SpillBarView: View {
         return text
     }
 
+}
+
+extension SpillBarView {
     private func helpText(for item: SpillDisplayedActionItem) -> String {
         var parts = [item.action.title]
 
@@ -1119,6 +1159,9 @@ private struct MetricSparklineSeries {
     let tint: Color
 }
 
+}
+
+extension SpillBarView {
 private struct ResourceLoadChartView: View {
     let primaryTitle: String
     let secondaryTitle: String
@@ -1222,6 +1265,9 @@ private struct ResourceLoadChartView: View {
     }
 }
 
+}
+
+extension SpillBarView {
 private struct CPUCoreBarChartView: View {
     let coreValues: [Double]
     let tint: Color
@@ -1272,6 +1318,9 @@ private struct CPUCoreBarChartView: View {
     }
 }
 
+}
+
+extension SpillBarView {
 private struct MetricSparklineView: View {
     let series: [MetricSparklineSeries]
     var normalizesToSeriesMaximum = false

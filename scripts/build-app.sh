@@ -349,9 +349,9 @@ cat > "$HELPER_CONTENTS_DIR/Info.plist" <<PLIST
     <key>CFBundleIdentifier</key>
     <string>$HELPER_BUNDLE_ID</string>
     <key>CFBundleName</key>
-    <string>Spill Token Dashboard</string>
+    <string>Spill - AI Token Metering</string>
     <key>CFBundleDisplayName</key>
-    <string>Spill Token Dashboard</string>
+    <string>Spill - AI Token Metering</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>CFBundleIconName</key>

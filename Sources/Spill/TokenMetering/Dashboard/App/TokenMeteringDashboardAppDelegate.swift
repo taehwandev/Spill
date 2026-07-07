@@ -47,6 +47,9 @@ final class TokenMeteringDashboardAppDelegate: NSObject, NSApplicationDelegate {
         SpillCrashReporter.markCleanShutdown(processRole: "token_dashboard")
     }
 
+}
+
+extension TokenMeteringDashboardAppDelegate {
     private static func makeTokenUsageStore() -> TokenUsageStore {
         TokenUsageStoreEnvironment.store() ?? TokenUsageStore.live()
     }
@@ -126,6 +129,9 @@ final class TokenMeteringDashboardAppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+}
+
+extension TokenMeteringDashboardAppDelegate {
     private func openMainAppIfNeeded(completion: (@MainActor @Sendable () -> Void)? = nil) {
         guard !isSmokeTest,
               let mainAppURL = TokenMeteringDashboardProcess.mainAppURLForDashboardHelper(),
@@ -199,11 +205,11 @@ final class TokenMeteringDashboardAppDelegate: NSObject, NSApplicationDelegate {
         let appMenuItem = NSMenuItem()
         mainMenu.addItem(appMenuItem)
 
-        let appMenu = NSMenu(title: "Spill Token Dashboard")
+        let appMenu = NSMenu(title: "Spill - AI Token Metering")
         appMenuItem.submenu = appMenu
         appMenu.addItem(
             NSMenuItem(
-                title: "Quit Spill Token Dashboard",
+                title: "Quit Spill - AI Token Metering",
                 action: #selector(quitDashboard),
                 keyEquivalent: "q"
             )

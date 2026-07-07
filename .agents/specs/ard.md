@@ -46,6 +46,8 @@ Caffeine remains part of the main surface. Only compact split mode may render it
 as trigger state or a compact badge on the Main trigger instead of a separate
 chip in the main item. System and AI values use their own compact status items
 only when the user enables split groups.
+`MenuBarTriggerIconStyle` owns the Main trigger mark: the droplet remains the
+default, and the symbolized Spill S mark is an alternate user-selected mark.
 
 Rationale:
 
@@ -202,7 +204,7 @@ Decision:
 
 Token metering appears as a compact summary inside the existing AI strip of the
 Spill Panel. The visible menu bar trigger continues to toggle the panel. A
-separate native Local Token Dashboard may exist as a detail action from that
+separate native `Spill - AI Token Metering` dashboard may exist as a detail action from that
 summary, Preferences, or menus, but it must not replace the panel as the primary
 surface.
 
@@ -283,11 +285,11 @@ Rules:
 - It should degrade to the existing AI status pills when no chartable state is
   available.
 
-### ARD-005C: Local Token Dashboard Uses A Separate Helper App
+### ARD-005C: Spill - AI Token Metering Uses A Separate Helper App
 
 Decision:
 
-The detailed Local Token Dashboard launches as a separate bundled helper app
+The detailed `Spill - AI Token Metering` dashboard launches as a separate bundled helper app
 from the main menu bar utility. The main Spill app remains an `LSUIElement`
 accessory process with one status item. The dashboard helper uses regular app
 activation so it can appear in Command-Tab/Alt-Tab style app switching and own

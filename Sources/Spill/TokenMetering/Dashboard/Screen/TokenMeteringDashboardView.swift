@@ -26,51 +26,6 @@ struct TokenMeteringDashboardView: View {
     private let syncsVisibleAITools: Bool
     private let titleDidChange: () -> Void
 
-    init(
-        store: TokenUsageDashboardStore,
-        cloudServiceStatusStore: CloudServiceStatusStore = CloudServiceStatusStore(),
-        aiStatusStore: AIStatusStore = AIStatusStore(),
-        settings: SpillSettings = .shared,
-        refreshAction: @escaping () -> Void = {},
-        settingsAction: @escaping () -> Void = {},
-        developerOptionsAction: @escaping () -> Void = {},
-        syncsVisibleAITools: Bool = true,
-        titleDidChange: @escaping () -> Void = {}
-    ) {
-        self.store = store
-        self.cloudServiceStatusStore = cloudServiceStatusStore
-        self.aiStatusStore = aiStatusStore
-        _settings = ObservedObject(wrappedValue: settings)
-        _resolvedLanguage = State(initialValue: TokenMeteringLanguage.current(appLanguage: settings.appLanguage))
-        self.refreshAction = refreshAction
-        self.settingsAction = settingsAction
-        self.developerOptionsAction = developerOptionsAction
-        self.syncsVisibleAITools = syncsVisibleAITools
-        self.titleDidChange = titleDidChange
-    }
-
-    private func t(_ key: TokenMeteringTextKey) -> String {
-        TokenMeteringL10n.text(
-            key,
-            language: currentLanguage
-        )
-    }
-
-    private var currentLanguage: TokenMeteringLanguage {
-        resolvedLanguage
-    }
-
-    private var selectedControlAccent: Color {
-        store.selectedTool?.dashboardTint ?? TokenMeteringDashboardToolPalette.antigravity
-    }
-
-    private var selectedControlAccentHighlight: Color {
-        if let tool = store.selectedTool {
-            return tool.dashboardTint.opacity(1.15)
-        }
-        return TokenMeteringDashboardToolPalette.antigravity.opacity(1.15)
-    }
-
     var body: some View {
         VStack(spacing: 0) {
             topHeader
@@ -85,20 +40,7 @@ struct TokenMeteringDashboardView: View {
 
             dashboardBody
         }
-        .background {
-            ZStack {
-                VisualEffectView(material: .sidebar, blendingMode: .withinWindow)
-                LinearGradient(
-                    colors: [
-                        Color.teal.opacity(0.04),
-                        Color.blue.opacity(0.03),
-                        Color.purple.opacity(0.04)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            }
-        }
+        .background(VisualEffectView(material: .sidebar, blendingMode: .withinWindow))
         .frame(minWidth: 1060, minHeight: 640)
         .focusEffectDisabled()
         .onAppear {
@@ -178,6 +120,54 @@ struct TokenMeteringDashboardView: View {
         }
     }
 
+}
+
+extension TokenMeteringDashboardView {
+    init(
+        store: TokenUsageDashboardStore,
+        cloudServiceStatusStore: CloudServiceStatusStore = CloudServiceStatusStore(),
+        aiStatusStore: AIStatusStore = AIStatusStore(),
+        settings: SpillSettings = .shared,
+        refreshAction: @escaping () -> Void = {},
+        settingsAction: @escaping () -> Void = {},
+        developerOptionsAction: @escaping () -> Void = {},
+        syncsVisibleAITools: Bool = true,
+        titleDidChange: @escaping () -> Void = {}
+    ) {
+        self.store = store
+        self.cloudServiceStatusStore = cloudServiceStatusStore
+        self.aiStatusStore = aiStatusStore
+        _settings = ObservedObject(wrappedValue: settings)
+        _resolvedLanguage = State(initialValue: TokenMeteringLanguage.current(appLanguage: settings.appLanguage))
+        self.refreshAction = refreshAction
+        self.settingsAction = settingsAction
+        self.developerOptionsAction = developerOptionsAction
+        self.syncsVisibleAITools = syncsVisibleAITools
+        self.titleDidChange = titleDidChange
+    }
+
+    private func t(_ key: TokenMeteringTextKey) -> String {
+        TokenMeteringL10n.text(
+            key,
+            language: currentLanguage
+        )
+    }
+
+    private var currentLanguage: TokenMeteringLanguage {
+        resolvedLanguage
+    }
+
+    private var selectedControlAccent: Color {
+        store.selectedTool?.dashboardTint ?? TokenMeteringDashboardToolPalette.antigravity
+    }
+
+    private var selectedControlAccentHighlight: Color {
+        if let tool = store.selectedTool {
+            return tool.dashboardTint.opacity(1.15)
+        }
+        return TokenMeteringDashboardToolPalette.antigravity.opacity(1.15)
+    }
+
     private var dashboardBody: some View {
         ZStack(alignment: .top) {
             HStack(alignment: .top, spacing: 16) {
@@ -217,6 +207,9 @@ struct TokenMeteringDashboardView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
+}
+
+extension TokenMeteringDashboardView {
     private func receiverPanel(_ selectedSession: TokenUsageDashboardSessionRow) -> some View {
         TokenMeteringDashboardDetailPanel(
             session: selectedSession,
@@ -236,42 +229,42 @@ struct TokenMeteringDashboardView: View {
     }
 
     private var topHeader: some View {
-        HStack(spacing: 14) {
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 8) {
-                    SpillBrandLockupView(
-                        subtitle: t(.dashboardTitle),
-                        iconSize: 36,
-                        titleFontSize: 18,
-                        titleWeight: .bold,
-                        subtitleFontSize: 11,
-                        subtitleWeight: .semibold,
-                        subtitleColor: .secondary,
-                        spacing: 14
-                    )
+        HStack(spacing: 12) {
+            SpillBrandLockupView(
+                subtitle: nil,
+                markStyle: nil,
+                iconSize: 36,
+                titleFontSize: 18,
+                titleWeight: .bold,
+                subtitleFontSize: 11,
+                subtitleWeight: .semibold,
+                subtitleColor: .secondary,
+                spacing: 14
+            )
 
-                    alphaBadge
-                    syncStateBadge
-                }
+            HStack(spacing: 8) {
+                alphaBadge
+                syncStateBadge
 
-                HStack(spacing: 6) {
-                    Text(t(.dashboardSubtitle))
+                Text("•")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary.opacity(0.5))
+
+                Text(t(.dashboardSubtitle))
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+
+                if let overallUpdated = store.snapshot.overallLastUpdatedString {
+                    Text("•")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.secondary.opacity(0.5))
+
+                    Text("\(t(.lastUpdatedLabel)): \(overallUpdated)")
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
-
-                    if let overallUpdated = store.snapshot.overallLastUpdatedString {
-                        Text("•")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(.secondary.opacity(0.5))
-
-                        Text("\(t(.lastUpdatedLabel)): \(overallUpdated)")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
                 }
-                .padding(.leading, 50)
             }
 
             Spacer(minLength: 16)
@@ -279,34 +272,37 @@ struct TokenMeteringDashboardView: View {
             HStack(spacing: 8) {
                 serviceStatusButton
 
-                Button {
-                    openWebDashboard()
-                } label: {
-                    Label(t(.privateUsageUploadOpenDashboard), systemImage: "safari")
-                }
-                .disabled(PrivateUsageWebConnection.dashboardURL() == nil)
-                .help(t(.privateUsageUploadOpenDashboardDetail))
+                headerActionButton(
+                    systemImage: "safari",
+                    accessibilityLabel: t(.privateUsageUploadOpenDashboard),
+                    helpText: t(.privateUsageUploadOpenDashboardDetail),
+                    isEnabled: PrivateUsageWebConnection.dashboardURL() != nil,
+                    action: openWebDashboard
+                )
 
-                Button {
-                    refreshLocalTokenData()
-                } label: {
-                    Label(t(.refresh), systemImage: (store.loadState == .loading || store.isRefreshing) ? "arrow.triangle.2.circlepath" : "arrow.clockwise")
-                }
-                .disabled(store.loadState == .loading || store.isRefreshing)
+                headerActionButton(
+                    systemImage: (store.loadState == .loading || store.isRefreshing) ? "arrow.triangle.2.circlepath" : "arrow.clockwise",
+                    accessibilityLabel: t(.refresh),
+                    helpText: t(.refresh),
+                    isEnabled: !(store.loadState == .loading || store.isRefreshing),
+                    action: refreshLocalTokenData
+                )
 
-                Button {
-                    settingsAction()
-                } label: {
-                    Label(AppL10n.text(.settings, appLanguage: settings.appLanguage), systemImage: "gearshape")
-                }
+                headerActionButton(
+                    systemImage: "gearshape",
+                    accessibilityLabel: AppL10n.text(.settings, appLanguage: settings.appLanguage),
+                    helpText: AppL10n.text(.settings, appLanguage: settings.appLanguage),
+                    action: settingsAction
+                )
             }
-            .buttonStyle(.bordered)
-            .font(.system(size: 11, weight: .semibold))
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 14)
     }
 
+}
+
+extension TokenMeteringDashboardView {
     private func openWebDashboard() {
         guard let url = PrivateUsageWebConnection.dashboardURL() else {
             return
@@ -388,9 +384,9 @@ struct TokenMeteringDashboardView: View {
         CloudServiceStatusButton(
             state: serviceStatusControlState,
             appLanguage: settings.appLanguage,
-            height: 22,
-            fontSize: 9,
-            horizontalPadding: 7
+            height: 28,
+            fontSize: 10,
+            horizontalPadding: 9
         ) {
             openServiceStatusDetails()
         }
@@ -399,6 +395,9 @@ struct TokenMeteringDashboardView: View {
         }
     }
 
+}
+
+extension TokenMeteringDashboardView {
     private func refreshLocalTokenData() {
         refreshAction()
         aiStatusStore.refreshInBackground()
@@ -425,6 +424,9 @@ struct TokenMeteringDashboardView: View {
         )
     }
 
+}
+
+extension TokenMeteringDashboardView {
     private var kpiStrip: some View {
         HStack(spacing: 12) {
             ForEach(store.snapshot.kpis) { kpi in
@@ -520,6 +522,9 @@ struct TokenMeteringDashboardView: View {
         store.loadState == .idle || store.loadState == .loading
     }
 
+}
+
+extension TokenMeteringDashboardView {
     private var showsEmptyDashboardOverlay: Bool {
         guard aiStatusStore.statuses.isEmpty else {
             return false
@@ -594,6 +599,9 @@ struct TokenMeteringDashboardView: View {
         )
     }
 
+}
+
+extension TokenMeteringDashboardView {
     private var modelPanel: some View {
         TokenMeteringDashboardRailPanel(
             title: t(.modelBreakdown),
@@ -638,8 +646,6 @@ struct TokenMeteringDashboardView: View {
         }
     }
 
-
-
     private var sessionsTable: some View {
         TokenMeteringDashboardSessionsTable(
             store: store,
@@ -660,8 +666,6 @@ struct TokenMeteringDashboardView: View {
         }
         pendingClearRequest = TokenUsageClearRequest(scope: scope, preview: preview)
     }
-
-
 
     private var alphaBadge: some View {
         Text(t(.previewBadge).uppercased())
@@ -693,6 +697,9 @@ struct TokenMeteringDashboardView: View {
         isPrivateUsageUploadActive ? .blue : .green
     }
 
+}
+
+extension TokenMeteringDashboardView {
     private var syncStateBadge: some View {
         Text(syncStateBadgeText.uppercased())
             .font(.system(size: 8, weight: .bold))
@@ -710,7 +717,59 @@ struct TokenMeteringDashboardView: View {
             }
     }
 
+    private func headerActionButton(
+        systemImage: String,
+        accessibilityLabel: String,
+        helpText: String,
+        isEnabled: Bool = true,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+        }
+        .buttonStyle(HeaderActionButtonStyle(isEnabled: isEnabled))
+        .disabled(!isEnabled)
+        .help(helpText)
+        .accessibilityLabel(Text(accessibilityLabel))
+        .accessibilityHint(Text(helpText))
+    }
+
     private var dashboardCardBackground: some ShapeStyle {
         .regularMaterial
+    }
+}
+
+private struct HeaderActionButtonStyle: ButtonStyle {
+    let isEnabled: Bool
+    @State private var isHovered = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(isEnabled ? Color.primary.opacity(0.72) : Color.primary.opacity(0.28))
+            .frame(width: 28, height: 28)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(
+                        configuration.isPressed
+                            ? Color.primary.opacity(0.12)
+                            : (isHovered && isEnabled ? Color.primary.opacity(0.08) : Color.primary.opacity(0.04))
+                    )
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(
+                        isHovered && isEnabled
+                            ? Color.primary.opacity(0.14)
+                            : Color.primary.opacity(0.08),
+                        lineWidth: 0.5
+                    )
+            }
+            .scaleEffect(configuration.isPressed ? 0.96 : 1.0)
+            .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
+            .animation(.easeOut(duration: 0.15), value: isHovered)
+            .onHover { hovering in
+                isHovered = hovering
+            }
     }
 }

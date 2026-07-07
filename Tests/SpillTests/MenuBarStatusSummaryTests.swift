@@ -34,7 +34,7 @@ final class MenuBarStatusSummaryTests: XCTestCase {
         XCTAssertTrue(summary.tooltip.contains("Memory 56.2%"))
         XCTAssertFalse(summary.tooltip.contains("GPU 1/1"))
         XCTAssertTrue(summary.tooltip.contains("Token Metering, 1.44M local tokens"))
-        XCTAssertTrue(summary.tooltip.contains("Open Local Token Dashboard"))
+        XCTAssertTrue(summary.tooltip.contains("Open Spill - AI Token Metering"))
         XCTAssertFalse(summary.tooltip.contains("secret"))
     }
 
