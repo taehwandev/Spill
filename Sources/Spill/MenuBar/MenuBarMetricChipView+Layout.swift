@@ -25,7 +25,9 @@ extension MenuBarMetricChipView {
         valueLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
         valueLabel.setContentHuggingPriority(.required, for: .horizontal)
     }
+}
 
+extension MenuBarMetricChipView {
     func installSubviews() {
         if segment.isValueOnly, !segment.value.isEmpty {
             addSubview(iconView)
@@ -86,11 +88,14 @@ extension MenuBarMetricChipView {
             valueLabel.centerYAnchor.constraint(equalTo: centerYAnchor)
         ])
     }
+}
 
+extension MenuBarMetricChipView {
     func refreshColors() {
         let color = statusColor
         valueLabel.textColor = segment.state == .unavailable ? .secondaryLabelColor : .labelColor
         if hasCustomTriggerIcon {
+            configureIcon()
             iconView.contentTintColor = nil
         } else {
             iconView.contentTintColor = color.withAlphaComponent(segment.state == .unavailable ? 0.5 : 1.0)
@@ -132,8 +137,8 @@ extension MenuBarMetricChipView {
         switch segment.visualStyle {
         case .symbol, .valueOnly, .symbolBadge:
             return false
-        case .trigger:
-            return false
+        case let .trigger(style):
+            return style.usesCustomRenderer
         }
     }
 

@@ -526,19 +526,25 @@ final class SpillSettingsTests: XCTestCase {
         XCTAssertEqual(settings.menuBarTriggerIconStyle, .spill)
     }
 
-    func testMenuBarTriggerIconStylesExposeDropSymbolOption() {
-        XCTAssertEqual(MenuBarTriggerIconStyle.selectableCases, [.spill])
+    func testMenuBarTriggerIconStylesExposeBrandSymbolOptions() {
+        XCTAssertEqual(MenuBarTriggerIconStyle.selectableCases, [.spill, .symbolizedS])
         XCTAssertEqual(MenuBarTriggerIconStyle.spill.title, "Drop")
+        XCTAssertEqual(MenuBarTriggerIconStyle.symbolizedS.title, "Symbolized S")
+        XCTAssertEqual(MenuBarTriggerIconStyle.symbolizedS.subtitle, "Uses the symbolized Spill S mark.")
+        XCTAssertEqual(MenuBarTriggerIconStyle.symbolizedS.symbolName(isActive: false), "s.circle")
+        XCTAssertEqual(MenuBarTriggerIconStyle.symbolizedS.symbolName(isActive: true), "s.circle.fill")
+        XCTAssertTrue(MenuBarTriggerIconStyle.symbolizedS.usesCustomRenderer)
         XCTAssertEqual(MenuBarTriggerIconStyle.normalized(rawValue: "spill"), .spill)
+        XCTAssertEqual(MenuBarTriggerIconStyle.normalized(rawValue: "symbolized_s"), .symbolizedS)
         XCTAssertEqual(MenuBarTriggerIconStyle.normalized(rawValue: "cat"), .spill)
         XCTAssertEqual(MenuBarTriggerIconStyle.normalized(rawValue: "liquid"), .spill)
 
         let defaults = makeDefaults()
-        defaults.set("spill", forKey: "menuBarTriggerIconStyle")
+        defaults.set("symbolized_s", forKey: "menuBarTriggerIconStyle")
 
         let settings = SpillSettings(defaults: defaults)
 
-        XCTAssertEqual(settings.menuBarTriggerIconStyle, .spill)
+        XCTAssertEqual(settings.menuBarTriggerIconStyle, .symbolizedS)
     }
 
     func testWindowActionShortcutsPersistAndResolveConflicts() {

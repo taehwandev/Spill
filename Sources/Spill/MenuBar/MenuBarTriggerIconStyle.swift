@@ -2,9 +2,10 @@ import Foundation
 
 enum MenuBarTriggerIconStyle: String, CaseIterable, Identifiable, Sendable {
     case spill
+    case symbolizedS = "symbolized_s"
 
     static let defaultStyle: MenuBarTriggerIconStyle = .spill
-    static let selectableCases: [MenuBarTriggerIconStyle] = [.spill]
+    static let selectableCases: [MenuBarTriggerIconStyle] = [.spill, .symbolizedS]
 
     static func normalized(rawValue: String?) -> MenuBarTriggerIconStyle {
         guard let rawValue,
@@ -25,6 +26,8 @@ enum MenuBarTriggerIconStyle: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .spill:
             return AppL10n.text(.triggerDrop)
+        case .symbolizedS:
+            return AppL10n.text(.triggerSymbolizedS)
         }
     }
 
@@ -32,6 +35,8 @@ enum MenuBarTriggerIconStyle: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .spill:
             return AppL10n.text(.triggerDropSubtitle)
+        case .symbolizedS:
+            return AppL10n.text(.triggerSymbolizedSSubtitle)
         }
     }
 
@@ -43,6 +48,15 @@ enum MenuBarTriggerIconStyle: String, CaseIterable, Identifiable, Sendable {
         false
     }
 
+    var usesCustomRenderer: Bool {
+        switch self {
+        case .spill:
+            return false
+        case .symbolizedS:
+            return true
+        }
+    }
+
     var requiredStatusModules: Set<SpillStatusModule> {
         usesPerformanceEffect ? [.cpu, .memory, .network] : []
     }
@@ -51,6 +65,8 @@ enum MenuBarTriggerIconStyle: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .spill:
             return isActive ? "drop.circle.fill" : "drop.fill"
+        case .symbolizedS:
+            return isActive ? "s.circle.fill" : "s.circle"
         }
     }
 }

@@ -44,7 +44,7 @@ final class MenuBarMetricChipView: NSView {
         refreshColors()
     }
 
-    private func configureIcon() {
+    func configureIcon() {
         iconView.translatesAutoresizingMaskIntoConstraints = false
         iconView.imageScaling = .scaleProportionallyDown
         if case let .trigger(style) = segment.visualStyle,

@@ -76,6 +76,9 @@ final class MenuBarStatusContentView: NSView {
         nil
     }
 
+}
+
+extension MenuBarStatusContentView {
     static func preferredWidth(
         for segments: [MenuBarStatusSegment],
         layoutStyle: MenuBarStatusLayoutStyle = .inline,
@@ -135,7 +138,9 @@ final class MenuBarStatusContentView: NSView {
 
         return nil
     }
+}
 
+extension MenuBarStatusContentView {
     private static func chipDescriptors(
         for segments: [MenuBarStatusSegment],
         layoutStyle: MenuBarStatusLayoutStyle,
@@ -219,7 +224,9 @@ final class MenuBarStatusContentView: NSView {
             return false
         }
     }
+}
 
+extension MenuBarStatusContentView {
     private static func segmentKind(
         at point: NSPoint,
         in frame: NSRect,
@@ -314,7 +321,9 @@ final class MenuBarStatusContentView: NSView {
             return height
         }
     }
+}
 
+extension MenuBarStatusContentView {
     private static func compactStackChipWidth(
         for segments: [MenuBarStatusSegment],
         textFontSize: CGFloat,
@@ -432,7 +441,9 @@ final class MenuBarStatusContentView: NSView {
         }
         return segment.kind == .trigger ? triggerChipHeight : metricChipHeight
     }
+}
 
+extension MenuBarStatusContentView {
     private func installChips() {
         var previous: NSView?
 
@@ -524,15 +535,30 @@ private final class MenuBarMainTriggerChipView: NSView {
         refreshColors()
     }
 
+}
+
+extension MenuBarMainTriggerChipView {
     private func configureIcon() {
         triggerIconView.translatesAutoresizingMaskIntoConstraints = false
         triggerIconView.imageScaling = .scaleProportionallyDown
-        triggerIconView.image = MenuBarSymbolImageCache.image(
-            named: trigger.symbolName,
-            accessibilityDescription: trigger.title,
-            pointSize: 15.5
-        )
-        triggerIconView.symbolConfiguration = nil
+        if case let .trigger(style) = trigger.visualStyle,
+           let image = MenuBarTriggerIconRenderer.image(
+               style: style,
+               tintColor: triggerColor,
+               usageRatio: trigger.usageRatio,
+               size: 18
+           )
+        {
+            triggerIconView.image = image
+            triggerIconView.symbolConfiguration = nil
+        } else {
+            triggerIconView.image = MenuBarSymbolImageCache.image(
+                named: trigger.symbolName,
+                accessibilityDescription: trigger.title,
+                pointSize: 15.5
+            )
+            triggerIconView.symbolConfiguration = nil
+        }
 
         guard let caffeine else {
             return
@@ -600,10 +626,26 @@ private final class MenuBarMainTriggerChipView: NSView {
         ])
     }
 
+}
+
+extension MenuBarMainTriggerChipView {
     private func refreshColors() {
-        triggerIconView.contentTintColor = triggerColor
+        if triggerUsesCustomIcon {
+            configureIcon()
+            triggerIconView.contentTintColor = nil
+        } else {
+            triggerIconView.contentTintColor = triggerColor
+        }
         caffeineIconView.contentTintColor = caffeineColor
         badgeLabel.textColor = caffeineColor
+    }
+
+    private var triggerUsesCustomIcon: Bool {
+        if case let .trigger(style) = trigger.visualStyle {
+            return style.usesCustomRenderer
+        }
+
+        return false
     }
 
     private var triggerColor: NSColor {
@@ -675,6 +717,9 @@ private final class MenuBarCompactStackMetricChipView: NSView {
         refreshColors()
     }
 
+}
+
+extension MenuBarCompactStackMetricChipView {
     private func installLabels() {
         let labels = segments.map(makeLabel(for:))
         let icons = segments.map(makeIcon(for:))
@@ -768,6 +813,9 @@ private final class MenuBarCompactStackMetricChipView: NSView {
         }
     }
 
+}
+
+extension MenuBarCompactStackMetricChipView {
     private var accessibilityText: String {
         segments
             .map { segment in
