@@ -69,6 +69,21 @@ LOCALIZED_CONTENT_FILES = {
 }
 
 
+def is_localized_content_file(relative_path: Path) -> bool:
+    normalized = relative_path.as_posix()
+    if normalized in LOCALIZED_CONTENT_FILES:
+        return True
+
+    name = relative_path.name
+    return (
+        normalized.startswith("Sources/Spill/App/AppLocalization+")
+        and re.fullmatch(r"AppLocalization\+[A-Za-z]+TextPart[0-9]+\.swift", name)
+    ) or (
+        normalized.startswith("Sources/Spill/Preferences/PreferencesLocalization+")
+        and re.fullmatch(r"PreferencesLocalization\+[A-Za-z]+TextPart[0-9]+\.swift", name)
+    )
+
+
 class Result:
     def __init__(self) -> None:
         self.failures: list[str] = []
@@ -279,7 +294,7 @@ def language_gates() -> None:
         relative_path = path.relative_to(ROOT)
         if relative_path.parts and relative_path.parts[0] == "Tests":
             continue
-        if relative_path.as_posix() in LOCALIZED_CONTENT_FILES:
+        if is_localized_content_file(relative_path):
             continue
 
         try:
