@@ -142,9 +142,10 @@ extension TokenUsageStore {
     }
 
     func removeContentDuplicateEvents(database: OpaquePointer) throws {
-        // For each group sharing (run_id, created_at, input_tokens, output_tokens),
-        // keep the has-accounting event first, then lowest rowid. Events without a
-        // run_id or token columns are skipped — they can't be safely matched on content alone.
+        // Removes exact-content duplicates sharing (run_id, ai_tool, task_type, stage,
+        // created_at, input_tokens, output_tokens). ai_tool, task_type, and stage are
+        // included so events from different tools or workflow stages with the same token
+        // counts are never incorrectly merged.
         let sql = """
         DELETE FROM token_usage_events
         WHERE rowid IN (
@@ -152,7 +153,8 @@ extension TokenUsageStore {
                 SELECT
                     rowid,
                     ROW_NUMBER() OVER (
-                        PARTITION BY run_id, created_at, input_tokens, output_tokens
+                        PARTITION BY run_id, ai_tool, task_type, stage,
+                                     created_at, input_tokens, output_tokens
                         ORDER BY
                             CASE WHEN accounting_uncached_input_tokens IS NOT NULL THEN 0 ELSE 1 END,
                             rowid
@@ -163,6 +165,48 @@ extension TokenUsageStore {
                     AND output_tokens IS NOT NULL
             )
             WHERE rn > 1
+        )
+        """
+        try execute(sql, database: database)
+    }
+
+    func removeTimeWindowDuplicateEvents(database: OpaquePointer, windowSeconds: Int = 30) throws {
+        // Catches Bug #2 duplicates: Claude Code writes the same requestId 2-3x to the
+        // transcript with slightly different timestamps (typically 1-5 s apart). Each
+        // incremental Stop hook read creates a new event with a different span-id but the
+        // same (run_id, input_tokens, output_tokens). All such events use span- format, so
+        // span-id prefix discrimination cannot distinguish them.
+        // Strategy: delete e1 when a "better" e2 exists with the same content within windowSeconds:
+        //   - better = has accounting data and e1 does not, OR
+        //   - equal accounting presence but e2.rowid < e1.rowid (keep the earliest write).
+        let sql = """
+        DELETE FROM token_usage_events
+        WHERE rowid IN (
+            SELECT e1.rowid
+            FROM token_usage_events e1
+            WHERE e1.run_id IS NOT NULL AND e1.run_id != ''
+              AND e1.input_tokens IS NOT NULL
+              AND e1.output_tokens IS NOT NULL
+              AND EXISTS (
+                  SELECT 1 FROM token_usage_events e2
+                  WHERE e2.run_id = e1.run_id
+                    AND e2.input_tokens = e1.input_tokens
+                    AND e2.output_tokens = e1.output_tokens
+                    AND e2.rowid != e1.rowid
+                    AND ABS(
+                        CAST(strftime('%s', e1.created_at) AS INTEGER) -
+                        CAST(strftime('%s', e2.created_at) AS INTEGER)
+                    ) <= \(windowSeconds)
+                    AND (
+                        (e2.accounting_uncached_input_tokens IS NOT NULL
+                            AND e1.accounting_uncached_input_tokens IS NULL)
+                        OR (
+                            CASE WHEN e1.accounting_uncached_input_tokens IS NULL THEN 1 ELSE 0 END =
+                            CASE WHEN e2.accounting_uncached_input_tokens IS NULL THEN 1 ELSE 0 END
+                            AND e2.rowid < e1.rowid
+                        )
+                    )
+              )
         )
         """
         try execute(sql, database: database)

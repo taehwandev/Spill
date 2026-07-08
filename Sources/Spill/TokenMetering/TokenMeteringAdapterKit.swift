@@ -281,19 +281,28 @@ private func copyExecutableScript(
     to destination: URL,
     fileManager: FileManager = .default
 ) throws {
-    try fileManager.createDirectory(
-        at: destination.deletingLastPathComponent(),
-        withIntermediateDirectories: true
-    )
+    // Restricted to the owner: these scripts are invoked only by Spill itself (via
+    // absolute path with an explicit python3/node executable), so no other local
+    // principal needs read or execute access, and keeping the directory owner-only
+    // blocks other local accounts from tampering with what gets executed here.
+    // Harden both the script's own directory (adapters/<tool>/) and its parent
+    // (adapters/) — createDirectory only applies posixPermissions to newly created
+    // path components, so a pre-existing adapters/ root from before this hardening was
+    // added would otherwise keep its looser default permissions indefinitely.
+    let scriptDirectory = destination.deletingLastPathComponent()
+    try TokenUsageStore.createPrivateDirectoryIfNeeded(at: scriptDirectory.deletingLastPathComponent())
+    try TokenUsageStore.createPrivateDirectoryIfNeeded(at: scriptDirectory)
 
     let temporaryURL = destination
         .deletingLastPathComponent()
         .appendingPathComponent(".\(destination.lastPathComponent).tmp-\(UUID().uuidString)")
     try fileManager.copyItem(at: sourceURL, to: temporaryURL)
     do {
+        // Owner-only rwx: only Spill itself invokes these scripts (via absolute path
+        // with an explicit python3/node executable), so group/other execute access is
+        // unnecessary exposure, not a requirement.
         var attrs = try fileManager.attributesOfItem(atPath: temporaryURL.path)
-        let perms = (attrs[.posixPermissions] as? Int ?? 0o644) | 0o111
-        attrs[.posixPermissions] = perms
+        attrs[.posixPermissions] = 0o700
         try fileManager.setAttributes(attrs, ofItemAtPath: temporaryURL.path)
 
         if fileManager.fileExists(atPath: destination.path) {

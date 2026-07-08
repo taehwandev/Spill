@@ -346,6 +346,34 @@ Requirements:
   paths, logs, diffs, source content, environment values, and secrets are still
   never read or stored.
 
+Token count accuracy and duplicate prevention:
+
+- Token counts shown in the dashboard and sync must reflect exactly one event
+  per AI turn. Runtime behavior that writes the same turn 2–3 times (e.g.,
+  Claude Code writing the same request ID to the transcript multiple times with
+  slightly different timestamps) must not produce multiple counted events.
+- Dedup must not merge distinct turns. Two real turns that happen to share the
+  same input and output token counts must each count as separate events. The
+  dedup policy must use only safe, non-content signals — timestamps, run IDs,
+  and exact request IDs — and never inspect or infer from prompt or response
+  content.
+- Duplicate prevention uses a layered strategy whose specifics live in ARD and
+  adapter docs. At the product level, the following accuracy guarantees apply:
+  - A runtime re-write of the same turn within a short window is counted as one
+    event, not two or three.
+  - Exact-content duplicates (same timestamp, same tokens, same tool/model/
+    workflow labels) are collapsed to one event in both the local store and sync.
+  - Distinct turns from different tools or workflow stages are never merged, even
+    if they share the same token counts.
+- The local DB schema carries a monotonically increasing user_version to track
+  which dedup migrations have run. One-time DB migrations apply dedup rules
+  retroactively to existing data so historical over-counts are corrected without
+  requiring a full re-import.
+- Private Usage Upload sync applies the same exact-content dedup policy before
+  uploading aggregates. Sync must not apply a weaker or stricter dedup than the
+  local store, and must not re-merge events that the local dedup already
+  separated as distinct turns.
+
 Dashboard UX requirements:
 
 - Default time range is `Today`, with explicit `7 days`, `30 days`, and `All`
@@ -422,8 +450,20 @@ Acceptance:
   sent.
 - Pre-release local metering data can be reset or reimported without a
   compatibility migration requirement.
-- Runtime hook, importer, diagnostics, dedupe, queue, and tool-specific adapter
-  mechanics live in ARD and adapter docs, not this PRD.
+- Token counts in the dashboard and sync reflect exactly one event per AI turn.
+  A runtime that writes the same turn multiple times with slightly different
+  timestamps does not produce multiple counted events.
+- Dedup does not merge distinct turns. Two real turns with the same token count
+  but different timestamps remain separate events.
+- Events from different AI tools or workflow stages are never merged, even when
+  their token counts match.
+- A monotonically increasing DB schema version tracks which dedup migrations
+  have run so historical over-counts can be corrected retroactively without a
+  full re-import.
+- Runtime hook, importer, diagnostics, queue, and tool-specific adapter
+  mechanics live in ARD and adapter docs, not this PRD. Dedup policy and
+  accuracy guarantees are documented here; dedup implementation details
+  (SQL migrations, parsing layer, session-state tracking) live in ARD.
 
 ### 5. System Status Strip
 

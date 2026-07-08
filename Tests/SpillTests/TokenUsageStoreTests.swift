@@ -1381,6 +1381,7 @@ final class TokenUsageStoreTests: XCTestCase {
         let transcript = [
             #"{"message":{"role":"user"}}"#,
             #"{"timestamp":"2026-06-26T00:00:01.000Z","requestId":"req_read","message":{"id":"msg_read","role":"assistant","model":"claude-sonnet-4","usage":{"input_tokens":20,"cache_creation_input_tokens":5,"cache_read_input_tokens":100,"output_tokens":7},"content":[{"type":"tool_use","name":"Read"}]}}"#,
+            #"{"timestamp":"2026-06-26T00:00:02.000Z","requestId":"req_read","message":{"id":"msg_read","role":"assistant","model":"claude-sonnet-4","usage":{"input_tokens":20,"cache_creation_input_tokens":5,"cache_read_input_tokens":100,"output_tokens":9},"content":[{"type":"tool_use","name":"Read"}]}}"#,
             #"{"timestamp":"2026-06-26T00:00:30.000Z","requestId":"req_cache_read","message":{"id":"msg_cache_read","role":"assistant","model":"claude-sonnet-4","usage":{"cache_read_input_tokens":100},"content":[]}}"#,
             #"{"timestamp":"2026-06-26T00:01:01.000Z","message":{"id":"msg_iter","role":"assistant","model":"claude-sonnet-4","usage":{"iterations":[{"usage":{"input_tokens":6,"cache_creation":{"ephemeral_1h_input_tokens":2},"cache_read_input_tokens":1,"output_tokens":3}}]},"content":[{"type":"tool_use","name":"Edit"}]}}"#,
         ].joined(separator: "\n")
@@ -1397,6 +1398,9 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(summary.scannedFiles, 1)
         XCTAssertEqual(summary.parsedTurns, 3)
         XCTAssertEqual(summary.importedEvents, 3)
+        // The transcript has two "req_read" lines (output 7, then 9) representing the
+        // same requestId written twice. Dedup always keeps the FIRST occurrence (output
+        // 7, total 132) so within-batch and cross-batch dedup agree on the same turn.
         XCTAssertEqual(store.loadEvents().map(\.totalTokens).sorted(), [12, 100, 132])
         XCTAssertEqual(store.loadEvents().map(\.inputTokens).sorted(), [9, 100, 125])
         let readTurn = try XCTUnwrap(store.loadEvents().first { $0.outputTokens == 7 })
@@ -1419,6 +1423,54 @@ final class TokenUsageStoreTests: XCTestCase {
         let secondSummary = importer.importRecentSessions(into: store)
         XCTAssertEqual(secondSummary.importedEvents, 0)
         XCTAssertEqual(store.loadEvents().count, 3)
+    }
+
+    func testClaudeCodeActiveImporterSkipsCrossBatchRequestIdDuplicates() throws {
+        // Bug #2 cross-batch scenario: Claude Code writes the same requestId a second
+        // time to the transcript after the first incremental read has already advanced
+        // the byte-offset cursor. The second occurrence has a slightly different timestamp
+        // (1 s later) so span_id dedup alone cannot catch it — requestId tracking must.
+        let rootURL = temporaryDirectoryURL()
+        let projectsURL = rootURL.appendingPathComponent("projects", isDirectory: true)
+        let projectURL = projectsURL.appendingPathComponent("project-opaque", isDirectory: true)
+        try FileManager.default.createDirectory(at: projectURL, withIntermediateDirectories: true)
+
+        let transcriptURL = projectURL.appendingPathComponent("11111111111111111111111111111111.jsonl")
+        let stateURL = rootURL.appendingPathComponent("claude-active-state.json")
+        let store = TokenUsageStore(fileURL: temporaryEventsURL())
+        let importer = TokenUsageClaudeCodeImporter(
+            projectsDirectory: projectsURL,
+            labelTimelineURL: rootURL.appendingPathComponent("missing-labels.jsonl"),
+            stateURL: stateURL
+        )
+
+        // Batch 1: first occurrence of req_bug2 at T=0s.
+        try """
+        {"timestamp":"2026-06-26T00:00:00.000Z","requestId":"req_bug2","message":{"role":"assistant","model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":10},"content":[]}}
+        """.write(to: transcriptURL, atomically: true, encoding: .utf8)
+
+        let batch1 = importer.importRecentSessions(into: store)
+        XCTAssertEqual(batch1.importedEvents, 1, "first occurrence should be imported")
+        XCTAssertEqual(store.loadEvents().count, 1)
+
+        // Batch 2: Claude Code appends the same requestId again with a 1-second offset
+        // timestamp (Bug #2). The importer reads from the updated cursor position.
+        let existingContent = try String(contentsOf: transcriptURL)
+        let duplicate = #"{"timestamp":"2026-06-26T00:00:01.000Z","requestId":"req_bug2","message":{"role":"assistant","model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":10},"content":[]}}"#
+        try (existingContent + "\n" + duplicate + "\n").write(to: transcriptURL, atomically: true, encoding: .utf8)
+
+        let batch2 = importer.importRecentSessions(into: store)
+        XCTAssertEqual(batch2.importedEvents, 0, "cross-batch duplicate requestId must be skipped")
+        XCTAssertEqual(store.loadEvents().count, 1, "store must contain exactly one event")
+
+        // A genuinely new turn with a different requestId must still be imported.
+        let newContent = try String(contentsOf: transcriptURL)
+        let newTurn = #"{"timestamp":"2026-06-26T00:01:00.000Z","requestId":"req_new","message":{"role":"assistant","model":"claude-sonnet-4","usage":{"input_tokens":50,"output_tokens":5},"content":[]}}"#
+        try (newContent + "\n" + newTurn + "\n").write(to: transcriptURL, atomically: true, encoding: .utf8)
+
+        let batch3 = importer.importRecentSessions(into: store)
+        XCTAssertEqual(batch3.importedEvents, 1, "new requestId in subsequent batch must be imported")
+        XCTAssertEqual(store.loadEvents().count, 2, "store must contain two distinct events")
     }
 
     func testClaudeCodeActiveImporterLeavesSubagentTranscriptFilesForStopHook() throws {
@@ -1861,13 +1913,6 @@ final class TokenUsageStoreTests: XCTestCase {
         )
         XCTAssertEqual(explicit?.path, "/custom/bin/node")
 
-        let nodeBinary = TokenUsageCollectorCoordinator.nodeExecutableURL(
-            environment: ["NODE_BINARY": "/configured/node"],
-            isExecutableFile: { $0 == "/configured/node" },
-            isRegularFile: { $0 == "/configured/node" }
-        )
-        XCTAssertEqual(nodeBinary?.path, "/configured/node")
-
         let homebrew = TokenUsageCollectorCoordinator.nodeExecutableURL(
             environment: [:],
             isExecutableFile: { $0 == "/opt/homebrew/bin/node" },
@@ -1881,6 +1926,17 @@ final class TokenUsageStoreTests: XCTestCase {
             isRegularFile: { _ in false }
         )
         XCTAssertNil(missing)
+    }
+
+    func testTokenUsageCollectorIgnoresGenericNodeBinaryEnvironmentVariable() {
+        // NODE_BINARY is a generic name many unrelated tools and shell profiles set; only
+        // the Spill-namespaced override may redirect which binary Spill executes.
+        let resolved = TokenUsageCollectorCoordinator.nodeExecutableURL(
+            environment: ["NODE_BINARY": "/attacker/controlled/node"],
+            isExecutableFile: { $0 == "/attacker/controlled/node" },
+            isRegularFile: { $0 == "/attacker/controlled/node" }
+        )
+        XCTAssertNil(resolved)
     }
 
     @MainActor
@@ -3741,6 +3797,173 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(rows, [["span_null_tokens_a"], ["span_null_tokens_b"]])
     }
 
+    func testTimeWindowDuplicateBackfillRemovesSameFormatDuplicatesWithinThirtySeconds() throws {
+        // Bug #2: Claude Code writes the same requestId 2-3x to the transcript with
+        // slightly different timestamps. All resulting events use span- format.
+        // The migration should collapse them into one, keeping the earliest.
+        // The widest migration window in the chain (user_version 10) is 300 s (widened
+        // from 30 s across several migrations to catch real Bug #2 gaps up to ~90 s
+        // observed across the Stop hook / active importer paths), so this fixture places
+        // the genuinely distinct turn at 400 s to stay unambiguously outside every window
+        // this store reopen will run (this test starts from user_version 4, so every
+        // migration from 5 through 10 executes).
+        let eventsURL = temporaryEventsURL()
+        let store = TokenUsageStore(fileURL: eventsURL)
+        let databaseURL = store.eventsDatabaseURL
+
+        let firstWrite = Self.safeEvent(
+            aiTool: .claude,
+            runID: "run_dupe",
+            spanID: "span-first-write",
+            inputTokens: 50000,
+            outputTokens: 500,
+            model: "claude-sonnet-4",
+            createdAt: "2026-06-05T00:00:00.000Z"
+        )
+        let secondWrite = Self.safeEvent(
+            aiTool: .claude,
+            runID: "run_dupe",
+            spanID: "span-second-write",
+            inputTokens: 50000,
+            outputTokens: 500,
+            model: "claude-sonnet-4",
+            createdAt: "2026-06-05T00:00:05.000Z"   // 5 s later — Bug #2 duplicate
+        )
+        let distinctLaterTurn = Self.safeEvent(
+            aiTool: .claude,
+            runID: "run_dupe",
+            spanID: "span-distinct-later",
+            inputTokens: 50000,
+            outputTokens: 500,
+            model: "claude-sonnet-4",
+            createdAt: "2026-06-05T00:06:40.000Z"   // 400 s later — genuinely different turn
+        )
+
+        try store.replaceEvents([firstWrite, secondWrite, distinctLaterTurn])
+        let database = try openSQLiteDatabase(databaseURL)
+        try executeSQLite("PRAGMA user_version = 4", database: database)
+        sqlite3_close(database)
+
+        let migratedStore = TokenUsageStore(fileURL: eventsURL)
+        XCTAssertEqual(
+            migratedStore.loadEvents().map(\.spanID).sorted(),
+            ["span-distinct-later", "span-first-write"]
+        )
+    }
+
+    func testReconcileClaudeSessionsDeletesOnlyStaleSpansForRescannedRuns() throws {
+        let store = TokenUsageStore(fileURL: temporaryEventsURL())
+        let staleDuplicate = Self.safeEvent(
+            aiTool: .claude,
+            runID: "run_aaa",
+            spanID: "span-old-formula-duplicate",
+            createdAt: "2026-06-05T00:00:00.000Z"
+        )
+        let canonical = Self.safeEvent(
+            aiTool: .claude,
+            runID: "run_aaa",
+            spanID: "span-canonical",
+            createdAt: "2026-06-05T00:00:01.000Z"
+        )
+        let otherRunUntouched = Self.safeEvent(
+            aiTool: .claude,
+            runID: "run_bbb",
+            spanID: "span-other-run-never-scanned",
+            createdAt: "2026-06-05T00:00:02.000Z"
+        )
+        let codexSameSpanShapeUntouched = Self.safeEvent(
+            aiTool: .codex,
+            runID: "run_aaa",
+            spanID: "span-codex-not-claude",
+            createdAt: "2026-06-05T00:00:03.000Z"
+        )
+        try store.replaceEvents([staleDuplicate, canonical, otherRunUntouched, codexSameSpanShapeUntouched])
+
+        let cutoff = store.maxRowID(forAITool: .claude)
+        let deleted = store.reconcileClaudeSessions(
+            authoritativeSpanIDsByRun: ["run_aaa": ["span-canonical"]],
+            notInsertedAfterRowID: cutoff
+        )
+
+        XCTAssertEqual(deleted, 1)
+        let remainingSpanIDs = Set(store.loadEvents().map(\.spanID))
+        XCTAssertEqual(remainingSpanIDs, [
+            "span-canonical",
+            "span-other-run-never-scanned",
+            "span-codex-not-claude",
+        ])
+    }
+
+    func testReconcileClaudeSessionsProtectsRowsInsertedAfterCutoff() throws {
+        // Simulates the race a full rescan can hit: a live Stop-hook turn for the same
+        // run_id lands in the database after the cutoff was captured (i.e. while the scan
+        // subprocess was still running), so its span_id is legitimately absent from the
+        // authoritative set even though it is not stale. Without the rowid cutoff, this
+        // turn would match the same "run_id scanned, span_id not authoritative" deletion
+        // criteria as a genuine stale duplicate and be wiped permanently.
+        let store = TokenUsageStore(fileURL: temporaryEventsURL())
+        let staleDuplicate = Self.safeEvent(
+            aiTool: .claude,
+            runID: "run_aaa",
+            spanID: "span-old-formula-duplicate",
+            createdAt: "2026-06-05T00:00:00.000Z"
+        )
+        try store.replaceEvents([staleDuplicate])
+        // Captured "before the scan starts" — anything inserted after this point must
+        // survive reconciliation regardless of authoritative-set membership.
+        let cutoff = store.maxRowID(forAITool: .claude)
+
+        let liveTurnDuringScan = Self.safeEvent(
+            aiTool: .claude,
+            runID: "run_aaa",
+            spanID: "span-live-turn-during-scan",
+            createdAt: "2026-06-05T00:00:05.000Z"
+        )
+        _ = try store.appendEventsWithoutLoading([liveTurnDuringScan])
+
+        // Neither span_id is in the authoritative set (simulating a scan that captured
+        // neither the pre-existing stale row's replacement nor the new live turn).
+        let deleted = store.reconcileClaudeSessions(
+            authoritativeSpanIDsByRun: ["run_aaa": ["span-canonical-the-scan-actually-saw"]],
+            notInsertedAfterRowID: cutoff
+        )
+
+        // Only the row that existed at (or before) the cutoff is eligible for deletion.
+        // The live turn inserted after the cutoff survives even though its span_id is
+        // just as "non-authoritative" as the one that got deleted.
+        XCTAssertEqual(deleted, 1)
+        XCTAssertEqual(Set(store.loadEvents().map(\.spanID)), ["span-live-turn-during-scan"])
+    }
+
+    func testReconcileClaudeSessionsLeavesRemovedTranscriptSessionsUntouched() throws {
+        let store = TokenUsageStore(fileURL: temporaryEventsURL())
+        let orphanedSessionEvent = Self.safeEvent(
+            aiTool: .claude,
+            runID: "run_deleted_transcript",
+            spanID: "span-from-a-session-not-in-this-scan"
+        )
+        try store.replaceEvents([orphanedSessionEvent])
+
+        let deleted = store.reconcileClaudeSessions(
+            authoritativeSpanIDsByRun: [:],
+            notInsertedAfterRowID: store.maxRowID(forAITool: .claude)
+        )
+
+        XCTAssertEqual(deleted, 0)
+        XCTAssertEqual(store.loadEvents(), [orphanedSessionEvent])
+    }
+
+    func testMaxRowIDReturnsZeroWhenNoMatchingEventsExist() throws {
+        let store = TokenUsageStore(fileURL: temporaryEventsURL())
+        XCTAssertEqual(store.maxRowID(forAITool: .claude), 0)
+
+        try store.replaceEvents([Self.safeEvent(aiTool: .codex)])
+        XCTAssertEqual(store.maxRowID(forAITool: .claude), 0)
+
+        try store.replaceEvents([Self.safeEvent(aiTool: .codex), Self.safeEvent(aiTool: .claude, spanID: "span-claude-01")])
+        XCTAssertGreaterThan(store.maxRowID(forAITool: .claude), 0)
+    }
+
     func testStoreDrainsQueuedInboxEventsAndDeduplicates() throws {
         let eventsURL = temporaryEventsURL()
         let inboxURL = temporaryInboxURL()
@@ -4022,6 +4245,40 @@ final class TokenUsageStoreTests: XCTestCase {
         let clearResponse = server.response(for: httpRequest(method: "DELETE", path: "/v1/usage/events"))
         XCTAssertTrue(httpStatusLine(clearResponse).contains("200 OK"))
         XCTAssertEqual(store.loadEvents(), [])
+    }
+
+    func testBridgeRejectsRequestsWithUntrustedHostHeader() throws {
+        // Guards the DNS-rebinding fix: a page resolving an attacker-controlled hostname
+        // to 127.0.0.1 must still fail here because the Host header itself is untrusted,
+        // even though the OS-level loopback bind was reached.
+        let store = TokenUsageStore(fileURL: temporaryEventsURL())
+        let server = TokenUsageBridgeServer(store: store)
+
+        let rebindingAttempt = server.response(for: httpRequest(
+            method: "GET",
+            path: "/v1/usage/events",
+            host: "attacker.example.com"
+        ))
+        XCTAssertTrue(httpStatusLine(rebindingAttempt).contains("403"), httpStatusLine(rebindingAttempt))
+        XCTAssertTrue(String(data: rebindingAttempt, encoding: .utf8)?.contains("untrusted_host") == true)
+
+        let missingHost = server.response(for: Data("GET /v1/usage/events HTTP/1.1\r\n\r\n".utf8))
+        XCTAssertTrue(httpStatusLine(missingHost).contains("403"), httpStatusLine(missingHost))
+
+        let trustedLocalhost = server.response(for: httpRequest(
+            method: "GET",
+            path: "/v1/usage/health",
+            host: "localhost:48731"
+        ))
+        XCTAssertTrue(httpStatusLine(trustedLocalhost).contains("200 OK"), httpStatusLine(trustedLocalhost))
+    }
+
+    func testBridgeHostnameParsingHandlesIPv6BracketNotation() {
+        XCTAssertEqual(TokenUsageBridgeServer.hostname(fromHostHeaderValue: "127.0.0.1:48731"), "127.0.0.1")
+        XCTAssertEqual(TokenUsageBridgeServer.hostname(fromHostHeaderValue: "127.0.0.1"), "127.0.0.1")
+        XCTAssertEqual(TokenUsageBridgeServer.hostname(fromHostHeaderValue: "[::1]:48731"), "::1")
+        XCTAssertEqual(TokenUsageBridgeServer.hostname(fromHostHeaderValue: "[::1]"), "::1")
+        XCTAssertEqual(TokenUsageBridgeServer.hostname(fromHostHeaderValue: "attacker.example.com"), "attacker.example.com")
     }
 
     func testBridgeClearEndpointIsDebugOnly() throws {
@@ -5794,10 +6051,10 @@ final class TokenUsageStoreTests: XCTestCase {
         return try String(contentsOf: sourceURL)
     }
 
-    private func httpRequest(method: String, path: String, body: Data = Data()) -> Data {
+    private func httpRequest(method: String, path: String, body: Data = Data(), host: String = "127.0.0.1") -> Data {
         let header = """
         \(method) \(path) HTTP/1.1\r
-        Host: 127.0.0.1\r
+        Host: \(host)\r
         Content-Type: application/json\r
         Content-Length: \(body.count)\r
         \r

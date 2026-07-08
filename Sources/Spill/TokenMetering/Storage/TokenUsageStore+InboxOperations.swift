@@ -82,10 +82,7 @@ extension TokenUsageStore {
 
         try lock.withLock {
             try event.validate()
-            try FileManager.default.createDirectory(
-                at: inboxURL,
-                withIntermediateDirectories: true
-            )
+            try Self.createPrivateDirectoryIfNeeded(at: inboxURL)
 
             let eventID = UUID().uuidString.lowercased()
             let temporaryURL = inboxURL.appendingPathComponent(".\(eventID).tmp")

@@ -31,7 +31,7 @@ extension TokenUsageHistoryImportCoordinator {
             guard historyFresh > liveFresh else { continue }
 
             let tmpFile = liveStateDir.appendingPathComponent(".\(historyFile.lastPathComponent).sync.tmp")
-            try? fileManager.createDirectory(at: liveStateDir, withIntermediateDirectories: true)
+            try? TokenUsageStore.createPrivateDirectoryIfNeeded(at: liveStateDir)
             guard (try? historyData.write(to: tmpFile)) != nil else { continue }
             do {
                 if fileManager.fileExists(atPath: liveFile.path) {
@@ -65,7 +65,7 @@ extension TokenUsageHistoryImportCoordinator {
         let fileManager = FileManager.default
         let liveStateDir = liveStateFile.deletingLastPathComponent()
         let tmpFile = liveStateDir.appendingPathComponent(".antigravity-active-importer-state.sync.tmp")
-        try? fileManager.createDirectory(at: liveStateDir, withIntermediateDirectories: true)
+        try? TokenUsageStore.createPrivateDirectoryIfNeeded(at: liveStateDir)
         try? fileManager.removeItem(at: tmpFile)
         guard (try? mergedData.write(to: tmpFile)) != nil else { return }
         try? fileManager.removeItem(at: liveStateFile)
@@ -115,10 +115,7 @@ extension TokenUsageHistoryImportCoordinator {
     func prepareFullHistoryReconciliation(for tools: [TokenUsageHistoryImportTool]) throws {
         store.drainQueuedEventsWithoutLoading(maximumInboxEventCount: nil)
         resetToolScanState(for: tools)
-        try FileManager.default.createDirectory(
-            at: historyStateDirectory,
-            withIntermediateDirectories: true
-        )
+        try TokenUsageStore.createPrivateDirectoryIfNeeded(at: historyStateDirectory)
     }
 
     func claudeHistorySessionStateDirectory() -> URL {

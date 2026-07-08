@@ -12,9 +12,12 @@ extension TokenUsageCollectorCoordinator {
             return !isDirectory.boolValue
         }
     ) -> URL? {
+        // Only the Spill-namespaced override is trusted. A generic name like NODE_BINARY
+        // is set by many unrelated tools and shell profiles, so honoring it here would let
+        // any local process or dotfile that happens to export NODE_BINARY redirect which
+        // binary Spill executes.
         let candidates = [
             environment["SPILL_TOKEN_USAGE_NODE"],
-            environment["NODE_BINARY"],
             "/opt/homebrew/bin/node",
             "/usr/local/bin/node",
             "/usr/bin/node",

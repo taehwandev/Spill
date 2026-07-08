@@ -55,6 +55,22 @@ DIAGNOSTICS_DIR = pathlib.Path(
 )
 EMPTY_DIAGNOSTIC_FILE_NAME = "claude-last-empty.json"
 MISMATCH_DIAGNOSTIC_FILE_NAME = "claude-last-mismatch.json"
+
+
+def _ensure_private_dir(path: pathlib.Path) -> None:
+    """Create path (and parents) restricted to the owner and re-assert 0700 even if the
+    directory already existed, so upgrades from an earlier version that created these
+    directories with default (looser, umask-based) permissions get hardened too. These
+    directories hold unauthenticated local usage events and session state that any other
+    local account should not be able to read or write into.
+    """
+    path.mkdir(parents=True, exist_ok=True, mode=0o700)
+    try:
+        os.chmod(path, 0o700)
+    except OSError:
+        pass
+
+
 SUCCESS_DIAGNOSTIC_FILE_NAME = "claude-last-success.json"
 _OPAQUE_ID = re.compile(r'^[A-Za-z0-9_-]{6,64}$')
 _MODEL_ID = re.compile(r'^[A-Za-z0-9_.:-]{2,80}$')
@@ -241,7 +257,7 @@ def _event_record(event: dict, accounting=None) -> dict:
 
 
 def _enqueue_event(event: dict, accounting=None) -> None:
-    INBOX_DIR.mkdir(parents=True, exist_ok=True)
+    _ensure_private_dir(INBOX_DIR)
     event_id = uuid.uuid4().hex
     temporary_path = INBOX_DIR / f".{event_id}.tmp"
     final_path = INBOX_DIR / f"{event_id}.json"
@@ -264,7 +280,7 @@ def _enqueue_event(event: dict, accounting=None) -> None:
 def _enqueue_events(records: list[dict]) -> None:
     if not records:
         return
-    INBOX_DIR.mkdir(parents=True, exist_ok=True)
+    _ensure_private_dir(INBOX_DIR)
     event_id = uuid.uuid4().hex
     temporary_path = INBOX_DIR / f".{event_id}.tmp"
     final_path = INBOX_DIR / f"{event_id}.jsonl"
@@ -439,7 +455,7 @@ def _write_diagnostic_file(filename: str, kind: str, reason: str, payload: dict 
         diagnostic["meaning"] = meaning
 
     try:
-        DIAGNOSTICS_DIR.mkdir(parents=True, exist_ok=True)
+        _ensure_private_dir(DIAGNOSTICS_DIR)
         final_path = DIAGNOSTICS_DIR / filename
         temporary_path = DIAGNOSTICS_DIR / f".{filename}.tmp"
         with open(temporary_path, "w") as f:
@@ -471,7 +487,7 @@ def _write_success_diagnostic(event: dict) -> None:
     }
 
     try:
-        DIAGNOSTICS_DIR.mkdir(parents=True, exist_ok=True)
+        _ensure_private_dir(DIAGNOSTICS_DIR)
         final_path = DIAGNOSTICS_DIR / SUCCESS_DIAGNOSTIC_FILE_NAME
         temporary_path = DIAGNOSTICS_DIR / f".{SUCCESS_DIAGNOSTIC_FILE_NAME}.tmp"
         with open(temporary_path, "w") as f:
@@ -512,8 +528,16 @@ def _state_request_ids(data: dict) -> set[str]:
     return {value for value in values if isinstance(value, str) and value}
 
 
-def _load_session_state(run_id: str) -> tuple[int, int, int, set[str]]:
-    """Return (prev_fresh, prev_output, byte_offset, emitted_request_ids) for this run."""
+def _load_session_state(run_id: str) -> tuple[int, int, int, set[str], int]:
+    """Return (prev_fresh, prev_output, byte_offset, emitted_request_ids, next_turn_index).
+
+    next_turn_index is the cumulative turn count from the start of the transcript file,
+    matching the Swift active importer's next_turn_index_by_source. It only affects
+    span_id when a turn's requestId is empty (span_id is requestId-stable otherwise, and
+    does not depend on turn_index at all), so a legacy state file written before
+    next_turn_index existed can safely default it to 0 and resume from its existing
+    byte_offset rather than forcing a full re-scan of the transcript.
+    """
     state_path = SESSION_STATE_DIR / f"{run_id}.json"
     try:
         data = json.loads(state_path.read_text())
@@ -524,10 +548,11 @@ def _load_session_state(run_id: str) -> tuple[int, int, int, set[str]]:
                 _state_int(data, "output"),
                 _state_int(data, "byte_offset"),
                 _state_request_ids(data),
+                _state_int(data, "next_turn_index"),
             )
     except Exception:
         pass
-    return 0, 0, 0, set()
+    return 0, 0, 0, set(), 0
 
 
 def _save_session_state(
@@ -536,15 +561,17 @@ def _save_session_state(
     output: int,
     byte_offset: int,
     emitted_request_ids=None,
+    next_turn_index: int = 0,
 ) -> None:
     try:
-        SESSION_STATE_DIR.mkdir(parents=True, exist_ok=True)
+        _ensure_private_dir(SESSION_STATE_DIR)
         state_path = SESSION_STATE_DIR / f"{run_id}.json"
         tmp_path = SESSION_STATE_DIR / f".{run_id}.tmp"
         tmp_path.write_text(json.dumps({
             "fresh": max(0, fresh),
             "output": max(0, output),
             "byte_offset": max(0, byte_offset),
+            "next_turn_index": max(0, next_turn_index),
             "emitted_request_ids": sorted(emitted_request_ids or set()),
         }))
         os.replace(tmp_path, state_path)
@@ -628,7 +655,7 @@ def _history_turn_sort_key(turn: dict) -> tuple[str, int]:
     return (timestamp if isinstance(timestamp, str) else "", int(turn.get("turn_index", 0) or 0))
 
 
-def _deduplicate_transcript_turns(turns: list[dict]) -> list[dict]:
+def _deduplicate_transcript_turns(turns: list[dict], starting_index: int = 0) -> list[dict]:
     keyed: dict[str, dict] = {}
     passthrough: list[dict] = []
 
@@ -638,26 +665,22 @@ def _deduplicate_transcript_turns(turns: list[dict]) -> list[dict]:
             passthrough.append(turn)
             continue
 
-        existing = keyed.get(request_id)
-        if existing is None:
-            keyed[request_id] = turn
-            continue
-
-        existing_input, existing_output = _usage_totals(existing.get("usage", {}))
-        turn_input, turn_output = _usage_totals(turn.get("usage", {}))
-        existing_total = existing_input + existing_output
-        turn_total = turn_input + turn_output
-        if _history_turn_sort_key(turn) > _history_turn_sort_key(existing) or turn_total > existing_total:
+        # Always keep the FIRST occurrence of each requestId. This matches the
+        # cross-batch emitted_request_ids rule and the Swift importer's
+        # deduplicateAssistantTurns behavior so both paths produce the same span_id.
+        if request_id not in keyed:
             keyed[request_id] = turn
 
     deduplicated = passthrough + list(keyed.values())
     deduplicated.sort(key=_history_turn_sort_key)
-    for index, turn in enumerate(deduplicated):
+    # Use starting_index so turn_index values are cumulative across incremental reads,
+    # matching the Swift active importer's nextTurnIndexBySource for identical span_ids.
+    for index, turn in enumerate(deduplicated, start=starting_index):
         turn["turn_index"] = index
     return deduplicated
 
 
-def _read_transcript_turns(transcript_path: str, byte_offset: int) -> tuple[list[dict], int, int]:
+def _read_transcript_turns(transcript_path: str, byte_offset: int, starting_turn_index: int = 0) -> tuple[list[dict], int, int, int]:
     start_offset = max(0, byte_offset)
     try:
         file_size = pathlib.Path(transcript_path).stat().st_size
@@ -669,6 +692,8 @@ def _read_transcript_turns(transcript_path: str, byte_offset: int) -> tuple[list
     all_turns: list[dict] = []
     current_group: list[dict] = []
     end_offset = start_offset
+    # Relative turn_index for intra-batch sort/dedup selection only;
+    # _deduplicate_transcript_turns reassigns absolute indices from starting_turn_index.
     turn_index = 0
 
     with open(transcript_path, "rb") as f:
@@ -695,7 +720,8 @@ def _read_transcript_turns(transcript_path: str, byte_offset: int) -> tuple[list
                 pass
 
     all_turns.extend(current_group)
-    return _deduplicate_transcript_turns(all_turns), end_offset, start_offset
+    result = _deduplicate_transcript_turns(all_turns, starting_index=starting_turn_index)
+    return result, end_offset, start_offset, starting_turn_index + len(result)
 
 
 def _turns_after_prior_cumulative(
@@ -775,15 +801,15 @@ def _event_for_live_turn(
         if not project_id:
             project_id = "project_global"
 
-    span_id = _stable_span_id(
-        run_id,
-        model,
-        str(turn.get("request_id", "")),
-        str(turn.get("turn_index", "")),
-        timestamp,
-        str(turn_span_input),
-        str(turn_output),
-    )
+    request_id_str = str(turn.get("request_id", ""))
+    if request_id_str:
+        # requestId-stable formula: Bug #2 writes the same requestId 2-3x with
+        # different timestamps. Omitting turn_index and timestamp makes all
+        # occurrences produce the same span_id so the DB PRIMARY KEY deduplicates
+        # them, regardless of which occurrence Python or Swift processed first.
+        span_id = _stable_span_id(run_id, model, request_id_str, str(turn_span_input), str(turn_output))
+    else:
+        span_id = _stable_span_id(run_id, model, "", str(turn.get("turn_index", "")), timestamp, str(turn_span_input), str(turn_output))
 
     return {
         "schema_version": 1,
@@ -852,11 +878,12 @@ def _run_history_payload(payload: dict, enqueue_event=_enqueue_event, flush_even
         result["unsupported_records"] += 1
         return result
 
-    prev_fresh, prev_output, previous_byte_offset, emitted_request_ids = _load_session_state(run_id)
+    prev_fresh, prev_output, previous_byte_offset, emitted_request_ids, starting_turn_index = _load_session_state(run_id)
     try:
-        all_turns, transcript_byte_offset, read_start_offset = _read_transcript_turns(
+        all_turns, transcript_byte_offset, read_start_offset, next_turn_index = _read_transcript_turns(
             transcript_path,
             previous_byte_offset,
+            starting_turn_index,
         )
     except Exception:
         result["unsupported_records"] += 1
@@ -864,7 +891,7 @@ def _run_history_payload(payload: dict, enqueue_event=_enqueue_event, flush_even
 
     if not all_turns:
         if transcript_byte_offset > previous_byte_offset:
-            _save_session_state(run_id, prev_fresh, prev_output, transcript_byte_offset, emitted_request_ids)
+            _save_session_state(run_id, prev_fresh, prev_output, transcript_byte_offset, emitted_request_ids, starting_turn_index)
         if previous_byte_offset > 0:
             result["skipped_seen"] += 1
         else:
@@ -899,14 +926,11 @@ def _run_history_payload(payload: dict, enqueue_event=_enqueue_event, flush_even
         task_type = label.get("task_type") if _SAFE_SLUG.match(label.get("task_type", "")) else "uncategorized"
         stage = label.get("stage") if _SAFE_SLUG.match(label.get("stage", "")) else "summarize"
         project_id = label.get("project_id") if _OPAQUE_ID.match(label.get("project_id", "")) else "project_global"
-        span_id = _stable_span_id(
-            run_id,
-            model,
-            str(turn.get("request_id", "")),
-            str(turn.get("turn_index", "")),
-            timestamp,
-            str(turn_span_input),
-            str(turn_output),
+        _req_id = str(turn.get("request_id", ""))
+        span_id = (
+            _stable_span_id(run_id, model, _req_id, str(turn_span_input), str(turn_output))
+            if _req_id
+            else _stable_span_id(run_id, model, "", str(turn.get("turn_index", "")), timestamp, str(turn_span_input), str(turn_output))
         )
 
         event = {
@@ -950,9 +974,10 @@ def _run_history_payload(payload: dict, enqueue_event=_enqueue_event, flush_even
             prev_output + session_output if read_start_offset > 0 else session_output,
             transcript_byte_offset,
             next_emitted_request_ids,
+            next_turn_index,
         )
     elif transcript_byte_offset > previous_byte_offset:
-        _save_session_state(run_id, prev_fresh, prev_output, transcript_byte_offset, next_emitted_request_ids)
+        _save_session_state(run_id, prev_fresh, prev_output, transcript_byte_offset, next_emitted_request_ids, next_turn_index)
 
     return result
 
@@ -970,11 +995,12 @@ def _run_for_payload(payload: dict, scan_subagents: bool = True, allow_timestamp
         _write_diagnostic_file(MISMATCH_DIAGNOSTIC_FILE_NAME, "runtime_payload_mismatch", "transcript_unavailable", payload)
         return _SCAN_UNSUPPORTED
 
-    prev_fresh, prev_output, previous_byte_offset, emitted_request_ids = _load_session_state(run_id)
+    prev_fresh, prev_output, previous_byte_offset, emitted_request_ids, starting_turn_index = _load_session_state(run_id)
     try:
-        all_turns, transcript_byte_offset, read_start_offset = _read_transcript_turns(
+        all_turns, transcript_byte_offset, read_start_offset, next_turn_index = _read_transcript_turns(
             transcript_path,
             previous_byte_offset,
+            starting_turn_index,
         )
     except Exception:
         _write_diagnostic_file(MISMATCH_DIAGNOSTIC_FILE_NAME, "runtime_payload_mismatch", "transcript_read_failed", payload)
@@ -982,7 +1008,7 @@ def _run_for_payload(payload: dict, scan_subagents: bool = True, allow_timestamp
 
     if not all_turns:
         if transcript_byte_offset > previous_byte_offset:
-            _save_session_state(run_id, prev_fresh, prev_output, transcript_byte_offset, emitted_request_ids)
+            _save_session_state(run_id, prev_fresh, prev_output, transcript_byte_offset, emitted_request_ids, starting_turn_index)
         reason = "no_new_token_delta" if previous_byte_offset > 0 else "no_assistant_usage"
         _write_diagnostic_file(
             EMPTY_DIAGNOSTIC_FILE_NAME,
@@ -1046,7 +1072,7 @@ def _run_for_payload(payload: dict, scan_subagents: bool = True, allow_timestamp
 
     next_emitted_request_ids = set(emitted_request_ids)
     if not events:
-        _save_session_state(run_id, next_fresh, next_output, transcript_byte_offset, next_emitted_request_ids)
+        _save_session_state(run_id, next_fresh, next_output, transcript_byte_offset, next_emitted_request_ids, next_turn_index)
         _write_diagnostic_file(
             EMPTY_DIAGNOSTIC_FILE_NAME,
             "no_usage_hook_call",
@@ -1061,7 +1087,7 @@ def _run_for_payload(payload: dict, scan_subagents: bool = True, allow_timestamp
         request_id = _request_id_for_turn(turn)
         if request_id:
             next_emitted_request_ids.add(request_id)
-    _save_session_state(run_id, next_fresh, next_output, transcript_byte_offset, next_emitted_request_ids)
+    _save_session_state(run_id, next_fresh, next_output, transcript_byte_offset, next_emitted_request_ids, next_turn_index)
     _write_success_diagnostic(events[-1][1])
     _consume_label_file()
     if scan_subagents:

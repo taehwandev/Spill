@@ -26,10 +26,7 @@ extension TokenUsageStore {
     }
 
     func openDatabase() throws -> OpaquePointer {
-        try FileManager.default.createDirectory(
-            at: databaseURL.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
+        try Self.createPrivateDirectoryIfNeeded(at: databaseURL.deletingLastPathComponent())
 
         var database: OpaquePointer?
         let flags = SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX
@@ -55,6 +52,24 @@ extension TokenUsageStore {
             sqlite3_close(database)
             throw error
         }
+    }
+
+    /// Creates `url` if needed and enforces `0700` permissions (owner read/write/execute
+    /// only). The `token-metering` tree holds the events database, the events inbox, and
+    /// session-state files that other local processes (the Stop hook, history import) write
+    /// unauthenticated event data into — restricting it to the owning user blocks other
+    /// local accounts from reading usage history or planting forged inbox events.
+    /// Applied on every open, not just first creation, so upgrades from an earlier version
+    /// that created these directories with default (looser) permissions get hardened too.
+    @discardableResult
+    static func createPrivateDirectoryIfNeeded(at url: URL) throws -> URL {
+        try FileManager.default.createDirectory(
+            at: url,
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700]
+        )
+        try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: url.path)
+        return url
     }
 
     func databaseSchemaCheckpoint(database: OpaquePointer) -> DatabaseSchemaCheckpoint {

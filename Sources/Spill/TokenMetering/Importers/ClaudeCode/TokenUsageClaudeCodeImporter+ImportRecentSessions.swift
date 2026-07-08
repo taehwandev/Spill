@@ -33,8 +33,18 @@ extension TokenUsageClaudeCodeImporter {
 
             for turn in turns {
                 guard !shouldCancel() else { break }
+                // Cross-batch Bug #2 dedup: skip requestIds already emitted for this session.
+                // Claude Code writes the same requestId 2-3x with slightly different timestamps,
+                // causing different span_ids across incremental read batches.
+                if !turn.requestId.isEmpty,
+                   importState.emittedRequestIDsBySource[stateKey]?.contains(turn.requestId) == true {
+                    continue
+                }
                 guard let event = event(from: turn, labelTimeline: labelTimeline) else { continue }
                 candidateEvents.append(event)
+                if !turn.requestId.isEmpty {
+                    importState.emittedRequestIDsBySource[stateKey, default: []].insert(turn.requestId)
+                }
             }
 
             if newOffset > priorOffset {

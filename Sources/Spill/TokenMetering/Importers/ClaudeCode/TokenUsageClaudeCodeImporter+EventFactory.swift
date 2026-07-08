@@ -15,18 +15,21 @@ extension TokenUsageClaudeCodeImporter {
 
         let model = Self.safeModel(turn.model)
 
-        // Match Python Stop hook formula exactly:
-        // "span-" + sha256(":".join([run_id, model, request_id, str(turn_index), timestamp, str(span_input), str(output)]))[:12]
         let runID = turn.sessionID
-        let spanSource = [
-            runID,
-            model,
-            turn.requestId,
-            String(turn.turnIndex),
-            turn.timestamp,
-            String(turn.spanInputTokens),
-            String(outputTokens),
-        ].joined(separator: ":")
+        // When requestId is present, omit turnIndex and timestamp from the span_id hash.
+        // Bug #2: Claude Code writes the same requestId 2-3x per turn with slightly different
+        // timestamps. Including timestamp or turnIndex would make each occurrence hash to a
+        // different span_id, defeating the DB PRIMARY KEY dedup. The requestId alone is a
+        // stable unique key for the turn; spanInputTokens and outputTokens guard against
+        // accidental collisions across turns that share a requestId format.
+        let spanSource: String
+        if !turn.requestId.isEmpty {
+            spanSource = [runID, model, turn.requestId,
+                          String(turn.spanInputTokens), String(outputTokens)].joined(separator: ":")
+        } else {
+            spanSource = [runID, model, "", String(turn.turnIndex), turn.timestamp,
+                          String(turn.spanInputTokens), String(outputTokens)].joined(separator: ":")
+        }
         let spanID = "span-" + SHA256.hash(data: Data(spanSource.utf8))
             .map { String(format: "%02x", $0) }.joined().prefix(12)
 

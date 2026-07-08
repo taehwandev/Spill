@@ -1280,12 +1280,15 @@ final class TokenUsageHistoryImportCoordinatorTests: XCTestCase {
 
         XCTAssertTrue(output.stdout.contains(#""imported_events":3"#), output.stdout)
         let events = try inboxEvents(in: inboxURL)
+        // req_111111111111111111111111 appears twice (23:58:50 then 23:59:00). Dedup
+        // always keeps the FIRST occurrence so within-batch and cross-batch dedup agree
+        // on the same turn.
         XCTAssertEqual(events.map { $0["created_at"] as? String }, [
-            "2026-06-17T23:59:00.000Z",
+            "2026-06-17T23:58:50.000Z",
             "2026-06-18T00:02:00.000Z",
             "2026-06-18T00:04:00.000Z",
         ])
-        XCTAssertEqual(events.map { $0["output_tokens"] as? Int }, [5, 2, 1])
+        XCTAssertEqual(events.map { $0["output_tokens"] as? Int }, [1, 2, 1])
         XCTAssertEqual(events[0]["task_type"] as? String, "code_review")
         XCTAssertEqual(events[0]["stage"] as? String, "verify")
         XCTAssertEqual(events[0]["project_id"] as? String, "project_11111111111151119111111111111111")

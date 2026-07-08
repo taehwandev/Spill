@@ -86,6 +86,37 @@ extension TokenUsageHistoryImportCoordinator {
             return .unavailable("No Claude Code local transcript history was found.")
         }
 
+        // Full (`--all`) scans reconcile stored events against the freshly written set, so
+        // they must read that set before it is drained. The live inbox is watched by
+        // TokenUsageInboxMonitor, which triggers a collection drain the instant the Python
+        // process writes a file — that would empty the inbox before reconciliation could
+        // read it. Route full scans through a private staging inbox the monitor does not
+        // watch; reconcile from there, then hand the events to the live inbox for draining.
+        let usesStagingInbox = mode == .firstImport
+        let stagingInbox = claudeReconcileStagingInboxDirectory()
+        // Captured before the (potentially multi-second, hundreds-of-files) scan starts.
+        // A live Stop-hook turn for one of the sessions being rescanned can land in the
+        // database while the scan is still running, after the scan already read past that
+        // transcript file — its span_id would then be legitimately absent from this scan's
+        // authoritative set even though it isn't stale. Rows written at or before this
+        // cutoff are the only ones reconciliation is allowed to delete.
+        let reconciliationCutoffRowID = usesStagingInbox ? store.maxRowID(forAITool: .claude) : 0
+        if usesStagingInbox {
+            try? FileManager.default.removeItem(at: stagingInbox)
+            try? TokenUsageStore.createPrivateDirectoryIfNeeded(at: stagingInbox)
+        }
+
+        var environment = [
+            "SPILL_TOKEN_USAGE_LABEL_FILE": historyStateDirectory
+                .appendingPathComponent("claude-label-context.json")
+                .path,
+            "SPILL_TOKEN_USAGE_SESSION_STATE_DIR": claudeHistorySessionStateDirectory()
+                .path
+        ]
+        if usesStagingInbox {
+            environment["SPILL_TOKEN_USAGE_INBOX_DIR"] = stagingInbox.path
+        }
+
         let arguments = [
             hookURL.path,
             "--scan-dir",
@@ -94,13 +125,7 @@ extension TokenUsageHistoryImportCoordinator {
         let processResult = runProcess(
             executableURL: python3URL,
             arguments: arguments,
-            environment: [
-                "SPILL_TOKEN_USAGE_LABEL_FILE": historyStateDirectory
-                    .appendingPathComponent("claude-label-context.json")
-                    .path,
-                "SPILL_TOKEN_USAGE_SESSION_STATE_DIR": claudeHistorySessionStateDirectory()
-                    .path
-            ]
+            environment: environment
         )
         if isCancelled {
             return .cancelled("Cancelled by user.")
@@ -142,8 +167,127 @@ extension TokenUsageHistoryImportCoordinator {
             unsupportedRecords: summary.unsupportedRecords,
             message: nil
         )
+        // A full (`--all`) scan lists every real turn for every session still on disk under
+        // the stable span_id formula, so it is authoritative. Delete stored Claude events
+        // for those sessions that are not in the freshly written set — these are
+        // pre-stable-span_id duplicates that inflated historical counts. Incremental scans
+        // only cover a recent window and are never authoritative, so reconciliation is
+        // gated to full scans.
+        //
+        // Move the staged events into the live inbox *before* reconciling, and only
+        // reconcile run_ids whose canonical replacement file was confirmed moved
+        // successfully. Reconciling a run_id first and moving its replacement second would
+        // leave a permanent gap if the move failed after the stale rows were already
+        // deleted — this ordering guarantees a stale row is never removed without its
+        // replacement already queued for insert.
+        if usesStagingInbox {
+            let authoritative = claudeAuthoritativeSpanIDs(inInbox: stagingInbox)
+            let movedRunIDs = moveStagedInboxFilesToLiveInbox(from: stagingInbox)
+            let reconcilableAuthoritative = authoritative.filter { movedRunIDs.contains($0.key) }
+            if !reconcilableAuthoritative.isEmpty {
+                store.reconcileClaudeSessions(
+                    authoritativeSpanIDsByRun: reconcilableAuthoritative,
+                    notInsertedAfterRowID: reconciliationCutoffRowID
+                )
+            }
+        }
         syncClaudeHistoryStateToLiveState()
         return result
+    }
+
+    func claudeReconcileStagingInboxDirectory() -> URL {
+        historyStateDirectory.appendingPathComponent("claude-reconcile-inbox", isDirectory: true)
+    }
+
+    /// Reads the Claude events the history scan wrote to `inbox` and groups their span_ids
+    /// by run_id. Only `ai_tool == "claude"` records are considered.
+    private func claudeAuthoritativeSpanIDs(inInbox inbox: URL) -> [String: Set<String>] {
+        guard let entries = try? FileManager.default.contentsOfDirectory(
+            at: inbox,
+            includingPropertiesForKeys: nil
+        ) else {
+            return [:]
+        }
+
+        var result = [String: Set<String>]()
+        for entry in entries where entry.pathExtension == "json" || entry.pathExtension == "jsonl" {
+            guard let data = try? Data(contentsOf: entry) else { continue }
+            for lineData in data.split(separator: UInt8(ascii: "\n"), omittingEmptySubsequences: true) {
+                guard let object = try? JSONSerialization.jsonObject(with: lineData) as? [String: Any],
+                      (object["ai_tool"] as? String) == "claude",
+                      let runID = object["run_id"] as? String, !runID.isEmpty,
+                      let spanID = object["span_id"] as? String, !spanID.isEmpty
+                else { continue }
+                result[runID, default: []].insert(spanID)
+            }
+        }
+        return result
+    }
+
+    /// Moves staged event files into the live inbox so the collector drain imports them.
+    /// `.accounting` sidecars are moved before their `.jsonl`/`.json` events so the inbox
+    /// reader never sees an event without its accounting detail. Leftover `.tmp` files are
+    /// discarded.
+    ///
+    /// - Returns: the run_ids whose canonical event file was moved successfully. Callers
+    ///   must only reconcile (delete stale rows for) run_ids in this set — a run_id whose
+    ///   move failed keeps its old (possibly duplicated) data untouched rather than losing
+    ///   it outright, since we can no longer guarantee a replacement is on the way in.
+    @discardableResult
+    private func moveStagedInboxFilesToLiveInbox(from staging: URL) -> Set<String> {
+        guard let liveInbox = store.eventsInboxURL,
+              let entries = try? FileManager.default.contentsOfDirectory(
+                at: staging,
+                includingPropertiesForKeys: nil
+              )
+        else {
+            return []
+        }
+
+        try? TokenUsageStore.createPrivateDirectoryIfNeeded(at: liveInbox)
+        let sidecars = entries.filter { $0.pathExtension == "accounting" }
+        let events = entries.filter { $0.pathExtension == "json" || $0.pathExtension == "jsonl" }
+
+        // Sidecar move failures are not tracked against run_id success below: losing
+        // accounting detail only degrades measurement-quality data, not event integrity.
+        for sidecar in sidecars {
+            moveInboxFile(sidecar, to: liveInbox)
+        }
+
+        var movedRunIDs = Set<String>()
+        for event in events {
+            let runIDsInFile = claudeRunIDs(inEventFile: event)
+            guard moveInboxFile(event, to: liveInbox) else { continue }
+            movedRunIDs.formUnion(runIDsInFile)
+        }
+
+        try? FileManager.default.removeItem(at: staging)
+        return movedRunIDs
+    }
+
+    @discardableResult
+    private func moveInboxFile(_ source: URL, to liveInbox: URL) -> Bool {
+        let destination = liveInbox.appendingPathComponent(source.lastPathComponent)
+        try? FileManager.default.removeItem(at: destination)
+        do {
+            try FileManager.default.moveItem(at: source, to: destination)
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    private func claudeRunIDs(inEventFile url: URL) -> Set<String> {
+        guard let data = try? Data(contentsOf: url) else { return [] }
+        var runIDs = Set<String>()
+        for lineData in data.split(separator: UInt8(ascii: "\n"), omittingEmptySubsequences: true) {
+            guard let object = try? JSONSerialization.jsonObject(with: lineData) as? [String: Any],
+                  (object["ai_tool"] as? String) == "claude",
+                  let runID = object["run_id"] as? String, !runID.isEmpty
+            else { continue }
+            runIDs.insert(runID)
+        }
+        return runIDs
     }
 
     // After a Claude history scan the history session-state dir holds the

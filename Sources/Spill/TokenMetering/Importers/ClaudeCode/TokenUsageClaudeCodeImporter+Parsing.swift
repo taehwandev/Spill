@@ -63,27 +63,24 @@ extension TokenUsageClaudeCodeImporter {
 
         let newByteOffset = byteOffset + data.count
         let lines = data.split(separator: UInt8(ascii: "\n"), omittingEmptySubsequences: true)
-        var turns = [AssistantTurn]()
-        var turnIndex = startingTurnIndex
+        var parsedTurns = [AssistantTurn]()
 
         for lineData in lines {
             guard let object = try? JSONSerialization.jsonObject(with: lineData) as? [String: Any],
                   let parsedRecord = assistantTurn(
                     from: object,
                     sourceSessionID: sourceSessionID,
-                    turnIndex: turnIndex
+                    turnIndex: 0
                   )
             else { continue }
 
             if let parsedTurn = parsedRecord.turn {
-                turns.append(parsedTurn)
-            }
-            if parsedRecord.consumesTurnIndex {
-                turnIndex += 1
+                parsedTurns.append(parsedTurn)
             }
         }
 
-        return (turns, newByteOffset, turnIndex)
+        let turns = deduplicateAssistantTurns(parsedTurns, startingTurnIndex: startingTurnIndex)
+        return (turns, newByteOffset, startingTurnIndex + turns.count)
     }
 
     private func assistantTurn(
@@ -203,5 +200,56 @@ extension TokenUsageClaudeCodeImporter {
             return nil
         }
         return value
+    }
+
+    private func deduplicateAssistantTurns(
+        _ turns: [AssistantTurn],
+        startingTurnIndex: Int
+    ) -> [AssistantTurn] {
+        var keyed = [String: AssistantTurn]()
+        var passthrough = [AssistantTurn]()
+
+        for turn in turns {
+            guard !turn.requestId.isEmpty else {
+                passthrough.append(turn)
+                continue
+            }
+
+            // Always keep the FIRST occurrence of each requestId. This matches the
+            // cross-batch emittedRequestIDsBySource rule so within-batch and cross-batch
+            // dedup agree on the same canonical turn, producing the same span_id on both
+            // the Python Stop hook full-rescan and incremental Swift importer paths.
+            if keyed[turn.requestId] == nil {
+                keyed[turn.requestId] = turn
+            }
+        }
+
+        return (passthrough + Array(keyed.values))
+            .sorted(by: assistantTurnPrecedes)
+            .enumerated()
+            .map { offset, turn in turn.withTurnIndex(startingTurnIndex + offset) }
+    }
+
+    private func assistantTurnPrecedes(_ lhs: AssistantTurn, _ rhs: AssistantTurn) -> Bool {
+        if lhs.timestamp != rhs.timestamp {
+            return lhs.timestamp < rhs.timestamp
+        }
+        return lhs.turnIndex < rhs.turnIndex
+    }
+}
+
+private extension TokenUsageClaudeCodeImporter.AssistantTurn {
+    func withTurnIndex(_ turnIndex: Int) -> TokenUsageClaudeCodeImporter.AssistantTurn {
+        TokenUsageClaudeCodeImporter.AssistantTurn(
+            requestId: requestId,
+            sessionID: sessionID,
+            timestamp: timestamp,
+            model: model,
+            turnIndex: turnIndex,
+            inputTokens: inputTokens,
+            spanInputTokens: spanInputTokens,
+            outputTokens: outputTokens,
+            tokenAccounting: tokenAccounting
+        )
     }
 }

@@ -235,6 +235,14 @@ final class TokenUsageBridgeServer: @unchecked Sendable {
             return httpResponse(status: 400, body: errorBody("invalid_request"))
         }
 
+        // Reject requests whose Host header does not target this loopback port. Without
+        // this check a page in the browser could reach this server via DNS rebinding
+        // (resolving an attacker-controlled hostname to 127.0.0.1 after the browser's
+        // same-origin check has already passed), bypassing the OS-level loopback bind.
+        guard isTrustedHost(request.host) else {
+            return httpResponse(status: 403, body: errorBody("untrusted_host"))
+        }
+
         switch (request.method, request.path) {
         case ("OPTIONS", _):
             return httpResponse(status: 204, body: Data())
@@ -282,9 +290,6 @@ final class TokenUsageBridgeServer: @unchecked Sendable {
             "Content-Type: application/json; charset=utf-8",
             "Content-Length: \(body.count)",
             "Cache-Control: no-store",
-            "Access-Control-Allow-Origin: *",
-            "Access-Control-Allow-Methods: GET, POST, DELETE, OPTIONS",
-            "Access-Control-Allow-Headers: Content-Type",
             "Connection: close",
             "",
             ""
@@ -293,6 +298,32 @@ final class TokenUsageBridgeServer: @unchecked Sendable {
         var data = Data(headers.utf8)
         data.append(body)
         return data
+    }
+
+    /// This bridge is a native-app-to-native-app IPC channel over loopback HTTP, not a
+    /// browser-facing API — it intentionally omits CORS headers so no web page origin can
+    /// call it, and it additionally pins the Host header to defeat DNS-rebinding attempts
+    /// that resolve an attacker-controlled hostname to 127.0.0.1 after the browser's
+    /// same-origin/CORS checks have already been satisfied for that hostname.
+    private func isTrustedHost(_ host: String?) -> Bool {
+        guard let host, !host.isEmpty else {
+            return false
+        }
+
+        let hostname = Self.hostname(fromHostHeaderValue: host)
+        return hostname == "127.0.0.1" || hostname == "localhost" || hostname == "::1"
+    }
+
+    /// Extracts the hostname portion of an HTTP `Host` header value, handling the
+    /// bracketed IPv6-literal form (`[::1]:port`, RFC 7230 §5.4) as well as the plain
+    /// `host:port` / bare-host forms. A naive split on the first `:` misparses IPv6
+    /// literals — e.g. `[::1]:48731` would yield `"["` — silently rejecting legitimate
+    /// IPv6 loopback requests instead of the intended behavior of trusting them.
+    static func hostname(fromHostHeaderValue host: String) -> String {
+        if host.hasPrefix("["), let closingBracketIndex = host.firstIndex(of: "]") {
+            return String(host[host.index(after: host.startIndex)..<closingBracketIndex])
+        }
+        return host.split(separator: ":", maxSplits: 1).first.map(String.init) ?? host
     }
 
     private func errorBody(_ code: String) -> Data {
@@ -326,6 +357,7 @@ final class TokenUsageBridgeServer: @unchecked Sendable {
 struct TokenUsageBridgeRequest: Equatable {
     let method: String
     let path: String
+    let host: String?
     let body: Data
 
     init?(data: Data) {
@@ -347,6 +379,15 @@ struct TokenUsageBridgeRequest: Equatable {
 
         method = parts[0].uppercased()
         path = parts[1].components(separatedBy: "?").first ?? parts[1]
+        host = lines.dropFirst().compactMap { line -> String? in
+            let headerParts = line.split(separator: ":", maxSplits: 1).map(String.init)
+            guard headerParts.count == 2,
+                  headerParts[0].caseInsensitiveCompare("Host") == .orderedSame
+            else {
+                return nil
+            }
+            return headerParts[1].trimmingCharacters(in: .whitespaces)
+        }.first
         body = data[headerEnd.upperBound...]
     }
 }
