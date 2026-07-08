@@ -31,7 +31,6 @@ extension PrivateUsageUploadStore {
         refreshTask?.cancel()
         refreshTask = Task { [weak self] in
             let status = await coordinator.statusAsync(isEnabled: isEnabled)
-            let hasCredential = (try? coordinator.credentialStore.loadCredential()) != nil
             await MainActor.run {
                 guard let self,
                       !Task.isCancelled,
@@ -39,9 +38,7 @@ extension PrivateUsageUploadStore {
                 else {
                     return
                 }
-                let resolvedStatus = status.isConnected && !hasCredential
-                    ? PrivateUsageUploadStatus.disconnected
-                    : status
+                let resolvedStatus = status
                 if !resolvedStatus.isConnected, self.settings.privateUsageUploadEnabled {
                     self.settings.privateUsageUploadEnabled = false
                 }
@@ -86,6 +83,9 @@ extension PrivateUsageUploadStore {
         do {
             _ = try await coordinator.exchangeGrantCode(grantCode)
             settings.privateUsageUploadEnabled = true
+            status = coordinator.locallySavedConnectionStatus(
+                isEnabled: settings.privateUsageUploadEnabled
+            )
             pendingConnectedMessage = false
             message = TokenMeteringL10n.text(.privateUsageUploadConnectedMessage)
         } catch {
@@ -132,6 +132,7 @@ extension PrivateUsageUploadStore {
         do {
             try coordinator.clearConnection()
             settings.privateUsageUploadEnabled = false
+            status = .disconnected
             message = TokenMeteringL10n.text(.privateUsageUploadDisconnectedMessage)
             errorMessage = nil
         } catch {

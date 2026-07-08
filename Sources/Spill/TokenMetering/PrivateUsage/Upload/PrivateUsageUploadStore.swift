@@ -40,6 +40,9 @@ final class PrivateUsageUploadStore: ObservableObject {
             coordinatorFactory = factory
             self.coordinator = factory(coordinatorEnvironment)
         }
+        status = self.coordinator.locallySavedConnectionStatus(
+            isEnabled: settings.privateUsageUploadEnabled
+        )
         observeConnectionResults()
         refresh()
     }
@@ -77,7 +80,11 @@ private extension PrivateUsageUploadStore {
 
         if payload.didSucceed {
             settings.privateUsageUploadEnabled = true
-            pendingConnectedMessage = true
+            status = coordinator.locallySavedConnectionStatus(
+                isEnabled: settings.privateUsageUploadEnabled
+            )
+            pendingConnectedMessage = false
+            message = TokenMeteringL10n.text(.privateUsageUploadConnectedMessage)
         } else {
             errorMessage = payload.errorMessage
         }

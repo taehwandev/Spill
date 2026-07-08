@@ -32,6 +32,14 @@ extension PrivateUsageUploadCoordinator {
         }
     }
 
+    func markSavedConnection(_ hasSavedConnection: Bool) {
+        lock.withLock {
+            var state = stateStore.load()
+            state.hasSavedConnection = hasSavedConnection
+            stateStore.save(state)
+        }
+    }
+
     func automaticUploadIsDue(
         isEnabled: Bool,
         now: Date

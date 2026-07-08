@@ -15,11 +15,29 @@ extension PrivateUsageUploadCoordinator {
             deviceKeyFingerprint: connectionCode.keyWrappingSecret.keyID
         )
         try credentialStore.saveConnection(credential: credential, keyWrappingSecret: connectionCode.keyWrappingSecret)
+        markSavedConnection(true)
         return credential
     }
 
     func clearConnection() throws {
         try credentialStore.clearConnection()
+        markSavedConnection(false)
+    }
+
+    func locallySavedConnectionStatus(
+        isEnabled: Bool,
+        now: Date = Date()
+    ) -> PrivateUsageUploadStatus {
+        let state = stateStore.load()
+        let shouldShowSavedConnection = state.hasSavedConnection == true ||
+            (state.hasSavedConnection == nil && isEnabled)
+        return status(
+            isConnected: shouldShowSavedConnection,
+            isEnabled: isEnabled,
+            queuedBucketCount: 0,
+            state: state,
+            now: now
+        )
     }
 
     func status(
@@ -37,10 +55,26 @@ extension PrivateUsageUploadCoordinator {
             queuedCount = max(dirtyBucketCount, dirtySummaryCount)
         }
 
-        return PrivateUsageUploadStatus(
+        return status(
             isConnected: credential != nil,
             isEnabled: isEnabled,
             queuedBucketCount: queuedCount,
+            state: state,
+            now: now
+        )
+    }
+
+    private func status(
+        isConnected: Bool,
+        isEnabled: Bool,
+        queuedBucketCount: Int,
+        state: PrivateUsageUploadPersistence,
+        now: Date
+    ) -> PrivateUsageUploadStatus {
+        return PrivateUsageUploadStatus(
+            isConnected: isConnected,
+            isEnabled: isEnabled,
+            queuedBucketCount: queuedBucketCount,
             lastSuccessfulUploadAt: state.lastSuccessfulUploadAt.flatMap(ISO8601DateFormatter.parseTokenUsageDate(from:)),
             lastFailedUploadAt: state.lastFailedUploadAt.flatMap(ISO8601DateFormatter.parseTokenUsageDate(from:)),
             lastFailureReason: state.lastFailureReason,
@@ -68,10 +102,12 @@ extension PrivateUsageUploadCoordinator {
 
         do {
             try await verifyDeviceConnection(credential)
+            markSavedConnection(true)
             return localStatus
         } catch let error as PrivateUsageUploadError where error.isRevokedConnection {
             return .disconnected
         } catch {
+            markSavedConnection(true)
             return localStatus
         }
     }

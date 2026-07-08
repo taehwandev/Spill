@@ -20,6 +20,9 @@ extension PrivateUsageUploadStore {
 
         coordinatorEnvironment = settings.privateUsageUploadEnvironment
         coordinator = coordinatorFactory(coordinatorEnvironment)
+        status = coordinator.locallySavedConnectionStatus(
+            isEnabled: settings.privateUsageUploadEnabled
+        )
         message = nil
         errorMessage = nil
     }

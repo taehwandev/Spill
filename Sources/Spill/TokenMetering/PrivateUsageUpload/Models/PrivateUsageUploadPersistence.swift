@@ -6,6 +6,7 @@ struct PrivateUsageUploadPersistence: Codable, Equatable, Sendable {
     var lastFailureReason: String?
     var lastAutomaticAttemptDayID: String?
     var lastAckedBucketKey: String?
+    var hasSavedConnection: Bool?
 
     static let empty = PrivateUsageUploadPersistence()
 }
