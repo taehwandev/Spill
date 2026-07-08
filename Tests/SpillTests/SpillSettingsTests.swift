@@ -533,6 +533,7 @@ final class SpillSettingsTests: XCTestCase {
         XCTAssertEqual(MenuBarTriggerIconStyle.symbolizedS.subtitle, "Uses the symbolized Spill S mark.")
         XCTAssertEqual(MenuBarTriggerIconStyle.symbolizedS.symbolName(isActive: false), "s.circle")
         XCTAssertEqual(MenuBarTriggerIconStyle.symbolizedS.symbolName(isActive: true), "s.circle.fill")
+        XCTAssertTrue(MenuBarTriggerIconStyle.spill.usesCustomRenderer)
         XCTAssertTrue(MenuBarTriggerIconStyle.symbolizedS.usesCustomRenderer)
         XCTAssertEqual(MenuBarTriggerIconStyle.normalized(rawValue: "spill"), .spill)
         XCTAssertEqual(MenuBarTriggerIconStyle.normalized(rawValue: "symbolized_s"), .symbolizedS)

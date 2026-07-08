@@ -666,15 +666,14 @@ final class MenuBarStatusContentViewTests: XCTestCase {
         )
     }
 
-    func testDropTriggerUsesSystemSymbolFallback() {
+    func testDropTriggerRendersCustomWaterdropGlyph() {
         let image = MenuBarTriggerIconRenderer.image(
             style: .spill,
-            tintColor: .systemTeal,
-            usageRatio: 0.4,
             size: 18
         )
 
-        XCTAssertNil(image)
+        XCTAssertNotNil(image)
+        XCTAssertEqual(image?.size, NSSize(width: 18, height: 18))
     }
 
     private func makeTriggerSegment() -> MenuBarStatusSegment {
