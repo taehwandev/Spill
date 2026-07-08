@@ -35,6 +35,24 @@ extension StatusItemController {
             performanceEffect: state.performanceEffect
         )
         applyRefreshState(state, changes: changes, statusTooltip: statusTooltip)
+        updateTriggerIconAnimator(usageRatio: state.performanceEffect.usageRatio)
+    }
+
+    /// The shared animator is started/stopped here — tied to settings, once per refresh —
+    /// rather than from `MenuBarMetricChipView`'s lifecycle, since that view is torn down and
+    /// rebuilt almost every refresh and must not own the animation timer itself (see
+    /// `TriggerIconAnimator`). `noteUsageRatio` is fed the app's already-computed combined
+    /// CPU/memory/network load so idle-triggered bursts can occasionally run early (and a
+    /// touch faster) when real system activity jumps, without requiring those stat modules to
+    /// be polled just for this (the reading is simply `.calm`/0 if they aren't already active).
+    private func updateTriggerIconAnimator(usageRatio: Double) {
+        let shouldAnimate = settings.useSpillAnimation && settings.menuBarTriggerIconStyle.animates
+        if shouldAnimate {
+            TriggerIconAnimator.shared.start()
+            TriggerIconAnimator.shared.noteUsageRatio(usageRatio)
+        } else {
+            TriggerIconAnimator.shared.stop()
+        }
     }
 }
 

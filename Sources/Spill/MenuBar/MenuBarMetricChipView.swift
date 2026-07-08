@@ -7,8 +7,6 @@ final class MenuBarMetricChipView: NSView {
     let textIsBold: Bool
     let iconView = NSImageView()
     let valueLabel = NSTextField(labelWithString: "")
-    private var animationTimer: Timer?
-    private var animationPhase: CGFloat = 0
 
     init(segment: MenuBarStatusSegment, textFontSize: CGFloat, textIsBold: Bool) {
         self.segment = segment
@@ -21,7 +19,7 @@ final class MenuBarMetricChipView: NSView {
         configureValue()
         installSubviews()
         refreshColors()
-        startAnimationIfNeeded()
+        registerForAnimationFramesIfNeeded()
 
         setAccessibilityLabel(accessibilityText)
     }
@@ -29,14 +27,6 @@ final class MenuBarMetricChipView: NSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
-    }
-
-    override func viewDidMoveToSuperview() {
-        super.viewDidMoveToSuperview()
-        if superview == nil {
-            animationTimer?.invalidate()
-            animationTimer = nil
-        }
     }
 
     override func viewDidChangeEffectiveAppearance() {
@@ -50,9 +40,7 @@ final class MenuBarMetricChipView: NSView {
         if case let .trigger(style) = segment.visualStyle,
            let image = MenuBarTriggerIconRenderer.image(
                style: style,
-               tintColor: statusColor,
-               usageRatio: segment.usageRatio,
-               phase: animationPhase,
+               phase: TriggerIconAnimator.shared.phase,
                size: iconSize
            )
         {
@@ -69,40 +57,19 @@ final class MenuBarMetricChipView: NSView {
         iconView.symbolConfiguration = nil
     }
 
-    private func startAnimationIfNeeded() {
+    /// This view is torn down and rebuilt almost every refresh, so it must not own the
+    /// animation timer itself (see `TriggerIconAnimator`). It only re-registers to redraw on
+    /// each frame the shared, persistent animator produces — whichever chip view was created
+    /// most recently "wins" this registration, and stale closures targeting a deallocated
+    /// prior view are harmless no-ops via `[weak self]`. Starting/stopping the shared animator
+    /// is `StatusItemController`'s job, tied to settings, not this view's lifecycle.
+    private func registerForAnimationFramesIfNeeded() {
         guard shouldAnimateTrigger else {
             return
         }
 
-        let timer = Timer(timeInterval: 1.0 / 12.0, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                self?.advanceAnimationFrame()
-            }
-        }
-        RunLoop.main.add(timer, forMode: .common)
-        animationTimer = timer
-    }
-
-    private func advanceAnimationFrame() {
-        animationPhase += animationStep
-        if animationPhase >= 1 {
-            animationPhase.formTruncatingRemainder(dividingBy: 1)
-        }
-
-        configureIcon()
-    }
-
-    private var animationStep: CGFloat {
-        let loadBoost = CGFloat(segment.usageRatio.clamped(to: 0...1)) * 0.055
-        switch segment.state {
-        case .warning:
-            return 0.105 + loadBoost
-        case .active, .refreshing:
-            return 0.075 + loadBoost
-        case .normal:
-            return 0.045 + loadBoost
-        case .unavailable:
-            return 0.03
+        TriggerIconAnimator.shared.onFrame = { [weak self] in
+            self?.configureIcon()
         }
     }
 

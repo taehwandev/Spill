@@ -127,8 +127,6 @@ extension StatusItemController {
         let triggerIconStyle = settings.menuBarTriggerIconStyle
         if let image = MenuBarTriggerIconRenderer.image(
             style: triggerIconStyle,
-            tintColor: isSpillBarVisible ? .systemTeal : .labelColor,
-            usageRatio: 0,
             size: 18
         ) {
             button.image = image

@@ -11,7 +11,6 @@ struct MenuBarTriggerIconPreview: View {
     var body: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 12.0, paused: !isAnimated || !style.animates)) { context in
             let phase = isAnimated ? phase(for: context.date) : 0.18
-            let usageRatio = previewUsageRatio(for: style, phase: phase)
 
             HStack(spacing: 10) {
                 Text(PreferencesL10n.text(.preview))
@@ -19,7 +18,7 @@ struct MenuBarTriggerIconPreview: View {
                     .foregroundStyle(.secondary)
 
                 HStack(spacing: 6) {
-                    triggerImage(style: style, phase: phase, usageRatio: usageRatio)
+                    triggerImage(style: style, phase: phase)
                         .frame(width: Self.appliedTriggerIconSize, height: Self.appliedTriggerIconSize)
 
                     Text("12:45")
@@ -40,12 +39,10 @@ struct MenuBarTriggerIconPreview: View {
         }
     }
 
-    private func triggerImage(style: MenuBarTriggerIconStyle, phase: CGFloat, usageRatio: Double) -> some View {
+    private func triggerImage(style: MenuBarTriggerIconStyle, phase: CGFloat) -> some View {
         Group {
             if let image = MenuBarTriggerIconRenderer.image(
                 style: style,
-                tintColor: .controlAccentColor,
-                usageRatio: usageRatio,
                 phase: phase,
                 size: Self.appliedTriggerIconSize
             ) {
@@ -63,14 +60,5 @@ struct MenuBarTriggerIconPreview: View {
 
     private func phase(for date: Date) -> CGFloat {
         CGFloat(date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1))
-    }
-
-    private func previewUsageRatio(for style: MenuBarTriggerIconStyle, phase: CGFloat) -> Double {
-        guard style.usesPerformanceEffect else {
-            return 0.35
-        }
-
-        let wave = (sin(Double(phase) * .pi * 2) + 1) / 2
-        return 0.35 + wave * 0.45
     }
 }

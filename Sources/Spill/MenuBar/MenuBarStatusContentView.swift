@@ -522,6 +522,7 @@ private final class MenuBarMainTriggerChipView: NSView {
         configureBadge()
         installSubviews()
         refreshColors()
+        registerForAnimationFramesIfNeeded()
         setAccessibilityLabel(accessibilityText)
     }
 
@@ -544,8 +545,7 @@ extension MenuBarMainTriggerChipView {
         if case let .trigger(style) = trigger.visualStyle,
            let image = MenuBarTriggerIconRenderer.image(
                style: style,
-               tintColor: triggerColor,
-               usageRatio: trigger.usageRatio,
+               phase: TriggerIconAnimator.shared.phase,
                size: 18
            )
         {
@@ -638,6 +638,16 @@ extension MenuBarMainTriggerChipView {
         }
         caffeineIconView.contentTintColor = caffeineColor
         badgeLabel.textColor = caffeineColor
+    }
+
+    private func registerForAnimationFramesIfNeeded() {
+        guard trigger.animates, triggerUsesCustomIcon else {
+            return
+        }
+
+        TriggerIconAnimator.shared.onFrame = { [weak self] in
+            self?.configureIcon()
+        }
     }
 
     private var triggerUsesCustomIcon: Bool {

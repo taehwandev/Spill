@@ -45,13 +45,18 @@ enum MenuBarTriggerIconStyle: String, CaseIterable, Identifiable, Sendable {
     }
 
     var animates: Bool {
-        false
+        switch self {
+        case .spill:
+            return true
+        case .symbolizedS:
+            return true
+        }
     }
 
     var usesCustomRenderer: Bool {
         switch self {
         case .spill:
-            return false
+            return true
         case .symbolizedS:
             return true
         }

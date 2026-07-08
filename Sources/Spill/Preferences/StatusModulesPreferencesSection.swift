@@ -379,8 +379,6 @@ extension ClockAreaStatusPreferencesSection {
         if let triggerStyle,
            let image = MenuBarTriggerIconRenderer.image(
                style: triggerStyle,
-               tintColor: .controlAccentColor,
-               usageRatio: 0.35,
                size: 11
            )
         {
