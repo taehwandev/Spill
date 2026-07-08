@@ -136,27 +136,52 @@ final class TokenMeteringCoordinator: NSObject {
         dashboardStore.refreshPanelSummary()
     }
 
+    /// Fire-and-forget wrapper for call sites (app launch, menu bar open, etc.) that don't
+    /// need to wait for the result. See `refreshMenuBarTokenTotalAsync` for why the actual
+    /// database read must never run synchronously on the calling thread.
     func refreshMenuBarTokenTotal(now: Date = Date(), force: Bool = false) {
+        Task { [weak self] in
+            guard await self?.refreshMenuBarTokenTotalAsync(now: now, force: force) == true else {
+                return
+            }
+            self?.usageEventsDidChange?()
+        }
+    }
+
+    /// `openDatabase()` runs the full one-time migration chain (including
+    /// `removeTimeWindowDuplicateEvents`, an O(n²)-ish self-join DELETE) the first time a
+    /// process opens the database. On an install that accumulated many events between app
+    /// launches, that migration alone can take seconds. This coordinator is `@MainActor`,
+    /// but `applicationDidFinishLaunching` calling this synchronously blocked the main
+    /// thread for the entire migration — confirmed in production as a multi-second app
+    /// hang at launch. `usageStore` is `@unchecked Sendable` and already internally
+    /// thread-safe (NSLock-guarded), so the blocking read is safe to run off the main
+    /// actor; only the final property writes need to land back on it.
+    @discardableResult
+    func refreshMenuBarTokenTotalAsync(now: Date = Date(), force: Bool = false) async -> Bool {
         let calendar = Calendar.autoupdatingCurrent
         let dayStart = calendar.startOfDay(for: now)
         guard force || shouldRefreshMenuBarTokenTotal else {
-            return
+            return false
         }
         guard force || menuBarTokenDayStart != dayStart else {
-            return
+            return false
         }
 
         let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? now
-        guard let totals = usageStore.menuBarTokenTotals(
-            startingAt: dayStart,
-            endingBefore: dayEnd
-        ) else {
-            return
+        let usageStore = usageStore
+        let totals = await Task.detached(priority: .utility) {
+            usageStore.menuBarTokenTotals(startingAt: dayStart, endingBefore: dayEnd)
+        }.value
+
+        guard let totals else {
+            return false
         }
 
         menuBarTokenDayStart = dayStart
         menuBarTokenTotal = totals.dailyTokens
         menuBarAllTimeTokenTotal = totals.allTimeTokens
+        return true
     }
 
     func requestMenuBarTokenUsageCollectionIfNeeded(now: Date = Date()) {
@@ -255,7 +280,6 @@ final class TokenMeteringCoordinator: NSObject {
         .receive(on: RunLoop.main)
         .sink { [weak self] _ in
             self?.refreshMenuBarTokenTotal(force: true)
-            self?.usageEventsDidChange?()
         }
         .store(in: &cancellables)
 
@@ -445,7 +469,6 @@ final class TokenMeteringCoordinator: NSObject {
 
     @objc private func tokenUsageEventsDidChangeFromDistributedNotification(_ notification: Notification) {
         refreshMenuBarTokenTotal(force: true)
-        usageEventsDidChange?()
     }
 
     private func openDashboardProcessOrFallback(

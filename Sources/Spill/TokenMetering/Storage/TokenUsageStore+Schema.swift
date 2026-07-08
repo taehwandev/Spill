@@ -35,6 +35,22 @@ extension TokenUsageStore {
             """,
             database: database
         )
+        // Created before the user_version migration block below: removeTimeWindowDuplicateEvents
+        // runs up to five times across versions 5-10 on a database that jumps straight from an
+        // old version to the current one, and its correlated EXISTS subquery matches on exactly
+        // (run_id, input_tokens, output_tokens). Without this index in place first, every one of
+        // those passes falls back to a full table scan per candidate row on a table that can hold
+        // hundreds of thousands of events — this was the root cause of a confirmed production
+        // main-thread hang at app launch (see refreshMenuBarTokenTotalAsync). idx_token_usage_events_run_id
+        // below becomes a redundant no-op once this broader index exists, but is left in place
+        // since other queries reference it by name.
+        try execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_token_usage_events_dedup_lookup
+            ON token_usage_events(run_id, input_tokens, output_tokens)
+            """,
+            database: database
+        )
 
         let userVersion = databaseUserVersion(database: database)
         if userVersion < 2 {

@@ -1678,7 +1678,7 @@ final class TokenUsageStoreTests: XCTestCase {
     }
 
     @MainActor
-    func testMenuBarAITokenStatusKeepsLastValueWhenStoreReadTemporarilyFails() throws {
+    func testMenuBarAITokenStatusKeepsLastValueWhenStoreReadTemporarilyFails() async throws {
         let eventsURL = temporaryEventsURL()
         let storeDirectoryURL = eventsURL.deletingLastPathComponent()
         let store = TokenUsageStore(fileURL: eventsURL)
@@ -1699,7 +1699,7 @@ final class TokenUsageStoreTests: XCTestCase {
             usageStore: store
         )
 
-        coordinator.refreshMenuBarTokenTotal(now: now, force: true)
+        await coordinator.refreshMenuBarTokenTotalAsync(now: now, force: true)
         XCTAssertEqual(coordinator.menuBarTokenTotal, 150)
         XCTAssertEqual(coordinator.menuBarAllTimeTokenTotal, 150)
 
@@ -1709,7 +1709,7 @@ final class TokenUsageStoreTests: XCTestCase {
             try? FileManager.default.removeItem(at: storeDirectoryURL)
         }
 
-        coordinator.refreshMenuBarTokenTotal(now: now.addingTimeInterval(60), force: true)
+        await coordinator.refreshMenuBarTokenTotalAsync(now: now.addingTimeInterval(60), force: true)
 
         XCTAssertEqual(coordinator.menuBarTokenTotal, 150)
         XCTAssertEqual(coordinator.menuBarAllTimeTokenTotal, 150)
