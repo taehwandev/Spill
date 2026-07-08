@@ -31,53 +31,35 @@ enum MenuBarTriggerIconRenderer {
 
             let rect = NSRect(x: 0, y: 0, width: size, height: size)
                 .insetBy(dx: size * 0.12, dy: size * 0.12)
-            let path = centerline(in: rect)
-            path.lineWidth = max(2.0, size * 0.18)
-            path.lineCapStyle = .round
-            path.lineJoinStyle = .round
-            tintColor.setStroke()
-            path.stroke()
+            let path = outline(in: rect)
+            tintColor.setFill()
+            path.fill()
 
             image.isTemplate = false
             return image
         }
 
-        private static func centerline(in rect: NSRect) -> NSBezierPath {
+        /// The Spill wordmark's "S" glyph outline (`WordmarkSShape.points`), filled rather
+        /// than stroked so the menu bar glyph matches the brand mark used everywhere else
+        /// (web favicon, Settings brand lockup) instead of a simplified centerline curve.
+        private static func outline(in rect: NSRect) -> NSBezierPath {
             let path = NSBezierPath()
 
-            func point(_ x: CGFloat, _ y: CGFloat) -> NSPoint {
+            func point(_ fraction: CGPoint) -> NSPoint {
                 NSPoint(
-                    x: rect.minX + rect.width * x,
-                    y: rect.minY + rect.height * (1 - y)
+                    x: rect.minX + rect.width * fraction.x,
+                    y: rect.minY + rect.height * (1 - fraction.y)
                 )
             }
 
-            path.move(to: point(0.76, 0.16))
-            path.curve(
-                to: point(0.34, 0.22),
-                controlPoint1: point(0.62, 0.10),
-                controlPoint2: point(0.42, 0.10)
-            )
-            path.curve(
-                to: point(0.27, 0.42),
-                controlPoint1: point(0.24, 0.32),
-                controlPoint2: point(0.21, 0.38)
-            )
-            path.curve(
-                to: point(0.60, 0.51),
-                controlPoint1: point(0.34, 0.49),
-                controlPoint2: point(0.51, 0.48)
-            )
-            path.curve(
-                to: point(0.72, 0.70),
-                controlPoint1: point(0.72, 0.55),
-                controlPoint2: point(0.80, 0.62)
-            )
-            path.curve(
-                to: point(0.25, 0.84),
-                controlPoint1: point(0.62, 0.86),
-                controlPoint2: point(0.42, 0.90)
-            )
+            guard let first = WordmarkSShape.points.first else {
+                return path
+            }
+            path.move(to: point(first))
+            for fraction in WordmarkSShape.points.dropFirst() {
+                path.line(to: point(fraction))
+            }
+            path.close()
 
             return path
         }
