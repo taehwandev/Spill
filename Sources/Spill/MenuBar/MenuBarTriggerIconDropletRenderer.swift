@@ -4,11 +4,13 @@ import AppKit
 enum MenuBarTriggerIconDropletRenderer {
     private static let keyColor = NSColor(calibratedRed: 0.0863, green: 0.7451, blue: 0.5451, alpha: 1)
 
-    /// A bright diagonal shine sweeps once across the drop, clipped to its silhouette — like
-    /// light glinting off a wet surface. The drop shape itself stays still; the earlier
-    /// squash-stretch "slosh" wobble was too small a pixel delta at menu bar size (±10%
-    /// width / ±7% height, well under 2px) to reliably read as motion, so it's replaced
-    /// entirely rather than layered under this.
+    /// A sharp streak of light falls from top to bottom, clipped to the drop's silhouette —
+    /// like a spark dropping straight down a wire. It only takes the first `fallWindow`
+    /// fraction of the burst (fast, not a slow glide); the icon then sits still for the rest
+    /// of the burst. The drop shape itself never moves — the earlier squash-stretch "slosh"
+    /// wobble was too small a pixel delta at menu bar size (±10% width / ±7% height, well
+    /// under 2px) to reliably read as motion, and a first attempt at this shine swept
+    /// sideways across the full burst, which read as slow drifting rather than a fall.
     static func image(phase: CGFloat, size: CGFloat) -> NSImage? {
         guard size.isFinite, size > 0 else {
             return nil
@@ -34,32 +36,40 @@ enum MenuBarTriggerIconDropletRenderer {
         keyColor.setFill()
         path.fill()
 
-        NSGraphicsContext.saveGraphicsState()
-        path.addClip()
-        NSColor.white.withAlphaComponent(0.92).setFill()
-        shineBand(phase: phase, size: size).fill()
-        NSGraphicsContext.restoreGraphicsState()
+        if let shine = fallingShineBand(phase: phase, size: size) {
+            NSGraphicsContext.saveGraphicsState()
+            path.addClip()
+            NSColor.white.withAlphaComponent(0.95).setFill()
+            shine.fill()
+            NSGraphicsContext.restoreGraphicsState()
+        }
 
         image.isTemplate = false
         return image
     }
 
-    /// A wide diagonal band, translated perpendicular to its own length as `phase` advances
-    /// from 0 to 1, so it enters from one side of the icon, sweeps across, and exits the
-    /// other — clipped to the drop's silhouette by the caller so only the portion crossing
-    /// the shape is visible.
-    private static func shineBand(phase: CGFloat, size: CGFloat) -> NSBezierPath {
-        let angle: CGFloat = .pi / 4 // 45°, bottom-left to top-right
-        let along = CGPoint(x: cos(angle), y: sin(angle))
-        let across = CGPoint(x: -sin(angle), y: cos(angle))
+    /// A thin band translated along its own length (not swept sideways across it), from
+    /// fully above the icon to fully below, only during the first `fallWindow` of the burst
+    /// — `nil` afterward, so nothing draws for the remainder. Clipped to the drop's
+    /// silhouette by the caller so only the portion crossing the shape is visible.
+    private static func fallingShineBand(phase: CGFloat, size: CGFloat) -> NSBezierPath? {
+        let fallWindow: CGFloat = 0.28
+        guard phase <= fallWindow else {
+            return nil
+        }
+        let fallT = phase / fallWindow
+
+        let tilt: CGFloat = 20 * .pi / 180 // slight lean off vertical, not a dead-straight drop
+        let along = CGPoint(x: -sin(tilt), y: -cos(tilt)) // points downward (AppKit is y-up)
+        let across = CGPoint(x: -along.y, y: along.x)
 
         let center = CGPoint(x: size / 2, y: size / 2)
-        let travel = size * 1.4
-        let offset = (phase - 0.5) * travel
-        let bandCenter = CGPoint(x: center.x + across.x * offset, y: center.y + across.y * offset)
+        let travel = size * 2.2
+        let offset = -travel / 2 + travel * fallT
+        let bandCenter = CGPoint(x: center.x + along.x * offset, y: center.y + along.y * offset)
 
-        let halfLength = size * 1.1 // long enough that both ends sit well outside the canvas
-        let halfWidth = size * 0.11
+        let halfLength = size * 0.55
+        let halfWidth = size * 0.06 // thin — sharp, not a soft wide glow
 
         func corner(_ lengthSign: CGFloat, _ widthSign: CGFloat) -> NSPoint {
             NSPoint(
