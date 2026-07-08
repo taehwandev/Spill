@@ -4,13 +4,16 @@ import AppKit
 enum MenuBarTriggerIconDropletRenderer {
     private static let keyColor = NSColor(calibratedRed: 0.0863, green: 0.7451, blue: 0.5451, alpha: 1)
 
-    /// A sharp streak of light falls from top to bottom, clipped to the drop's silhouette —
-    /// like a spark dropping straight down a wire. It only takes the first `fallWindow`
-    /// fraction of the burst (fast, not a slow glide); the icon then sits still for the rest
-    /// of the burst. The drop shape itself never moves — the earlier squash-stretch "slosh"
-    /// wobble was too small a pixel delta at menu bar size (±10% width / ±7% height, well
-    /// under 2px) to reliably read as motion, and a first attempt at this shine swept
-    /// sideways across the full burst, which read as slow drifting rather than a fall.
+    /// A glint of light traces down the drop's own outline — top, down the right edge, to the
+    /// bottom point — like a bead of water running down the side of a glass, rather than a
+    /// beam crossing through the interior. It's a short fading comet trail (bright head,
+    /// transparent tail), only during the first `traceWindow` of the burst (fast, not a slow
+    /// glide); the icon then sits still for the rest of the burst. The drop shape itself
+    /// never moves — the earlier squash-stretch "slosh" wobble was too small a pixel delta at
+    /// menu bar size (±10% width / ±7% height, well under 2px) to reliably read as motion,
+    /// and an interior-crossing shine band (two prior attempts: a wide sideways sweep, then a
+    /// straight top-to-bottom drop) both read as unrelated to the drop's own shape rather than
+    /// water actually moving on its surface.
     static func image(phase: CGFloat, size: CGFloat) -> NSImage? {
         guard size.isFinite, size > 0 else {
             return nil
@@ -36,11 +39,16 @@ enum MenuBarTriggerIconDropletRenderer {
         keyColor.setFill()
         path.fill()
 
-        if let shine = fallingShineBand(phase: phase, size: size) {
+        let trail = edgeGlintTrail(phase: phase, rect: rect)
+        if !trail.isEmpty {
             NSGraphicsContext.saveGraphicsState()
             path.addClip()
-            NSColor.white.withAlphaComponent(0.95).setFill()
-            shine.fill()
+            for (segmentPath, alpha) in trail {
+                NSColor.white.withAlphaComponent(alpha).setStroke()
+                segmentPath.lineWidth = size * 0.09
+                segmentPath.lineCapStyle = .round
+                segmentPath.stroke()
+            }
             NSGraphicsContext.restoreGraphicsState()
         }
 
@@ -48,43 +56,79 @@ enum MenuBarTriggerIconDropletRenderer {
         return image
     }
 
-    /// A thin band translated along its own length (not swept sideways across it), from
-    /// fully above the icon to fully below, only during the first `fallWindow` of the burst
-    /// — `nil` afterward, so nothing draws for the remainder. Clipped to the drop's
-    /// silhouette by the caller so only the portion crossing the shape is visible.
-    private static func fallingShineBand(phase: CGFloat, size: CGFloat) -> NSBezierPath? {
-        let fallWindow: CGFloat = 0.28
-        guard phase <= fallWindow else {
-            return nil
+    /// Points sampling the top-to-bottom-via-the-right-edge half of the outline (the initial
+    /// straight edge plus the first two curves — `WaterDropletOutline.segments[0...2]` — which
+    /// end exactly at the drop's bottom point), flattened into short line segments so a
+    /// sub-range of them can be stroked as a moving trail. Curves are sampled at 10 steps each;
+    /// coarser would look faceted at this line width, finer is wasted precision at icon size.
+    private static let topToBottomPolyline: [CGPoint] = {
+        let samplesPerCurve = 10
+        var points = [WaterDropletOutline.start]
+        var previous = WaterDropletOutline.start
+        for segment in WaterDropletOutline.segments.prefix(3) {
+            if let control1 = segment.control1, let control2 = segment.control2 {
+                for step in 1...samplesPerCurve {
+                    let t = CGFloat(step) / CGFloat(samplesPerCurve)
+                    points.append(cubicBezierPoint(previous, control1, control2, segment.end, t))
+                }
+            } else {
+                points.append(segment.end)
+            }
+            previous = segment.end
         }
-        let fallT = phase / fallWindow
+        return points
+    }()
 
-        let tilt: CGFloat = 20 * .pi / 180 // slight lean off vertical, not a dead-straight drop
-        let along = CGPoint(x: -sin(tilt), y: -cos(tilt)) // points downward (AppKit is y-up)
-        let across = CGPoint(x: -along.y, y: along.x)
+    private static func cubicBezierPoint(
+        _ start: CGPoint,
+        _ control1: CGPoint,
+        _ control2: CGPoint,
+        _ end: CGPoint,
+        _ t: CGFloat
+    ) -> CGPoint {
+        let mt = 1 - t
+        let x = mt * mt * mt * start.x + 3 * mt * mt * t * control1.x + 3 * mt * t * t * control2.x + t * t * t * end.x
+        let y = mt * mt * mt * start.y + 3 * mt * mt * t * control1.y + 3 * mt * t * t * control2.y + t * t * t * end.y
+        return CGPoint(x: x, y: y)
+    }
 
-        let center = CGPoint(x: size / 2, y: size / 2)
-        let travel = size * 2.2
-        let offset = -travel / 2 + travel * fallT
-        let bandCenter = CGPoint(x: center.x + along.x * offset, y: center.y + along.y * offset)
+    /// The moving comet trail, as individual short segments each with their own fade-in
+    /// alpha (transparent tail, opaque head) — a single stroke can't carry a gradient along
+    /// its length in AppKit, so the trail is built from several short overlapping strokes
+    /// instead. Empty once `phase` is past `traceWindow`, so nothing draws for the remainder
+    /// of the burst.
+    private static func edgeGlintTrail(phase: CGFloat, rect: NSRect) -> [(path: NSBezierPath, alpha: CGFloat)] {
+        let traceWindow: CGFloat = 0.4
+        guard phase <= traceWindow else {
+            return []
+        }
 
-        let halfLength = size * 0.55
-        let halfWidth = size * 0.06 // thin — sharp, not a soft wide glow
+        let points = topToBottomPolyline
+        let traceT = phase / traceWindow
+        let headIndex = Int((traceT * CGFloat(points.count - 1)).rounded())
+        let trailLength = 9
+        let tailIndex = max(0, headIndex - trailLength)
+        guard headIndex > tailIndex else {
+            return []
+        }
 
-        func corner(_ lengthSign: CGFloat, _ widthSign: CGFloat) -> NSPoint {
+        func mapped(_ fraction: CGPoint) -> NSPoint {
             NSPoint(
-                x: bandCenter.x + along.x * halfLength * lengthSign + across.x * halfWidth * widthSign,
-                y: bandCenter.y + along.y * halfLength * lengthSign + across.y * halfWidth * widthSign
+                x: rect.minX + rect.width * fraction.x,
+                y: rect.minY + rect.height * (1 - fraction.y)
             )
         }
 
-        let path = NSBezierPath()
-        path.move(to: corner(1, 1))
-        path.line(to: corner(1, -1))
-        path.line(to: corner(-1, -1))
-        path.line(to: corner(-1, 1))
-        path.close()
-        return path
+        var trail: [(NSBezierPath, CGFloat)] = []
+        for index in tailIndex..<headIndex {
+            let fractionAlongTrail = CGFloat(index - tailIndex) / CGFloat(headIndex - tailIndex)
+            let alpha = fractionAlongTrail * fractionAlongTrail // eases in toward the bright head
+            let segmentPath = NSBezierPath()
+            segmentPath.move(to: mapped(points[index]))
+            segmentPath.line(to: mapped(points[index + 1]))
+            trail.append((segmentPath, alpha))
+        }
+        return trail
     }
 
     private static func outline(in rect: NSRect) -> NSBezierPath {
