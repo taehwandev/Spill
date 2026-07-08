@@ -103,7 +103,7 @@ extension TokenUsageHistoryImportCoordinator {
         let reconciliationCutoffRowID = usesStagingInbox ? store.maxRowID(forAITool: .claude) : 0
         if usesStagingInbox {
             try? FileManager.default.removeItem(at: stagingInbox)
-            try? TokenUsageStore.createPrivateDirectoryIfNeeded(at: stagingInbox)
+            _ = try? TokenUsageStore.createPrivateDirectoryIfNeeded(at: stagingInbox)
         }
 
         var environment = [
@@ -167,32 +167,35 @@ extension TokenUsageHistoryImportCoordinator {
             unsupportedRecords: summary.unsupportedRecords,
             message: nil
         )
-        // A full (`--all`) scan lists every real turn for every session still on disk under
-        // the stable span_id formula, so it is authoritative. Delete stored Claude events
-        // for those sessions that are not in the freshly written set — these are
-        // pre-stable-span_id duplicates that inflated historical counts. Incremental scans
-        // only cover a recent window and are never authoritative, so reconciliation is
-        // gated to full scans.
-        //
-        // Move the staged events into the live inbox *before* reconciling, and only
-        // reconcile run_ids whose canonical replacement file was confirmed moved
-        // successfully. Reconciling a run_id first and moving its replacement second would
-        // leave a permanent gap if the move failed after the stale rows were already
-        // deleted — this ordering guarantees a stale row is never removed without its
-        // replacement already queued for insert.
-        if usesStagingInbox {
-            let authoritative = claudeAuthoritativeSpanIDs(inInbox: stagingInbox)
-            let movedRunIDs = moveStagedInboxFilesToLiveInbox(from: stagingInbox)
-            let reconcilableAuthoritative = authoritative.filter { movedRunIDs.contains($0.key) }
-            if !reconcilableAuthoritative.isEmpty {
-                store.reconcileClaudeSessions(
-                    authoritativeSpanIDsByRun: reconcilableAuthoritative,
-                    notInsertedAfterRowID: reconciliationCutoffRowID
-                )
-            }
-        }
+        reconcileStagedClaudeEventsIfNeeded(
+            usesStagingInbox: usesStagingInbox,
+            stagingInbox: stagingInbox,
+            reconciliationCutoffRowID: reconciliationCutoffRowID
+        )
         syncClaudeHistoryStateToLiveState()
         return result
+    }
+
+    /// Reconciles full Claude scans only after their staged replacement events
+    /// are moved to the live inbox. A full (`--all`) scan is authoritative for
+    /// stable span IDs, but deleting stale rows before queuing replacements can
+    /// create permanent gaps if a move fails.
+    private func reconcileStagedClaudeEventsIfNeeded(
+        usesStagingInbox: Bool,
+        stagingInbox: URL,
+        reconciliationCutoffRowID: Int64
+    ) {
+        guard usesStagingInbox else { return }
+
+        let authoritative = claudeAuthoritativeSpanIDs(inInbox: stagingInbox)
+        let movedRunIDs = moveStagedInboxFilesToLiveInbox(from: stagingInbox)
+        let reconcilableAuthoritative = authoritative.filter { movedRunIDs.contains($0.key) }
+        if !reconcilableAuthoritative.isEmpty {
+            store.reconcileClaudeSessions(
+                authoritativeSpanIDsByRun: reconcilableAuthoritative,
+                notInsertedAfterRowID: reconciliationCutoffRowID
+            )
+        }
     }
 
     func claudeReconcileStagingInboxDirectory() -> URL {
@@ -244,7 +247,7 @@ extension TokenUsageHistoryImportCoordinator {
             return []
         }
 
-        try? TokenUsageStore.createPrivateDirectoryIfNeeded(at: liveInbox)
+        _ = try? TokenUsageStore.createPrivateDirectoryIfNeeded(at: liveInbox)
         let sidecars = entries.filter { $0.pathExtension == "accounting" }
         let events = entries.filter { $0.pathExtension == "json" || $0.pathExtension == "jsonl" }
 

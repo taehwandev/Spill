@@ -26,7 +26,7 @@ final class TokenUsageInboxMonitor: @unchecked Sendable {
             isStopped = false
 
             let inboxURL = store.eventsInboxURL ?? TokenUsageStore.defaultInboxURL()
-            try? TokenUsageStore.createPrivateDirectoryIfNeeded(at: inboxURL)
+            _ = try? TokenUsageStore.createPrivateDirectoryIfNeeded(at: inboxURL)
 
             let descriptor = Darwin.open(inboxURL.path, O_EVTONLY)
             guard descriptor >= 0 else {
