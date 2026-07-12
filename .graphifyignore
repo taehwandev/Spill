@@ -1,0 +1,7 @@
+# agentplaybook-graphify-inputs:start
+.agentplaybook/
+.agents/
+.claude/
+.codex/
+graphify-out/
+# agentplaybook-graphify-inputs:end

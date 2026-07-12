@@ -1158,5 +1158,27 @@
       "Bash(SPILL_TOKEN_USAGE_AI_TOOL=claude scripts/agent_workspace_policy.py:*)",
       "Bash(SPILL_TOKEN_USAGE_AI_TOOL=claude scripts/agent_workspace_policy.py *)"
     ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "graphify hook-guard search"
+          }
+        ]
+      },
+      {
+        "matcher": "Read|Glob",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "graphify hook-guard read"
+          }
+        ]
+      }
+    ]
   }
 }

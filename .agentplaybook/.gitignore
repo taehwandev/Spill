@@ -1,0 +1,8 @@
+# agentplaybook-project-assets:start
+/*
+!/.gitignore
+!/skills/
+/skills/*
+!/skills/graphify/
+!/skills/graphify/**
+# agentplaybook-project-assets:end
