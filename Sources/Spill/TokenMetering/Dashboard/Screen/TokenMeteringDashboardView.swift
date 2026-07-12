@@ -158,14 +158,14 @@ extension TokenMeteringDashboardView {
     }
 
     private var selectedControlAccent: Color {
-        store.selectedTool?.dashboardTint ?? TokenMeteringDashboardToolPalette.antigravity
+        store.selectedTool?.dashboardTint ?? TokenUsageAITool.antigravity.dashboardTint
     }
 
     private var selectedControlAccentHighlight: Color {
         if let tool = store.selectedTool {
             return tool.dashboardTint.opacity(1.15)
         }
-        return TokenMeteringDashboardToolPalette.antigravity.opacity(1.15)
+        return TokenUsageAITool.antigravity.dashboardTint.opacity(1.15)
     }
 
     private var dashboardBody: some View {

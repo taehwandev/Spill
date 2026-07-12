@@ -1,9 +1,35 @@
 import SwiftUI
 
 enum SpillPanelSurface {
-    static let cardFill = Color(red: 0.12, green: 0.17, blue: 0.20).opacity(0.92)
-    static let cardFillHovered = Color(red: 0.15, green: 0.21, blue: 0.24).opacity(0.96)
-    static let insetFill = Color(red: 0.10, green: 0.15, blue: 0.18).opacity(0.88)
+    static var cardFill: Color {
+        Color(nsColor: NSColor(name: nil) { appearance in
+            if appearance.name.rawValue.lowercased().contains("dark") {
+                return NSColor(white: 0.13, alpha: 0.55)
+            } else {
+                return NSColor(white: 1.0, alpha: 0.82)
+            }
+        })
+    }
+
+    static var cardFillHovered: Color {
+        Color(nsColor: NSColor(name: nil) { appearance in
+            if appearance.name.rawValue.lowercased().contains("dark") {
+                return NSColor(white: 0.17, alpha: 0.70)
+            } else {
+                return NSColor(white: 1.0, alpha: 0.94)
+            }
+        })
+    }
+
+    static var insetFill: Color {
+        Color(nsColor: NSColor(name: nil) { appearance in
+            if appearance.name.rawValue.lowercased().contains("dark") {
+                return NSColor(white: 0.08, alpha: 0.45)
+            } else {
+                return NSColor(red: 0.95, green: 0.96, blue: 0.97, alpha: 0.85)
+            }
+        })
+    }
 
     static func cardFill(isHovered: Bool) -> Color {
         isHovered ? cardFillHovered : cardFill

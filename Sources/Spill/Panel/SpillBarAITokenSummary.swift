@@ -27,7 +27,7 @@ struct SpillBarAITokenSummary: View {
             tokenMeteringDetailAction()
         } label: {
             HStack(spacing: 10) {
-                statusIconBadge(symbolName: "chart.bar.xaxis", tint: .teal)
+                statusIconBadge(symbolName: "chart.bar.xaxis", tint: SpillStatusState.active.panelTint)
 
                 VStack(alignment: .leading, spacing: 5) {
                     tokenSummaryHeader
@@ -69,7 +69,7 @@ struct SpillBarAITokenSummary: View {
             .background(tokenSummaryBackground)
             .overlay { tokenSummaryStroke }
             .shadow(
-                color: Color.teal.opacity(isHovered ? 0.08 : 0.02),
+                color: SpillStatusState.active.panelTint.opacity(isHovered ? 0.08 : 0.02),
                 radius: isHovered ? 6 : 2,
                 y: isHovered ? 3 : 1
             )
@@ -179,7 +179,7 @@ struct SpillBarAITokenSummary: View {
     }
 
     private var tokenSyncBadgeColor: Color {
-        isPrivateUsageUploadActive ? .blue : .teal
+        isPrivateUsageUploadActive ? .blue : SpillStatusState.active.panelTint
     }
 
     private var isPrivateUsageUploadActive: Bool {
@@ -202,7 +202,7 @@ struct SpillBarAITokenSummary: View {
                 .fill(SpillPanelSurface.cardFill(isHovered: isHovered))
             LinearGradient(
                 colors: [
-                    Color.teal.opacity(isHovered ? 0.09 : 0.05),
+                    SpillStatusState.active.panelTint.opacity(isHovered ? 0.09 : 0.05),
                     Color.blue.opacity(isHovered ? 0.05 : 0.02)
                 ],
                 startPoint: .topLeading,
@@ -217,8 +217,8 @@ struct SpillBarAITokenSummary: View {
             .stroke(
                 LinearGradient(
                     colors: isHovered
-                        ? [Color.teal.opacity(0.40), Color.blue.opacity(0.20)]
-                        : [Color.teal.opacity(0.22), Color.blue.opacity(0.08)],
+                        ? [SpillStatusState.active.panelTint.opacity(0.40), Color.blue.opacity(0.20)]
+                        : [SpillStatusState.active.panelTint.opacity(0.22), Color.blue.opacity(0.08)],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 ),

@@ -137,16 +137,17 @@ struct TokenMeteringDashboardSessionsTable: View {
                     HStack(spacing: 4) {
                         Image(systemName: isSelected ? "folder.fill" : "folder")
                             .font(.system(size: 8.5, weight: .semibold))
+                            .foregroundStyle(isSelected ? selectedControlAccent : .secondary)
                         Text(session.projectTitle)
                             .font(.system(size: 9, weight: .medium))
                             .lineLimit(1)
+                            .foregroundStyle(isSelected ? .primary : .secondary)
                     }
-                    .foregroundStyle(isSelected ? .white.opacity(0.75) : .secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 Text(session.detail)
                     .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(isSelected ? .white.opacity(0.82) : .secondary)
+                    .foregroundStyle(isSelected ? Color.primary.opacity(0.72) : .secondary)
                     .lineLimit(1)
                     .frame(width: 150, alignment: .leading)
                 Text(session.value)
@@ -157,11 +158,11 @@ struct TokenMeteringDashboardSessionsTable: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
-            .foregroundStyle(isSelected ? .white : .primary)
+            .foregroundStyle(isSelected ? selectedControlAccent : .primary)
             .background(
                 ZStack {
                     if isSelected {
-                        selectedControlAccent.opacity(isHovered ? 0.9 : 0.8)
+                        selectedControlAccent.opacity(isHovered ? 0.16 : 0.10)
                     } else {
                         if isHovered {
                             Color.primary.opacity(0.04)
@@ -176,7 +177,7 @@ struct TokenMeteringDashboardSessionsTable: View {
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
                     .stroke(
                         isSelected
-                            ? selectedControlAccent.opacity(0.15)
+                            ? selectedControlAccent.opacity(0.24)
                             : Color.primary.opacity(isHovered ? 0.06 : 0.03),
                         lineWidth: 0.5
                     )

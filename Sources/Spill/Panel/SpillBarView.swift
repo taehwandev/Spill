@@ -51,6 +51,15 @@ struct SpillBarView: View {
             .frame(maxWidth: .infinity, alignment: .top)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(
+            Color(nsColor: NSColor(name: nil) { appearance in
+                if appearance.name.rawValue.lowercased().contains("dark") {
+                    return NSColor(white: 0.08, alpha: 0.45)
+                } else {
+                    return NSColor(white: 0.98, alpha: 0.60)
+                }
+            })
+        )
         .onChange(of: panelState.pendingDismiss) { _, pendingDismiss in
             updatePendingDismiss(pendingDismiss)
         }
@@ -203,11 +212,11 @@ extension SpillBarView {
         case .upToDate:
             return .green
         case .unsupported:
-            return .orange
+            return SpillStatusState.warning.panelTint
         case .checking, .idle, .failed:
             return .secondary
         case .available:
-            return .teal
+            return SpillStatusState.active.panelTint
         }
     }
 
@@ -601,8 +610,8 @@ extension SpillBarView {
         }
 
         return [
-            MetricSparklineSeries(values: statusStore.networkTrafficHistory.received, tint: .teal),
-            MetricSparklineSeries(values: statusStore.networkTrafficHistory.sent, tint: .orange)
+            MetricSparklineSeries(values: statusStore.networkTrafficHistory.received, tint: SpillStatusState.active.panelTint),
+            MetricSparklineSeries(values: statusStore.networkTrafficHistory.sent, tint: SpillStatusState.warning.panelTint)
         ]
     }
 
@@ -650,11 +659,11 @@ extension SpillBarView {
     }
 
     private func metricValueTint(for module: SpillStatusModule, state: SpillStatusState) -> Color {
-        module == .network ? .teal : state.panelTint
+        module == .network ? SpillStatusState.active.panelTint : state.panelTint
     }
 
     private func metricSubtitleTint(for module: SpillStatusModule) -> Color {
-        module == .network ? .orange : .secondary
+        module == .network ? SpillStatusState.warning.panelTint : .secondary
     }
 
     @ViewBuilder
@@ -970,7 +979,7 @@ extension SpillBarView {
                 HStack(spacing: 5) {
                     Image(systemName: sleepGuard.isActive ? "cup.and.saucer.fill" : "cup.and.saucer")
                         .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(sleepGuard.isActive ? Color.teal : Color.primary.opacity(0.66))
+                        .foregroundStyle(sleepGuard.isActive ? SpillStatusState.active.panelTint : Color.primary.opacity(0.66))
 
                     Text(sleepGuardHeaderValue)
                         .font(.system(size: 11, weight: .semibold, design: .rounded))
