@@ -637,6 +637,15 @@ Requirements:
 - Before an automatic upload or Manual Sync Now builds encrypted daily buckets,
   the app runs the lightweight local token collection/inbox drain path once so
   locally queued exact-usage events are reflected before server sync.
+- After the initial connection/backfill, upload preparation is incremental. The
+  app persists a local event-change cursor plus the affected local day ids,
+  reads only those day ranges, and rebuilds only their encrypted bucket and
+  shared summary. It must not scan all historical events on every sync.
+- Aggregate generation is content-stable: an unchanged local day keeps the same
+  canonical payload and hashes across later sync times, so it is acknowledged
+  locally without another relay upload. Interrupted or failed batches retain
+  their affected day ids for retry; the cursor advances only after a successful
+  relay acknowledgement or a verified no-op day.
 - Manual Sync Now performs one explicit upload attempt after that local freshness
   pass and may include the current local day's partial daily bucket. The partial
   bucket uses the same daily bucket key and is safely replaced by later manual
@@ -654,6 +663,9 @@ Requirements:
   environment values, secrets, raw event ids, `run_id`, or `span_id`.
 - Multi-day backlogs, such as weekends or offline periods, remain queued locally
   and may upload later in one or more batches.
+- Existing installations may enqueue one one-time historical change-journal
+  backfill after upgrading. Subsequent automatic and manual syncs are limited to
+  newly inserted, effectively updated, or removed local event days.
 - The web dashboard shows per-device statistics and combined account totals
   after browser-side decryption.
 - The web dashboard must label delayed data as last backed up, not realtime

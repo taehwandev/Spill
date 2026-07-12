@@ -491,6 +491,22 @@ Rules:
   background tasks so opening Token Metering settings stays responsive.
 - Automatic and manual uploads still require a saved connection and explicit
   `privateUsageUploadEnabled` setting.
+- SQLite maintains a private-usage event-change journal through insert, effective
+  update, and delete triggers. Upload state persists the last processed change
+  id and pending local day ids. A schema upgrade seeds the journal once from
+  existing rows so established installations can backfill without returning to
+  full-history scans on later runs.
+- Upload planning merges journal entries newer than the persisted cursor with
+  pending day ids, selects at most one bounded batch, and loads events only for
+  those local-day intervals. Ineligible current-day or pre-connection automatic
+  work remains pending instead of being lost when the journal cursor advances.
+- Daily aggregate `generated_at` is derived from the latest included event
+  timestamp, not wall-clock sync time. Identical daily content therefore keeps
+  stable encrypted and shared-summary hashes across retries and later runs.
+- The journal cursor and processed pending days are committed only after the
+  relay acknowledges every requested bucket/summary, or when rebuilding the
+  selected days proves there is no uploadable content change. Transport and
+  partial-acceptance failures preserve the previous state for retry.
 - Automatic upload and Manual Sync Now must request the local token collection
   and inbox drain path before building encrypted daily buckets. This freshness
   pass must remain local-only, use existing exact-usage importers/queue drains,
