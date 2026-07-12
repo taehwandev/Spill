@@ -76,6 +76,17 @@ elif [[ "$PRIVATE_USAGE_REQUIRES_CONFIGURATION" == "true" ]]; then
     exit 2
 fi
 
+# Mark development builds with a -dev suffix on the displayed version so they are
+# not confused with production builds. Only CFBundleShortVersionString (VERSION)
+# is suffixed; CFBundleVersion (BUILD_NUMBER) stays numeric for Sparkle version
+# comparison.
+if [[ "$PRIVATE_USAGE_ENVIRONMENT" == "development" ]]; then
+    case "$VERSION" in
+        *-dev) ;;
+        *) VERSION="${VERSION}-dev" ;;
+    esac
+fi
+
 if [[ "${SPILL_DISABLE_SPARKLE:-0}" == "1" ]]; then
     SPARKLE_PUBLIC_ED_KEY=""
 fi
