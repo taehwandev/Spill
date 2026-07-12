@@ -72,6 +72,16 @@ action, or acceptance criteria do or do not require a documentation update. The
 later `documentation` gate must prove the actual update or unchanged/not
 applicable decision.
 
+<!-- BEGIN MANAGED AGENTPLAYBOOK DOC ENFORCEMENT -->
+Baseline documentation enforcement — the `documentation` gate always runs and is
+non-empty, `unchanged` needs inspection proof, skipping docs needs recorded user
+approval, and a `triage`/`plan` roadmap needs `product route re-entry` with PRD
+coverage — is enforced centrally by the shared AgentPlaybook finish-check and is
+identical across Codex, Claude, and Antigravity. Do not duplicate the rules
+here. Source of truth and exception process:
+`workflows/skills/documentation-update/SKILL.md` in the shared AgentPlaybook.
+<!-- END MANAGED AGENTPLAYBOOK DOC ENFORCEMENT -->
+
 If the route, repo workflow, or user asks for Grill-Me, use the actual Grill-Me
 protocol, skill, or `/grilling` session as the question drill. Do not replace it
 with ad hoc internal questions. Record the Grill-Me output in finish evidence
