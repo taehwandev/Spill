@@ -52,6 +52,54 @@ extension TokenUsageStore {
             database: database
         )
 
+        try prepareDatabaseMigrations(database: database)
+        try preparePrivateUsageChangeTracking(database: database)
+
+        try execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_token_usage_events_tool_created_at
+            ON token_usage_events(ai_tool, created_at, total_tokens, input_tokens, output_tokens)
+            """,
+            database: database
+        )
+        try execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_token_usage_events_task_type_created_at
+            ON token_usage_events(task_type, created_at, total_tokens)
+            """,
+            database: database
+        )
+        try execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_token_usage_events_stage_created_at
+            ON token_usage_events(stage, created_at, total_tokens)
+            """,
+            database: database
+        )
+        try execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_token_usage_events_model_created_at
+            ON token_usage_events(model, created_at, total_tokens)
+            """,
+            database: database
+        )
+        try execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_token_usage_events_run_id
+            ON token_usage_events(run_id)
+            """,
+            database: database
+        )
+        try execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_token_usage_events_project_created_at
+            ON token_usage_events(project_id, created_at, total_tokens)
+            """,
+            database: database
+        )
+    }
+
+    private func prepareDatabaseMigrations(database: OpaquePointer) throws {
         let userVersion = databaseUserVersion(database: database)
         if userVersion < 2 {
             try execute("DROP INDEX IF EXISTS idx_token_usage_events_tool_created_at", database: database)
@@ -120,46 +168,68 @@ extension TokenUsageStore {
             try removeTimeWindowDuplicateEvents(database: database, windowSeconds: 300)
             try execute("PRAGMA user_version = 10", database: database)
         }
+        if userVersion < 11 {
+            try execute(
+                """
+                CREATE TABLE IF NOT EXISTS private_usage_event_changes (
+                    change_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    event_created_at TEXT NOT NULL
+                )
+                """,
+                database: database
+            )
+            try execute(
+                """
+                INSERT INTO private_usage_event_changes (event_created_at)
+                SELECT created_at FROM token_usage_events
+                """,
+                database: database
+            )
+            try execute("PRAGMA user_version = 11", database: database)
+        }
 
+    }
+
+    private func preparePrivateUsageChangeTracking(database: OpaquePointer) throws {
         try execute(
             """
-            CREATE INDEX IF NOT EXISTS idx_token_usage_events_tool_created_at
-            ON token_usage_events(ai_tool, created_at, total_tokens, input_tokens, output_tokens)
+            CREATE TABLE IF NOT EXISTS private_usage_event_changes (
+                change_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_created_at TEXT NOT NULL
+            )
             """,
             database: database
         )
         try execute(
             """
-            CREATE INDEX IF NOT EXISTS idx_token_usage_events_task_type_created_at
-            ON token_usage_events(task_type, created_at, total_tokens)
+            CREATE TRIGGER IF NOT EXISTS token_usage_events_private_usage_insert
+            AFTER INSERT ON token_usage_events
+            BEGIN
+                INSERT INTO private_usage_event_changes (event_created_at)
+                VALUES (NEW.created_at);
+            END
             """,
             database: database
         )
         try execute(
             """
-            CREATE INDEX IF NOT EXISTS idx_token_usage_events_stage_created_at
-            ON token_usage_events(stage, created_at, total_tokens)
+            CREATE TRIGGER IF NOT EXISTS token_usage_events_private_usage_update
+            AFTER UPDATE ON token_usage_events
+            BEGIN
+                INSERT INTO private_usage_event_changes (event_created_at)
+                VALUES (NEW.created_at);
+            END
             """,
             database: database
         )
         try execute(
             """
-            CREATE INDEX IF NOT EXISTS idx_token_usage_events_model_created_at
-            ON token_usage_events(model, created_at, total_tokens)
-            """,
-            database: database
-        )
-        try execute(
-            """
-            CREATE INDEX IF NOT EXISTS idx_token_usage_events_run_id
-            ON token_usage_events(run_id)
-            """,
-            database: database
-        )
-        try execute(
-            """
-            CREATE INDEX IF NOT EXISTS idx_token_usage_events_project_created_at
-            ON token_usage_events(project_id, created_at, total_tokens)
+            CREATE TRIGGER IF NOT EXISTS token_usage_events_private_usage_delete
+            AFTER DELETE ON token_usage_events
+            BEGIN
+                INSERT INTO private_usage_event_changes (event_created_at)
+                VALUES (OLD.created_at);
+            END
             """,
             database: database
         )

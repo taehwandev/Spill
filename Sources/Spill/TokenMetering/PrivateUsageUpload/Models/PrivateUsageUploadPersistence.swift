@@ -7,6 +7,8 @@ struct PrivateUsageUploadPersistence: Codable, Equatable, Sendable {
     var lastAutomaticAttemptDayID: String?
     var lastAckedBucketKey: String?
     var hasSavedConnection: Bool?
+    var lastProcessedEventChangeID: Int64?
+    var pendingDirtyDayIDs: [String]?
 
     static let empty = PrivateUsageUploadPersistence()
 }

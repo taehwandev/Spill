@@ -1,8 +1,8 @@
 import Foundation
 
 struct PrivateUsageDailyBucketBuilder: Sendable {
-    private let calendar: Calendar
-    private let timeZone: TimeZone
+    let calendar: Calendar
+    let timeZone: TimeZone
     private let sealer: PrivateUsageBucketSealing
     private let encoder: JSONEncoder
 
@@ -155,11 +155,15 @@ extension PrivateUsageDailyBucketBuilder {
                 return nil
             }
 
+            let generatedAt = dayEvents.compactMap {
+                ISO8601DateFormatter.parseTokenUsageDate(from: $0.createdAt)
+            }.max() ?? dayEnd
+
             return makeAggregate(
                 dayStart: dayStart,
                 dayEnd: dayEnd,
                 events: dayEvents.sorted(by: Self.eventPrecedes),
-                generatedAt: now
+                generatedAt: generatedAt
             )
         }
     }

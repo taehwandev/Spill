@@ -1,4 +1,5 @@
 import Foundation
+import SQLite3
 import XCTest
 @testable import Spill
 
@@ -18,6 +19,35 @@ final class TokenUsageStoreSchemaTests: XCTestCase {
         _ = try store.appendEvent(Self.event(spanID: "span_schema_02"))
 
         XCTAssertEqual(store.loadEvents().map(\.spanID), ["span_schema_02"])
+    }
+
+    func testVersionElevenSeedsPrivateUsageChangeJournalFromExistingEvents() throws {
+        let directoryURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("TokenUsageStoreSchemaTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directoryURL) }
+
+        let fileURL = directoryURL.appendingPathComponent("events.json")
+        let initialStore = TokenUsageStore(fileURL: fileURL)
+        try initialStore.appendEvent(Self.event(spanID: "span_schema_backfill"))
+
+        var database: OpaquePointer?
+        XCTAssertEqual(sqlite3_open(initialStore.eventsDatabaseURL.path, &database), SQLITE_OK)
+        let downgradeSQL = """
+        DROP TRIGGER IF EXISTS token_usage_events_private_usage_insert;
+        DROP TRIGGER IF EXISTS token_usage_events_private_usage_update;
+        DROP TRIGGER IF EXISTS token_usage_events_private_usage_delete;
+        DROP TABLE IF EXISTS private_usage_event_changes;
+        PRAGMA user_version = 10;
+        """
+        XCTAssertEqual(sqlite3_exec(database, downgradeSQL, nil, nil, nil), SQLITE_OK)
+        sqlite3_close(database)
+
+        let migratedStore = TokenUsageStore(fileURL: fileURL)
+        let changes = migratedStore.loadPrivateUsageEventChanges(afterChangeID: 0)
+
+        XCTAssertEqual(changes.changes.map(\.eventCreatedAt), ["2026-06-07T04:00:00.000Z"])
+        XCTAssertGreaterThan(changes.maxChangeID, 0)
     }
 
     private func removeSQLiteFiles(at databaseURL: URL) throws {

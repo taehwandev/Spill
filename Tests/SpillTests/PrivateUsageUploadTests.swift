@@ -543,7 +543,7 @@ final class PrivateUsageUploadTests: XCTestCase {
         let secondBuckets = try builder.makeDirtyDailyBuckets(
             events: [event],
             acknowledgedHashesByBucketKey: [firstBucket.bucketKey: firstBucket.ciphertextHash],
-            now: now
+            now: now.addingTimeInterval(86_400)
         )
 
         XCTAssertTrue(secondBuckets.isEmpty)
@@ -1226,15 +1226,89 @@ final class PrivateUsageUploadTests: XCTestCase {
         )
 
         let firstResult = try await coordinator.syncNow(isEnabled: true, now: now)
-        let secondResult = try await coordinator.syncNow(isEnabled: true, now: now)
+        let secondResult = try await coordinator.syncNow(
+            isEnabled: true,
+            now: now.addingTimeInterval(3_600)
+        )
+
+        try usageStore.appendEvent(
+            makeEvent(
+                spanID: "span_sync",
+                runID: "run_sync",
+                aiTool: .codex,
+                taskType: "code_generation",
+                stage: "implement",
+                model: "gpt-5",
+                input: 17,
+                output: 19,
+                createdAt: yesterday
+            )
+        )
+        let changedResult = try await coordinator.syncNow(
+            isEnabled: true,
+            now: now.addingTimeInterval(7_200)
+        )
 
         XCTAssertEqual(firstResult.accepted, 1)
         XCTAssertEqual(firstResult.attemptedBucketCount, 1)
         XCTAssertEqual(secondResult.accepted, 0)
-        XCTAssertEqual(relayClient.uploadedBucketCounts, [1])
-        XCTAssertEqual(relayClient.uploadedSharedSummaryCounts, [1])
-        XCTAssertEqual(relayClient.uploadedKeyEnvelopeCounts, [1])
+        XCTAssertEqual(changedResult.accepted, 1)
+        XCTAssertEqual(changedResult.attemptedBucketCount, 1)
+        XCTAssertEqual(relayClient.uploadedBucketCounts, [1, 1])
+        XCTAssertEqual(relayClient.uploadedBucketKeys, [["2026-06-07:daily"], ["2026-06-07:daily"]])
+        XCTAssertEqual(relayClient.uploadedSharedSummaryCounts, [1, 1])
+        XCTAssertEqual(relayClient.uploadedKeyEnvelopeCounts, [1, 1])
         XCTAssertEqual(coordinator.status(isEnabled: true, now: now).queuedBucketCount, 0)
+    }
+
+    func testPrivateUsageChangeJournalTracksOnlyEffectiveEventChanges() throws {
+        let timeZone = try XCTUnwrap(TimeZone(identifier: "UTC"))
+        let calendar = fixedCalendar(timeZone: timeZone)
+        let createdAt = try XCTUnwrap(
+            calendar.date(from: DateComponents(year: 2026, month: 6, day: 7, hour: 12))
+        )
+        let usageStore = makeUsageStore()
+        let baseline = usageStore.loadPrivateUsageEventChanges(afterChangeID: 0).maxChangeID
+        let event = makeEvent(
+            spanID: "span_change_journal",
+            runID: "run_change_journal",
+            aiTool: .codex,
+            taskType: "code_generation",
+            stage: "implement",
+            model: "gpt-5",
+            input: 11,
+            output: 13,
+            createdAt: createdAt
+        )
+
+        try usageStore.appendEvent(event)
+        let inserted = usageStore.loadPrivateUsageEventChanges(afterChangeID: baseline)
+        XCTAssertEqual(inserted.changes.count, 1)
+
+        try usageStore.appendEvent(event)
+        let unchanged = usageStore.loadPrivateUsageEventChanges(afterChangeID: inserted.maxChangeID)
+        XCTAssertTrue(unchanged.changes.isEmpty)
+
+        try usageStore.appendEvent(
+            makeEvent(
+                spanID: "span_change_journal",
+                runID: "run_change_journal",
+                aiTool: .codex,
+                taskType: "code_generation",
+                stage: "implement",
+                model: "gpt-5",
+                input: 17,
+                output: 19,
+                createdAt: createdAt
+            )
+        )
+        let updated = usageStore.loadPrivateUsageEventChanges(afterChangeID: inserted.maxChangeID)
+        XCTAssertEqual(updated.changes.count, 1)
+
+        try usageStore.clearEvents()
+        let deleted = usageStore.loadPrivateUsageEventChanges(afterChangeID: updated.maxChangeID)
+        XCTAssertEqual(deleted.changes.count, 1)
+        XCTAssertEqual(deleted.changes.first?.eventCreatedAt, event.createdAt)
     }
 
     func testCoordinatorUploadsSharedSummaryWhenEncryptedBucketWasAlreadyAcknowledged() async throws {

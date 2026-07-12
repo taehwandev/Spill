@@ -4,6 +4,7 @@ extension PrivateUsageUploadCoordinator {
     func acknowledge(
         buckets: [PrivateUsageEncryptedBucket],
         sharedSummaries: [PrivateUsageSharedSummary],
+        plan: PrivateUsageUploadPlan,
         uploadedAt: Date
     ) {
         lock.withLock {
@@ -20,8 +21,28 @@ extension PrivateUsageUploadCoordinator {
             state.lastFailedUploadAt = nil
             state.lastFailureReason = nil
             state.lastAckedBucketKey = buckets.last?.bucketKey ?? sharedSummaries.last?.bucketKey ?? state.lastAckedBucketKey
+            applyChangeTracking(plan, to: &state)
             stateStore.save(state)
         }
+    }
+
+    func advanceChangeTracking(_ plan: PrivateUsageUploadPlan) {
+        lock.withLock {
+            var state = stateStore.load()
+            applyChangeTracking(plan, to: &state)
+            stateStore.save(state)
+        }
+    }
+
+    private func applyChangeTracking(
+        _ plan: PrivateUsageUploadPlan,
+        to state: inout PrivateUsageUploadPersistence
+    ) {
+        state.lastProcessedEventChangeID = max(
+            state.lastProcessedEventChangeID ?? 0,
+            plan.maxChangeID
+        )
+        state.pendingDirtyDayIDs = plan.remainingPendingDayIDs
     }
 
     func markAutomaticAttempt(dayID: String) {
