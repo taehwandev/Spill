@@ -500,13 +500,36 @@ Rules:
   pending day ids, selects at most one bounded batch, and loads events only for
   those local-day intervals. Ineligible current-day or pre-connection automatic
   work remains pending instead of being lost when the journal cursor advances.
+- Persisted local-day ids are Gregorian `yyyy-MM-dd` values. Both formatting
+  and interval parsing use a Gregorian calendar with the bucket timezone;
+  `Calendar.autoupdatingCurrent` may still define local midnight boundaries but
+  must not reinterpret the persisted year under a non-Gregorian user calendar.
 - Daily aggregate `generated_at` is derived from the latest included event
   timestamp, not wall-clock sync time. Identical daily content therefore keeps
   stable encrypted and shared-summary hashes across retries and later runs.
+- Dirty day ids are also passed to aggregate construction. When a selected day
+  has no remaining events after a delete or reconciliation, the builder emits a
+  deterministic zero aggregate whose `generated_at` is local day start. The
+  existing bucket key is therefore replaced through the normal compatible
+  upload contract instead of remaining stale remotely.
+- Environment-scoped upload state stores a SHA-256 sync-target fingerprint over
+  the relay device id and wrapping-key id. A first connection, changed target,
+  or reconnect after disconnect clears acknowledgements and seeds pending day
+  ids from all current local event dates while advancing the journal cursor to
+  the checkpoint captured with that seed.
 - The journal cursor and processed pending days are committed only after the
   relay acknowledges every requested bucket/summary, or when rebuilding the
   selected days proves there is no uploadable content change. Transport and
   partial-acceptance failures preserve the previous state for retry.
+- Once that state save completes, the store prunes journal rows through the
+  minimum committed cursor for every environment with a saved connection. The
+  state save happens first so pending unprocessed days remain recoverable,
+  pruning failure is harmless growth, and rows newer than the slowest connected
+  environment cursor remain available for the next plan. Explicitly disconnected
+  environments are excluded because their next connection forces a full resync.
+- Upload status derives encrypted-bucket and shared-summary queue counts from
+  one upload plan. Status refresh must not repeat the same SQLite range reads,
+  aggregation, and sealing work independently for each count.
 - Automatic upload and Manual Sync Now must request the local token collection
   and inbox drain path before building encrypted daily buckets. This freshness
   pass must remain local-only, use existing exact-usage importers/queue drains,

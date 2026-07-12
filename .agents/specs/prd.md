@@ -641,11 +641,24 @@ Requirements:
   app persists a local event-change cursor plus the affected local day ids,
   reads only those day ranges, and rebuilds only their encrypted bucket and
   shared summary. It must not scan all historical events on every sync.
+- Local day ids use the Gregorian `yyyy-MM-dd` contract regardless of the
+  user's preferred system calendar. Parsing a persisted day id must use the
+  same Gregorian calendar and the bucket timezone so Buddhist, Japanese, or
+  other calendar preferences cannot redirect a change to a different date.
 - Aggregate generation is content-stable: an unchanged local day keeps the same
   canonical payload and hashes across later sync times, so it is acknowledged
   locally without another relay upload. Interrupted or failed batches retain
   their affected day ids for retry; the cursor advances only after a successful
   relay acknowledgement or a verified no-op day.
+- If deleting or reconciling events leaves a dirty day with no remaining local
+  events, the app uploads a deterministic zero aggregate for that same bucket
+  key. This replaces the previous remote totals without adding a delete or
+  tombstone shape that older relays and web clients do not understand.
+- Upload acknowledgements and change cursors are bound to a local fingerprint of
+  the relay device id and browser wrapping-key id. First connection, connection
+  to a different target, or reconnect after an explicit disconnect clears prior
+  acknowledgements and seeds every existing local day as pending for an explicit
+  bounded resync.
 - Manual Sync Now performs one explicit upload attempt after that local freshness
   pass and may include the current local day's partial daily bucket. The partial
   bucket uses the same daily bucket key and is safely replaced by later manual
@@ -666,6 +679,13 @@ Requirements:
 - Existing installations may enqueue one one-time historical change-journal
   backfill after upgrading. Subsequent automatic and manual syncs are limited to
   newly inserted, effectively updated, or removed local event days.
+- After the cursor and all still-pending day ids are saved, consumed
+  change-journal rows may be pruned through that cursor. Pruning must never run
+  before the retry state is persisted and must preserve changes newer than the
+  committed cursor. When development and production both retain saved
+  connections, pruning stops at the minimum committed cursor across those
+  environments; a disconnected environment is excluded because reconnecting it
+  always seeds a full local resync checkpoint.
 - The web dashboard shows per-device statistics and combined account totals
   after browser-side decryption.
 - The web dashboard must label delayed data as last backed up, not realtime
