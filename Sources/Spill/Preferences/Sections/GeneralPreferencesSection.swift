@@ -14,6 +14,7 @@ struct GeneralPreferencesSection: View {
         VStack(alignment: .leading, spacing: 16) {
             launchSettingsCard
             languageSettingsCard
+            appearanceSettingsCard
             permissionsCard
             updatesCard
             legalAndPrivacyCard
@@ -68,6 +69,31 @@ private extension GeneralPreferencesSection {
                 }
 
                 Text(PreferencesL10n.languageDetail(settings.appLanguage, appLanguage: settings.appLanguage))
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var appearanceSettingsCard: some View {
+        PreferenceCard(title: t(.appearanceSettings), symbolName: "circle.lefthalf.filled", iconColor: .indigo) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text(t(.appearanceTheme))
+                        .font(.system(size: 13, weight: .medium))
+
+                    Spacer()
+
+                    Picker("", selection: $settings.appearanceTheme) {
+                        ForEach(SpillAppearanceTheme.allCases) { theme in
+                            Text(theme.title(appLanguage: language)).tag(theme)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 150)
+                }
+
+                Text(t(.appearanceThemeDetail))
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
             }

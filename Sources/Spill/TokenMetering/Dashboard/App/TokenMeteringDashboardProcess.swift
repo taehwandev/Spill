@@ -15,6 +15,7 @@ enum TokenMeteringDashboardProcess {
     static let tokenMeteringPreferencesTab = "tokens"
     static let developerOptionsPreferencesTab = "developer"
     static let appLanguageSettingsKey = "appLanguage"
+    static let appearanceThemeSettingsKey = "appearanceTheme"
     static let tokenUsageDashboardOnboardingPreviewSettingsKey = "tokenUsageDashboardOnboardingPreviewEnabled"
 
     static var isDashboardProcess: Bool {
@@ -96,6 +97,15 @@ enum TokenMeteringDashboardProcess {
             settingsDidChangeNotification,
             object: nil,
             userInfo: [settingsKeyUserInfoKey: appLanguageSettingsKey],
+            deliverImmediately: true
+        )
+    }
+
+    static func postAppearanceThemeDidChange() {
+        DistributedNotificationCenter.default().postNotificationName(
+            settingsDidChangeNotification,
+            object: nil,
+            userInfo: [settingsKeyUserInfoKey: appearanceThemeSettingsKey],
             deliverImmediately: true
         )
     }

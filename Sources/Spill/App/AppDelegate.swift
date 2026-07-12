@@ -683,6 +683,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             .store(in: &cancellables)
 
+        settings.$appearanceTheme
+            .dropFirst()
+            .sink { _ in
+                SpillTelemetry.shared.track("preference_changed", props: ["name": "appearance_theme"])
+                DispatchQueue.main.async {
+                    // The theme is scoped to app windows (panel, preferences, dashboard),
+                    // which self-update from settings. The menu bar status item keeps the
+                    // system appearance, so NSApp.appearance is intentionally left unset.
+                    TokenMeteringDashboardProcess.postAppearanceThemeDidChange()
+                }
+            }
+            .store(in: &cancellables)
+
         if SpillBuildOptions.developerOptionsEnabled {
             settings.$tokenUsageDashboardOnboardingPreviewEnabled
                 .dropFirst()

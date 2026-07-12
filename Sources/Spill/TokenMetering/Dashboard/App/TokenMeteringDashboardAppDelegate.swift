@@ -20,6 +20,7 @@ final class TokenMeteringDashboardAppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
+        NSApp.appearance = settings.appearanceTheme.nsAppearance
         configureMainMenu()
         observeSettingsChanges()
         launchMainAppIfNeeded()
@@ -168,6 +169,7 @@ extension TokenMeteringDashboardAppDelegate {
         let settingsKey = notification.userInfo?[TokenMeteringDashboardProcess.settingsKeyUserInfoKey] as? String
         let supportedSettingsKeys = [
             TokenMeteringDashboardProcess.appLanguageSettingsKey,
+            TokenMeteringDashboardProcess.appearanceThemeSettingsKey,
             TokenMeteringDashboardProcess.tokenUsageDashboardOnboardingPreviewSettingsKey
         ]
         guard settingsKey == nil || supportedSettingsKeys.contains(settingsKey ?? "") else {
@@ -176,6 +178,11 @@ extension TokenMeteringDashboardAppDelegate {
 
         if settingsKey == nil || settingsKey == TokenMeteringDashboardProcess.appLanguageSettingsKey {
             settings.reloadAppLanguageFromDefaults()
+        }
+
+        if settingsKey == nil || settingsKey == TokenMeteringDashboardProcess.appearanceThemeSettingsKey {
+            settings.reloadAppearanceThemeFromDefaults()
+            NSApp.appearance = settings.appearanceTheme.nsAppearance
         }
 
         if SpillBuildOptions.developerOptionsEnabled,

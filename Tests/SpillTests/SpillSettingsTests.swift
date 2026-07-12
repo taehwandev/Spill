@@ -359,6 +359,35 @@ final class SpillSettingsTests: XCTestCase {
         XCTAssertEqual(SpillSettings(defaults: defaults).displayMode, .selectedItems)
     }
 
+    func testAppearanceThemeDefaultsToSystemAndPersists() {
+        let defaults = makeDefaults()
+        let settings = SpillSettings(defaults: defaults)
+        XCTAssertEqual(settings.appearanceTheme, .system)
+
+        settings.appearanceTheme = .dark
+        XCTAssertEqual(defaults.string(forKey: "appearanceTheme"), "dark")
+
+        let reloadedSettings = SpillSettings(defaults: defaults)
+        XCTAssertEqual(reloadedSettings.appearanceTheme, .dark)
+    }
+
+    func testAppearanceThemeNormalizesInvalidValue() {
+        let defaults = makeDefaults()
+        defaults.set("bogus-theme", forKey: "appearanceTheme")
+        let settings = SpillSettings(defaults: defaults)
+        XCTAssertEqual(settings.appearanceTheme, .system)
+    }
+
+    func testReloadAppearanceThemeFromDefaultsPicksUpExternalChange() {
+        let defaults = makeDefaults()
+        let settings = SpillSettings(defaults: defaults)
+        XCTAssertEqual(settings.appearanceTheme, .system)
+
+        defaults.set("light", forKey: "appearanceTheme")
+        settings.reloadAppearanceThemeFromDefaults()
+        XCTAssertEqual(settings.appearanceTheme, .light)
+    }
+
     func testMenuBarStatusOptionsPersist() {
         let defaults = makeDefaults()
         let settings = SpillSettings(defaults: defaults)

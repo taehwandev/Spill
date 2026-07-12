@@ -173,6 +173,13 @@ final class SpillSettings: ObservableObject {
         }
     }
 
+    @Published var appearanceTheme: SpillAppearanceTheme {
+        didSet {
+            defaults.set(appearanceTheme.rawValue, forKey: Keys.appearanceTheme)
+            defaults.synchronize()
+        }
+    }
+
     @Published var iconSpacing: Double {
         didSet {
             let normalizedValue = Self.normalizedIconSpacing(iconSpacing)
@@ -400,6 +407,16 @@ final class SpillSettings: ObservableObject {
         appLanguage = persistedLanguage
     }
 
+    func reloadAppearanceThemeFromDefaults() {
+        defaults.synchronize()
+        let persistedTheme = SpillAppearanceTheme.normalized(rawValue: defaults.string(forKey: Keys.appearanceTheme))
+        guard appearanceTheme != persistedTheme else {
+            return
+        }
+
+        appearanceTheme = persistedTheme
+    }
+
     func reloadTokenUsageDashboardOnboardingPreviewFromDefaults() {
         defaults.synchronize()
         let persistedValue = defaults.object(forKey: Keys.tokenUsageDashboardOnboardingPreviewEnabled) as? Bool ?? false
@@ -431,6 +448,7 @@ final class SpillSettings: ObservableObject {
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         appLanguage = SpillAppLanguage.normalized(rawValue: defaults.string(forKey: Keys.appLanguage))
+        appearanceTheme = SpillAppearanceTheme.normalized(rawValue: defaults.string(forKey: Keys.appearanceTheme))
         iconSpacing = Self.normalizedIconSpacing(defaults.object(forKey: Keys.iconSpacing) as? Double)
         showCountBadge = defaults.object(forKey: Keys.showCountBadge) as? Bool ?? true
         showPowerFooter = defaults.object(forKey: Keys.showPowerFooter) as? Bool ?? true
@@ -907,6 +925,7 @@ private struct WindowActionShortcutRegistrationKey: Hashable {
 
 private enum Keys {
     static let appLanguage = SpillAppLanguage.defaultsKey
+    static let appearanceTheme = SpillAppearanceTheme.defaultsKey
     static let iconSpacing = "iconSpacing"
     static let showCountBadge = "showCountBadge"
     static let showPowerFooter = "showPowerFooter"

@@ -22,6 +22,7 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
     private let tokenMeteringSettingsAction: () -> Void
     private let tokenMeteringDetailAction: () -> Void
     private var panel: NSPanel?
+    private weak var panelVisualEffectView: NSVisualEffectView?
     private var anchorFrame: NSRect?
     private var isPresented = false
     private var panelRefreshTask: Task<Void, Never>?
@@ -35,12 +36,10 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
         settings: SpillSettings,
         scanner: AXMenuBarItemScanner,
         panelStore: PanelStore,
-        statusStore: SystemStatusStore = SystemStatusStore(),
-        aiStatusStore: AIStatusStore = AIStatusStore(),
+        statusStore: SystemStatusStore = SystemStatusStore(), aiStatusStore: AIStatusStore = AIStatusStore(),
         cloudServiceStatusStore: CloudServiceStatusStore = CloudServiceStatusStore(),
         tokenUsageDashboardStore: TokenUsageDashboardStore,
-        windowActionStore: WindowActionStore = WindowActionStore(),
-        updateStore: UpdateCheckStore = UpdateCheckStore(),
+        windowActionStore: WindowActionStore = WindowActionStore(), updateStore: UpdateCheckStore = UpdateCheckStore(),
         sleepGuard: SleepGuardController,
         visibilityChanged: @escaping (Bool) -> Void = { _ in },
         settingsAction: @escaping () -> Void = {},
@@ -220,6 +219,7 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
         panel.hidesOnDeactivate = false
         panel.isMovableByWindowBackground = false
         panel.minSize = SpillPanelMetrics.minimumSize
+        panel.appearance = settings.appearanceTheme.nsAppearance
 
         let visualEffectView = NSVisualEffectView(frame: NSRect(origin: .zero, size: frame.size))
         visualEffectView.autoresizingMask = [.width, .height]
@@ -231,7 +231,8 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
         visualEffectView.layer?.cornerCurve = .continuous
         visualEffectView.layer?.masksToBounds = true
         visualEffectView.layer?.borderWidth = 0.8
-        visualEffectView.layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.45).cgColor
+        panelVisualEffectView = visualEffectView
+        applyPanelBorderColor()
 
         let hostingView = NSHostingView(
             rootView: SpillBarView(
@@ -321,6 +322,16 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
         panel.setFrame(panelFrame(), display: true, animate: settings.useSpillAnimation)
     }
 
+    private func applyPanelBorderColor() {
+        guard let layer = panelVisualEffectView?.layer else {
+            return
+        }
+        let appearance = panel?.effectiveAppearance ?? NSApp.effectiveAppearance
+        appearance.performAsCurrentDrawingAppearance {
+            layer.borderColor = NSColor.separatorColor.withAlphaComponent(0.45).cgColor
+        }
+    }
+
     private func observeLayoutChanges() {
         scanner.$items
             .dropFirst()
@@ -347,6 +358,14 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
             .dropFirst()
             .sink { [weak self] _ in
                 self?.resizePanelIfVisible()
+            }
+            .store(in: &cancellables)
+
+        settings.$appearanceTheme
+            .dropFirst()
+            .sink { [weak self] theme in
+                self?.panel?.appearance = theme.nsAppearance
+                self?.applyPanelBorderColor()
             }
             .store(in: &cancellables)
 

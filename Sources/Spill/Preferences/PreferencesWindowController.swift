@@ -20,6 +20,7 @@ final class PreferencesWindowController {
     private let navigationState = PreferencesNavigationState()
     private var window: NSWindow?
     private var languageObservation: AnyCancellable?
+    private var appearanceObservation: AnyCancellable?
 
     init(
         settings: SpillSettings,
@@ -82,6 +83,7 @@ final class PreferencesWindowController {
         )
 
         window.title = PreferencesL10n.text(.preferencesWindowTitle, appLanguage: settings.appLanguage)
+        window.appearance = settings.appearanceTheme.nsAppearance
         window.titlebarAppearsTransparent = true
         window.isReleasedWhenClosed = false
         window.isRestorable = false
@@ -93,12 +95,17 @@ final class PreferencesWindowController {
         languageObservation = settings.$appLanguage.sink { [weak self] appLanguage in
             self?.window?.title = PreferencesL10n.text(.preferencesWindowTitle, appLanguage: appLanguage)
         }
+        appearanceObservation = settings.$appearanceTheme.sink { [weak self] theme in
+            self?.window?.appearance = theme.nsAppearance
+        }
         return window
     }
 
     func prepareForTermination() {
         languageObservation?.cancel()
         languageObservation = nil
+        appearanceObservation?.cancel()
+        appearanceObservation = nil
         window?.isRestorable = false
         window?.orderOut(nil)
     }
