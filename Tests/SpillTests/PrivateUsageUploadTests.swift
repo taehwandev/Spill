@@ -549,6 +549,29 @@ final class PrivateUsageUploadTests: XCTestCase {
         XCTAssertTrue(secondBuckets.isEmpty)
     }
 
+    func testLocalDayIntervalUsesGregorianCalendarRegardlessOfUserCalendar() throws {
+        let timeZone = try XCTUnwrap(TimeZone(identifier: "UTC"))
+        var buddhistCalendar = Calendar(identifier: .buddhist)
+        buddhistCalendar.timeZone = timeZone
+        let builder = PrivateUsageDailyBucketBuilder(
+            calendar: buddhistCalendar,
+            timeZone: timeZone,
+            sealer: RecordingPrivateUsageSealer()
+        )
+        let interval = try XCTUnwrap(builder.localDayInterval(for: "2026-07-12"))
+        var gregorianCalendar = Calendar(identifier: .gregorian)
+        gregorianCalendar.timeZone = timeZone
+
+        XCTAssertEqual(
+            interval.start,
+            gregorianCalendar.date(from: DateComponents(year: 2026, month: 7, day: 12))
+        )
+        XCTAssertEqual(
+            interval.end,
+            gregorianCalendar.date(from: DateComponents(year: 2026, month: 7, day: 13))
+        )
+    }
+
     func testDailyBucketBuilderReuploadsLegacyAcknowledgedBucketWhenWorkItemsAreAdded() throws {
         let timeZone = try XCTUnwrap(TimeZone(identifier: "UTC"))
         let calendar = fixedCalendar(timeZone: timeZone)
@@ -1259,6 +1282,74 @@ final class PrivateUsageUploadTests: XCTestCase {
         XCTAssertEqual(relayClient.uploadedSharedSummaryCounts, [1, 1])
         XCTAssertEqual(relayClient.uploadedKeyEnvelopeCounts, [1, 1])
         XCTAssertEqual(coordinator.status(isEnabled: true, now: now).queuedBucketCount, 0)
+        XCTAssertTrue(usageStore.loadPrivateUsageEventChanges(afterChangeID: 0).changes.isEmpty)
+    }
+
+    func testCoordinatorUploadsZeroAggregateAfterLastEventForDayIsDeleted() async throws {
+        let timeZone = try XCTUnwrap(TimeZone(identifier: "UTC"))
+        let calendar = fixedCalendar(timeZone: timeZone)
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 8, hour: 9)))
+        let yesterday = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 7, hour: 12)))
+        let usageStore = makeUsageStore()
+        try usageStore.replaceEvents([
+            makeEvent(
+                spanID: "span_deleted_day",
+                runID: "run_deleted_day",
+                aiTool: .codex,
+                taskType: "code_generation",
+                stage: "implement",
+                model: "gpt-5",
+                input: 11,
+                output: 13,
+                createdAt: yesterday
+            )
+        ])
+        let credentialStore = InMemoryPrivateUsageCredentialStore()
+        try credentialStore.saveCredential(
+            PrivateUsageDeviceCredential(
+                deviceID: "device_server",
+                credential: "spill_device_v1_secret",
+                tokenType: "spill_device_v1",
+                createdAt: yesterday
+            )
+        )
+        try credentialStore.saveKeyWrappingSecret(
+            PrivateUsageKeyWrappingSecret(rawValue: testWrappingSecret)
+        )
+        let relayClient = FakePrivateUsageRelayClient()
+        let sealer = RecordingPrivateUsageSealer()
+        let coordinator = PrivateUsageUploadCoordinator(
+            usageStore: usageStore,
+            credentialStore: credentialStore,
+            stateStore: PrivateUsageUploadStateStore(defaults: makeDefaults()),
+            relayClient: relayClient,
+            bucketBuilder: PrivateUsageDailyBucketBuilder(
+                calendar: calendar,
+                timeZone: timeZone,
+                sealer: sealer
+            ),
+            sealer: sealer
+        )
+
+        _ = try await coordinator.syncNow(isEnabled: true, now: now)
+        try usageStore.clearEvents()
+        let deletionResult = try await coordinator.syncNow(
+            isEnabled: true,
+            now: now.addingTimeInterval(3_600)
+        )
+
+        XCTAssertEqual(deletionResult.accepted, 1)
+        XCTAssertEqual(deletionResult.acceptedSharedSummaryCount, 1)
+        XCTAssertEqual(relayClient.uploadedBucketKeys, [
+            ["2026-06-07:daily"],
+            ["2026-06-07:daily"]
+        ])
+        let zeroPlaintext = try XCTUnwrap(sealer.plaintexts.last)
+        let zeroAggregate = try JSONDecoder().decode(PrivateUsageDailyAggregate.self, from: zeroPlaintext)
+        XCTAssertEqual(zeroAggregate.totals, .zero)
+        XCTAssertTrue(zeroAggregate.toolTotals.isEmpty)
+        XCTAssertTrue(zeroAggregate.workItems.isEmpty)
+        XCTAssertEqual(zeroAggregate.generatedAt, "2026-06-07T00:00:00.000Z")
     }
 
     func testPrivateUsageChangeJournalTracksOnlyEffectiveEventChanges() throws {
@@ -1309,6 +1400,49 @@ final class PrivateUsageUploadTests: XCTestCase {
         let deleted = usageStore.loadPrivateUsageEventChanges(afterChangeID: updated.maxChangeID)
         XCTAssertEqual(deleted.changes.count, 1)
         XCTAssertEqual(deleted.changes.first?.eventCreatedAt, event.createdAt)
+    }
+
+    func testPrivateUsageChangeJournalPrunesOnlyConsumedChanges() throws {
+        let timeZone = try XCTUnwrap(TimeZone(identifier: "UTC"))
+        let calendar = fixedCalendar(timeZone: timeZone)
+        let firstDate = try XCTUnwrap(
+            calendar.date(from: DateComponents(year: 2026, month: 6, day: 7, hour: 12))
+        )
+        let secondDate = try XCTUnwrap(
+            calendar.date(from: DateComponents(year: 2026, month: 6, day: 8, hour: 12))
+        )
+        let usageStore = makeUsageStore()
+        try usageStore.appendEvent(makeEvent(
+            spanID: "span_prune_first",
+            runID: "run_prune_first",
+            aiTool: .codex,
+            taskType: "code_generation",
+            stage: "implement",
+            model: "gpt-5",
+            input: 11,
+            output: 13,
+            createdAt: firstDate
+        ))
+        let firstChange = try XCTUnwrap(
+            usageStore.loadPrivateUsageEventChanges(afterChangeID: 0).changes.last
+        )
+        try usageStore.appendEvent(makeEvent(
+            spanID: "span_prune_second",
+            runID: "run_prune_second",
+            aiTool: .codex,
+            taskType: "code_generation",
+            stage: "implement",
+            model: "gpt-5",
+            input: 17,
+            output: 19,
+            createdAt: secondDate
+        ))
+
+        usageStore.prunePrivateUsageEventChanges(throughChangeID: firstChange.changeID)
+
+        let remaining = usageStore.loadPrivateUsageEventChanges(afterChangeID: 0).changes
+        XCTAssertEqual(remaining.count, 1)
+        XCTAssertEqual(remaining.first?.eventCreatedAt, ISO8601DateFormatter.tokenUsage.string(from: secondDate))
     }
 
     func testCoordinatorUploadsSharedSummaryWhenEncryptedBucketWasAlreadyAcknowledged() async throws {
@@ -1553,7 +1687,9 @@ final class PrivateUsageUploadTests: XCTestCase {
         }
 
         XCTAssertTrue(stateStore.load().acknowledgedCiphertextHashesByBucketKey.isEmpty)
+        let sealCountBeforeStatus = sealer.plaintexts.count
         XCTAssertEqual(coordinator.status(isEnabled: true, now: now).queuedBucketCount, 1)
+        XCTAssertEqual(sealer.plaintexts.count, sealCountBeforeStatus + 1)
         XCTAssertNotNil(stateStore.load().lastFailedUploadAt)
     }
 
@@ -1934,6 +2070,158 @@ final class PrivateUsageUploadTests: XCTestCase {
         )
     }
 
+    func testStateStorePrunesOnlyThroughMinimumConnectedEnvironmentCursor() {
+        let defaults = makeDefaults()
+        let productionStateStore = PrivateUsageUploadStateStore(
+            defaults: defaults,
+            environment: .production
+        )
+        let developmentStateStore = PrivateUsageUploadStateStore(
+            defaults: defaults,
+            environment: .development
+        )
+        var productionState = PrivateUsageUploadPersistence.empty
+        productionState.hasSavedConnection = true
+        productionState.lastProcessedEventChangeID = 12
+        productionStateStore.save(productionState)
+        var developmentState = PrivateUsageUploadPersistence.empty
+        developmentState.hasSavedConnection = true
+        developmentState.lastProcessedEventChangeID = 5
+        developmentStateStore.save(developmentState)
+
+        XCTAssertEqual(
+            productionStateStore.minimumPrunableChangeID(including: 12),
+            5
+        )
+
+        developmentState.hasSavedConnection = false
+        developmentStateStore.save(developmentState)
+        XCTAssertEqual(
+            productionStateStore.minimumPrunableChangeID(including: 12),
+            12
+        )
+    }
+
+    func testGrantExchangeResetsAcknowledgementsForChangedSyncTarget() async throws {
+        let timeZone = try XCTUnwrap(TimeZone(identifier: "UTC"))
+        let calendar = fixedCalendar(timeZone: timeZone)
+        let eventDate = try XCTUnwrap(
+            calendar.date(from: DateComponents(year: 2026, month: 6, day: 7, hour: 12))
+        )
+        let usageStore = makeUsageStore()
+        try usageStore.replaceEvents([
+            makeEvent(
+                spanID: "span_target_reset",
+                runID: "run_target_reset",
+                aiTool: .codex,
+                taskType: "code_generation",
+                stage: "implement",
+                model: "gpt-5",
+                input: 11,
+                output: 13,
+                createdAt: eventDate
+            )
+        ])
+        let credentialStore = InMemoryPrivateUsageCredentialStore()
+        try credentialStore.saveConnection(
+            credential: PrivateUsageDeviceCredential(
+                deviceID: "device_old",
+                credential: "spill_device_v1_old",
+                tokenType: "spill_device_v1",
+                createdAt: eventDate
+            ),
+            keyWrappingSecret: PrivateUsageKeyWrappingSecret(rawValue: testWrappingSecret)
+        )
+        let stateStore = PrivateUsageUploadStateStore(defaults: makeDefaults())
+        var state = PrivateUsageUploadPersistence.empty
+        state.hasSavedConnection = true
+        state.acknowledgedCiphertextHashesByBucketKey = ["2026-06-07:daily": String(repeating: "a", count: 64)]
+        state.acknowledgedSharedSummaryHashesByBucketKey = ["2026-06-07:daily": String(repeating: "b", count: 64)]
+        state.lastProcessedEventChangeID = 1
+        stateStore.save(state)
+        let relayClient = FakePrivateUsageRelayClient()
+        let sealer = RecordingPrivateUsageSealer()
+        let coordinator = PrivateUsageUploadCoordinator(
+            usageStore: usageStore,
+            credentialStore: credentialStore,
+            stateStore: stateStore,
+            relayClient: relayClient,
+            bucketBuilder: PrivateUsageDailyBucketBuilder(
+                calendar: calendar,
+                timeZone: timeZone,
+                sealer: sealer
+            ),
+            sealer: sealer
+        )
+
+        _ = try await coordinator.exchangeGrantCode(
+            "spill-v1:grant_secret:\(testWrappingSecret)"
+        )
+
+        let reboundState = stateStore.load()
+        XCTAssertTrue(reboundState.acknowledgedCiphertextHashesByBucketKey.isEmpty)
+        XCTAssertTrue(reboundState.acknowledgedSharedSummaryHashesByBucketKey.isEmpty)
+        XCTAssertEqual(reboundState.pendingDirtyDayIDs, ["2026-06-07"])
+        XCTAssertEqual(
+            reboundState.lastProcessedEventChangeID,
+            usageStore.loadPrivateUsageEventChanges(afterChangeID: 0).maxChangeID
+        )
+        XCTAssertEqual(reboundState.syncTargetFingerprint?.count, 64)
+        XCTAssertEqual(reboundState.hasSavedConnection, true)
+    }
+
+    func testReconnectSeedsAcknowledgedDeletedDaysAfterJournalWasPruned() async throws {
+        let timeZone = try XCTUnwrap(TimeZone(identifier: "UTC"))
+        let calendar = fixedCalendar(timeZone: timeZone)
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 8, hour: 9)))
+        let yesterday = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 7, hour: 12)))
+        let usageStore = makeUsageStore()
+        try usageStore.replaceEvents([
+            makeEvent(
+                spanID: "span_reconnect_deleted",
+                runID: "run_reconnect_deleted",
+                aiTool: .codex,
+                taskType: "code_generation",
+                stage: "implement",
+                model: "gpt-5",
+                input: 11,
+                output: 13,
+                createdAt: yesterday
+            )
+        ])
+        let credentialStore = InMemoryPrivateUsageCredentialStore()
+        let stateStore = PrivateUsageUploadStateStore(defaults: makeDefaults())
+        let relayClient = FakePrivateUsageRelayClient()
+        let sealer = RecordingPrivateUsageSealer()
+        let coordinator = PrivateUsageUploadCoordinator(
+            usageStore: usageStore,
+            credentialStore: credentialStore,
+            stateStore: stateStore,
+            relayClient: relayClient,
+            bucketBuilder: PrivateUsageDailyBucketBuilder(
+                calendar: calendar,
+                timeZone: timeZone,
+                sealer: sealer
+            ),
+            sealer: sealer
+        )
+        let connectionCode = "spill-v1:grant_secret:\(testWrappingSecret)"
+
+        _ = try await coordinator.exchangeGrantCode(connectionCode)
+        _ = try await coordinator.syncNow(isEnabled: true, now: now)
+        try coordinator.clearConnection()
+        try usageStore.clearEvents()
+        let deletionCursor = usageStore.loadPrivateUsageEventChanges(afterChangeID: 0).maxChangeID
+        usageStore.prunePrivateUsageEventChanges(throughChangeID: deletionCursor)
+
+        _ = try await coordinator.exchangeGrantCode(connectionCode)
+
+        let reconnectState = stateStore.load()
+        XCTAssertEqual(reconnectState.pendingDirtyDayIDs, ["2026-06-07"])
+        XCTAssertTrue(reconnectState.acknowledgedCiphertextHashesByBucketKey.isEmpty)
+        XCTAssertTrue(reconnectState.acknowledgedSharedSummaryHashesByBucketKey.isEmpty)
+    }
+
     func testStatusCheckClearsRevokedDeviceCredential() async throws {
         let now = try XCTUnwrap(ISO8601DateFormatter.parseTokenUsageDate(from: "2026-06-08T10:00:00.000Z"))
         let credentialStore = InMemoryPrivateUsageCredentialStore()
@@ -2281,6 +2569,22 @@ final class PrivateUsageUploadTests: XCTestCase {
         let keyRing = try XCTUnwrap(credentialStore.storedKeyRing())
         XCTAssertEqual(keyRing["current_version"] as? Int, 2)
         XCTAssertEqual((keyRing["keys"] as? [[String: Any]])?.count, 2)
+    }
+
+    func testAESGCMSealerProducesStableCiphertextForStableContent() throws {
+        let credentialStore = InMemoryPrivateUsageCredentialStore()
+        try credentialStore.saveSealingKeyData(Data(repeating: 7, count: 32))
+        let sealer = PrivateUsageAESGCMBucketSealer(
+            credentialStore: credentialStore,
+            rotationInterval: 60,
+            now: { Date(timeIntervalSince1970: 1_000) }
+        )
+        let plaintext = Data("stable aggregate".utf8)
+
+        let first = try sealer.seal(plaintext, bucketKey: "2026-07-12:daily")
+        let second = try sealer.seal(plaintext, bucketKey: "2026-07-12:daily")
+
+        XCTAssertEqual(first, second)
     }
 
     func testAESGCMSealerMigratesLegacySingleKeyToVersionOneKeyRing() throws {

@@ -109,38 +109,6 @@ extension PrivateUsageUploadCoordinator {
         }
     }
 
-    func dirtyBuckets(
-        state: PrivateUsageUploadPersistence,
-        now: Date,
-        limit: Int,
-        earliestBucketStart: Date? = nil,
-        includeCurrentDay: Bool = false
-    ) throws -> [PrivateUsageEncryptedBucket] {
-        try makeUploadPlan(
-            state: state,
-            now: now,
-            limit: limit,
-            earliestBucketStart: earliestBucketStart,
-            includeCurrentDay: includeCurrentDay
-        ).buckets
-    }
-
-    func dirtySharedSummaries(
-        state: PrivateUsageUploadPersistence,
-        now: Date,
-        limit: Int,
-        earliestBucketStart: Date? = nil,
-        includeCurrentDay: Bool = false
-    ) throws -> [PrivateUsageSharedSummary] {
-        try makeUploadPlan(
-            state: state,
-            now: now,
-            limit: limit,
-            earliestBucketStart: earliestBucketStart,
-            includeCurrentDay: includeCurrentDay
-        ).sharedSummaries
-    }
-
     func makeUploadPlan(
         state: PrivateUsageUploadPersistence,
         now: Date,
@@ -197,14 +165,16 @@ extension PrivateUsageUploadCoordinator {
             acknowledgedHashesByBucketKey: state.acknowledgedCiphertextHashesByBucketKey,
             now: now,
             limit: limit,
-            includeCurrentDay: includeCurrentDay
+            includeCurrentDay: includeCurrentDay,
+            requiredDayIDs: processedDayIDs
         )
         let sharedSummaries = try bucketBuilder.makeDirtySharedSummaries(
             events: events,
             acknowledgedHashesByBucketKey: state.acknowledgedSharedSummaryHashesByBucketKey,
             now: now,
             limit: limit,
-            includeCurrentDay: includeCurrentDay
+            includeCurrentDay: includeCurrentDay,
+            requiredDayIDs: processedDayIDs
         )
         pendingDayIDs.subtract(processedDayIDs)
 

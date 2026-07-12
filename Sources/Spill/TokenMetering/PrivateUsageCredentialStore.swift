@@ -262,7 +262,7 @@ final class PrivateUsageUploadStateStore: @unchecked Sendable {
 
     private let namespace: String
     private let defaults: UserDefaults
-    private let lock = NSLock()
+    private static let lock = NSLock()
 
     init(
         defaults: UserDefaults = .standard,
@@ -273,19 +273,13 @@ final class PrivateUsageUploadStateStore: @unchecked Sendable {
     }
 
     func load() -> PrivateUsageUploadPersistence {
-        lock.withLock {
-            guard let data = defaults.data(forKey: namespacedKey(Keys.state)),
-                  let state = try? JSONDecoder().decode(PrivateUsageUploadPersistence.self, from: data)
-            else {
-                return .empty
-            }
-
-            return state
+        Self.lock.withLock {
+            loadUnlocked(namespace: namespace)
         }
     }
 
     func save(_ state: PrivateUsageUploadPersistence) {
-        lock.withLock {
+        Self.lock.withLock {
             guard let data = try? JSONEncoder().encode(state) else {
                 return
             }
@@ -294,8 +288,21 @@ final class PrivateUsageUploadStateStore: @unchecked Sendable {
         }
     }
 
+    func minimumPrunableChangeID(including currentChangeID: Int64) -> Int64 {
+        Self.lock.withLock {
+            let connectedCursors = PrivateUsageUploadEnvironment.allCases.compactMap { environment -> Int64? in
+                let state = loadUnlocked(namespace: environment.stateKeyNamespace)
+                guard state.hasSavedConnection == true else {
+                    return nil
+                }
+                return state.lastProcessedEventChangeID ?? 0
+            }
+            return ([currentChangeID] + connectedCursors).min() ?? currentChangeID
+        }
+    }
+
     func installID() -> String {
-        lock.withLock {
+        Self.lock.withLock {
             if let existing = defaults.string(forKey: namespacedKey(Keys.installID)),
                Self.isSafeInstallID(existing) {
                 return existing
@@ -309,6 +316,15 @@ final class PrivateUsageUploadStateStore: @unchecked Sendable {
 
     private func namespacedKey(_ key: String) -> String {
         "\(namespace).\(key)"
+    }
+
+    private func loadUnlocked(namespace: String) -> PrivateUsageUploadPersistence {
+        guard let data = defaults.data(forKey: "\(namespace).\(Keys.state)"),
+              let state = try? JSONDecoder().decode(PrivateUsageUploadPersistence.self, from: data)
+        else {
+            return .empty
+        }
+        return state
     }
 
     private static func isSafeInstallID(_ value: String) -> Bool {

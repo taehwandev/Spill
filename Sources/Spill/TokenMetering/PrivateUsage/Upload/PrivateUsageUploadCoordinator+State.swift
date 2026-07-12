@@ -7,7 +7,7 @@ extension PrivateUsageUploadCoordinator {
         plan: PrivateUsageUploadPlan,
         uploadedAt: Date
     ) {
-        lock.withLock {
+        let consumedThroughChangeID = lock.withLock {
             var state = stateStore.load()
             for bucket in buckets {
                 state.acknowledgedCiphertextHashesByBucketKey[bucket.bucketKey] = bucket.ciphertextHash
@@ -21,28 +21,37 @@ extension PrivateUsageUploadCoordinator {
             state.lastFailedUploadAt = nil
             state.lastFailureReason = nil
             state.lastAckedBucketKey = buckets.last?.bucketKey ?? sharedSummaries.last?.bucketKey ?? state.lastAckedBucketKey
-            applyChangeTracking(plan, to: &state)
+            let consumedThroughChangeID = applyChangeTracking(plan, to: &state)
             stateStore.save(state)
+            return consumedThroughChangeID
         }
+        usageStore.prunePrivateUsageEventChanges(
+            throughChangeID: stateStore.minimumPrunableChangeID(including: consumedThroughChangeID)
+        )
     }
 
     func advanceChangeTracking(_ plan: PrivateUsageUploadPlan) {
-        lock.withLock {
+        let consumedThroughChangeID = lock.withLock {
             var state = stateStore.load()
-            applyChangeTracking(plan, to: &state)
+            let consumedThroughChangeID = applyChangeTracking(plan, to: &state)
             stateStore.save(state)
+            return consumedThroughChangeID
         }
+        usageStore.prunePrivateUsageEventChanges(
+            throughChangeID: stateStore.minimumPrunableChangeID(including: consumedThroughChangeID)
+        )
     }
 
     private func applyChangeTracking(
         _ plan: PrivateUsageUploadPlan,
         to state: inout PrivateUsageUploadPersistence
-    ) {
+    ) -> Int64 {
         state.lastProcessedEventChangeID = max(
             state.lastProcessedEventChangeID ?? 0,
             plan.maxChangeID
         )
         state.pendingDirtyDayIDs = plan.remainingPendingDayIDs
+        return state.lastProcessedEventChangeID ?? 0
     }
 
     func markAutomaticAttempt(dayID: String) {

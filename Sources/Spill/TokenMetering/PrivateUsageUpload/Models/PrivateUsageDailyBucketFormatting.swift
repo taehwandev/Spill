@@ -7,13 +7,15 @@ extension PrivateUsageDailyBucketBuilder {
     }
 
     func localDayInterval(for dayID: String) -> DateInterval? {
+        var gregorianCalendar = Calendar(identifier: .gregorian)
+        gregorianCalendar.timeZone = timeZone
         let formatter = DateFormatter()
-        formatter.calendar = calendar
+        formatter.calendar = gregorianCalendar
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.timeZone = timeZone
         formatter.dateFormat = "yyyy-MM-dd"
         guard let start = formatter.date(from: dayID),
-              let end = calendar.date(byAdding: .day, value: 1, to: start)
+              let end = gregorianCalendar.date(byAdding: .day, value: 1, to: start)
         else {
             return nil
         }

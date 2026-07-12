@@ -7,6 +7,7 @@ struct PrivateUsageUploadPersistence: Codable, Equatable, Sendable {
     var lastAutomaticAttemptDayID: String?
     var lastAckedBucketKey: String?
     var hasSavedConnection: Bool?
+    var syncTargetFingerprint: String?
     var lastProcessedEventChangeID: Int64?
     var pendingDirtyDayIDs: [String]?
 

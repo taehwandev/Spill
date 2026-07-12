@@ -30,7 +30,8 @@ extension PrivateUsageDailyBucketBuilder {
         now: Date = Date(),
         limit: Int = 31,
         earliestBucketStart: Date? = nil,
-        includeCurrentDay: Bool = false
+        includeCurrentDay: Bool = false,
+        requiredDayIDs: [String] = []
     ) throws -> [PrivateUsageEncryptedBucket] {
         guard limit > 0 else {
             return []
@@ -40,7 +41,8 @@ extension PrivateUsageDailyBucketBuilder {
             events: events,
             now: now,
             earliestBucketStart: earliestBucketStart,
-            includeCurrentDay: includeCurrentDay
+            includeCurrentDay: includeCurrentDay,
+            requiredDayIDs: requiredDayIDs
         )
         var buckets = [PrivateUsageEncryptedBucket]()
         buckets.reserveCapacity(min(aggregates.count, limit))
@@ -82,7 +84,8 @@ extension PrivateUsageDailyBucketBuilder {
         now: Date = Date(),
         limit: Int = 31,
         earliestBucketStart: Date? = nil,
-        includeCurrentDay: Bool = false
+        includeCurrentDay: Bool = false,
+        requiredDayIDs: [String] = []
     ) throws -> [PrivateUsageSharedSummary] {
         guard limit > 0 else {
             return []
@@ -92,7 +95,8 @@ extension PrivateUsageDailyBucketBuilder {
             events: events,
             now: now,
             earliestBucketStart: earliestBucketStart,
-            includeCurrentDay: includeCurrentDay
+            includeCurrentDay: includeCurrentDay,
+            requiredDayIDs: requiredDayIDs
         )
         var summaries = [PrivateUsageSharedSummary]()
         summaries.reserveCapacity(min(aggregates.count, limit))
@@ -120,7 +124,8 @@ extension PrivateUsageDailyBucketBuilder {
         events: [TokenUsageEvent],
         now: Date = Date(),
         earliestBucketStart: Date? = nil,
-        includeCurrentDay: Bool = false
+        includeCurrentDay: Bool = false,
+        requiredDayIDs: [String] = []
     ) -> [PrivateUsageDailyAggregate] {
         let todayStart = calendar.startOfDay(for: now)
         let earliestDayStart = earliestBucketStart.map { calendar.startOfDay(for: $0) }
@@ -144,7 +149,7 @@ extension PrivateUsageDailyBucketBuilder {
             dayStart
         }
 
-        return groupedEvents.keys.sorted().compactMap { dayStart -> PrivateUsageDailyAggregate? in
+        var aggregates = groupedEvents.keys.sorted().compactMap { dayStart -> PrivateUsageDailyAggregate? in
             guard let groupedDayEvents = groupedEvents[dayStart], !groupedDayEvents.isEmpty else {
                 return nil
             }
@@ -166,6 +171,32 @@ extension PrivateUsageDailyBucketBuilder {
                 generatedAt: generatedAt
             )
         }
+
+        var existingDayIDs = Set(aggregates.map { String($0.bucketKey.prefix(10)) })
+        for dayID in requiredDayIDs.sorted() where !existingDayIDs.contains(dayID) {
+            guard let interval = localDayInterval(for: dayID),
+                  interval.start < todayStart || (includeCurrentDay && interval.start <= now)
+            else {
+                continue
+            }
+            if let earliestDayStart,
+               interval.start < earliestDayStart
+            {
+                continue
+            }
+
+            aggregates.append(
+                makeAggregate(
+                    dayStart: interval.start,
+                    dayEnd: interval.end,
+                    events: [],
+                    generatedAt: interval.start
+                )
+            )
+            existingDayIDs.insert(dayID)
+        }
+
+        return aggregates.sorted { $0.bucketStartAt < $1.bucketStartAt }
     }
 
     private func makeAggregate(
