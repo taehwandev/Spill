@@ -205,18 +205,6 @@ struct ClockAreaStatusPreferencesSection: View {
             }
 
             optionPicker(
-                title: t(.layout),
-                symbolName: "rectangle.split.2x1",
-                selection: $settings.menuBarStatusLayoutStyle
-            ) {
-                ForEach(MenuBarStatusLayoutStyle.allCases) { layout in
-                    Text(layout.title(appLanguage: settings.appLanguage)).tag(layout)
-                }
-            }
-            .disabled(!settings.menuBarStatusCompactMode)
-            .opacity(settings.menuBarStatusCompactMode ? 1 : 0.55)
-
-            optionPicker(
                 title: t(.decimals),
                 symbolName: "percent",
                 selection: $settings.menuBarStatusPrecision
