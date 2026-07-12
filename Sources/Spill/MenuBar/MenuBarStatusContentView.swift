@@ -271,12 +271,12 @@ extension MenuBarStatusContentView {
 
     fileprivate static func compactStackTextFont(textFontSize: CGFloat, textIsBold: Bool) -> NSFont {
         let size = (normalizedTextFontSize(textFontSize) * 0.61).clamped(to: 7.6...9.4)
-        return NSFont.monospacedDigitSystemFont(ofSize: size, weight: textIsBold ? .semibold : .medium)
+        return NSFont.monospacedDigitSystemFont(ofSize: size, weight: textIsBold ? .semibold : .light)
     }
 
     static func compactIconValueFont(textFontSize: CGFloat, textIsBold: Bool) -> NSFont {
         let size = (normalizedTextFontSize(textFontSize) * 0.65).clamped(to: 8.0...9.6)
-        return NSFont.monospacedDigitSystemFont(ofSize: size, weight: textIsBold ? .semibold : .medium)
+        return NSFont.monospacedDigitSystemFont(ofSize: size, weight: textIsBold ? .semibold : .light)
     }
 
     static func badgeTextFont(textFontSize: CGFloat, textIsBold: Bool) -> NSFont {
@@ -291,7 +291,7 @@ extension MenuBarStatusContentView {
 
     fileprivate static func verticalValueFont(textFontSize: CGFloat, textIsBold: Bool) -> NSFont {
         let size = (normalizedTextFontSize(textFontSize) * 0.80).clamped(to: 9.8...12.2)
-        return NSFont.monospacedDigitSystemFont(ofSize: size, weight: textIsBold ? .semibold : .medium)
+        return NSFont.monospacedDigitSystemFont(ofSize: size, weight: textIsBold ? .semibold : .light)
     }
 
     private static func chipWidth(
