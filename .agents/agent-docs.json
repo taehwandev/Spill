@@ -24,16 +24,16 @@
   "requiredAgentPlaybookDocs": [
     "AGENTS.md",
     "index.md",
-    "workflows/agent-task-lifecycle.md",
-    "workflows/request-triage.md",
-    "workflows/ambiguity-gate.md",
-    "workflows/product-architecture-delivery.md",
-    "workflows/feature-implementation.md",
-    "workflows/development-cycle.md",
-    "workflows/multi-agent-collaboration.md",
-    "workflows/multi-perspective-review.md",
-    "workflows/release-readiness.md",
-    "workflows/documentation-update.md"
+    "workflows/skills/agent-task-lifecycle/SKILL.md",
+    "workflows/skills/request-triage/SKILL.md",
+    "workflows/skills/ambiguity-gate/SKILL.md",
+    "workflows/skills/product-architecture-delivery/SKILL.md",
+    "workflows/skills/feature-implementation/SKILL.md",
+    "workflows/skills/development-cycle/SKILL.md",
+    "workflows/skills/multi-agent-collaboration/SKILL.md",
+    "workflows/skills/multi-perspective-review/SKILL.md",
+    "workflows/skills/release-readiness/SKILL.md",
+    "workflows/skills/documentation-update/SKILL.md"
   ],
   "hardRules": [
     "No giant NSStatusItem spacers",

@@ -127,7 +127,7 @@ python3 .agents/scripts/workflow.py status-click-smoke
 Release from the current repository state:
 
 ```bash
-sed -n '1,220p' "${AGENTPLAYBOOK_HOME}/workflows/release-readiness.md"
+sed -n '1,220p' "${AGENTPLAYBOOK_HOME}/workflows/skills/release-readiness/SKILL.md"
 ```
 
 Use `README.md` distribution notes, `VIBEGUARD.md`, and
