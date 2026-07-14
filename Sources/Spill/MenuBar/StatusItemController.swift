@@ -23,6 +23,9 @@ final class StatusItemController: NSObject {
     let systemItem: NSStatusItem
     let aiItem: NSStatusItem
     var isSpillBarVisible = false
+    var pressedMouseButtonsProvider: () -> Int = { NSEvent.pressedMouseButtons }
+    var mouseLocationProvider: () -> NSPoint = { NSEvent.mouseLocation }
+    var isDeferredRefreshScheduled = false
     var mainStatusContentView: MenuBarStatusContentView?
     var systemStatusContentView: MenuBarStatusContentView?
     var aiStatusContentView: MenuBarStatusContentView?

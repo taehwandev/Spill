@@ -27,6 +27,14 @@ extension StatusItemController {
             self.isSpillBarVisible = isSpillBarVisible
         }
 
+        // Applying a tick mid-click tears down and shifts the chips under the cursor,
+        // so the mouseUp can miss the button or hit-test against a moved layout.
+        // Hold this tick until the press ends; the deferred retry re-applies it.
+        guard !isMouseInteractingWithStatusItems else {
+            scheduleRefreshAfterInteraction()
+            return
+        }
+
         let state = makeRefreshState()
         let changes = updateCurrentState(from: state)
         let statusTooltip = statusTooltip(
@@ -52,6 +60,48 @@ extension StatusItemController {
             TriggerIconAnimator.shared.noteUsageRatio(usageRatio)
         } else {
             TriggerIconAnimator.shared.stop()
+        }
+    }
+}
+
+extension StatusItemController {
+    var statusItemWindows: [NSWindow] {
+        [triggerItem, systemItem, aiItem].compactMap { $0.button?.window }
+    }
+
+    private var isMouseInteractingWithStatusItems: Bool {
+        Self.isMouseInteracting(
+            pressedMouseButtons: pressedMouseButtonsProvider(),
+            mouseLocation: mouseLocationProvider(),
+            statusWindowFrames: statusItemWindows.map(\.frame)
+        )
+    }
+
+    static func isMouseInteracting(
+        pressedMouseButtons: Int,
+        mouseLocation: NSPoint,
+        statusWindowFrames: [NSRect]
+    ) -> Bool {
+        guard pressedMouseButtons != 0 else {
+            return false
+        }
+
+        return statusWindowFrames.contains { $0.contains(mouseLocation) }
+    }
+
+    private func scheduleRefreshAfterInteraction() {
+        guard !isDeferredRefreshScheduled else {
+            return
+        }
+
+        isDeferredRefreshScheduled = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+            guard let self else {
+                return
+            }
+
+            self.isDeferredRefreshScheduled = false
+            self.refresh()
         }
     }
 }

@@ -5,7 +5,11 @@ final class SpillPanelDismissController {
     private var globalMonitor: Any?
     private var localMonitor: Any?
 
-    func start(panel: NSPanel, onDismiss: @escaping @MainActor () -> Void) {
+    func start(
+        panel: NSPanel,
+        isExcludedWindow: @escaping @MainActor (NSWindow) -> Bool = { _ in false },
+        onDismiss: @escaping @MainActor () -> Void
+    ) {
         stop()
 
         globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { _ in
@@ -26,7 +30,14 @@ final class SpillPanelDismissController {
                 return event
             }
 
-            if !Self.isEventWindowInsidePanelSurface(eventWindow, panel: panel) {
+            let shouldDismiss = MainActor.assumeIsolated {
+                Self.shouldDismiss(
+                    forEventWindow: eventWindow,
+                    panel: panel,
+                    isExcludedWindow: isExcludedWindow
+                )
+            }
+            if shouldDismiss {
                 Task { @MainActor in
                     onDismiss()
                 }
@@ -34,6 +45,22 @@ final class SpillPanelDismissController {
 
             return event
         }
+    }
+
+    /// Status-item clicks own the panel open/close decision through their button
+    /// actions (mouseUp). Dismissing here on their mouseDown as well makes a single
+    /// click close and immediately reopen (or open and immediately close) the panel.
+    @MainActor
+    static func shouldDismiss(
+        forEventWindow eventWindow: NSWindow,
+        panel: NSPanel,
+        isExcludedWindow: (NSWindow) -> Bool
+    ) -> Bool {
+        if isExcludedWindow(eventWindow) {
+            return false
+        }
+
+        return !isEventWindowInsidePanelSurface(eventWindow, panel: panel)
     }
 
     func stop() {
