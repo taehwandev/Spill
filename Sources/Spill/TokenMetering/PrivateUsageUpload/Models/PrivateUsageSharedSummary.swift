@@ -112,6 +112,9 @@ private extension PrivateUsageSharedSummary {
         return compacted
     }
 
+}
+
+private extension PrivateUsageSharedSummary {
     static func compactWorkItems(
         _ workItems: [PrivateUsageWorkItemAggregate],
         limit: Int,

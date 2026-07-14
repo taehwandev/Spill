@@ -1,6 +1,9 @@
 import Foundation
 
 enum TokenUsageDashboardTrendBucketBuilder {
+}
+
+extension TokenUsageDashboardTrendBucketBuilder {
     static func buckets(
         events: [TokenUsageDashboardParsedEvent],
         selectedPeriod: TokenUsageDashboardPeriod,
@@ -51,6 +54,9 @@ enum TokenUsageDashboardTrendBucketBuilder {
         }
     }
 
+}
+
+private extension TokenUsageDashboardTrendBucketBuilder {
     private static func dailyBuckets(
         events: [TokenUsageDashboardParsedEvent],
         dayCount: Int,
@@ -109,6 +115,9 @@ enum TokenUsageDashboardTrendBucketBuilder {
         }
     }
 
+}
+
+private extension TokenUsageDashboardTrendBucketBuilder {
     private static func monthlyBuckets(
         events: [TokenUsageDashboardParsedEvent],
         language: TokenMeteringLanguage,
@@ -184,6 +193,9 @@ enum TokenUsageDashboardTrendBucketBuilder {
         return buckets
     }
 
+}
+
+private extension TokenUsageDashboardTrendBucketBuilder {
     private static func summariesByBucket<BucketID: Hashable>(
         events: [TokenUsageDashboardParsedEvent],
         language: TokenMeteringLanguage,
@@ -201,6 +213,9 @@ enum TokenUsageDashboardTrendBucketBuilder {
         }
     }
 
+}
+
+private extension TokenUsageDashboardTrendBucketBuilder {
     private struct BucketSummary {
         var eventCount = 0
         var totalTokens = 0
@@ -229,6 +244,9 @@ enum TokenUsageDashboardTrendBucketBuilder {
         }
     }
 
+}
+
+private extension TokenUsageDashboardTrendBucketBuilder {
     private static func monthStart(for date: Date, calendar: Calendar) -> Date {
         let components = calendar.dateComponents([.year, .month], from: date)
         return calendar.date(from: components) ?? calendar.startOfDay(for: date)

@@ -9,7 +9,9 @@ struct TokenMeteringDashboardDetailPanel: View {
     let isLiveUpdated: (String) -> Bool
     let clearSelection: () -> Void
     let updateAlias: (String, String) -> Void
+}
 
+extension TokenMeteringDashboardDetailPanel {
     private var detailSession: TokenUsageDashboardSessionRow {
         snapshot.selectedSession ?? session
     }
@@ -32,7 +34,9 @@ struct TokenMeteringDashboardDetailPanel: View {
         }
         .frame(maxHeight: .infinity, alignment: .topLeading)
     }
+}
 
+extension TokenMeteringDashboardDetailPanel {
     private func detailPanelHeader(_ detailSession: TokenUsageDashboardSessionRow) -> some View {
         HStack(alignment: .top, spacing: 8) {
             VStack(alignment: .leading, spacing: 4) {
@@ -113,7 +117,9 @@ struct TokenMeteringDashboardDetailPanel: View {
                 .stroke(Color.primary.opacity(0.04), lineWidth: 0.5)
         }
     }
+}
 
+extension TokenMeteringDashboardDetailPanel {
     private func detailMetricsSection(detailSession: TokenUsageDashboardSessionRow) -> some View {
         VStack(spacing: 8) {
             HStack {
@@ -195,7 +201,9 @@ struct TokenMeteringDashboardDetailPanel: View {
         .padding(10)
         .background(Color.primary.opacity(0.02), in: RoundedRectangle(cornerRadius: 8))
     }
+}
 
+extension TokenMeteringDashboardDetailPanel {
     private func workItemPopoverSection<Rows: Collection>(
         title: String,
         rows: Rows,

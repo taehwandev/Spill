@@ -17,7 +17,9 @@ final class TokenUsageBridgeServer: @unchecked Sendable {
         self.store = store
         self.port = port
     }
+}
 
+extension TokenUsageBridgeServer {
     func start() throws {
         guard acceptSource == nil else {
             return
@@ -103,7 +105,9 @@ final class TokenUsageBridgeServer: @unchecked Sendable {
             throw currentPOSIXError()
         }
     }
+}
 
+extension TokenUsageBridgeServer {
     private func acceptAvailableConnections() {
         while listenSocket >= 0 {
             let clientSocket = Darwin.accept(listenSocket, nil, nil)
@@ -183,7 +187,9 @@ final class TokenUsageBridgeServer: @unchecked Sendable {
 
         return request
     }
+}
 
+extension TokenUsageBridgeServer {
     private func isCompleteHTTPRequest(_ data: Data) -> Bool {
         guard let headerEnd = data.range(of: Data("\r\n\r\n".utf8)),
               let headerText = String(data: data[..<headerEnd.lowerBound], encoding: .utf8)
@@ -229,7 +235,9 @@ final class TokenUsageBridgeServer: @unchecked Sendable {
             }
         }
     }
+}
 
+extension TokenUsageBridgeServer {
     func response(for requestData: Data) -> Data {
         guard let request = TokenUsageBridgeRequest(data: requestData) else {
             return httpResponse(status: 400, body: errorBody("invalid_request"))
@@ -282,7 +290,9 @@ final class TokenUsageBridgeServer: @unchecked Sendable {
             return httpResponse(status: 404, body: errorBody("not_found"))
         }
     }
+}
 
+extension TokenUsageBridgeServer {
     private func httpResponse(status: Int, body: Data) -> Data {
         let reason = reasonPhrase(for: status)
         let headers = [

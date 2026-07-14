@@ -10,6 +10,20 @@ struct SpillPanelAccessibilityReport: Equatable {
         "Caffeine Off"
     ]
 
+    private static let axStringAttributes = [
+        kAXDescriptionAttribute,
+        kAXTitleAttribute,
+        kAXValueAttribute,
+        kAXHelpAttribute
+    ]
+
+    private static let axArrayAttributes = [
+        kAXWindowsAttribute,
+        kAXChildrenAttribute,
+        kAXVisibleChildrenAttribute,
+        kAXContentsAttribute
+    ]
+
     let requiredLabels: [String]
     let discoveredLabels: [String]
 
@@ -36,7 +50,9 @@ struct SpillPanelAccessibilityReport: Equatable {
             Self.collectLabels(from: rootElement) + Self.collectCurrentApplicationAXLabels()
         )
     }
+}
 
+extension SpillPanelAccessibilityReport {
     var missingLabels: [String] {
         requiredLabels.filter { requiredLabel in
             !discoveredLabels.contains { discoveredLabel in
@@ -57,7 +73,9 @@ struct SpillPanelAccessibilityReport: Equatable {
             "valid=\(isValid)"
         ].joined(separator: " ")
     }
+}
 
+private extension SpillPanelAccessibilityReport {
     @MainActor private static func collectLabels(from rootElement: AnyObject) -> [String] {
         var labels = [String]()
         var visited = Set<ObjectIdentifier>()
@@ -139,7 +157,9 @@ struct SpillPanelAccessibilityReport: Equatable {
 
         return value.takeUnretainedValue()
     }
+}
 
+private extension SpillPanelAccessibilityReport {
     private static func collectCurrentApplicationAXLabels() -> [String] {
         let appElement = AXUIElementCreateApplication(ProcessInfo.processInfo.processIdentifier)
         var labels = [String]()
@@ -212,7 +232,9 @@ struct SpillPanelAccessibilityReport: Equatable {
 
         return array.compactMap(axElement)
     }
+}
 
+private extension SpillPanelAccessibilityReport {
     @MainActor private static func collectLabelsIfPossible(
         from element: Any,
         depth: Int,
@@ -304,18 +326,4 @@ struct SpillPanelAccessibilityReport: Equatable {
 
         return result.isEmpty ? "empty" : result
     }
-
-    private static let axStringAttributes = [
-        kAXDescriptionAttribute,
-        kAXTitleAttribute,
-        kAXValueAttribute,
-        kAXHelpAttribute
-    ]
-
-    private static let axArrayAttributes = [
-        kAXWindowsAttribute,
-        kAXChildrenAttribute,
-        kAXVisibleChildrenAttribute,
-        kAXContentsAttribute
-    ]
 }

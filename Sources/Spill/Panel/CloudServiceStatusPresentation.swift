@@ -70,7 +70,9 @@ enum CloudServiceStatusPresentation {
             isLoading: isLoading
         )
     }
+}
 
+extension CloudServiceStatusPresentation {
     static func serviceKinds(for kind: LocalAIToolKind) -> [CloudServiceKind] {
         switch kind {
         case .codex:

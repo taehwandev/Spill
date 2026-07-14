@@ -48,7 +48,9 @@ final class TokenUsageCollectorCoordinator: TokenUsageExternalCollecting, @unche
             )
         }
     }
+}
 
+extension TokenUsageCollectorCoordinator {
     func requestCollection(reason: String) {
         requestCollection(reason: reason, completion: nil)
     }
@@ -96,7 +98,9 @@ final class TokenUsageCollectorCoordinator: TokenUsageExternalCollecting, @unche
             hasPendingRequest = false
         }
     }
+}
 
+extension TokenUsageCollectorCoordinator {
     private func runCollectionLoop() {
         while true {
             guard !shouldStop else {
@@ -144,7 +148,9 @@ final class TokenUsageCollectorCoordinator: TokenUsageExternalCollecting, @unche
             }
         }
     }
+}
 
+extension TokenUsageCollectorCoordinator {
     private func runAntigravityActiveImporter() {
         let startDate = Date().addingTimeInterval(-antigravityLookbackInterval)
         _ = antigravityImportRunner(store, startDate) { [weak self] in
@@ -190,5 +196,4 @@ final class TokenUsageCollectorCoordinator: TokenUsageExternalCollecting, @unche
         }
         NotificationCenter.default.post(name: Self.collectionDidFinishNotification, object: self)
     }
-
 }

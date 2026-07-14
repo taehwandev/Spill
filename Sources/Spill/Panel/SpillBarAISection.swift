@@ -51,7 +51,9 @@ struct SpillBarAISection: View {
             }
         }
     }
+}
 
+private extension SpillBarAISection {
     private var aiToolColumns: [GridItem] {
         [
             GridItem(.flexible(minimum: 0), spacing: 7),
@@ -130,7 +132,9 @@ struct SpillBarAISection: View {
             settings.isLocalAIToolVisible(status.kind)
         }
     }
+}
 
+private extension SpillBarAISection {
     private func serviceStatus(for kind: LocalAIToolKind) -> CloudServiceStatusItem? {
         CloudServiceStatusPresentation.serviceStatus(
             for: kind,
@@ -174,7 +178,9 @@ struct SpillBarAISection: View {
             }
         }
     }
+}
 
+private extension SpillBarAISection {
     private func aiStatusDetailPopover(for status: LocalAIToolStatus) -> some View {
         SpillStatusDetailPopover(
             title: status.title,

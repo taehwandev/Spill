@@ -15,7 +15,9 @@ struct SpillBarAITokenSummary: View {
             tokenSummary
         }
     }
+}
 
+private extension SpillBarAITokenSummary {
     private var tokenSummary: some View {
         let snapshot = tokenUsageDashboardStore.panelSummary
         let displayTotalTokens = snapshot.totalTokens
@@ -90,7 +92,9 @@ struct SpillBarAITokenSummary: View {
             )
         )
     }
+}
 
+private extension SpillBarAITokenSummary {
     private var setupPreview: some View {
         Button {
             tokenMeteringSettingsAction()
@@ -144,7 +148,9 @@ struct SpillBarAITokenSummary: View {
         .help(AppL10n.text(.tokenMeteringSettings, appLanguage: settings.appLanguage))
         .accessibilityLabel(AppL10n.text(.tokenMeteringSetupTitle, appLanguage: settings.appLanguage))
     }
+}
 
+private extension SpillBarAITokenSummary {
     private var tokenSummaryHeader: some View {
         HStack(spacing: 6) {
             Text(AppL10n.text(.tokenMetering, appLanguage: settings.appLanguage))
@@ -195,7 +201,9 @@ struct SpillBarAITokenSummary: View {
             return settings.isTokenUsageAIToolVisible(tool)
         }
     }
+}
 
+private extension SpillBarAITokenSummary {
     private var tokenSummaryBackground: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -252,7 +260,9 @@ struct SpillBarAITokenSummary: View {
             .padding(.top, 2)
         }
     }
+}
 
+private extension SpillBarAITokenSummary {
     private func tokenMeteringSubtitle(
         topTask: TokenUsageDashboardBarRow?,
         topSource: TokenUsageDashboardBarRow?,

@@ -70,7 +70,9 @@ struct SpillBarAIToolCard: View {
             isHovered = hovering
         }
     }
+}
 
+private extension SpillBarAIToolCard {
     @ViewBuilder
     private func tokenUsageRow(tint: Color) -> some View {
         if let tokenUsage {
@@ -128,7 +130,9 @@ struct SpillBarAIToolCard: View {
         .frame(height: 14)
         .background(tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 3, style: .continuous))
     }
+}
 
+private extension SpillBarAIToolCard {
     @ViewBuilder
     private var aiStatusBadge: some View {
         if let serviceStatus {
@@ -185,7 +189,9 @@ struct SpillBarAIToolCard: View {
         .background(tint.opacity(0.10), in: Capsule())
         .help(AppL10n.text(.serverStatusPendingHelp, appLanguage: appLanguage))
     }
+}
 
+private extension SpillBarAIToolCard {
     private func aiToolIconBadge(symbolName: String, tint: Color) -> some View {
         ZStack {
             RoundedRectangle(cornerRadius: 6, style: .continuous)
@@ -227,7 +233,9 @@ struct SpillBarAIToolCard: View {
             return AppL10n.text(.checking, appLanguage: appLanguage)
         }
     }
+}
 
+private extension SpillBarAIToolCard {
     private struct AgentActivityWaveView: View {
         let isActive: Bool
         let tint: Color

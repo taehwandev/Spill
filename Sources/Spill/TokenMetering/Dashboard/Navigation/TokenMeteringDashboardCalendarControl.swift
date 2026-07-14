@@ -5,7 +5,9 @@ struct TokenMeteringDashboardCalendarControl: View {
     @Binding var isPresented: Bool
     let language: TokenMeteringLanguage
     let selectedControlAccent: Color
+}
 
+extension TokenMeteringDashboardCalendarControl {
     var body: some View {
         HStack(spacing: 6) {
             calendarButton
@@ -60,7 +62,9 @@ struct TokenMeteringDashboardCalendarControl: View {
             .focusEffectDisabled()
         }
     }
+}
 
+extension TokenMeteringDashboardCalendarControl {
     private var calendarPickerPanel: some View {
         VStack(spacing: 9) {
             HStack(spacing: 8) {
@@ -112,7 +116,9 @@ struct TokenMeteringDashboardCalendarControl: View {
         .buttonStyle(.plain)
         .disabled(!isEnabled)
     }
+}
 
+extension TokenMeteringDashboardCalendarControl {
     private var todayCalendarButton: some View {
         Button {
             store.selectTodayCalendarDay()
@@ -178,7 +184,9 @@ struct TokenMeteringDashboardCalendarControl: View {
             .accessibilityLabel(day.detail)
         }
     }
+}
 
+extension TokenMeteringDashboardCalendarControl {
     private var datePickerTitle: String {
         store.snapshot.selectedCalendarDayTitle ?? t(.pickDate)
     }

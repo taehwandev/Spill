@@ -123,6 +123,9 @@ final class PrivateUsageRelayClient: PrivateUsageRelayClienting, @unchecked Send
         let _: PrivateUsageDeviceCheckResponse = try await send(request)
     }
 
+}
+
+private extension PrivateUsageRelayClient {
     private func makeJSONRequest(path: String) throws -> URLRequest {
         let endpoint = relayURL.appendingPathComponent(path)
         guard PrivateUsageRelayEndpoint.isSafeRelayURL(endpoint) else {

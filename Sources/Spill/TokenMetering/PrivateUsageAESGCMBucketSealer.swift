@@ -57,6 +57,9 @@ final class PrivateUsageAESGCMBucketSealer: PrivateUsageBucketSealing, @unchecke
         self.decoder = decoder
     }
 
+}
+
+extension PrivateUsageAESGCMBucketSealer {
     func seal(_ plaintext: Data, bucketKey: String) throws -> PrivateUsageSealedPayload {
         let activeKey = try loadOrCreateActiveKey()
         let key = SymmetricKey(data: activeKey.keyData)
@@ -122,6 +125,9 @@ final class PrivateUsageAESGCMBucketSealer: PrivateUsageBucketSealing, @unchecke
         }
     }
 
+}
+
+private extension PrivateUsageAESGCMBucketSealer {
     private func loadOrCreateActiveKey() throws -> PrivateUsageActiveSealingKey {
         try lock.withLock {
             var keyRing = try loadOrCreateKeyRing()
@@ -176,6 +182,9 @@ final class PrivateUsageAESGCMBucketSealer: PrivateUsageBucketSealing, @unchecke
         throw PrivateUsageUploadError.missingSealingKey
     }
 
+}
+
+private extension PrivateUsageAESGCMBucketSealer {
     private func shouldRotate(
         keyRing: PrivateUsageSealingKeyRing,
         now: Date
@@ -209,6 +218,9 @@ final class PrivateUsageAESGCMBucketSealer: PrivateUsageBucketSealing, @unchecke
         try credentialStore.saveSealingKeyData(encoder.encode(keyRing))
     }
 
+}
+
+private extension PrivateUsageAESGCMBucketSealer {
     private static func wrapSealingKey(
         _ key: PrivateUsageSealingKey,
         using wrappingSecret: PrivateUsageKeyWrappingSecret
@@ -253,6 +265,9 @@ final class PrivateUsageAESGCMBucketSealer: PrivateUsageBucketSealing, @unchecke
         )
     }
 
+}
+
+private extension PrivateUsageAESGCMBucketSealer {
     private func deterministicNonceData(
         keyData: Data,
         bucketKey: String,

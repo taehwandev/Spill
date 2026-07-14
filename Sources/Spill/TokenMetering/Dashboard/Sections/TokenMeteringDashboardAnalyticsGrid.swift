@@ -9,7 +9,9 @@ struct TokenMeteringDashboardAnalyticsGrid: View {
     let developerOptionsAction: () -> Void
     @State private var hoveredRowID: String? = nil
     @State private var selectedTrendBucketID: String? = nil
+}
 
+extension TokenMeteringDashboardAnalyticsGrid {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             if showsPlaceholder {
@@ -74,7 +76,9 @@ struct TokenMeteringDashboardAnalyticsGrid: View {
             }
         }
     }
+}
 
+extension TokenMeteringDashboardAnalyticsGrid {
     private var trendTitle: String {
         t(.trendTitle)
     }
@@ -135,7 +139,9 @@ struct TokenMeteringDashboardAnalyticsGrid: View {
 
         return buckets.last { $0.hasEvents }
     }
+}
 
+extension TokenMeteringDashboardAnalyticsGrid {
     private var loadingAnalyticsGrid: some View {
         TokenMeteringDashboardLoadingAnalyticsGrid(
             shouldShowTrendChart: shouldShowTrendChart,
@@ -164,7 +170,9 @@ struct TokenMeteringDashboardAnalyticsGrid: View {
             developerOptionsAction: developerOptionsAction
         )
     }
+}
 
+extension TokenMeteringDashboardAnalyticsGrid {
     private func distributionPanel(
         rows: [TokenUsageDashboardBarRow],
         title: String,
@@ -253,7 +261,9 @@ struct TokenMeteringDashboardAnalyticsGrid: View {
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
     }
+}
 
+extension TokenMeteringDashboardAnalyticsGrid {
     private func metricValue(_ value: String, tint: Color, isHovered: Bool) -> some View {
         let parts = metricValueParts(from: value)
         return HStack(spacing: 5) {

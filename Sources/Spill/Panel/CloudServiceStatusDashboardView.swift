@@ -50,7 +50,9 @@ struct CloudServiceStatusDashboardView: View {
             store.refreshIfNeeded()
         }
     }
+}
 
+private extension CloudServiceStatusDashboardView {
     private var header: some View {
         HStack(alignment: .center, spacing: 8) {
             VStack(alignment: .leading, spacing: 2) {
@@ -103,7 +105,9 @@ struct CloudServiceStatusDashboardView: View {
             )
         }
     }
+}
 
+private extension CloudServiceStatusDashboardView {
     private func serviceRow(_ item: CloudServiceStatusItem) -> some View {
         HStack(alignment: .center, spacing: 10) {
             ZStack {
@@ -165,7 +169,9 @@ struct CloudServiceStatusDashboardView: View {
         .help(AppL10n.openStatusPage(item.title))
         .accessibilityLabel(AppL10n.openStatusPage(item.title))
     }
+}
 
+private extension CloudServiceStatusDashboardView {
     private var footerText: String {
         guard let snapshot = store.snapshot else {
             return AppL10n.text(.officialStatusFetchedOnOpen)

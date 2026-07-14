@@ -10,7 +10,9 @@ struct PanelState: Equatable {
     let statusDetailTarget: SpillStatusDetailTarget?
     let pendingDismiss: Bool
     let onboardingPreviewEnabled: Bool
+}
 
+extension PanelState {
     var itemCount: Int {
         displayItems.count
     }
@@ -42,7 +44,9 @@ struct PanelState: Equatable {
 
         return pinnedActionItems + displayActionItems
     }
+}
 
+extension PanelState {
     @MainActor
     static func derived(
         settings: SpillSettings,
@@ -120,7 +124,9 @@ struct PanelState: Equatable {
             onboardingPreviewEnabled: true
         )
     }
+}
 
+extension PanelState {
     func replacingTransientState(
         actionFeedback: SpillActionFeedback?,
         statusDetailTarget: SpillStatusDetailTarget?,
@@ -209,7 +215,9 @@ final class PanelStore: ObservableObject {
         state = stateBuilder(settings, scanner, isAccessibilityTrusted())
         observeInputs()
     }
+}
 
+extension PanelStore {
     func send(_ action: PanelAction) {
         switch action {
         case .refreshDerivedState:
@@ -264,7 +272,9 @@ final class PanelStore: ObservableObject {
             self?.refreshDerivedState()
         }
     }
+}
 
+private extension PanelStore {
     private func refreshDerivedState() {
         let currentState = state
         state = stateBuilder(settings, scanner, isAccessibilityTrusted())
@@ -307,7 +317,9 @@ final class PanelStore: ObservableObject {
             pendingDismiss: .replace(false)
         )
     }
+}
 
+private extension PanelStore {
     private func perform(_ item: SpillDisplayedActionItem) {
         let result = menuBarActionPerformer(item.action)
         SpillTelemetry.shared.track(

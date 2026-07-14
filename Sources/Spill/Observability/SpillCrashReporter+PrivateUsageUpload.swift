@@ -104,6 +104,9 @@ private extension SpillCrashReporter {
         )
     }
 
+}
+
+private extension SpillCrashReporter {
     static func privateUsageUploadErrorKind(_ error: PrivateUsageUploadError) -> String {
         switch error {
         case .invalidConnectionCode:

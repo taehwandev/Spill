@@ -5,6 +5,9 @@ enum PrivateUsageWebConnection {
     static let webURLInfoDictionaryKey = "SPILLPrivateUsageWebURL"
     static let callbackURL = "spill://private-usage/connect"
 
+}
+
+extension PrivateUsageWebConnection {
     static func connectDeviceURL(
         processEnvironment: [String: String] = ProcessInfo.processInfo.environment,
         bundleInfo: [String: Any]? = Bundle.main.infoDictionary
@@ -51,6 +54,9 @@ enum PrivateUsageWebConnection {
         return nil
     }
 
+}
+
+private extension PrivateUsageWebConnection {
     private static func sanitizedConnectDeviceURL(_ rawValue: String) -> URL? {
         let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let url = URL(string: trimmed),

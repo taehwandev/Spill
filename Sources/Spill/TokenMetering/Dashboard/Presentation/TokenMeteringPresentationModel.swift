@@ -39,189 +39,6 @@ struct TokenUsageDashboardSnapshot: Equatable {
     let canNavigatePreviousPeriod: Bool
     let canNavigateNextPeriod: Bool
 
-    static func buildPair(
-        events: [TokenUsageEvent],
-        selectedTool: TokenUsageAITool?,
-        selectedPeriod: TokenUsageDashboardPeriod,
-        selectedCalendarDayID: String?,
-        selectedProjectID: String?,
-        selectedSessionID: String?,
-        language: TokenMeteringLanguage,
-        localAliases: [String: String],
-        showAdvancedTools: Bool,
-        visibleTools: Set<TokenUsageAITool>? = nil,
-        now: Date,
-        proposedCalendarMonthStart: Date?,
-        calendar: Calendar,
-        periodFilterTotals: [TokenUsageDashboardPeriod: Int]? = nil,
-        availableDateBounds: TokenUsageDashboardDateBounds? = nil,
-        calendarDayTotals: [String: Int]? = nil,
-        periodOffset: Int = 0,
-        locale: Locale = .autoupdatingCurrent,
-        timeZone: TimeZone = .autoupdatingCurrent
-    ) -> TokenUsageDashboardSnapshotPair {
-        let context = TokenUsageDashboardSnapshotBuildContext(
-            events: events,
-            showAdvancedTools: showAdvancedTools,
-            calendar: calendar
-        )
-        return buildPair(
-            context: context,
-            selectedTool: selectedTool,
-            selectedPeriod: selectedPeriod,
-            selectedCalendarDayID: selectedCalendarDayID,
-            selectedProjectID: selectedProjectID,
-            selectedSessionID: selectedSessionID,
-            language: language,
-            localAliases: localAliases,
-            showAdvancedTools: showAdvancedTools,
-            visibleTools: visibleTools,
-            now: now,
-            proposedCalendarMonthStart: proposedCalendarMonthStart,
-            calendar: calendar,
-            periodFilterTotals: periodFilterTotals,
-            availableDateBounds: availableDateBounds,
-            calendarDayTotals: calendarDayTotals,
-            periodOffset: periodOffset,
-            locale: locale,
-            timeZone: timeZone
-        )
-    }
-
-    static func buildPair(
-        context: TokenUsageDashboardSnapshotBuildContext,
-        selectedTool: TokenUsageAITool?,
-        selectedPeriod: TokenUsageDashboardPeriod,
-        selectedCalendarDayID: String?,
-        selectedProjectID: String?,
-        selectedSessionID: String?,
-        language: TokenMeteringLanguage,
-        localAliases: [String: String],
-        showAdvancedTools: Bool,
-        visibleTools: Set<TokenUsageAITool>? = nil,
-        now: Date,
-        proposedCalendarMonthStart: Date?,
-        calendar: Calendar,
-        periodFilterTotals: [TokenUsageDashboardPeriod: Int]? = nil,
-        availableDateBounds: TokenUsageDashboardDateBounds? = nil,
-        calendarDayTotals: [String: Int]? = nil,
-        periodOffset: Int = 0,
-        locale: Locale = .autoupdatingCurrent,
-        timeZone: TimeZone = .autoupdatingCurrent
-    ) -> TokenUsageDashboardSnapshotPair {
-        let selectedDayMonth = selectedCalendarDayID
-            .flatMap { date(forDayID: $0, calendar: calendar) }
-            .map { monthStart(for: $0, calendar: calendar) }
-        let displayCalendarMonth = normalizedCalendarMonthStart(
-            events: context.dashboardEvents,
-            availableDateBounds: availableDateBounds,
-            now: now,
-            proposedMonthStart: proposedCalendarMonthStart ?? selectedDayMonth,
-            calendar: calendar
-        )
-        let filtered = TokenUsageDashboardSnapshot(
-            context: context,
-            selectedTool: selectedTool,
-            selectedPeriod: selectedPeriod,
-            selectedCalendarDayID: selectedCalendarDayID,
-            selectedProjectID: selectedProjectID,
-            selectedSessionID: selectedSessionID,
-            language: language,
-            localAliases: localAliases,
-            showAdvancedTools: showAdvancedTools,
-            visibleTools: visibleTools,
-            now: now,
-            calendarMonthStart: displayCalendarMonth,
-            resolvedCalendarMonthStart: displayCalendarMonth,
-            periodFilterTotals: periodFilterTotals,
-            availableDateBounds: availableDateBounds,
-            periodOffset: periodOffset,
-            calendar: calendar,
-            locale: locale,
-            timeZone: timeZone,
-            calendarDayTotals: calendarDayTotals
-        )
-        let unfiltered = selectedTool == nil && selectedProjectID == nil
-            ? filtered
-            : TokenUsageDashboardSnapshot(
-                context: context,
-                selectedTool: nil,
-                selectedPeriod: selectedPeriod,
-                selectedCalendarDayID: selectedCalendarDayID,
-                selectedProjectID: nil,
-                selectedSessionID: nil,
-                language: language,
-                localAliases: localAliases,
-                showAdvancedTools: showAdvancedTools,
-                visibleTools: visibleTools,
-                now: now,
-                calendarMonthStart: displayCalendarMonth,
-                resolvedCalendarMonthStart: displayCalendarMonth,
-                periodFilterTotals: periodFilterTotals,
-                availableDateBounds: availableDateBounds,
-                periodOffset: periodOffset,
-                calendar: calendar,
-                locale: locale,
-                timeZone: timeZone,
-                calendarDayTotals: calendarDayTotals
-            )
-
-        return TokenUsageDashboardSnapshotPair(
-            filtered: filtered,
-            unfiltered: unfiltered,
-            calendarMonthStart: displayCalendarMonth
-        )
-    }
-
-    init(
-        events: [TokenUsageEvent],
-        selectedTool: TokenUsageAITool? = nil,
-        selectedPeriod: TokenUsageDashboardPeriod = .all,
-        selectedCalendarDayID: String? = nil,
-        selectedProjectID: String? = nil,
-        selectedSessionID: String? = nil,
-        language: TokenMeteringLanguage = .current(),
-        localAliases: [String: String] = [:],
-        showAdvancedTools: Bool = false,
-        visibleTools: Set<TokenUsageAITool>? = nil,
-        now: Date = Date(),
-        calendarMonthStart: Date? = nil,
-        periodFilterTotals: [TokenUsageDashboardPeriod: Int]? = nil,
-        availableDateBounds: TokenUsageDashboardDateBounds? = nil,
-        periodOffset: Int = 0,
-        calendar: Calendar = .autoupdatingCurrent,
-        locale: Locale = .autoupdatingCurrent,
-        timeZone: TimeZone = .autoupdatingCurrent,
-        calendarDayTotals: [String: Int]? = nil
-    ) {
-        self.init(
-            context: TokenUsageDashboardSnapshotBuildContext(
-                events: events,
-                showAdvancedTools: showAdvancedTools,
-                calendar: calendar
-            ),
-            selectedTool: selectedTool,
-            selectedPeriod: selectedPeriod,
-            selectedCalendarDayID: selectedCalendarDayID,
-            selectedProjectID: selectedProjectID,
-            selectedSessionID: selectedSessionID,
-            language: language,
-            localAliases: localAliases,
-            showAdvancedTools: showAdvancedTools,
-            visibleTools: visibleTools,
-            now: now,
-            calendarMonthStart: calendarMonthStart,
-            resolvedCalendarMonthStart: nil,
-            periodFilterTotals: periodFilterTotals,
-            availableDateBounds: availableDateBounds,
-            periodOffset: periodOffset,
-            calendar: calendar,
-            locale: locale,
-            timeZone: timeZone,
-            calendarDayTotals: calendarDayTotals
-        )
-    }
-
     private init(
         context: TokenUsageDashboardSnapshotBuildContext,
         selectedTool: TokenUsageAITool? = nil,
@@ -539,6 +356,201 @@ struct TokenUsageDashboardSnapshot: Equatable {
         }
     }
 
+}
+
+extension TokenUsageDashboardSnapshot {
+    static func buildPair(
+        events: [TokenUsageEvent],
+        selectedTool: TokenUsageAITool?,
+        selectedPeriod: TokenUsageDashboardPeriod,
+        selectedCalendarDayID: String?,
+        selectedProjectID: String?,
+        selectedSessionID: String?,
+        language: TokenMeteringLanguage,
+        localAliases: [String: String],
+        showAdvancedTools: Bool,
+        visibleTools: Set<TokenUsageAITool>? = nil,
+        now: Date,
+        proposedCalendarMonthStart: Date?,
+        calendar: Calendar,
+        periodFilterTotals: [TokenUsageDashboardPeriod: Int]? = nil,
+        availableDateBounds: TokenUsageDashboardDateBounds? = nil,
+        calendarDayTotals: [String: Int]? = nil,
+        periodOffset: Int = 0,
+        locale: Locale = .autoupdatingCurrent,
+        timeZone: TimeZone = .autoupdatingCurrent
+    ) -> TokenUsageDashboardSnapshotPair {
+        let context = TokenUsageDashboardSnapshotBuildContext(
+            events: events,
+            showAdvancedTools: showAdvancedTools,
+            calendar: calendar
+        )
+        return buildPair(
+            context: context,
+            selectedTool: selectedTool,
+            selectedPeriod: selectedPeriod,
+            selectedCalendarDayID: selectedCalendarDayID,
+            selectedProjectID: selectedProjectID,
+            selectedSessionID: selectedSessionID,
+            language: language,
+            localAliases: localAliases,
+            showAdvancedTools: showAdvancedTools,
+            visibleTools: visibleTools,
+            now: now,
+            proposedCalendarMonthStart: proposedCalendarMonthStart,
+            calendar: calendar,
+            periodFilterTotals: periodFilterTotals,
+            availableDateBounds: availableDateBounds,
+            calendarDayTotals: calendarDayTotals,
+            periodOffset: periodOffset,
+            locale: locale,
+            timeZone: timeZone
+        )
+    }
+
+}
+
+extension TokenUsageDashboardSnapshot {
+    static func buildPair(
+        context: TokenUsageDashboardSnapshotBuildContext,
+        selectedTool: TokenUsageAITool?,
+        selectedPeriod: TokenUsageDashboardPeriod,
+        selectedCalendarDayID: String?,
+        selectedProjectID: String?,
+        selectedSessionID: String?,
+        language: TokenMeteringLanguage,
+        localAliases: [String: String],
+        showAdvancedTools: Bool,
+        visibleTools: Set<TokenUsageAITool>? = nil,
+        now: Date,
+        proposedCalendarMonthStart: Date?,
+        calendar: Calendar,
+        periodFilterTotals: [TokenUsageDashboardPeriod: Int]? = nil,
+        availableDateBounds: TokenUsageDashboardDateBounds? = nil,
+        calendarDayTotals: [String: Int]? = nil,
+        periodOffset: Int = 0,
+        locale: Locale = .autoupdatingCurrent,
+        timeZone: TimeZone = .autoupdatingCurrent
+    ) -> TokenUsageDashboardSnapshotPair {
+        let selectedDayMonth = selectedCalendarDayID
+            .flatMap { date(forDayID: $0, calendar: calendar) }
+            .map { monthStart(for: $0, calendar: calendar) }
+        let displayCalendarMonth = normalizedCalendarMonthStart(
+            events: context.dashboardEvents,
+            availableDateBounds: availableDateBounds,
+            now: now,
+            proposedMonthStart: proposedCalendarMonthStart ?? selectedDayMonth,
+            calendar: calendar
+        )
+        let filtered = TokenUsageDashboardSnapshot(
+            context: context,
+            selectedTool: selectedTool,
+            selectedPeriod: selectedPeriod,
+            selectedCalendarDayID: selectedCalendarDayID,
+            selectedProjectID: selectedProjectID,
+            selectedSessionID: selectedSessionID,
+            language: language,
+            localAliases: localAliases,
+            showAdvancedTools: showAdvancedTools,
+            visibleTools: visibleTools,
+            now: now,
+            calendarMonthStart: displayCalendarMonth,
+            resolvedCalendarMonthStart: displayCalendarMonth,
+            periodFilterTotals: periodFilterTotals,
+            availableDateBounds: availableDateBounds,
+            periodOffset: periodOffset,
+            calendar: calendar,
+            locale: locale,
+            timeZone: timeZone,
+            calendarDayTotals: calendarDayTotals
+        )
+        let unfiltered = selectedTool == nil && selectedProjectID == nil
+            ? filtered
+            : TokenUsageDashboardSnapshot(
+                context: context,
+                selectedTool: nil,
+                selectedPeriod: selectedPeriod,
+                selectedCalendarDayID: selectedCalendarDayID,
+                selectedProjectID: nil,
+                selectedSessionID: nil,
+                language: language,
+                localAliases: localAliases,
+                showAdvancedTools: showAdvancedTools,
+                visibleTools: visibleTools,
+                now: now,
+                calendarMonthStart: displayCalendarMonth,
+                resolvedCalendarMonthStart: displayCalendarMonth,
+                periodFilterTotals: periodFilterTotals,
+                availableDateBounds: availableDateBounds,
+                periodOffset: periodOffset,
+                calendar: calendar,
+                locale: locale,
+                timeZone: timeZone,
+                calendarDayTotals: calendarDayTotals
+            )
+
+        return TokenUsageDashboardSnapshotPair(
+            filtered: filtered,
+            unfiltered: unfiltered,
+            calendarMonthStart: displayCalendarMonth
+        )
+    }
+
+}
+
+extension TokenUsageDashboardSnapshot {
+    init(
+        events: [TokenUsageEvent],
+        selectedTool: TokenUsageAITool? = nil,
+        selectedPeriod: TokenUsageDashboardPeriod = .all,
+        selectedCalendarDayID: String? = nil,
+        selectedProjectID: String? = nil,
+        selectedSessionID: String? = nil,
+        language: TokenMeteringLanguage = .current(),
+        localAliases: [String: String] = [:],
+        showAdvancedTools: Bool = false,
+        visibleTools: Set<TokenUsageAITool>? = nil,
+        now: Date = Date(),
+        calendarMonthStart: Date? = nil,
+        periodFilterTotals: [TokenUsageDashboardPeriod: Int]? = nil,
+        availableDateBounds: TokenUsageDashboardDateBounds? = nil,
+        periodOffset: Int = 0,
+        calendar: Calendar = .autoupdatingCurrent,
+        locale: Locale = .autoupdatingCurrent,
+        timeZone: TimeZone = .autoupdatingCurrent,
+        calendarDayTotals: [String: Int]? = nil
+    ) {
+        self.init(
+            context: TokenUsageDashboardSnapshotBuildContext(
+                events: events,
+                showAdvancedTools: showAdvancedTools,
+                calendar: calendar
+            ),
+            selectedTool: selectedTool,
+            selectedPeriod: selectedPeriod,
+            selectedCalendarDayID: selectedCalendarDayID,
+            selectedProjectID: selectedProjectID,
+            selectedSessionID: selectedSessionID,
+            language: language,
+            localAliases: localAliases,
+            showAdvancedTools: showAdvancedTools,
+            visibleTools: visibleTools,
+            now: now,
+            calendarMonthStart: calendarMonthStart,
+            resolvedCalendarMonthStart: nil,
+            periodFilterTotals: periodFilterTotals,
+            availableDateBounds: availableDateBounds,
+            periodOffset: periodOffset,
+            calendar: calendar,
+            locale: locale,
+            timeZone: timeZone,
+            calendarDayTotals: calendarDayTotals
+        )
+    }
+
+}
+
+extension TokenUsageDashboardSnapshot {
     private init(events: [TokenUsageEvent], selectedTool legacySelectedTool: TokenUsageAITool?) {
         self.init(events: events, selectedTool: legacySelectedTool, selectedPeriod: .all, selectedSessionID: nil)
     }

@@ -8,7 +8,9 @@ struct TokenMeteringDashboardSessionsTable: View {
     let requestClear: (TokenUsageClearScope) -> Void
     @State private var hoveredSessionID: String? = nil
     @State private var hoveredProjectFilterID: String? = nil
+}
 
+extension TokenMeteringDashboardSessionsTable {
     var body: some View {
         TokenMeteringDashboardPanel(
             title: t(.runs),
@@ -70,7 +72,9 @@ struct TokenMeteringDashboardSessionsTable: View {
             .padding(.horizontal, 2)
         }
     }
+}
 
+extension TokenMeteringDashboardSessionsTable {
     private func projectFilterPill(_ filter: TokenUsageDashboardProjectFilter) -> some View {
         let isHovered = hoveredProjectFilterID == filter.id
         let isSelected = store.selectedProjectID == filter.projectID
@@ -112,7 +116,9 @@ struct TokenMeteringDashboardSessionsTable: View {
         }
         .buttonStyle(.plain)
     }
+}
 
+extension TokenMeteringDashboardSessionsTable {
     private func sessionRow(_ session: TokenUsageDashboardSessionRow) -> some View {
         let isSelected = store.selectedSessionID == session.id
         let liveUpdateID = "session:\(session.id)"

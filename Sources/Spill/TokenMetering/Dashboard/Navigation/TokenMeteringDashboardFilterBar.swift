@@ -9,7 +9,9 @@ struct TokenMeteringDashboardFilterBar: View {
     let selectedControlAccent: Color
     let selectedControlAccentHighlight: Color
     @State private var hoveredPeriodID: String? = nil
+}
 
+extension TokenMeteringDashboardFilterBar {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
@@ -51,7 +53,9 @@ struct TokenMeteringDashboardFilterBar: View {
         .padding(.horizontal, 18)
         .padding(.vertical, 12)
     }
+}
 
+extension TokenMeteringDashboardFilterBar {
     private var activeAccumulationWindowText: String {
         if let selectedCalendarDayTitle = store.snapshot.selectedCalendarDayTitle {
             return selectedCalendarDayTitle
@@ -138,7 +142,9 @@ struct TokenMeteringDashboardFilterBar: View {
         }
         .padding(.horizontal, 4)
     }
+}
 
+extension TokenMeteringDashboardFilterBar {
     private func periodPill(_ filter: TokenUsageDashboardPeriodFilter) -> some View {
         let isHovered = hoveredPeriodID == filter.id
         let isSelected = store.selectedCalendarDayID == nil && store.selectedPeriod == filter.period

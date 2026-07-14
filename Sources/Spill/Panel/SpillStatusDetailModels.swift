@@ -61,7 +61,9 @@ enum SpillStatusDetailRows {
             SpillStatusDetailRow(label: AppL10n.text(.state), value: status.state.detailTitle)
         ]
     }
+}
 
+extension SpillStatusDetailRows {
     static func rows(for status: SystemGPUStatus) -> [SpillStatusDetailRow] {
         let unifiedCount = status.devices.filter(\.hasUnifiedMemory).count
         let lowPowerCount = status.devices.filter(\.isLowPower).count
@@ -102,7 +104,9 @@ enum SpillStatusDetailRows {
             SpillStatusDetailRow(label: AppL10n.text(.uploadedTotal), value: SystemNetworkProvider.formatBytes(status.totalSentBytes))
         ]
     }
+}
 
+extension SpillStatusDetailRows {
     static func rows(for status: LocalAIToolStatus) -> [SpillStatusDetailRow] {
         var rows = [
             SpillStatusDetailRow(label: AppL10n.text(.status), value: status.value),

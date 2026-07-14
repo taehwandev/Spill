@@ -24,7 +24,9 @@ enum SpillPanelContentSizer {
     private static let menuBarActionRowSpacing: CGFloat = 6
     private static let inlineActionStateHeight: CGFloat = 48
     private static let actionSectionSpacing: CGFloat = 7
+}
 
+extension SpillPanelContentSizer {
     static func preferredSize(
         statusModuleCount: Int,
         aiStatusCount: Int,
@@ -83,7 +85,9 @@ enum SpillPanelContentSizer {
 
         return min(max(desiredHeight.rounded(.up), SpillPanelMetrics.minimumSize.height), availableHeight)
     }
+}
 
+private extension SpillPanelContentSizer {
     private static func statusSectionHeight(moduleCount: Int) -> CGFloat {
         guard moduleCount > 0 else {
             return 0
@@ -123,7 +127,9 @@ enum SpillPanelContentSizer {
                 iconSpacing: iconSpacing
             )
     }
+}
 
+private extension SpillPanelContentSizer {
     private static func windowActionsSectionHeight(actionCount: Int, contentWidth _: CGFloat) -> CGFloat {
         guard actionCount > 0 else {
             return sectionHeaderHeight + sectionContentSpacing + windowActionHeight

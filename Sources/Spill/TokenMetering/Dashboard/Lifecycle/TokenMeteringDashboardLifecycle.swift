@@ -74,7 +74,9 @@ final class TokenMeteringDashboardLifecycle: NSObject {
         DistributedNotificationCenter.default().removeObserver(self)
         NSWorkspace.shared.notificationCenter.removeObserver(self)
     }
+}
 
+extension TokenMeteringDashboardLifecycle {
     @objc private func mainApplicationWillTerminate(_ notification: Notification) {
         postMainAppWillTerminate()
         terminateDashboardHelperProcesses()
@@ -101,7 +103,9 @@ final class TokenMeteringDashboardLifecycle: NSObject {
             deliverImmediately: true
         )
     }
+}
 
+extension TokenMeteringDashboardLifecycle {
     private func terminateDashboardHelperProcesses() {
         guard let helperBundleIdentifier = Self.dashboardBundleIdentifier(
             forMainBundleIdentifier: mainBundleIdentifier
@@ -134,7 +138,9 @@ final class TokenMeteringDashboardLifecycle: NSObject {
             _ = RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.05))
         }
     }
+}
 
+extension TokenMeteringDashboardLifecycle {
     func terminateCurrentDashboardProcess() {
         guard TokenMeteringDashboardProcess.isDashboardProcess else {
             NSApp.terminate(nil)

@@ -8,7 +8,9 @@ struct TokenMeteringDashboardToolTab: View {
     let selectedControlAccent: Color
     let selectedControlAccentHighlight: Color
     @State private var isHovered = false
+}
 
+extension TokenMeteringDashboardToolTab {
     var body: some View {
         let liveUpdateID = "filter:tool:\(filter.id)"
         let isLiveUpdated = store.isLiveUpdated(liveUpdateID)
@@ -66,7 +68,9 @@ struct TokenMeteringDashboardToolTab: View {
         .buttonStyle(.plain)
         .focusEffectDisabled()
     }
+}
 
+extension TokenMeteringDashboardToolTab {
     private func tabLabel(
         detail: String,
         shareLabel: String?,
@@ -141,7 +145,9 @@ struct TokenMeteringDashboardToolTab: View {
                     .stroke(isSelected ? tint.opacity(0.28) : tint.opacity(0.2), lineWidth: 0.5)
             }
     }
+}
 
+extension TokenMeteringDashboardToolTab {
     private func hasServiceStatusAccessory(
         serviceStatus: CloudServiceStatusItem?,
         tool: TokenUsageAITool?
