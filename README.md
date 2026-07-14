@@ -10,7 +10,8 @@ This repository currently contains an MVP shell:
 - generated app icon applied to bundled `.app` builds
 - GitHub Release distribution automation
 - click-to-toggle floating Spill Bar anchored to the status item
-- optional CPU, memory, and active Caffeine menu bar glance chips, with an opt-in Caffeine countdown
+- independent Off, Text, or framed Chart menu bar modes for CPU, memory, and
+  optional Network, with one shared layout and active Caffeine state
 - CPU, memory, and storage panel rows with compact sparklines
 - right-click menu with preferences and app quit actions
 - visible panel Close control that hides the panel without quitting Spill
@@ -303,6 +304,22 @@ symbolicated. Crash and app-hang reports are configured with
 `sendDefaultPii=false`, no logs, no session replay, no MetricKit payloads, and no
 performance sampling; do not use Sentry for token events, prompts, arbitrary
 local file paths, or support logs.
+
+### AI Token Metering Setup
+
+Run the public installer once. It installs one shared runtime instruction at
+`~/.spill/runtime-instruction.md` and adds only a small managed bridge to the
+user instruction file used by Codex, Claude Code, and Antigravity/AGY.
+
+```bash
+/bin/bash -c "$(curl -fsSL https://spill.thdev.app/token-metering/install.sh)"
+```
+
+The installer preserves unrelated user instructions. It does not require users
+to copy the full Spill prompt into three different AI tools. Supported runtimes
+may read known local usage metadata to collect exact token counts, but Spill
+does not store or upload prompts, responses, commands, file paths, logs, source
+content, environment values, or secrets.
 
 ### Hosted Web And Download Site
 

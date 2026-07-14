@@ -275,6 +275,14 @@ final class SpillSettings: ObservableObject {
         }
     }
 
+    @Published private(set) var menuBarMetricPresentationStyles: [
+        SpillMenuBarStatusItem: MenuBarStatusPresentationStyle
+    ] {
+        didSet {
+            Self.persistMenuBarMetricPresentationStyles(menuBarMetricPresentationStyles, to: defaults)
+        }
+    }
+
     @Published var menuBarStatusLayoutStyle: MenuBarStatusLayoutStyle {
         didSet { defaults.set(menuBarStatusLayoutStyle.rawValue, forKey: Keys.menuBarStatusLayoutStyle) }
     }
@@ -507,6 +515,20 @@ final class SpillSettings: ObservableObject {
         panelOnboardingPreviewEnabled = defaults.object(forKey: Keys.panelOnboardingPreviewEnabled) as? Bool ?? false
         tokenUsageDashboardOnboardingPreviewEnabled =
             defaults.object(forKey: Keys.tokenUsageDashboardOnboardingPreviewEnabled) as? Bool ?? false
+        let presentationRawValue = defaults.string(forKey: Keys.menuBarStatusPresentationStyle)
+            ?? MenuBarStatusPresentationStyle.text.rawValue
+        let legacyPresentationStyle = MenuBarStatusPresentationStyle(rawValue: presentationRawValue) ?? .text
+        let persistedMetricPresentationStyles = defaults.dictionary(
+            forKey: Keys.menuBarMetricPresentationStyles
+        )
+        let initialMetricPresentationStyles = Self.normalizedMenuBarMetricPresentationStyles(
+            from: persistedMetricPresentationStyles,
+            legacyStyle: legacyPresentationStyle
+        )
+        menuBarMetricPresentationStyles = initialMetricPresentationStyles
+        if persistedMetricPresentationStyles == nil {
+            Self.persistMenuBarMetricPresentationStyles(initialMetricPresentationStyles, to: defaults)
+        }
         let layoutRawValue = defaults.string(forKey: Keys.menuBarStatusLayoutStyle)
             ?? MenuBarStatusLayoutStyle.inline.rawValue
         menuBarStatusLayoutStyle = MenuBarStatusLayoutStyle(rawValue: layoutRawValue) ?? .inline
@@ -678,11 +700,92 @@ final class SpillSettings: ObservableObject {
         }
     }
 
+    func menuBarStatusPresentationStyle(
+        for item: SpillMenuBarStatusItem
+    ) -> MenuBarStatusPresentationStyle {
+        menuBarMetricPresentationStyles[item] ?? .text
+    }
+
+    func menuBarMetricPresentationMode(
+        for item: SpillMenuBarStatusItem
+    ) -> MenuBarMetricPresentationMode {
+        guard enabledMenuBarStatusItems.contains(item) else {
+            return .off
+        }
+
+        switch menuBarStatusPresentationStyle(for: item) {
+        case .text:
+            return .text
+        case .chart:
+            return .chart
+        }
+    }
+
+    func setMenuBarMetricPresentationMode(
+        _ mode: MenuBarMetricPresentationMode,
+        for item: SpillMenuBarStatusItem
+    ) {
+        guard SpillMenuBarStatusItem.graphPresentationSupported.contains(item) else {
+            return
+        }
+
+        guard let presentationStyle = mode.presentationStyle else {
+            setMenuBarStatusItem(item, enabled: false)
+            return
+        }
+
+        var updatedStyles = menuBarMetricPresentationStyles
+        updatedStyles[item] = presentationStyle
+        menuBarMetricPresentationStyles = updatedStyles
+        setMenuBarStatusItem(item, enabled: true)
+    }
+
+    var hasTextPresentedMenuBarStatusItems: Bool {
+        enabledMenuBarStatusItems.contains(.ai)
+            || SpillMenuBarStatusItem.graphPresentationSupported.contains {
+                enabledMenuBarStatusItems.contains($0)
+                    && menuBarStatusPresentationStyle(for: $0) == .text
+            }
+    }
+
     var statusModulesRequiredForRefresh: Set<SpillStatusModule> {
         let menuBarModules = enabledMenuBarStatusItems.compactMap(\.systemModule)
         return Set(visiblePanelStatusModules)
             .union(menuBarModules)
             .union(menuBarTriggerIconStyle.requiredStatusModules)
+    }
+
+    private static func normalizedMenuBarMetricPresentationStyles(
+        from rawValues: [String: Any]?,
+        legacyStyle: MenuBarStatusPresentationStyle
+    ) -> [SpillMenuBarStatusItem: MenuBarStatusPresentationStyle] {
+        var styles = Dictionary(uniqueKeysWithValues: SpillMenuBarStatusItem.graphPresentationSupported.map {
+            ($0, legacyStyle)
+        })
+
+        for (rawItem, rawStyle) in rawValues ?? [:] {
+            guard let item = SpillMenuBarStatusItem(rawValue: rawItem),
+                  SpillMenuBarStatusItem.graphPresentationSupported.contains(item),
+                  let rawStyle = rawStyle as? String,
+                  let style = MenuBarStatusPresentationStyle(rawValue: rawStyle)
+            else {
+                continue
+            }
+
+            styles[item] = style
+        }
+
+        return styles
+    }
+
+    private static func persistMenuBarMetricPresentationStyles(
+        _ styles: [SpillMenuBarStatusItem: MenuBarStatusPresentationStyle],
+        to defaults: UserDefaults
+    ) {
+        let rawStyles = Dictionary(uniqueKeysWithValues: SpillMenuBarStatusItem.graphPresentationSupported.map {
+            ($0.rawValue, (styles[$0] ?? .text).rawValue)
+        })
+        defaults.set(rawStyles, forKey: Keys.menuBarMetricPresentationStyles)
     }
 
     var visiblePanelStatusModules: [SpillStatusModule] {
@@ -944,6 +1047,8 @@ private enum Keys {
     static let enabledMenuBarStatusItems = "enabledMenuBarStatusItems"
     static let panelOnboardingPreviewEnabled = "panelOnboardingPreviewEnabled"
     static let tokenUsageDashboardOnboardingPreviewEnabled = "tokenUsageDashboardOnboardingPreviewEnabled"
+    static let menuBarStatusPresentationStyle = "menuBarStatusPresentationStyle"
+    static let menuBarMetricPresentationStyles = "menuBarMetricPresentationStyles"
     static let menuBarStatusLayoutStyle = "menuBarStatusLayoutStyle"
     static let menuBarStatusCompactMode = "menuBarStatusCompactMode"
     static let menuBarStatusSplitGroups = "menuBarStatusSplitGroups"

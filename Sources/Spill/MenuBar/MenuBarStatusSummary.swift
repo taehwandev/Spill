@@ -1,10 +1,22 @@
 import Foundation
 
 struct MenuBarStatusSegment: Equatable {
+    struct GraphSeries: Equatable, Sendable {
+        enum Role: Equatable, Sendable {
+            case status
+            case received
+            case sent
+        }
+
+        let role: Role
+        let values: [Double]
+    }
+
     enum Kind: Equatable {
         case trigger
         case cpu
         case memory
+        case network
         case caffeine
         case ai
         case sleepGuard
@@ -13,6 +25,7 @@ struct MenuBarStatusSegment: Equatable {
     enum VisualStyle: Equatable {
         case symbol
         case valueOnly
+        case chart
         case symbolBadge
         case trigger(MenuBarTriggerIconStyle)
     }
@@ -27,6 +40,7 @@ struct MenuBarStatusSegment: Equatable {
     let symbolName: String
     let visualStyle: VisualStyle
     let animates: Bool
+    let graphSeries: [GraphSeries]
 
     init(
         kind: Kind,
@@ -38,7 +52,8 @@ struct MenuBarStatusSegment: Equatable {
         state: SpillStatusState,
         symbolName: String,
         visualStyle: VisualStyle = .symbol,
-        animates: Bool = false
+        animates: Bool = false,
+        graphSeries: [GraphSeries] = []
     ) {
         self.kind = kind
         self.title = title
@@ -50,10 +65,43 @@ struct MenuBarStatusSegment: Equatable {
         self.symbolName = symbolName
         self.visualStyle = visualStyle
         self.animates = animates
+        self.graphSeries = graphSeries
     }
 }
 
 extension MenuBarStatusSegment {
+    var showsHistoryGraph: Bool {
+        usesChartPresentation && !graphSeries.isEmpty
+    }
+
+    var usesChartPresentation: Bool {
+        if case .chart = visualStyle {
+            return true
+        }
+
+        return false
+    }
+
+    func chartMenuBarSegment() -> MenuBarStatusSegment {
+        guard kind == .cpu || kind == .memory || kind == .network else {
+            return self
+        }
+
+        return MenuBarStatusSegment(
+            kind: kind,
+            title: title,
+            shortTitle: shortTitle,
+            value: value,
+            displayText: displayText,
+            usageRatio: usageRatio,
+            state: state,
+            symbolName: symbolName,
+            visualStyle: .chart,
+            animates: false,
+            graphSeries: graphSeries
+        )
+    }
+
     func withoutMenuBarValue() -> MenuBarStatusSegment {
         MenuBarStatusSegment(
             kind: kind,
@@ -65,7 +113,8 @@ extension MenuBarStatusSegment {
             state: state,
             symbolName: symbolName,
             visualStyle: visualStyle,
-            animates: animates
+            animates: animates,
+            graphSeries: graphSeries
         )
     }
 
@@ -80,7 +129,8 @@ extension MenuBarStatusSegment {
             state: state,
             symbolName: symbolName,
             visualStyle: .symbolBadge,
-            animates: false
+            animates: false,
+            graphSeries: graphSeries
         )
     }
 
@@ -95,7 +145,8 @@ extension MenuBarStatusSegment {
             state: state,
             symbolName: symbolName,
             visualStyle: .valueOnly,
-            animates: false
+            animates: false,
+            graphSeries: graphSeries
         )
     }
 }
@@ -115,6 +166,10 @@ struct MenuBarStatusSummary: Equatable {
         enabledItems: Set<SpillMenuBarStatusItem>,
         cpu: SystemCPUStatus,
         memory: SystemMemoryStatus,
+        network: SystemNetworkStatus = SystemNetworkProvider.status(previous: nil, current: nil),
+        cpuHistory: [Double] = [],
+        memoryHistory: [Double] = [],
+        networkHistory: SystemNetworkTrafficHistory = SystemNetworkTrafficHistory(received: [], sent: []),
         aiTokenCount: Int = 0,
         aiAllTimeTokenCount: Int = 0,
         displayMode: MenuBarTokenDisplayMode = .daily,
@@ -130,6 +185,10 @@ struct MenuBarStatusSummary: Equatable {
                 for: $0,
                 cpu: cpu,
                 memory: memory,
+                network: network,
+                cpuHistory: cpuHistory,
+                memoryHistory: memoryHistory,
+                networkHistory: networkHistory,
                 aiTokenCount: aiTokenCount,
                 aiAllTimeTokenCount: aiAllTimeTokenCount,
                 displayMode: displayMode,
@@ -153,6 +212,10 @@ struct MenuBarStatusSummary: Equatable {
         for item: SpillMenuBarStatusItem,
         cpu: SystemCPUStatus,
         memory: SystemMemoryStatus,
+        network: SystemNetworkStatus,
+        cpuHistory: [Double],
+        memoryHistory: [Double],
+        networkHistory: SystemNetworkTrafficHistory,
         aiTokenCount: Int,
         aiAllTimeTokenCount: Int,
         displayMode: MenuBarTokenDisplayMode,
@@ -170,6 +233,7 @@ struct MenuBarStatusSummary: Equatable {
                 subtitle: cpu.subtitle,
                 usageRatio: cpu.usageRatio,
                 state: cpu.state,
+                graphSeries: [MenuBarStatusSegment.GraphSeries(role: .status, values: cpu.coreUsageRatios.isEmpty ? [cpu.usageRatio] : cpu.coreUsageRatios)],
                 highlightThreshold: highlightThreshold
             )
         case .memory:
@@ -181,6 +245,22 @@ struct MenuBarStatusSummary: Equatable {
                 subtitle: memory.subtitle,
                 usageRatio: memory.usageRatio,
                 state: memory.state,
+                graphSeries: [MenuBarStatusSegment.GraphSeries(role: .status, values: memoryHistory)],
+                highlightThreshold: highlightThreshold
+            )
+        case .network:
+            return metricEntry(
+                item: item,
+                kind: .network,
+                value: networkValue(received: network.value, sent: network.subtitle),
+                detailValue: network.value,
+                subtitle: network.subtitle,
+                usageRatio: network.activityRatio,
+                state: network.state,
+                graphSeries: [
+                    MenuBarStatusSegment.GraphSeries(role: .received, values: networkHistory.received),
+                    MenuBarStatusSegment.GraphSeries(role: .sent, values: networkHistory.sent)
+                ],
                 highlightThreshold: highlightThreshold
             )
         case .ai:
@@ -223,7 +303,7 @@ struct MenuBarStatusSummary: Equatable {
                 tooltip: tooltipParts.joined(separator: " - "),
                 segment: segment
             )
-        case .caffeine, .gpu, .network:
+        case .caffeine, .gpu:
             return nil
         }
     }
@@ -236,6 +316,7 @@ struct MenuBarStatusSummary: Equatable {
         subtitle: String?,
         usageRatio: Double,
         state: SpillStatusState,
+        graphSeries: [MenuBarStatusSegment.GraphSeries],
         highlightThreshold: MenuBarStatusHighlightThreshold
     ) -> MenuBarStatusEntry {
         let displayText = displayText(label: item.shortTitle, value: value)
@@ -252,7 +333,8 @@ struct MenuBarStatusSummary: Equatable {
                 ratio: normalizedUsageRatio,
                 highlightThreshold: highlightThreshold
             ),
-            symbolName: item.symbolName
+            symbolName: item.symbolName,
+            graphSeries: graphSeries
         )
         return MenuBarStatusEntry(
             title: displayText,
@@ -263,6 +345,10 @@ struct MenuBarStatusSummary: Equatable {
 
     private static func displayText(label: String, value: String) -> String {
         "\(label) \(value)"
+    }
+
+    private static func networkValue(received: String, sent: String?) -> String {
+        [received, sent].compactMap { $0 }.joined(separator: " ")
     }
 
     private static func aiStatusState(for health: CloudServiceHealth?) -> SpillStatusState {

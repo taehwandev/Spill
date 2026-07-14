@@ -103,6 +103,40 @@ final class MenuBarStatusSummaryTests: XCTestCase {
         XCTAssertEqual(summary.segments.map(\.value), ["20.0%", "56.2%"])
     }
 
+    func testSummaryIncludesMetricHistoryAndOptionalNetworkTraffic() {
+        let network = SystemNetworkProvider.status(
+            previous: SystemNetworkReading(receivedBytes: 0, sentBytes: 0, timestamp: 1, activeInterfaceCount: 1),
+            current: SystemNetworkReading(receivedBytes: 2_000_000, sentBytes: 500_000, timestamp: 2, activeInterfaceCount: 1)
+        )
+        let summary = MenuBarStatusSummary.make(
+            enabledItems: [.cpu, .memory, .network],
+            cpu: SystemCPUProvider.status(previous: nil, current: nil),
+            memory: SystemMemoryProvider.status(from: nil),
+            network: network,
+            cpuHistory: [0.1, 0.4],
+            memoryHistory: [0.2, 0.6],
+            networkHistory: SystemNetworkTrafficHistory(
+                received: [0.1, 0.25],
+                sent: [0.05, 0.15]
+            )
+        )
+
+        XCTAssertEqual(summary.segments.map(\.kind), [.cpu, .memory, .network])
+        XCTAssertEqual(summary.segments[0].graphSeries, [
+            MenuBarStatusSegment.GraphSeries(role: .status, values: [0.0])
+        ])
+        XCTAssertEqual(summary.segments[1].graphSeries, [
+            MenuBarStatusSegment.GraphSeries(role: .status, values: [0.2, 0.6])
+        ])
+        XCTAssertEqual(summary.segments[2].graphSeries, [
+            MenuBarStatusSegment.GraphSeries(role: .received, values: [0.1, 0.25]),
+            MenuBarStatusSegment.GraphSeries(role: .sent, values: [0.05, 0.15])
+        ])
+        XCTAssertEqual(summary.segments[2].value, "↓ 2.0 MB/s ↑ 500 KB/s")
+        XCTAssertTrue(summary.segments.allSatisfy { !$0.showsHistoryGraph })
+        XCTAssertTrue(summary.segments.map { $0.chartMenuBarSegment() }.allSatisfy(\.showsHistoryGraph))
+    }
+
     func testSummaryUsesPlaceholderWhileCPUIsSampling() {
         let summary = MenuBarStatusSummary.make(
             enabledItems: [.cpu],

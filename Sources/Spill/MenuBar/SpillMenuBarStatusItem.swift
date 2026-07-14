@@ -82,7 +82,8 @@ enum SpillMenuBarStatusItem: String, CaseIterable, Identifiable, Sendable {
 
     static let defaultOrder: [SpillMenuBarStatusItem] = [.cpu, .memory, .caffeine, .gpu, .network, .ai]
     static let defaultEnabled: Set<SpillMenuBarStatusItem> = [.cpu, .memory]
-    static let glanceSupported: Set<SpillMenuBarStatusItem> = [.cpu, .memory, .caffeine, .ai]
+    static let glanceSupported: Set<SpillMenuBarStatusItem> = [.cpu, .memory, .caffeine, .network, .ai]
+    static let graphPresentationSupported: Set<SpillMenuBarStatusItem> = [.cpu, .memory, .network]
 
     static func normalizedEnabled(from rawValues: [String]?) -> Set<SpillMenuBarStatusItem> {
         guard let rawValues else {

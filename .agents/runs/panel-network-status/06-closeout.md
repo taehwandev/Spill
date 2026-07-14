@@ -36,17 +36,30 @@
 
 ## Residual Risks
 
-- Network remains panel-only in this slice; menu bar network glance support still needs a separate UX decision.
+- At this slice's original closeout, Network remained panel-only; the separate
+  menu bar UX decision was resolved in the 2026-07-14 follow-up below.
 - Existing user settings that have explicitly disabled modules will continue to honor those stored preferences.
 - The row reports aggregate non-loopback interface activity, not per-interface diagnostics.
 
 ## Follow-up Tasks
 
-- Decide separately whether Network should become a supported menu bar glance item.
+- [x] Add Network as a default-off menu bar glance with mutually exclusive
+  receive/upload Text and distinct RX/TX Chart presentations.
+
+## Follow-up Resolution (2026-07-14)
+
+- Network is now included in the supported clock-area status set but remains
+  disabled by default.
+- The menu bar reuses the panel's receive/upload histories and shared refresh
+  cadence rather than starting another sampler.
+- CPU, memory, and Network now expose independent Off, Text, or Chart settings;
+  existing global Text/Chart choices migrate to each metric.
+- Chart mode replaces numeric values with a framed chart, uses visible guides
+  and fills, and works in both horizontal and vertical layouts.
 
 ## Docs Updated
 
 - [x] PRD
 - [x] ARD
 - [ ] roadmap
-- [ ] README
+- [x] README

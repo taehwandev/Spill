@@ -14,6 +14,9 @@ final class SpillSettingsTests: XCTestCase {
         XCTAssertEqual(settings.enabledMenuBarStatusItems, [.cpu, .memory])
         XCTAssertFalse(settings.panelOnboardingPreviewEnabled)
         XCTAssertFalse(settings.tokenUsageDashboardOnboardingPreviewEnabled)
+        XCTAssertEqual(settings.menuBarMetricPresentationMode(for: .cpu), .text)
+        XCTAssertEqual(settings.menuBarMetricPresentationMode(for: .memory), .text)
+        XCTAssertEqual(settings.menuBarMetricPresentationMode(for: .network), .off)
         XCTAssertEqual(settings.menuBarStatusLayoutStyle, .inline)
         XCTAssertFalse(settings.menuBarStatusCompactMode)
         XCTAssertFalse(settings.menuBarStatusSplitGroups)
@@ -284,15 +287,15 @@ final class SpillSettingsTests: XCTestCase {
         XCTAssertFalse(settings.isMenuBarStatusItemEnabled(.memory))
         XCTAssertTrue(settings.isMenuBarStatusItemEnabled(.caffeine))
         XCTAssertFalse(settings.isMenuBarStatusItemEnabled(.gpu))
-        XCTAssertFalse(settings.isMenuBarStatusItemEnabled(.network))
+        XCTAssertTrue(settings.isMenuBarStatusItemEnabled(.network))
         XCTAssertTrue(settings.isMenuBarStatusItemEnabled(.ai))
-        XCTAssertEqual(defaults.stringArray(forKey: "enabledMenuBarStatusItems"), ["cpu", "caffeine", "ai"])
+        XCTAssertEqual(defaults.stringArray(forKey: "enabledMenuBarStatusItems"), ["cpu", "caffeine", "network", "ai"])
         XCTAssertEqual(settings.visiblePanelStatusModules, [.cpu, .storage])
-        XCTAssertEqual(settings.statusModulesRequiredForRefresh, [.cpu, .storage])
+        XCTAssertEqual(settings.statusModulesRequiredForRefresh, [.cpu, .storage, .network])
 
         settings.menuBarTriggerIconStyle = .spill
 
-        XCTAssertEqual(settings.statusModulesRequiredForRefresh, [.cpu, .storage])
+        XCTAssertEqual(settings.statusModulesRequiredForRefresh, [.cpu, .storage, .network])
     }
 
     func testMenuBarStatusKeepsDisabledPanelModuleRefreshingWhenShownInMenuBar() {
@@ -392,6 +395,9 @@ final class SpillSettingsTests: XCTestCase {
         let defaults = makeDefaults()
         let settings = SpillSettings(defaults: defaults)
 
+        settings.setMenuBarMetricPresentationMode(.chart, for: .cpu)
+        settings.setMenuBarMetricPresentationMode(.off, for: .memory)
+        settings.setMenuBarMetricPresentationMode(.text, for: .network)
         settings.menuBarStatusLayoutStyle = .stacked
         settings.menuBarStatusCompactMode = true
         settings.menuBarStatusSplitGroups = true
@@ -401,6 +407,10 @@ final class SpillSettingsTests: XCTestCase {
         settings.menuBarStatusTextBold = true
         settings.menuBarTriggerIconStyle = .spill
 
+        XCTAssertEqual(
+            defaults.dictionary(forKey: "menuBarMetricPresentationStyles") as? [String: String],
+            ["cpu": "chart", "memory": "text", "network": "text"]
+        )
         XCTAssertEqual(defaults.string(forKey: "menuBarStatusLayoutStyle"), "stacked")
         XCTAssertTrue(defaults.bool(forKey: "menuBarStatusCompactMode"))
         XCTAssertTrue(defaults.bool(forKey: "menuBarStatusSplitGroups"))
@@ -411,6 +421,9 @@ final class SpillSettingsTests: XCTestCase {
         XCTAssertEqual(defaults.string(forKey: "menuBarTriggerIconStyle"), "spill")
 
         let reloadedSettings = SpillSettings(defaults: defaults)
+        XCTAssertEqual(reloadedSettings.menuBarMetricPresentationMode(for: .cpu), .chart)
+        XCTAssertEqual(reloadedSettings.menuBarMetricPresentationMode(for: .memory), .off)
+        XCTAssertEqual(reloadedSettings.menuBarMetricPresentationMode(for: .network), .text)
         XCTAssertEqual(reloadedSettings.menuBarStatusLayoutStyle, .stacked)
         XCTAssertTrue(reloadedSettings.menuBarStatusCompactMode)
         XCTAssertTrue(reloadedSettings.menuBarStatusSplitGroups)
@@ -540,6 +553,11 @@ final class SpillSettingsTests: XCTestCase {
 
     func testMenuBarStatusOptionsNormalizeUnknownValues() {
         let defaults = makeDefaults()
+        defaults.set("bad-presentation", forKey: "menuBarStatusPresentationStyle")
+        defaults.set(
+            ["cpu": "bad-presentation", "memory": "chart", "network": 7, "ai": "chart"],
+            forKey: "menuBarMetricPresentationStyles"
+        )
         defaults.set("bad-layout", forKey: "menuBarStatusLayoutStyle")
         defaults.set(9, forKey: "menuBarStatusPrecision")
         defaults.set(12, forKey: "menuBarStatusHighlightThreshold")
@@ -548,11 +566,49 @@ final class SpillSettingsTests: XCTestCase {
 
         let settings = SpillSettings(defaults: defaults)
 
+        XCTAssertEqual(settings.menuBarStatusPresentationStyle(for: .cpu), .text)
+        XCTAssertEqual(settings.menuBarStatusPresentationStyle(for: .memory), .chart)
+        XCTAssertEqual(settings.menuBarStatusPresentationStyle(for: .network), .text)
         XCTAssertEqual(settings.menuBarStatusLayoutStyle, .inline)
         XCTAssertEqual(settings.menuBarStatusPrecision, .tenths)
         XCTAssertEqual(settings.menuBarStatusHighlightThreshold, .seventy)
         XCTAssertEqual(settings.menuBarStatusFontSize, 13.5)
         XCTAssertEqual(settings.menuBarTriggerIconStyle, .spill)
+    }
+
+    func testLegacyGlobalPresentationStyleMigratesToEveryGraphMetric() {
+        let defaults = makeDefaults()
+        defaults.set("chart", forKey: "menuBarStatusPresentationStyle")
+        defaults.set(["cpu", "memory", "network"], forKey: "enabledMenuBarStatusItems")
+
+        let settings = SpillSettings(defaults: defaults)
+
+        XCTAssertEqual(settings.menuBarMetricPresentationMode(for: .cpu), .chart)
+        XCTAssertEqual(settings.menuBarMetricPresentationMode(for: .memory), .chart)
+        XCTAssertEqual(settings.menuBarMetricPresentationMode(for: .network), .chart)
+        XCTAssertEqual(
+            defaults.dictionary(forKey: "menuBarMetricPresentationStyles") as? [String: String],
+            ["cpu": "chart", "memory": "chart", "network": "chart"]
+        )
+    }
+
+    func testMetricPresentationModesRemainIndependentAndOffPreservesStyle() {
+        let defaults = makeDefaults()
+        let settings = SpillSettings(defaults: defaults)
+
+        settings.setMenuBarMetricPresentationMode(.chart, for: .cpu)
+        settings.setMenuBarMetricPresentationMode(.off, for: .memory)
+        settings.setMenuBarMetricPresentationMode(.text, for: .network)
+
+        XCTAssertEqual(settings.menuBarMetricPresentationMode(for: .cpu), .chart)
+        XCTAssertEqual(settings.menuBarMetricPresentationMode(for: .memory), .off)
+        XCTAssertEqual(settings.menuBarMetricPresentationMode(for: .network), .text)
+        XCTAssertEqual(settings.statusModulesRequiredForRefresh, [.cpu, .memory, .storage, .network])
+
+        settings.setMenuBarMetricPresentationMode(.off, for: .cpu)
+        settings.setMenuBarStatusItem(.cpu, enabled: true)
+
+        XCTAssertEqual(settings.menuBarMetricPresentationMode(for: .cpu), .chart)
     }
 
     func testMenuBarTriggerIconStylesExposeBrandSymbolOptions() {

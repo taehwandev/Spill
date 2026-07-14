@@ -115,6 +115,8 @@ extension PreferencesTextKey {
     static let highlight = Self(rawValue: "highlight")
     static let inline = Self(rawValue: "inline")
     static let stacked = Self(rawValue: "stacked")
+    static let text = Self(rawValue: "text")
+    static let chart = Self(rawValue: "chart")
     static let iconOnly = Self(rawValue: "iconOnly")
     static let bundleID = Self(rawValue: "bundleID")
     static let bundle = Self(rawValue: "bundle")

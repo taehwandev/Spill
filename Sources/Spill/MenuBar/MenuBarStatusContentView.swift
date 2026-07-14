@@ -17,6 +17,7 @@ final class MenuBarStatusContentView: NSView {
     private static let verticalHorizontalPadding: CGFloat = 7
     private static let compactIconValueMinWidth: CGFloat = 22
     private static let compactIconValueHorizontalPadding: CGFloat = 5
+    static let sparklineWidth: CGFloat = 30
     static let defaultTextFontSize: CGFloat = 13.5
     static let minimumTextFontSize: CGFloat = 10
     static let maximumTextFontSize: CGFloat = 15
@@ -205,7 +206,7 @@ extension MenuBarStatusContentView {
         }
 
         switch segment.kind {
-        case .cpu, .memory, .ai:
+        case .cpu, .memory, .network, .ai:
             return true
         case .caffeine, .sleepGuard, .trigger:
             return false
@@ -218,7 +219,7 @@ extension MenuBarStatusContentView {
         }
 
         switch segment.kind {
-        case .cpu, .memory, .ai:
+        case .cpu, .memory, .network, .ai:
             return true
         case .caffeine, .sleepGuard, .trigger:
             return false
@@ -346,9 +347,11 @@ extension MenuBarStatusContentView {
         let titleWidth = (verticalTitle(for: segment) as NSString).size(
             withAttributes: [.font: verticalTitleFont(textFontSize: textFontSize)]
         ).width
-        let valueWidth = (segment.value as NSString).size(
-            withAttributes: [.font: verticalValueFont(textFontSize: textFontSize, textIsBold: textIsBold)]
-        ).width
+        let valueWidth = segment.usesChartPresentation
+            ? sparklineWidth
+            : (segment.value as NSString).size(
+                withAttributes: [.font: verticalValueFont(textFontSize: textFontSize, textIsBold: textIsBold)]
+            ).width
         return max(verticalChipMinWidth, ceil(max(titleWidth, valueWidth)) + verticalHorizontalPadding)
     }
 
@@ -358,7 +361,7 @@ extension MenuBarStatusContentView {
             return "RAM"
         case .cpu:
             return "CPU"
-        case .ai, .caffeine, .sleepGuard, .trigger:
+        case .network, .ai, .caffeine, .sleepGuard, .trigger:
             return segment.shortTitle
         }
     }
@@ -420,6 +423,9 @@ extension MenuBarStatusContentView {
         }
         if segment.isBadge {
             return iconOnlyChipWidth
+        }
+        if segment.usesChartPresentation {
+            return sparklineWidth + 23
         }
 
         if segment.isValueOnly {
@@ -855,7 +861,7 @@ private final class MenuBarVerticalMetricChipView: NSView {
 
         translatesAutoresizingMaskIntoConstraints = false
         configureLabels()
-        installLabels()
+        installContent()
         setAccessibilityLabel(accessibilityText)
     }
 
@@ -892,9 +898,20 @@ private final class MenuBarVerticalMetricChipView: NSView {
         refreshColors()
     }
 
-    private func installLabels() {
+    private func installContent() {
         addSubview(titleLabel)
-        addSubview(valueLabel)
+
+        let contentView: NSView
+        if segment.usesChartPresentation {
+            contentView = MenuBarMetricSparklineView(
+                series: segment.graphSeries,
+                kind: segment.kind,
+                statusColor: valueColor
+            )
+        } else {
+            contentView = valueLabel
+        }
+        addSubview(contentView)
 
         NSLayoutConstraint.activate([
             titleLabel.topAnchor.constraint(equalTo: topAnchor, constant: 1),
@@ -902,10 +919,10 @@ private final class MenuBarVerticalMetricChipView: NSView {
             titleLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -3),
             titleLabel.heightAnchor.constraint(equalToConstant: 8),
 
-            valueLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: -1),
-            valueLabel.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -1),
-            valueLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 3),
-            valueLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -3)
+            contentView.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: -1),
+            contentView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -1),
+            contentView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 2),
+            contentView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -2)
         ])
     }
 

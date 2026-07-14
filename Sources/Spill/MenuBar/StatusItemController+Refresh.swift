@@ -64,6 +64,10 @@ extension StatusItemController {
             enabledItems: settings.enabledMenuBarStatusItems,
             cpu: statusStore.cpu,
             memory: statusStore.memory,
+            network: statusStore.network,
+            cpuHistory: statusStore.history(for: .cpu),
+            memoryHistory: statusStore.history(for: .memory),
+            networkHistory: statusStore.networkTrafficHistory,
             aiTokenCount: tokenCounts.daily,
             aiAllTimeTokenCount: tokenCounts.total,
             displayMode: settings.menuBarTokenDisplayMode,
@@ -75,15 +79,18 @@ extension StatusItemController {
         let sleepGuardSegment = sleepGuardMenuBarSegment
         let compactMode = settings.menuBarStatusCompactMode
         let splitGroups = settings.menuBarStatusSplitGroups
-        let layoutStyle: MenuBarStatusLayoutStyle = compactMode ? settings.menuBarStatusLayoutStyle : .inline
+        let presentationStyles = settings.menuBarMetricPresentationStyles
+        let layoutStyle = settings.menuBarStatusLayoutStyle
         let textFontSize = MenuBarStatusContentView.normalizedTextFontSize(
             CGFloat(settings.menuBarStatusFontSize)
         )
         let textIsBold = settings.menuBarStatusTextBold
         let trigger = triggerSegment(performanceEffect: performanceEffect)
-        let displayStatusSegments = compactMode
-            ? summary.segments.map { $0.valueOnlyMenuBarSegment() }
-            : summary.segments
+        let displayStatusSegments = Self.displayStatusSegments(
+            summary.segments,
+            presentationStyles: presentationStyles,
+            compactMode: compactMode
+        )
         let displaySleepGuardSegment = compactMode
             ? sleepGuardSegment?.badgeMenuBarSegment()
             : sleepGuardSegment
@@ -115,6 +122,37 @@ extension StatusItemController {
         )
     }
 
+    static func displayStatusSegments(
+        _ segments: [MenuBarStatusSegment],
+        presentationStyles: [SpillMenuBarStatusItem: MenuBarStatusPresentationStyle],
+        compactMode: Bool
+    ) -> [MenuBarStatusSegment] {
+        segments.map { segment in
+            if let item = menuBarStatusItem(for: segment.kind),
+               presentationStyles[item] == .chart
+            {
+                return segment.chartMenuBarSegment()
+            }
+
+            return compactMode ? segment.valueOnlyMenuBarSegment() : segment
+        }
+    }
+
+    private static func menuBarStatusItem(
+        for kind: MenuBarStatusSegment.Kind
+    ) -> SpillMenuBarStatusItem? {
+        switch kind {
+        case .cpu:
+            return .cpu
+        case .memory:
+            return .memory
+        case .network:
+            return .network
+        case .trigger, .caffeine, .ai, .sleepGuard:
+            return nil
+        }
+    }
+
     func refreshSegments(
         trigger: MenuBarStatusSegment,
         statusSegments: [MenuBarStatusSegment],
@@ -126,10 +164,11 @@ extension StatusItemController {
         usesCompactFallback: Bool
     ) -> (main: [MenuBarStatusSegment], system: [MenuBarStatusSegment], ai: [MenuBarStatusSegment]) {
         if splitGroups {
+            let groupedSegments = Self.splitStatusSegments(statusSegments)
             return (
                 main: Self.orderedSegments(trigger: trigger, statusSegments: [], caffeineSegment: caffeineSegment),
-                system: statusSegments.filter { $0.kind == .cpu || $0.kind == .memory },
-                ai: statusSegments.filter { $0.kind == .ai }
+                system: groupedSegments.system,
+                ai: groupedSegments.ai
             )
         }
 
@@ -146,6 +185,17 @@ extension StatusItemController {
             ),
             system: [],
             ai: []
+        )
+    }
+
+    static func splitStatusSegments(
+        _ segments: [MenuBarStatusSegment]
+    ) -> (system: [MenuBarStatusSegment], ai: [MenuBarStatusSegment]) {
+        (
+            system: segments.filter {
+                $0.kind == .cpu || $0.kind == .memory || $0.kind == .network
+            },
+            ai: segments.filter { $0.kind == .ai }
         )
     }
 }

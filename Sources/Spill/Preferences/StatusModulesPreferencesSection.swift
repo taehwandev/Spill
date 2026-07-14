@@ -154,14 +154,28 @@ struct ClockAreaStatusPreferencesSection: View {
 
             VStack(spacing: 9) {
                 ForEach(clockAreaItems) { item in
-                    HStack {
-                        Label(menuBarStatusTitle(for: item), systemImage: item.symbolName)
-                            .font(.callout)
-                        Spacer()
-                        Toggle(menuBarStatusTitle(for: item), isOn: menuBarStatusBinding(for: item))
-                            .labelsHidden()
-                            .toggleStyle(.switch)
+                    if SpillMenuBarStatusItem.graphPresentationSupported.contains(item) {
+                        metricPresentationPicker(for: item)
+                    } else {
+                        HStack {
+                            Label(menuBarStatusTitle(for: item), systemImage: item.symbolName)
+                                .font(.callout)
+                            Spacer()
+                            Toggle(menuBarStatusTitle(for: item), isOn: menuBarStatusBinding(for: item))
+                                .labelsHidden()
+                                .toggleStyle(.switch)
+                        }
                     }
+                }
+            }
+
+            optionPicker(
+                title: t(.layout),
+                symbolName: "rectangle.split.1x2",
+                selection: $settings.menuBarStatusLayoutStyle
+            ) {
+                ForEach(MenuBarStatusLayoutStyle.allCases) { style in
+                    Text(style.title(appLanguage: settings.appLanguage)).tag(style)
                 }
             }
 
@@ -179,38 +193,40 @@ struct ClockAreaStatusPreferencesSection: View {
                 isOn: $settings.menuBarStatusSplitGroups
             )
 
-            HStack {
-                Label(t(.clockAreaTextBold), systemImage: "bold")
-                    .font(.callout)
-                Spacer()
-                Toggle(t(.clockAreaTextBold), isOn: $settings.menuBarStatusTextBold)
-                    .labelsHidden()
-                    .toggleStyle(.switch)
-            }
-
-            VStack(alignment: .leading, spacing: 4) {
+            if settings.hasTextPresentedMenuBarStatusItems {
                 HStack {
-                    Label(t(.clockAreaTextSize), systemImage: "textformat.size")
+                    Label(t(.clockAreaTextBold), systemImage: "bold")
                         .font(.callout)
                     Spacer()
-                    Text(String(format: "%.1fpt", settings.menuBarStatusFontSize))
-                        .font(.system(size: 12, design: .monospaced))
-                        .foregroundStyle(.secondary)
+                    Toggle(t(.clockAreaTextBold), isOn: $settings.menuBarStatusTextBold)
+                        .labelsHidden()
+                        .toggleStyle(.switch)
                 }
-                Slider(
-                    value: $settings.menuBarStatusFontSize,
-                    in: 10...15,
-                    step: 0.5
-                )
-            }
 
-            optionPicker(
-                title: t(.decimals),
-                symbolName: "percent",
-                selection: $settings.menuBarStatusPrecision
-            ) {
-                ForEach(MenuBarStatusPrecision.allCases) { precision in
-                    Text(precision.title).tag(precision)
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Label(t(.clockAreaTextSize), systemImage: "textformat.size")
+                            .font(.callout)
+                        Spacer()
+                        Text(String(format: "%.1fpt", settings.menuBarStatusFontSize))
+                            .font(.system(size: 12, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                    }
+                    Slider(
+                        value: $settings.menuBarStatusFontSize,
+                        in: 10...15,
+                        step: 0.5
+                    )
+                }
+
+                optionPicker(
+                    title: t(.decimals),
+                    symbolName: "percent",
+                    selection: $settings.menuBarStatusPrecision
+                ) {
+                    ForEach(MenuBarStatusPrecision.allCases) { precision in
+                        Text(precision.title).tag(precision)
+                    }
                 }
             }
 
@@ -230,7 +246,7 @@ struct ClockAreaStatusPreferencesSection: View {
 
 extension ClockAreaStatusPreferencesSection {
     private var clockAreaItems: [SpillMenuBarStatusItem] {
-        [.caffeine, .cpu, .memory, .ai]
+        [.caffeine, .cpu, .memory, .network, .ai]
     }
 
     private func menuBarStatusBinding(for item: SpillMenuBarStatusItem) -> Binding<Bool> {
@@ -238,6 +254,28 @@ extension ClockAreaStatusPreferencesSection {
             settings.isMenuBarStatusItemEnabled(item)
         } set: { enabled in
             settings.setMenuBarStatusItem(item, enabled: enabled)
+        }
+    }
+
+    private func metricPresentationBinding(
+        for item: SpillMenuBarStatusItem
+    ) -> Binding<MenuBarMetricPresentationMode> {
+        Binding {
+            settings.menuBarMetricPresentationMode(for: item)
+        } set: { mode in
+            settings.setMenuBarMetricPresentationMode(mode, for: item)
+        }
+    }
+
+    private func metricPresentationPicker(for item: SpillMenuBarStatusItem) -> some View {
+        optionPicker(
+            title: menuBarStatusTitle(for: item),
+            symbolName: item.symbolName,
+            selection: metricPresentationBinding(for: item)
+        ) {
+            ForEach(MenuBarMetricPresentationMode.allCases) { mode in
+                Text(mode.title(appLanguage: settings.appLanguage)).tag(mode)
+            }
         }
     }
 
@@ -274,11 +312,13 @@ extension ClockAreaStatusPreferencesSection {
                 )
 
                 ForEach(previewItems) { item in
+                    let chartSeries = previewChartSeries(for: item)
                     previewChip(
                         symbolName: item.symbolName,
                         label: previewLabel(for: item),
-                        value: previewValue(for: item),
-                        isTrigger: false
+                        value: chartSeries == nil ? previewValue(for: item) : nil,
+                        isTrigger: false,
+                        chartSeries: chartSeries
                     )
                 }
             }
@@ -310,44 +350,60 @@ extension ClockAreaStatusPreferencesSection {
         label: String?,
         value: String?,
         isTrigger: Bool,
-        triggerStyle: MenuBarTriggerIconStyle? = nil
+        triggerStyle: MenuBarTriggerIconStyle? = nil,
+        chartSeries: [[Double]]? = nil
     ) -> some View {
-        HStack(spacing: 4) {
-            previewIcon(symbolName: symbolName, triggerStyle: triggerStyle)
-
-            if previewUsesStackedLayout, !isTrigger, value != nil {
+        Group {
+            if let chartSeries, previewUsesStackedLayout {
                 VStack(spacing: 0) {
                     if let label {
                         Text(label)
                             .font(.system(size: max(clockPreviewTextSize * 0.56, 7), weight: .semibold))
                     }
 
-                    if let value {
-                        Text(value)
-                            .font(.system(
-                                size: max(clockPreviewTextSize * 0.80, 9),
-                                weight: settings.menuBarStatusTextBold ? .semibold : .regular,
-                                design: .monospaced
-                            ))
-                    }
+                    ClockAreaPreviewChart(series: chartSeries)
                 }
             } else {
-                if let label {
-                    Text(label)
-                        .font(.system(
-                            size: max(clockPreviewTextSize - 2.5, 8),
-                            weight: settings.menuBarStatusTextBold ? .semibold : .regular,
-                            design: .rounded
-                        ))
-                }
+                HStack(spacing: 4) {
+                    previewIcon(symbolName: symbolName, triggerStyle: triggerStyle)
 
-                if let value {
-                    Text(value)
-                        .font(.system(
-                            size: clockPreviewTextSize,
-                            weight: settings.menuBarStatusTextBold ? .semibold : .regular,
-                            design: .monospaced
-                        ))
+                    if let chartSeries {
+                        ClockAreaPreviewChart(series: chartSeries)
+                    } else if previewUsesStackedLayout, !isTrigger, value != nil {
+                        VStack(spacing: 0) {
+                            if let label {
+                                Text(label)
+                                    .font(.system(size: max(clockPreviewTextSize * 0.56, 7), weight: .semibold))
+                            }
+
+                            if let value {
+                                Text(value)
+                                    .font(.system(
+                                        size: max(clockPreviewTextSize * 0.80, 9),
+                                        weight: settings.menuBarStatusTextBold ? .semibold : .regular,
+                                        design: .monospaced
+                                    ))
+                            }
+                        }
+                    } else {
+                        if let label {
+                            Text(label)
+                                .font(.system(
+                                    size: max(clockPreviewTextSize - 2.5, 8),
+                                    weight: settings.menuBarStatusTextBold ? .semibold : .regular,
+                                    design: .rounded
+                                ))
+                        }
+
+                        if let value {
+                            Text(value)
+                                .font(.system(
+                                    size: clockPreviewTextSize,
+                                    weight: settings.menuBarStatusTextBold ? .semibold : .regular,
+                                    design: .monospaced
+                                ))
+                        }
+                    }
                 }
             }
         }
@@ -414,7 +470,29 @@ extension ClockAreaStatusPreferencesSection {
         case .cpu, .memory:
             let value = settings.menuBarStatusPrecision.percentText(for: previewValues[item] ?? 0)
             return value
-        case .gpu, .network:
+        case .network:
+            return "↓ 1.2 MB/s ↑ 320 KB/s"
+        case .gpu:
+            return nil
+        }
+    }
+
+    private func previewChartSeries(for item: SpillMenuBarStatusItem) -> [[Double]]? {
+        guard settings.menuBarStatusPresentationStyle(for: item) == .chart else {
+            return nil
+        }
+
+        switch item {
+        case .cpu:
+            return [[0.16, 0.38, 0.24, 0.72, 0.34]]
+        case .memory:
+            return [[0.48, 0.53, 0.57, 0.55, 0.62]]
+        case .network:
+            return [
+                [0.12, 0.58, 0.22, 0.82, 0.42],
+                [0.08, 0.24, 0.14, 0.36, 0.18]
+            ]
+        case .caffeine, .gpu, .ai:
             return nil
         }
     }
@@ -464,16 +542,13 @@ extension ClockAreaStatusPreferencesSection {
     }
 
     private var previewUsesStackedLayout: Bool {
-        settings.menuBarStatusCompactMode && settings.menuBarStatusLayoutStyle == .stacked
+        settings.menuBarStatusLayoutStyle == .stacked
     }
 
     private var previewModeTitle: String {
-        var parts: [String] = []
-        if settings.menuBarStatusCompactMode {
-            parts.append(settings.menuBarStatusLayoutStyle.title(appLanguage: settings.appLanguage))
-        } else {
-            parts.append(PreferencesL10n.text(.inline, appLanguage: settings.appLanguage))
-        }
+        var parts = [
+            settings.menuBarStatusLayoutStyle.title(appLanguage: settings.appLanguage)
+        ]
         if settings.menuBarStatusSplitGroups {
             parts.append(PreferencesL10n.text(.clockAreaSplitGroups, appLanguage: settings.appLanguage))
         }

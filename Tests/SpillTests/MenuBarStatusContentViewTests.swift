@@ -666,6 +666,192 @@ final class MenuBarStatusContentViewTests: XCTestCase {
         )
     }
 
+    func testTextPresentationDoesNotRenderHistoryGraph() throws {
+        let current = makeStatusSegment(kind: .cpu, value: "20.0%")
+        let withHistory = MenuBarStatusSegment(
+            kind: current.kind,
+            title: current.title,
+            shortTitle: current.shortTitle,
+            value: current.value,
+            displayText: current.displayText,
+            usageRatio: current.usageRatio,
+            state: current.state,
+            symbolName: current.symbolName,
+            graphSeries: [MenuBarStatusSegment.GraphSeries(role: .status, values: [0.1, 0.4])]
+        )
+
+        let view = MenuBarStatusContentView(segments: [withHistory])
+        let chip = try XCTUnwrap(view.subviews.first)
+
+        XCTAssertFalse(withHistory.showsHistoryGraph)
+        XCTAssertEqual(
+            MenuBarStatusContentView.preferredWidth(for: [withHistory]),
+            MenuBarStatusContentView.preferredWidth(for: [current])
+        )
+        XCTAssertTrue(chip.subviews.compactMap { $0 as? MenuBarMetricSparklineView }.isEmpty)
+    }
+
+    func testChartPresentationRendersGraphWithoutNumericTextInHorizontalLayout() throws {
+        let current = makeStatusSegment(kind: .cpu, value: "20.0%")
+        let chart = MenuBarStatusSegment(
+            kind: current.kind,
+            title: current.title,
+            shortTitle: current.shortTitle,
+            value: current.value,
+            displayText: current.displayText,
+            usageRatio: current.usageRatio,
+            state: current.state,
+            symbolName: current.symbolName,
+            graphSeries: [MenuBarStatusSegment.GraphSeries(role: .status, values: [0.1, 0.4])]
+        ).chartMenuBarSegment()
+
+        let view = MenuBarStatusContentView(segments: [chart], layoutStyle: .inline)
+        let chip = try XCTUnwrap(view.subviews.first)
+
+        XCTAssertTrue(chart.showsHistoryGraph)
+        XCTAssertEqual(chip.subviews.compactMap { $0 as? MenuBarMetricSparklineView }.count, 1)
+        XCTAssertFalse(chip.subviews.compactMap { $0 as? NSTextField }.contains { $0.stringValue == "20.0%" })
+    }
+
+    func testNetworkHistoryRendersDualSeriesSparkline() throws {
+        let current = makeStatusSegment(kind: .network, value: "↓ 2.0 MB/s ↑ 500 KB/s")
+        let network = MenuBarStatusSegment(
+            kind: current.kind,
+            title: current.title,
+            shortTitle: current.shortTitle,
+            value: current.value,
+            displayText: current.displayText,
+            usageRatio: current.usageRatio,
+            state: current.state,
+            symbolName: current.symbolName,
+            graphSeries: [
+                MenuBarStatusSegment.GraphSeries(role: .received, values: [0.1, 0.4]),
+                MenuBarStatusSegment.GraphSeries(role: .sent, values: [0.2, 0.3])
+            ]
+        )
+
+        let chart = network.chartMenuBarSegment()
+        let view = MenuBarStatusContentView(segments: [chart])
+        let chip = try XCTUnwrap(view.subviews.first)
+
+        XCTAssertFalse(network.showsHistoryGraph)
+        XCTAssertTrue(chart.showsHistoryGraph)
+        XCTAssertEqual(chip.subviews.compactMap { $0 as? MenuBarMetricSparklineView }.count, 1)
+    }
+
+    func testChartPresentationRendersInVerticalLayoutWithoutNumericValue() throws {
+        let current = makeStatusSegment(kind: .memory, value: "60.0%")
+        let chart = MenuBarStatusSegment(
+            kind: current.kind,
+            title: current.title,
+            shortTitle: current.shortTitle,
+            value: current.value,
+            displayText: current.displayText,
+            usageRatio: current.usageRatio,
+            state: current.state,
+            symbolName: current.symbolName,
+            graphSeries: [MenuBarStatusSegment.GraphSeries(role: .status, values: [0.4, 0.55, 0.6])]
+        ).chartMenuBarSegment()
+
+        let view = MenuBarStatusContentView(segments: [chart], layoutStyle: .stacked)
+        let chip = try XCTUnwrap(view.subviews.first)
+
+        XCTAssertEqual(chip.subviews.compactMap { $0 as? MenuBarMetricSparklineView }.count, 1)
+        XCTAssertFalse(chip.subviews.compactMap { $0 as? NSTextField }.contains { $0.stringValue == "60.0%" })
+    }
+
+    func testPresentationStylesTransformEachGraphMetricIndependently() {
+        let cpu = makeStatusSegment(kind: .cpu, value: "20.0%")
+        let memory = makeStatusSegment(kind: .memory, value: "60.0%")
+        let network = makeStatusSegment(kind: .network, value: "↓ 2.0 MB/s ↑ 500 KB/s")
+        let ai = makeStatusSegment(kind: .ai, value: "1.2M")
+
+        let segments = StatusItemController.displayStatusSegments(
+            [cpu, memory, network, ai],
+            presentationStyles: [.cpu: .chart, .memory: .text, .network: .chart],
+            compactMode: false
+        )
+
+        XCTAssertTrue(segments[0].usesChartPresentation)
+        XCTAssertFalse(segments[1].usesChartPresentation)
+        XCTAssertTrue(segments[2].usesChartPresentation)
+        XCTAssertFalse(segments[3].usesChartPresentation)
+    }
+
+    func testMetricGraphPreviewRendersOffscreen() throws {
+        func segment(
+            kind: MenuBarStatusSegment.Kind,
+            value: String,
+            graphSeries: [MenuBarStatusSegment.GraphSeries]
+        ) -> MenuBarStatusSegment {
+            let current = makeStatusSegment(kind: kind, value: value)
+            return MenuBarStatusSegment(
+                kind: current.kind,
+                title: current.title,
+                shortTitle: current.shortTitle,
+                value: current.value,
+                displayText: current.displayText,
+                usageRatio: current.usageRatio,
+                state: current.state,
+                symbolName: current.symbolName,
+                graphSeries: graphSeries
+            )
+        }
+
+        let segments = [
+            segment(
+                kind: .cpu,
+                value: "20.0%",
+                graphSeries: [MenuBarStatusSegment.GraphSeries(role: .status, values: [0.1, 0.3, 0.2, 0.7])]
+            ),
+            segment(
+                kind: .memory,
+                value: "60.0%",
+                graphSeries: [MenuBarStatusSegment.GraphSeries(role: .status, values: [0.5, 0.55, 0.58, 0.6])]
+            ),
+            segment(
+                kind: .network,
+                value: "↓ 2.0 MB/s ↑ 500 KB/s",
+                graphSeries: [
+                    MenuBarStatusSegment.GraphSeries(role: .received, values: [0.1, 0.6, 0.25, 0.8]),
+                    MenuBarStatusSegment.GraphSeries(role: .sent, values: [0.05, 0.2, 0.1, 0.35])
+                ]
+            )
+        ].map { $0.chartMenuBarSegment() }
+
+        for layoutStyle in MenuBarStatusLayoutStyle.allCases {
+            let view = MenuBarStatusContentView(segments: segments, layoutStyle: layoutStyle)
+            view.frame = NSRect(origin: .zero, size: view.intrinsicContentSize)
+            view.wantsLayer = true
+            view.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+            view.layoutSubtreeIfNeeded()
+
+            let representation = try XCTUnwrap(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+            view.cacheDisplay(in: view.bounds, to: representation)
+            let data = try XCTUnwrap(representation.representation(using: .png, properties: [:]))
+
+            XCTAssertGreaterThan(data.count, 100)
+            let outputKey = layoutStyle == .inline
+                ? "SPILL_MENU_BAR_RENDER_OUTPUT"
+                : "SPILL_MENU_BAR_VERTICAL_RENDER_OUTPUT"
+            if let outputPath = ProcessInfo.processInfo.environment[outputKey] {
+                try data.write(to: URL(fileURLWithPath: outputPath), options: .atomic)
+            }
+        }
+    }
+
+    func testSplitStatusSegmentsIncludeOptionalNetworkInSystemGroup() {
+        let cpu = makeStatusSegment(kind: .cpu, value: "20.0%")
+        let memory = makeStatusSegment(kind: .memory, value: "60.0%")
+        let network = makeStatusSegment(kind: .network, value: "↓ 2.0 MB/s ↑ 500 KB/s")
+        let ai = makeStatusSegment(kind: .ai, value: "1.2M")
+
+        let groups = StatusItemController.splitStatusSegments([cpu, memory, network, ai])
+
+        XCTAssertEqual(groups.system.map(\.kind), [.cpu, .memory, .network])
+        XCTAssertEqual(groups.ai.map(\.kind), [.ai])
+    }
+
     func testDropTriggerRendersCustomWaterdropGlyph() {
         let image = MenuBarTriggerIconRenderer.image(
             style: .spill,
@@ -719,6 +905,10 @@ final class MenuBarStatusContentViewTests: XCTestCase {
             title = "Memory"
             shortTitle = "MEM"
             symbolName = "memorychip"
+        case .network:
+            title = "Network"
+            shortTitle = "NET"
+            symbolName = "network"
         case .caffeine:
             title = "Caffeine"
             shortTitle = "CAF"

@@ -38,7 +38,7 @@ When split groups are enabled, Spill may create separate small `NSStatusItem`
 instances:
 
 1. Main trigger, including optional Caffeine state.
-2. System glance values such as CPU and memory.
+2. System glance values such as CPU, memory, and opt-in Network RX/TX.
 3. AI glance values such as local token usage.
 
 The Main trigger is the survival priority and remains the panel entry point.
@@ -72,6 +72,25 @@ Rules:
   itself too small for reliable direct interaction.
 - System and AI values must share the same provider stores and refresh cadence
   as the Main app state instead of starting independent timers.
+- `MenuBarStatusSummary` carries formatted text plus semantic graph series to
+  AppKit status chips. `SpillSettings` persists a presentation style per
+  graph-capable metric and coordinates Off with the existing enabled-item set.
+  CPU, memory, and Network can independently select Off, Text, or Chart, while
+  Text and Chart are never combined in one chip. CPU and memory use one status
+  series; Network uses separate receive and upload series from `SystemStatusStore`.
+- When the per-metric style map is absent, settings migrate the legacy global
+  `MenuBarStatusPresentationStyle` to CPU, memory, and Network. The enabled-item
+  set remains authoritative, so Network stays default-off and an Off/On cycle
+  preserves the metric's last Text or Chart selection.
+- Horizontal and vertical chip owners reuse the same AppKit chart view. The view
+  draws its own frame, background, guide, area fill, traces, and endpoint, but it
+  must not sample system state, start timers, or decide whether a metric is enabled.
+- CPU and memory retain fixed unit scaling. Network RX/TX share a recent-peak
+  scale inside the renderer so relative traffic shape remains readable without
+  changing the accessible current-rate text.
+- Network menu bar support is opt-in and default off. Its receive and upload
+  traces use distinct styling while tooltips and accessibility labels remain the
+  non-color-only source of meaning in Chart mode.
 - System and AI status items are optional display surfaces. Hiding them because
   no corresponding value is enabled must not disable the underlying provider.
 - Spill cannot rely on macOS preserving item order. Functional items are a
@@ -647,6 +666,16 @@ Rules:
   user-level hook files for detected tools, but it must be explicit opt-in,
   support dry-run behavior, avoid overwriting unrelated hook entries, and back
   up existing config files before writing.
+- The setup helper must install the canonical agent instruction at
+  `~/.spill/runtime-instruction.md` with owner-only permissions. Runtime-specific
+  user instruction files are discovery bridges only and must not contain a full
+  duplicated Spill instruction.
+- The Codex bridge targets `~/.codex/AGENTS.override.md` when that file already
+  exists, otherwise `~/.codex/AGENTS.md`. The Claude Code bridge imports the
+  canonical file from `~/.claude/CLAUDE.md`. The Antigravity/AGY bridge points
+  to the canonical file from `~/.antigravity/AGENTS.md`.
+- Instruction bridge writes must be idempotent, preserve unrelated user text,
+  keep one managed Spill block per target, and back up a changed existing file.
 - Setup helper output, setup UI, and copied agent-facing install prompts must
   disclose that known local JSONL, transcript, or metadata stores can be read
   locally only for exact token metadata, and must repeat that content-like
@@ -949,6 +978,10 @@ Implementation rules:
 - AppKit bridge controllers may keep owning `NSPanel`, `NSStatusItem`, and
   window delegate behavior, but should receive feature stores, state, or
   closures instead of embedding business rules.
+- AppKit window controllers must stop window-scoped work when a window closes.
+  `PreferencesWindowController` releases its hosted SwiftUI content and
+  window-scoped observations on close, then recreates them on the next show so
+  preview animations cannot retain a hidden view tree.
 - Permission-required, unavailable, disabled, success, and failure states must
   be represented explicitly in feature state or action results.
 

@@ -49,6 +49,27 @@ extension MenuBarMetricChipView {
 
         addSubview(iconView)
 
+        if segment.usesChartPresentation {
+            let sparkline = MenuBarMetricSparklineView(
+                series: segment.graphSeries,
+                kind: segment.kind,
+                statusColor: statusColor
+            )
+            addSubview(sparkline)
+            NSLayoutConstraint.activate([
+                iconView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 5),
+                iconView.centerYAnchor.constraint(equalTo: centerYAnchor),
+                iconView.widthAnchor.constraint(equalToConstant: iconSize),
+                iconView.heightAnchor.constraint(equalToConstant: iconSize),
+
+                sparkline.leadingAnchor.constraint(equalTo: iconView.trailingAnchor, constant: 3),
+                sparkline.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -5),
+                sparkline.centerYAnchor.constraint(equalTo: centerYAnchor),
+                sparkline.heightAnchor.constraint(equalToConstant: 13)
+            ])
+            return
+        }
+
         if segment.isBadge, !segment.value.isEmpty {
             addSubview(valueLabel)
 
@@ -135,7 +156,7 @@ extension MenuBarMetricChipView {
 
     var hasCustomTriggerIcon: Bool {
         switch segment.visualStyle {
-        case .symbol, .valueOnly, .symbolBadge:
+        case .symbol, .valueOnly, .chart, .symbolBadge:
             return false
         case let .trigger(style):
             return style.usesCustomRenderer

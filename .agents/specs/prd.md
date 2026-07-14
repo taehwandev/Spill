@@ -117,8 +117,20 @@ Requirements:
   menu bar items, both, or neither.
 - In split mode, the groups are:
   - Main: Spill trigger plus optional Caffeine state.
-  - System: CPU and memory glance values.
+  - System: CPU, memory, and optional network glance values.
   - AI: local token/AI glance value.
+- CPU, memory, and Network each expose an independent Off, Text, or Chart mode.
+  Text shows the current numeric value, while Chart replaces that value with a
+  framed history chart that includes a visible background, guide, and area fill.
+- CPU, memory, and optional Network charts support both horizontal and vertical
+  clock-area layouts.
+- Network is available as a default-off clock-area option. Text mode shows its
+  receive and upload rates; Chart mode uses distinct RX/TX traces with shared
+  recent-peak scaling so low traffic remains visually meaningful.
+- Menu bar graphs reuse the system status store history and refresh cadence;
+  they do not create independent timers, probes, or permission requirements.
+- Existing global Text/Chart preferences migrate to each graph-capable metric;
+  new installations keep CPU and memory on Text while Network remains Off.
 - Caffeine is part of the main menu bar surface, not a standalone status group.
   When compact split mode is enabled, it may appear as a small badge or active
   state on the Spill trigger, with detailed remaining time available in tooltip
@@ -142,6 +154,14 @@ Acceptance:
 - Compact icon/value rendering never becomes the default solely because the menu
   bar is crowded; it is controlled by the compact display option.
 - Caffeine state does not consume a standalone status group.
+- Off, Text, and Chart are independently selectable for CPU, memory, and
+  Network. Text and Chart are mutually exclusive within each glance chip.
+- Chart mode has a visible frame and guide and remains legible in both horizontal
+  and vertical layouts.
+- Network remains disabled by default, can be enabled from clock-area status
+  Preferences, and distinguishes receive from upload in both text and chart modes.
+- Accessibility labels and tooltips communicate metric values without relying
+  on graph shape or color alone.
 - Local token usage appears inside the panel AI section.
 - No invisible, spacer, or oversized status items are created.
 - The app remains usable when the menu bar is crowded, subject to macOS status
@@ -168,6 +188,13 @@ Requirements:
   leaves the device, and why exact runtime usage metadata is required.
 - The global setup prompt and one-step installer should be available, but the UI
   must not imply that a prompt alone can measure token usage.
+- The one-step installer owns one canonical runtime instruction at
+  `~/.spill/runtime-instruction.md`. It must add only a small managed discovery
+  bridge to the active user instruction file for Codex, Claude Code, and
+  Antigravity/AGY, preserve unrelated instructions, and avoid asking users to
+  maintain three full prompt copies.
+- Setup completion copy should explain that already-running AI sessions may
+  need to restart before they discover the new bridge.
 - Web dashboard connection is optional and clearly separate from local metering.
 
 Acceptance:
@@ -236,6 +263,8 @@ Requirements:
   environment values, secrets, or arbitrary content-like fields.
 - Setup UI should offer a one-step installer path before exposing per-adapter
   snippets.
+- Setup UI should describe the install as one shared instruction plus automatic
+  runtime bridges, not as three separate prompt-install procedures.
 - Setup UI and the copied agent install prompt must explicitly explain that
   supported local JSONL, transcript, or metadata stores may be read locally only
   for exact token metadata, and that prompts, responses, commands, file paths,
@@ -483,6 +512,8 @@ Requirements:
   should not expose a separate option to choose among multiple CPU calculation
   modes unless a later PRD defines a real user workflow for that distinction.
 - Avoid high CPU overhead.
+- Closing Preferences releases its hosted UI and window-scoped preview work;
+  hidden configuration surfaces must not keep animations or layout passes alive.
 
 Acceptance:
 
@@ -490,6 +521,8 @@ Acceptance:
 - Missing metrics show a quiet unavailable state.
 - Redundant CPU mode settings are removed from Preferences and no longer affect
   status display.
+- Reopening Preferences recreates its UI normally after the previous window was
+  closed and released.
 
 ### 6. AI Status Strip
 
