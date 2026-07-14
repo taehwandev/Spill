@@ -123,49 +123,6 @@ final class SpillSettings: ObservableObject {
     static let shared = SpillSettings(defaults: sharedDefaults())
     static let aiToolVisibilityDidChangeNotification = Notification.Name("dev.spill.Spill.aiToolVisibilityDidChange")
 
-    static func sharedDefaults(
-        bundleIdentifier: String? = Bundle.main.bundleIdentifier,
-        arguments: [String] = ProcessInfo.processInfo.arguments,
-        environment: [String: String] = ProcessInfo.processInfo.environment
-    ) -> UserDefaults {
-        guard let suiteName = sharedDefaultsSuiteName(
-            bundleIdentifier: bundleIdentifier,
-            arguments: arguments,
-            environment: environment
-        ) else {
-            return .standard
-        }
-
-        return UserDefaults(suiteName: suiteName) ?? .standard
-    }
-
-    static func sharedDefaultsSuiteName(
-        bundleIdentifier: String?,
-        arguments: [String],
-        environment: [String: String]
-    ) -> String? {
-        let isDashboardProcess = environment[TokenMeteringDashboardProcess.standaloneEnvironmentKey] == "1"
-            || arguments.contains(TokenMeteringDashboardProcess.standaloneArgument)
-            || TokenMeteringDashboardProcess.isDashboardBundleIdentifier(bundleIdentifier)
-        guard isDashboardProcess else {
-            return nil
-        }
-
-        if let mainBundleIdentifier = environment[TokenMeteringDashboardProcess.mainBundleIdentifierEnvironmentKey],
-           !mainBundleIdentifier.isEmpty
-        {
-            return mainBundleIdentifier
-        }
-
-        guard let bundleIdentifier,
-              TokenMeteringDashboardProcess.isDashboardBundleIdentifier(bundleIdentifier)
-        else {
-            return nil
-        }
-
-        return String(bundleIdentifier.dropLast(TokenMeteringDashboardProcess.helperBundleIdentifierSuffix.count))
-    }
-
     @Published var appLanguage: SpillAppLanguage {
         didSet {
             defaults.set(appLanguage.rawValue, forKey: Keys.appLanguage)
@@ -405,36 +362,6 @@ final class SpillSettings: ObservableObject {
         }
     }
 
-    func reloadAppLanguageFromDefaults() {
-        defaults.synchronize()
-        let persistedLanguage = SpillAppLanguage.normalized(rawValue: defaults.string(forKey: Keys.appLanguage))
-        guard appLanguage != persistedLanguage else {
-            return
-        }
-
-        appLanguage = persistedLanguage
-    }
-
-    func reloadAppearanceThemeFromDefaults() {
-        defaults.synchronize()
-        let persistedTheme = SpillAppearanceTheme.normalized(rawValue: defaults.string(forKey: Keys.appearanceTheme))
-        guard appearanceTheme != persistedTheme else {
-            return
-        }
-
-        appearanceTheme = persistedTheme
-    }
-
-    func reloadTokenUsageDashboardOnboardingPreviewFromDefaults() {
-        defaults.synchronize()
-        let persistedValue = defaults.object(forKey: Keys.tokenUsageDashboardOnboardingPreviewEnabled) as? Bool ?? false
-        guard tokenUsageDashboardOnboardingPreviewEnabled != persistedValue else {
-            return
-        }
-
-        tokenUsageDashboardOnboardingPreviewEnabled = persistedValue
-    }
-
     @Published var statusValueBold: Bool {
         didSet { defaults.set(statusValueBold, forKey: Keys.statusValueBold) }
     }
@@ -587,6 +514,86 @@ final class SpillSettings: ObservableObject {
         panelSectionSpacing = defaults.object(forKey: Keys.panelSectionSpacing) as? Double ?? 14
     }
 
+}
+
+extension SpillSettings {
+    static func sharedDefaults(
+        bundleIdentifier: String? = Bundle.main.bundleIdentifier,
+        arguments: [String] = ProcessInfo.processInfo.arguments,
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> UserDefaults {
+        guard let suiteName = sharedDefaultsSuiteName(
+            bundleIdentifier: bundleIdentifier,
+            arguments: arguments,
+            environment: environment
+        ) else {
+            return .standard
+        }
+
+        return UserDefaults(suiteName: suiteName) ?? .standard
+    }
+
+    static func sharedDefaultsSuiteName(
+        bundleIdentifier: String?,
+        arguments: [String],
+        environment: [String: String]
+    ) -> String? {
+        let isDashboardProcess = environment[TokenMeteringDashboardProcess.standaloneEnvironmentKey] == "1"
+            || arguments.contains(TokenMeteringDashboardProcess.standaloneArgument)
+            || TokenMeteringDashboardProcess.isDashboardBundleIdentifier(bundleIdentifier)
+        guard isDashboardProcess else {
+            return nil
+        }
+
+        if let mainBundleIdentifier = environment[TokenMeteringDashboardProcess.mainBundleIdentifierEnvironmentKey],
+           !mainBundleIdentifier.isEmpty
+        {
+            return mainBundleIdentifier
+        }
+
+        guard let bundleIdentifier,
+              TokenMeteringDashboardProcess.isDashboardBundleIdentifier(bundleIdentifier)
+        else {
+            return nil
+        }
+
+        return String(bundleIdentifier.dropLast(TokenMeteringDashboardProcess.helperBundleIdentifierSuffix.count))
+    }
+}
+
+extension SpillSettings {
+    func reloadAppLanguageFromDefaults() {
+        defaults.synchronize()
+        let persistedLanguage = SpillAppLanguage.normalized(rawValue: defaults.string(forKey: Keys.appLanguage))
+        guard appLanguage != persistedLanguage else {
+            return
+        }
+
+        appLanguage = persistedLanguage
+    }
+
+    func reloadAppearanceThemeFromDefaults() {
+        defaults.synchronize()
+        let persistedTheme = SpillAppearanceTheme.normalized(rawValue: defaults.string(forKey: Keys.appearanceTheme))
+        guard appearanceTheme != persistedTheme else {
+            return
+        }
+
+        appearanceTheme = persistedTheme
+    }
+
+    func reloadTokenUsageDashboardOnboardingPreviewFromDefaults() {
+        defaults.synchronize()
+        let persistedValue = defaults.object(forKey: Keys.tokenUsageDashboardOnboardingPreviewEnabled) as? Bool ?? false
+        guard tokenUsageDashboardOnboardingPreviewEnabled != persistedValue else {
+            return
+        }
+
+        tokenUsageDashboardOnboardingPreviewEnabled = persistedValue
+    }
+}
+
+extension SpillSettings {
     func selectionState(for item: MenuBarItemSnapshot) -> MenuBarItemSelectionState {
         selectedItemKeys.contains(item.stableKey) ? .selected : .unselected
     }
@@ -613,6 +620,12 @@ final class SpillSettings: ObservableObject {
         hiddenItemKeys.remove(item.stableKey)
     }
 
+    func clearSelectedItems() {
+        selectedItemKeys = []
+    }
+}
+
+extension SpillSettings {
     func setTokenUsageAITool(_ tool: TokenUsageAITool, isVisible: Bool) {
         guard tool.isDashboardTool else {
             return
@@ -664,10 +677,33 @@ final class SpillSettings: ObservableObject {
         }
     }
 
-    func clearSelectedItems() {
-        selectedItemKeys = []
+    private func setLocalAITool(_ kind: LocalAIToolKind, isVisible: Bool, postsVisibilityChange: Bool) {
+        if isVisible {
+            hiddenLocalAIToolKinds.remove(kind)
+        } else {
+            hiddenLocalAIToolKinds.insert(kind)
+        }
+        if let tool = kind.tokenUsageDashboardTool {
+            if isVisible {
+                hiddenTokenUsageAITools.remove(tool)
+            } else {
+                hiddenTokenUsageAITools.insert(tool)
+            }
+        }
+        if postsVisibilityChange {
+            postAIToolVisibilityDidChange()
+        }
     }
 
+    private func postAIToolVisibilityDidChange() {
+        DistributedNotificationCenter.default().post(
+            name: Self.aiToolVisibilityDidChangeNotification,
+            object: nil
+        )
+    }
+}
+
+extension SpillSettings {
     func isStatusModuleEnabled(_ module: SpillStatusModule) -> Bool {
         enabledStatusModules.contains(module)
     }
@@ -684,6 +720,54 @@ final class SpillSettings: ObservableObject {
         }
     }
 
+    var visiblePanelStatusModules: [SpillStatusModule] {
+        statusModuleOrder.filter { enabledStatusModules.contains($0) }
+    }
+
+    func setStatusModuleOrder(_ modules: [SpillStatusModule]) {
+        statusModuleOrder = SpillStatusModule.normalizedOrder(modules)
+    }
+
+    func moveStatusModule(_ module: SpillStatusModule, direction: Int) {
+        guard direction != 0,
+              let index = statusModuleOrder.firstIndex(of: module)
+        else {
+            return
+        }
+
+        let targetIndex = index + direction
+        guard statusModuleOrder.indices.contains(targetIndex) else {
+            return
+        }
+
+        statusModuleOrder.swapAt(index, targetIndex)
+    }
+
+    private static func shouldMigrateNetworkStatusModuleDefault(
+        rawValues: [String]?,
+        defaults: UserDefaults
+    ) -> Bool {
+        guard defaults.object(forKey: Keys.statusModuleNetworkDefaultEnabledMigrated) as? Bool != true,
+              let rawValues
+        else {
+            return false
+        }
+
+        return !rawValues.contains(SpillStatusModule.network.rawValue)
+    }
+
+    private static func persistEnabledStatusModules(
+        _ modules: Set<SpillStatusModule>,
+        to defaults: UserDefaults
+    ) {
+        let orderedEnabledModules = SpillStatusModule.defaultOrder
+            .filter { modules.contains($0) }
+            .map(\.rawValue)
+        defaults.set(orderedEnabledModules, forKey: Keys.enabledStatusModules)
+    }
+}
+
+extension SpillSettings {
     func isMenuBarStatusItemEnabled(_ item: SpillMenuBarStatusItem) -> Bool {
         enabledMenuBarStatusItems.contains(item)
     }
@@ -787,34 +871,9 @@ final class SpillSettings: ObservableObject {
         })
         defaults.set(rawStyles, forKey: Keys.menuBarMetricPresentationStyles)
     }
+}
 
-    var visiblePanelStatusModules: [SpillStatusModule] {
-        statusModuleOrder.filter { enabledStatusModules.contains($0) }
-    }
-
-    var availableSleepGuardDurations: [SleepGuardDuration] {
-        SleepGuardDuration.availableDurations(allowsIndefinite: sleepGuardAllowsIndefinite)
-    }
-
-    func setStatusModuleOrder(_ modules: [SpillStatusModule]) {
-        statusModuleOrder = SpillStatusModule.normalizedOrder(modules)
-    }
-
-    func moveStatusModule(_ module: SpillStatusModule, direction: Int) {
-        guard direction != 0,
-              let index = statusModuleOrder.firstIndex(of: module)
-        else {
-            return
-        }
-
-        let targetIndex = index + direction
-        guard statusModuleOrder.indices.contains(targetIndex) else {
-            return
-        }
-
-        statusModuleOrder.swapAt(index, targetIndex)
-    }
-
+extension SpillSettings {
     func shortcutKey(for kind: WindowActionKind) -> WindowActionShortcutKey {
         windowActionShortcutKeys[kind] ?? kind.defaultShortcutKey
     }
@@ -924,28 +983,11 @@ final class SpillSettings: ObservableObject {
             "\(kind.rawValue)=\((shortcutKeys[kind] ?? kind.defaultShortcutKey).rawValue)"
         }
     }
+}
 
-    private static func shouldMigrateNetworkStatusModuleDefault(
-        rawValues: [String]?,
-        defaults: UserDefaults
-    ) -> Bool {
-        guard defaults.object(forKey: Keys.statusModuleNetworkDefaultEnabledMigrated) as? Bool != true,
-              let rawValues
-        else {
-            return false
-        }
-
-        return !rawValues.contains(SpillStatusModule.network.rawValue)
-    }
-
-    private static func persistEnabledStatusModules(
-        _ modules: Set<SpillStatusModule>,
-        to defaults: UserDefaults
-    ) {
-        let orderedEnabledModules = SpillStatusModule.defaultOrder
-            .filter { modules.contains($0) }
-            .map(\.rawValue)
-        defaults.set(orderedEnabledModules, forKey: Keys.enabledStatusModules)
+extension SpillSettings {
+    var availableSleepGuardDurations: [SleepGuardDuration] {
+        SleepGuardDuration.availableDurations(allowsIndefinite: sleepGuardAllowsIndefinite)
     }
 
     private static func normalizedIconSpacing(_ value: Double?) -> Double {
@@ -982,31 +1024,6 @@ final class SpillSettings: ObservableObject {
 
     private static func normalizedLocalAIToolKinds(from rawValues: [String]?) -> Set<LocalAIToolKind> {
         Set(rawValues?.compactMap(LocalAIToolKind.init(rawValue:)) ?? [])
-    }
-
-    private func setLocalAITool(_ kind: LocalAIToolKind, isVisible: Bool, postsVisibilityChange: Bool) {
-        if isVisible {
-            hiddenLocalAIToolKinds.remove(kind)
-        } else {
-            hiddenLocalAIToolKinds.insert(kind)
-        }
-        if let tool = kind.tokenUsageDashboardTool {
-            if isVisible {
-                hiddenTokenUsageAITools.remove(tool)
-            } else {
-                hiddenTokenUsageAITools.insert(tool)
-            }
-        }
-        if postsVisibilityChange {
-            postAIToolVisibilityDidChange()
-        }
-    }
-
-    private func postAIToolVisibilityDidChange() {
-        DistributedNotificationCenter.default().post(
-            name: Self.aiToolVisibilityDidChangeNotification,
-            object: nil
-        )
     }
 
     private static func privateUsageUploadEnabled(

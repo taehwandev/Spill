@@ -120,7 +120,9 @@ enum WindowFramePlanner {
             return restoreFrame.integral
         }
     }
+}
 
+private extension WindowFramePlanner {
     private static func nextVisibleFrame(after current: CGRect, in frames: [CGRect]) -> CGRect? {
         adjacentVisibleFrame(from: current, in: frames, offset: 1)
     }

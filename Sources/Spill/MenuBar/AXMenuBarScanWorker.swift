@@ -74,7 +74,9 @@ struct AXMenuBarScanWorker: @unchecked Sendable {
             stats: stats
         )
     }
+}
 
+private extension AXMenuBarScanWorker {
     private func menuBars(
         for applicationElement: AXUIElement,
         application: MenuBarApplicationCandidate
@@ -140,7 +142,9 @@ struct AXMenuBarScanWorker: @unchecked Sendable {
             )
         }
     }
+}
 
+private extension AXMenuBarScanWorker {
     private func isRepresentableMenuBarElement(role: String, frame: CGRect) -> Bool {
         if role == AXRoleName.menuBarItem {
             return true

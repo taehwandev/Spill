@@ -50,7 +50,9 @@ final class UpdateCheckStore: ObservableObject {
     deinit {
         checkTask?.cancel()
     }
+}
 
+extension UpdateCheckStore {
     var currentVersion: String {
         state.currentVersion
     }
@@ -132,7 +134,9 @@ final class UpdateCheckStore: ObservableObject {
             dashboardCheckDate: currentDate
         )
     }
+}
 
+private extension UpdateCheckStore {
     private var hasKnownDashboardUpdateResult: Bool {
         switch state {
         case .upToDate, .available, .unsupported:
@@ -193,7 +197,9 @@ final class UpdateCheckStore: ObservableObject {
             }
         }
     }
+}
 
+private extension UpdateCheckStore {
     private static func cachedDashboardState(
         defaults: UserDefaults,
         checker: UpdateChecker,
@@ -263,7 +269,9 @@ final class UpdateCheckStore: ObservableObject {
             }
         }
     }
+}
 
+extension UpdateCheckStore {
     func openUpdate(source: String = "preferences") {
         guard case .available(let update) = state else {
             return

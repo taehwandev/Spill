@@ -59,7 +59,9 @@ enum WindowActionShortcutKey: String, CaseIterable, Identifiable, Sendable {
     case eight
     case nine
     case zero
+}
 
+extension WindowActionShortcutKey {
     var id: String {
         rawValue
     }
@@ -118,7 +120,9 @@ enum WindowActionShortcutKey: String, CaseIterable, Identifiable, Sendable {
             return UInt32(kVK_ANSI_0)
         }
     }
+}
 
+extension WindowActionShortcutKey {
     var shortcutLabel: String {
         shortcutLabel(with: .standard)
     }

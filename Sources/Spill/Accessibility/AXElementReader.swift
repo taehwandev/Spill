@@ -4,7 +4,9 @@ import Foundation
 
 struct AXElementReader: Sendable {
     private let messagingTimeout: Float = 0.08
+}
 
+extension AXElementReader {
     func elementAttribute(_ element: AXUIElement, _ attribute: String) -> AXUIElement? {
         prepare(element)
 
@@ -56,6 +58,24 @@ struct AXElementReader: Sendable {
         return value as? String
     }
 
+    func actionNames(for element: AXUIElement) -> [String] {
+        prepare(element)
+
+        var names: CFArray?
+        guard AXUIElementCopyActionNames(element, &names) == .success else {
+            return []
+        }
+
+        return names as? [String] ?? []
+    }
+
+    func performPress(on element: AXUIElement) -> AXError {
+        prepare(element)
+        return AXUIElementPerformAction(element, AXActionName.press as CFString)
+    }
+}
+
+extension AXElementReader {
     func frame(of element: AXUIElement) -> CGRect {
         guard let position = pointAttribute(element, AXAttributeName.position),
               let size = sizeAttribute(element, AXAttributeName.size)
@@ -71,22 +91,6 @@ struct AXElementReader: Sendable {
         let didSetSize = setSize(frame.size, for: element, attribute: AXAttributeName.size)
 
         return didSetPosition && didSetSize
-    }
-
-    func actionNames(for element: AXUIElement) -> [String] {
-        prepare(element)
-
-        var names: CFArray?
-        guard AXUIElementCopyActionNames(element, &names) == .success else {
-            return []
-        }
-
-        return names as? [String] ?? []
-    }
-
-    func performPress(on element: AXUIElement) -> AXError {
-        prepare(element)
-        return AXUIElementPerformAction(element, AXActionName.press as CFString)
     }
 
     private func pointAttribute(_ element: AXUIElement, _ attribute: String) -> CGPoint? {
@@ -148,7 +152,9 @@ struct AXElementReader: Sendable {
 
         return AXUIElementSetAttributeValue(element, attribute as CFString, value) == .success
     }
+}
 
+extension AXElementReader {
     private func axValue(from value: CFTypeRef) -> AXValue? {
         guard CFGetTypeID(value) == AXValueGetTypeID() else {
             return nil

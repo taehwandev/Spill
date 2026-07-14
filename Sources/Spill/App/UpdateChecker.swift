@@ -82,7 +82,9 @@ struct UpdateChecker: Sendable {
         self.currentMacOS = currentMacOS
         self.dataLoader = dataLoader
     }
+}
 
+extension UpdateChecker {
     func check() async throws -> UpdateCheckOutcome {
         let manifest: UpdateManifest
         do {
@@ -129,7 +131,9 @@ struct UpdateChecker: Sendable {
 
         return .upToDate(currentVersion: currentVersion, manifest: manifest)
     }
+}
 
+private extension UpdateChecker {
     private func decodeManifest(from data: Data) throws -> UpdateManifest {
         do {
             return try JSONDecoder().decode(UpdateManifest.self, from: data)

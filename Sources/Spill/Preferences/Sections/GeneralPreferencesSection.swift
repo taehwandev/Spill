@@ -115,7 +115,9 @@ private extension GeneralPreferencesSection {
             UpdatePreferencesSection(store: updateStore)
         }
     }
+}
 
+private extension GeneralPreferencesSection {
     private var legalAndPrivacyCard: some View {
         PreferencesLegalLinksCard(language: language)
     }

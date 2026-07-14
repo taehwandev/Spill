@@ -59,7 +59,9 @@ struct UpdatePreferencesSection: View {
             .controlSize(.small)
         }
     }
+}
 
+private extension UpdatePreferencesSection {
     @ViewBuilder
     private var checkForUpdatesButton: some View {
         if store.canOpenUpdate && store.usesInAppUpdater {
@@ -137,7 +139,9 @@ struct UpdatePreferencesSection: View {
                 .foregroundStyle(.red)
         }
     }
+}
 
+private extension UpdatePreferencesSection {
     private var showsManualFallbackActions: Bool {
         store.canOpenUpdate && !store.usesInAppUpdater
     }

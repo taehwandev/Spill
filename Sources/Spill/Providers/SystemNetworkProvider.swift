@@ -50,7 +50,9 @@ struct SystemNetworkProvider: SpillStatusProvider {
     func snapshot() async -> [SpillStatusItem] {
         [Self.status(previous: nil, current: Self.currentReading()).statusItem]
     }
+}
 
+extension SystemNetworkProvider {
     static func status() -> SystemNetworkStatus {
         status(previous: nil, current: currentReading())
     }
@@ -137,7 +139,9 @@ struct SystemNetworkProvider: SpillStatusProvider {
 
         return compactRate(Double(bytes) / 1_000_000_000, unit: "GB")
     }
+}
 
+private extension SystemNetworkProvider {
     private static func samplingStatus(from current: SystemNetworkReading) -> SystemNetworkStatus {
         SystemNetworkStatus(
             value: "Sampling",

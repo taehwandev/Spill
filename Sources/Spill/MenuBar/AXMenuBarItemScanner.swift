@@ -145,7 +145,9 @@ final class AXMenuBarItemScanner: ObservableObject {
     ) -> Bool {
         refresh(force: false, reason: reason, minimumRefreshInterval: minimumRefreshInterval)
     }
+}
 
+extension AXMenuBarItemScanner {
     @discardableResult
     func pressItem(withID id: MenuBarItemSnapshot.ID) -> Bool {
         guard let reference = elementsByID[id] else {
@@ -205,7 +207,9 @@ final class AXMenuBarItemScanner: ObservableObject {
             refresh(force: true, reason: queuedReason)
         }
     }
+}
 
+private extension AXMenuBarItemScanner {
     private func message(
         for stats: MenuBarScanStats,
         items: [MenuBarItemSnapshot],
@@ -273,7 +277,9 @@ final class AXMenuBarItemScanner: ObservableObject {
         iconRefreshGeneration += 1
         return iconRefreshGeneration
     }
+}
 
+private extension AXMenuBarItemScanner {
     private func refreshMissingIcons(for items: [MenuBarItemSnapshot], generation: Int) {
         let requests = items.compactMap { item -> MenuBarIconLoadRequest? in
             guard item.isNotchCandidate, item.imageData == nil else {
@@ -327,7 +333,9 @@ final class AXMenuBarItemScanner: ObservableObject {
             }
         }
     }
+}
 
+private extension AXMenuBarItemScanner {
     private func applyLoadedIcons(
         _ loaded: [String: (key: String, data: Data)],
         missingKeys: Set<String>,

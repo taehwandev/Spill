@@ -207,7 +207,9 @@ struct MenuBarStatusSummary: Equatable {
             segments: entries.map(\.segment)
         )
     }
+}
 
+private extension MenuBarStatusSummary {
     private static func entry(
         for item: SpillMenuBarStatusItem,
         cpu: SystemCPUStatus,
@@ -307,7 +309,9 @@ struct MenuBarStatusSummary: Equatable {
             return nil
         }
     }
+}
 
+private extension MenuBarStatusSummary {
     private static func metricEntry(
         item: SpillMenuBarStatusItem,
         kind: MenuBarStatusSegment.Kind,

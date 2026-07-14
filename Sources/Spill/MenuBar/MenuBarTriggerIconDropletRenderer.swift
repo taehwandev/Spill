@@ -55,7 +55,9 @@ enum MenuBarTriggerIconDropletRenderer {
         image.isTemplate = false
         return image
     }
+}
 
+private extension MenuBarTriggerIconDropletRenderer {
     /// Points sampling the top-to-bottom-via-the-right-edge half of the outline (the initial
     /// straight edge plus the first two curves — `WaterDropletOutline.segments[0...2]` — which
     /// end exactly at the drop's bottom point), flattened into short line segments so a
@@ -91,7 +93,9 @@ enum MenuBarTriggerIconDropletRenderer {
         let y = mt * mt * mt * start.y + 3 * mt * mt * t * control1.y + 3 * mt * t * t * control2.y + t * t * t * end.y
         return CGPoint(x: x, y: y)
     }
+}
 
+private extension MenuBarTriggerIconDropletRenderer {
     /// The moving comet trail, as individual short segments each with their own fade-in
     /// alpha (transparent tail, opaque head) — a single stroke can't carry a gradient along
     /// its length in AppKit, so the trail is built from several short overlapping strokes

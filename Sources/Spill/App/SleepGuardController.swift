@@ -123,7 +123,9 @@ final class SleepGuardController: ObservableObject {
         self.now = now
         self.automaticallySchedulesTimer = automaticallySchedulesTimer
     }
+}
 
+extension SleepGuardController {
     var remainingLabel: String {
         guard isActive else {
             return ""
@@ -211,7 +213,9 @@ final class SleepGuardController: ObservableObject {
             stop(clearError: false)
         }
     }
+}
 
+private extension SleepGuardController {
     private func stop(clearError: Bool) {
         timer?.invalidate()
         timer = nil

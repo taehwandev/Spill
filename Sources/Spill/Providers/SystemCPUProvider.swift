@@ -85,7 +85,9 @@ struct SystemCPUProvider: SpillStatusProvider {
     func snapshot() async -> [SpillStatusItem] {
         [(await Self.status()).statusItem]
     }
+}
 
+extension SystemCPUProvider {
     static func status(sampleIntervalNanoseconds: UInt64 = 500_000_000) async -> SystemCPUStatus {
         let previous = SystemCPUReader.current()
         try? await Task.sleep(nanoseconds: sampleIntervalNanoseconds)
@@ -154,7 +156,9 @@ struct SystemCPUProvider: SpillStatusProvider {
             state: state(for: ratio)
         )
     }
+}
 
+extension SystemCPUProvider {
     static func percentText(_ ratio: Double) -> String {
         let clampedRatio = ratio.clamped(to: 0...1)
         guard clampedRatio > 0 else {
@@ -199,7 +203,9 @@ struct SystemCPUProvider: SpillStatusProvider {
             state: .unavailable
         )
     }
+}
 
+private extension SystemCPUProvider {
     private static func samplingStatus() -> SystemCPUStatus {
         SystemCPUStatus(
             value: "Sampling",

@@ -44,7 +44,9 @@ final class PreferencesWindowController: NSObject, NSWindowDelegate {
         self.preparePrivateUsageUploadAction = preparePrivateUsageUploadAction
         super.init()
     }
+}
 
+extension PreferencesWindowController {
     func show(selectedTab: String? = nil) {
         if let selectedTab {
             navigationState.selectedTab = selectedTab
@@ -102,7 +104,9 @@ final class PreferencesWindowController: NSObject, NSWindowDelegate {
         }
         return window
     }
+}
 
+extension PreferencesWindowController {
     func windowWillClose(_ notification: Notification) {
         guard let closingWindow = notification.object as? NSWindow,
               closingWindow === window
@@ -130,7 +134,9 @@ final class PreferencesWindowController: NSObject, NSWindowDelegate {
         window?.delegate = nil
         window?.contentView = nil
     }
+}
 
+private extension PreferencesWindowController {
     private var defaultWindowFrame: NSRect {
         let visibleFrame = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1024, height: 768)
         let size = fittedSize(for: visibleFrame)

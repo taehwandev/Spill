@@ -115,7 +115,9 @@ struct AccessibilityPreferencesSection: View {
             }
         }
     }
+}
 
+private extension AccessibilityPreferencesSection {
     private func refreshPermissionState() {
         accessibilityTrusted = AccessibilityPermission.isTrusted
         SpillTelemetry.shared.track(

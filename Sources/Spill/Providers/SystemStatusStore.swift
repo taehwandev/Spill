@@ -75,7 +75,9 @@ final class SystemStatusStore: ObservableObject {
         self.cpuInitialSampleIntervalNanoseconds = cpuInitialSampleIntervalNanoseconds
         self.networkInitialSampleIntervalNanoseconds = networkInitialSampleIntervalNanoseconds
     }
+}
 
+extension SystemStatusStore {
     func refresh(
         enabledModules: Set<SpillStatusModule> = SpillStatusModule.defaultEnabled,
         readsPower: Bool = true
@@ -157,7 +159,9 @@ final class SystemStatusStore: ObservableObject {
     func history(for module: SpillStatusModule) -> [Double] {
         metricHistory[module] ?? []
     }
+}
 
+private extension SystemStatusStore {
     private func appendHistory(_ value: Double, for module: SpillStatusModule, state: SpillStatusState) {
         guard state != .unavailable, value.isFinite else {
             return
@@ -224,7 +228,9 @@ final class SystemStatusStore: ObservableObject {
             value.isFinite ? [value.clamped(to: 0...1)] : []
         }
     }
+}
 
+private extension SystemStatusStore {
     private func networkPreviousReadingForRefresh() async -> SystemNetworkReading? {
         if let previousNetworkReading {
             return previousNetworkReading

@@ -224,7 +224,9 @@ struct LocalAIStatusProvider: SpillStatusProvider {
     func snapshot() async -> [SpillStatusItem] {
         Self.statuses().map(\.statusItem)
     }
+}
 
+extension LocalAIStatusProvider {
     static func statuses(shouldCancel: @escaping () -> Bool = { false }) -> [LocalAIToolStatus] {
         let environment = ProcessInfo.processInfo.environment
         let executablePaths = LocalExecutableDetector.installedExecutablePaths(
@@ -275,7 +277,9 @@ struct LocalAIStatusProvider: SpillStatusProvider {
             installedApplicationNames: []
         )
     }
+}
 
+extension LocalAIStatusProvider {
     static func statuses(
         environment: [String: String],
         processNames: Set<String>,
@@ -346,7 +350,9 @@ struct LocalAIStatusProvider: SpillStatusProvider {
             openAIStatus(environment: environment)
         ].compactMap { $0 }
     }
+}
 
+private extension LocalAIStatusProvider {
     private static func commandStatus(
         kind: LocalAIToolKind,
         processNames: Set<String>,
@@ -434,7 +440,9 @@ struct LocalAIStatusProvider: SpillStatusProvider {
     private static func commandState(isRunning: Bool) -> SpillStatusState {
         return .normal
     }
+}
 
+private extension LocalAIStatusProvider {
     private static func openAIStatus(environment: [String: String]) -> LocalAIToolStatus? {
         let hasConfiguration = hasNonEmptyValue("OPENAI_API_KEY", in: environment)
             || hasNonEmptyValue("OPENAI_BASE_URL", in: environment)
@@ -495,7 +503,9 @@ struct LocalAIStatusProvider: SpillStatusProvider {
 
         return fallback
     }
+}
 
+private extension LocalAIStatusProvider {
     private static func hasRunningProcess(
         namedAnyOf names: [String],
         processNames: Set<String>,
@@ -552,7 +562,9 @@ struct LocalAIStatusProvider: SpillStatusProvider {
 
         return nil
     }
+}
 
+extension LocalAIStatusProvider {
     static func commandLine(_ commandLine: String, matchesExecutableNamed name: String) -> Bool {
         let tokens = LocalAICommandLineParser.tokens(from: commandLine)
         guard let executableToken = LocalAICommandLineParser.executableToken(from: tokens) else {

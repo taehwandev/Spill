@@ -148,7 +148,9 @@ struct CloudServiceStatusProvider: Sendable {
 
         return CloudServiceStatusSnapshot(fetchedAt: now, items: items)
     }
+}
 
+private extension CloudServiceStatusProvider {
     private func openAIItems() async -> [CloudServiceStatusItem] {
         do {
             let summary = try await statusPageSummary(from: Self.openAIStatusURL)
@@ -204,7 +206,9 @@ struct CloudServiceStatusProvider: Sendable {
             ]
         }
     }
+}
 
+private extension CloudServiceStatusProvider {
     private func googleItems() async -> [CloudServiceStatusItem] {
         do {
             let data = try await dataLoader(Self.googleCloudIncidentsURL)
@@ -260,7 +264,9 @@ struct CloudServiceStatusProvider: Sendable {
         let names = Set(names)
         return summary.components.filter { names.contains($0.name) }
     }
+}
 
+private extension CloudServiceStatusProvider {
     private func item(
         kind: CloudServiceKind,
         source: String,
