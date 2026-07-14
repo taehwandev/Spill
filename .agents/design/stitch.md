@@ -54,8 +54,9 @@ the local token metering dashboard.
 - Central analytics canvas maps to KPI, AI tool, task, stage, and source rows in
   `TokenUsageDashboardSnapshot`.
 - Right detail rail maps to selected Work Item detail and recent event rows.
-- Local receiver status tiles map to local inbox, optional HTTP bridge, and
-  on-demand adapter state in Preferences and dashboard diagnostics.
+- Primary Preferences and dashboard surfaces keep internal receiver filesystem
+  paths hidden. User-facing status may expose adapter and setup state, while
+  receiver path details remain developer-only diagnostics.
 - The agent-status rail owns a compact token-metering setup state and two
   explicit actions: direct `Install`/`Reinstall` using the bundled helper and
   `Copy Setup Instructions` as an alternative. It must not duplicate the full

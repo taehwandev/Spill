@@ -307,9 +307,15 @@ local file paths, or support logs.
 
 ### AI Token Metering Setup
 
-Run the public installer once. It installs one shared runtime instruction at
-`~/.spill/runtime-instruction.md` and adds only a small managed bridge to the
-user instruction file used by Codex, Claude Code, and Antigravity/AGY.
+The app's Preferences and AI dashboard offer two setup paths. **Basic metering**
+installs exact token collection without work-type or stage labels. **Workflow
+setup** copies an instruction that should be run from the directory owning the
+workflow when reusable `task_type` and `stage` grouping is desired.
+
+The public installer remains the full workflow-aware setup path. Run it once to
+install one shared runtime instruction at `~/.spill/runtime-instruction.md` and
+add only a small managed bridge to the user instruction file used by Codex,
+Claude Code, and Antigravity/AGY.
 
 ```bash
 /bin/bash -c "$(curl -fsSL https://spill.thdev.app/token-metering/install.sh)"
@@ -320,6 +326,10 @@ to copy the full Spill prompt into three different AI tools. Supported runtimes
 may read known local usage metadata to collect exact token counts, but Spill
 does not store or upload prompts, responses, commands, file paths, logs, source
 content, environment values, or secrets.
+
+After installing or repairing the connection, start a new session or restart
+any AI tool session that was already running so it loads the updated connection
+files.
 
 ### Hosted Web And Download Site
 

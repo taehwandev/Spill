@@ -390,6 +390,49 @@ Rules:
   These rows are a display/analysis aid only. They must not alter
   `input_tokens`, `output_tokens`, `total_tokens`, event identity, workflow
   label grouping, or default tool comparisons.
+- Pricing remains a presentation-layer estimate. The web repository owns the
+  dated provider rate table and pins its review date in tests; the normative
+  source pages are OpenAI's model catalog and GPT-5.6 announcement, Anthropic's
+  standard API pricing, and Google's Gemini Developer API pricing as linked in
+  the PRD. A rate refresh updates the source date, model table, estimator, and
+  test fixtures together. Unknown pricing is represented as unavailable, and
+  invoice-only adjustments are never inferred from token aggregates.
+- `SpillSettings` persists the overview usage-input scope as a small string enum
+  whose invalid or missing value falls back to `Include cache`. Snapshot
+  aggregation keeps one complete raw accounting row set and separately records
+  the exact uncached-input subtotal. The overview KPI projection uses raw input
+  for `Include cache`, or exact uncached input for `Fresh only`, and keeps output
+  unchanged. The menu bar store query applies the same projection to both daily
+  and all-time AI values without changing stored totals. Unclassified input is
+  never inferred as fresh. Raw accounting, workflow/task/stage/work-item
+  grouping, stored events, and synced totals keep their cache-inclusive baseline
+  regardless of this local preference.
+- Dashboard snapshot construction receives the selected input scope and uses a
+  single exact token projection (`total_tokens` for Include cache, or
+  `output_tokens + accounting_uncached_input_tokens` for Fresh only) for usage
+  KPIs, period filters, tool filters and rows, model/project rows, trend buckets,
+  comparisons, and calendar totals. Period and calendar store queries return
+  both raw and exact-fresh totals in one SQL read so a scope change can rebuild
+  from loaded events without reloading event history. Workflow, task, stage,
+  work-item, source-detail, and raw input accounting projections continue to
+  use raw totals.
+- The compact panel summary query returns both the complete raw total and the
+  exact fresh total in the same store read. `TokenUsagePanelSummarySnapshot`
+  projects only its headline total from `SpillSettings.tokenUsageInputScope`;
+  tool, task, source, event-count, workflow, and detail rows continue to use the
+  complete raw summary. Because the panel already observes `SpillSettings`, a
+  scope change re-renders the headline without another store read or timer.
+- The main process observes usage-input scope changes, forces a menu bar token
+  refresh, and posts the existing distributed settings-change notification with
+  a dedicated setting key. The running dashboard helper reloads that key from
+  the shared defaults suite so its observed `SpillSettings` instance invalidates
+  the overview KPI view immediately. This synchronization is notification-driven
+  and must not add a polling timer, data upload, or dashboard process restart.
+- A dashboard scope rebuild must not show scope-dependent KPIs, filter totals,
+  model rows, trends, or calendar values from different scope snapshots at the
+  same time. The view presents a loading placeholder for those usage surfaces
+  until the rebuilt snapshot matches the selected scope; raw workflow and detail
+  rows remain cache-inclusive by design.
 - Runtime importers preserve pricing-relevant token accounting separately from
   the strict usage event JSON. The strict event schema remains limited to raw
   `input_tokens`, `output_tokens`, `total_tokens`, and `token_breakdown`.
@@ -591,6 +634,12 @@ Rules:
   summaries must reject or omit prompt text, responses, commands, file paths,
   repo names, branch names, terminal output, logs, diffs, source content,
   environment values, secrets, raw event ids, `run_id`, and `span_id`.
+- Every token-total object in encrypted aggregates and shared summaries carries
+  the numeric accounting totals needed for cache-aware pricing. When an
+  accounted event reports fewer measured input tokens than its raw input total,
+  aggregation adds the remainder to unclassified input. Relay validation may
+  normalize a missing safe remainder but must never strip valid accounting
+  metadata or infer a cache split.
 - Automatic upload keeps the daily completed-bucket cadence. Manual Sync Now may
   include the current local day's partial aggregate so explicit user sync can
   update the web dashboard's work-item list without waiting for the next day.
@@ -691,15 +740,19 @@ Rules:
 - Preferences and the local token dashboard may run the bundled setup helper
   directly after an explicit `Install`, `Reinstall`, or `Repair` button click.
   The app must first install or refresh its bundled helper resources, execute
-  the helper with `--apply`, keep the UI responsive, and expose a safe success
-  or actionable failure state. It must not run setup automatically on view
+  the helper with `--apply --metering-only`, keep the UI responsive, and expose
+  a safe success or actionable failure state. Metering-only mode installs exact
+  collection adapters and runtime settings but does not add the shared runtime
+  instruction or runtime instruction bridges. It must preserve existing bridges
+  and workflow integrations and must not run setup automatically on view
   appearance, dashboard refresh, app launch, or instruction copy.
 - The setup action label is derived from app-owned setup installation state.
   Setup presence and helper exit success are configuration evidence only; they
   are not evidence that a real Codex, Claude, or Antigravity/AGY turn recorded
   exact tokens.
-- The setup helper must install the canonical agent instruction at
-  `~/.spill/runtime-instruction.md` with owner-only permissions. Runtime-specific
+- The default public setup helper mode must install the canonical agent
+  instruction at `~/.spill/runtime-instruction.md` with owner-only permissions.
+  Runtime-specific
   user instruction files are discovery bridges only and must not contain a full
   duplicated Spill instruction.
 - The Codex bridge targets `~/.codex/AGENTS.override.md` when that file already
@@ -720,6 +773,11 @@ Rules:
 - Workflow hook installation is a separate user-selected action. The helper may
   write a selected `.agents/hooks.json` or equivalent workflow hook file only
   when the path is passed explicitly by the user or a trusted workflow setup.
+- Preferences and the local dashboard must expose workflow-aware setup as a
+  copied instruction separate from basic installation. That instruction treats
+  the current directory as the workflow root, asks the user to relocate when it
+  is not the owning directory, inspects only that root for trusted workflow
+  entry points, and must not scan unrelated directories for possible workflows.
 - Existing workflow scripts that expose safe reusable labels should pass those
   labels to adapters through exact hook payload fields, flags, or environment
   variables. Adapters must not read prompts, commands, logs, diffs, source, or

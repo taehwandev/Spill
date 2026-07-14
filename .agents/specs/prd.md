@@ -186,19 +186,24 @@ Requirements:
 - Token metering setup is offered as an optional setup card in Preferences and
   the local token dashboard. It should explain what is counted, what never
   leaves the device, and why exact runtime usage metadata is required.
-- The setup card must provide both a direct `Install` or `Reinstall` action and
-  a `Copy Setup Instructions` alternative. The direct action runs the bundled
-  one-step installer only after the user clicks it, reports success or failure,
-  and never treats copying instructions as proof that metering is installed.
+- The setup card must separate a direct basic metering `Install` or `Reinstall`
+  action from a `Copy Workflow Setup` alternative. The direct action installs
+  exact token collection without work-type or stage classification. The copied
+  workflow setup is for users who want safe reusable `task_type` and `stage`
+  grouping and must be run from the directory that owns their workflow.
+- The direct action runs the bundled installer only after the user clicks it,
+  reports success or failure, preserves existing workflow integrations, and
+  never treats copying instructions as proof that metering is installed.
 - The global setup prompt and one-step installer should be available, but the UI
   must not imply that a prompt alone can measure token usage.
-- The one-step installer owns one canonical runtime instruction at
+- The public one-step installer owns one canonical runtime instruction at
   `~/.spill/runtime-instruction.md`. It must add only a small managed discovery
   bridge to the active user instruction file for Codex, Claude Code, and
   Antigravity/AGY, preserve unrelated instructions, and avoid asking users to
   maintain three full prompt copies.
-- Setup completion copy should explain that already-running AI sessions may
-  need to restart before they discover the new bridge.
+- The in-app basic installer must not add the shared runtime instruction or its
+  discovery bridges. Existing bridges remain untouched when basic metering is
+  installed or repaired.
 - Web dashboard connection is optional and clearly separate from local metering.
 
 Acceptance:
@@ -265,15 +270,20 @@ Requirements:
 - Local usage records must never include prompts, responses, commands, file
   paths, repo names, branch names, terminal output, logs, diffs, source content,
   environment values, secrets, or arbitrary content-like fields.
-- Setup UI should offer a one-step installer path before exposing per-adapter
-  snippets.
+- Setup UI should offer basic exact-token installation before the optional
+  workflow-aware setup path.
 - Setup UI in Preferences and the local token dashboard should inspect the
   app-owned setup files and adapter configuration to label the direct action as
   `Install` when setup is absent and `Reinstall` or `Repair` when setup already
   exists. This check is setup state, not evidence that a real AI turn produced
   token usage.
-- Setup UI should describe the install as one shared instruction plus automatic
-  runtime bridges, not as three separate prompt-install procedures.
+- Setup UI should describe basic metering as exact totals without work-type or
+  stage labels. It should describe workflow-aware setup as an optional copied
+  instruction that is run from the workflow-owning directory, without scanning
+  unrelated directories.
+- After a basic-metering install or repair, setup status and copied instructions
+  must tell users that an AI tool session already in progress needs a restart or
+  a new session before it can load the updated connection files.
 - Setup UI and the copied agent install prompt must explicitly explain that
   supported local JSONL, transcript, or metadata stores may be read locally only
   for exact token metadata, and that prompts, responses, commands, file paths,
@@ -304,6 +314,9 @@ Requirements:
   Runtime-specific hooks, importers, or SDK adapters normalize into that store;
   the app should not present Codex, Claude Code, and Antigravity/AGY as three
   separate product databases.
+- Primary settings and dashboard surfaces must not expose the internal token
+  event queue filesystem path or a copy-path action. Receiver path diagnostics
+  belong only in developer-facing diagnostics when explicitly needed.
 - When a user explicitly asks an agent for `spill`, Spill status, token usage
   status, or local usage status, installed agents should be able to read the
   same app-owned local store through a read-only helper and return a
@@ -330,6 +343,16 @@ Requirements:
   output buckets when runtimes expose them so dashboard or web pricing layers
   can apply provider/model-specific rates without changing the raw usage
   baseline.
+- All cost UI must say `Estimated cost`, not billed or actual cost. The web
+  pricing catalog is a dated application snapshot reviewed against the official
+  OpenAI model pricing (<https://developers.openai.com/api/docs/models> and
+  <https://openai.com/index/gpt-5-6/>), Anthropic pricing
+  (<https://platform.claude.com/docs/en/about-claude/pricing>), and Google
+  Gemini API pricing (<https://ai.google.dev/gemini-api/docs/pricing>). Its info
+  disclosure must show the review date and explain that batch discounts,
+  long-context tiers, cache-storage duration, tool fees, taxes, and negotiated
+  rates can make an actual invoice differ. Unknown models must show an
+  unavailable estimate rather than use a made-up fallback price.
 - Dashboard usage surfaces must distinguish raw usage totals from accounting
   buckets and workflow labels. Input/output totals answer token direction.
   `task_type`/`stage` answer workflow grouping. Accounting buckets explain the
@@ -338,6 +361,30 @@ Requirements:
   number, while Claude exposes fresh input, cache writes, and cache reads
   separately. If a split is unavailable, the input remains valid raw usage and
   is shown as unclassified/unsplit accounting, not inferred from content.
+- Token Meter settings must offer a persisted local usage-input scope with
+  `Include cache` and `Fresh only` choices. `Include cache` is the default.
+  `Fresh only` changes dashboard usage KPIs, period totals, AI-tool filters and
+  distribution, model and project usage, trends, calendar totals, the compact
+  Spill Panel Token Metering headline, and the clock-area AI token value to
+  exact uncached input plus the unchanged output count. Daily and all-time menu
+  bar modes must use the same scope. Input without an exact runtime accounting
+  split is not guessed and is not counted as fresh. The setting must include an
+  accessible information button explaining that exact-data boundary.
+- Changing the usage-input scope must update the running main menu bar process
+  including its compact panel summary, and the separate local token dashboard
+  helper immediately. Neither surface may require a restart, reopen, manual
+  refresh, or Private Usage Upload sync to observe this device-local
+  presentation setting.
+- The usage-input scope must not filter the raw input accounting card or change
+  workflow, task, stage, work-item, source-detail, raw event, storage, or sync
+  totals. Those surfaces remain cache-inclusive so labels keep the same
+  comparable runtime baseline. The raw input accounting card always shows the
+  complete available fresh/cache-write/cache-read/unsplit breakdown and has no
+  scope control.
+- The local app usage-input scope is a device-local presentation preference and
+  does not alter web cost estimates. The web estimator may persist its own
+  `Include cache` / `Fresh only` cost scope, but both cost modes must derive from
+  the same complete synced accounting aggregate and provider-category rates.
 - Token detail categories such as system, user, history, repo context, tool
   output, generated output, and unknown are secondary measurement-quality
   statistics. They are useful only when the runtime or adapter supplies exact
@@ -431,6 +478,12 @@ Dashboard UX requirements:
   token detail and workflow labels. The copy must state that cache discounts and
   cost weighting belong in cost analysis/display, not in raw metering storage or
   default usage totals.
+- The accounting card keeps its information affordance but no display filter.
+  The `Include cache` / `Fresh only` control belongs in Settings > Token Meter.
+  Its information content must explain that dashboard usage totals and
+  breakdowns, the compact panel Token Metering headline, and the clock-area AI
+  token value change, output is unchanged, unsplit input is not guessed as
+  fresh, and raw/workflow totals remain cache-inclusive.
 - Top AI tool filter tabs may show each tool's share of the current All-tool
   token scope, but the share must be secondary to the tool name. The percentage
   belongs on the tab's second line with the token detail, not in the primary
@@ -507,6 +560,13 @@ Acceptance:
   mechanics live in ARD and adapter docs, not this PRD. Dedup policy and
   accuracy guarantees are documented here; dedup implementation details
   (SQL migrations, parsing layer, session-state tracking) live in ARD.
+- The compact panel Token Metering headline follows the persisted usage-input
+  scope immediately, while its workflow/detail subtitle and grouped tool/task/
+  source rows remain cache-inclusive.
+- The local AI dashboard applies the persisted usage-input scope consistently
+  to KPI, period, tool, model, project, trend, and calendar usage values. Its
+  workflow, task, stage, work-item, source-detail, and raw input accounting
+  values remain cache-inclusive.
 
 ### 5. System Status Strip
 

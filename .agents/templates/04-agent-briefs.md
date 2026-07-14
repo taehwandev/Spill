@@ -9,6 +9,8 @@
 - Confirm the feature necessity decision before implementation.
 - Ask the maintainer before PRD authoring if the goal, scope, value, UI behavior, feasibility, permission impact, or distribution impact is unclear.
 - Do not let Agent A write the PRD while `00-intake.md` is still `needs-clarification`.
+- For settings work, require the accepted surface-impact map before implementation. AI settings must address Preferences, the compact panel/general dashboard, the separate AI dashboard helper, and the clock-adjacent AI menu-bar glance.
+- Cross-process settings briefs must name persistence, notification or IPC transport, receiver reload/invalidation, update latency, and the nearest propagation tests.
 
 ## Agent A: Product
 
@@ -86,6 +88,10 @@ Checks:
 - build
 - manual behavior
 - permission states
+- settings persistence/default/migration
+- cross-process propagation and receiver reload
+- every affected dashboard, helper-app, panel, and menu-bar surface
+- absence of undocumented polling, restart, reopen, manual refresh, or upload-sync dependencies
 
 Final report:
 

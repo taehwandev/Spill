@@ -13,6 +13,24 @@ necessity:
   questions:
     - 
 
+settings_surface_impact:
+  applies: true | false
+  setting_owner: <owner>
+  persistence_default_migration: <description>
+  reading_processes:
+    - <process>
+  propagation_transport: <same-process observation | notification | IPC | not-applicable>
+  refresh_trigger: <trigger>
+  update_latency_contract: <immediate | reopen | restart | manual-refresh>
+  surfaces:
+    preferences: affected | not-applicable
+    compact_panel_general_dashboard: affected | not-applicable
+    ai_token_dashboard_helper: affected | not-applicable
+    clock_adjacent_ai_menu_bar: affected | not-applicable
+    other_dashboard_menu_bar_web_sync_agent: affected | not-applicable
+  not_applicable_reasons:
+    - <surface and reason>
+
 tasks:
   - id: <feature-id>-T1
     title: <task title>
@@ -28,11 +46,13 @@ tasks:
       - Sources/Spill/<UnrelatedFile.swift>
     acceptance:
       - swift build passes.
+      - Every affected settings surface and propagation path has automated or manual evidence.
     verification:
       commands:
         - swift build
       manual:
         - Launch app and verify behavior.
+        - Change the setting and verify every affected surface meets its update-latency contract.
 
 parallel_groups:
   - id: group-1

@@ -49,6 +49,23 @@ What appears in the compact panel?
 
 1. 
 
+## Settings And Surface Acceptance
+
+If the feature changes settings or user-visible configuration, carry the accepted
+impact map from `00-intake.md` into observable requirements.
+
+- persistence/default/migration behavior:
+- propagation and update-latency contract:
+- behavior when a receiving process or surface is closed, open, stale, or unavailable:
+
+| Surface | Expected observable result | Acceptance evidence |
+| --- | --- | --- |
+| Preferences |  |  |
+| Compact Spill Panel / general dashboard |  |  |
+| Separate AI Token Metering dashboard helper |  |  |
+| Clock-adjacent AI menu-bar glance |  |  |
+| Other dashboard, menu-bar, web, sync, or agent-facing surface |  |  |
+
 ## Behavior Scenarios
 
 ### Main Path

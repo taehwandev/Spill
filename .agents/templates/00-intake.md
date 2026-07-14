@@ -91,6 +91,29 @@ What should the user see or do?
 - distribution constraints:
 - performance constraints:
 
+## Settings And Surface Impact
+
+Complete this section when the feature adds or changes a setting, configuration,
+visibility rule, filter, or display mode. For AI-related settings, every first-class
+surface below must be classified before PRD authoring.
+
+- setting/configuration owner:
+- persistence, default, and migration impact:
+- reading processes:
+- propagation transport and refresh trigger:
+- required update latency:
+
+| Surface | `affected` / `not applicable` | Reason and expected behavior |
+| --- | --- | --- |
+| Preferences |  |  |
+| Compact Spill Panel / general dashboard |  |  |
+| Separate AI Token Metering dashboard helper |  |  |
+| Clock-adjacent AI menu-bar glance |  |  |
+| Web dashboard / upload / agent summary, when data crosses that boundary |  |  |
+
+For non-AI settings, keep only the relevant rows but include every panel,
+dashboard, helper-app, or menu-bar surface that renders or filters the value.
+
 ## Non-goals
 
 - 

@@ -245,6 +245,35 @@ Routing and executable evidence:
   missed-gate recovery.
 - Wrapper evidence under `.agentplaybook/` is local runtime evidence, not source.
 
+Cross-surface settings impact:
+
+- Before adding or changing a `SpillSettings` value, Preferences control, or
+  user-visible configuration, record a settings impact map before implementation.
+  The map must name the persistence owner and default/migration behavior, every
+  reading process, the propagation transport, the refresh/invalidation trigger,
+  the expected update latency, and every affected user surface.
+- For AI-related settings, always inspect and explicitly mark `affected` or
+  `not applicable` with a reason for all of these surfaces:
+  1. Preferences.
+  2. The main-process compact Spill Panel, which is the general dashboard surface.
+  3. The separate `Spill - AI Token Metering` dashboard helper.
+  4. The clock-adjacent AI glance in the menu bar status surface.
+  5. Web dashboard, Private Usage Upload, sync payloads, or agent-facing summaries
+     when the setting changes stored, synced, or remotely presented data.
+- For non-AI settings, inspect every compact panel, dashboard, helper-app, and
+  menu-bar surface that renders or filters the affected value. A Preferences-only
+  implementation is incomplete when another visible surface consumes that state.
+- Shared defaults persistence alone is not a real-time synchronization contract.
+  When more than one process reads a setting, document and implement the explicit
+  notification or IPC path, receiver reload/invalidation behavior, and whether the
+  change must appear without restart, reopen, manual refresh, polling, or upload
+  sync. Reuse the existing shared-defaults plus distributed-notification bridge
+  when it fits; adding a polling loop requires an explicit ARD decision.
+- PRD acceptance, ARD data flow, task ownership, tests, and manual verification
+  must cover the writer, propagation path, and each affected surface. Verification
+  must also prove that `not applicable` surfaces stay unaffected and that no
+  duplicate timer, collector, network request, or sync path was introduced.
+
 Claude Code native active importer:
 
 - The primary token metering path for Claude Code is the native Swift importer

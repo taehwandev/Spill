@@ -19,6 +19,14 @@ List bugs, regressions, and missing tests before summary.
 - [ ] No giant `NSStatusItem` spacer.
 - [ ] Provider logic is separated from view code when applicable.
 
+## Settings And Cross-Surface Propagation
+
+- [ ] Every changed setting names its persistence owner, defaults/migration, reading processes, propagation transport, refresh trigger, and update-latency contract.
+- [ ] AI-related settings explicitly cover Preferences, the compact Spill Panel/general dashboard, the separate AI Token Metering dashboard helper, and the clock-adjacent AI menu-bar glance, with a reason for every `not applicable` surface.
+- [ ] Other settings cover every panel, dashboard, helper-app, or menu-bar surface that renders or filters the affected state.
+- [ ] Cross-process changes use an explicit notification or IPC plus receiver reload/invalidation; shared defaults alone are not treated as immediate synchronization.
+- [ ] Tests and manual checks prove the writer-to-surface path without requiring an undocumented restart, reopen, manual refresh, polling loop, or upload sync.
+
 ## macOS Behavior
 
 - [ ] Accessibility permission missing state is handled.
