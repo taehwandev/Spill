@@ -76,10 +76,6 @@ _OPAQUE_ID = re.compile(r'^[A-Za-z0-9_-]{6,64}$')
 _MODEL_ID = re.compile(r'^[A-Za-z0-9_.:-]{2,80}$')
 _SAFE_SLUG = re.compile(r'^[a-z][a-z0-9_]{1,40}$')
 
-# Tools that produce code/config changes.
-_WRITE_TOOLS = {'Edit', 'Write', 'MultiEdit', 'NotebookEdit'}
-# Tools that read without changing state.
-_READ_TOOLS = {'Read', 'Grep', 'WebFetch', 'WebSearch', 'LS'}
 _USED_LABEL_FILE = False
 _SCAN_IMPORTED = "imported"
 _SCAN_SKIPPED = "skipped"
@@ -593,36 +589,6 @@ def _consume_label_file() -> None:
         pass
 
 
-def _infer_task_type(tool_names: set) -> str:
-    """Infer task_type from tool call names only — no content inspection."""
-    if tool_names & _WRITE_TOOLS:
-        return 'code_generation'
-    if tool_names and not (tool_names - _READ_TOOLS - {'Bash'}):
-        return 'analysis'
-    if not tool_names:
-        return 'analysis'
-    return 'uncategorized'
-
-
-def _infer_stage(tool_names: set) -> str:
-    """Infer stage from tool call names only — no content inspection."""
-    if tool_names & _WRITE_TOOLS:
-        return 'implement'
-    if 'Bash' in tool_names and not (tool_names & _WRITE_TOOLS):
-        return 'verify'
-    return 'summarize'
-
-
-def _turn_tool_names(turn: dict) -> set[str]:
-    names: set[str] = set()
-    for item in turn.get("content", []):
-        if isinstance(item, dict) and item.get("type") == "tool_use":
-            name = item.get("name", "")
-            if name:
-                names.add(name)
-    return names
-
-
 def _turn_from_record(obj: dict):
     msg = obj.get("message", {})
     if not isinstance(msg, dict) or msg.get("role", "") != "assistant":
@@ -767,9 +733,8 @@ def _event_for_live_turn(
 
     raw_model = turn.get("model", "")
     model = raw_model if _MODEL_ID.match(raw_model) else "claude-unknown"
-    tool_names = _turn_tool_names(turn)
-    inferred_task_type = _infer_task_type(tool_names)
-    inferred_stage = _infer_stage(tool_names)
+    inferred_task_type = 'uncategorized'
+    inferred_stage = 'summarize'
     label = _label_timeline_for_timestamp(timestamp)
 
     task_type = label.get("task_type") if _SAFE_SLUG.match(label.get("task_type", "")) else ""

@@ -3,6 +3,7 @@ import Foundation
 struct TokenUsagePanelSummarySnapshot: Equatable {
     let eventCount: Int
     let totalTokens: Int
+    let exactFreshTotalTokens: Int
     let toolRows: [TokenUsageDashboardBarRow]
     let taskRows: [TokenUsageDashboardBarRow]
     let sourceRows: [TokenUsageDashboardBarRow]
@@ -13,6 +14,7 @@ struct TokenUsagePanelSummarySnapshot: Equatable {
     ) {
         eventCount = summary.eventCount
         totalTokens = summary.totalTokens
+        exactFreshTotalTokens = summary.exactFreshTotalTokens
 
         toolRows = TokenUsageDashboardRowBuilder.rawRows(
             tokenValues: summary.toolTotals,
@@ -39,10 +41,20 @@ struct TokenUsagePanelSummarySnapshot: Equatable {
     init(snapshot: TokenUsageDashboardSnapshot) {
         eventCount = snapshot.eventCount
         totalTokens = snapshot.totalTokens
+        exactFreshTotalTokens = snapshot.usageInputScopeTotals.freshOnly
         toolRows = snapshot.toolRows
         taskRows = snapshot.taskRows
         sourceRows = snapshot.sourceRows
     }
 
     static let empty = TokenUsagePanelSummarySnapshot(summary: .empty)
+
+    func usageTotal(for scope: TokenUsageInputScope) -> Int {
+        switch scope {
+        case .includeCache:
+            totalTokens
+        case .freshOnly:
+            exactFreshTotalTokens
+        }
+    }
 }

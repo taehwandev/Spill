@@ -28,8 +28,9 @@ One run handles Codex, Claude Code, and Antigravity/AGY together. It:
 
 The bridge files remain small and preserve unrelated user instructions. Do not
 copy the full Spill runtime prompt separately into Codex, Claude, or AGY files.
-Do not ask the user to maintain three prompt copies. Already-running agent
-sessions may need to restart before they load the new shared instruction.
+Do not ask the user to maintain three prompt copies. After the installer runs,
+start a new session or restart any AI tool session that was already running so
+it loads the updated shared instruction.
 
 ## Privacy Boundary
 
@@ -59,9 +60,11 @@ After the command finishes:
 1. Report the installer's actual installed, repaired, skipped, or failed items.
 2. Confirm that `~/.spill/runtime-instruction.md` exists and that the managed
    runtime bridges point to it without replacing unrelated instruction content.
-3. Treat workflow-aware label integration as an optional follow-up, not an
+3. Start a new session or restart any AI tool session that was already running
+   before the install or repair.
+4. Treat workflow-aware label integration as an optional follow-up, not an
    installation requirement. Fallback per-turn labels work without it.
-4. Do not claim that setup output, a permission prompt, a label write, a hook
+5. Do not claim that setup output, a permission prompt, a label write, a hook
    configuration, a unit test, or a mock payload proves real usage was recorded.
 
 Real usage evidence requires an exact safe event in Spill's local queue/store or

@@ -202,7 +202,8 @@ extension TokenUsageDashboardSnapshot {
         calendar: Calendar,
         locale: Locale,
         timeZone: TimeZone,
-        dayTokenTotals: [String: Int]? = nil
+        dayTokenTotals: [String: Int]? = nil,
+        rawDayTokenTotals: [String: Int]? = nil
     ) -> [TokenUsageDashboardCalendarDay] {
         guard let displayEnd = calendar.date(byAdding: .month, value: 1, to: monthStart) else {
             return []
@@ -220,6 +221,7 @@ extension TokenUsageDashboardSnapshot {
             }
         }
         let maxTokens = max(1, resolvedDayTokenTotals.values.max() ?? 0)
+        let resolvedRawDayTokenTotals = rawDayTokenTotals ?? resolvedDayTokenTotals
 
         let dayFormatter = cachedFixedDateFormatter(dateFormat: "d", locale: locale, timeZone: timeZone)
         let calendarDayTitleFormatter = cachedLocalizedDateFormatter(template: "MMM d", locale: locale, timeZone: timeZone)
@@ -256,7 +258,7 @@ extension TokenUsageDashboardSnapshot {
                 detail: "\(calendarDayTitle) · \(formatTokens(tokens))",
                 ratio: chartRatio(tokens: tokens, totalTokens: maxTokens),
                 isCurrentMonth: true,
-                hasEvents: tokens > 0,
+                hasEvents: resolvedRawDayTokenTotals[dayBucket, default: 0] > 0,
                 isPlaceholder: false,
                 isToday: dayBucket == todayCalendarDayID,
                 isSelected: dayBucket == selectedCalendarDayID

@@ -94,7 +94,7 @@ private enum TokenMeteringSetupProcessRunner {
         }
 
         do {
-            try TokenMeteringSetupInstaller.install()
+            try TokenMeteringSetupInstaller.install(installsSharedRuntimeInstruction: false)
         } catch {
             return .failed
         }
@@ -108,6 +108,7 @@ private enum TokenMeteringSetupProcessRunner {
         process.arguments = [
             TokenMeteringSetupInstaller.defaultInstallURL().path,
             "--apply",
+            "--metering-only",
             "--json",
             "--include",
             includedTools.joined(separator: ",")

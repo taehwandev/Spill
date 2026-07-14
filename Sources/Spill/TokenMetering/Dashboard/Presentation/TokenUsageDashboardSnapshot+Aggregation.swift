@@ -48,17 +48,34 @@ extension TokenUsageDashboardSnapshot {
 
     static func tokenTotals<Key: Hashable>(
         events: [TokenUsageDashboardParsedEvent],
+        inputScope: TokenUsageInputScope = .includeCache,
         by key: (TokenUsageDashboardParsedEvent) -> Key
     ) -> [Key: Int] {
         var totals: [Key: Int] = [:]
         for event in events {
-            totals[key(event), default: 0] += event.event.totalTokens
+            totals[key(event), default: 0] += usageTokens(for: event.event, inputScope: inputScope)
         }
         return totals
     }
 
-    static func toolTotals(events: [TokenUsageDashboardParsedEvent]) -> [TokenUsageAITool: Int] {
-        tokenTotals(events: events) { $0.event.aiTool }
+    static func toolTotals(
+        events: [TokenUsageDashboardParsedEvent],
+        inputScope: TokenUsageInputScope = .includeCache
+    ) -> [TokenUsageAITool: Int] {
+        tokenTotals(events: events, inputScope: inputScope) { $0.event.aiTool }
+    }
+
+    static func usageTokens(
+        for event: TokenUsageEvent,
+        inputScope: TokenUsageInputScope
+    ) -> Int {
+        switch inputScope {
+        case .includeCache:
+            event.totalTokens
+        case .freshOnly:
+            max(0, event.outputTokens)
+                + max(0, event.tokenAccounting?.uncachedInputTokens ?? 0)
+        }
     }
 
     static func workflowUsage(
@@ -141,9 +158,12 @@ extension TokenUsageDashboardSnapshot {
     static func projectFilters(
         events: [TokenUsageDashboardParsedEvent],
         selectedProjectID: String?,
+        inputScope: TokenUsageInputScope = .includeCache,
         language: TokenMeteringLanguage
     ) -> [TokenUsageDashboardProjectFilter] {
-        let totalTokens = events.reduce(0) { $0 + $1.event.totalTokens }
+        let totalTokens = events.reduce(0) {
+            $0 + usageTokens(for: $1.event, inputScope: inputScope)
+        }
         let allFilter = TokenUsageDashboardProjectFilter(
             projectID: nil,
             title: TokenMeteringL10n.text(.allFolders, language: language),
@@ -156,7 +176,9 @@ extension TokenUsageDashboardSnapshot {
         )
         let projectRows = Dictionary(grouping: events) { $0.event.projectID }
             .map { projectID, groupedEvents in
-                let tokens = groupedEvents.reduce(0) { $0 + $1.event.totalTokens }
+                let tokens = groupedEvents.reduce(0) {
+                    $0 + usageTokens(for: $1.event, inputScope: inputScope)
+                }
                 return TokenUsageDashboardProjectFilter(
                     projectID: projectID,
                     title: projectTitle(projectID, language: language),
@@ -232,7 +254,11 @@ extension TokenUsageDashboardSnapshot {
             id: { $0.rawValue },
             label: { $0.label(language: language) }
         )
-        return TokenUsageDashboardInputAccounting(rows: rows)
+        return TokenUsageDashboardInputAccounting(
+            rows: rows,
+            rawInputTokens: inputTokens,
+            exactFreshInputTokens: totals[.uncachedInput, default: 0]
+        )
     }
 
     static func sessionRows(

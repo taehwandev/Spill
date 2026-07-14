@@ -14,6 +14,7 @@ final class SpillSettingsTests: XCTestCase {
         XCTAssertEqual(settings.enabledMenuBarStatusItems, [.cpu, .memory])
         XCTAssertFalse(settings.panelOnboardingPreviewEnabled)
         XCTAssertFalse(settings.tokenUsageDashboardOnboardingPreviewEnabled)
+        XCTAssertEqual(settings.tokenUsageInputScope, .includeCache)
         XCTAssertEqual(settings.menuBarMetricPresentationMode(for: .cpu), .text)
         XCTAssertEqual(settings.menuBarMetricPresentationMode(for: .memory), .text)
         XCTAssertEqual(settings.menuBarMetricPresentationMode(for: .network), .off)
@@ -65,6 +66,33 @@ final class SpillSettingsTests: XCTestCase {
 
         let reloadedSettings = SpillSettings(defaults: defaults)
         XCTAssertTrue(reloadedSettings.privateUsageUploadEnabled)
+    }
+
+    func testTokenUsageInputScopePersists() {
+        let defaults = makeDefaults()
+        let settings = SpillSettings(defaults: defaults)
+
+        settings.tokenUsageInputScope = .freshOnly
+
+        XCTAssertEqual(defaults.string(forKey: "tokenUsageInputScope"), "fresh-only")
+        XCTAssertEqual(SpillSettings(defaults: defaults).tokenUsageInputScope, .freshOnly)
+    }
+
+    func testTokenUsageInputScopeNormalizesInvalidPersistedValue() {
+        let defaults = makeDefaults()
+        defaults.set("unexpected-scope", forKey: "tokenUsageInputScope")
+
+        XCTAssertEqual(SpillSettings(defaults: defaults).tokenUsageInputScope, .includeCache)
+    }
+
+    func testTokenUsageInputScopeReloadsAfterAnotherProcessPersistsIt() {
+        let defaults = makeDefaults()
+        let settings = SpillSettings(defaults: defaults)
+        defaults.set(TokenUsageInputScope.freshOnly.rawValue, forKey: "tokenUsageInputScope")
+
+        settings.reloadTokenUsageInputScopeFromDefaults()
+
+        XCTAssertEqual(settings.tokenUsageInputScope, .freshOnly)
     }
 
     func testHiddenTokenUsageAIToolsPersistAndNormalizeUnknownValues() {

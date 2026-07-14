@@ -33,6 +33,7 @@ struct PrivateUsageTokenAccountingTotals: Codable, Equatable, Sendable {
             uncachedInputTokens += accounting.uncachedInputTokens
             cacheCreationInputTokens += accounting.cacheCreationInputTokens
             cacheReadInputTokens += accounting.cacheReadInputTokens
+            unclassifiedInputTokens += max(0, event.inputTokens - accounting.measuredInputTokens)
             reasoningOutputTokens += accounting.reasoningOutputTokens
         } else {
             unclassifiedEventCount += 1

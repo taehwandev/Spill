@@ -10,10 +10,11 @@ extension TokenUsageStore {
     func menuBarTokenTotals(
         startingAt startDate: Date,
         endingBefore endDate: Date,
+        inputScope: TokenUsageInputScope = .includeCache,
         dashboardToolsOnly: Bool = true,
         visibleTools: Set<TokenUsageAITool>? = nil
     ) -> TokenUsageMenuBarTotals? {
-        lock.withLock {
+        lock.withLock { () -> TokenUsageMenuBarTotals? in
             let database: OpaquePointer
             do {
                 database = try openDatabase()
@@ -23,14 +24,15 @@ extension TokenUsageStore {
             defer { sqlite3_close(database) }
 
             guard
-                let daily = loadDashboardCountAndTotalIfAvailable(
+                let dailyTokens = loadMenuBarTokenTotalIfAvailable(
                     startingAt: startDate,
                     endingBefore: endDate,
+                    inputScope: inputScope,
                     dashboardToolsOnly: dashboardToolsOnly,
                     visibleTools: visibleTools,
                     database: database
                 ),
-                let allTime = loadDashboardCountAndTotalIfAvailable(
+                let allTimeTotals = loadDashboardCountAndTotalIfAvailable(
                     dashboardToolsOnly: dashboardToolsOnly,
                     visibleTools: visibleTools,
                     database: database
@@ -40,8 +42,11 @@ extension TokenUsageStore {
             }
 
             return TokenUsageMenuBarTotals(
-                dailyTokens: daily.totalTokens,
-                allTimeTokens: allTime.totalTokens
+                dailyTokens: dailyTokens,
+                allTimeTokens: TokenUsageInputScopeTotals(
+                    includeCache: allTimeTotals.totalTokens,
+                    freshOnly: allTimeTotals.exactFreshTotalTokens
+                ).total(for: inputScope)
             )
         }
     }
@@ -92,6 +97,21 @@ extension TokenUsageStore {
         dashboardToolsOnly: Bool = true,
         visibleTools: Set<TokenUsageAITool>? = nil
     ) -> [TokenUsageDashboardPeriod: Int] {
+        allPeriodInputScopeTotals(
+            now: now,
+            calendar: calendar,
+            dashboardToolsOnly: dashboardToolsOnly,
+            visibleTools: visibleTools
+        )
+        .mapValues(\.includeCache)
+    }
+
+    func allPeriodInputScopeTotals(
+        now: Date,
+        calendar: Calendar,
+        dashboardToolsOnly: Bool = true,
+        visibleTools: Set<TokenUsageAITool>? = nil
+    ) -> [TokenUsageDashboardPeriod: TokenUsageInputScopeTotals] {
         lock.withLock {
             let database: OpaquePointer
             do {
@@ -182,6 +202,23 @@ extension TokenUsageStore {
         dashboardToolsOnly: Bool = true,
         visibleTools: Set<TokenUsageAITool>? = nil
     ) -> [String: Int] {
+        dashboardDayInputScopeTotals(
+            startingAt: startDate,
+            endingBefore: endDate,
+            calendar: calendar,
+            dashboardToolsOnly: dashboardToolsOnly,
+            visibleTools: visibleTools
+        )
+        .mapValues(\.includeCache)
+    }
+
+    func dashboardDayInputScopeTotals(
+        startingAt startDate: Date,
+        endingBefore endDate: Date,
+        calendar: Calendar,
+        dashboardToolsOnly: Bool = true,
+        visibleTools: Set<TokenUsageAITool>? = nil
+    ) -> [String: TokenUsageInputScopeTotals] {
         lock.withLock {
             let database: OpaquePointer
             do {

@@ -756,6 +756,15 @@ extension AppDelegate {
                 }
                 .store(in: &cancellables)
         }
+
+        settings.$tokenUsageInputScope
+            .dropFirst()
+            .sink { _ in
+                DispatchQueue.main.async {
+                    TokenMeteringDashboardProcess.postTokenUsageInputScopeDidChange()
+                }
+            }
+            .store(in: &cancellables)
     }
 }
 

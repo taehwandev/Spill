@@ -299,7 +299,10 @@ extension TokenMeteringSetupInstaller {
         return true
     }
 
-    static func install(to destination: URL = defaultInstallURL()) throws {
+    static func install(
+        to destination: URL = defaultInstallURL(),
+        installsSharedRuntimeInstruction: Bool = true
+    ) throws {
         guard let url = scriptURL else {
             throw TokenMeteringAdapterInstallError.scriptNotFound("Setup helper")
         }
@@ -325,11 +328,13 @@ extension TokenMeteringSetupInstaller {
             to: destination.deletingLastPathComponent().appendingPathComponent(runtimeInstructionFileName),
             permissions: 0o600
         )
-        try copyPrivateResource(
-            from: runtimeInstructionURL,
-            to: defaultSharedRuntimeInstructionURL(),
-            permissions: 0o600
-        )
+        if installsSharedRuntimeInstruction {
+            try copyPrivateResource(
+                from: runtimeInstructionURL,
+                to: defaultSharedRuntimeInstructionURL(),
+                permissions: 0o600
+            )
+        }
     }
 
     static func setupCommand(installedAt scriptURL: URL = defaultInstallURL()) -> String {

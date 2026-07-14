@@ -15,6 +15,7 @@ const args = parseArgs(process.argv.slice(2));
 const apply = args.apply === true;
 const force = args.force === true;
 const json = args.json === true;
+const meteringOnly = args.meteringOnly === true;
 const installRoot = expandHome(args.installDir ?? join(homedir(), "Library/Application Support/Spill/adapters"));
 const setupHelperPath = join(installRoot, "setup", "spill-token-metering-setup.mjs");
 const statsHelperPath = join(installRoot, "setup", "spill-token-metering-stats.mjs");
@@ -92,7 +93,9 @@ const adapters = {
 
 const results = [];
 await installSetupHelper(runtimeInstructionSource);
-await installSharedRuntimeInstruction(runtimeInstructionSource);
+if (!meteringOnly) {
+  await installSharedRuntimeInstruction(runtimeInstructionSource);
+}
 for (const adapter of Object.values(adapters)) {
   if (!include.has(adapter.id)) continue;
   const detected = force || alwaysInstallAdapters.has(adapter.id) || await adapter.detect();
@@ -107,10 +110,10 @@ for (const adapter of Object.values(adapters)) {
   }
 }
 
-await configureRuntimeLabelDefaults();
+await configureRuntimeLabelDefaults({ installsInstructionBridges: !meteringOnly });
 
 if (json) {
-  process.stdout.write(`${JSON.stringify({ apply, source_root: sourceRoot, install_root: installRoot, results }, null, 2)}\n`);
+  process.stdout.write(`${JSON.stringify({ apply, metering_only: meteringOnly, source_root: sourceRoot, install_root: installRoot, results }, null, 2)}\n`);
 } else {
   for (const result of results) {
     const suffix = result.reason ? ` (${result.reason})` : "";
@@ -370,7 +373,7 @@ async function unloadLegacyLaunchAgent(plist, tool) {
   }
 }
 
-async function configureRuntimeLabelDefaults() {
+async function configureRuntimeLabelDefaults({ installsInstructionBridges }) {
   if (include.has("codex")) {
     await configureCodexRuntimeRules();
   }
@@ -387,6 +390,9 @@ async function configureRuntimeLabelDefaults() {
       target: join(homedir(), ".gemini", "antigravity-cli", "settings.json"),
       permissionPrefix: "command",
     });
+  }
+  if (!installsInstructionBridges) {
+    return;
   }
   if (include.has("codex")) {
     await configureRuntimeInstructionBridge({
@@ -902,6 +908,9 @@ function parseArgs(values) {
     case "--json":
       parsed.json = true;
       break;
+    case "--metering-only":
+      parsed.meteringOnly = true;
+      break;
     case "--if-absent":
       parsed.ifAbsent = true;
       break;
@@ -959,6 +968,7 @@ function printHelp() {
 
 Options:
   --apply                 Copy adapters, configure Codex/Claude hooks, remove legacy Claude scanner, and remove managed AGY hooks in one pass.
+  --metering-only         Install exact token collection without adding shared runtime instructions or instruction bridges.
   --force                 Install every included adapter even when it is not a default adapter or detected.
   --include LIST          Comma list. Default: codex,claude,antigravity. Optional: openai.
   --source-root PATH      Adapter source root. Default: repo or bundled adapters directory.

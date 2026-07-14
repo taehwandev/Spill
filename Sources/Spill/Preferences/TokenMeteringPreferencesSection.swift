@@ -114,11 +114,7 @@ private extension TokenMeteringPreferencesSection {
     private var localSyncAndDisplaySettingsSection: some View {
         TokenMeteringLocalSyncSettingsSection(
             settings: settings,
-            language: currentLanguage,
-            copiedTarget: copiedTarget,
-            copyInboxPathAction: { path in
-                copyToClipboard(path, target: "inbox")
-            }
+            language: currentLanguage
         )
     }
 

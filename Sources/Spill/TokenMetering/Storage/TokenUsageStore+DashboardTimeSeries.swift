@@ -8,7 +8,7 @@ extension TokenUsageStore {
         dashboardToolsOnly: Bool,
         visibleTools: Set<TokenUsageAITool>? = nil,
         database: OpaquePointer
-    ) -> [TokenUsageDashboardPeriod: Int] {
+    ) -> [TokenUsageDashboardPeriod: TokenUsageInputScopeTotals] {
         let todayRange = TokenUsageDashboardSnapshot.cutoffDateRange(for: .today, periodOffset: 0, now: now, calendar: calendar)
         let sevenRange = TokenUsageDashboardSnapshot.cutoffDateRange(for: .sevenDays, periodOffset: 0, now: now, calendar: calendar)
         let thirtyRange = TokenUsageDashboardSnapshot.cutoffDateRange(for: .thirtyDays, periodOffset: 0, now: now, calendar: calendar)
@@ -17,15 +17,19 @@ extension TokenUsageStore {
               let sevenStart = sevenRange.start, let sevenEnd = sevenRange.end,
               let thirtyStart = thirtyRange.start, let thirtyEnd = thirtyRange.end
         else {
+            let allTotals = loadDashboardCountAndTotal(
+                dashboardToolsOnly: dashboardToolsOnly,
+                visibleTools: visibleTools,
+                database: database
+            )
             return [
-                .today: 0,
-                .sevenDays: 0,
-                .thirtyDays: 0,
-                .all: loadDashboardCountAndTotal(
-                    dashboardToolsOnly: dashboardToolsOnly,
-                    visibleTools: visibleTools,
-                    database: database
-                ).totalTokens
+                .today: .zero,
+                .sevenDays: .zero,
+                .thirtyDays: .zero,
+                .all: TokenUsageInputScopeTotals(
+                    includeCache: allTotals.totalTokens,
+                    freshOnly: allTotals.exactFreshTotalTokens
+                )
             ]
         }
 
@@ -36,9 +40,13 @@ extension TokenUsageStore {
         let sql = """
         SELECT
           COALESCE(SUM(CASE WHEN created_at >= ? AND created_at < ? THEN total_tokens ELSE 0 END), 0),
+          COALESCE(SUM(CASE WHEN created_at >= ? AND created_at < ? THEN \(Self.dashboardFreshTokenSQL) ELSE 0 END), 0),
           COALESCE(SUM(CASE WHEN created_at >= ? AND created_at < ? THEN total_tokens ELSE 0 END), 0),
+          COALESCE(SUM(CASE WHEN created_at >= ? AND created_at < ? THEN \(Self.dashboardFreshTokenSQL) ELSE 0 END), 0),
           COALESCE(SUM(CASE WHEN created_at >= ? AND created_at < ? THEN total_tokens ELSE 0 END), 0),
-          COALESCE(SUM(total_tokens), 0)
+          COALESCE(SUM(CASE WHEN created_at >= ? AND created_at < ? THEN \(Self.dashboardFreshTokenSQL) ELSE 0 END), 0),
+          COALESCE(SUM(total_tokens), 0),
+          COALESCE(SUM(\(Self.dashboardFreshTokenSQL)), 0)
         FROM token_usage_events
         WHERE 1=1\(toolFilter)
         """
@@ -54,20 +62,38 @@ extension TokenUsageStore {
         let fmt = ISO8601DateFormatter.tokenUsage
         sqlite3_bind_text(statement, 1, fmt.string(from: todayStart), -1, SQLITE_TRANSIENT)
         sqlite3_bind_text(statement, 2, fmt.string(from: todayEnd), -1, SQLITE_TRANSIENT)
-        sqlite3_bind_text(statement, 3, fmt.string(from: sevenStart), -1, SQLITE_TRANSIENT)
-        sqlite3_bind_text(statement, 4, fmt.string(from: sevenEnd), -1, SQLITE_TRANSIENT)
-        sqlite3_bind_text(statement, 5, fmt.string(from: thirtyStart), -1, SQLITE_TRANSIENT)
-        sqlite3_bind_text(statement, 6, fmt.string(from: thirtyEnd), -1, SQLITE_TRANSIENT)
+        sqlite3_bind_text(statement, 3, fmt.string(from: todayStart), -1, SQLITE_TRANSIENT)
+        sqlite3_bind_text(statement, 4, fmt.string(from: todayEnd), -1, SQLITE_TRANSIENT)
+        sqlite3_bind_text(statement, 5, fmt.string(from: sevenStart), -1, SQLITE_TRANSIENT)
+        sqlite3_bind_text(statement, 6, fmt.string(from: sevenEnd), -1, SQLITE_TRANSIENT)
+        sqlite3_bind_text(statement, 7, fmt.string(from: sevenStart), -1, SQLITE_TRANSIENT)
+        sqlite3_bind_text(statement, 8, fmt.string(from: sevenEnd), -1, SQLITE_TRANSIENT)
+        sqlite3_bind_text(statement, 9, fmt.string(from: thirtyStart), -1, SQLITE_TRANSIENT)
+        sqlite3_bind_text(statement, 10, fmt.string(from: thirtyEnd), -1, SQLITE_TRANSIENT)
+        sqlite3_bind_text(statement, 11, fmt.string(from: thirtyStart), -1, SQLITE_TRANSIENT)
+        sqlite3_bind_text(statement, 12, fmt.string(from: thirtyEnd), -1, SQLITE_TRANSIENT)
 
         guard sqlite3_step(statement) == SQLITE_ROW else {
             return [:]
         }
 
         return [
-            .today: Int(sqlite3_column_int64(statement, 0)),
-            .sevenDays: Int(sqlite3_column_int64(statement, 1)),
-            .thirtyDays: Int(sqlite3_column_int64(statement, 2)),
-            .all: Int(sqlite3_column_int64(statement, 3))
+            .today: TokenUsageInputScopeTotals(
+                includeCache: Int(sqlite3_column_int64(statement, 0)),
+                freshOnly: Int(sqlite3_column_int64(statement, 1))
+            ),
+            .sevenDays: TokenUsageInputScopeTotals(
+                includeCache: Int(sqlite3_column_int64(statement, 2)),
+                freshOnly: Int(sqlite3_column_int64(statement, 3))
+            ),
+            .thirtyDays: TokenUsageInputScopeTotals(
+                includeCache: Int(sqlite3_column_int64(statement, 4)),
+                freshOnly: Int(sqlite3_column_int64(statement, 5))
+            ),
+            .all: TokenUsageInputScopeTotals(
+                includeCache: Int(sqlite3_column_int64(statement, 6)),
+                freshOnly: Int(sqlite3_column_int64(statement, 7))
+            )
         ]
     }
 
@@ -113,9 +139,11 @@ extension TokenUsageStore {
         dashboardToolsOnly: Bool,
         visibleTools: Set<TokenUsageAITool>? = nil,
         database: OpaquePointer
-    ) -> [String: Int] {
+    ) -> [String: TokenUsageInputScopeTotals] {
         var sql = """
-        SELECT created_at, total_tokens
+        SELECT created_at,
+               total_tokens,
+               \(Self.dashboardFreshTokenSQL)
         FROM token_usage_events
         WHERE created_at >= ? AND created_at < ?
         """
@@ -139,7 +167,7 @@ extension TokenUsageStore {
         sqlite3_bind_text(statement, 1, startValue, -1, SQLITE_TRANSIENT)
         sqlite3_bind_text(statement, 2, endValue, -1, SQLITE_TRANSIENT)
 
-        var totals = [String: Int]()
+        var totals = [String: TokenUsageInputScopeTotals]()
         while sqlite3_step(statement) == SQLITE_ROW {
             guard let createdAt = Self.columnString(statement, 0),
                   let date = ISO8601DateFormatter.parseTokenUsageDate(from: createdAt)
@@ -147,7 +175,11 @@ extension TokenUsageStore {
                 continue
             }
             let dayID = TokenUsageDashboardSnapshot.dayID(for: date, calendar: calendar)
-            totals[dayID, default: 0] += Int(sqlite3_column_int64(statement, 1))
+            let current = totals[dayID, default: .zero]
+            totals[dayID] = TokenUsageInputScopeTotals(
+                includeCache: current.includeCache + Int(sqlite3_column_int64(statement, 1)),
+                freshOnly: current.freshOnly + Int(sqlite3_column_int64(statement, 2))
+            )
         }
         return totals
     }

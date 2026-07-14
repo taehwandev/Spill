@@ -13,6 +13,7 @@ extension TokenUsageStoreTests {
         let setupControls = try Self.source(named: "TokenMeteringSetupActionControls.swift")
         let setupActionStore = try Self.source(named: "TokenMeteringSetupActionStore.swift")
         let dashboardAgentStatus = try Self.source(named: "TokenMeteringDashboardAgentStatusPanel.swift")
+        let dashboardSetupPanel = try Self.source(named: "TokenMeteringDashboardSetupPanel.swift")
         let historyImportSection = try Self.source(named: "TokenUsageHistoryImportSection.swift")
         let adapterStatusSection = try Self.source(named: "TokenMeteringAdapterStatusSection.swift")
 
@@ -23,8 +24,12 @@ extension TokenUsageStoreTests {
         XCTAssertTrue(setupControls.contains("t(.copyInstallPrompt)"))
         XCTAssertTrue(setupActionStore.contains("static let shared = TokenMeteringSetupActionStore()"))
         XCTAssertTrue(setupActionStore.contains("\"--include\""))
+        XCTAssertTrue(setupActionStore.contains("\"--metering-only\""))
         XCTAssertTrue(setupActionStore.contains("includedTools.joined(separator: \",\")"))
-        XCTAssertTrue(dashboardAgentStatus.contains("TokenMeteringSetupActionControls("))
+        XCTAssertTrue(setupControls.contains("t(.setupQuickStartTitle)"))
+        XCTAssertTrue(setupControls.contains("t(.setupWorkflowLabelsTitle)"))
+        XCTAssertFalse(dashboardAgentStatus.contains("TokenMeteringSetupActionControls("))
+        XCTAssertTrue(dashboardSetupPanel.contains("TokenMeteringSetupActionControls("))
         XCTAssertTrue(preferencesSection.contains("installedHistoryImportTools"))
         XCTAssertTrue(preferencesSection.contains("startImport(for: installedTools)"))
         XCTAssertTrue(historyImportSection.contains("availableSnapshots"))
@@ -34,7 +39,7 @@ extension TokenUsageStoreTests {
         XCTAssertTrue(adapterStatusSection.contains("installedTools.contains($0.aiTool)"))
         XCTAssertTrue(adapterStatusSection.contains("adapter.aiTool == .antigravity"))
         XCTAssertTrue(preferencesSection.contains("TokenMeteringSetupActionStore.shared"))
-        XCTAssertTrue(dashboardAgentStatus.contains("TokenMeteringSetupActionStore.shared"))
+        XCTAssertTrue(dashboardSetupPanel.contains("TokenMeteringSetupActionStore.shared"))
     }
 }
 
@@ -202,6 +207,62 @@ extension TokenUsageStoreTests {
         XCTAssertEqual(totals.dailyTokens, 100)
         XCTAssertEqual(totals.allTimeTokens, 100)
     }
+
+    func testMenuBarTokenTotalsApplyFreshOnlyToDailyAndAllTimeValues() throws {
+        let store = TokenUsageStore(fileURL: temporaryEventsURL())
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        let end = start.addingTimeInterval(60)
+        try store.replaceEvents([
+            Self.safeEvent(
+                aiTool: .codex,
+                spanID: "span_menu_fresh_unsplit",
+                inputTokens: 60,
+                outputTokens: 10,
+                createdAt: ISO8601DateFormatter.tokenUsage.string(from: start.addingTimeInterval(10))
+            ),
+            Self.safeEvent(
+                aiTool: .claude,
+                spanID: "span_menu_fresh_split",
+                inputTokens: 125,
+                outputTokens: 7,
+                tokenAccounting: TokenUsageAccounting(
+                    uncachedInputTokens: 20,
+                    cacheCreationInputTokens: 5,
+                    cacheReadInputTokens: 100
+                ),
+                createdAt: ISO8601DateFormatter.tokenUsage.string(from: start.addingTimeInterval(20))
+            ),
+            Self.safeEvent(
+                aiTool: .antigravity,
+                spanID: "span_menu_fresh_all_time",
+                inputTokens: 90,
+                outputTokens: 15,
+                tokenAccounting: TokenUsageAccounting(
+                    uncachedInputTokens: 50,
+                    cacheReadInputTokens: 40
+                ),
+                createdAt: ISO8601DateFormatter.tokenUsage.string(from: end.addingTimeInterval(10))
+            )
+        ])
+
+        let included = try XCTUnwrap(
+            store.menuBarTokenTotals(
+                startingAt: start,
+                endingBefore: end,
+                inputScope: .includeCache
+            )
+        )
+        let fresh = try XCTUnwrap(
+            store.menuBarTokenTotals(
+                startingAt: start,
+                endingBefore: end,
+                inputScope: .freshOnly
+            )
+        )
+
+        XCTAssertEqual(included, TokenUsageMenuBarTotals(dailyTokens: 202, allTimeTokens: 307))
+        XCTAssertEqual(fresh, TokenUsageMenuBarTotals(dailyTokens: 37, allTimeTokens: 102))
+    }
 }
 
 extension TokenUsageStoreTests {
@@ -333,7 +394,11 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(TokenMeteringL10n.text(.agentStatusDetected, language: .english), "Detected")
         XCTAssertTrue(TokenMeteringL10n.text(.agentStatusInfoDetail, language: .korean).contains("프롬프트"))
         XCTAssertEqual(TokenMeteringL10n.text(.noAgentStatusData, language: .japanese), "ローカルエージェントは検出されていません")
-        XCTAssertEqual(TokenMeteringL10n.text(.setupWorkflowLabelsTitle, language: .english), "2. Work labels are optional")
+        XCTAssertEqual(TokenMeteringL10n.text(.setupWorkflowLabelsTitle, language: .english), "Workflow-aware metering")
+        XCTAssertTrue(TokenMeteringL10n.text(.usageInputScopeDetail, language: .english).contains("menu bar AI"))
+        XCTAssertTrue(TokenMeteringL10n.text(.usageInputScopeDetail, language: .english).contains("compact panel"))
+        XCTAssertTrue(TokenMeteringL10n.text(.usageInputScopeInfoDetail, language: .korean).contains("즉시 반영"))
+        XCTAssertTrue(TokenMeteringL10n.text(.usageInputScopeInfoDetail, language: .korean).contains("컴팩트 패널"))
         XCTAssertEqual(TokenMeteringL10n.text(.copyWebSetup, language: .korean), "설치 명령 복사")
         XCTAssertEqual(TokenMeteringL10n.text(.adapterSetupRequired, language: .japanese), "ローカルトークン記録の設定が必要")
         XCTAssertEqual(TokenMeteringL10n.adapterInstalled("spill-hook.py", language: .english), "Installed: spill-hook.py")
@@ -774,10 +839,22 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(rowsByID["unclassified_input"]?.value, "60 (21.8%)")
         XCTAssertEqual(rowsByID["cache_creation_input"]?.value, "5 (1.8%)")
         XCTAssertEqual(snapshot.taskRows.map(\.id), ["analysis"])
+        XCTAssertEqual(snapshot.taskRows.first?.value, "307 (100.0%)")
+
+        let freshKPIs = Dictionary(
+            uniqueKeysWithValues: snapshot.usageKPIs(for: .freshOnly, language: .english).map { ($0.id, $0) }
+        )
+        XCTAssertEqual(freshKPIs["total"]?.value, "102")
+        XCTAssertEqual(freshKPIs["input"]?.value, "70")
+        XCTAssertEqual(freshKPIs["output"]?.value, "32")
+        XCTAssertEqual(snapshot.inputAccounting.exactFreshInputTokens, 70)
+        XCTAssertEqual(snapshot.usageInputScopeTotals.includeCache, 307)
+        XCTAssertEqual(snapshot.usageInputScopeTotals.freshOnly, 102)
 
         let codexSnapshot = TokenUsageDashboardSnapshot(events: [codex, claude], selectedTool: .codex, language: .english)
         XCTAssertEqual(codexSnapshot.inputAccounting.rows.map(\.id), ["unclassified_input"])
         XCTAssertEqual(codexSnapshot.inputAccounting.rows.first?.value, "60 (100.0%)")
+        XCTAssertEqual(codexSnapshot.usageKPIs(for: .freshOnly, language: .english).first?.value, "10")
 
         let claudeSnapshot = TokenUsageDashboardSnapshot(events: [codex, claude], selectedTool: .claude, language: .english)
         let claudeRowsByID = Dictionary(uniqueKeysWithValues: claudeSnapshot.inputAccounting.rows.map { ($0.id, $0) })
@@ -785,6 +862,60 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(claudeRowsByID["uncached_input"]?.value, "20 (16.0%)")
         XCTAssertEqual(claudeRowsByID["cache_creation_input"]?.value, "5 (4.0%)")
         XCTAssertNil(claudeRowsByID["unclassified_input"])
+        XCTAssertEqual(claudeSnapshot.usageKPIs(for: .freshOnly, language: .english).first?.value, "27")
+    }
+
+    func testFreshOnlyDashboardScopesUsageSurfacesButKeepsWorkflowRowsRaw() throws {
+        let timeZone = try XCTUnwrap(TimeZone(identifier: "UTC"))
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let now = try Self.date("2026-07-14T12:00:00.000Z")
+        let codex = Self.safeEvent(
+            aiTool: .codex,
+            spanID: "span_fresh_dashboard_codex",
+            inputTokens: 60,
+            outputTokens: 10,
+            model: "codex-fresh-model",
+            createdAt: "2026-07-14T10:00:00.000Z"
+        )
+        let claude = Self.safeEvent(
+            aiTool: .claude,
+            spanID: "span_fresh_dashboard_claude",
+            inputTokens: 125,
+            outputTokens: 7,
+            tokenAccounting: TokenUsageAccounting(
+                uncachedInputTokens: 20,
+                cacheCreationInputTokens: 5,
+                cacheReadInputTokens: 100
+            ),
+            model: "claude-fresh-model",
+            createdAt: "2026-07-14T11:00:00.000Z"
+        )
+
+        let snapshot = TokenUsageDashboardSnapshot(
+            events: [codex, claude],
+            selectedPeriod: .sevenDays,
+            language: .english,
+            now: now,
+            inputScope: .freshOnly,
+            calendar: calendar,
+            locale: Locale(identifier: "en_US_POSIX"),
+            timeZone: timeZone
+        )
+
+        XCTAssertEqual(snapshot.totalTokens, 202)
+        XCTAssertEqual(snapshot.usageKPIs(for: .freshOnly, language: .english).first?.value, "37")
+        XCTAssertEqual(snapshot.toolFilters.first?.detail, "2 records / 37 tokens")
+        XCTAssertEqual(snapshot.toolFilters.first { $0.tool == .codex }?.detail, "10")
+        XCTAssertEqual(snapshot.toolFilters.first { $0.tool == .claude }?.detail, "27")
+        XCTAssertEqual(snapshot.periodFilters.first { $0.period == .today }?.detail, "37")
+        XCTAssertEqual(snapshot.periodFilters.first { $0.period == .all }?.detail, "37")
+        XCTAssertEqual(snapshot.toolRows.map(\.value), ["27 (73.0%)", "10 (27.0%)"])
+        XCTAssertEqual(snapshot.modelRows.map(\.value), ["27 (73.0%)", "10 (27.0%)"])
+        XCTAssertEqual(snapshot.trendBuckets.last { $0.hasEvents }?.totalTokens, 37)
+        XCTAssertEqual(snapshot.taskRows.first?.value, "202 (100.0%)")
+        XCTAssertEqual(snapshot.stageRows.first?.value, "202 (100.0%)")
+        XCTAssertEqual(snapshot.inputAccounting.rawInputTokens, 185)
     }
 
     func testDashboardSnapshotFiltersByAITool() {
@@ -1134,13 +1265,18 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(preferencesSection.contains("TokenMeteringSetupSection("))
         XCTAssertTrue(setupSection.contains("t(.step1Title)"))
         XCTAssertTrue(setupSection.contains("TokenMeteringPromptInstructionCard("))
-        XCTAssertTrue(promptCard.contains("TokenMeteringGlobalSetup.globalPrompt"))
+        XCTAssertTrue(promptCard.contains("TokenMeteringGlobalSetup.workflowPrompt"))
+        XCTAssertTrue(promptCard.contains("t(.promptInstructionCardDetail)"))
         XCTAssertFalse(preferencesSection.contains("TokenMeteringGlobalSetup.prompt("))
         XCTAssertFalse(preferencesSection.contains("Text(TokenMeteringSetupInstaller.setupCommand())"))
         XCTAssertTrue(localSyncSection.contains("t(.menuBarTokenDisplayModeTitle)"))
         XCTAssertTrue(localSyncSection.contains("t(.menuBarTokenDisplayModeDetail)"))
+        XCTAssertFalse(localSyncSection.contains("t(.localEventQueue)"))
+        XCTAssertFalse(localSyncSection.contains("t(.copyPath)"))
+        XCTAssertFalse(localSyncSection.contains("TokenUsageStore.defaultInboxURL"))
         XCTAssertTrue(preferencesSection.contains("localSyncAndDisplaySettingsSection"))
         XCTAssertTrue(preferencesSection.contains("TokenMeteringLocalSyncSettingsSection("))
+        XCTAssertFalse(preferencesSection.contains("copyInboxPathAction"))
         XCTAssertTrue(preferencesSection.contains("aiToolVisibilitySection"))
         XCTAssertTrue(preferencesSection.contains("TokenMeteringAIToolVisibilitySection("))
         XCTAssertTrue(aiToolVisibilitySection.contains("TokenMeteringToolAvailability.installedLocalToolKinds"))
@@ -1204,10 +1340,12 @@ final class TokenUsageStoreTests: XCTestCase {
         let appDelegate = try String(contentsOf: root.appendingPathComponent("Sources/Spill/App/AppDelegate.swift"))
         let preferencesView = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Preferences/PreferencesView.swift"))
         let tokenMeteringPreferencesSection = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Preferences/TokenMeteringPreferencesSection.swift"))
+        let localSyncSettingsSection = try Self.source(named: "TokenMeteringLocalSyncSettingsSection.swift")
         let historyImportSection = try Self.source(named: "TokenUsageHistoryImportSection.swift")
         let localDataSection = try Self.source(named: "TokenMeteringLocalDataManagementSection.swift")
         let developerOptionsSection = try Self.source(named: "DeveloperOptionsPreferencesSection.swift")
         let dashboardStore = try Self.source(named: "TokenUsageDashboardStore.swift")
+        let dashboardSetupPanel = try Self.source(named: "TokenMeteringDashboardSetupPanel.swift")
 
         XCTAssertFalse(dashboardView.contains("private var leftRail"))
         XCTAssertFalse(dashboardView.contains("railPanel(title: t(.aiTool))"))
@@ -1237,6 +1375,20 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(analyticsGrid.contains("metricValueBadge("))
         XCTAssertTrue(analyticsGrid.contains(".padding(.top, 10)"))
         XCTAssertTrue(analyticsGrid.contains(".frame(minHeight: rowsMinimumHeight, alignment: .topLeading)"))
+        XCTAssertTrue(analyticsGrid.contains("infoDetail: t(.inputAccountingInfoDetail)"))
+        XCTAssertTrue(analyticsGrid.contains("rows: store.snapshot.inputAccounting.rows"))
+        XCTAssertFalse(analyticsGrid.contains("Picker("))
+        XCTAssertFalse(analyticsGrid.contains("settings.tokenUsageInputScope"))
+        XCTAssertTrue(localSyncSettingsSection.contains("selection: $settings.tokenUsageInputScope"))
+        XCTAssertTrue(localSyncSettingsSection.contains("TokenMeteringInfoButton("))
+        // Every rendered number follows the applied snapshot's scope, so a scope
+        // toggle keeps the previous data visible (no placeholder pass) until the
+        // rebuilt snapshot lands and everything switches together.
+        XCTAssertTrue(dashboardView.contains("store.snapshot.usageKPIs(for: store.snapshotInputScope"))
+        XCTAssertTrue(dashboardView.contains("store.setUsageInputScope(settings.tokenUsageInputScope)"))
+        XCTAssertTrue(dashboardView.contains("store.setUsageInputScope(scope)"))
+        XCTAssertFalse(dashboardView.contains("isUsageScopeTransitioning"))
+        XCTAssertFalse(dashboardView.contains("usageKPIs(for: settings.tokenUsageInputScope"))
         XCTAssertFalse(analyticsGrid.contains("maximumRows"))
         XCTAssertFalse(analyticsGrid.contains(".prefix(maximumRows)"))
         XCTAssertTrue(analyticsGrid.contains("TokenUsageAITool(rawValue: row.id.lowercased())?.dashboardTint ?? .secondary"))
@@ -1275,6 +1427,14 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(dashboardView.contains("private var dashboardBody"))
         XCTAssertTrue(dashboardView.contains("private var agentStatusPanel"))
         XCTAssertTrue(dashboardView.contains("TokenMeteringDashboardAgentStatusPanel("))
+        XCTAssertTrue(dashboardSetupPanel.contains("TokenMeteringSetupActionControls("))
+        let agentStatusRange = try XCTUnwrap(dashboardView.range(of: "agentStatusPanel"))
+        let modelRange = try XCTUnwrap(dashboardView.range(of: "modelPanel"))
+        let workflowRange = try XCTUnwrap(dashboardView.range(of: "workflowUsagePanel"))
+        let setupRange = try XCTUnwrap(dashboardView.range(of: "setupPanel"))
+        XCTAssertLessThan(agentStatusRange.lowerBound, modelRange.lowerBound)
+        XCTAssertLessThan(modelRange.lowerBound, workflowRange.lowerBound)
+        XCTAssertLessThan(workflowRange.lowerBound, setupRange.lowerBound)
         XCTAssertFalse(analyticsGrid.contains("TokenMeteringDashboardAgentStatusPanel("))
         XCTAssertTrue(dashboardView.contains("showsEmptyDashboardOverlay"))
         XCTAssertTrue(dashboardView.contains("showsDashboardPlaceholder"))
@@ -1425,6 +1585,9 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(spillBarAITokenSummary.contains("tokenSyncBadge"))
         XCTAssertTrue(spillBarAITokenSummary.contains("settings.privateUsageUploadEnabled"))
         XCTAssertTrue(spillBarAITokenSummary.contains(".webSyncEnabled"))
+        XCTAssertTrue(spillBarAITokenSummary.contains("snapshot.usageTotal(for: settings.tokenUsageInputScope)"))
+        XCTAssertFalse(spillBarAITokenSummary.contains("let displayTotalTokens = snapshot.totalTokens"))
+        XCTAssertTrue(spillBarAITokenSummary.contains("if snapshot.totalTokens > 0, !visibleToolRows.isEmpty"))
         XCTAssertTrue(spillBarAIToolCard.contains("status.kind.dashboardTint"))
         XCTAssertFalse(spillBarAIToolCard.contains("status.hasRunningProcesses ? .teal"))
         XCTAssertTrue(spillBarAITokenSummary.contains("setupPreview"))
@@ -1969,6 +2132,8 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(tokenMeteringCoordinator.contains("private var shouldRefreshMenuBarTokenTotal"))
         XCTAssertTrue(tokenMeteringCoordinator.contains("settings.enabledMenuBarStatusItems.contains(.ai)"))
         XCTAssertTrue(tokenMeteringCoordinator.contains("usageStore.menuBarTokenTotals("))
+        XCTAssertTrue(tokenMeteringCoordinator.contains("inputScope: inputScope"))
+        XCTAssertTrue(tokenMeteringCoordinator.contains("settings.$tokenUsageInputScope"))
         XCTAssertTrue(tokenMeteringCoordinator.contains("guard let totals"))
         XCTAssertTrue(tokenMeteringCoordinator.contains("startingAt: dayStart"))
         XCTAssertTrue(tokenMeteringCoordinator.contains("menuBarTokenCollectionInterval"))
@@ -2008,6 +2173,7 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(process.contains("settingsDidChangeNotification"))
         XCTAssertTrue(process.contains("postAppLanguageDidChange"))
         XCTAssertTrue(process.contains("postTokenUsageDashboardOnboardingPreviewDidChange"))
+        XCTAssertTrue(process.contains("postTokenUsageInputScopeDidChange"))
         XCTAssertTrue(lifecycle.contains("mainAppWillTerminateNotification"))
         XCTAssertTrue(lifecycle.contains("observeMainApplicationTermination"))
         XCTAssertTrue(lifecycle.contains("observeDashboardMainApplicationTermination"))
@@ -2047,6 +2213,7 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(appDelegate.contains("DispatchQueue.main.async { [weak self] in"))
         XCTAssertTrue(appDelegate.contains("TokenMeteringDashboardProcess.postAppLanguageDidChange()"))
         XCTAssertTrue(appDelegate.contains("TokenMeteringDashboardProcess.postTokenUsageDashboardOnboardingPreviewDidChange()"))
+        XCTAssertTrue(appDelegate.contains("TokenMeteringDashboardProcess.postTokenUsageInputScopeDidChange()"))
 
         XCTAssertTrue(helperDelegate.contains("applicationShouldTerminateAfterLastWindowClosed"))
         XCTAssertTrue(helperDelegate.contains("SPILL_TOKEN_DASHBOARD_SMOKE_READY"))
@@ -2069,6 +2236,7 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(helperDelegate.contains("settingsDidChangeFromMainApp"))
         XCTAssertTrue(helperDelegate.contains("settings.reloadAppLanguageFromDefaults()"))
         XCTAssertTrue(helperDelegate.contains("settings.reloadTokenUsageDashboardOnboardingPreviewFromDefaults()"))
+        XCTAssertTrue(helperDelegate.contains("settings.reloadTokenUsageInputScopeFromDefaults()"))
         XCTAssertTrue(helperDelegate.contains("tokenUsageDashboardStore.setOnboardingPreviewEnabled"))
         XCTAssertFalse(helperDelegate.contains("StatusItemController("))
         XCTAssertFalse(helperDelegate.contains("AXMenuBarItemScanner("))
@@ -2553,12 +2721,69 @@ final class TokenUsageStoreTests: XCTestCase {
         )
         XCTAssertTrue(dashboardStore.contains("let cachedPeriodFilterTotals = reusesPeriodFilterTotals ? periodFilterTotals : [:]"))
         XCTAssertTrue(dashboardStore.contains("dateRange(cachedDateRange, contains: requestedRange)"))
+        XCTAssertTrue(dashboardStore.contains("func setUsageInputScope(_ scope: TokenUsageInputScope)"))
+        XCTAssertTrue(dashboardStore.contains("rebuildSnapshotFromCurrentEventsAsync()"))
+        XCTAssertTrue(dashboardStore.contains("if isRefreshing"))
+        XCTAssertTrue(dashboardStore.contains("@Published private(set) var snapshotInputScope"))
 
         let moveCalendarStart = try XCTUnwrap(dashboardStore.range(of: "private func moveCalendarMonth"))
         let runSelfTestStart = try XCTUnwrap(dashboardStore.range(of: "func runLocalQueueSelfTest"))
         let moveCalendarSource = String(dashboardStore[moveCalendarStart.lowerBound..<runSelfTestStart.lowerBound])
         XCTAssertFalse(moveCalendarSource.contains("loadPanelSummary"))
         XCTAssertTrue(moveCalendarSource.contains("snapshotBuildQueue.async"))
+    }
+
+    @MainActor
+    func testDashboardStoreScopeChangeRebuildsUsageSurfacesAndKeepsWorkflowRowsRaw() async throws {
+        let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
+        var calendar = Calendar.autoupdatingCurrent
+        calendar.firstWeekday = 1
+        let todayStart = calendar.startOfDay(for: Date())
+        let createdAt = try XCTUnwrap(calendar.date(byAdding: .hour, value: 1, to: todayStart))
+        try usageStore.replaceEvents([
+            Self.safeEvent(
+                aiTool: .codex,
+                spanID: "span_scope_store_codex",
+                inputTokens: 60,
+                outputTokens: 10,
+                model: "scope-store-codex",
+                createdAt: ISO8601DateFormatter.tokenUsage.string(from: createdAt)
+            ),
+            Self.safeEvent(
+                aiTool: .claude,
+                spanID: "span_scope_store_claude",
+                inputTokens: 125,
+                outputTokens: 7,
+                tokenAccounting: TokenUsageAccounting(
+                    uncachedInputTokens: 20,
+                    cacheCreationInputTokens: 5,
+                    cacheReadInputTokens: 100
+                ),
+                model: "scope-store-claude",
+                createdAt: ISO8601DateFormatter.tokenUsage.string(from: createdAt.addingTimeInterval(60))
+            )
+        ])
+        let dashboardStore = TokenUsageDashboardStore(
+            usageStore: usageStore,
+            loadsInitialPanelSummary: false
+        )
+
+        dashboardStore.refreshAsyncIfIdle()
+        try await waitForDashboardStoreRefresh(dashboardStore)
+        XCTAssertEqual(dashboardStore.snapshotInputScope, .includeCache)
+        XCTAssertEqual(dashboardStore.snapshot.toolFilters.first?.detail, "2 records / 202 tokens")
+
+        dashboardStore.setUsageInputScope(.freshOnly)
+        XCTAssertEqual(dashboardStore.snapshotInputScope, .includeCache)
+        try await waitForDashboardStoreRefresh(dashboardStore)
+
+        XCTAssertEqual(dashboardStore.usageInputScope, .freshOnly)
+        XCTAssertEqual(dashboardStore.snapshotInputScope, .freshOnly)
+        XCTAssertEqual(dashboardStore.snapshot.toolFilters.first?.detail, "2 records / 37 tokens")
+        XCTAssertEqual(dashboardStore.snapshot.periodFilters.first { $0.period == .today }?.detail, "37")
+        XCTAssertEqual(dashboardStore.snapshot.toolRows.map(\.value), ["27 (73.0%)", "10 (27.0%)"])
+        XCTAssertEqual(dashboardStore.snapshot.modelRows.map(\.value), ["27 (73.0%)", "10 (27.0%)"])
+        XCTAssertEqual(dashboardStore.snapshot.taskRows.first?.value, "202 (100.0%)")
     }
 
     @MainActor
@@ -3682,6 +3907,13 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(dashboardTotals[.thirtyDays], 690)
         XCTAssertEqual(dashboardTotals[.all], 1_140)
 
+        let scopedDashboardTotals = store.allPeriodInputScopeTotals(now: now, calendar: calendar)
+        XCTAssertEqual(scopedDashboardTotals[.today]?.includeCache, 120)
+        XCTAssertEqual(scopedDashboardTotals[.today]?.freshOnly, 20)
+        XCTAssertEqual(scopedDashboardTotals[.sevenDays]?.freshOnly, 50)
+        XCTAssertEqual(scopedDashboardTotals[.thirtyDays]?.freshOnly, 90)
+        XCTAssertEqual(scopedDashboardTotals[.all]?.freshOnly, 140)
+
         let visibleToolTotals = store.allPeriodTotalTokens(
             now: now,
             calendar: calendar,
@@ -3747,6 +3979,40 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(fullSummary.toolTotals["openai"], 900)
         XCTAssertEqual(fullSummary.taskTotals["testing"], 900)
         XCTAssertEqual(fullSummary.sourceTotals["unknown"], 1_180)
+    }
+
+    func testPanelSummaryProjectsFreshOnlyHeadlineWithoutChangingWorkflowRows() throws {
+        let store = TokenUsageStore(fileURL: temporaryEventsURL())
+        try store.replaceEvents([
+            Self.safeEvent(
+                aiTool: .codex,
+                spanID: "span_panel_fresh_unsplit",
+                inputTokens: 60,
+                outputTokens: 10
+            ),
+            Self.safeEvent(
+                aiTool: .claude,
+                spanID: "span_panel_fresh_split",
+                inputTokens: 125,
+                outputTokens: 7,
+                tokenAccounting: TokenUsageAccounting(
+                    uncachedInputTokens: 20,
+                    cacheCreationInputTokens: 5,
+                    cacheReadInputTokens: 100
+                )
+            )
+        ])
+
+        let summary = store.dashboardSummary()
+        let panelSummary = TokenUsagePanelSummarySnapshot(summary: summary, language: .english)
+
+        XCTAssertEqual(summary.totalTokens, 202)
+        XCTAssertEqual(summary.exactFreshTotalTokens, 37)
+        XCTAssertEqual(panelSummary.usageTotal(for: .includeCache), 202)
+        XCTAssertEqual(panelSummary.usageTotal(for: .freshOnly), 37)
+        XCTAssertEqual(panelSummary.toolRows.first { $0.id == "codex" }?.value, "70 (34.7%)")
+        XCTAssertEqual(panelSummary.toolRows.first { $0.id == "claude" }?.value, "132 (65.3%)")
+        XCTAssertEqual(panelSummary.taskRows.first?.value, "202 (100.0%)")
     }
 
     func testStoreReadsDashboardSummaryForDateRangeWithoutLoadingEvents() throws {
@@ -4575,26 +4841,21 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(store.loadEvents(), [event])
     }
 
-    func testGlobalSetupPromptBootstrapsPublicInstaller() {
-        let prompt = TokenMeteringGlobalSetup.globalPrompt
+    func testWorkflowSetupPromptConnectsCurrentWorkflow() {
+        let prompt = TokenMeteringGlobalSetup.workflowPrompt
 
-        XCTAssertTrue(prompt.contains("Install or repair Spill token metering now"))
+        XCTAssertTrue(prompt.contains("Treat the current directory as the workflow root"))
+        XCTAssertTrue(prompt.contains("basic in-app install already records exact token totals"))
+        XCTAssertTrue(prompt.contains("never stores or uploads prompts"))
         XCTAssertTrue(prompt.contains(TokenMeteringSetupInstaller.publicSetupCommand))
-        XCTAssertTrue(prompt.contains("If shell, filesystem, sandbox, or user-level configuration permission is required"))
-        XCTAssertTrue(prompt.contains("known local Codex/Claude JSONL session or transcript files"))
-        XCTAssertTrue(prompt.contains("must never store or upload prompts"))
-        XCTAssertTrue(prompt.contains("handles Codex, Claude Code, and Antigravity/AGY together"))
-        XCTAssertTrue(prompt.contains("~/.spill/runtime-instruction.md"))
-        XCTAssertTrue(prompt.contains("small managed discovery bridge"))
-        XCTAssertTrue(prompt.contains("Preserve unrelated user instructions"))
-        XCTAssertTrue(prompt.contains("Do not copy the full Spill prompt separately"))
+        XCTAssertTrue(prompt.contains("Inspect only this workflow root"))
+        XCTAssertTrue(prompt.contains("--label <codex|claude|antigravity>"))
+        XCTAssertTrue(prompt.contains("--task-type <safe_slug> --stage <safe_slug>"))
+        XCTAssertTrue(prompt.contains("start a new session or restart any AI tool session that was already running"))
+        XCTAssertTrue(prompt.contains("never prompts, commands, file paths"))
         XCTAssertTrue(prompt.contains("do not install AGY lifecycle hooks"))
-        XCTAssertTrue(prompt.contains("already-running agent sessions may need to restart"))
-        XCTAssertTrue(prompt.contains("Setup success is not proof"))
-        XCTAssertTrue(prompt.contains(TokenMeteringGlobalSetup.setupPromptURL))
         XCTAssertFalse(prompt.contains("claude-last-empty.json"))
         XCTAssertFalse(prompt.contains("antigravity-active-importer-last.json"))
-        XCTAssertFalse(prompt.contains("Should I connect workflow-aware labels now?"))
         XCTAssertLessThan(prompt.count, 2_500)
     }
 
@@ -4739,6 +5000,10 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(installer.contains("--runtime-instruction-source \"$TMP_DIR/runtime-instruction.md\""))
 
         XCTAssertTrue(helper.contains("configureRuntimeLabelDefaults"))
+        XCTAssertTrue(helper.contains("const meteringOnly = args.meteringOnly === true"))
+        XCTAssertTrue(helper.contains("--metering-only"))
+        XCTAssertTrue(helper.contains("installsInstructionBridges: !meteringOnly"))
+        XCTAssertTrue(helper.contains("metering_only: meteringOnly"))
         XCTAssertTrue(helper.contains("installSharedRuntimeInstruction"))
         XCTAssertTrue(helper.contains("configureRuntimeInstructionBridge"))
         XCTAssertTrue(helper.contains("~/.spill/runtime-instruction.md"))
@@ -4850,6 +5115,10 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(claudeHook.contains("claude-last-success.json"))
         XCTAssertTrue(claudeHook.contains("transcript_path"))
         XCTAssertTrue(claudeHook.contains("No payload values"))
+        XCTAssertTrue(claudeHook.contains("inferred_task_type = 'uncategorized'"))
+        XCTAssertTrue(claudeHook.contains("inferred_stage = 'summarize'"))
+        XCTAssertFalse(claudeHook.contains("_infer_task_type"))
+        XCTAssertFalse(claudeHook.contains("_turn_tool_names"))
         XCTAssertFalse(claudeHook.contains("traceback.print_exc"))
         XCTAssertEqual(claudeHook, bundledClaudeHook)
     }
@@ -5018,7 +5287,8 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(events.count, 2)
         XCTAssertEqual(events.compactMap { $0["total_tokens"] as? Int }.sorted(), [125, 237])
         XCTAssertFalse(events.contains { $0["stage"] as? String == "classify" })
-        XCTAssertEqual(Set(events.compactMap { $0["stage"] as? String }), Set(["summarize", "implement"]))
+        XCTAssertEqual(Set(events.compactMap { $0["task_type"] as? String }), Set(["uncategorized"]))
+        XCTAssertEqual(Set(events.compactMap { $0["stage"] as? String }), Set(["summarize"]))
     }
 
     func testAdapterHookConfigsUseExactRuntimeHookShapes() throws {

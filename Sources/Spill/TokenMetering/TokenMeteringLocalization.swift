@@ -167,6 +167,12 @@ enum TokenMeteringTextKey: String {
     case inputAccountingCacheCreation
     case inputAccountingCacheRead
     case inputAccountingUnclassified
+    case usageInputScopeTitle
+    case usageInputScopeDetail
+    case usageInputScopeInfoTitle
+    case usageInputScopeInfoDetail
+    case usageInputScopeIncludeCache
+    case usageInputScopeFreshOnly
     case output
     case avgLatency
     case latencyUnavailable
@@ -224,7 +230,6 @@ enum TokenMeteringTextKey: String {
     case copyInstallPrompt
     case copyWebSetup
     case dashboard
-    case localEventQueue
     case historyImportTitle
     case historyImportReady
     case historyImportRunning
@@ -249,7 +254,6 @@ enum TokenMeteringTextKey: String {
     case historyImportMetricDuplicates
     case historyImportMetricUnsupported
     case historyImportFullScanWarning
-    case copyPath
     case adapterScripts
     case neverCollectedOrUploaded
     case copyScript

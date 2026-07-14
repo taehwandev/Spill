@@ -170,7 +170,8 @@ extension TokenMeteringDashboardAppDelegate {
         let supportedSettingsKeys = [
             TokenMeteringDashboardProcess.appLanguageSettingsKey,
             TokenMeteringDashboardProcess.appearanceThemeSettingsKey,
-            TokenMeteringDashboardProcess.tokenUsageDashboardOnboardingPreviewSettingsKey
+            TokenMeteringDashboardProcess.tokenUsageDashboardOnboardingPreviewSettingsKey,
+            TokenMeteringDashboardProcess.tokenUsageInputScopeSettingsKey
         ]
         guard settingsKey == nil || supportedSettingsKeys.contains(settingsKey ?? "") else {
             return
@@ -191,6 +192,10 @@ extension TokenMeteringDashboardAppDelegate {
             tokenUsageDashboardStore.setOnboardingPreviewEnabled(
                 settings.tokenUsageDashboardOnboardingPreviewEnabled
             )
+        }
+
+        if settingsKey == nil || settingsKey == TokenMeteringDashboardProcess.tokenUsageInputScopeSettingsKey {
+            settings.reloadTokenUsageInputScopeFromDefaults()
         }
     }
 

@@ -53,13 +53,14 @@ struct TokenUsageDashboardSnapshot: Equatable {
         now: Date = Date(),
         calendarMonthStart: Date? = nil,
         resolvedCalendarMonthStart: Date? = nil,
-        periodFilterTotals: [TokenUsageDashboardPeriod: Int]? = nil,
+        periodFilterTotals: [TokenUsageDashboardPeriod: TokenUsageInputScopeTotals]? = nil,
         availableDateBounds: TokenUsageDashboardDateBounds? = nil,
         periodOffset: Int = 0,
+        inputScope: TokenUsageInputScope = .includeCache,
         calendar: Calendar = .autoupdatingCurrent,
         locale: Locale = .autoupdatingCurrent,
         timeZone: TimeZone = .autoupdatingCurrent,
-        calendarDayTotals: [String: Int]? = nil
+        calendarDayTotals: [String: TokenUsageInputScopeTotals]? = nil
     ) {
         let dashboardEvents = context.dashboardEvents.filter { event in
             visibleTools?.contains(event.event.aiTool) ?? true
@@ -99,6 +100,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
         projectFilters = Self.projectFilters(
             events: toolVisibleEvents,
             selectedProjectID: validSelectedProjectID,
+            inputScope: inputScope,
             language: language
         )
         let visibleEvents = validSelectedProjectID.map { projectID in
@@ -126,9 +128,17 @@ struct TokenUsageDashboardSnapshot: Equatable {
         } ?? visibleEvents
 
         eventCount = focusedEvents.count
-        let capturedTotalTokens = focusedEvents.reduce(0) { $0 + $1.event.totalTokens }
+        var capturedTotalTokens = 0
+        var capturedUsageTokens = 0
+        for focusedEvent in focusedEvents {
+            capturedTotalTokens += focusedEvent.event.totalTokens
+            capturedUsageTokens += Self.usageTokens(for: focusedEvent.event, inputScope: inputScope)
+        }
         totalTokens = capturedTotalTokens
-        let visibleCapturedToolTokens = Self.toolTotals(events: focusedEvents)
+        let visibleCapturedToolTokens = Self.toolTotals(
+            events: focusedEvents,
+            inputScope: inputScope
+        )
             .filter { tool, _ in
                 visibleTools?.contains(tool) ?? true
             }
@@ -136,8 +146,8 @@ struct TokenUsageDashboardSnapshot: Equatable {
 
         periodFilters = TokenUsageDashboardPeriod.allCases.map { period in
             let capturedPeriodTotal: Int
-            if let total = periodFilterTotals?[period] {
-                capturedPeriodTotal = total
+            if let totals = periodFilterTotals?[period] {
+                capturedPeriodTotal = totals.total(for: inputScope)
             } else {
                 let periodCapturedEvents = Self.filteredParsedEvents(
                     dashboardEvents,
@@ -145,7 +155,9 @@ struct TokenUsageDashboardSnapshot: Equatable {
                     now: now,
                     calendar: calendar
                 )
-                capturedPeriodTotal = periodCapturedEvents.reduce(0) { $0 + $1.event.totalTokens }
+                capturedPeriodTotal = periodCapturedEvents.reduce(0) {
+                    $0 + Self.usageTokens(for: $1.event, inputScope: inputScope)
+                }
             }
             return TokenUsageDashboardPeriodFilter(
                 period: period,
@@ -155,7 +167,10 @@ struct TokenUsageDashboardSnapshot: Equatable {
             )
         }
 
-        let allToolTotals = Self.toolTotals(events: toolFilterEvents)
+        let allToolTotals = Self.toolTotals(
+            events: toolFilterEvents,
+            inputScope: inputScope
+        )
         toolFilters = Self.toolFilters(
             selectedTool: selectedDashboardTool,
             totals: allToolTotals,
@@ -196,15 +211,17 @@ struct TokenUsageDashboardSnapshot: Equatable {
 
         toolRows = TokenUsageDashboardRowBuilder.rows(
             tokenValues: visibleCapturedToolTokens,
-            totalTokens: totalTokens,
+            totalTokens: capturedUsageTokens,
             id: { $0.rawValue },
             label: { $0.dashboardLabel(language: language) }
         )
 
-        let modelTokens = Self.tokenTotals(events: focusedEvents) { Self.modelKey($0.event.model) }
+        let modelTokens = Self.tokenTotals(events: focusedEvents, inputScope: inputScope) {
+            Self.modelKey($0.event.model)
+        }
         modelRows = TokenUsageDashboardRowBuilder.rows(
             tokenValues: modelTokens,
-            totalTokens: totalTokens,
+            totalTokens: capturedUsageTokens,
             id: { $0 },
             label: { Self.modelLabel($0, language: language) }
         )
@@ -244,6 +261,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
             calendar: calendar,
             locale: locale,
             timeZone: timeZone,
+            inputScope: inputScope,
             visibleTools: visibleTools
         )
 
@@ -261,7 +279,9 @@ struct TokenUsageDashboardSnapshot: Equatable {
                     guard let date = event.createdAt else { return false }
                     return date >= yesterdayStart && date < todayStart
                 }
-                comparisonTotalTokens = compEvents.isEmpty ? nil : compEvents.reduce(0) { $0 + $1.event.totalTokens }
+                comparisonTotalTokens = compEvents.isEmpty ? nil : compEvents.reduce(0) {
+                    $0 + Self.usageTokens(for: $1.event, inputScope: inputScope)
+                }
             case .sevenDays:
                 let sevenDaysAgo = Self.periodStartDate(dayCount: 7, now: now, calendar: calendar)
                 let fourteenDaysAgo = calendar.date(byAdding: .day, value: -7, to: sevenDaysAgo) ?? sevenDaysAgo
@@ -269,7 +289,9 @@ struct TokenUsageDashboardSnapshot: Equatable {
                     guard let date = event.createdAt else { return false }
                     return date >= fourteenDaysAgo && date < sevenDaysAgo
                 }
-                comparisonTotalTokens = compEvents.isEmpty ? nil : compEvents.reduce(0) { $0 + $1.event.totalTokens }
+                comparisonTotalTokens = compEvents.isEmpty ? nil : compEvents.reduce(0) {
+                    $0 + Self.usageTokens(for: $1.event, inputScope: inputScope)
+                }
             case .thirtyDays:
                 let thirtyDaysAgo = Self.periodStartDate(dayCount: 30, now: now, calendar: calendar)
                 let sixtyDaysAgo = calendar.date(byAdding: .day, value: -30, to: thirtyDaysAgo) ?? thirtyDaysAgo
@@ -277,7 +299,9 @@ struct TokenUsageDashboardSnapshot: Equatable {
                     guard let date = event.createdAt else { return false }
                     return date >= sixtyDaysAgo && date < thirtyDaysAgo
                 }
-                comparisonTotalTokens = compEvents.isEmpty ? nil : compEvents.reduce(0) { $0 + $1.event.totalTokens }
+                comparisonTotalTokens = compEvents.isEmpty ? nil : compEvents.reduce(0) {
+                    $0 + Self.usageTokens(for: $1.event, inputScope: inputScope)
+                }
             case .all:
                 comparisonTotalTokens = nil
             }
@@ -309,7 +333,8 @@ struct TokenUsageDashboardSnapshot: Equatable {
             calendar: calendar,
             locale: locale,
             timeZone: timeZone,
-            dayTokenTotals: calendarDayTotals
+            dayTokenTotals: calendarDayTotals?.mapValues { $0.total(for: inputScope) },
+            rawDayTokenTotals: calendarDayTotals?.mapValues(\.includeCache)
         )
 
         codexLastUpdatedString = codexLastUpdated.map {
@@ -359,6 +384,48 @@ struct TokenUsageDashboardSnapshot: Equatable {
 }
 
 extension TokenUsageDashboardSnapshot {
+    var usageInputScopeTotals: TokenUsageInputScopeTotals {
+        TokenUsageInputScopeTotals(
+            totalTokens: totalTokens,
+            rawInputTokens: inputAccounting.rawInputTokens,
+            exactFreshInputTokens: inputAccounting.exactFreshInputTokens
+        )
+    }
+
+    func usageKPIs(
+        for scope: TokenUsageInputScope,
+        language: TokenMeteringLanguage
+    ) -> [TokenUsageDashboardKPI] {
+        guard scope == .freshOnly else {
+            return kpis
+        }
+
+        let outputTokens = max(0, totalTokens - inputAccounting.rawInputTokens)
+        let freshInputTokens = inputAccounting.exactFreshInputTokens
+        let freshTotalTokens = usageInputScopeTotals.freshOnly
+
+        return [
+            TokenUsageDashboardKPI(
+                id: "total",
+                title: TokenMeteringL10n.text(.totalTokens, language: language),
+                value: Self.formatTokens(freshTotalTokens),
+                detail: TokenMeteringL10n.localEventsDetail(eventCount: eventCount, language: language)
+            ),
+            TokenUsageDashboardKPI(
+                id: "input",
+                title: TokenMeteringL10n.text(.input, language: language),
+                value: Self.formatTokens(freshInputTokens),
+                detail: Self.percentageDetail(value: freshInputTokens, total: freshTotalTokens, language: language)
+            ),
+            TokenUsageDashboardKPI(
+                id: "output",
+                title: TokenMeteringL10n.text(.output, language: language),
+                value: Self.formatTokens(outputTokens),
+                detail: Self.percentageDetail(value: outputTokens, total: freshTotalTokens, language: language)
+            )
+        ]
+    }
+
     static func buildPair(
         events: [TokenUsageEvent],
         selectedTool: TokenUsageAITool?,
@@ -373,10 +440,11 @@ extension TokenUsageDashboardSnapshot {
         now: Date,
         proposedCalendarMonthStart: Date?,
         calendar: Calendar,
-        periodFilterTotals: [TokenUsageDashboardPeriod: Int]? = nil,
+        periodFilterTotals: [TokenUsageDashboardPeriod: TokenUsageInputScopeTotals]? = nil,
         availableDateBounds: TokenUsageDashboardDateBounds? = nil,
-        calendarDayTotals: [String: Int]? = nil,
+        calendarDayTotals: [String: TokenUsageInputScopeTotals]? = nil,
         periodOffset: Int = 0,
+        inputScope: TokenUsageInputScope = .includeCache,
         locale: Locale = .autoupdatingCurrent,
         timeZone: TimeZone = .autoupdatingCurrent
     ) -> TokenUsageDashboardSnapshotPair {
@@ -403,6 +471,7 @@ extension TokenUsageDashboardSnapshot {
             availableDateBounds: availableDateBounds,
             calendarDayTotals: calendarDayTotals,
             periodOffset: periodOffset,
+            inputScope: inputScope,
             locale: locale,
             timeZone: timeZone
         )
@@ -425,10 +494,11 @@ extension TokenUsageDashboardSnapshot {
         now: Date,
         proposedCalendarMonthStart: Date?,
         calendar: Calendar,
-        periodFilterTotals: [TokenUsageDashboardPeriod: Int]? = nil,
+        periodFilterTotals: [TokenUsageDashboardPeriod: TokenUsageInputScopeTotals]? = nil,
         availableDateBounds: TokenUsageDashboardDateBounds? = nil,
-        calendarDayTotals: [String: Int]? = nil,
+        calendarDayTotals: [String: TokenUsageInputScopeTotals]? = nil,
         periodOffset: Int = 0,
+        inputScope: TokenUsageInputScope = .includeCache,
         locale: Locale = .autoupdatingCurrent,
         timeZone: TimeZone = .autoupdatingCurrent
     ) -> TokenUsageDashboardSnapshotPair {
@@ -459,6 +529,7 @@ extension TokenUsageDashboardSnapshot {
             periodFilterTotals: periodFilterTotals,
             availableDateBounds: availableDateBounds,
             periodOffset: periodOffset,
+            inputScope: inputScope,
             calendar: calendar,
             locale: locale,
             timeZone: timeZone,
@@ -483,6 +554,7 @@ extension TokenUsageDashboardSnapshot {
                 periodFilterTotals: periodFilterTotals,
                 availableDateBounds: availableDateBounds,
                 periodOffset: periodOffset,
+                inputScope: inputScope,
                 calendar: calendar,
                 locale: locale,
                 timeZone: timeZone,
@@ -512,13 +584,14 @@ extension TokenUsageDashboardSnapshot {
         visibleTools: Set<TokenUsageAITool>? = nil,
         now: Date = Date(),
         calendarMonthStart: Date? = nil,
-        periodFilterTotals: [TokenUsageDashboardPeriod: Int]? = nil,
+        periodFilterTotals: [TokenUsageDashboardPeriod: TokenUsageInputScopeTotals]? = nil,
         availableDateBounds: TokenUsageDashboardDateBounds? = nil,
         periodOffset: Int = 0,
+        inputScope: TokenUsageInputScope = .includeCache,
         calendar: Calendar = .autoupdatingCurrent,
         locale: Locale = .autoupdatingCurrent,
         timeZone: TimeZone = .autoupdatingCurrent,
-        calendarDayTotals: [String: Int]? = nil
+        calendarDayTotals: [String: TokenUsageInputScopeTotals]? = nil
     ) {
         self.init(
             context: TokenUsageDashboardSnapshotBuildContext(
@@ -541,6 +614,7 @@ extension TokenUsageDashboardSnapshot {
             periodFilterTotals: periodFilterTotals,
             availableDateBounds: availableDateBounds,
             periodOffset: periodOffset,
+            inputScope: inputScope,
             calendar: calendar,
             locale: locale,
             timeZone: timeZone,

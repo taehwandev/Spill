@@ -12,41 +12,44 @@ struct TokenMeteringPromptInstructionCard: View {
     }
 
     var body: some View {
-        HStack(spacing: 12) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.teal.opacity(0.15), Color.blue.opacity(0.1)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [Color.teal.opacity(0.15), Color.blue.opacity(0.1)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
                         )
-                    )
-                    .frame(width: 32, height: 32)
+                        .frame(width: 32, height: 32)
 
-                Image(systemName: "sparkles")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [Color.teal, Color.blue],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [Color.teal, Color.blue],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
                         )
-                    )
-            }
+                }
 
-            VStack(alignment: .leading, spacing: 3) {
-                Text(t(.promptInstructionCardTitle))
-                    .font(.system(size: 11.5, weight: .bold))
-                    .foregroundStyle(.primary)
-                Text(TokenMeteringSetupL10n.text(setupActionStore.statusTextKey, language: language))
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(3)
-                    .fixedSize(horizontal: false, vertical: true)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(t(.promptInstructionCardTitle))
+                        .font(.system(size: 11.5, weight: .bold))
+                        .foregroundStyle(.primary)
+                    Text(t(.promptInstructionCardDetail))
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(TokenMeteringSetupL10n.text(setupActionStore.statusTextKey, language: language))
+                        .font(.system(size: 9.5, weight: .semibold))
+                        .foregroundStyle(.teal)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
-
-            Spacer(minLength: 8)
 
             TokenMeteringSetupActionControls(
                 store: setupActionStore,
@@ -54,7 +57,7 @@ struct TokenMeteringPromptInstructionCard: View {
                 language: language,
                 isSetupPromptCopied: copiedTarget == "prompt",
                 copySetupPromptAction: {
-                    copyInstallPromptAction(TokenMeteringGlobalSetup.globalPrompt)
+                    copyInstallPromptAction(TokenMeteringGlobalSetup.workflowPrompt)
                 }
             )
         }

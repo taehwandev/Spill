@@ -54,6 +54,33 @@ grep -Fqx "@$SETUP_SHARED_INSTRUCTION" "$SETUP_HOME/.claude/CLAUDE.md"
 grep -Fq "\`$SETUP_SHARED_INSTRUCTION\`" "$SETUP_HOME/.codex/AGENTS.override.md"
 grep -Fq "\`$SETUP_SHARED_INSTRUCTION\`" "$SETUP_HOME/.antigravity/AGENTS.md"
 
+BASIC_HOME="$ADAPTER_TMP_DIR/basic-home"
+BASIC_INSTALL_ROOT="$ADAPTER_TMP_DIR/basic-install"
+mkdir -p "$BASIC_HOME/.codex" "$BASIC_HOME/.claude" "$BASIC_HOME/.antigravity"
+printf '# Existing Codex\nkeep-basic-codex\n' > "$BASIC_HOME/.codex/AGENTS.md"
+printf '# Existing Claude\nkeep-basic-claude\n' > "$BASIC_HOME/.claude/CLAUDE.md"
+printf '# Existing AGY\nkeep-basic-agy\n' > "$BASIC_HOME/.antigravity/AGENTS.md"
+
+HOME="$BASIC_HOME" node "$ROOT_DIR/scripts/spill-token-metering-setup.mjs" \
+    --apply \
+    --metering-only \
+    --include codex,claude,antigravity \
+    --source-root "$ROOT_DIR/Sources/Spill/Resources/adapters" \
+    --runtime-instruction-source "$ROOT_DIR/docs/token-metering/runtime-instruction.md" \
+    --install-dir "$BASIC_INSTALL_ROOT" \
+    --json >/dev/null
+
+[[ -f "$BASIC_INSTALL_ROOT/setup/spill-token-metering-setup.mjs" ]]
+[[ -f "$BASIC_INSTALL_ROOT/codex/spill-importer.mjs" ]]
+[[ -f "$BASIC_INSTALL_ROOT/claude-code/spill-hook.py" ]]
+[[ ! -e "$BASIC_HOME/.spill/runtime-instruction.md" ]]
+grep -q 'keep-basic-codex' "$BASIC_HOME/.codex/AGENTS.md"
+grep -q 'keep-basic-claude' "$BASIC_HOME/.claude/CLAUDE.md"
+grep -q 'keep-basic-agy' "$BASIC_HOME/.antigravity/AGENTS.md"
+! grep -q 'spill-token-metering-instruction:begin' "$BASIC_HOME/.codex/AGENTS.md"
+! grep -q 'spill-token-metering-instruction:begin' "$BASIC_HOME/.claude/CLAUDE.md"
+! grep -q 'spill-token-metering-instruction:begin' "$BASIC_HOME/.antigravity/AGENTS.md"
+
 rm -f "$LOG_FILE" "$EVENTS_FILE" "$EVENTS_DB" "$EVENTS_DB-shm" "$EVENTS_DB-wal"
 
 HOOK_TIMESTAMP="$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")"
@@ -126,6 +153,7 @@ import { writeFile } from 'node:fs/promises';
 const transcript = [
   { message: { role: "user" } },
   {
+    timestamp: "2026-07-14T12:00:00.000Z",
     message: {
       role: "assistant",
       model: "claude-sonnet-4",

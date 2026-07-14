@@ -20,7 +20,7 @@ struct SpillBarAITokenSummary: View {
 private extension SpillBarAITokenSummary {
     private var tokenSummary: some View {
         let snapshot = tokenUsageDashboardStore.panelSummary
-        let displayTotalTokens = snapshot.totalTokens
+        let displayTotalTokens = snapshot.usageTotal(for: settings.tokenUsageInputScope)
         let visibleToolRows = visibleToolRows(from: snapshot.toolRows)
         let topTask = snapshot.taskRows.first
         let topSource = snapshot.sourceRows.first
@@ -50,7 +50,7 @@ private extension SpillBarAITokenSummary {
                         .minimumScaleFactor(0.72)
                         .foregroundStyle(.secondary)
 
-                    if displayTotalTokens > 0, !visibleToolRows.isEmpty {
+                    if snapshot.totalTokens > 0, !visibleToolRows.isEmpty {
                         toolDistributionBar(rows: visibleToolRows)
                     }
                 }

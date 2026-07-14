@@ -11,7 +11,7 @@ private struct TokenUsageDashboardEventLoadScope {
 
 private struct TokenUsageDashboardCalendarMonthSummary {
     let monthStart: Date
-    let dayTokenTotals: [String: Int]
+    let dayTokenTotals: [String: TokenUsageInputScopeTotals]
 }
 
 private struct TokenUsageDashboardContextCacheKey: Equatable {
@@ -42,6 +42,9 @@ private struct TokenUsageDashboardContextCacheKey: Equatable {
             hasher.combine(event.createdAt)
             hasher.combine(event.aiTool.rawValue)
             hasher.combine(event.totalTokens)
+            hasher.combine(event.inputTokens)
+            hasher.combine(event.outputTokens)
+            hasher.combine(event.tokenAccounting?.uncachedInputTokens)
         }
         totalTokens = total
         eventFingerprint = hasher.finalize()
@@ -93,6 +96,8 @@ final class TokenUsageDashboardStore: ObservableObject {
     @Published private(set) var selectedSessionID: String?
     @Published private(set) var calendarMonthStart: Date?
     @Published private(set) var periodOffset = 0
+    @Published private(set) var usageInputScope: TokenUsageInputScope = .includeCache
+    @Published private(set) var snapshotInputScope: TokenUsageInputScope = .includeCache
     @Published private(set) var language: TokenMeteringLanguage = .current()
     @Published private(set) var lastError: String?
     @Published private(set) var isRunningSelfTest = false
@@ -102,7 +107,7 @@ final class TokenUsageDashboardStore: ObservableObject {
     private let usageStore: TokenUsageStore
     private var events: [TokenUsageEvent] = []
     private var loadedEventsDateRange: TokenUsageDashboardSnapshot.DateRange?
-    private var periodFilterTotals: [TokenUsageDashboardPeriod: Int] = [:]
+    private var periodFilterTotals: [TokenUsageDashboardPeriod: TokenUsageInputScopeTotals] = [:]
     private var availableDateBounds = TokenUsageDashboardDateBounds.empty
     private var cachedSnapshotContext: TokenUsageDashboardSnapshotBuildContext?
     private var cachedSnapshotContextKey: TokenUsageDashboardContextCacheKey?
@@ -169,7 +174,7 @@ final class TokenUsageDashboardStore: ObservableObject {
             return hasLoadedDashboardEvents
         }
         let hasKnownDashboardHistory = availableDateBounds.earliest != nil
-            || periodFilterTotals.values.contains { $0 > 0 }
+            || periodFilterTotals.values.contains { $0.includeCache > 0 }
         return panelSummary.eventCount > 0 || hasLoadedDashboardEvents || hasKnownDashboardHistory
     }
 
@@ -308,6 +313,7 @@ extension TokenUsageDashboardStore {
                 self.applySnapshotPair(
                     snapshotOutput.snapshotPair,
                     loadedEvents: loadedEvents,
+                    inputScope: buildRequest.inputScope,
                     trackLiveUpdates: shouldTrackLiveUpdates,
                     previousEvents: previousEvents,
                     previousSnapshot: previousSnapshot,
@@ -371,7 +377,7 @@ extension TokenUsageDashboardStore {
     func rebuildSnapshot(
         trackLiveUpdates: Bool = false,
         previousEvents: [TokenUsageEvent]? = nil,
-        periodFilterTotals nextPeriodFilterTotals: [TokenUsageDashboardPeriod: Int]? = nil,
+        periodFilterTotals nextPeriodFilterTotals: [TokenUsageDashboardPeriod: TokenUsageInputScopeTotals]? = nil,
         panelSummary: TokenUsagePanelSummarySnapshot? = nil
     ) {
         snapshotBuildGate.next()
@@ -400,6 +406,7 @@ extension TokenUsageDashboardStore {
         applySnapshotPair(
             snapshotOutput.snapshotPair,
             loadedEvents: events,
+            inputScope: request.inputScope,
             trackLiveUpdates: trackLiveUpdates && !isOnboardingPreviewEnabled,
             previousEvents: previousEvents,
             previousSnapshot: previousSnapshot,
@@ -462,6 +469,7 @@ extension TokenUsageDashboardStore {
                 self.applySnapshotPair(
                     snapshotOutput.snapshotPair,
                     loadedEvents: currentEvents,
+                    inputScope: buildRequest.inputScope,
                     trackLiveUpdates: trackLiveUpdates && !self.isOnboardingPreviewEnabled,
                     previousEvents: previousEvents,
                     previousSnapshot: previousSnapshot,
@@ -482,12 +490,13 @@ extension TokenUsageDashboardStore {
     private func applySnapshotPair(
         _ snapshotPair: TokenUsageDashboardSnapshotPair,
         loadedEvents: [TokenUsageEvent],
+        inputScope: TokenUsageInputScope,
         trackLiveUpdates: Bool,
         previousEvents: [TokenUsageEvent]?,
         previousSnapshot: TokenUsageDashboardSnapshot,
         previousUnfilteredSnapshot: TokenUsageDashboardSnapshot,
         loadedEventsDateRange nextLoadedEventsDateRange: TokenUsageDashboardSnapshot.DateRange?,
-        periodFilterTotals nextPeriodFilterTotals: [TokenUsageDashboardPeriod: Int]?,
+        periodFilterTotals nextPeriodFilterTotals: [TokenUsageDashboardPeriod: TokenUsageInputScopeTotals]?,
         panelSummary: TokenUsagePanelSummarySnapshot?,
         availableDateBounds nextAvailableDateBounds: TokenUsageDashboardDateBounds? = nil,
         snapshotContext nextSnapshotContext: TokenUsageDashboardSnapshotBuildContext? = nil,
@@ -511,6 +520,7 @@ extension TokenUsageDashboardStore {
         let filteredSnapshot = snapshotPair.filtered
         selectedProjectID = filteredSnapshot.selectedProjectID
         selectedSessionID = filteredSnapshot.selectedSession?.id
+        snapshotInputScope = inputScope
         snapshot = filteredSnapshot
         unfilteredSnapshot = snapshotPair.unfiltered
         if let panelSummary {
@@ -559,6 +569,7 @@ extension TokenUsageDashboardStore {
             proposedCalendarMonthStart: calendarMonthStart,
             calendar: calendar,
             periodOffset: periodOffset,
+            inputScope: usageInputScope,
             availableDateBounds: availableDateBounds
         )
     }
@@ -566,8 +577,8 @@ extension TokenUsageDashboardStore {
     nonisolated private static func buildSnapshotOutput(
         events: [TokenUsageEvent],
         request: TokenUsageDashboardBuildRequest,
-        periodFilterTotals: [TokenUsageDashboardPeriod: Int],
-        calendarDayTotals: [String: Int],
+        periodFilterTotals: [TokenUsageDashboardPeriod: TokenUsageInputScopeTotals],
+        calendarDayTotals: [String: TokenUsageInputScopeTotals],
         cachedContext: TokenUsageDashboardSnapshotBuildContext?,
         cachedContextKey: TokenUsageDashboardContextCacheKey?
     ) -> TokenUsageDashboardSnapshotBuildOutput {
@@ -601,7 +612,8 @@ extension TokenUsageDashboardStore {
             periodFilterTotals: resolvedPeriodFilterTotals,
             availableDateBounds: request.availableDateBounds,
             calendarDayTotals: calendarDayTotals,
-            periodOffset: request.periodOffset
+            periodOffset: request.periodOffset,
+            inputScope: request.inputScope
         )
         return TokenUsageDashboardSnapshotBuildOutput(
             snapshotPair: snapshotPair,
@@ -613,7 +625,7 @@ extension TokenUsageDashboardStore {
     nonisolated private static func buildSnapshotPair(
         events: [TokenUsageEvent],
         request: TokenUsageDashboardBuildRequest,
-        periodFilterTotals: [TokenUsageDashboardPeriod: Int]
+        periodFilterTotals: [TokenUsageDashboardPeriod: TokenUsageInputScopeTotals]
     ) -> TokenUsageDashboardSnapshotPair {
         buildSnapshotOutput(
             events: events,
@@ -703,7 +715,7 @@ extension TokenUsageDashboardStore {
 
     private func loadPeriodFilterTotals(
         for request: TokenUsageDashboardBuildRequest
-    ) -> [TokenUsageDashboardPeriod: Int] {
+    ) -> [TokenUsageDashboardPeriod: TokenUsageInputScopeTotals] {
         Self.loadPeriodFilterTotals(from: usageStore, for: request)
     }
 
@@ -727,7 +739,7 @@ extension TokenUsageDashboardStore {
         let endDate = monthRange.end
             ?? request.calendar.date(byAdding: .month, value: 1, to: monthStart)
             ?? monthStart
-        let dayTokenTotals = usageStore.dashboardDayTokenTotals(
+        let dayTokenTotals = usageStore.dashboardDayInputScopeTotals(
             startingAt: monthStart,
             endingBefore: endDate,
             calendar: request.calendar,
@@ -743,8 +755,8 @@ extension TokenUsageDashboardStore {
     nonisolated private static func loadPeriodFilterTotals(
         from usageStore: TokenUsageStore,
         for request: TokenUsageDashboardBuildRequest
-    ) -> [TokenUsageDashboardPeriod: Int] {
-        usageStore.allPeriodTotalTokens(
+    ) -> [TokenUsageDashboardPeriod: TokenUsageInputScopeTotals] {
+        usageStore.allPeriodInputScopeTotals(
             now: request.now,
             calendar: request.calendar,
             dashboardToolsOnly: !request.showAdvancedTools,
@@ -1031,6 +1043,7 @@ extension TokenUsageDashboardStore {
             now: now,
             calendarMonthStart: displayCalendarMonth,
             periodOffset: periodOffset,
+            inputScope: usageInputScope,
             calendar: calendar
         )
     }
@@ -1075,6 +1088,23 @@ extension TokenUsageDashboardStore {
             refreshAsync(reusesLoadedEvents: true, reusesPeriodFilterTotals: true)
         } else {
             refreshPanelSummary()
+        }
+    }
+
+    func setUsageInputScope(_ scope: TokenUsageInputScope) {
+        guard usageInputScope != scope else {
+            return
+        }
+        usageInputScope = scope
+        if hasRebuiltSnapshot {
+            rebuildSnapshotFromCurrentEventsAsync()
+            return
+        }
+        if isRefreshing {
+            refreshAsync(
+                trackLiveUpdates: false,
+                refreshesPanelSummary: false
+            )
         }
     }
 }
@@ -1253,6 +1283,7 @@ extension TokenUsageDashboardStore {
                 self.applySnapshotPair(
                     snapshotOutput.snapshotPair,
                     loadedEvents: loadedEvents,
+                    inputScope: buildRequest.inputScope,
                     trackLiveUpdates: false,
                     previousEvents: nil,
                     previousSnapshot: previousSnapshot,
@@ -1659,6 +1690,7 @@ private struct TokenUsageDashboardBuildRequest {
     let proposedCalendarMonthStart: Date?
     let calendar: Calendar
     let periodOffset: Int
+    let inputScope: TokenUsageInputScope
     let availableDateBounds: TokenUsageDashboardDateBounds
 }
 
@@ -1680,6 +1712,7 @@ private extension TokenUsageDashboardBuildRequest {
             proposedCalendarMonthStart: proposedCalendarMonthStart,
             calendar: calendar,
             periodOffset: periodOffset,
+            inputScope: inputScope,
             availableDateBounds: bounds
         )
     }

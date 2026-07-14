@@ -1,24 +1,28 @@
 import Foundation
 
 enum TokenMeteringGlobalSetup {
-    static let setupPromptURL = "https://spill.thdev.app/token-metering/setup-prompt.md"
     static let runtimeInstructionURL = "https://spill.thdev.app/token-metering/runtime-instruction.md"
 
-    static let globalPrompt = """
-    # Install Spill AI Token Metering
+    static let workflowPrompt = """
+    # Connect Spill to This Workflow
 
-    Install or repair Spill token metering now with the one-step installer:
+    Treat the current directory as the workflow root. If it is not the directory that owns this workflow's instructions, hooks, or runner, stop and ask the user to run this prompt from the correct directory.
 
-      /bin/bash -c "$(curl -fsSL https://spill.thdev.app/token-metering/install.sh)"
+    Spill's basic in-app install already records exact token totals without classifying work type or stage. This workflow setup is optional and adds trusted reusable `task_type` and `stage` labels.
 
-    If shell, filesystem, sandbox, or user-level configuration permission is required, explain why and ask for that permission before running the command.
+    Privacy boundary: Spill may read known local usage metadata only to extract exact numeric token counts, timestamps, safe model ids, and opaque ids. It never stores or uploads prompts, responses, commands, file paths, logs, diffs, source content, environment values, or secrets.
 
-    Privacy boundary: Spill may read known local Codex/Claude JSONL session or transcript files and Antigravity/AGY metadata only to extract exact numeric token counts, timestamps, safe model ids, and opaque ids. It must never store or upload prompts, responses, commands, file paths, transcript text, logs, diffs, source content, environment values, or secrets.
+    After installing or repairing connection files, start a new session or restart any AI tool session that was already running so it loads the updated connection.
 
-    The installer handles Codex, Claude Code, and Antigravity/AGY together. It writes one shared instruction to `~/.spill/runtime-instruction.md` and adds only a small managed discovery bridge to each runtime's user instruction file. Preserve unrelated user instructions and existing workflow label hooks. Do not copy the full Spill prompt separately into Codex, Claude, or AGY files, and do not install AGY lifecycle hooks.
+    1. Inspect only this workflow root for existing instruction files, hooks, runners, or reusable step definitions. Do not scan unrelated directories.
+    2. If Spill metering is missing, install or repair it with:
 
-    After the installer finishes, report what it actually installed or repaired and note that already-running agent sessions may need to restart before the new shared instruction is loaded. Setup success is not proof that the current AI turn was recorded.
+       /bin/bash -c "$(curl -fsSL https://spill.thdev.app/token-metering/install.sh)"
 
-    Full setup contract: https://spill.thdev.app/token-metering/setup-prompt.md
+    3. At trusted workflow step boundaries, call the installed helper with the current runtime and safe reusable labels:
+
+       node "$HOME/Library/Application Support/Spill/adapters/setup/spill-token-metering-setup.mjs" --label <codex|claude|antigravity> --task-type <safe_slug> --stage <safe_slug>
+
+    Workflow labels must come from trusted workflow metadata, never prompts, commands, file paths, logs, diffs, source content, or transcripts. Preserve existing workflow hooks and instructions, and do not install AGY lifecycle hooks. Report the files changed and the checks performed.
     """
 }

@@ -13,6 +13,7 @@ extension TokenUsageDashboardTrendBucketBuilder {
         calendar: Calendar,
         locale: Locale,
         timeZone: TimeZone,
+        inputScope: TokenUsageInputScope = .includeCache,
         visibleTools: Set<TokenUsageAITool>? = nil
     ) -> [TokenUsageDashboardTrendBucket] {
         switch selectedPeriod {
@@ -28,6 +29,7 @@ extension TokenUsageDashboardTrendBucketBuilder {
                 calendar: calendar,
                 locale: locale,
                 timeZone: timeZone,
+                inputScope: inputScope,
                 visibleTools: visibleTools
             )
         case .thirtyDays:
@@ -40,6 +42,7 @@ extension TokenUsageDashboardTrendBucketBuilder {
                 calendar: calendar,
                 locale: locale,
                 timeZone: timeZone,
+                inputScope: inputScope,
                 visibleTools: visibleTools
             )
         case .all:
@@ -49,6 +52,7 @@ extension TokenUsageDashboardTrendBucketBuilder {
                 calendar: calendar,
                 locale: locale,
                 timeZone: timeZone,
+                inputScope: inputScope,
                 visibleTools: visibleTools
             )
         }
@@ -66,6 +70,7 @@ private extension TokenUsageDashboardTrendBucketBuilder {
         calendar: Calendar,
         locale: Locale,
         timeZone: TimeZone,
+        inputScope: TokenUsageInputScope,
         visibleTools: Set<TokenUsageAITool>?
     ) -> [TokenUsageDashboardTrendBucket] {
         let baseStart = TokenUsageDashboardSnapshot.periodStartDate(
@@ -77,6 +82,7 @@ private extension TokenUsageDashboardTrendBucketBuilder {
         let summariesByDay = Self.summariesByBucket(
             events: events,
             language: language,
+            inputScope: inputScope,
             visibleTools: visibleTools,
             bucketID: \.dayBucket
         )
@@ -124,6 +130,7 @@ private extension TokenUsageDashboardTrendBucketBuilder {
         calendar: Calendar,
         locale: Locale,
         timeZone: TimeZone,
+        inputScope: TokenUsageInputScope,
         visibleTools: Set<TokenUsageAITool>?
     ) -> [TokenUsageDashboardTrendBucket] {
         var datedEvents: [TokenUsageDashboardParsedEvent] = []
@@ -149,6 +156,7 @@ private extension TokenUsageDashboardTrendBucketBuilder {
         let summariesByMonth = Self.summariesByBucket(
             events: datedEvents,
             language: language,
+            inputScope: inputScope,
             visibleTools: visibleTools,
             bucketID: \.monthBucket
         )
@@ -199,12 +207,16 @@ private extension TokenUsageDashboardTrendBucketBuilder {
     private static func summariesByBucket<BucketID: Hashable>(
         events: [TokenUsageDashboardParsedEvent],
         language: TokenMeteringLanguage,
+        inputScope: TokenUsageInputScope,
         visibleTools: Set<TokenUsageAITool>?,
         bucketID: (TokenUsageDashboardParsedEvent) -> BucketID
     ) -> [BucketID: BucketSummary] {
         var summaries = [BucketID: BucketSummary]()
         for event in events {
-            summaries[bucketID(event), default: BucketSummary.empty].add(event)
+            summaries[bucketID(event), default: BucketSummary.empty].add(
+                event,
+                inputScope: inputScope
+            )
         }
         return summaries.mapValues { summary in
             var summary = summary
@@ -224,11 +236,18 @@ private extension TokenUsageDashboardTrendBucketBuilder {
 
         static let empty = BucketSummary()
 
-        mutating func add(_ parsedEvent: TokenUsageDashboardParsedEvent) {
+        mutating func add(
+            _ parsedEvent: TokenUsageDashboardParsedEvent,
+            inputScope: TokenUsageInputScope
+        ) {
             let event = parsedEvent.event
+            let tokens = TokenUsageDashboardSnapshot.usageTokens(
+                for: event,
+                inputScope: inputScope
+            )
             eventCount += 1
-            totalTokens += event.totalTokens
-            toolTotals[event.aiTool, default: 0] += event.totalTokens
+            totalTokens += tokens
+            toolTotals[event.aiTool, default: 0] += tokens
         }
 
         mutating func finalizeToolRows(language: TokenMeteringLanguage, visibleTools: Set<TokenUsageAITool>?) {

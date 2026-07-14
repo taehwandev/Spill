@@ -200,6 +200,13 @@ final class SpillSettings: ObservableObject {
         didSet { defaults.set(tokenUsageShowAdvancedTools, forKey: Keys.tokenUsageShowAdvancedTools) }
     }
 
+    @Published var tokenUsageInputScope: TokenUsageInputScope {
+        didSet {
+            defaults.set(tokenUsageInputScope.rawValue, forKey: Keys.tokenUsageInputScope)
+            defaults.synchronize()
+        }
+    }
+
     @Published var hiddenTokenUsageAITools: Set<TokenUsageAITool> {
         didSet {
             defaults.set(
@@ -367,6 +374,9 @@ final class SpillSettings: ObservableObject {
         tokenUsageBridgeEnabled = defaults.object(forKey: Keys.tokenUsageBridgeEnabled) as? Bool ?? false
         tokenUsageLocalAliases = defaults.dictionary(forKey: Keys.tokenUsageLocalAliases) as? [String: String] ?? [:]
         tokenUsageShowAdvancedTools = defaults.object(forKey: Keys.tokenUsageShowAdvancedTools) as? Bool ?? false
+        tokenUsageInputScope = TokenUsageInputScope.normalized(
+            rawValue: defaults.string(forKey: Keys.tokenUsageInputScope)
+        )
         let persistedHiddenTokenUsageAITools = Self.normalizedTokenUsageAITools(
             from: defaults.stringArray(forKey: Keys.hiddenTokenUsageAITools)
         )
@@ -473,6 +483,18 @@ extension SpillSettings {
         }
 
         tokenUsageDashboardOnboardingPreviewEnabled = persistedValue
+    }
+
+    func reloadTokenUsageInputScopeFromDefaults() {
+        defaults.synchronize()
+        let persistedScope = TokenUsageInputScope.normalized(
+            rawValue: defaults.string(forKey: Keys.tokenUsageInputScope)
+        )
+        guard tokenUsageInputScope != persistedScope else {
+            return
+        }
+
+        tokenUsageInputScope = persistedScope
     }
 }
 
@@ -965,6 +987,7 @@ private enum Keys {
     static let tokenUsageBridgeEnabled = "tokenUsageBridgeEnabled"
     static let tokenUsageLocalAliases = "tokenUsageLocalAliases"
     static let tokenUsageShowAdvancedTools = "tokenUsageShowAdvancedTools"
+    static let tokenUsageInputScope = "tokenUsageInputScope"
     static let hiddenTokenUsageAITools = "hiddenTokenUsageAITools"
     static let hiddenLocalAIToolKinds = "hiddenLocalAIToolKinds"
     static let menuBarTokenDisplayMode = "menuBarTokenDisplayMode"

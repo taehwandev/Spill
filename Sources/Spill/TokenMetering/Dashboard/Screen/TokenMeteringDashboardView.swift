@@ -48,6 +48,7 @@ struct TokenMeteringDashboardView: View {
             resolvedLanguage = language
             titleDidChange()
             store.setLanguage(language)
+            store.setUsageInputScope(settings.tokenUsageInputScope)
             syncOnboardingPreviewFromSettings()
             if syncsVisibleAITools {
                 installAIToolVisibilityObserver()
@@ -71,6 +72,9 @@ struct TokenMeteringDashboardView: View {
         }
         .onChange(of: settings.tokenUsageDashboardOnboardingPreviewEnabled) { _, _ in
             syncOnboardingPreviewFromSettings()
+        }
+        .onChange(of: settings.tokenUsageInputScope) { _, scope in
+            store.setUsageInputScope(scope)
         }
         .onChange(of: settings.hiddenTokenUsageAITools) { _, _ in
             scheduleVisibleAIToolsSync()
@@ -430,7 +434,7 @@ extension TokenMeteringDashboardView {
 extension TokenMeteringDashboardView {
     private var kpiStrip: some View {
         HStack(spacing: 12) {
-            ForEach(store.snapshot.kpis) { kpi in
+            ForEach(store.snapshot.usageKPIs(for: store.snapshotInputScope, language: currentLanguage)) { kpi in
                 let liveUpdateID = "kpi:\(kpi.id)"
                 let isLiveUpdated = store.isLiveUpdated(liveUpdateID)
                 let isHovered = hoveredKPI == kpi.id
@@ -519,6 +523,9 @@ extension TokenMeteringDashboardView {
         store.hasDashboardEvents
     }
 
+    // Scope toggles keep showing the applied snapshot (whose scope drives every
+    // rendered number, including the KPI strip) until the rebuilt snapshot lands,
+    // so no placeholder pass is needed for the transition.
     private var isDashboardLoading: Bool {
         store.loadState == .idle || store.loadState == .loading
     }
@@ -586,6 +593,7 @@ extension TokenMeteringDashboardView {
                 agentStatusPanel
                 modelPanel
                 workflowUsagePanel
+                setupPanel
             }
             .padding(.vertical, 18)
         }
@@ -597,6 +605,13 @@ extension TokenMeteringDashboardView {
             settings: settings,
             language: currentLanguage,
             appLanguage: settings.appLanguage
+        )
+    }
+
+    private var setupPanel: some View {
+        TokenMeteringDashboardSetupPanel(
+            aiStatusStore: aiStatusStore,
+            language: currentLanguage
         )
     }
 

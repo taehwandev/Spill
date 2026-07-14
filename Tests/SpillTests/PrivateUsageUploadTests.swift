@@ -184,6 +184,33 @@ final class PrivateUsageUploadTests: XCTestCase {
         XCTAssertFalse(plaintextString.contains("span_today"))
     }
 
+    func testTokenAccountingTotalsPreserveMeasuredInputRemainderAsUnclassified() {
+        let event = makeEvent(
+            spanID: "span_partial_accounting",
+            runID: "run_partial_accounting",
+            aiTool: .codex,
+            taskType: "analysis",
+            stage: "implement",
+            model: "gpt-5",
+            input: 120,
+            output: 10,
+            tokenAccounting: TokenUsageAccounting(
+                uncachedInputTokens: 20,
+                cacheReadInputTokens: 80
+            ),
+            createdAt: Date(timeIntervalSince1970: 0)
+        )
+        var totals = PrivateUsageTokenAccountingTotals.zero
+
+        totals.add(event)
+
+        XCTAssertEqual(totals.accountedEventCount, 1)
+        XCTAssertEqual(totals.unclassifiedEventCount, 0)
+        XCTAssertEqual(totals.uncachedInputTokens, 20)
+        XCTAssertEqual(totals.cacheReadInputTokens, 80)
+        XCTAssertEqual(totals.unclassifiedInputTokens, 20)
+    }
+
     func testSharedSummaryBuilderPublishesOnlyAllowlistedAggregateFields() throws {
         let timeZone = try XCTUnwrap(TimeZone(identifier: "UTC"))
         let calendar = fixedCalendar(timeZone: timeZone)

@@ -182,11 +182,13 @@ extension TokenMeteringCoordinator {
             statuses: aiStatusStore.statuses,
             hiddenTools: settings.hiddenTokenUsageAITools
         )
+        let inputScope = settings.tokenUsageInputScope
         let usageStore = usageStore
         let totals = await Task.detached(priority: .utility) {
             usageStore.menuBarTokenTotals(
                 startingAt: dayStart,
                 endingBefore: dayEnd,
+                inputScope: inputScope,
                 visibleTools: visibleTools
             )
         }.value
@@ -310,6 +312,14 @@ extension TokenMeteringCoordinator {
             self?.refreshMenuBarTokenTotal(force: true)
         }
         .store(in: &cancellables)
+
+        settings.$tokenUsageInputScope
+            .dropFirst()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.refreshMenuBarTokenTotal(force: true)
+            }
+            .store(in: &cancellables)
 
         DistributedNotificationCenter.default().addObserver(
             self,
