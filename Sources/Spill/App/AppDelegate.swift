@@ -98,7 +98,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         super.init()
     }
+}
 
+extension AppDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         configureMainMenu()
         SpillTelemetry.shared.track("app_started", props: ["source": "mac_app"])
@@ -138,6 +140,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 NSApp.terminate(nil)
             }
         )
+        spillPanelController.dismissExcludedWindowsProvider = { [weak self] in
+            self?.statusItemController?.statusItemWindows ?? []
+        }
 
         observeStateChanges()
         observeDashboardPreferenceRequests()
@@ -178,7 +183,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var shouldStartSleepGuardInSmokeTest: Bool {
         ProcessInfo.processInfo.environment["SPILL_SMOKE_START_SLEEP_GUARD"] == "1"
     }
+}
 
+extension AppDelegate {
     private func startSmokeTestExitTimer() {
         print("SPILL_SMOKE_READY")
 
@@ -253,7 +260,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             print("SPILL_STATUS_CLICK_SMOKE_NOT_VISIBLE")
         }
     }
+}
 
+extension AppDelegate {
     private func reportPanelLayoutForSmokeTest() {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
             self?.reportPanelLayoutForSmokeTest(attempt: 1)
@@ -305,7 +314,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             print("SPILL_PANEL_ACCESSIBILITY_FAIL")
         }
     }
+}
 
+extension AppDelegate {
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         if !flag {
             showSpillBar(source: "app_reopen")
@@ -370,7 +381,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         scheduleDeferredScanIfNeeded()
     }
+}
 
+extension AppDelegate {
     private func refreshMenuBarItems(source: String = "status_menu") {
         SpillTelemetry.shared.track("menu_bar_scan_requested", props: ["source": source])
         tokenMeteringCoordinator.requestCollection(reason: "manual_refresh")
@@ -431,7 +444,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         showPreferences(source: "update_check")
         updateCheckStore.checkForUpdates(source: source)
     }
+}
 
+extension AppDelegate {
     private func prewarmPanel() {
         DispatchQueue.main.async { [weak self] in
             self?.spillPanelController.prepare()
@@ -499,8 +514,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         )
     }
+}
 
+extension AppDelegate {
     private func observeStateChanges() {
+        observeControllerInputs()
+        observeHotKeySettings()
+        observeMenuBarItemSettings()
+        observeMenuBarAppearanceSettings()
+        observeAppSettings()
+    }
+
+    private func observeControllerInputs() {
         scanner.$items
             .sink { [weak self] _ in
                 Task { @MainActor in
@@ -531,7 +556,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
             .store(in: &cancellables)
+    }
 
+    private func observeHotKeySettings() {
         settings.$hotKeyEnabled
             .dropFirst()
             .sink { [weak self] _ in
@@ -547,7 +574,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.configureHotKey()
             }
             .store(in: &cancellables)
+    }
+}
 
+extension AppDelegate {
+    private func observeMenuBarItemSettings() {
         settings.$displayMode
             .dropFirst()
             .sink { [weak self] _ in
@@ -604,11 +635,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.statusItemController?.refresh()
             }
             .store(in: &cancellables)
+    }
+}
 
+extension AppDelegate {
+    private func observeMenuBarAppearanceSettings() {
         settings.$menuBarStatusLayoutStyle
             .dropFirst()
             .sink { [weak self] _ in
                 SpillTelemetry.shared.track("preference_changed", props: ["name": "menu_bar_status_layout_style"])
+                self?.statusItemController?.refresh()
+            }
+            .store(in: &cancellables)
+
+        settings.$menuBarMetricPresentationStyles
+            .dropFirst()
+            .sink { [weak self] _ in
+                SpillTelemetry.shared.track(
+                    "preference_changed",
+                    props: ["name": "menu_bar_metric_presentation_styles"]
+                )
                 self?.statusItemController?.refresh()
             }
             .store(in: &cancellables)
@@ -662,7 +708,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.statusItemController?.refresh()
             }
             .store(in: &cancellables)
+    }
+}
 
+extension AppDelegate {
+    private func observeAppSettings() {
         settings.$refreshInterval
             .dropFirst()
             .sink { [weak self] _ in
@@ -707,7 +757,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .store(in: &cancellables)
         }
     }
+}
 
+extension AppDelegate {
     private func observeDashboardPreferenceRequests() {
         DistributedNotificationCenter.default().addObserver(
             self,
@@ -732,7 +784,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let reason = notification.userInfo?[TokenMeteringDashboardProcess.collectionReasonUserInfoKey] as? String
         tokenMeteringCoordinator.requestCollection(reason: reason ?? "dashboard_refresh")
     }
+}
 
+extension AppDelegate {
     private func configureStatusRefreshLoop(startsImmediately: Bool = true) {
         statusRefreshTask?.cancel()
 
@@ -799,7 +853,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Set(settings.enabledMenuBarStatusItems.compactMap(\.systemModule))
             .union(settings.menuBarTriggerIconStyle.requiredStatusModules)
     }
+}
 
+extension AppDelegate {
     private func configureMainMenu() {
         let mainMenu = NSMenu()
         let appMenuItem = NSMenuItem()

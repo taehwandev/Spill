@@ -21,6 +21,7 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
     private let settingsAction: () -> Void
     private let tokenMeteringSettingsAction: () -> Void
     private let tokenMeteringDetailAction: () -> Void
+    var dismissExcludedWindowsProvider: @MainActor () -> [NSWindow] = { [] }
     private var panel: NSPanel?
     private weak var panelVisualEffectView: NSVisualEffectView?
     private var anchorFrame: NSRect?
@@ -71,7 +72,9 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
     func prepare() {
         _ = ensurePanel()
     }
+}
 
+extension SpillPanelController {
     var layoutReport: SpillPanelLayoutReport {
         guard let panel else {
             return SpillPanelLayoutReport(
@@ -125,7 +128,9 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
 
         return SpillPanelAccessibilityReport(rootElement: panel?.contentView)
     }
+}
 
+extension SpillPanelController {
     func toggle() {
         if isVisible {
             hide(animated: true)
@@ -155,7 +160,12 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
         panel.orderFrontRegardless()
         schedulePanelDataRefresh(refreshTokenUsage: !tokenUsageAlreadyRefreshed)
         if dismissOnOutsideInteraction {
-            dismissController.start(panel: panel) { [weak self] in
+            dismissController.start(
+                panel: panel,
+                isExcludedWindow: { [weak self] window in
+                    self?.dismissExcludedWindowsProvider().contains { $0 === window } == true
+                }
+            ) { [weak self] in
                 self?.hide(animated: true)
             }
         } else {
@@ -193,7 +203,9 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
             self?.resizePanelIfVisible()
         })
     }
+}
 
+extension SpillPanelController {
     private func ensurePanel() -> NSPanel {
         if let panel {
             return panel
@@ -270,7 +282,9 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
         self.panel = panel
         return panel
     }
+}
 
+extension SpillPanelController {
     private func panelFrame() -> NSRect {
         let screen = screenForAnchor() ?? panel?.screen ?? NSScreen.main ?? NSScreen.screens.first
         let visibleFrame = layout.visibleFrame(forScreen: screen)
@@ -331,7 +345,9 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
             layer.borderColor = NSColor.separatorColor.withAlphaComponent(0.45).cgColor
         }
     }
+}
 
+extension SpillPanelController {
     private func observeLayoutChanges() {
         scanner.$items
             .dropFirst()
@@ -416,7 +432,9 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
             }
             .store(in: &cancellables)
     }
+}
 
+extension SpillPanelController {
     private func refreshStatusStore(refreshTokenUsage: Bool = true) {
         let enabledModules = settings.statusModulesRequiredForRefresh
         let readsPower = true
@@ -441,7 +459,9 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
             refreshStatusStore(refreshTokenUsage: refreshTokenUsage)
         }
     }
+}
 
+extension SpillPanelController {
     func windowWillClose(_ notification: Notification) {
         dismissController.stop()
         isPresented = false
