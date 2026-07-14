@@ -3,7 +3,7 @@
 ## Purpose
 
 Token Metering settings must provide an explicit local history import action for
-all first-class local AI runtimes:
+first-class local AI runtimes installed on this Mac:
 
 - Codex
 - Claude Code
@@ -14,15 +14,20 @@ automatic install behavior, not account sync, and not cloud sync.
 
 ## Product Requirements
 
-- The settings UI provides one full sync action that attempts all three
-  importers and one per-tool sync action for each importer: Codex, Claude Code,
-  and Antigravity/AGY.
+- The settings UI provides one full sync action for the currently installed
+  supported runtimes and one per-tool sync action for each installed runtime.
+  Absent runtimes do not appear as rows and are not attempted by the normal All
+  action.
+- Runtime eligibility uses the same safe executable or app-bundle installation
+  detection as the token dashboard and AI Visible controls. A running process
+  is not required, and an empty or incomplete refresh must not fall back to all
+  three tools.
 - A per-tool sync reconciles only that tool's app-owned usage rows and that
   tool's history import cursor state. It must not clear, rescan, or mutate the
   other supported tools.
 - The import is not scoped to whichever agent is currently running.
-- Missing tools, missing local sources, or sources with no exact usage are
-  per-tool results, not reasons to skip the other tools.
+- A runtime that is installed but has missing local sources or no exact usage
+  reports that as a per-tool result and does not block the other selected tools.
 - Every explicit import scans supported local history for its selected scope
   from the local runtime sources and reconciles it into the app-owned store.
   Spill resets only the matching tool-specific history import cursors before
@@ -81,10 +86,10 @@ diagnostics, or cloud-synced data.
 ## Import Mode
 
 Settings-triggered import is a full local reconciliation for the selected
-scope. The All action scans all supported local history and resets only the
-history import cursor state used by Codex, Claude Code, and Antigravity/AGY so
-the sources are reread. A per-tool action does the same only for that selected
-tool.
+scope. The All action scans local history for the current installed supported
+tool set and resets only those tools' history-import cursor state so their
+sources are reread. A per-tool action does the same only for that selected
+installed tool.
 
 The intended user flow is:
 
@@ -153,9 +158,9 @@ Tool-specific timestamp rules:
 
 ## Cursor And Checkpoint Rules
 
-The history import job is owned by an app-wide coordinator. The coordinator
-starts one per-tool import task for Codex, Claude Code, and Antigravity/AGY on
-every explicit run.
+The history import job is owned by an app-wide coordinator. The caller passes
+the installed selected tool scope, and the coordinator starts one per-tool task
+for that scope on every explicit run.
 
 Source cursors are local-only support state. They may contain:
 

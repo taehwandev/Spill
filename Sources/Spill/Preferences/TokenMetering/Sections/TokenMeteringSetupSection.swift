@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct TokenMeteringSetupSection: View {
+    @ObservedObject var setupActionStore: TokenMeteringSetupActionStore
+    let installedTools: Set<TokenUsageAITool>
     let language: TokenMeteringLanguage
     let copiedTarget: String?
     let adapterStatuses: [String: TokenMeteringAdapterConnectionStatus]
@@ -24,6 +26,8 @@ struct TokenMeteringSetupSection: View {
             }
 
             TokenMeteringPromptInstructionCard(
+                setupActionStore: setupActionStore,
+                installedTools: installedTools,
                 language: language,
                 copiedTarget: copiedTarget,
                 copyInstallPromptAction: { prompt in
@@ -36,6 +40,7 @@ struct TokenMeteringSetupSection: View {
             TokenMeteringAdapterStatusSection(
                 language: language,
                 copiedTarget: copiedTarget,
+                installedTools: installedTools,
                 adapterStatuses: adapterStatuses,
                 copyToClipboardAction: copyToClipboardAction
             )

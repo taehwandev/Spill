@@ -9,6 +9,7 @@ struct TokenMeteringPreferencesSection: View {
     let openDashboardAction: () -> Void
     let preparePrivateUsageUploadAction: @MainActor () async -> Void
     @StateObject private var privateUsageUploadStore: PrivateUsageUploadStore
+    @ObservedObject private var setupActionStore = TokenMeteringSetupActionStore.shared
     @State private var copiedTarget: String?
     @State private var adapterStatuses: [String: TokenMeteringAdapterConnectionStatus] = [:]
     @State private var adapterStatusRefreshTask: Task<Void, Never>?
@@ -60,6 +61,8 @@ struct TokenMeteringPreferencesSection: View {
             }
 
             TokenMeteringSetupSection(
+                setupActionStore: setupActionStore,
+                installedTools: installedTokenTools,
                 language: currentLanguage,
                 copiedTarget: copiedTarget,
                 adapterStatuses: adapterStatuses,
@@ -81,6 +84,7 @@ struct TokenMeteringPreferencesSection: View {
             privacyBoundarySection
         }
         .onAppear {
+            aiStatusStore.refreshInBackground()
             refreshAdapterStatuses()
             refreshPrivateUsageUploadIfAvailable()
         }
@@ -94,10 +98,19 @@ struct TokenMeteringPreferencesSection: View {
         .onChange(of: settings.privateUsageUploadEnabled) { _, _ in
             refreshPrivateUsageUploadIfAvailable()
         }
+        .onChange(of: setupActionStore.operationState) { _, state in
+            if state == .succeeded {
+                refreshAdapterStatuses()
+            }
+        }
     }
 }
 
 private extension TokenMeteringPreferencesSection {
+    private var installedTokenTools: Set<TokenUsageAITool> {
+        TokenMeteringToolAvailability.installedTools(from: aiStatusStore.statuses)
+    }
+
     private var localSyncAndDisplaySettingsSection: some View {
         TokenMeteringLocalSyncSettingsSection(
             settings: settings,
@@ -182,16 +195,25 @@ private extension TokenMeteringPreferencesSection {
     private var privateUsageWebDashboardURL: URL? {
         PrivateUsageWebConnection.dashboardURL()
     }
+}
 
+private extension TokenMeteringPreferencesSection {
     private func refreshAdapterStatuses() {
         adapterStatusRefreshTask?.cancel()
         adapterStatusRefreshGeneration += 1
         let generation = adapterStatusRefreshGeneration
+        let installedTools = installedTokenTools
         adapterStatusRefreshTask = Task {
             let statuses = await Task.detached(priority: .utility) {
                 Dictionary(
-                    uniqueKeysWithValues: TokenMeteringAdapterKit.hookAdapters.map { adapter in
-                        (adapter.id, TokenMeteringAdapterConnectionDiagnostics.status(for: adapter))
+                    uniqueKeysWithValues: TokenMeteringAdapterKit.localRuntimeAdapters.map { adapter in
+                        (
+                            adapter.id,
+                            TokenMeteringSetupInstallationDiagnostics.connectionStatus(
+                                for: adapter.aiTool,
+                                runtimeInstalled: installedTools.contains(adapter.aiTool)
+                            )
+                        )
                     }
                 )
             }.value
@@ -208,11 +230,15 @@ private extension TokenMeteringPreferencesSection {
     }
 
     private var historyImportSection: some View {
-        TokenUsageHistoryImportSection(
+        let installedTools = TokenMeteringToolAvailability.installedHistoryImportTools(
+            from: aiStatusStore.statuses
+        )
+        return TokenUsageHistoryImportSection(
             snapshot: tokenHistoryImportCoordinator.snapshot,
+            availableTools: installedTools,
             language: currentLanguage,
             startAllAction: {
-                tokenHistoryImportCoordinator.startImport()
+                tokenHistoryImportCoordinator.startImport(for: installedTools)
             },
             cancelAction: {
                 tokenHistoryImportCoordinator.cancelImport()
@@ -222,5 +248,4 @@ private extension TokenMeteringPreferencesSection {
             }
         )
     }
-
 }

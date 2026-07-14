@@ -157,9 +157,13 @@ final class TokenUsageDashboardStore: ObservableObject {
 
     var hasDashboardEvents: Bool {
         let showAdvancedTools = SpillSettings.shared.tokenUsageShowAdvancedTools
+        let dashboardFilterTools = TokenUsageDashboardToolVisibility.dashboardFilterTools(
+            visibleInstalledTools: visibleAITools,
+            showAdvancedTools: showAdvancedTools
+        )
         let hasLoadedDashboardEvents = displayEvents(for: events).contains { event in
             (showAdvancedTools || event.aiTool.isDashboardTool)
-                && (visibleAITools?.contains(event.aiTool) ?? true)
+                && (dashboardFilterTools?.contains(event.aiTool) ?? true)
         }
         if isOnboardingPreviewEnabled {
             return hasLoadedDashboardEvents
@@ -186,7 +190,9 @@ final class TokenUsageDashboardStore: ObservableObject {
         clearLiveUpdateTask?.cancel()
         scheduledRefreshTask?.cancel()
     }
+}
 
+extension TokenUsageDashboardStore {
     func refresh(trackLiveUpdates: Bool = true, refreshesPanelSummary: Bool = true) {
         scheduledRefreshTask?.cancel()
         scheduledRefreshTask = nil
@@ -211,7 +217,9 @@ final class TokenUsageDashboardStore: ObservableObject {
             panelSummary: panelSummary
         )
     }
+}
 
+extension TokenUsageDashboardStore {
     func refreshAsync(
         trackLiveUpdates: Bool = true,
         refreshesPanelSummary: Bool = true,
@@ -314,7 +322,9 @@ final class TokenUsageDashboardStore: ObservableObject {
             }
         }
     }
+}
 
+extension TokenUsageDashboardStore {
     func refreshAsyncIfIdle(trackLiveUpdates: Bool = true, refreshesPanelSummary: Bool = true) {
         guard loadState == .idle, !isRefreshing else {
             return
@@ -355,7 +365,9 @@ final class TokenUsageDashboardStore: ObservableObject {
             self?.refreshAsync(trackLiveUpdates: trackLiveUpdates)
         }
     }
+}
 
+extension TokenUsageDashboardStore {
     func rebuildSnapshot(
         trackLiveUpdates: Bool = false,
         previousEvents: [TokenUsageEvent]? = nil,
@@ -369,12 +381,13 @@ final class TokenUsageDashboardStore: ObservableObject {
         let previousSnapshot = snapshot
         let previousUnfilteredSnapshot = unfilteredSnapshot
         let displayEvents = displayEvents(for: events)
+        let initialRequest = snapshotBuildRequest()
         let nextDateBounds = usageStore.dashboardDateBounds(
             selectedTool: selectedTool,
-            dashboardToolsOnly: !SpillSettings.shared.tokenUsageShowAdvancedTools,
-            visibleTools: visibleAITools
+            dashboardToolsOnly: !initialRequest.showAdvancedTools,
+            visibleTools: initialRequest.visibleAITools
         )
-        let request = snapshotBuildRequest().replacingAvailableDateBounds(nextDateBounds)
+        let request = initialRequest.replacingAvailableDateBounds(nextDateBounds)
         let calendarMonthSummary = Self.loadCalendarMonthSummary(from: usageStore, for: request)
         let snapshotOutput = Self.buildSnapshotOutput(
             events: displayEvents,
@@ -399,7 +412,9 @@ final class TokenUsageDashboardStore: ObservableObject {
             snapshotContextKey: snapshotOutput.contextKey
         )
     }
+}
 
+extension TokenUsageDashboardStore {
     private func rebuildSnapshotFromCurrentEventsAsync(
         trackLiveUpdates: Bool = false,
         previousEvents: [TokenUsageEvent]? = nil
@@ -461,7 +476,9 @@ final class TokenUsageDashboardStore: ObservableObject {
             }
         }
     }
+}
 
+extension TokenUsageDashboardStore {
     private func applySnapshotPair(
         _ snapshotPair: TokenUsageDashboardSnapshotPair,
         loadedEvents: [TokenUsageEvent],
@@ -514,7 +531,9 @@ final class TokenUsageDashboardStore: ObservableObject {
         }
         hasRebuiltSnapshot = true
     }
+}
 
+extension TokenUsageDashboardStore {
     private func displayEvents(for loadedEvents: [TokenUsageEvent]) -> [TokenUsageEvent] {
         isOnboardingPreviewEnabled ? TokenUsageDashboardPreviewDataSource.onboardingEvents : loadedEvents
     }
@@ -522,6 +541,7 @@ final class TokenUsageDashboardStore: ObservableObject {
     private func snapshotBuildRequest() -> TokenUsageDashboardBuildRequest {
         var calendar = Calendar.autoupdatingCurrent
         calendar.firstWeekday = 1
+        let showAdvancedTools = SpillSettings.shared.tokenUsageShowAdvancedTools
         return TokenUsageDashboardBuildRequest(
             selectedTool: selectedTool,
             selectedPeriod: selectedPeriod,
@@ -530,8 +550,11 @@ final class TokenUsageDashboardStore: ObservableObject {
             selectedSessionID: selectedSessionID,
             language: language,
             localAliases: SpillSettings.shared.tokenUsageLocalAliases,
-            showAdvancedTools: SpillSettings.shared.tokenUsageShowAdvancedTools,
-            visibleAITools: visibleAITools,
+            showAdvancedTools: showAdvancedTools,
+            visibleAITools: TokenUsageDashboardToolVisibility.dashboardFilterTools(
+                visibleInstalledTools: visibleAITools,
+                showAdvancedTools: showAdvancedTools
+            ),
             now: Date(),
             proposedCalendarMonthStart: calendarMonthStart,
             calendar: calendar,
@@ -602,7 +625,9 @@ final class TokenUsageDashboardStore: ObservableObject {
         )
         .snapshotPair
     }
+}
 
+extension TokenUsageDashboardStore {
     private func loadEvents(for request: TokenUsageDashboardBuildRequest) -> TokenUsageDashboardEventLoadScope {
         Self.loadEvents(from: usageStore, for: request)
     }
@@ -669,7 +694,9 @@ final class TokenUsageDashboardStore: ObservableObject {
             return $0.createdAt < $1.createdAt
         }
     }
+}
 
+extension TokenUsageDashboardStore {
     private func loadPanelSummary(for request: TokenUsageDashboardBuildRequest) -> TokenUsagePanelSummarySnapshot {
         Self.loadPanelSummary(from: usageStore, for: request)
     }
@@ -742,7 +769,9 @@ final class TokenUsageDashboardStore: ObservableObject {
             language: request.language
         )
     }
+}
 
+extension TokenUsageDashboardStore {
     nonisolated private static func eventLoadDateRange(
         for request: TokenUsageDashboardBuildRequest
     ) -> TokenUsageDashboardSnapshot.DateRange {
@@ -814,7 +843,9 @@ final class TokenUsageDashboardStore: ObservableObject {
         }
         return true
     }
+}
 
+extension TokenUsageDashboardStore {
     func setOnboardingPreviewEnabled(_ enabled: Bool) {
         guard isOnboardingPreviewEnabled != enabled else {
             return
@@ -870,7 +901,9 @@ final class TokenUsageDashboardStore: ObservableObject {
             refreshPanelSummary()
         }
     }
+}
 
+extension TokenUsageDashboardStore {
     func setSelectedProjectID(_ projectID: String?) {
         selectedProjectID = projectID
         selectedSessionID = nil
@@ -941,7 +974,9 @@ final class TokenUsageDashboardStore: ObservableObject {
             reusesPeriodFilterTotals: true
         )
     }
+}
 
+extension TokenUsageDashboardStore {
     func selectSession(_ sessionID: String) {
         selectedSessionID = sessionID
         rebuildSnapshotFromCurrentEventsAsync()
@@ -999,7 +1034,9 @@ final class TokenUsageDashboardStore: ObservableObject {
             calendar: calendar
         )
     }
+}
 
+extension TokenUsageDashboardStore {
     func showPreviousCalendarMonth() {
         moveCalendarMonth(by: -1)
     }
@@ -1040,7 +1077,9 @@ final class TokenUsageDashboardStore: ObservableObject {
             refreshPanelSummary()
         }
     }
+}
 
+extension TokenUsageDashboardStore {
     func clearLocalEvents() {
         guard SpillBuildOptions.developerOptionsEnabled else {
             return
@@ -1090,7 +1129,9 @@ final class TokenUsageDashboardStore: ObservableObject {
             lastError = TokenMeteringL10n.text(.clearFailed, language: language)
         }
     }
+}
 
+extension TokenUsageDashboardStore {
     private func events(matching scope: TokenUsageClearScope) -> [TokenUsageEvent] {
         let now = Date()
         var calendar = Calendar.autoupdatingCurrent
@@ -1159,7 +1200,9 @@ final class TokenUsageDashboardStore: ObservableObject {
                 ?? TokenMeteringL10n.text(.selectedWorkItem, language: language)
         }
     }
+}
 
+extension TokenUsageDashboardStore {
     private func moveCalendarMonth(by value: Int) {
         var calendar = Calendar.autoupdatingCurrent
         calendar.firstWeekday = 1
@@ -1224,7 +1267,9 @@ final class TokenUsageDashboardStore: ObservableObject {
             }
         }
     }
+}
 
+extension TokenUsageDashboardStore {
     func runLocalQueueSelfTest() async {
         guard !isRunningSelfTest else {
             return
@@ -1290,7 +1335,9 @@ final class TokenUsageDashboardStore: ObservableObject {
             createdAt: timestamp
         )
     }
+}
 
+extension TokenUsageDashboardStore {
     func addLocalTestEvent() {
         do {
             try usageStore.appendEvent(Self.makeLocalTestEvent(index: snapshot.eventCount))
@@ -1342,7 +1389,9 @@ final class TokenUsageDashboardStore: ObservableObject {
             }
         }
     }
+}
 
+extension TokenUsageDashboardStore {
     private static func liveUpdateIDs(
         previousEvents: [TokenUsageEvent],
         nextEvents: [TokenUsageEvent],
@@ -1430,7 +1479,9 @@ final class TokenUsageDashboardStore: ObservableObject {
 
         return ids
     }
+}
 
+extension TokenUsageDashboardStore {
     private static func appendChangedRows(
         to ids: inout Set<String>,
         previous: [TokenUsageDashboardKPI],
@@ -1484,7 +1535,9 @@ final class TokenUsageDashboardStore: ObservableObject {
             }
         }
     }
+}
 
+extension TokenUsageDashboardStore {
     private static func dashboardEvents(
         _ events: [TokenUsageEvent],
         selectedTool: TokenUsageAITool?,
@@ -1540,7 +1593,9 @@ final class TokenUsageDashboardStore: ObservableObject {
         }
         return trimmed
     }
+}
 
+extension TokenUsageDashboardStore {
     private static func makeLocalTestEvent(index: Int) -> TokenUsageEvent {
         let taskTypes: [TokenUsageTaskType] = [
             .analysis,

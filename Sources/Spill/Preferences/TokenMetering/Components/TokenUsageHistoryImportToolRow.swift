@@ -73,7 +73,9 @@ struct TokenUsageHistoryImportToolRow: View {
                 .stroke(tint.opacity(0.13), lineWidth: 0.5)
         }
     }
+}
 
+private extension TokenUsageHistoryImportToolRow {
     @ViewBuilder
     private var statusIcon: some View {
         if snapshot.state == .running {

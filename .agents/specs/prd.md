@@ -186,6 +186,10 @@ Requirements:
 - Token metering setup is offered as an optional setup card in Preferences and
   the local token dashboard. It should explain what is counted, what never
   leaves the device, and why exact runtime usage metadata is required.
+- The setup card must provide both a direct `Install` or `Reinstall` action and
+  a `Copy Setup Instructions` alternative. The direct action runs the bundled
+  one-step installer only after the user clicks it, reports success or failure,
+  and never treats copying instructions as proof that metering is installed.
 - The global setup prompt and one-step installer should be available, but the UI
   must not imply that a prompt alone can measure token usage.
 - The one-step installer owns one canonical runtime instruction at
@@ -263,6 +267,11 @@ Requirements:
   environment values, secrets, or arbitrary content-like fields.
 - Setup UI should offer a one-step installer path before exposing per-adapter
   snippets.
+- Setup UI in Preferences and the local token dashboard should inspect the
+  app-owned setup files and adapter configuration to label the direct action as
+  `Install` when setup is absent and `Reinstall` or `Repair` when setup already
+  exists. This check is setup state, not evidence that a real AI turn produced
+  token usage.
 - Setup UI should describe the install as one shared instruction plus automatic
   runtime bridges, not as three separate prompt-install procedures.
 - Setup UI and the copied agent install prompt must explicitly explain that
@@ -271,10 +280,10 @@ Requirements:
   logs, diffs, source content, environment values, and secrets are not stored or
   uploaded.
 - Token metering settings must offer an explicit local history import action
-  for Codex, Claude Code, and Antigravity/AGY together. The action is
-  user-initiated, not automatic on install, not scoped to the current agent, and
-  separate from cloud or account sync. Detailed requirements live in
-  `specs/token-history-import.md`.
+  for the supported runtimes installed on this Mac. The action is
+  user-initiated, not automatic on install, not scoped to whichever agent is
+  currently running, and separate from cloud or account sync. Detailed
+  requirements live in `specs/token-history-import.md`.
 - The local dashboard should group usage into human-readable Work Items derived
   from safe labels, not raw run ids.
 - Work Items may be scoped by opaque local folder/project ids. UI labels should
@@ -407,9 +416,14 @@ Dashboard UX requirements:
 
 - Default time range is `Today`, with explicit `7 days`, `30 days`, and `All`
   controls.
-- Default agent filter includes first-class local agent tools such as Codex,
-  Claude Code, and Antigravity/AGY. Legacy `unknown` and optional direct OpenAI
-  SDK events belong behind diagnostics or an advanced filter.
+- Default agent content includes only first-class local agent tools that are
+  installed on this Mac and enabled by the user's AI visibility setting.
+  Installation eligibility is shared separately across history-import targets,
+  AI visibility controls, and agent connection status so an installed but hidden
+  tool remains available to re-enable. Legacy `unknown`, optional direct OpenAI
+  SDK events, and stored rows for a runtime that is no longer installed belong
+  behind diagnostics or an advanced filter; they remain stored unless the user
+  explicitly deletes them.
 - The first dashboard read should answer whether usage was large, whether the
   cost came mostly from input or output, which model/tool/work type/stage
   dominated, and whether workflow labels covered the selected records.

@@ -25,8 +25,17 @@ struct TokenMeteringAIToolVisibilitySection: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             VStack(spacing: 8) {
-                ForEach(visibleToolKinds, id: \.self) { kind in
-                    visibilityRow(for: kind)
+                if installedToolKinds.isEmpty {
+                    Text(TokenMeteringSetupL10n.text(.aiToolVisibilityNoInstalledTools, language: language))
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 8)
+                } else {
+                    ForEach(installedToolKinds, id: \.self) { kind in
+                        visibilityRow(for: kind)
+                    }
                 }
             }
         }
@@ -34,12 +43,8 @@ struct TokenMeteringAIToolVisibilitySection: View {
         .background(tokenMeteringOptionBackground)
     }
 
-    private var visibleToolKinds: [LocalAIToolKind] {
-        let detectedKinds = aiStatusStore.statuses.map(\.kind)
-        if detectedKinds.isEmpty {
-            return TokenUsageAITool.dashboardTools.compactMap(\.localAIToolKind)
-        }
-        return LocalAIToolKind.allCases.filter { detectedKinds.contains($0) }
+    private var installedToolKinds: [LocalAIToolKind] {
+        TokenMeteringToolAvailability.installedLocalToolKinds(from: aiStatusStore.statuses)
     }
 
     private func visibilityRow(for kind: LocalAIToolKind) -> some View {

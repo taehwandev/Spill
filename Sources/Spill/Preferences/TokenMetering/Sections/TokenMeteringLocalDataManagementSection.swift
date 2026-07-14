@@ -114,7 +114,9 @@ struct TokenMeteringLocalDataManagementSection: View {
             ))
         }
     }
+}
 
+private extension TokenMeteringLocalDataManagementSection {
     private var tokenMeteringOptionBackground: some View {
         RoundedRectangle(cornerRadius: 8, style: .continuous)
             .fill(Color(NSColor.controlBackgroundColor).opacity(0.35))

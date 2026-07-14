@@ -6,6 +6,312 @@ import XCTest
 
 private let TEST_SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
+extension TokenUsageStoreTests {
+    func testSetupActionsAndInstalledToolSectionsUseSharedAvailability() throws {
+        let preferencesSection = try Self.source(named: "TokenMeteringPreferencesSection.swift")
+        let promptCard = try Self.source(named: "TokenMeteringPromptInstructionCard.swift")
+        let setupControls = try Self.source(named: "TokenMeteringSetupActionControls.swift")
+        let setupActionStore = try Self.source(named: "TokenMeteringSetupActionStore.swift")
+        let dashboardAgentStatus = try Self.source(named: "TokenMeteringDashboardAgentStatusPanel.swift")
+        let historyImportSection = try Self.source(named: "TokenUsageHistoryImportSection.swift")
+        let adapterStatusSection = try Self.source(named: "TokenMeteringAdapterStatusSection.swift")
+
+        XCTAssertTrue(promptCard.contains("TokenMeteringSetupActionControls("))
+        XCTAssertTrue(setupControls.contains("store.installOrRepair(installedTools: installedTools)"))
+        XCTAssertTrue(setupControls.contains("installedTools.isEmpty"))
+        XCTAssertTrue(setupControls.contains("store.isInstalled ? .setupReinstall : .setupInstall"))
+        XCTAssertTrue(setupControls.contains("t(.copyInstallPrompt)"))
+        XCTAssertTrue(setupActionStore.contains("static let shared = TokenMeteringSetupActionStore()"))
+        XCTAssertTrue(setupActionStore.contains("\"--include\""))
+        XCTAssertTrue(setupActionStore.contains("includedTools.joined(separator: \",\")"))
+        XCTAssertTrue(dashboardAgentStatus.contains("TokenMeteringSetupActionControls("))
+        XCTAssertTrue(preferencesSection.contains("installedHistoryImportTools"))
+        XCTAssertTrue(preferencesSection.contains("startImport(for: installedTools)"))
+        XCTAssertTrue(historyImportSection.contains("availableSnapshots"))
+        XCTAssertTrue(historyImportSection.contains("historyImportNoInstalledTools"))
+        XCTAssertTrue(adapterStatusSection.contains("installedAdapters"))
+        XCTAssertTrue(adapterStatusSection.contains("TokenMeteringAdapterKit.localRuntimeAdapters"))
+        XCTAssertTrue(adapterStatusSection.contains("installedTools.contains($0.aiTool)"))
+        XCTAssertTrue(adapterStatusSection.contains("adapter.aiTool == .antigravity"))
+        XCTAssertTrue(preferencesSection.contains("TokenMeteringSetupActionStore.shared"))
+        XCTAssertTrue(dashboardAgentStatus.contains("TokenMeteringSetupActionStore.shared"))
+    }
+}
+
+extension TokenUsageStoreTests {
+    func testDashboardToolVisibilityRequiresInstalledToolsButNotRunningProcesses() {
+        let statuses = [
+            LocalAIToolStatus(
+                kind: .codex,
+                value: "Ready",
+                subtitle: nil,
+                state: .normal
+            ),
+            LocalAIToolStatus(
+                kind: .antigravity,
+                value: "Running",
+                subtitle: nil,
+                state: .normal
+            ),
+            LocalAIToolStatus(
+                kind: .ollama,
+                value: "Ready",
+                subtitle: nil,
+                state: .normal
+            )
+        ]
+
+        XCTAssertEqual(
+            TokenUsageDashboardToolVisibility.visibleTools(statuses: statuses, hiddenTools: []),
+            Set([.codex, .antigravity])
+        )
+        XCTAssertEqual(
+            TokenUsageDashboardToolVisibility.visibleTools(
+                statuses: statuses,
+                hiddenTools: [.codex]
+            ),
+            Set([.antigravity])
+        )
+        XCTAssertEqual(
+            TokenUsageDashboardToolVisibility.visibleTools(
+                statuses: statuses,
+                hiddenTools: [.openAI, .unknown]
+            ),
+            Set([.codex, .antigravity])
+        )
+        XCTAssertEqual(
+            TokenUsageDashboardToolVisibility.visibleTools(statuses: [], hiddenTools: []),
+            []
+        )
+        XCTAssertEqual(
+            TokenUsageDashboardToolVisibility.dashboardFilterTools(
+                visibleInstalledTools: [.codex],
+                showAdvancedTools: false
+            ),
+            [.codex]
+        )
+        XCTAssertNil(
+            TokenUsageDashboardToolVisibility.dashboardFilterTools(
+                visibleInstalledTools: [.codex],
+                showAdvancedTools: true
+            )
+        )
+        XCTAssertEqual(
+            TokenMeteringToolAvailability.installedHistoryImportTools(from: statuses),
+            [.codex, .antigravity]
+        )
+    }
+}
+
+extension TokenUsageStoreTests {
+    @MainActor
+    func testMenuBarServerHealthUsesOnlyVisibleInstalledTools() throws {
+        let defaultsName = "spill.tests.menu-bar-health.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: defaultsName))
+        defer {
+            defaults.removePersistentDomain(forName: defaultsName)
+        }
+        let settings = SpillSettings(defaults: defaults)
+        settings.setTokenUsageAITool(.claude, isVisible: false)
+
+        let cacheDirectoryURL = temporaryDirectoryURL()
+        try FileManager.default.createDirectory(
+            at: cacheDirectoryURL,
+            withIntermediateDirectories: true
+        )
+        let cacheURL = cacheDirectoryURL.appendingPathComponent("cloud-status.json")
+        let snapshot = CloudServiceStatusSnapshot(
+            fetchedAt: Date(),
+            items: [
+                CloudServiceStatusItem(
+                    kind: .codex,
+                    health: .operational,
+                    detail: "test",
+                    source: "test"
+                ),
+                CloudServiceStatusItem(
+                    kind: .claudeCode,
+                    health: .outage,
+                    detail: "test",
+                    source: "test"
+                ),
+                CloudServiceStatusItem(
+                    kind: .antigravity,
+                    health: .outage,
+                    detail: "test",
+                    source: "test"
+                )
+            ]
+        )
+        try JSONEncoder().encode(snapshot).write(to: cacheURL)
+
+        let coordinator = TokenMeteringCoordinator(
+            settings: settings,
+            cloudServiceStatusStore: CloudServiceStatusStore(cacheURL: cacheURL),
+            aiStatusStore: AIStatusStore(statuses: [
+                LocalAIToolStatus(
+                    kind: .codex,
+                    value: "Ready",
+                    subtitle: nil,
+                    state: .normal
+                ),
+                LocalAIToolStatus(
+                    kind: .claude,
+                    value: "Ready",
+                    subtitle: nil,
+                    state: .normal
+                )
+            ]),
+            usageStore: TokenUsageStore(fileURL: temporaryEventsURL())
+        )
+
+        XCTAssertEqual(coordinator.menuBarServerHealth, .operational)
+    }
+}
+
+extension TokenUsageStoreTests {
+    func testMenuBarTokenTotalsRespectVisibleInstalledTools() throws {
+        let store = TokenUsageStore(fileURL: temporaryEventsURL())
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        let end = start.addingTimeInterval(60)
+        try store.replaceEvents([
+            Self.safeEvent(
+                aiTool: .codex,
+                spanID: "span_menu_visibility_codex",
+                inputTokens: 80,
+                outputTokens: 20,
+                createdAt: ISO8601DateFormatter.tokenUsage.string(from: start.addingTimeInterval(10))
+            ),
+            Self.safeEvent(
+                aiTool: .antigravity,
+                spanID: "span_menu_visibility_agy",
+                inputTokens: 160,
+                outputTokens: 40,
+                createdAt: ISO8601DateFormatter.tokenUsage.string(from: start.addingTimeInterval(20))
+            )
+        ])
+
+        let totals = try XCTUnwrap(
+            store.menuBarTokenTotals(
+                startingAt: start,
+                endingBefore: end,
+                visibleTools: [.codex]
+            )
+        )
+
+        XCTAssertEqual(totals.dailyTokens, 100)
+        XCTAssertEqual(totals.allTimeTokens, 100)
+    }
+}
+
+extension TokenUsageStoreTests {
+    @MainActor
+    func testSetupActionStoreRefreshesStateAfterDirectInstall() async throws {
+        let store = TokenMeteringSetupActionStore(
+            installationReader: { tools in
+                tools == [.codex]
+            },
+            setupRunner: { tools in
+                tools == [.codex] ? .succeeded : .failed
+            }
+        )
+
+        store.refresh(installedTools: [.codex])
+        XCTAssertTrue(store.isInstalled)
+
+        store.installOrRepair(installedTools: [.codex])
+        for _ in 0..<100 where store.operationState == .running {
+            try await Task.sleep(nanoseconds: 5_000_000)
+        }
+
+        XCTAssertEqual(store.operationState, .succeeded)
+        XCTAssertTrue(store.isInstalled)
+
+        store.refresh(installedTools: [.claude])
+        XCTAssertEqual(store.operationState, .idle)
+        XCTAssertFalse(store.isInstalled)
+
+        store.refresh(installedTools: [])
+        XCTAssertEqual(store.operationState, .idle)
+        XCTAssertFalse(store.isInstalled)
+        XCTAssertFalse(TokenMeteringSetupInstallationDiagnostics.isInstalled(for: []))
+    }
+}
+
+extension TokenUsageStoreTests {
+    func testAntigravityConnectionStatusUsesBuiltInImporterAvailability() {
+        XCTAssertTrue(
+            TokenMeteringSetupInstallationDiagnostics.connectionStatus(
+                for: .antigravity,
+                runtimeInstalled: true
+            ).isActive
+        )
+        XCTAssertFalse(
+            TokenMeteringSetupInstallationDiagnostics.connectionStatus(
+                for: .antigravity,
+                runtimeInstalled: false
+            ).isActive
+        )
+    }
+}
+
+extension TokenUsageStoreTests {
+    @MainActor
+    func testMenuBarAITokenStatusKeepsLastValueWhenStoreReadTemporarilyFails() async throws {
+        let eventsURL = temporaryEventsURL()
+        let storeDirectoryURL = eventsURL.deletingLastPathComponent()
+        let store = TokenUsageStore(fileURL: eventsURL)
+        let now = try Self.date("2026-07-05T10:15:00.000Z")
+        try store.appendEvent(Self.safeEvent(
+            spanID: "span_menu_bar_cache_survives_read_failure",
+            createdAt: ISO8601DateFormatter.tokenUsage.string(from: now)
+        ))
+
+        let defaultsName = "spill.tests.menu-bar-cache.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: defaultsName))
+        defer {
+            defaults.removePersistentDomain(forName: defaultsName)
+        }
+        let coordinator = TokenMeteringCoordinator(
+            settings: SpillSettings(defaults: defaults),
+            cloudServiceStatusStore: CloudServiceStatusStore(),
+            aiStatusStore: AIStatusStore(statuses: [
+                LocalAIToolStatus(
+                    kind: .codex,
+                    value: "Ready",
+                    subtitle: nil,
+                    state: .normal
+                )
+            ]),
+            usageStore: store
+        )
+
+        await coordinator.refreshMenuBarTokenTotalAsync(now: now, force: true)
+        XCTAssertEqual(coordinator.menuBarTokenTotal, 150)
+        XCTAssertEqual(coordinator.menuBarAllTimeTokenTotal, 150)
+
+        try FileManager.default.removeItem(at: storeDirectoryURL)
+        try Data().write(to: storeDirectoryURL)
+        defer {
+            try? FileManager.default.removeItem(at: storeDirectoryURL)
+        }
+
+        await coordinator.refreshMenuBarTokenTotalAsync(now: now.addingTimeInterval(60), force: true)
+
+        XCTAssertEqual(coordinator.menuBarTokenTotal, 150)
+        XCTAssertEqual(coordinator.menuBarAllTimeTokenTotal, 150)
+    }
+}
+
+extension TokenUsageStoreTests {
+    func testLocalRuntimeAdaptersIncludeActiveImporterTools() {
+        XCTAssertEqual(
+            TokenMeteringAdapterKit.localRuntimeAdapters.map(\.aiTool),
+            [.claude, .codex, .antigravity]
+        )
+    }
+}
+
 final class TokenUsageStoreTests: XCTestCase {
     func testPreferencesModelKeepsForbiddenContentLabels() {
         XCTAssertEqual(
@@ -828,7 +1134,6 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(preferencesSection.contains("TokenMeteringSetupSection("))
         XCTAssertTrue(setupSection.contains("t(.step1Title)"))
         XCTAssertTrue(setupSection.contains("TokenMeteringPromptInstructionCard("))
-        XCTAssertTrue(promptCard.contains("t(.copyInstallPrompt)"))
         XCTAssertTrue(promptCard.contains("TokenMeteringGlobalSetup.globalPrompt"))
         XCTAssertFalse(preferencesSection.contains("TokenMeteringGlobalSetup.prompt("))
         XCTAssertFalse(preferencesSection.contains("Text(TokenMeteringSetupInstaller.setupCommand())"))
@@ -838,7 +1143,7 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(preferencesSection.contains("TokenMeteringLocalSyncSettingsSection("))
         XCTAssertTrue(preferencesSection.contains("aiToolVisibilitySection"))
         XCTAssertTrue(preferencesSection.contains("TokenMeteringAIToolVisibilitySection("))
-        XCTAssertTrue(aiToolVisibilitySection.contains("aiStatusStore.statuses.map(\\.kind)"))
+        XCTAssertTrue(aiToolVisibilitySection.contains("TokenMeteringToolAvailability.installedLocalToolKinds"))
         XCTAssertTrue(aiToolVisibilitySection.contains("settings.setLocalAITool(kind, isVisible: $0)"))
         XCTAssertTrue(preferencesSection.contains("privacyBoundarySection"))
         XCTAssertTrue(privacyBoundarySection.contains("t(.privacyBoundaryDetail)"))
@@ -1675,44 +1980,6 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(dashboardStore.contains("TokenUsageStore.distributedEventsDidChangeNotification"))
         XCTAssertTrue(dashboardStore.contains("private var scheduledRefreshTask"))
         XCTAssertTrue(dashboardStore.contains("private func scheduleRefresh"))
-    }
-
-    @MainActor
-    func testMenuBarAITokenStatusKeepsLastValueWhenStoreReadTemporarilyFails() async throws {
-        let eventsURL = temporaryEventsURL()
-        let storeDirectoryURL = eventsURL.deletingLastPathComponent()
-        let store = TokenUsageStore(fileURL: eventsURL)
-        let now = try Self.date("2026-07-05T10:15:00.000Z")
-        try store.appendEvent(Self.safeEvent(
-            spanID: "span_menu_bar_cache_survives_read_failure",
-            createdAt: ISO8601DateFormatter.tokenUsage.string(from: now)
-        ))
-
-        let defaultsName = "spill.tests.menu-bar-cache.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: defaultsName))
-        defer {
-            defaults.removePersistentDomain(forName: defaultsName)
-        }
-        let coordinator = TokenMeteringCoordinator(
-            settings: SpillSettings(defaults: defaults),
-            cloudServiceStatusStore: CloudServiceStatusStore(),
-            usageStore: store
-        )
-
-        await coordinator.refreshMenuBarTokenTotalAsync(now: now, force: true)
-        XCTAssertEqual(coordinator.menuBarTokenTotal, 150)
-        XCTAssertEqual(coordinator.menuBarAllTimeTokenTotal, 150)
-
-        try FileManager.default.removeItem(at: storeDirectoryURL)
-        try Data().write(to: storeDirectoryURL)
-        defer {
-            try? FileManager.default.removeItem(at: storeDirectoryURL)
-        }
-
-        await coordinator.refreshMenuBarTokenTotalAsync(now: now.addingTimeInterval(60), force: true)
-
-        XCTAssertEqual(coordinator.menuBarTokenTotal, 150)
-        XCTAssertEqual(coordinator.menuBarAllTimeTokenTotal, 150)
     }
 
     func testTokenDashboardHelperProcessContracts() throws {
@@ -2812,23 +3079,6 @@ final class TokenUsageStoreTests: XCTestCase {
 
         XCTAssertEqual(dashboardStore.snapshot.eventCount, 1)
         XCTAssertEqual(dashboardStore.snapshot.periodFilters.map(\.detail), ["100", "130", "130", "130"])
-    }
-
-    func testDashboardToolVisibilityKeepsUsageIndependentOfProcessDetection() {
-        XCTAssertEqual(
-            TokenUsageDashboardToolVisibility.visibleTools(hiddenTools: []),
-            Set(TokenUsageAITool.dashboardTools)
-        )
-
-        XCTAssertEqual(
-            TokenUsageDashboardToolVisibility.visibleTools(hiddenTools: [.codex]),
-            Set([.claude, .antigravity])
-        )
-
-        XCTAssertEqual(
-            TokenUsageDashboardToolVisibility.visibleTools(hiddenTools: [.openAI, .unknown]),
-            Set(TokenUsageAITool.dashboardTools)
-        )
     }
 
     @MainActor

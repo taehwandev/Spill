@@ -119,6 +119,13 @@ automatically overwrite the installed user-level hook files in Application
 Support. If a hook script changed and the user wants the runtime to use it now,
 run the setup helper or installer again after approval.
 
+The Preferences and token-dashboard direct setup buttons are explicit user
+approval to refresh the bundled helper resources and run that installed helper
+with `--apply`. Merely opening either view, refreshing installation status, or
+copying setup instructions must not execute the helper. The button should show
+`Install` when the setup helper/shared instruction are absent and
+`Reinstall`/`Repair` when app-owned setup is already present.
+
 Default local setup helper:
 
 ```bash

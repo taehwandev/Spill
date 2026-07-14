@@ -3,6 +3,7 @@ import SwiftUI
 struct TokenMeteringAdapterStatusSection: View {
     let language: TokenMeteringLanguage
     let copiedTarget: String?
+    let installedTools: Set<TokenUsageAITool>
     let adapterStatuses: [String: TokenMeteringAdapterConnectionStatus]
     let copyToClipboardAction: (String, String) -> Void
 
@@ -13,17 +14,30 @@ struct TokenMeteringAdapterStatusSection: View {
                 .foregroundStyle(.secondary)
 
             VStack(spacing: 7) {
-                ForEach(TokenMeteringAdapterKit.hookAdapters) { adapter in
-                    TokenMeteringAdapterStatusRow(
-                        adapter: adapter,
-                        status: status(for: adapter),
-                        language: language,
-                        copiedTarget: copiedTarget,
-                        copyToClipboardAction: copyToClipboardAction
-                    )
+                if installedAdapters.isEmpty {
+                    Text(TokenMeteringSetupL10n.text(.aiToolVisibilityNoInstalledTools, language: language))
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 6)
+                } else {
+                    ForEach(installedAdapters) { adapter in
+                        TokenMeteringAdapterStatusRow(
+                            adapter: adapter,
+                            status: status(for: adapter),
+                            language: language,
+                            copiedTarget: copiedTarget,
+                            copyToClipboardAction: copyToClipboardAction
+                        )
+                    }
                 }
             }
         }
+    }
+
+    private var installedAdapters: [TokenMeteringAdapter] {
+        TokenMeteringAdapterKit.localRuntimeAdapters.filter { installedTools.contains($0.aiTool) }
     }
 
     private func status(for adapter: TokenMeteringAdapter) -> TokenMeteringAdapterConnectionStatus {
@@ -70,12 +84,12 @@ private struct TokenMeteringAdapterStatusRow: View {
 
     @ViewBuilder
     private var trailingStatusControl: some View {
-        if !status.isActive {
+        if !status.isActive,
+           let config = adapter.hookConfig(
+               installedAt: TokenMeteringAdapterKit.defaultInstallURL(for: adapter)
+           ) {
             Button {
-                let path = TokenMeteringAdapterKit.defaultInstallURL(for: adapter)
-                if let config = adapter.hookConfig(installedAt: path) {
-                    copyToClipboardAction(config, "prompt_\(adapter.id)")
-                }
+                copyToClipboardAction(config, "prompt_\(adapter.id)")
             } label: {
                 Label(
                     copiedTarget == "prompt_\(adapter.id)" ? t(.copied) : t(.copyPrompt),
@@ -84,6 +98,10 @@ private struct TokenMeteringAdapterStatusRow: View {
             }
             .buttonStyle(.bordered)
             .font(.system(size: 11, weight: .semibold))
+        } else if !status.isActive {
+            Text(t(.adapterSetupRequired))
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(.orange)
         } else {
             Text(t(.active))
                 .font(.system(size: 11, weight: .bold))
@@ -95,7 +113,15 @@ private struct TokenMeteringAdapterStatusRow: View {
     }
 
     private var adapterStatusDetail: String {
+        if adapter.aiTool == .antigravity, status.isActive {
+            return adapter.subtitle
+        }
+
         if !status.scriptInstalled {
+            return t(.adapterSetupRequired)
+        }
+
+        if adapter.aiTool == .antigravity {
             return t(.adapterSetupRequired)
         }
 

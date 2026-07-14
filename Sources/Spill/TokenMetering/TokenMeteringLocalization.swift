@@ -323,6 +323,33 @@ enum TokenMeteringL10n {
     private static let tableName = "TokenMetering"
     private static let keyPrefix = "token_metering"
 
+    private static let stringCatalog: StringCatalog? = {
+        guard let bundle = resourceBundle() else {
+            return nil
+        }
+
+        let candidateURLs = [
+            bundle.url(forResource: tableName, withExtension: "xcstrings"),
+            bundle.url(
+                forResource: tableName,
+                withExtension: "xcstrings",
+                subdirectory: "Localization"
+            )
+        ].compactMap(\.self)
+
+        for url in candidateURLs {
+            do {
+                let data = try Data(contentsOf: url)
+                return try JSONDecoder().decode(StringCatalog.self, from: data)
+            } catch {
+                continue
+            }
+        }
+        return nil
+    }()
+}
+
+extension TokenMeteringL10n {
     static func text(_ key: TokenMeteringTextKey, language: TokenMeteringLanguage = .current()) -> String {
         localized(key.localizationKey, language: language)
     }
@@ -397,7 +424,9 @@ enum TokenMeteringL10n {
     static func adapterInstalled(_ path: String, language: TokenMeteringLanguage = .current()) -> String {
         localizedFormat("format.adapter_installed", language: language, text(.installed, language: language), path)
     }
+}
 
+extension TokenMeteringL10n {
     static func forbiddenContentLabels(language: TokenMeteringLanguage = .current()) -> [String] {
         [
             "prompts",
@@ -467,7 +496,9 @@ enum TokenMeteringL10n {
             return text(.privateUsageUploadEnvironmentProductionDetail, language: language)
         }
     }
+}
 
+private extension TokenMeteringL10n {
     private static func localizedFallback(
         _ suffix: String,
         fallback: String,
@@ -549,33 +580,10 @@ enum TokenMeteringL10n {
         return entry.localizations[language.rawValue]?.value
             ?? entry.localizations[TokenMeteringLanguage.english.rawValue]?.value
     }
+}
 
-    private static let stringCatalog: StringCatalog? = {
-        guard let bundle = resourceBundle() else {
-            return nil
-        }
-
-        let candidateURLs = [
-            bundle.url(forResource: tableName, withExtension: "xcstrings"),
-            bundle.url(
-                forResource: tableName,
-                withExtension: "xcstrings",
-                subdirectory: "Localization"
-            )
-        ].compactMap(\.self)
-
-        for url in candidateURLs {
-            do {
-                let data = try Data(contentsOf: url)
-                return try JSONDecoder().decode(StringCatalog.self, from: data)
-            } catch {
-                continue
-            }
-        }
-        return nil
-    }()
-
-    #if DEBUG
+#if DEBUG
+extension TokenMeteringL10n {
     static func testingStringCatalogValue(
         from data: Data,
         key: String,
@@ -588,8 +596,8 @@ enum TokenMeteringL10n {
         return entry.localizations[language.rawValue]?.value
             ?? entry.localizations[TokenMeteringLanguage.english.rawValue]?.value
     }
-    #endif
 }
+#endif
 
 private struct StringCatalog: Decodable, Sendable {
     let strings: [String: StringCatalogEntry]

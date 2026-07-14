@@ -10,7 +10,8 @@ extension TokenUsageStore {
     func menuBarTokenTotals(
         startingAt startDate: Date,
         endingBefore endDate: Date,
-        dashboardToolsOnly: Bool = true
+        dashboardToolsOnly: Bool = true,
+        visibleTools: Set<TokenUsageAITool>? = nil
     ) -> TokenUsageMenuBarTotals? {
         lock.withLock {
             let database: OpaquePointer
@@ -26,10 +27,12 @@ extension TokenUsageStore {
                     startingAt: startDate,
                     endingBefore: endDate,
                     dashboardToolsOnly: dashboardToolsOnly,
+                    visibleTools: visibleTools,
                     database: database
                 ),
                 let allTime = loadDashboardCountAndTotalIfAvailable(
                     dashboardToolsOnly: dashboardToolsOnly,
+                    visibleTools: visibleTools,
                     database: database
                 )
             else {

@@ -82,10 +82,13 @@ enum TokenMeteringAdapterKit {
         codex,
     ]
 
-    static let all: [TokenMeteringAdapter] = [
+    static let localRuntimeAdapters: [TokenMeteringAdapter] = [
         claudeCode,
         codex,
         agy,
+    ]
+
+    static let all: [TokenMeteringAdapter] = localRuntimeAdapters + [
         openai,
     ]
 

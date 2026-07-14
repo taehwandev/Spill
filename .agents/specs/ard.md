@@ -406,31 +406,50 @@ Rules:
   `span_id` input component while storing cache-read-inclusive raw
   `input_tokens`.
 
-### ARD-005B2: Token Usage Display Is Store-Driven
+### ARD-005B2: Token Usage Separates Installation Eligibility and User Visibility
 
 Decision:
 
-Dashboard, panel, and menu bar token usage surfaces derive usage visibility from
-the app-owned `TokenUsageStore` plus explicit user visibility settings. They
-must not use current AI process detection as a gate for whether stored usage for
-Codex, Claude Code, or Antigravity/AGY is visible.
+Dashboard, panel, Preferences, and history-import surfaces derive installation
+eligibility from one shared predicate: the local runtime is installed.
+Installation is determined from safe executable or app bundle presence. Normal
+usage content applies the user's AI visibility setting after installation
+eligibility; controls that let the user re-enable a hidden tool use installation
+eligibility alone. Current process presence must not be used as a gate. Eligible
+usage totals still come from the app-owned `TokenUsageStore`.
 
 Rationale:
 
-Process presence answers "is this tool running now?" Token usage answers "what
-exact usage has been recorded?" These signals have different lifecycles. A user
-can have valid stored Codex usage after the Codex process exits, while a manual
-upload or refresh may make stale display state appear fixed. Coupling usage
-display to process detection makes local metering look broken even when the
-store is current.
+Process presence answers "is this tool running now?" Installation answers
+"can this runtime be used on this Mac?" Token usage answers "what exact usage
+has been recorded?" These signals have different lifecycles. A valid stored
+Codex row remains visible after the Codex process exits because Codex remains
+installed. If a runtime is uninstalled, its stored rows remain in the local
+store but leave normal dashboard, import, and AI-visible surfaces until the
+runtime is installed again or an advanced diagnostic surface is selected.
 
 Rules:
 
-- First-class dashboard tools are Codex, Claude Code, and Antigravity/AGY unless
-  the user explicitly hides one through token usage visibility settings.
-- AI process status panels may read `AIStatusStore`, but token totals, tool
-  tabs, panel summaries, Work Items, and dashboard filters must read
-  `TokenUsageStore` and visibility preferences instead of live process state.
+- `TokenMeteringToolAvailability` owns the mapping from installed
+  `LocalAIToolStatus` values to first-class token tools. Dashboard visibility,
+  AI Visible controls, agent connection status, and history-import rows must
+  consume this mapping rather than rebuilding tool lists independently.
+- Dashboard, panel, and menu-bar token content includes only
+  `installedTools - hiddenTools` in normal mode.
+- AI Visible controls, agent connection status, and history-import targets use
+  `installedTools` so hidden tools can be re-enabled and installation/setup
+  state remains inspectable.
+- Advanced dashboard mode may include stored OpenAI SDK, `unknown`, and
+  uninstalled-runtime history without changing normal eligibility or deleting
+  those rows.
+  Empty or not-yet-refreshed installation detection must not fall back to all
+  three tools; the UI may show a quiet loading or no-installed-tools state.
+- AI process status panels may read running state from `AIStatusStore`, but
+  token totals, tool tabs, panel summaries, Work Items, dashboard filters,
+  history-import rows, and AI-visible toggles must never use running process
+  state as eligibility.
+- Store queries must use the eligible tool set. Uninstalling a runtime does not
+  delete or rewrite its stored usage, labels, aliases, or cursor state.
 - Manual Private Usage Upload Sync Now is an upload and freshness action for
   encrypted web backup. It must not be required for local token usage to appear
   in the native panel, menu bar, or local dashboard.
@@ -450,9 +469,10 @@ Rules:
 Decision:
 
 Token metering settings must expose an explicit "Import Local History" action.
-Each run attempts all first-class local runtime importers together: Codex,
-Claude Code, and Antigravity/AGY. It imports exact historical usage only from
-their known local runtime stores. This is a user-initiated local backfill and
+Each run attempts the selected installed first-class local runtime importers.
+The normal All action resolves the current installed tool set first and does
+not start importers for absent runtimes. It imports exact historical usage only
+from known local runtime stores. This is a user-initiated local backfill and
 reconciliation job, not automatic install behavior and not cloud sync.
 
 Rationale:
@@ -467,8 +487,10 @@ Rules:
 
 - The import job is owned by an app-wide coordinator, not by the Preferences
   view lifecycle.
-- One explicit run must attempt Codex, Claude Code, and Antigravity/AGY and
-  report per-tool results.
+- One explicit All run must attempt each currently installed supported runtime
+  and report per-tool results. Per-tool rows and actions are shown only for
+  installed supported runtimes. The selected scope is not limited to whichever
+  runtime process is currently running.
 - Importers may parse only exact numeric usage records and safe opaque metadata
   from known runtime stores.
 - Repeated imports for Codex, Claude Code, and Antigravity/AGY may repair raw
@@ -666,6 +688,16 @@ Rules:
   user-level hook files for detected tools, but it must be explicit opt-in,
   support dry-run behavior, avoid overwriting unrelated hook entries, and back
   up existing config files before writing.
+- Preferences and the local token dashboard may run the bundled setup helper
+  directly after an explicit `Install`, `Reinstall`, or `Repair` button click.
+  The app must first install or refresh its bundled helper resources, execute
+  the helper with `--apply`, keep the UI responsive, and expose a safe success
+  or actionable failure state. It must not run setup automatically on view
+  appearance, dashboard refresh, app launch, or instruction copy.
+- The setup action label is derived from app-owned setup installation state.
+  Setup presence and helper exit success are configuration evidence only; they
+  are not evidence that a real Codex, Claude, or Antigravity/AGY turn recorded
+  exact tokens.
 - The setup helper must install the canonical agent instruction at
   `~/.spill/runtime-instruction.md` with owner-only permissions. Runtime-specific
   user instruction files are discovery bridges only and must not contain a full

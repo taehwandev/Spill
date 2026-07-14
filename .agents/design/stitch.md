@@ -56,6 +56,13 @@ the local token metering dashboard.
 - Right detail rail maps to selected Work Item detail and recent event rows.
 - Local receiver status tiles map to local inbox, optional HTTP bridge, and
   on-demand adapter state in Preferences and dashboard diagnostics.
+- The agent-status rail owns a compact token-metering setup state and two
+  explicit actions: direct `Install`/`Reinstall` using the bundled helper and
+  `Copy Setup Instructions` as an alternative. It must not duplicate the full
+  Preferences setup form or run installation on appearance.
+- Dashboard tool tabs, AI Visible toggles, history-import rows, and agent-status
+  tool rows all use the same installed-runtime availability mapping. Running
+  state may decorate an installed tool but must not decide eligibility.
 
 Preferences should keep menu bar scanning out of primary settings unless it
 becomes a clear user workflow. Preserve the existing Spill theme. Future

@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct TokenMeteringPromptInstructionCard: View {
+    @ObservedObject var setupActionStore: TokenMeteringSetupActionStore
+    let installedTools: Set<TokenUsageAITool>
     let language: TokenMeteringLanguage
     let copiedTarget: String?
     let copyInstallPromptAction: (String) -> Void
@@ -37,7 +39,7 @@ struct TokenMeteringPromptInstructionCard: View {
                 Text(t(.promptInstructionCardTitle))
                     .font(.system(size: 11.5, weight: .bold))
                     .foregroundStyle(.primary)
-                Text(t(.promptInstructionCardDetail))
+                Text(TokenMeteringSetupL10n.text(setupActionStore.statusTextKey, language: language))
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(.secondary)
                     .lineLimit(3)
@@ -46,16 +48,15 @@ struct TokenMeteringPromptInstructionCard: View {
 
             Spacer(minLength: 8)
 
-            Button {
-                copyInstallPromptAction(TokenMeteringGlobalSetup.globalPrompt)
-            } label: {
-                Label(
-                    copiedTarget == "prompt" ? t(.copied) : t(.copyInstallPrompt),
-                    systemImage: copiedTarget == "prompt" ? "checkmark" : "doc.on.doc"
-                )
-            }
-            .buttonStyle(.bordered)
-            .font(.system(size: 11, weight: .semibold))
+            TokenMeteringSetupActionControls(
+                store: setupActionStore,
+                installedTools: installedTools,
+                language: language,
+                isSetupPromptCopied: copiedTarget == "prompt",
+                copySetupPromptAction: {
+                    copyInstallPromptAction(TokenMeteringGlobalSetup.globalPrompt)
+                }
+            )
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 10)

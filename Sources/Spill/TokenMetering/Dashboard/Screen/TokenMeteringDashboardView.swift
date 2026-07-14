@@ -321,6 +321,7 @@ extension TokenMeteringDashboardView {
     private func syncVisibleAIToolsFromStatusStore() {
         store.setVisibleAITools(
             TokenUsageDashboardToolVisibility.visibleTools(
+                statuses: aiStatusStore.statuses,
                 hiddenTools: settings.hiddenTokenUsageAITools
             )
         )

@@ -2,14 +2,11 @@ import SwiftUI
 
 struct TokenUsageHistoryImportSection: View {
     let snapshot: TokenUsageHistoryImportSnapshot
+    let availableTools: [TokenUsageHistoryImportTool]
     let language: TokenMeteringLanguage
     let startAllAction: () -> Void
     let cancelAction: () -> Void
     let startToolAction: (TokenUsageHistoryImportTool) -> Void
-
-    private func t(_ key: TokenMeteringTextKey) -> String {
-        TokenMeteringL10n.text(key, language: language)
-    }
 
     var body: some View {
         let tint = snapshot.isRunning ? Color.blue : Color.teal
@@ -47,7 +44,10 @@ struct TokenUsageHistoryImportSection: View {
                 }
                 .buttonStyle(.bordered)
                 .font(.system(size: 12, weight: .semibold))
-                .disabled(snapshot.isRunning && snapshot.tools.allSatisfy(\.state.isFinished))
+                .disabled(
+                    availableTools.isEmpty
+                        || (snapshot.isRunning && availableSnapshots.allSatisfy(\.state.isFinished))
+                )
             }
 
             Text(t(.historyImportDetail))
@@ -62,32 +62,41 @@ struct TokenUsageHistoryImportSection: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             VStack(spacing: 7) {
-                ForEach(snapshot.tools) { toolSnapshot in
-                    TokenUsageHistoryImportToolRow(
-                        snapshot: toolSnapshot,
-                        language: language,
-                        firstModeText: t(.historyImportFirstMode),
-                        incrementalModeText: t(.historyImportIncrementalMode),
-                        waitingText: t(.historyImportStateWaiting),
-                        scanningText: t(.historyImportStateScanning),
-                        doneText: t(.historyImportStateDone),
-                        noSourceText: t(.historyImportStateNoSource),
-                        failedText: t(.historyImportStateFailed),
-                        cancelledText: t(.historyImportStateCancelled),
-                        sourcesText: t(.historyImportMetricSources),
-                        newText: t(.historyImportMetricNew),
-                        duplicatesText: t(.historyImportMetricDuplicates),
-                        unsupportedText: t(.historyImportMetricUnsupported),
-                        syncText: t(.historyImportToolStart),
-                        isImportRunning: snapshot.isRunning,
-                        lastRunText: TokenUsageHistoryImportLastRunText.text(
-                            for: toolSnapshot.lastRun,
-                            language: language
-                        ),
-                        syncAction: {
-                            startToolAction(toolSnapshot.tool)
-                        }
-                    )
+                if availableSnapshots.isEmpty {
+                    Text(TokenMeteringSetupL10n.text(.historyImportNoInstalledTools, language: language))
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 8)
+                } else {
+                    ForEach(availableSnapshots) { toolSnapshot in
+                        TokenUsageHistoryImportToolRow(
+                            snapshot: toolSnapshot,
+                            language: language,
+                            firstModeText: t(.historyImportFirstMode),
+                            incrementalModeText: t(.historyImportIncrementalMode),
+                            waitingText: t(.historyImportStateWaiting),
+                            scanningText: t(.historyImportStateScanning),
+                            doneText: t(.historyImportStateDone),
+                            noSourceText: t(.historyImportStateNoSource),
+                            failedText: t(.historyImportStateFailed),
+                            cancelledText: t(.historyImportStateCancelled),
+                            sourcesText: t(.historyImportMetricSources),
+                            newText: t(.historyImportMetricNew),
+                            duplicatesText: t(.historyImportMetricDuplicates),
+                            unsupportedText: t(.historyImportMetricUnsupported),
+                            syncText: t(.historyImportToolStart),
+                            isImportRunning: snapshot.isRunning,
+                            lastRunText: TokenUsageHistoryImportLastRunText.text(
+                                for: toolSnapshot.lastRun,
+                                language: language
+                            ),
+                            syncAction: {
+                                startToolAction(toolSnapshot.tool)
+                            }
+                        )
+                    }
                 }
             }
 
@@ -103,10 +112,21 @@ struct TokenUsageHistoryImportSection: View {
         .padding(10)
         .background(tokenMeteringOptionBackground)
     }
+}
+
+private extension TokenUsageHistoryImportSection {
+    func t(_ key: TokenMeteringTextKey) -> String {
+        TokenMeteringL10n.text(key, language: language)
+    }
 
     private var tokenMeteringOptionBackground: some View {
         RoundedRectangle(cornerRadius: 8, style: .continuous)
             .fill(Color(NSColor.controlBackgroundColor).opacity(0.35))
+    }
+
+    private var availableSnapshots: [TokenUsageHistoryImportToolSnapshot] {
+        let availableSet = Set(availableTools)
+        return snapshot.tools.filter { availableSet.contains($0.tool) }
     }
 
     private func formatUploadDate(_ date: Date) -> String {

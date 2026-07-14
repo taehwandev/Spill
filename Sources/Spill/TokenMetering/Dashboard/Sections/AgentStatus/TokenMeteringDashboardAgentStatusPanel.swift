@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct TokenMeteringDashboardAgentStatusPanel: View {
@@ -6,6 +7,8 @@ struct TokenMeteringDashboardAgentStatusPanel: View {
     let language: TokenMeteringLanguage
     let appLanguage: SpillAppLanguage
     @State private var showsDetails = false
+    @State private var isSetupPromptCopied = false
+    @ObservedObject private var setupActionStore = TokenMeteringSetupActionStore.shared
 
     private static let summaryColumns = [
         GridItem(.flexible(minimum: 88), spacing: 6),
@@ -34,7 +37,18 @@ struct TokenMeteringDashboardAgentStatusPanel: View {
                 } else {
                     compactAgentStatus(summary)
                 }
+
+                Divider()
+                    .opacity(0.45)
+
+                setupActionPanel
             }
+        }
+        .onAppear {
+            setupActionStore.refresh(installedTools: installedTokenTools)
+        }
+        .onChange(of: aiStatusStore.statuses) { _, _ in
+            setupActionStore.refresh(installedTools: installedTokenTools)
         }
     }
 
@@ -44,6 +58,52 @@ struct TokenMeteringDashboardAgentStatusPanel: View {
         }
     }
 
+    private var installedTokenTools: Set<TokenUsageAITool> {
+        TokenMeteringToolAvailability.installedTools(from: aiStatusStore.statuses)
+    }
+}
+
+private extension TokenMeteringDashboardAgentStatusPanel {
+    private var setupActionPanel: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(TokenMeteringSetupL10n.text(.setupDashboardTitle, language: language))
+                    .font(.system(size: 10.5, weight: .bold))
+                Text(TokenMeteringSetupL10n.text(setupActionStore.statusTextKey, language: language))
+                    .font(.system(size: 9.5, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            TokenMeteringSetupActionControls(
+                store: setupActionStore,
+                installedTools: installedTokenTools,
+                language: language,
+                isSetupPromptCopied: isSetupPromptCopied,
+                copySetupPromptAction: copySetupPrompt
+            )
+            .controlSize(.small)
+        }
+        .padding(9)
+        .background(Color.teal.opacity(0.055), in: RoundedRectangle(cornerRadius: 8))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.teal.opacity(0.09), lineWidth: 0.5)
+        }
+    }
+
+    private func copySetupPrompt() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(TokenMeteringGlobalSetup.globalPrompt, forType: .string)
+        isSetupPromptCopied = true
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
+            isSetupPromptCopied = false
+        }
+    }
+}
+
+private extension TokenMeteringDashboardAgentStatusPanel {
     private func compactAgentStatus(_ summary: TokenMeteringDashboardAgentStatusSummary) -> some View {
         VStack(alignment: .leading, spacing: 9) {
             summaryGrid(summary)
@@ -123,7 +183,9 @@ struct TokenMeteringDashboardAgentStatusPanel: View {
         .accessibilityLabel(AppL10n.text(.details, appLanguage: appLanguage))
         .help(t(.agentStatusInfoDetail))
     }
+}
 
+private extension TokenMeteringDashboardAgentStatusPanel {
     private func agentDetailsList(_ summary: TokenMeteringDashboardAgentStatusSummary) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             ForEach(summary.rows) { row in
@@ -191,7 +253,9 @@ struct TokenMeteringDashboardAgentStatusPanel: View {
                 .stroke(tint.opacity(row.isRunning ? 0.12 : 0.06), lineWidth: 0.5)
         }
     }
+}
 
+private extension TokenMeteringDashboardAgentStatusPanel {
     private func agentCard(_ row: TokenMeteringDashboardAgentStatusRow) -> some View {
         let tint = row.kind.dashboardTint
 
@@ -285,7 +349,9 @@ struct TokenMeteringDashboardAgentStatusPanel: View {
         .padding(.vertical, 6)
         .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
     }
+}
 
+private extension TokenMeteringDashboardAgentStatusPanel {
     private func metadataStack(_ rows: [TokenMeteringDashboardAgentMetadataRow]) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             ForEach(rows.prefix(3)) { row in

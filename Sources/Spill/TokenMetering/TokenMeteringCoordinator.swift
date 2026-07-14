@@ -31,9 +31,11 @@ final class TokenMeteringCoordinator: NSObject {
     private var isSpillPanelVisible = false
     private var menuBarTokenDayStart: Date?
     private var lastMenuBarTokenCollectionAt: Date?
+    private var menuBarTokenRefreshGeneration = 0
     private var usageEventsDidChange: (@MainActor () -> Void)?
     private var cancellables = Set<AnyCancellable>()
     private var visibleAIToolsSyncTask: Task<Void, Never>?
+    private var visibleAITools: Set<TokenUsageAITool>?
     private var hasStarted = false
     private var isStopped = false
 
@@ -62,7 +64,9 @@ final class TokenMeteringCoordinator: NSObject {
             andEventID: AEEventID(kAEGetURL)
         )
     }
+}
 
+extension TokenMeteringCoordinator {
     func start(
         isSmokeTest: Bool,
         usageEventsDidChange: @escaping @MainActor () -> Void
@@ -72,6 +76,7 @@ final class TokenMeteringCoordinator: NSObject {
         self.isSmokeTest = isSmokeTest
         self.usageEventsDidChange = usageEventsDidChange
         TokenMeteringSetupInstaller.refreshInstalledFilesIfPresent()
+        aiStatusStore.refreshInBackground()
         syncVisibleAIToolsFromStatusStore()
         observeUsageEvents()
         observeAIToolVisibility()
@@ -135,7 +140,9 @@ final class TokenMeteringCoordinator: NSObject {
         syncVisibleAIToolsFromStatusStore()
         dashboardStore.refreshPanelSummary()
     }
+}
 
+extension TokenMeteringCoordinator {
     /// Fire-and-forget wrapper for call sites (app launch, menu bar open, etc.) that don't
     /// need to wait for the result. See `refreshMenuBarTokenTotalAsync` for why the actual
     /// database read must never run synchronously on the calling thread.
@@ -168,12 +175,25 @@ final class TokenMeteringCoordinator: NSObject {
             return false
         }
 
+        menuBarTokenRefreshGeneration &+= 1
+        let refreshGeneration = menuBarTokenRefreshGeneration
         let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? now
+        let visibleTools = visibleAITools ?? TokenUsageDashboardToolVisibility.visibleTools(
+            statuses: aiStatusStore.statuses,
+            hiddenTools: settings.hiddenTokenUsageAITools
+        )
         let usageStore = usageStore
         let totals = await Task.detached(priority: .utility) {
-            usageStore.menuBarTokenTotals(startingAt: dayStart, endingBefore: dayEnd)
+            usageStore.menuBarTokenTotals(
+                startingAt: dayStart,
+                endingBefore: dayEnd,
+                visibleTools: visibleTools
+            )
         }.value
 
+        guard menuBarTokenRefreshGeneration == refreshGeneration else {
+            return false
+        }
         guard let totals else {
             return false
         }
@@ -203,7 +223,11 @@ final class TokenMeteringCoordinator: NSObject {
             return nil
         }
 
-        let dashboardToolStatuses = TokenUsageAITool.dashboardTools.compactMap { tool in
+        let visibleTools = visibleAITools ?? TokenUsageDashboardToolVisibility.visibleTools(
+            statuses: aiStatusStore.statuses,
+            hiddenTools: settings.hiddenTokenUsageAITools
+        )
+        let dashboardToolStatuses = visibleTools.compactMap { tool in
             CloudServiceStatusPresentation.serviceStatus(for: tool, in: snapshot)
         }
         guard !dashboardToolStatuses.isEmpty else {
@@ -212,7 +236,9 @@ final class TokenMeteringCoordinator: NSObject {
 
         return CloudServiceStatusPresentation.aggregateHealth(for: dashboardToolStatuses)
     }
+}
 
+extension TokenMeteringCoordinator {
     func openDashboard(
         deferLaunch: Bool,
         refreshStatusItem: @escaping @MainActor () -> Void,
@@ -271,7 +297,9 @@ final class TokenMeteringCoordinator: NSObject {
             return
         }
     }
+}
 
+extension TokenMeteringCoordinator {
     private func observeUsageEvents() {
         NotificationCenter.default.publisher(
             for: TokenUsageStore.eventsDidChangeNotification,
@@ -359,13 +387,22 @@ final class TokenMeteringCoordinator: NSObject {
     }
 
     private func syncVisibleAIToolsFromStatusStore() {
-        dashboardStore.setVisibleAITools(
-            TokenUsageDashboardToolVisibility.visibleTools(
-                hiddenTools: settings.hiddenTokenUsageAITools
-            )
+        let visibleTools = TokenUsageDashboardToolVisibility.visibleTools(
+            statuses: aiStatusStore.statuses,
+            hiddenTools: settings.hiddenTokenUsageAITools
         )
+        guard self.visibleAITools != visibleTools else {
+            return
+        }
+        self.visibleAITools = visibleTools
+        dashboardStore.setVisibleAITools(
+            visibleTools
+        )
+        refreshMenuBarTokenTotal(force: true)
     }
+}
 
+extension TokenMeteringCoordinator {
     private func registerPrivateUsageConnectionURLHandler() {
         guard PrivateUsageUploadFeatureAvailability.isEnabledInCurrentBuild else {
             return
@@ -420,7 +457,9 @@ final class TokenMeteringCoordinator: NSObject {
             )
         }
     }
+}
 
+extension TokenMeteringCoordinator {
     private func schedulePrivateUsageUploadIfNeeded() {
         guard !isSmokeTest else {
             return
@@ -466,7 +505,9 @@ final class TokenMeteringCoordinator: NSObject {
             )
         }
     }
+}
 
+extension TokenMeteringCoordinator {
     @objc private func tokenUsageEventsDidChangeFromDistributedNotification(_ notification: Notification) {
         refreshMenuBarTokenTotal(force: true)
     }
