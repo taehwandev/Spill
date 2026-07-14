@@ -3,7 +3,7 @@ import Combine
 import SwiftUI
 
 @MainActor
-final class PreferencesWindowController {
+final class PreferencesWindowController: NSObject, NSWindowDelegate {
     private let autosaveName = NSWindow.FrameAutosaveName("SpillPreferences")
     private let preferredSize = NSSize(width: 720, height: 560)
     private let minimumSize = NSSize(width: 640, height: 480)
@@ -42,6 +42,7 @@ final class PreferencesWindowController {
         self.showPanelAction = showPanelAction
         self.openTokenDashboardAction = openTokenDashboardAction
         self.preparePrivateUsageUploadAction = preparePrivateUsageUploadAction
+        super.init()
     }
 
     func show(selectedTab: String? = nil) {
@@ -91,6 +92,7 @@ final class PreferencesWindowController {
         window.collectionBehavior = [.moveToActiveSpace]
         window.setFrameAutosaveName(autosaveName)
         window.contentView = NSHostingView(rootView: contentView)
+        window.delegate = self
         self.window = window
         languageObservation = settings.$appLanguage.sink { [weak self] appLanguage in
             self?.window?.title = PreferencesL10n.text(.preferencesWindowTitle, appLanguage: appLanguage)
@@ -101,13 +103,32 @@ final class PreferencesWindowController {
         return window
     }
 
+    func windowWillClose(_ notification: Notification) {
+        guard let closingWindow = notification.object as? NSWindow,
+              closingWindow === window
+        else {
+            return
+        }
+
+        releaseWindowContent()
+    }
+
     func prepareForTermination() {
+        window?.isRestorable = false
+        window?.orderOut(nil)
+        releaseWindowContent()
+    }
+
+    private func releaseWindowContent() {
         languageObservation?.cancel()
         languageObservation = nil
         appearanceObservation?.cancel()
         appearanceObservation = nil
-        window?.isRestorable = false
-        window?.orderOut(nil)
+
+        let window = self.window
+        self.window = nil
+        window?.delegate = nil
+        window?.contentView = nil
     }
 
     private var defaultWindowFrame: NSRect {
