@@ -18,9 +18,15 @@ const json = args.json === true;
 const installRoot = expandHome(args.installDir ?? join(homedir(), "Library/Application Support/Spill/adapters"));
 const setupHelperPath = join(installRoot, "setup", "spill-token-metering-setup.mjs");
 const statsHelperPath = join(installRoot, "setup", "spill-token-metering-stats.mjs");
+const installedRuntimeInstructionPath = join(installRoot, "setup", "runtime-instruction.md");
+const sharedRuntimeInstructionPath = expandHome(
+  args.sharedInstruction ?? join(homedir(), ".spill", "runtime-instruction.md")
+);
 const defaultAdapters = "codex,claude,antigravity";
 const managedRuntimeRulesBegin = "# spill-token-metering:begin";
 const managedRuntimeRulesEnd = "# spill-token-metering:end";
+const managedRuntimeInstructionBegin = "<!-- spill-token-metering-instruction:begin -->";
+const managedRuntimeInstructionEnd = "<!-- spill-token-metering-instruction:end -->";
 const alwaysInstallAdapters = new Set(defaultAdapters.split(","));
 const include = new Set((args.include ?? defaultAdapters).split(",").map((item) => item.trim()).filter(Boolean));
 
@@ -43,6 +49,7 @@ if (args.label) {
 }
 
 const sourceRoot = await resolveSourceRoot(args.sourceRoot);
+const runtimeInstructionSource = await resolveRuntimeInstructionSource(args.runtimeInstructionSource);
 
 const adapters = {
   codex: {
@@ -84,7 +91,8 @@ const adapters = {
 };
 
 const results = [];
-await installSetupHelper();
+await installSetupHelper(runtimeInstructionSource);
+await installSharedRuntimeInstruction(runtimeInstructionSource);
 for (const adapter of Object.values(adapters)) {
   if (!include.has(adapter.id)) continue;
   const detected = force || alwaysInstallAdapters.has(adapter.id) || await adapter.detect();
@@ -113,10 +121,11 @@ if (json) {
   }
 }
 
-async function installSetupHelper() {
+async function installSetupHelper(runtimeInstructionSource) {
   if (!apply) {
     results.push({ tool: "setup", action: "would_install", path: setupHelperPath });
     results.push({ tool: "stats", action: "would_install", path: statsHelperPath });
+    results.push({ tool: "runtime_instruction_source", action: "would_install", path: installedRuntimeInstructionPath });
     return;
   }
 
@@ -132,6 +141,32 @@ async function installSetupHelper() {
   await copyFile(statsSource, statsHelperPath);
   await chmod(statsHelperPath, 0o755);
   results.push({ tool: "stats", action: "installed", path: statsHelperPath });
+
+  await installPrivateFile(runtimeInstructionSource, installedRuntimeInstructionPath);
+  results.push({ tool: "runtime_instruction_source", action: "installed", path: installedRuntimeInstructionPath });
+}
+
+async function installSharedRuntimeInstruction(runtimeInstructionSource) {
+  if (!apply) {
+    results.push({ tool: "runtime_instruction", action: "would_install", path: sharedRuntimeInstructionPath });
+    return;
+  }
+
+  await installPrivateFile(runtimeInstructionSource, sharedRuntimeInstructionPath);
+  results.push({ tool: "runtime_instruction", action: "installed", path: sharedRuntimeInstructionPath });
+}
+
+async function installPrivateFile(source, destination) {
+  await mkdir(dirname(destination), { recursive: true, mode: 0o700 });
+  if (resolve(source) === resolve(destination)) {
+    await chmod(destination, 0o600);
+    return;
+  }
+
+  const temporary = `${destination}.tmp-${process.pid}`;
+  await copyFile(source, temporary);
+  await chmod(temporary, 0o600);
+  await rename(temporary, destination);
 }
 
 async function installAdapter(adapter) {
@@ -353,6 +388,65 @@ async function configureRuntimeLabelDefaults() {
       permissionPrefix: "command",
     });
   }
+  if (include.has("codex")) {
+    await configureRuntimeInstructionBridge({
+      tool: "codex",
+      target: await codexRuntimeInstructionTarget(),
+      block: pointerRuntimeInstructionBlock("Codex"),
+    });
+  }
+  if (include.has("claude")) {
+    await configureRuntimeInstructionBridge({
+      tool: "claude",
+      target: join(homedir(), ".claude", "CLAUDE.md"),
+      block: importedRuntimeInstructionBlock(),
+    });
+  }
+  if (include.has("antigravity")) {
+    await configureRuntimeInstructionBridge({
+      tool: "antigravity",
+      target: join(homedir(), ".antigravity", "AGENTS.md"),
+      block: pointerRuntimeInstructionBlock("Antigravity/AGY"),
+    });
+  }
+
+  async function codexRuntimeInstructionTarget() {
+    const override = join(homedir(), ".codex", "AGENTS.override.md");
+    return await exists(override) ? override : join(homedir(), ".codex", "AGENTS.md");
+  }
+
+  async function configureRuntimeInstructionBridge({ tool, target, block }) {
+    if (!apply) {
+      results.push({ tool, action: "would_configure_instruction_bridge", path: target });
+      return;
+    }
+
+    await writeManagedTextBlock({
+      path: target,
+      begin: managedRuntimeInstructionBegin,
+      end: managedRuntimeInstructionEnd,
+      block,
+    });
+    results.push({ tool, action: "configured_instruction_bridge", path: target });
+  }
+
+  function pointerRuntimeInstructionBlock(runtimeName) {
+    return [
+      managedRuntimeInstructionBegin,
+      "## Spill Token Metering",
+      `Before each user-visible task, read and follow \`${sharedRuntimeInstructionPath}\` when it exists.`,
+      `This ${runtimeName} bridge only points to Spill's shared instruction; do not copy the full instruction into this file.`,
+      managedRuntimeInstructionEnd,
+    ].join("\n");
+  }
+
+  function importedRuntimeInstructionBlock() {
+    return [
+      managedRuntimeInstructionBegin,
+      `@${sharedRuntimeInstructionPath}`,
+      managedRuntimeInstructionEnd,
+    ].join("\n");
+  }
 }
 
 async function configureCodexRuntimeRules() {
@@ -554,7 +648,9 @@ async function writeManagedTextBlock({ path, begin, end, block }) {
 }
 
 function managedTextBlockPattern(begin, end) {
-  if (begin !== managedRuntimeRulesBegin || end !== managedRuntimeRulesEnd) {
+  const rulesBlock = begin === managedRuntimeRulesBegin && end === managedRuntimeRulesEnd;
+  const instructionBlock = begin === managedRuntimeInstructionBegin && end === managedRuntimeInstructionEnd;
+  if (!rulesBlock && !instructionBlock) {
     throw new Error("Invalid managed text block markers");
   }
 
@@ -750,6 +846,27 @@ async function resolveStatsHelperSource(setupSource) {
   throw new Error("Missing Spill stats helper source: spill-token-metering-stats.mjs");
 }
 
+async function resolveRuntimeInstructionSource(option) {
+  if (option) {
+    const candidate = resolve(expandHome(option));
+    if (await exists(candidate)) return candidate;
+    throw new Error(`Missing Spill runtime instruction source: ${candidate}`);
+  }
+
+  const setupSource = fileURLToPath(import.meta.url);
+  const setupDirectory = dirname(setupSource);
+  const candidates = [
+    join(setupDirectory, "runtime-instruction.md"),
+    join(sourceRoot, "setup", "runtime-instruction.md"),
+    join(setupDirectory, "..", "docs", "token-metering", "runtime-instruction.md"),
+    join(setupDirectory, "..", "..", "docs", "token-metering", "runtime-instruction.md"),
+  ];
+  for (const candidate of candidates) {
+    if (await exists(candidate)) return resolve(candidate);
+  }
+  throw new Error("Missing Spill runtime instruction source: runtime-instruction.md");
+}
+
 async function exists(path) {
   try {
     await stat(path);
@@ -801,6 +918,12 @@ function parseArgs(values) {
     case "--source-root":
       parsed.sourceRoot = requiredValue(values, ++index, value);
       break;
+    case "--runtime-instruction-source":
+      parsed.runtimeInstructionSource = requiredValue(values, ++index, value);
+      break;
+    case "--shared-instruction":
+      parsed.sharedInstruction = requiredValue(values, ++index, value);
+      break;
     case "--label":
       parsed.label = requiredValue(values, ++index, value);
       break;
@@ -840,6 +963,10 @@ Options:
   --include LIST          Comma list. Default: codex,claude,antigravity. Optional: openai.
   --source-root PATH      Adapter source root. Default: repo or bundled adapters directory.
   --install-dir PATH      Adapter install root. Default: ~/Library/Application Support/Spill/adapters.
+  --runtime-instruction-source PATH
+                          Shared runtime instruction source. Default: bundled or repo runtime-instruction.md.
+  --shared-instruction PATH
+                          Installed shared instruction. Default: ~/.spill/runtime-instruction.md.
   --label TOOL            Write a short-lived safe task/stage label for codex, claude, antigravity, or openai.
   --if-absent             With --label, keep an active same-tool label instead of overwriting it.
   --task-type SLUG        Safe task label for --label.
@@ -854,7 +981,9 @@ even if the current agent is only one of those tools. Codex is the
 OpenAI-backed agent runtime hook. Antigravity/AGY has no Spill runtime hook.
 The OpenAI SDK adapter is optional and installs only when included explicitly.
 The helper also installs or refreshes itself and the read-only local usage stats
-helper at the default setup command path.
+helper at the default setup command path. It writes one shared agent instruction
+to ~/.spill/runtime-instruction.md and adds only a small managed discovery bridge
+to Codex, Claude Code, and Antigravity/AGY user instruction files.
 When Claude Code or Antigravity/AGY user settings exist, the helper sets
 SPILL_AI_TOOL for that runtime and adds narrow allowlist entries for Spill label
 handoff, explicit user-requested Spill local usage status checks, and

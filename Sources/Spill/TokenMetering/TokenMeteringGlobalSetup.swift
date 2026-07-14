@@ -5,95 +5,20 @@ enum TokenMeteringGlobalSetup {
     static let runtimeInstructionURL = "https://spill.thdev.app/token-metering/runtime-instruction.md"
 
     static let globalPrompt = """
-    # Spill Token Metering Setup Bootstrap
+    # Install Spill AI Token Metering
 
-    MANDATORY ACTION: install or repair Spill token metering now.
-    This is not just a policy note, not just documentation, and not just a global instruction to remember later.
+    Install or repair Spill token metering now with the one-step installer:
 
-    Use the current public setup request as the source of truth:
-    https://spill.thdev.app/token-metering/setup-prompt.md
-
-    You MUST run the public setup installer before doing anything else:
       /bin/bash -c "$(curl -fsSL https://spill.thdev.app/token-metering/install.sh)"
 
-    If shell, filesystem, sandbox, or user-level config permission is required, ask for that permission and then run the installer.
-    The installer downloads the latest open-source Spill adapter files from spill.thdev.app, then installs and configures Codex, Claude Code, and Antigravity/AGY metering locally.
-    Before asking for permissions or making changes, clearly tell the user the privacy boundary: Spill local importers may read known Codex/Claude JSONL transcript or session files and Antigravity/AGY metadata records on this Mac only to extract allowlisted numeric token metadata, timestamps, model ids, and opaque ids. They must not store or upload prompts, responses, commands, file paths, transcript text, logs, diffs, source content, environment values, or secrets.
-    The installer must install and repair Codex, Claude Code, and Antigravity/AGY together, regardless of which AI tool is currently handling this request.
-    Codex is the OpenAI-backed agent runtime hook. Direct OpenAI SDK metering is optional and not part of the default agent dashboard.
-    The installer must also configure supported runtime defaults: Claude Code uses SPILL_AI_TOOL=claude, Antigravity/AGY uses SPILL_AI_TOOL=antigravity, and Codex uses the codex tool label by default.
-    The installer must narrowly allow Spill label handoff commands and explicit user-requested read-only Spill status commands when the runtime supports permission allowlists. For Codex, write managed prefix_rule entries to ~/.codex/rules/default.rules. For Claude Code and Antigravity/AGY, write the same narrow commands to their user-level permission settings files. Do not use broad python3, node, or shell-wide allow rules. Do not make the user approve the same trusted Spill label command over and over after this explicit install request. Workflow runner permissions are separate from the default Spill metering install.
-    The installer must install the read-only local usage stats helper at ~/Library/Application Support/Spill/adapters/setup/spill-token-metering-stats.mjs. When the user explicitly asks for `spill`, Spill status, token usage status, or local usage status, the agent should run node ~/Library/Application\\ Support/Spill/adapters/setup/spill-token-metering-stats.mjs --tool <current-tool> and answer with the full self-scoped aggregate summary: total, input, output, record count, average record size, peak record size, workflow label coverage, model/task/stage breakdowns, token detail categories, and recent activity. The answer must prioritize total/input/output, event size, model, task, stage, and workflow label coverage. Token detail categories are optional measurement-quality data; if unknown dominates, explain that exact detail attribution was unavailable, not that the agent judged user input. The prompt must also include concrete status commands for every first-class runtime: node ~/Library/Application\\ Support/Spill/adapters/setup/spill-token-metering-stats.mjs --tool codex, node ~/Library/Application\\ Support/Spill/adapters/setup/spill-token-metering-stats.mjs --tool claude, and node ~/Library/Application\\ Support/Spill/adapters/setup/spill-token-metering-stats.mjs --tool antigravity. The stats helper is not a usage event, hook, importer, or label handoff. Do not run it in normal replies and do not inspect prompts, responses, commands, file paths, logs, diffs, code content, environment values, transcripts, shell history, or secrets to explain its output.
-    The adapters must force the strict Spill output event schema while accepting runtime-specific exact-count input shapes. First-class runtime totals use raw exact token usage for comparable tool summaries. Claude Code adapters must include cache_read_input_tokens together with input_tokens and cache_creation_input_tokens in the normalized Spill input_tokens value. Codex input_tokens already includes cached input reads. Codex reasoning_output_tokens is a subset of output_tokens; preserve it as pricing/accounting detail but do not add it again to normalized output_tokens or total_tokens. Do not drop cache-read tokens to approximate cost; cost weighting belongs in a separate display or analysis layer. For Antigravity/AGY, use the local active importer when AGY conversation metadata exposes exact numeric usage fields; the importer may extract only numeric counts, safe model ids, and opaque conversation/generation ids and must never store prompts, responses, commands, file paths, logs, diffs, source, environment values, secrets, raw database paths, or arbitrary transcript content. Do not install AGY PostInvocation, Stop, or lifecycle hooks for Spill metering. The setup helper must remove managed Spill AGY hook entries so hook command logs cannot be mistaken for real usage evidence. Claude Code uses a different Stop-hook contract: stdin should contain a transcript_path payload, and the adapter reads exact usage from the transcript. Claude diagnostics must be split into claude-last-empty.json, claude-last-mismatch.json, and claude-last-success.json. Mismatch diagnostics may include observed_safe_shape booleans only, never raw payload values. Diagnostics must never store transcript paths, transcript content, payload values, prompts, responses, commands, file paths, logs, diffs, source, environment values, secrets, run ids, or span ids.
-    Do not confuse Spill label handoff with usage metering. A permission prompt or successful execution of node .../spill-token-metering-setup.mjs --label antigravity ... --if-absent only writes safe label context. It never proves that AGY imported exact token usage, queued an event, or changed SQLite. Do not claim real AGY usage was recorded from mock payload injection, unit tests, token-metering smoke tests, hook config shape, hook-load logs, hook command execution logs, label-context file writes, or permission prompts alone. Those are setup or adapter checks. Accepted proof for real AGY metering must come from a real AGY runtime turn followed by at least one concrete local side effect: an imported events-inbox usage JSON file, a new token_usage_events row with ai_tool = antigravity, or antigravity-active-importer-last.json showing imported exact usage.
-    Do not add forced dummy tool calls, list_permissions, or any other hidden user-visible tool activity as the normal fix for text-only AGY turns. Such calls are diagnostic only, require explicit user approval, and still do not prove metering unless the real AGY importer side effects above move. Do not implement a heuristic classifier that infers task labels from tool names, commands, file writes, grep/list-dir patterns, prompt text, logs, diffs, source content, transcripts, shell history, or arbitrary payload values. If trusted safe labels are absent, degrade to uncategorized/summarize; do not trade privacy for better-looking categories. Do not implement or request a heuristic token-detail classifier. If exact detail categories are unavailable, keep exact totals and treat the missing split as unavailable detail attribution.
+    If shell, filesystem, sandbox, or user-level configuration permission is required, explain why and ask for that permission before running the command.
 
-    After the installer succeeds, fetch and apply the current runtime instruction as a global agent instruction:
-    https://spill.thdev.app/token-metering/runtime-instruction.md
+    Privacy boundary: Spill may read known local Codex/Claude JSONL session or transcript files and Antigravity/AGY metadata only to extract exact numeric token counts, timestamps, safe model ids, and opaque ids. It must never store or upload prompts, responses, commands, file paths, transcript text, logs, diffs, source content, environment values, or secrets.
 
-    The runtime instruction must make every user-visible AI task write a safe per-turn label context when the setup helper exists. Workflow integration is only for better labels; it must not be required for recording usage. If no workflow exists, agents still classify the current task with safe reusable labels such as code_review/verify, review_response/implement, code_generation/implement, testing/verify, or uncategorized/summarize. Workflow-provided labels must win: agent per-turn fallback labels must use --if-absent, while workflow step labels must omit --if-absent so they can replace older fallback labels. This is a two-layer design, not a choice between modes: keep the agent fallback layer active and add workflow labels on top when the user chooses workflow-aware labels. The setup helper must preserve existing UserPromptSubmit or workflow label hooks; never remove a workflow label hook to force agent-only fallback. Agents should always attempt the per-turn fallback label with --if-absent after request classification, even when workflow integration exists. The helper will skip the fallback when an active workflow label is already present, and will write the fallback when the workflow did not label that task.
-    Do not configure agents or workflows to send conversation titles, work item titles, local aliases, task text, or display names. Usage events carry only safe reusable labels; Spill generates default work item names locally from ai_tool, task_type, stage, model id, and timestamp buckets.
+    The installer handles Codex, Claude Code, and Antigravity/AGY together. It writes one shared instruction to `~/.spill/runtime-instruction.md` and adds only a small managed discovery bridge to each runtime's user instruction file. Preserve unrelated user instructions and existing workflow label hooks. Do not copy the full Spill prompt separately into Codex, Claude, or AGY files, and do not install AGY lifecycle hooks.
 
-    Then ask one explicit workflow-label decision question. Match the user's current conversation language; if the user has been speaking Korean, ask in Korean. The question must be visibly a decision request, not a completion summary or a casual trailing "would you like" sentence.
-    Use this decision shape, translated to the user's conversation language:
-      Decision needed:
-      Spill can already record usage with fallback labels. Connecting workflow labels is more effective for meaningful stats because each workflow step can write the task and stage before the AI run starts.
-      - Connect workflow labels (recommended): discover safe workflow entry points and ask before editing them.
-      - Skip workflow labels: keep fallback labels only; usage still works, but task/stage stats are less precise.
-      Question: Should I connect workflow-aware labels now?
+    After the installer finishes, report what it actually installed or repaired and note that already-running agent sessions may need to restart before the new shared instruction is loaded. Setup success is not proof that the current AI turn was recorded.
 
-    Do not ask for a hook path in that first decision question.
-    If the answer is no, do not modify workflow files; installed hooks must still record usage when exact counts are available, and per-turn labels must still come from the runtime instruction.
-    If the answer is yes, discover candidate workflow integration points yourself.
-    Do not remove existing workflow label hooks during discovery, install, or repair.
-    Do not delete or disable existing Spill integration while updating workflows, prompts, hooks, CI/CD, docs publishing, release scripts, install scripts, or setup files. Preserve Spill token-metering hooks, label handoff commands, SPILL_AI_TOOL / SPILL_TOKEN_USAGE_AI_TOOL environment handoff, setup helper references, adapter resources, generated prompt references, docs publishing artifacts, and workflow label calls. If a workflow entry point, hook file, prompt, docs site, release script, or publishing path is renamed or replaced, carry the Spill responsibility forward in the same change and update the matching Spill setup prompt, runtime instruction, installer, adapter resource, docs artifact, or verification path. Removing Spill integration requires explicit user approval, a documented replacement path, and verification that the replacement still preserves local metering and release/docs behavior.
-
-    Workflow integration rules:
-    - Prefer script-based workflow entry points first, such as a local workflow runner script, task pipeline script, or clearly named agent workflow script.
-    - Use hook/config files only after script candidates are absent, or as a runtime hook receiver alongside the script when the tool requires it.
-    - If both a script and a hook/config file are present, wire labels in the script first. The hook/config file should only receive the adapter hook or fallback integration that the script cannot provide.
-    - Preserve unrelated hooks and existing workflow label hooks. Merge new Spill integration with the existing workflow instead of replacing it.
-    - If one safe candidate is found, summarize the file you intend to edit and ask for approval before changing it.
-    - If multiple candidates are found, ask the user which workflow should receive Spill labels.
-    - If no candidate is found, ask how their workflow is invoked or where its config lives.
-
-    After a workflow integration point is selected and editing is approved, wire each workflow step start to write a short-lived safe label context before the AI tool runs:
-      node ~/Library/Application\\ Support/Spill/adapters/setup/spill-token-metering-setup.mjs --label <current-tool> --task-type code_generation --stage implement
-
-    Do not add --if-absent to workflow step labels. --if-absent is only for the agent's per-turn fallback label when no workflow label already exists.
-    Use the current runtime tool in --label. When invoking a workflow runner, set SPILL_AI_TOOL and SPILL_TOKEN_USAGE_AI_TOOL to the current runtime, or rely on the runtime-level env installed by the setup helper. Never let Claude Code or Antigravity/AGY workflow routing fall back to codex. Workflow runner permissions are separate from the default Spill metering install.
-
-    For script workflows, add the label command before the script invokes the AI tool. If the script already has safe reusable step names, map those directly. For simple hook/config workflows without a script, wire the safest available step start hook; if it cannot run per step before the AI tool starts, treat it as receiver-only and do not claim detailed workflow labels are configured.
-
-    Suggested mapping:
-    - intake/classify/route -> analysis/classify
-    - plan/design-plan -> analysis/plan
-    - write-code/edit/implement/patch -> code_generation/implement
-    - refactor/cleanup -> refactoring/implement
-    - bugfix/reproduce-fix -> debugging/implement
-    - test-authoring/add-tests -> test_generation/implement
-    - test/build/audit/smoke -> testing/verify
-    - review/code-review/risk-review/pr-review -> code_review/verify
-    - review-response/address-review-comments -> review_response/implement
-    - docs/readme/guide -> documentation/draft
-    - changelog -> changelog/draft
-    - release-notes -> release_notes/draft
-    - commit -> git_commit/summarize
-    - commit-message -> commit_message/draft
-    - pr/pull-request -> pull_request/summarize
-    - workflow-install/hook-setup -> workflow_setup/implement
-
-    Use safe reusable slugs only. Never encode project names, feature names, ticket ids, file names, branch names, user names, prompts, commands, diffs, logs, source content, secrets, conversation titles, work item titles, local aliases, task text, or display names.
-
-    Do not save only the runtime instruction and call the task done.
-    Do not give manual per-adapter setup steps as the primary answer.
-    Do not claim Spill token metering is installed until these conditions are satisfied:
-    - The installer has run and Codex/Claude hook shapes plus AGY active importer setup have been verified:
-    - Codex: ~/.codex/hooks.json has hooks.Stop[] with matcher: "" and a Spill Codex importer command. ~/.codex/rules/default.rules has managed Spill prefix_rule entries for Spill Codex label handoff.
-    - Claude Code: ~/.claude/settings.json has hooks.Stop[] with matcher: "", a Spill Claude hook command, SPILL_AI_TOOL=claude, and narrow allowlist entries for Spill label handoff.
-    - Antigravity/AGY: Spill's local active importer is the AGY collection path when AGY conversation metadata exposes exact numeric usage fields. The installer removes managed Spill AGY hook entries from ~/.gemini/config/hooks.json, ~/.gemini/hooks.json, and ~/.gemini/antigravity-cli/hooks.json. ~/.gemini/antigravity-cli/settings.json has SPILL_AI_TOOL=antigravity and narrow allowlist entries for Spill label handoff only.
-    - If workflow labels were requested, every workflow edit was approved by the user.
-    - If workflow labels were requested, script-based workflows were checked first and used when present.
-    - If workflow labels were requested, at least one workflow step can write a safe label context before the AI tool starts.
+    Full setup contract: https://spill.thdev.app/token-metering/setup-prompt.md
     """
 }

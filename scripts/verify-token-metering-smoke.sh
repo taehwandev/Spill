@@ -23,6 +23,37 @@ trap cleanup EXIT
 
 "$ROOT_DIR/scripts/build-app.sh"
 
+SETUP_HOME="$ADAPTER_TMP_DIR/setup-home"
+SETUP_INSTALL_ROOT="$ADAPTER_TMP_DIR/setup-install"
+mkdir -p "$SETUP_HOME/.codex" "$SETUP_HOME/.claude" "$SETUP_HOME/.antigravity"
+printf '# Existing Codex base\nkeep-codex-base\n' > "$SETUP_HOME/.codex/AGENTS.md"
+printf '# Existing Codex override\nkeep-codex-override\n' > "$SETUP_HOME/.codex/AGENTS.override.md"
+printf '# Existing Claude\nkeep-claude\n' > "$SETUP_HOME/.claude/CLAUDE.md"
+printf '# Existing AGY\nkeep-agy\n' > "$SETUP_HOME/.antigravity/AGENTS.md"
+SETUP_SHARED_INSTRUCTION="$(HOME="$SETUP_HOME" node -e 'const { homedir } = require("node:os"); const { join } = require("node:path"); process.stdout.write(join(homedir(), ".spill", "runtime-instruction.md"));')"
+
+for _ in 1 2; do
+    HOME="$SETUP_HOME" node "$ROOT_DIR/scripts/spill-token-metering-setup.mjs" \
+        --apply \
+        --include codex,claude,antigravity \
+        --source-root "$ROOT_DIR/Sources/Spill/Resources/adapters" \
+        --runtime-instruction-source "$ROOT_DIR/docs/token-metering/runtime-instruction.md" \
+        --install-dir "$SETUP_INSTALL_ROOT" \
+        --json >/dev/null
+done
+
+diff -q "$ROOT_DIR/docs/token-metering/runtime-instruction.md" "$SETUP_HOME/.spill/runtime-instruction.md"
+grep -q 'keep-codex-base' "$SETUP_HOME/.codex/AGENTS.md"
+grep -q 'keep-codex-override' "$SETUP_HOME/.codex/AGENTS.override.md"
+grep -q 'keep-claude' "$SETUP_HOME/.claude/CLAUDE.md"
+grep -q 'keep-agy' "$SETUP_HOME/.antigravity/AGENTS.md"
+[[ "$(grep -c 'spill-token-metering-instruction:begin' "$SETUP_HOME/.codex/AGENTS.override.md")" == "1" ]]
+[[ "$(grep -c 'spill-token-metering-instruction:begin' "$SETUP_HOME/.claude/CLAUDE.md")" == "1" ]]
+[[ "$(grep -c 'spill-token-metering-instruction:begin' "$SETUP_HOME/.antigravity/AGENTS.md")" == "1" ]]
+grep -Fqx "@$SETUP_SHARED_INSTRUCTION" "$SETUP_HOME/.claude/CLAUDE.md"
+grep -Fq "\`$SETUP_SHARED_INSTRUCTION\`" "$SETUP_HOME/.codex/AGENTS.override.md"
+grep -Fq "\`$SETUP_SHARED_INSTRUCTION\`" "$SETUP_HOME/.antigravity/AGENTS.md"
+
 rm -f "$LOG_FILE" "$EVENTS_FILE" "$EVENTS_DB" "$EVENTS_DB-shm" "$EVENTS_DB-wal"
 
 HOOK_TIMESTAMP="$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")"

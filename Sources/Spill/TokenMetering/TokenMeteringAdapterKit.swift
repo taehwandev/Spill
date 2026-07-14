@@ -184,6 +184,7 @@ enum TokenMeteringAdapterKit {
 enum TokenMeteringSetupInstaller {
     static let scriptFileName = "spill-token-metering-setup.mjs"
     static let statsScriptFileName = "spill-token-metering-stats.mjs"
+    static let runtimeInstructionFileName = "runtime-instruction.md"
     static let publicInstallScriptURL = "https://spill.thdev.app/token-metering/install.sh"
     static let publicSetupCommand = #"/bin/bash -c "$(curl -fsSL https://spill.thdev.app/token-metering/install.sh)""#
 
@@ -203,6 +204,14 @@ enum TokenMeteringSetupInstaller {
         )
     }
 
+    static var runtimeInstructionURL: URL? {
+        Bundle.main.url(
+            forResource: "runtime-instruction",
+            withExtension: "md",
+            subdirectory: "adapters/setup"
+        )
+    }
+
     static func defaultInstallURL() -> URL {
         AppDirectories.spillApplicationSupportDirectory()
             .appendingPathComponent("adapters", isDirectory: true)
@@ -216,6 +225,18 @@ enum TokenMeteringSetupInstaller {
             .appendingPathComponent(statsScriptFileName)
     }
 
+    static func defaultRuntimeInstructionInstallURL() -> URL {
+        defaultInstallURL()
+            .deletingLastPathComponent()
+            .appendingPathComponent(runtimeInstructionFileName)
+    }
+
+    static func defaultSharedRuntimeInstructionURL(fileManager: FileManager = .default) -> URL {
+        fileManager.homeDirectoryForCurrentUser
+            .appendingPathComponent(".spill", isDirectory: true)
+            .appendingPathComponent(runtimeInstructionFileName)
+    }
+
     static func refreshInstalledFilesIfPresent() {
         TokenMeteringAdapterKit.refreshInstalledHookAdaptersIfPresent()
         _ = try? refreshInstalledHelperIfPresent(
@@ -225,6 +246,14 @@ enum TokenMeteringSetupInstaller {
         _ = try? refreshInstalledHelperIfPresent(
             sourceURL: statsScriptURL,
             destination: defaultStatsInstallURL()
+        )
+        _ = try? refreshInstalledRuntimeInstructionIfPresent(
+            sourceURL: runtimeInstructionURL,
+            destination: defaultRuntimeInstructionInstallURL()
+        )
+        _ = try? refreshInstalledRuntimeInstructionIfPresent(
+            sourceURL: runtimeInstructionURL,
+            destination: defaultSharedRuntimeInstructionURL()
         )
     }
 
@@ -243,6 +272,29 @@ enum TokenMeteringSetupInstaller {
         try copyExecutableScript(from: sourceURL, to: destination, fileManager: fileManager)
         return true
     }
+}
+
+extension TokenMeteringSetupInstaller {
+    @discardableResult
+    static func refreshInstalledRuntimeInstructionIfPresent(
+        sourceURL: URL?,
+        destination: URL,
+        fileManager: FileManager = .default
+    ) throws -> Bool {
+        guard let sourceURL,
+              fileManager.fileExists(atPath: destination.path)
+        else {
+            return false
+        }
+
+        try copyPrivateResource(
+            from: sourceURL,
+            to: destination,
+            permissions: 0o600,
+            fileManager: fileManager
+        )
+        return true
+    }
 
     static func install(to destination: URL = defaultInstallURL()) throws {
         guard let url = scriptURL else {
@@ -250,6 +302,9 @@ enum TokenMeteringSetupInstaller {
         }
         guard let statsURL = statsScriptURL else {
             throw TokenMeteringAdapterInstallError.scriptNotFound("Stats helper")
+        }
+        guard let runtimeInstructionURL else {
+            throw TokenMeteringAdapterInstallError.scriptNotFound("Runtime instruction")
         }
 
         for adapter in TokenMeteringAdapterKit.hookAdapters {
@@ -262,12 +317,21 @@ enum TokenMeteringSetupInstaller {
             .deletingLastPathComponent()
             .appendingPathComponent(statsScriptFileName)
         try copyExecutableScript(from: statsURL, to: statsDestination)
+        try copyPrivateResource(
+            from: runtimeInstructionURL,
+            to: destination.deletingLastPathComponent().appendingPathComponent(runtimeInstructionFileName),
+            permissions: 0o600
+        )
+        try copyPrivateResource(
+            from: runtimeInstructionURL,
+            to: defaultSharedRuntimeInstructionURL(),
+            permissions: 0o600
+        )
     }
 
     static func setupCommand(installedAt scriptURL: URL = defaultInstallURL()) -> String {
         publicSetupCommand
     }
-
 }
 
 private enum ShellQuoting {
@@ -281,28 +345,33 @@ private func copyExecutableScript(
     to destination: URL,
     fileManager: FileManager = .default
 ) throws {
-    // Restricted to the owner: these scripts are invoked only by Spill itself (via
-    // absolute path with an explicit python3/node executable), so no other local
-    // principal needs read or execute access, and keeping the directory owner-only
-    // blocks other local accounts from tampering with what gets executed here.
-    // Harden both the script's own directory (adapters/<tool>/) and its parent
-    // (adapters/) — createDirectory only applies posixPermissions to newly created
-    // path components, so a pre-existing adapters/ root from before this hardening was
-    // added would otherwise keep its looser default permissions indefinitely.
-    let scriptDirectory = destination.deletingLastPathComponent()
-    try TokenUsageStore.createPrivateDirectoryIfNeeded(at: scriptDirectory.deletingLastPathComponent())
-    try TokenUsageStore.createPrivateDirectoryIfNeeded(at: scriptDirectory)
+    try copyPrivateResource(
+        from: sourceURL,
+        to: destination,
+        permissions: 0o700,
+        fileManager: fileManager
+    )
+}
+
+private func copyPrivateResource(
+    from sourceURL: URL,
+    to destination: URL,
+    permissions: Int,
+    fileManager: FileManager = .default
+) throws {
+    let resourceDirectory = destination.deletingLastPathComponent()
+    if resourceDirectory.lastPathComponent != ".spill" {
+        try TokenUsageStore.createPrivateDirectoryIfNeeded(at: resourceDirectory.deletingLastPathComponent())
+    }
+    try TokenUsageStore.createPrivateDirectoryIfNeeded(at: resourceDirectory)
 
     let temporaryURL = destination
         .deletingLastPathComponent()
         .appendingPathComponent(".\(destination.lastPathComponent).tmp-\(UUID().uuidString)")
     try fileManager.copyItem(at: sourceURL, to: temporaryURL)
     do {
-        // Owner-only rwx: only Spill itself invokes these scripts (via absolute path
-        // with an explicit python3/node executable), so group/other execute access is
-        // unnecessary exposure, not a requirement.
         var attrs = try fileManager.attributesOfItem(atPath: temporaryURL.path)
-        attrs[.posixPermissions] = 0o700
+        attrs[.posixPermissions] = permissions
         try fileManager.setAttributes(attrs, ofItemAtPath: temporaryURL.path)
 
         if fileManager.fileExists(atPath: destination.path) {

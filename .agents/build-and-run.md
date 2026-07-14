@@ -109,6 +109,9 @@ being tested separate from the copy being edited.
 | `scripts/spill-token-metering-setup.mjs` | Public setup helper source copied into the hosted setup package by `scripts/prepare-docs.sh`. |
 | `Sources/Spill/Resources/adapters/setup/spill-token-metering-setup.mjs` | Setup helper bundled into the app resources. |
 | `Sources/Spill/Resources/adapters/setup/spill-token-metering-stats.mjs` | Read-only local usage stats helper bundled into the app resources and installed beside the setup helper. |
+| `docs/token-metering/runtime-instruction.md` | Canonical shared runtime instruction source used by the public installer. |
+| `Sources/Spill/Resources/adapters/setup/runtime-instruction.md` | Canonical runtime instruction bundled into the app resources. |
+| `~/.spill/runtime-instruction.md` | Installed owner-only shared instruction read through the runtime discovery bridges. |
 | `~/Library/Application Support/Spill/adapters/<tool>/...` | Installed user-level runtime hook or importer used by Codex, Claude Code, and AGY after setup. |
 
 Rebuilding the app updates the `.build/Spill.app` resource copy. It does not
@@ -144,7 +147,16 @@ diff -q scripts/spill-token-metering-setup.mjs Sources/Spill/Resources/adapters/
 diff -q adapters/setup/spill-token-metering-setup.mjs Sources/Spill/Resources/adapters/setup/spill-token-metering-setup.mjs
 diff -q adapters/setup/spill-token-metering-stats.mjs Sources/Spill/Resources/adapters/setup/spill-token-metering-stats.mjs
 diff -q scripts/spill-token-metering-stats.mjs Sources/Spill/Resources/adapters/setup/spill-token-metering-stats.mjs
+diff -q docs/token-metering/runtime-instruction.md adapters/setup/runtime-instruction.md
+diff -q docs/token-metering/runtime-instruction.md Sources/Spill/Resources/adapters/setup/runtime-instruction.md
 ```
+
+The setup helper installs one canonical instruction at
+`~/.spill/runtime-instruction.md`. It merges only a managed bridge into the
+active Codex user instruction file, `~/.claude/CLAUDE.md`, and
+`~/.antigravity/AGENTS.md`; those runtime files are not independent copies of
+the full Spill prompt. Existing unrelated content must remain intact, and
+running agent sessions may need a restart before they reload the bridge.
 
 ## Token Metering Runtime Facts
 
