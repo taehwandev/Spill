@@ -623,15 +623,14 @@ extension TokenUsageDashboardStore {
         )
     }
 
-    /// No project/session/day drill-down and includeCache scope: every dashboard output can be
-    /// answered from SQL aggregate queries alone (see TokenUsageDashboardSnapshot+SQLFactory.swift),
-    /// so this skips loadEvents entirely rather than loading and holding the full raw row array
-    /// just to recompute totals the store already has SQL paths for.
+    /// No project/session/day drill-down: every dashboard output can be answered from SQL
+    /// aggregate queries alone (see TokenUsageDashboardSnapshot+SQLFactory.swift), for either
+    /// inputScope, so this skips loadEvents entirely rather than loading and holding the full
+    /// raw row array just to recompute totals the store already has SQL paths for.
     nonisolated private static func canBuildSnapshotFromSQL(for request: TokenUsageDashboardBuildRequest) -> Bool {
         request.selectedProjectID == nil
             && request.selectedSessionID == nil
             && request.selectedCalendarDayID == nil
-            && request.inputScope == .includeCache
     }
 
     nonisolated private static func buildSnapshotOutputFromSQL(
@@ -642,6 +641,7 @@ extension TokenUsageDashboardStore {
             usageStore: usageStore,
             selectedTool: request.selectedTool,
             selectedPeriod: request.selectedPeriod,
+            inputScope: request.inputScope,
             language: request.language,
             localAliases: request.localAliases,
             showAdvancedTools: request.showAdvancedTools,
@@ -657,6 +657,7 @@ extension TokenUsageDashboardStore {
                 usageStore: usageStore,
                 selectedTool: nil,
                 selectedPeriod: request.selectedPeriod,
+                inputScope: request.inputScope,
                 language: request.language,
                 localAliases: request.localAliases,
                 showAdvancedTools: request.showAdvancedTools,

@@ -1,19 +1,20 @@
 import Foundation
 
 /// Builds the full TokenUsageDashboardSnapshot from SQL aggregate queries instead of a raw
-/// events array, for the common case: no project/session/calendar-day drill-down selected, and
-/// inputScope is .includeCache (the default). This is what lets the "All time" dashboard view
-/// avoid loading and holding every stored event in memory just to answer aggregate totals.
+/// events array, for the common case: no project/session/calendar-day drill-down selected. Both
+/// .includeCache and .freshOnly inputScope are SQL-eligible. This is what lets the "All time"
+/// dashboard view avoid loading and holding every stored event in memory just to answer
+/// aggregate totals.
 ///
 /// Every field here mirrors TokenMeteringPresentationModel's private init exactly for this same
-/// unfiltered/includeCache case; TokenUsageDashboardStore is responsible for falling back to the
-/// existing events-based init(context:...) whenever a project/session/day is selected or
-/// inputScope is .freshOnly (grouped fresh-token SQL sums don't exist yet).
+/// unfiltered case; TokenUsageDashboardStore is responsible for falling back to the existing
+/// events-based init(context:...) whenever a project/session/day is selected.
 extension TokenUsageDashboardSnapshot {
     static func buildFromSQLAggregates(
         usageStore: TokenUsageStore,
         selectedTool: TokenUsageAITool? = nil,
         selectedPeriod: TokenUsageDashboardPeriod = .all,
+        inputScope: TokenUsageInputScope = .includeCache,
         language: TokenMeteringLanguage = .current(),
         localAliases: [String: String] = [:],
         showAdvancedTools: Bool = false,
@@ -58,6 +59,10 @@ extension TokenUsageDashboardSnapshot {
         let totalTokens = focused.totalTokens
         let inputTokens = focused.inputTokens
         let outputTokens = focused.outputTokens
+        // Mirrors the original init's capturedUsageTokens: raw totalTokens for .includeCache,
+        // the exact fresh (output + uncached input) sum for .freshOnly. Used as the denominator
+        // for tool/model/task/stage rows -- unlike the totalTokens KPI, which always stays raw.
+        let usageTokensTotal = inputScope == .includeCache ? totalTokens : focused.exactFreshTotalTokens
 
         let kpis = [
             TokenUsageDashboardKPI(
@@ -81,7 +86,7 @@ extension TokenUsageDashboardSnapshot {
         ]
 
         let periodFilters = TokenUsageDashboardPeriod.allCases.map { period -> TokenUsageDashboardPeriodFilter in
-            let capturedPeriodTotal = periodFilterTotals[period]?.includeCache ?? 0
+            let capturedPeriodTotal = periodFilterTotals[period]?.total(for: inputScope) ?? 0
             return TokenUsageDashboardPeriodFilter(
                 period: period,
                 title: period.title(language: language),
@@ -90,12 +95,12 @@ extension TokenUsageDashboardSnapshot {
             )
         }
 
-        let toolTotals = usageStore.groupedTokenTotalsByTool(
+        let toolTotals = usageStore.groupedInputScopeTotalsByTool(
             startingAt: requestRange.start,
             endingBefore: requestRange.end,
             dashboardToolsOnly: dashboardToolsOnly,
             visibleTools: visibleTools
-        )
+        ).mapValues { $0.total(for: inputScope) }
         // toolFilters' own totals/count intentionally ignore the single selectedTool narrowing
         // (only visibleTools) -- it needs the period+project scope shared by every tool chip,
         // not the one currently selected, matching how the original init's toolFilterEvents
@@ -122,7 +127,12 @@ extension TokenUsageDashboardSnapshot {
             dashboardToolsOnly: dashboardToolsOnly,
             visibleTools: effectiveVisibleTools
         )
-        let projectFilters = Self.projectFiltersFromTotals(projectTotals, selectedProjectID: nil, language: language)
+        let projectFilters = Self.projectFiltersFromTotals(
+            projectTotals,
+            selectedProjectID: nil,
+            inputScope: inputScope,
+            language: language
+        )
 
         let inputAccountingSQL = usageStore.inputAccountingTotals(
             startingAt: requestRange.start,
@@ -151,33 +161,33 @@ extension TokenUsageDashboardSnapshot {
         // Unlike toolFilters' totals (deliberately unfiltered by selectedTool), toolRows must
         // reflect the fully-focused scope -- selectedTool narrowing included -- matching the
         // original init's visibleCapturedToolTokens, which is built from focusedEvents.
-        let toolRowTotals = usageStore.groupedTokenTotalsByTool(
+        let toolRowTotals = usageStore.groupedInputScopeTotalsByTool(
             startingAt: requestRange.start,
             endingBefore: requestRange.end,
             dashboardToolsOnly: dashboardToolsOnly,
             visibleTools: effectiveVisibleTools
-        )
+        ).mapValues { $0.total(for: inputScope) }
         let toolRows = TokenUsageDashboardRowBuilder.rows(
             tokenValues: toolRowTotals.filter { tool, _ in visibleTools?.contains(tool) ?? true },
-            totalTokens: totalTokens,
+            totalTokens: usageTokensTotal,
             id: { $0.rawValue },
             label: { $0.dashboardLabel(language: language) }
         )
 
-        let modelTotalsSQL = usageStore.groupedModelTotals(
+        let modelTotalsSQL = usageStore.groupedModelInputScopeTotals(
             startingAt: requestRange.start,
             endingBefore: requestRange.end,
             dashboardToolsOnly: dashboardToolsOnly,
             visibleTools: effectiveVisibleTools
-        )
+        ).mapValues { $0.total(for: inputScope) }
         let modelRows = TokenUsageDashboardRowBuilder.rows(
             tokenValues: modelTotalsSQL,
-            totalTokens: totalTokens,
+            totalTokens: usageTokensTotal,
             id: { $0 },
             label: { modelLabel($0, language: language) }
         )
 
-        let taskTotalsSQL = usageStore.groupedTaskTypeTotals(
+        let taskTotalsSQL = usageStore.groupedTaskTypeInputScopeTotals(
             startingAt: requestRange.start,
             endingBefore: requestRange.end,
             dashboardToolsOnly: dashboardToolsOnly,
@@ -185,16 +195,16 @@ extension TokenUsageDashboardSnapshot {
         )
         var taskTotals = [TokenUsageTaskType: Int]()
         for (key, value) in taskTotalsSQL {
-            taskTotals[TokenUsageTaskType(rawValue: key) ?? .uncategorized, default: 0] += value
+            taskTotals[TokenUsageTaskType(rawValue: key) ?? .uncategorized, default: 0] += value.total(for: inputScope)
         }
         let taskRows = TokenUsageDashboardRowBuilder.rows(
             tokenValues: taskTotals,
-            totalTokens: totalTokens,
+            totalTokens: usageTokensTotal,
             id: { $0.rawValue },
             label: { $0.dashboardLabel(language: language) }
         )
 
-        let stageTotalsSQL = usageStore.groupedStageTotals(
+        let stageTotalsSQL = usageStore.groupedStageInputScopeTotals(
             startingAt: requestRange.start,
             endingBefore: requestRange.end,
             dashboardToolsOnly: dashboardToolsOnly,
@@ -202,11 +212,11 @@ extension TokenUsageDashboardSnapshot {
         )
         var stageTotals = [TokenUsageStage: Int]()
         for (key, value) in stageTotalsSQL {
-            stageTotals[TokenUsageStage(rawValue: key) ?? .summarize, default: 0] += value
+            stageTotals[TokenUsageStage(rawValue: key) ?? .summarize, default: 0] += value.total(for: inputScope)
         }
         let stageRows = TokenUsageDashboardRowBuilder.rows(
             tokenValues: stageTotals,
-            totalTokens: totalTokens,
+            totalTokens: usageTokensTotal,
             id: { $0.rawValue },
             label: { $0.dashboardLabel(language: language) }
         )
@@ -262,7 +272,7 @@ extension TokenUsageDashboardSnapshot {
         )
         let sessions = sessionRows(
             sourceRows: sourceRowsData,
-            inputScope: .includeCache,
+            inputScope: inputScope,
             language: language,
             localAliases: localAliases,
             calendar: calendar,
@@ -291,6 +301,7 @@ extension TokenUsageDashboardSnapshot {
             calendar: calendar,
             locale: locale,
             timeZone: timeZone,
+            inputScope: inputScope,
             visibleTools: visibleTools
         )
 
@@ -301,6 +312,7 @@ extension TokenUsageDashboardSnapshot {
             comparisonTotalTokens = Self.comparisonTotal(
                 usageStore: usageStore,
                 selectedPeriod: selectedPeriod,
+                inputScope: inputScope,
                 now: now,
                 calendar: calendar,
                 dashboardToolsOnly: dashboardToolsOnly,
@@ -324,13 +336,13 @@ extension TokenUsageDashboardSnapshot {
         // Like periodFilters, the calendar heatmap totals are deliberately unfiltered by the
         // single selectedTool -- only by the broader visibleTools set -- matching how the
         // buildPair caller computes calendarDayTotals independent of selectedTool.
-        let calendarDayTotals = usageStore.dashboardDayTokenTotals(
+        let calendarDayTotals = usageStore.dashboardDayInputScopeTotals(
             startingAt: calendarMonth,
             endingBefore: calendar.date(byAdding: .month, value: 1, to: calendarMonth) ?? calendarMonth,
             calendar: calendar,
             dashboardToolsOnly: dashboardToolsOnly,
             visibleTools: visibleTools
-        )
+        ).mapValues { $0.total(for: inputScope) }
         let calendarDays = Self.calendarDays(
             events: [],
             monthStart: calendarMonth,
@@ -429,6 +441,7 @@ private extension TokenUsageDashboardSnapshot {
     static func comparisonTotal(
         usageStore: TokenUsageStore,
         selectedPeriod: TokenUsageDashboardPeriod,
+        inputScope: TokenUsageInputScope,
         now: Date,
         calendar: Calendar,
         dashboardToolsOnly: Bool,
@@ -441,6 +454,7 @@ private extension TokenUsageDashboardSnapshot {
             return usageStore.comparisonTokenTotal(
                 startingAt: yesterdayStart,
                 endingBefore: todayStart,
+                inputScope: inputScope,
                 dashboardToolsOnly: dashboardToolsOnly,
                 visibleTools: visibleTools
             )
@@ -450,6 +464,7 @@ private extension TokenUsageDashboardSnapshot {
             return usageStore.comparisonTokenTotal(
                 startingAt: fourteenDaysAgo,
                 endingBefore: sevenDaysAgo,
+                inputScope: inputScope,
                 dashboardToolsOnly: dashboardToolsOnly,
                 visibleTools: visibleTools
             )
@@ -459,6 +474,7 @@ private extension TokenUsageDashboardSnapshot {
             return usageStore.comparisonTokenTotal(
                 startingAt: sixtyDaysAgo,
                 endingBefore: thirtyDaysAgo,
+                inputScope: inputScope,
                 dashboardToolsOnly: dashboardToolsOnly,
                 visibleTools: visibleTools
             )
@@ -472,9 +488,10 @@ private extension TokenUsageDashboardSnapshot {
     static func projectFiltersFromTotals(
         _ totals: [String: (eventCount: Int, totals: TokenUsageInputScopeTotals)],
         selectedProjectID: String?,
+        inputScope: TokenUsageInputScope,
         language: TokenMeteringLanguage
     ) -> [TokenUsageDashboardProjectFilter] {
-        let totalTokens = totals.values.reduce(0) { $0 + $1.totals.includeCache }
+        let totalTokens = totals.values.reduce(0) { $0 + $1.totals.total(for: inputScope) }
         let totalEvents = totals.values.reduce(0) { $0 + $1.eventCount }
         let allFilter = TokenUsageDashboardProjectFilter(
             projectID: nil,
@@ -490,7 +507,7 @@ private extension TokenUsageDashboardSnapshot {
             TokenUsageDashboardProjectFilter(
                 projectID: projectID,
                 title: projectTitle(projectID, language: language),
-                detail: formatTokens(value.totals.includeCache),
+                detail: formatTokens(value.totals.total(for: inputScope)),
                 isSelected: selectedProjectID == projectID
             )
         }.sorted { lhs, rhs in

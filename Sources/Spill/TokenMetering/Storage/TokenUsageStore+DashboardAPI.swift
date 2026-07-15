@@ -315,6 +315,119 @@ extension TokenUsageStore {
         }
     }
 
+    func groupedInputScopeTotalsByTool(
+        startingAt startDate: Date? = nil,
+        endingBefore endDate: Date? = nil,
+        dashboardToolsOnly: Bool = true,
+        visibleTools: Set<TokenUsageAITool>? = nil
+    ) -> [TokenUsageAITool: TokenUsageInputScopeTotals] {
+        let raw: [String: TokenUsageInputScopeTotals] = lock.withLock {
+            let database: OpaquePointer
+            do {
+                database = try openDatabase()
+            } catch {
+                return [:]
+            }
+            defer { sqlite3_close(database) }
+
+            return loadGroupedInputScopeTotals(
+                column: "ai_tool",
+                startingAt: startDate,
+                endingBefore: endDate,
+                dashboardToolsOnly: dashboardToolsOnly,
+                visibleTools: visibleTools,
+                database: database
+            )
+        }
+        var totals = [TokenUsageAITool: TokenUsageInputScopeTotals]()
+        for (key, value) in raw {
+            let tool: TokenUsageAITool = key == "agy" ? .antigravity : (TokenUsageAITool(rawValue: key) ?? .unknown)
+            let existing = totals[tool] ?? .zero
+            totals[tool] = TokenUsageInputScopeTotals(
+                includeCache: existing.includeCache + value.includeCache,
+                freshOnly: existing.freshOnly + value.freshOnly
+            )
+        }
+        return totals
+    }
+
+    func groupedTaskTypeInputScopeTotals(
+        startingAt startDate: Date? = nil,
+        endingBefore endDate: Date? = nil,
+        dashboardToolsOnly: Bool = true,
+        visibleTools: Set<TokenUsageAITool>? = nil
+    ) -> [String: TokenUsageInputScopeTotals] {
+        lock.withLock {
+            let database: OpaquePointer
+            do {
+                database = try openDatabase()
+            } catch {
+                return [:]
+            }
+            defer { sqlite3_close(database) }
+
+            return loadGroupedInputScopeTotals(
+                column: "task_type",
+                startingAt: startDate,
+                endingBefore: endDate,
+                dashboardToolsOnly: dashboardToolsOnly,
+                visibleTools: visibleTools,
+                database: database
+            )
+        }
+    }
+
+    func groupedStageInputScopeTotals(
+        startingAt startDate: Date? = nil,
+        endingBefore endDate: Date? = nil,
+        dashboardToolsOnly: Bool = true,
+        visibleTools: Set<TokenUsageAITool>? = nil
+    ) -> [String: TokenUsageInputScopeTotals] {
+        lock.withLock {
+            let database: OpaquePointer
+            do {
+                database = try openDatabase()
+            } catch {
+                return [:]
+            }
+            defer { sqlite3_close(database) }
+
+            return loadGroupedInputScopeTotals(
+                column: "stage",
+                startingAt: startDate,
+                endingBefore: endDate,
+                dashboardToolsOnly: dashboardToolsOnly,
+                visibleTools: visibleTools,
+                database: database
+            )
+        }
+    }
+
+    func groupedModelInputScopeTotals(
+        startingAt startDate: Date? = nil,
+        endingBefore endDate: Date? = nil,
+        dashboardToolsOnly: Bool = true,
+        visibleTools: Set<TokenUsageAITool>? = nil
+    ) -> [String: TokenUsageInputScopeTotals] {
+        lock.withLock {
+            let database: OpaquePointer
+            do {
+                database = try openDatabase()
+            } catch {
+                return [:]
+            }
+            defer { sqlite3_close(database) }
+
+            return loadGroupedModelInputScopeTotals(
+                startingAt: startDate,
+                endingBefore: endDate,
+                dashboardToolsOnly: dashboardToolsOnly,
+                visibleTools: visibleTools,
+                database: database
+            )
+        }
+    }
+
     // loadGroupedTokenTotals sums total_tokens only (includeCache), matching every other
     // caller of it today (dashboardSummary's toolTotals/taskTotals). The Swift-side
     // taskRows/stageRows reducer these are meant to eventually replace is inputScope-aware;

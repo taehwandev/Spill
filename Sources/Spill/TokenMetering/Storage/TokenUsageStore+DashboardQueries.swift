@@ -376,6 +376,103 @@ extension TokenUsageStore {
         return totals
     }
 
+    /// Fresh-scope-aware sibling of loadGroupedTokenTotals(column:), for callers (toolRows,
+    /// taskRows, stageRows) whose Swift-side reducer is inputScope-aware and therefore can't use
+    /// the includeCache-only original.
+    func loadGroupedInputScopeTotals(
+        column: String,
+        startingAt startDate: Date? = nil,
+        endingBefore endDate: Date? = nil,
+        dashboardToolsOnly: Bool,
+        visibleTools: Set<TokenUsageAITool>? = nil,
+        database: OpaquePointer
+    ) -> [String: TokenUsageInputScopeTotals] {
+        let sql = """
+        SELECT \(column),
+               COALESCE(SUM(total_tokens), 0),
+               COALESCE(SUM(\(Self.dashboardFreshTokenSQL)), 0)
+        FROM token_usage_events
+        \(Self.dashboardWhereClause(startingAt: startDate, endingBefore: endDate, dashboardToolsOnly: dashboardToolsOnly, visibleTools: visibleTools))
+        GROUP BY \(column)
+        """
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
+              let statement
+        else {
+            return [:]
+        }
+        defer { sqlite3_finalize(statement) }
+        Self.bindDashboardDateRange(startingAt: startDate, endingBefore: endDate, statement: statement)
+
+        var totals = [String: TokenUsageInputScopeTotals]()
+        while sqlite3_step(statement) == SQLITE_ROW {
+            guard let keyText = sqlite3_column_text(statement, 0) else {
+                continue
+            }
+            let key = String(cString: keyText)
+            guard !key.isEmpty else {
+                continue
+            }
+            totals[key] = TokenUsageInputScopeTotals(
+                includeCache: Int(sqlite3_column_int64(statement, 1)),
+                freshOnly: Int(sqlite3_column_int64(statement, 2))
+            )
+        }
+        return totals
+    }
+
+    /// Fresh-scope-aware sibling of loadGroupedModelTotals; see that function's doc comment for
+    /// the modelKey-normalization and TRIM-character-set caveats, both identical here.
+    func loadGroupedModelInputScopeTotals(
+        startingAt startDate: Date? = nil,
+        endingBefore endDate: Date? = nil,
+        dashboardToolsOnly: Bool,
+        visibleTools: Set<TokenUsageAITool>? = nil,
+        database: OpaquePointer
+    ) -> [String: TokenUsageInputScopeTotals] {
+        let trimExpr = "TRIM(model, ' ' || char(9) || char(10) || char(13))"
+        let keyExpr = """
+        CASE
+            WHEN \(trimExpr) = ''
+                OR LOWER(\(trimExpr)) IN ('unknown', 'unknown_model', 'model_unknown', 'unavailable')
+            THEN 'model_unavailable'
+            ELSE \(trimExpr)
+        END
+        """
+        let sql = """
+        SELECT \(keyExpr),
+               COALESCE(SUM(total_tokens), 0),
+               COALESCE(SUM(\(Self.dashboardFreshTokenSQL)), 0)
+        FROM token_usage_events
+        \(Self.dashboardWhereClause(startingAt: startDate, endingBefore: endDate, dashboardToolsOnly: dashboardToolsOnly, visibleTools: visibleTools))
+        GROUP BY 1
+        """
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
+              let statement
+        else {
+            return [:]
+        }
+        defer { sqlite3_finalize(statement) }
+        Self.bindDashboardDateRange(startingAt: startDate, endingBefore: endDate, statement: statement)
+
+        var totals = [String: TokenUsageInputScopeTotals]()
+        while sqlite3_step(statement) == SQLITE_ROW {
+            guard let keyText = sqlite3_column_text(statement, 0) else {
+                continue
+            }
+            let key = String(cString: keyText)
+            guard !key.isEmpty else {
+                continue
+            }
+            totals[key] = TokenUsageInputScopeTotals(
+                includeCache: Int(sqlite3_column_int64(statement, 1)),
+                freshOnly: Int(sqlite3_column_int64(statement, 2))
+            )
+        }
+        return totals
+    }
+
     /// Mirrors TokenUsageDashboardSnapshot.modelKey in SQL: collapses empty/whitespace-only and
     /// known "unknown" spellings into "model_unavailable", otherwise groups by the trimmed model
     /// string as-is (case preserved). SQLite's two-arg TRIM only strips the listed characters

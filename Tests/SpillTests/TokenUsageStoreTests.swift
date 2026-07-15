@@ -4413,6 +4413,85 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertNil(actual["UNKNOWN"])
     }
 
+    func testGroupedInputScopeTotalsMatchPerEventSwiftAggregationForBothScopes() throws {
+        let store = TokenUsageStore(fileURL: temporaryEventsURL())
+        try store.appendEvent(Self.safeEvent(
+            aiTool: .codex,
+            spanID: "span_scope_group_1",
+            inputTokens: 100,
+            outputTokens: 50,
+            tokenAccounting: TokenUsageAccounting(uncachedInputTokens: 40),
+            taskType: .debugging,
+            stage: .implement,
+            model: "Claude-Sonnet-5"
+        ))
+        try store.appendEvent(Self.safeEvent(
+            aiTool: .claude,
+            spanID: "span_scope_group_2",
+            inputTokens: 60,
+            outputTokens: 20,
+            tokenAccounting: nil,
+            taskType: .debugging,
+            stage: .verify,
+            model: "gpt-5"
+        ))
+        try store.appendEvent(Self.safeEvent(
+            aiTool: .codex,
+            spanID: "span_scope_group_3",
+            inputTokens: 40,
+            outputTokens: 10,
+            tokenAccounting: TokenUsageAccounting(uncachedInputTokens: 35),
+            taskType: .codeReview,
+            stage: .implement,
+            model: "Claude-Sonnet-5"
+        ))
+
+        let events = store.loadEvents(startingAt: nil, endingBefore: nil)
+        let parsedEvents = events.map { TokenUsageDashboardParsedEvent(event: $0, calendar: .autoupdatingCurrent) }
+
+        func expectedTotals<Key: Hashable>(_ key: (TokenUsageDashboardParsedEvent) -> Key) -> [Key: TokenUsageInputScopeTotals] {
+            var result = [Key: TokenUsageInputScopeTotals]()
+            for scope: TokenUsageInputScope in [.includeCache, .freshOnly] {
+                let totals = TokenUsageDashboardSnapshot.tokenTotals(events: parsedEvents, inputScope: scope, by: key)
+                for (k, v) in totals {
+                    var existing = result[k] ?? .zero
+                    existing = TokenUsageInputScopeTotals(
+                        includeCache: scope == .includeCache ? v : existing.includeCache,
+                        freshOnly: scope == .freshOnly ? v : existing.freshOnly
+                    )
+                    result[k] = existing
+                }
+            }
+            return result
+        }
+
+        let expectedToolTotals = expectedTotals { $0.event.aiTool }
+        let actualToolTotals = store.groupedInputScopeTotalsByTool()
+        for (tool, expected) in expectedToolTotals {
+            XCTAssertEqual(actualToolTotals[tool], expected, "tool \(tool)")
+        }
+        XCTAssertEqual(actualToolTotals[.codex]?.includeCache, 200)
+        XCTAssertEqual(actualToolTotals[.codex]?.freshOnly, 135)
+
+        let expectedTaskTotals = expectedTotals { $0.event.taskType.rawValue }
+        let actualTaskTotals = store.groupedTaskTypeInputScopeTotals()
+        for (task, expected) in expectedTaskTotals {
+            XCTAssertEqual(actualTaskTotals[task], expected, "task \(task)")
+        }
+
+        let expectedStageTotals = expectedTotals { $0.event.stage.rawValue }
+        let actualStageTotals = store.groupedStageInputScopeTotals()
+        for (stage, expected) in expectedStageTotals {
+            XCTAssertEqual(actualStageTotals[stage], expected, "stage \(stage)")
+        }
+
+        let expectedModelTotals = expectedTotals { TokenUsageDashboardSnapshot.modelKey($0.event.model) }
+        let actualModelTotals = store.groupedModelInputScopeTotals()
+        for (model, expected) in expectedModelTotals {
+            XCTAssertEqual(actualModelTotals[model], expected, "model \(model)")
+        }
+    }
+
     func testSQLSourcedTrendBucketsMatchExistingEventBasedAggregation() throws {
         let store = TokenUsageStore(fileURL: temporaryEventsURL())
         let calendar = Calendar.autoupdatingCurrent
@@ -4647,6 +4726,7 @@ final class TokenUsageStoreTests: XCTestCase {
 
         for period: TokenUsageDashboardPeriod in [.today, .sevenDays, .thirtyDays, .all] {
             for selectedTool: TokenUsageAITool? in [nil, .codex] {
+                for inputScope: TokenUsageInputScope in [.includeCache, .freshOnly] {
                 let expectedPair = TokenUsageDashboardSnapshot.buildPair(
                     events: events,
                     selectedTool: selectedTool,
@@ -4663,7 +4743,7 @@ final class TokenUsageStoreTests: XCTestCase {
                     periodFilterTotals: periodFilterTotals,
                     availableDateBounds: dateBounds,
                     calendarDayTotals: calendarDayInputScopeTotals,
-                    inputScope: .includeCache,
+                    inputScope: inputScope,
                     locale: .autoupdatingCurrent,
                     timeZone: .autoupdatingCurrent
                 )
@@ -4672,6 +4752,7 @@ final class TokenUsageStoreTests: XCTestCase {
                     usageStore: store,
                     selectedTool: selectedTool,
                     selectedPeriod: period,
+                    inputScope: inputScope,
                     language: .english,
                     localAliases: [:],
                     showAdvancedTools: false,
@@ -4682,7 +4763,7 @@ final class TokenUsageStoreTests: XCTestCase {
                 )
 
                 let expected = expectedPair.filtered
-                let label = "period \(period), selectedTool \(String(describing: selectedTool))"
+                let label = "period \(period), selectedTool \(String(describing: selectedTool)), inputScope \(inputScope)"
                 XCTAssertEqual(actual.eventCount, expected.eventCount, "eventCount \(label)")
                 XCTAssertEqual(actual.totalTokens, expected.totalTokens, "totalTokens \(label)")
                 XCTAssertEqual(actual.kpis, expected.kpis, "kpis \(label)")
@@ -4711,6 +4792,7 @@ final class TokenUsageStoreTests: XCTestCase {
                 XCTAssertEqual(actual.canNavigateNextPeriod, expected.canNavigateNextPeriod, "canNavNextPeriod \(label)")
                 // Full-struct check as a safety net for any field not enumerated above.
                 XCTAssertEqual(actual, expected, "full snapshot \(label)")
+                }
             }
         }
     }
