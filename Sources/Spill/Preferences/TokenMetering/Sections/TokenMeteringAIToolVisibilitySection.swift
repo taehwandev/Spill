@@ -4,6 +4,11 @@ struct TokenMeteringAIToolVisibilitySection: View {
     @ObservedObject var settings: SpillSettings
     @ObservedObject var aiStatusStore: AIStatusStore
     let language: TokenMeteringLanguage
+    // Adapter connection state (script + hook/importer) requires reading hook
+    // config files from disk. The parent already computes this off the main
+    // thread and caches it (TokenMeteringPreferencesSection.refreshAdapterStatuses);
+    // reuse that instead of re-reading synchronously on every render here.
+    let adapterStatuses: [String: TokenMeteringAdapterConnectionStatus]
 
     private func t(_ key: TokenMeteringTextKey) -> String {
         TokenMeteringL10n.text(key, language: language)
@@ -26,7 +31,7 @@ struct TokenMeteringAIToolVisibilitySection: View {
 
             VStack(spacing: 8) {
                 if installedToolKinds.isEmpty {
-                    Text(TokenMeteringSetupL10n.text(.aiToolVisibilityNoInstalledTools, language: language))
+                    Text(emptyStateMessage)
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -44,7 +49,24 @@ struct TokenMeteringAIToolVisibilitySection: View {
     }
 
     private var installedToolKinds: [LocalAIToolKind] {
-        TokenMeteringToolAvailability.installedLocalToolKinds(from: aiStatusStore.statuses)
+        TokenMeteringToolAvailability.installedAndAdapterConnectedLocalToolKinds(
+            from: aiStatusStore.statuses,
+            adapterStatuses: adapterStatuses
+        )
+    }
+
+    // Distinguishes "no supported CLI detected" from "a CLI is present but
+    // Spill's adapter isn't connected yet" — the same generic message for both
+    // sent users chasing the wrong problem (thinking their CLI wasn't found at
+    // all, when they actually just need to run Setup).
+    private var emptyStateMessage: String {
+        let anyDetected = !TokenMeteringToolAvailability.installedLocalToolKinds(
+            from: aiStatusStore.statuses
+        ).isEmpty
+        return TokenMeteringSetupL10n.text(
+            anyDetected ? .aiToolVisibilityInstalledNotConnected : .aiToolVisibilityNoInstalledTools,
+            language: language
+        )
     }
 
     private func visibilityRow(for kind: LocalAIToolKind) -> some View {

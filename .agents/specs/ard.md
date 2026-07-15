@@ -429,10 +429,14 @@ Rules:
   the overview KPI view immediately. This synchronization is notification-driven
   and must not add a polling timer, data upload, or dashboard process restart.
 - A dashboard scope rebuild must not show scope-dependent KPIs, filter totals,
-  model rows, trends, or calendar values from different scope snapshots at the
-  same time. The view presents a loading placeholder for those usage surfaces
-  until the rebuilt snapshot matches the selected scope; raw workflow and detail
-  rows remain cache-inclusive by design.
+  model rows, trends, calendar values, Work Type, Work Step, or Work Item rows
+  from different scope snapshots at the same time. Instead of redacting those
+  surfaces during the rebuild, the view keeps rendering the previously applied
+  snapshot's own scope (every scope-dependent value reads from that one
+  snapshot, including the KPI headline) so nothing flashes a reload state; the
+  view switches wholesale, in a single re-render, once the rebuilt snapshot for
+  the newly selected scope lands. Workflow coverage, source-detail, and raw
+  accounting rows remain cache-inclusive by design.
 - Runtime importers preserve pricing-relevant token accounting separately from
   the strict usage event JSON. The strict event schema remains limited to raw
   `input_tokens`, `output_tokens`, `total_tokens`, and `token_breakdown`.
@@ -461,27 +465,67 @@ eligibility; controls that let the user re-enable a hidden tool use installation
 eligibility alone. Current process presence must not be used as a gate. Eligible
 usage totals still come from the app-owned `TokenUsageStore`.
 
+The Preferences AI Visible toggle list is a narrower surface: it must gate on
+both installation eligibility (runtime present) and adapter-connected
+eligibility (Spill's own metering adapter for that tool has its setup script
+present and its hook/importer actually configured). A row for a tool must not
+appear there merely because the runtime is installed with no adapter wired up,
+and it must not linger merely because adapter files remain after the runtime
+itself was uninstalled — both signals are required. The user's show/hide
+preference (`hiddenTools`) is a third, independent layer applied only within
+that installed-and-connected set; it cannot make an uninstalled or
+unconnected tool visible.
+
 Rationale:
 
 Process presence answers "is this tool running now?" Installation answers
-"can this runtime be used on this Mac?" Token usage answers "what exact usage
-has been recorded?" These signals have different lifecycles. A valid stored
-Codex row remains visible after the Codex process exits because Codex remains
+"can this runtime be used on this Mac?" Adapter connection answers "is Spill
+actually collecting for this tool?" Token usage answers "what exact usage has
+been recorded?" These signals have different lifecycles. A valid stored Codex
+row remains visible after the Codex process exits because Codex remains
 installed. If a runtime is uninstalled, its stored rows remain in the local
 store but leave normal dashboard, import, and AI-visible surfaces until the
 runtime is installed again or an advanced diagnostic surface is selected.
+Offering a visibility toggle for a tool Spill isn't actually connected to (or
+that no longer exists on the Mac) misrepresents what the toggle controls, so
+the AI Visible list uses the stricter installed-and-connected predicate while
+setup/history-import surfaces that need to show or repair connection state
+keep using installation eligibility alone.
 
 Rules:
 
 - `TokenMeteringToolAvailability` owns the mapping from installed
-  `LocalAIToolStatus` values to first-class token tools. Dashboard visibility,
-  AI Visible controls, agent connection status, and history-import rows must
-  consume this mapping rather than rebuilding tool lists independently.
+  `LocalAIToolStatus` values to first-class token tools, including
+  `installedAndAdapterConnectedLocalToolKinds`, the installed-and-connected
+  intersection used by the AI Visible list. Dashboard visibility, AI Visible
+  controls, agent connection status, and history-import rows must consume
+  this mapping rather than rebuilding tool lists independently.
 - Dashboard, panel, and menu-bar token content includes only
   `installedTools - hiddenTools` in normal mode.
-- AI Visible controls, agent connection status, and history-import targets use
-  `installedTools` so hidden tools can be re-enabled and installation/setup
-  state remains inspectable.
+- The Preferences AI Visible toggle list uses
+  `installedAndAdapterConnectedLocalToolKinds` so a row only appears once the
+  runtime is installed, the shared setup-script root exists, and Spill's
+  adapter is actually connected for that tool. Per-tool adapter-connected
+  state must come from `TokenMeteringSetupInstallationDiagnostics
+  .connectionStatus` — the same check and the same asynchronously-computed,
+  cached result (`TokenMeteringPreferencesSection.refreshAdapterStatuses` /
+  `adapterStatuses`) the Setup card itself already uses — passed in rather
+  than re-read synchronously on the main thread inside this list's own body.
+  For Antigravity there is no separate hook/script wiring step (Spill's
+  built-in active importer collects for it as soon as it's installed), so its
+  connection state is installation state by design; this matches how every
+  other Antigravity-facing surface in the app already treats it, it is not a
+  weaker check specific to this list. The list must observe adapter
+  install/repair state (for example `TokenMeteringSetupActionStore`, via the
+  parent's cached `adapterStatuses` changing) so a completed install adds the
+  row without requiring a relaunch. The empty state must distinguish "no
+  supported tool detected at all" from "a tool is detected but not yet
+  adapter-connected" — the same message for both misleads a user who only
+  needs to run Setup into thinking their CLI wasn't found.
+- Agent connection status panels and history-import targets use
+  `installedTools` alone (not the adapter-connected intersection) so hidden or
+  not-yet-connected tools remain inspectable and repairable from those
+  surfaces.
 - Advanced dashboard mode may include stored OpenAI SDK, `unknown`, and
   uninstalled-runtime history without changing normal eligibility or deleting
   those rows.

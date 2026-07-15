@@ -277,6 +277,15 @@ Requirements:
   `Install` when setup is absent and `Reinstall` or `Repair` when setup already
   exists. This check is setup state, not evidence that a real AI turn produced
   token usage.
+- The Preferences "AI tool visibility" list must offer a show/hide toggle for a
+  tool only when both are true: the runtime is actually installed on this Mac,
+  and Spill's own metering adapter is actually connected for it. A tool that is
+  not installed must never appear, even if adapter files remain from an earlier
+  install; a tool whose runtime is installed but whose adapter was never set up
+  must not appear either. The toggle itself is a further, separate preference:
+  among tools that already pass both checks, the user may choose to hide one
+  from dashboards. Hiding only affects local dashboard UI; token records stay
+  saved and local collection continues.
 - Setup UI should describe basic metering as exact totals without work-type or
   stage labels. It should describe workflow-aware setup as an optional copied
   instruction that is run from the workflow-owning directory, without scanning

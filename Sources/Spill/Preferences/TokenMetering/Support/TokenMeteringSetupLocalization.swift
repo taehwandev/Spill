@@ -3,6 +3,7 @@ import Foundation
 enum TokenMeteringSetupL10n {
     enum Key: String {
         case aiToolVisibilityNoInstalledTools
+        case aiToolVisibilityInstalledNotConnected
         case historyImportNoInstalledTools
         case setupDashboardTitle
         case setupInstall

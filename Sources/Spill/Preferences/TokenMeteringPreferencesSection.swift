@@ -122,7 +122,8 @@ private extension TokenMeteringPreferencesSection {
         TokenMeteringAIToolVisibilitySection(
             settings: settings,
             aiStatusStore: aiStatusStore,
-            language: currentLanguage
+            language: currentLanguage,
+            adapterStatuses: adapterStatuses
         )
     }
 
