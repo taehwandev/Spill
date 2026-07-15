@@ -107,42 +107,16 @@ extension TokenUsageStoreTests {
         )
     }
 
-    func testInstalledAndAdapterConnectedRequiresBothInstallationAndAdapterConnection() {
+    func testInstalledLocalToolKindsUsesRuntimeInstallationOnly() {
         let statuses = [
             LocalAIToolStatus(kind: .codex, value: "Ready", subtitle: nil, state: .normal),
-            LocalAIToolStatus(kind: .claude, value: "Ready", subtitle: nil, state: .normal)
-        ]
-
-        // Codex is installed and its adapter is connected: must appear.
-        // Claude is installed but its adapter was never wired up: must not
-        // appear, even though the CLI itself was detected.
-        // Antigravity has a lingering "connected" adapter entry despite never
-        // appearing in `statuses` (simulating adapter files left over after an
-        // uninstall): must not appear either, since installation is required.
-        let adapterStatuses: [String: TokenMeteringAdapterConnectionStatus] = [
-            "codex": TokenMeteringAdapterConnectionStatus(scriptInstalled: true, hookConfigured: true),
-            "claude": TokenMeteringAdapterConnectionStatus(scriptInstalled: true, hookConfigured: false),
-            "antigravity": TokenMeteringAdapterConnectionStatus(scriptInstalled: true, hookConfigured: true)
+            LocalAIToolStatus(kind: .claude, value: "Ready", subtitle: nil, state: .normal),
+            LocalAIToolStatus(kind: .antigravity, value: "Ready", subtitle: nil, state: .normal)
         ]
 
         XCTAssertEqual(
-            TokenMeteringToolAvailability.installedAndAdapterConnectedLocalToolKinds(
-                from: statuses,
-                adapterStatuses: adapterStatuses,
-                setupScriptInstalled: true
-            ),
-            [.codex]
-        )
-
-        // If the shared setup-script root itself is missing, nothing may
-        // appear, even for a tool that is both installed and adapter-connected.
-        XCTAssertEqual(
-            TokenMeteringToolAvailability.installedAndAdapterConnectedLocalToolKinds(
-                from: statuses,
-                adapterStatuses: adapterStatuses,
-                setupScriptInstalled: false
-            ),
-            []
+            TokenMeteringToolAvailability.installedLocalToolKinds(from: statuses),
+            [.codex, .claude, .antigravity]
         )
     }
 }
@@ -1337,16 +1311,11 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertFalse(preferencesSection.contains("copyInboxPathAction"))
         XCTAssertTrue(preferencesSection.contains("aiToolVisibilitySection"))
         XCTAssertTrue(preferencesSection.contains("TokenMeteringAIToolVisibilitySection("))
-        // Visibility must require both the CLI being present on this machine and
-        // Spill's own adapter being connected — see
-        // TokenMeteringToolAvailability.installedAndAdapterConnectedLocalToolKinds.
-        // The section also reads installedLocalToolKinds directly, but only to
-        // pick the correct empty-state copy (installed-but-not-connected vs
-        // nothing detected at all), not as the row-visibility gate itself.
-        XCTAssertTrue(aiToolVisibilitySection.contains("TokenMeteringToolAvailability.installedAndAdapterConnectedLocalToolKinds"))
-        XCTAssertTrue(aiToolVisibilitySection.contains("aiToolVisibilityInstalledNotConnected"))
+        XCTAssertTrue(aiToolVisibilitySection.contains("TokenMeteringToolAvailability.installedLocalToolKinds"))
+        XCTAssertFalse(aiToolVisibilitySection.contains("installedAndAdapterConnectedLocalToolKinds"))
         XCTAssertTrue(aiToolVisibilitySection.contains("settings.setLocalAITool(kind, isVisible: $0)"))
-        XCTAssertTrue(preferencesSection.contains("adapterStatuses: adapterStatuses"))
+        XCTAssertFalse(aiToolVisibilitySection.contains("adapterStatuses"))
+        XCTAssertTrue(preferencesSection.contains(".onChange(of: aiStatusStore.statuses)"))
         XCTAssertTrue(preferencesSection.contains("privacyBoundarySection"))
         XCTAssertTrue(privacyBoundarySection.contains("t(.privacyBoundaryDetail)"))
         XCTAssertTrue(privacyBoundarySection.contains("TokenMeteringPreferencesModel.forbiddenContentLabels"))

@@ -103,6 +103,9 @@ struct TokenMeteringPreferencesSection: View {
                 refreshAdapterStatuses()
             }
         }
+        .onChange(of: aiStatusStore.statuses) { _, _ in
+            refreshAdapterStatuses()
+        }
     }
 }
 
@@ -122,8 +125,7 @@ private extension TokenMeteringPreferencesSection {
         TokenMeteringAIToolVisibilitySection(
             settings: settings,
             aiStatusStore: aiStatusStore,
-            language: currentLanguage,
-            adapterStatuses: adapterStatuses
+            language: currentLanguage
         )
     }
 

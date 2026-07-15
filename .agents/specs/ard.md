@@ -469,16 +469,13 @@ eligibility; controls that let the user re-enable a hidden tool use installation
 eligibility alone. Current process presence must not be used as a gate. Eligible
 usage totals still come from the app-owned `TokenUsageStore`.
 
-The Preferences AI Visible toggle list is a narrower surface: it must gate on
-both installation eligibility (runtime present) and adapter-connected
-eligibility (Spill's own metering adapter for that tool has its setup script
-present and its hook/importer actually configured). A row for a tool must not
-appear there merely because the runtime is installed with no adapter wired up,
-and it must not linger merely because adapter files remain after the runtime
-itself was uninstalled — both signals are required. The user's show/hide
-preference (`hiddenTools`) is a third, independent layer applied only within
-that installed-and-connected set; it cannot make an uninstalled or
-unconnected tool visible.
+The Preferences AI Visible toggle list follows the same installation
+eligibility: it uses only runtime presence on the user's computer. Spill setup
+files, adapter hooks, importers, and prior Spill installation state do not
+change whether a row appears. A runtime that is uninstalled stays hidden even
+when old adapter files remain. The user's show/hide preference (`hiddenTools`)
+is a separate layer applied within that installed set. Adapter connection state
+remains visible in the separate Setup UI.
 
 Rationale:
 
@@ -489,43 +486,23 @@ been recorded?" These signals have different lifecycles. A valid stored Codex
 row remains visible after the Codex process exits because Codex remains
 installed. If a runtime is uninstalled, its stored rows remain in the local
 store but leave normal dashboard, import, and AI-visible surfaces until the
-runtime is installed again or an advanced diagnostic surface is selected.
-Offering a visibility toggle for a tool Spill isn't actually connected to (or
-that no longer exists on the Mac) misrepresents what the toggle controls, so
-the AI Visible list uses the stricter installed-and-connected predicate while
-setup/history-import surfaces that need to show or repair connection state
-keep using installation eligibility alone.
+runtime is installed again or an advanced diagnostic surface is selected. The
+AI Visible toggle controls dashboard display for an installed runtime; setup
+and connection state remain separately inspectable and repairable.
 
 Rules:
 
 - `TokenMeteringToolAvailability` owns the mapping from installed
-  `LocalAIToolStatus` values to first-class token tools, including
-  `installedAndAdapterConnectedLocalToolKinds`, the installed-and-connected
-  intersection used by the AI Visible list. Dashboard visibility, AI Visible
-  controls, agent connection status, and history-import rows must consume
-  this mapping rather than rebuilding tool lists independently.
+  `LocalAIToolStatus` values to first-class token tools. Dashboard visibility,
+  AI Visible controls, agent connection status, and history-import rows must
+  consume this mapping rather than rebuilding tool lists independently.
 - Dashboard, panel, and menu-bar token content includes only
   `installedTools - hiddenTools` in normal mode.
-- The Preferences AI Visible toggle list uses
-  `installedAndAdapterConnectedLocalToolKinds` so a row only appears once the
-  runtime is installed, the shared setup-script root exists, and Spill's
-  adapter is actually connected for that tool. Per-tool adapter-connected
-  state must come from `TokenMeteringSetupInstallationDiagnostics
-  .connectionStatus` — the same check and the same asynchronously-computed,
-  cached result (`TokenMeteringPreferencesSection.refreshAdapterStatuses` /
-  `adapterStatuses`) the Setup card itself already uses — passed in rather
-  than re-read synchronously on the main thread inside this list's own body.
-  For Antigravity there is no separate hook/script wiring step (Spill's
-  built-in active importer collects for it as soon as it's installed), so its
-  connection state is installation state by design; this matches how every
-  other Antigravity-facing surface in the app already treats it, it is not a
-  weaker check specific to this list. The list must observe adapter
-  install/repair state (for example `TokenMeteringSetupActionStore`, via the
-  parent's cached `adapterStatuses` changing) so a completed install adds the
-  row without requiring a relaunch. The empty state must distinguish "no
-  supported tool detected at all" from "a tool is detected but not yet
-  adapter-connected" — the same message for both misleads a user who only
-  needs to run Setup into thinking their CLI wasn't found.
+- The Preferences AI Visible toggle list uses `installedLocalToolKinds`. It
+  must update when `AIStatusStore.statuses` receives a completed local runtime
+  scan and must not read or depend on adapter connection diagnostics, shared
+  setup-script roots, hook files, importer state, or `TokenMeteringSetupActionStore`.
+  Its empty state means no supported runtime is installed on this computer.
 - Agent connection status panels and history-import targets use
   `installedTools` alone (not the adapter-connected intersection) so hidden or
   not-yet-connected tools remain inspectable and repairable from those
