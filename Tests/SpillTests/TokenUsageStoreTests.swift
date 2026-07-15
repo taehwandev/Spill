@@ -4541,6 +4541,153 @@ final class TokenUsageStoreTests: XCTestCase {
         )
     }
 
+    func testSQLOnlySnapshotFactoryMatchesExistingEventBasedSnapshot() throws {
+        let store = TokenUsageStore(fileURL: temporaryEventsURL())
+        let calendar = Calendar.autoupdatingCurrent
+        let now = Date()
+        let today = ISO8601DateFormatter.tokenUsage.string(from: now)
+        let yesterday = ISO8601DateFormatter.tokenUsage.string(
+            from: calendar.date(byAdding: .day, value: -1, to: now) ?? now
+        )
+
+        try store.appendEvent(Self.safeEvent(
+            aiTool: .codex,
+            spanID: "span_full_1",
+            inputTokens: 100,
+            outputTokens: 50,
+            tokenAccounting: TokenUsageAccounting(uncachedInputTokens: 40, cacheCreationInputTokens: 10, cacheReadInputTokens: 20),
+            projectID: "project_alpha",
+            taskType: .debugging,
+            stage: .implement,
+            model: "Claude-Sonnet-5",
+            latencyMS: 30,
+            createdAt: today
+        ))
+        try store.appendEvent(Self.safeEvent(
+            aiTool: .claude,
+            spanID: "span_full_2",
+            inputTokens: 60,
+            outputTokens: 20,
+            tokenAccounting: nil,
+            projectID: "project_alpha",
+            taskType: .uncategorized,
+            stage: .summarize,
+            model: "gpt-5",
+            latencyMS: 12,
+            createdAt: today
+        ))
+        try store.appendEvent(Self.safeEvent(
+            aiTool: .codex,
+            spanID: "span_full_3",
+            inputTokens: 40,
+            outputTokens: 10,
+            tokenAccounting: TokenUsageAccounting(uncachedInputTokens: 35),
+            projectID: "project_beta",
+            taskType: .codeReview,
+            stage: .verify,
+            model: "Claude-Sonnet-5",
+            latencyMS: 8,
+            createdAt: yesterday
+        ))
+        try store.appendEvent(Self.safeEvent(
+            aiTool: .codex,
+            spanID: "span_full_old_month",
+            inputTokens: 200,
+            outputTokens: 80,
+            tokenAccounting: TokenUsageAccounting(uncachedInputTokens: 190),
+            projectID: "project_alpha",
+            taskType: .debugging,
+            stage: .implement,
+            model: "Claude-Sonnet-5",
+            latencyMS: 50,
+            createdAt: "2026-01-15T12:00:00Z"
+        ))
+
+        let events = store.loadEvents(startingAt: nil, endingBefore: nil)
+        let dateBounds = store.dashboardDateBounds()
+        let periodFilterTotals = store.allPeriodInputScopeTotals(now: now, calendar: calendar)
+        let calendarMonth = TokenUsageDashboardSnapshot.normalizedCalendarMonthStart(
+            availableDateBounds: dateBounds,
+            now: now,
+            proposedMonthStart: nil,
+            calendar: calendar
+        )
+        let calendarDayInputScopeTotals = store.dashboardDayInputScopeTotals(
+            startingAt: calendarMonth,
+            endingBefore: calendar.date(byAdding: .month, value: 1, to: calendarMonth) ?? calendarMonth,
+            calendar: calendar
+        )
+
+        for period: TokenUsageDashboardPeriod in [.today, .sevenDays, .thirtyDays, .all] {
+            for selectedTool: TokenUsageAITool? in [nil, .codex] {
+                let expectedPair = TokenUsageDashboardSnapshot.buildPair(
+                    events: events,
+                    selectedTool: selectedTool,
+                    selectedPeriod: period,
+                    selectedCalendarDayID: nil,
+                    selectedProjectID: nil,
+                    selectedSessionID: nil,
+                    language: .english,
+                    localAliases: [:],
+                    showAdvancedTools: false,
+                    now: now,
+                    proposedCalendarMonthStart: nil,
+                    calendar: calendar,
+                    periodFilterTotals: periodFilterTotals,
+                    availableDateBounds: dateBounds,
+                    calendarDayTotals: calendarDayInputScopeTotals,
+                    inputScope: .includeCache,
+                    locale: .autoupdatingCurrent,
+                    timeZone: .autoupdatingCurrent
+                )
+
+                let actual = TokenUsageDashboardSnapshot.buildFromSQLAggregates(
+                    usageStore: store,
+                    selectedTool: selectedTool,
+                    selectedPeriod: period,
+                    language: .english,
+                    localAliases: [:],
+                    showAdvancedTools: false,
+                    now: now,
+                    calendar: calendar,
+                    locale: .autoupdatingCurrent,
+                    timeZone: .autoupdatingCurrent
+                )
+
+                let expected = expectedPair.filtered
+                let label = "period \(period), selectedTool \(String(describing: selectedTool))"
+                XCTAssertEqual(actual.eventCount, expected.eventCount, "eventCount \(label)")
+                XCTAssertEqual(actual.totalTokens, expected.totalTokens, "totalTokens \(label)")
+                XCTAssertEqual(actual.kpis, expected.kpis, "kpis \(label)")
+                XCTAssertEqual(actual.periodFilters, expected.periodFilters, "periodFilters \(label)")
+                XCTAssertEqual(actual.toolFilters, expected.toolFilters, "toolFilters \(label)")
+                XCTAssertEqual(actual.projectFilters, expected.projectFilters, "projectFilters \(label)")
+                XCTAssertEqual(actual.toolRows, expected.toolRows, "toolRows \(label)")
+                XCTAssertEqual(actual.modelRows, expected.modelRows, "modelRows \(label)")
+                XCTAssertEqual(actual.workflowUsage, expected.workflowUsage, "workflowUsage \(label)")
+                XCTAssertEqual(actual.inputAccounting, expected.inputAccounting, "inputAccounting \(label)")
+                XCTAssertEqual(actual.taskRows, expected.taskRows, "taskRows \(label)")
+                XCTAssertEqual(actual.stageRows, expected.stageRows, "stageRows \(label)")
+                XCTAssertEqual(actual.sourceRows, expected.sourceRows, "sourceRows \(label)")
+                XCTAssertEqual(actual.sessions, expected.sessions, "sessions \(label)")
+                XCTAssertEqual(actual.trendBuckets, expected.trendBuckets, "trendBuckets \(label)")
+                XCTAssertEqual(actual.calendarDays, expected.calendarDays, "calendarDays \(label)")
+                XCTAssertEqual(actual.calendarMonthTitle, expected.calendarMonthTitle, "calendarMonthTitle \(label)")
+                XCTAssertEqual(actual.canNavigatePreviousCalendarMonth, expected.canNavigatePreviousCalendarMonth, "canNavPrevMonth \(label)")
+                XCTAssertEqual(actual.canNavigateNextCalendarMonth, expected.canNavigateNextCalendarMonth, "canNavNextMonth \(label)")
+                XCTAssertEqual(actual.codexLastUpdatedString, expected.codexLastUpdatedString, "codexLastUpdated \(label)")
+                XCTAssertEqual(actual.claudeLastUpdatedString, expected.claudeLastUpdatedString, "claudeLastUpdated \(label)")
+                XCTAssertEqual(actual.antigravityLastUpdatedString, expected.antigravityLastUpdatedString, "antigravityLastUpdated \(label)")
+                XCTAssertEqual(actual.overallLastUpdatedString, expected.overallLastUpdatedString, "overallLastUpdated \(label)")
+                XCTAssertEqual(actual.comparisonTotalTokens, expected.comparisonTotalTokens, "comparisonTotalTokens \(label)")
+                XCTAssertEqual(actual.canNavigatePreviousPeriod, expected.canNavigatePreviousPeriod, "canNavPrevPeriod \(label)")
+                XCTAssertEqual(actual.canNavigateNextPeriod, expected.canNavigateNextPeriod, "canNavNextPeriod \(label)")
+                // Full-struct check as a safety net for any field not enumerated above.
+                XCTAssertEqual(actual, expected, "full snapshot \(label)")
+            }
+        }
+    }
+
     func testPanelSummaryProjectsFreshOnlyHeadlineWithoutChangingWorkflowRows() throws {
         let store = TokenUsageStore(fileURL: temporaryEventsURL())
         try store.replaceEvents([
