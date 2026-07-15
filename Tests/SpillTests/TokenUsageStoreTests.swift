@@ -4054,6 +4054,223 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(fullSummary.sourceTotals["unknown"], 1_180)
     }
 
+    func testInputAccountingTotalsMatchesPerEventSwiftAggregation() throws {
+        let store = TokenUsageStore(fileURL: temporaryEventsURL())
+        // Full accounting present: 40 uncached + 20 cache-creation + 30 cache-read = 90
+        // measured, leaving max(0, 100 - 90) = 10 unclassified.
+        try store.appendEvent(Self.safeEvent(
+            aiTool: .codex,
+            spanID: "span_accounting_codex",
+            inputTokens: 100,
+            outputTokens: 50,
+            tokenAccounting: TokenUsageAccounting(
+                uncachedInputTokens: 40,
+                cacheCreationInputTokens: 20,
+                cacheReadInputTokens: 30,
+                reasoningOutputTokens: 5
+            )
+        ))
+        // No accounting at all: the full 200 input tokens fall back to unclassified,
+        // exactly like an event with tokenAccounting == nil in the Swift-side reducer.
+        try store.appendEvent(Self.safeEvent(
+            aiTool: .claude,
+            spanID: "span_accounting_claude",
+            inputTokens: 200,
+            outputTokens: 80,
+            tokenAccounting: nil
+        ))
+        // Zero input tokens: excluded entirely (matches the `inputTokens > 0` guard).
+        try store.appendEvent(Self.safeEvent(
+            aiTool: .codex,
+            spanID: "span_accounting_zero_input",
+            inputTokens: 0,
+            outputTokens: 50,
+            tokenAccounting: nil
+        ))
+        // Non-dashboard tool: excluded when dashboardToolsOnly is true.
+        try store.appendEvent(Self.safeEvent(
+            aiTool: .openAI,
+            spanID: "span_accounting_openai",
+            inputTokens: 700,
+            outputTokens: 200,
+            tokenAccounting: nil
+        ))
+
+        let totals = store.inputAccountingTotals()
+        XCTAssertEqual(totals["uncached_input"], 40)
+        XCTAssertEqual(totals["cache_creation_input"], 20)
+        XCTAssertEqual(totals["cache_read_input"], 30)
+        XCTAssertEqual(totals["unclassified_input"], 210)
+
+        let fullTotals = store.inputAccountingTotals(dashboardToolsOnly: false)
+        XCTAssertEqual(fullTotals["unclassified_input"], 910)
+    }
+
+    func testGroupedProjectTotalsMatchesPerEventSwiftAggregation() throws {
+        let store = TokenUsageStore(fileURL: temporaryEventsURL())
+        try store.appendEvent(Self.safeEvent(
+            aiTool: .codex,
+            spanID: "span_project_a_1",
+            inputTokens: 100,
+            outputTokens: 50,
+            projectID: "project_alpha"
+        ))
+        try store.appendEvent(Self.safeEvent(
+            aiTool: .claude,
+            spanID: "span_project_a_2",
+            inputTokens: 200,
+            outputTokens: 80,
+            projectID: "project_alpha"
+        ))
+        try store.appendEvent(Self.safeEvent(
+            aiTool: .codex,
+            spanID: "span_project_b_1",
+            inputTokens: 40,
+            outputTokens: 10,
+            projectID: "project_beta"
+        ))
+        // Non-dashboard tool: excluded when dashboardToolsOnly is true.
+        try store.appendEvent(Self.safeEvent(
+            aiTool: .openAI,
+            spanID: "span_project_a_openai",
+            inputTokens: 700,
+            outputTokens: 200,
+            projectID: "project_alpha"
+        ))
+
+        let totals = store.groupedProjectTotals()
+        XCTAssertEqual(totals["project_alpha"]?.eventCount, 2)
+        XCTAssertEqual(totals["project_alpha"]?.totals.includeCache, 430)
+        XCTAssertEqual(totals["project_beta"]?.eventCount, 1)
+        XCTAssertEqual(totals["project_beta"]?.totals.includeCache, 50)
+
+        let fullTotals = store.groupedProjectTotals(dashboardToolsOnly: false)
+        XCTAssertEqual(fullTotals["project_alpha"]?.eventCount, 3)
+        XCTAssertEqual(fullTotals["project_alpha"]?.totals.includeCache, 1_330)
+    }
+
+    func testSQLSourcedSessionRowsMatchExistingEventBasedAggregation() throws {
+        let store = TokenUsageStore(fileURL: temporaryEventsURL())
+        let calendar = Calendar.autoupdatingCurrent
+        let now = Date()
+
+        try store.appendEvent(Self.safeEvent(
+            aiTool: .codex,
+            runID: "run_alpha_1",
+            spanID: "span_alpha_1a",
+            inputTokens: 100,
+            outputTokens: 50,
+            tokenAccounting: TokenUsageAccounting(uncachedInputTokens: 30),
+            projectID: "project_alpha",
+            taskType: .debugging,
+            stage: .implement,
+            latencyMS: 40,
+            createdAt: "2026-07-10T12:00:00Z"
+        ))
+        // Same work item (project + taskType + stage + day), different run: should merge into
+        // one session row with spanCount 2 and runCount 2.
+        try store.appendEvent(Self.safeEvent(
+            aiTool: .codex,
+            runID: "run_alpha_2",
+            spanID: "span_alpha_1b",
+            inputTokens: 60,
+            outputTokens: 20,
+            tokenAccounting: nil,
+            projectID: "project_alpha",
+            taskType: .debugging,
+            stage: .implement,
+            latencyMS: 15,
+            createdAt: "2026-07-10T13:00:00Z"
+        ))
+        // Same project/task/stage but a different day: must be a separate work item.
+        try store.appendEvent(Self.safeEvent(
+            aiTool: .codex,
+            runID: "run_alpha_3",
+            spanID: "span_alpha_2",
+            inputTokens: 200,
+            outputTokens: 90,
+            tokenAccounting: TokenUsageAccounting(uncachedInputTokens: 190),
+            projectID: "project_alpha",
+            taskType: .debugging,
+            stage: .implement,
+            latencyMS: 25,
+            createdAt: "2026-07-11T12:00:00Z"
+        ))
+        // Different project and task/stage entirely.
+        try store.appendEvent(Self.safeEvent(
+            aiTool: .claude,
+            runID: "run_beta_1",
+            spanID: "span_beta_1",
+            inputTokens: 500,
+            outputTokens: 150,
+            tokenAccounting: nil,
+            projectID: "project_beta",
+            taskType: .codeReview,
+            stage: .verify,
+            latencyMS: 60,
+            createdAt: "2026-07-12T12:00:00Z"
+        ))
+
+        let events = store.loadEvents(startingAt: nil, endingBefore: nil)
+        let parsedEvents = events.map { TokenUsageDashboardParsedEvent(event: $0, calendar: calendar) }
+
+        for inputScope: TokenUsageInputScope in [.includeCache, .freshOnly] {
+            let expected = TokenUsageDashboardSnapshot.sessionRows(
+                events: parsedEvents,
+                inputScope: inputScope,
+                language: .english,
+                localAliases: [:],
+                calendar: calendar,
+                now: now,
+                locale: .autoupdatingCurrent,
+                timeZone: .autoupdatingCurrent
+            )
+
+            let sourceRows = store.sessionSourceRows(calendar: calendar)
+            let actual = TokenUsageDashboardSnapshot.sessionRows(
+                sourceRows: sourceRows,
+                inputScope: inputScope,
+                language: .english,
+                localAliases: [:],
+                calendar: calendar,
+                now: now,
+                locale: .autoupdatingCurrent,
+                timeZone: .autoupdatingCurrent
+            )
+
+            XCTAssertEqual(actual, expected, "mismatch for inputScope \(inputScope)")
+        }
+
+        XCTAssertEqual(parsedEvents.count, 4)
+        let sourceRows = store.sessionSourceRows(calendar: calendar)
+        XCTAssertEqual(sourceRows.count, 4)
+
+        let rows = TokenUsageDashboardSnapshot.sessionRows(
+            sourceRows: sourceRows,
+            inputScope: .includeCache,
+            language: .english,
+            localAliases: [:],
+            calendar: calendar,
+            now: now,
+            locale: .autoupdatingCurrent,
+            timeZone: .autoupdatingCurrent
+        )
+        // 4 events collapse into 3 work items: two alpha/debugging/implement events on the
+        // same day merge, the next day's alpha/debugging/implement event stays separate, and
+        // the beta/code_review/verify event is its own row.
+        XCTAssertEqual(rows.count, 3)
+        let mergedRow = try XCTUnwrap(rows.first { $0.eventCount == 2 })
+        XCTAssertEqual(mergedRow.projectID, "project_alpha")
+        XCTAssertEqual(mergedRow.value, TokenUsageDashboardSnapshot.formatTokens(230))
+
+        // Project/tool filters passed to the SQL layer must narrow results the same way the
+        // in-memory events array would if it had already been filtered by them.
+        let alphaOnly = store.sessionSourceRows(projectID: "project_alpha", calendar: calendar)
+        XCTAssertEqual(alphaOnly.count, 3)
+        let codexOnly = store.sessionSourceRows(selectedTool: .codex, calendar: calendar)
+        XCTAssertEqual(codexOnly.count, 3)
+    }
+
     func testPanelSummaryProjectsFreshOnlyHeadlineWithoutChangingWorkflowRows() throws {
         let store = TokenUsageStore(fileURL: temporaryEventsURL())
         try store.replaceEvents([
