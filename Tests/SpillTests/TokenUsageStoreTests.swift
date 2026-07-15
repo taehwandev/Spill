@@ -4386,6 +4386,106 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertNil(actual["UNKNOWN"])
     }
 
+    func testSQLSourcedTrendBucketsMatchExistingEventBasedAggregation() throws {
+        let store = TokenUsageStore(fileURL: temporaryEventsURL())
+        let calendar = Calendar.autoupdatingCurrent
+        let now = Date()
+        let today = ISO8601DateFormatter.tokenUsage.string(from: now)
+        let yesterday = ISO8601DateFormatter.tokenUsage.string(
+            from: calendar.date(byAdding: .day, value: -1, to: now) ?? now
+        )
+
+        try store.appendEvent(Self.safeEvent(
+            aiTool: .codex,
+            spanID: "span_trend_today_codex",
+            inputTokens: 100,
+            outputTokens: 50,
+            tokenAccounting: TokenUsageAccounting(uncachedInputTokens: 30),
+            createdAt: today
+        ))
+        try store.appendEvent(Self.safeEvent(
+            aiTool: .claude,
+            spanID: "span_trend_today_claude",
+            inputTokens: 60,
+            outputTokens: 20,
+            createdAt: today
+        ))
+        try store.appendEvent(Self.safeEvent(
+            aiTool: .codex,
+            spanID: "span_trend_yesterday",
+            inputTokens: 40,
+            outputTokens: 10,
+            createdAt: yesterday
+        ))
+        // A different month entirely: only relevant to the .all (monthly) bucketing case.
+        try store.appendEvent(Self.safeEvent(
+            aiTool: .codex,
+            spanID: "span_trend_old_month",
+            inputTokens: 200,
+            outputTokens: 80,
+            tokenAccounting: TokenUsageAccounting(uncachedInputTokens: 190),
+            createdAt: "2026-01-15T12:00:00Z"
+        ))
+
+        let events = store.loadEvents(startingAt: nil, endingBefore: nil)
+        let parsedEvents = events.map { TokenUsageDashboardParsedEvent(event: $0, calendar: calendar) }
+        let sourceRows = store.trendSourceRows(calendar: calendar)
+        XCTAssertEqual(sourceRows.count, parsedEvents.count)
+
+        for period: TokenUsageDashboardPeriod in [.sevenDays, .thirtyDays, .all] {
+            for inputScope: TokenUsageInputScope in [.includeCache, .freshOnly] {
+                let expected = TokenUsageDashboardTrendBucketBuilder.buckets(
+                    events: parsedEvents,
+                    selectedPeriod: period,
+                    language: .english,
+                    now: now,
+                    calendar: calendar,
+                    locale: .autoupdatingCurrent,
+                    timeZone: .autoupdatingCurrent,
+                    inputScope: inputScope
+                )
+                let actual = TokenUsageDashboardTrendBucketBuilder.buckets(
+                    sourceRows: sourceRows,
+                    selectedPeriod: period,
+                    language: .english,
+                    now: now,
+                    calendar: calendar,
+                    locale: .autoupdatingCurrent,
+                    timeZone: .autoupdatingCurrent,
+                    inputScope: inputScope
+                )
+                XCTAssertEqual(actual, expected, "mismatch for period \(period), inputScope \(inputScope)")
+            }
+        }
+
+        let sevenDayBuckets = TokenUsageDashboardTrendBucketBuilder.buckets(
+            sourceRows: sourceRows,
+            selectedPeriod: .sevenDays,
+            language: .english,
+            now: now,
+            calendar: calendar,
+            locale: .autoupdatingCurrent,
+            timeZone: .autoupdatingCurrent
+        )
+        XCTAssertEqual(sevenDayBuckets.count, 7)
+        let todayBucket = try XCTUnwrap(sevenDayBuckets.last)
+        XCTAssertEqual(todayBucket.eventCount, 2)
+        XCTAssertEqual(todayBucket.totalTokens, 230)
+        XCTAssertEqual(todayBucket.toolRows.count, 2)
+
+        let monthlyBuckets = TokenUsageDashboardTrendBucketBuilder.buckets(
+            sourceRows: sourceRows,
+            selectedPeriod: .all,
+            language: .english,
+            now: now,
+            calendar: calendar,
+            locale: .autoupdatingCurrent,
+            timeZone: .autoupdatingCurrent
+        )
+        XCTAssertTrue(monthlyBuckets.count >= 2)
+        XCTAssertEqual(monthlyBuckets.reduce(0) { $0 + $1.eventCount }, 4)
+    }
+
     func testPanelSummaryProjectsFreshOnlyHeadlineWithoutChangingWorkflowRows() throws {
         let store = TokenUsageStore(fileURL: temporaryEventsURL())
         try store.replaceEvents([
