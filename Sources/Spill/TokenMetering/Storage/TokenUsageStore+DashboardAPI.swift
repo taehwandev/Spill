@@ -172,6 +172,46 @@ extension TokenUsageStore {
         }
     }
 
+    /// Reuses loadDashboardCountAndTotalIfAvailable rather than a SUM-only query so an empty
+    /// range (eventCount == 0) can return nil -- matching the existing comparisonTotalTokens
+    /// Swift reducer's `compEvents.isEmpty ? nil : ...`, which COALESCE(SUM(...), 0) alone can't
+    /// distinguish from a range whose events happen to sum to zero.
+    func comparisonTokenTotal(
+        startingAt startDate: Date,
+        endingBefore endDate: Date,
+        inputScope: TokenUsageInputScope = .includeCache,
+        dashboardToolsOnly: Bool = true,
+        visibleTools: Set<TokenUsageAITool>? = nil
+    ) -> Int? {
+        lock.withLock { () -> Int? in
+            let database: OpaquePointer
+            do {
+                database = try openDatabase()
+            } catch {
+                return nil
+            }
+            defer { sqlite3_close(database) }
+
+            guard let totals = loadDashboardCountAndTotalIfAvailable(
+                startingAt: startDate,
+                endingBefore: endDate,
+                dashboardToolsOnly: dashboardToolsOnly,
+                visibleTools: visibleTools,
+                database: database
+            ), totals.eventCount > 0
+            else {
+                return nil
+            }
+
+            switch inputScope {
+            case .includeCache:
+                return totals.totalTokens
+            case .freshOnly:
+                return totals.exactFreshTotalTokens
+            }
+        }
+    }
+
     func inputAccountingTotals(
         startingAt startDate: Date? = nil,
         endingBefore endDate: Date? = nil,
@@ -188,6 +228,62 @@ extension TokenUsageStore {
             defer { sqlite3_close(database) }
 
             return loadInputAccountingTotals(
+                startingAt: startDate,
+                endingBefore: endDate,
+                dashboardToolsOnly: dashboardToolsOnly,
+                visibleTools: visibleTools,
+                database: database
+            )
+        }
+    }
+
+    // loadGroupedTokenTotals sums total_tokens only (includeCache), matching every other
+    // caller of it today (dashboardSummary's toolTotals/taskTotals). The Swift-side
+    // taskRows/stageRows reducer these are meant to eventually replace is inputScope-aware;
+    // wiring that in needs a fresh-token variant of the grouped-totals SQL, not added here.
+    func groupedTaskTypeTotals(
+        startingAt startDate: Date? = nil,
+        endingBefore endDate: Date? = nil,
+        dashboardToolsOnly: Bool = true,
+        visibleTools: Set<TokenUsageAITool>? = nil
+    ) -> [String: Int] {
+        lock.withLock {
+            let database: OpaquePointer
+            do {
+                database = try openDatabase()
+            } catch {
+                return [:]
+            }
+            defer { sqlite3_close(database) }
+
+            return loadGroupedTokenTotals(
+                column: "task_type",
+                startingAt: startDate,
+                endingBefore: endDate,
+                dashboardToolsOnly: dashboardToolsOnly,
+                visibleTools: visibleTools,
+                database: database
+            )
+        }
+    }
+
+    func groupedStageTotals(
+        startingAt startDate: Date? = nil,
+        endingBefore endDate: Date? = nil,
+        dashboardToolsOnly: Bool = true,
+        visibleTools: Set<TokenUsageAITool>? = nil
+    ) -> [String: Int] {
+        lock.withLock {
+            let database: OpaquePointer
+            do {
+                database = try openDatabase()
+            } catch {
+                return [:]
+            }
+            defer { sqlite3_close(database) }
+
+            return loadGroupedTokenTotals(
+                column: "stage",
                 startingAt: startDate,
                 endingBefore: endDate,
                 dashboardToolsOnly: dashboardToolsOnly,

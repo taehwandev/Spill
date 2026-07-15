@@ -4271,6 +4271,69 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(codexOnly.count, 3)
     }
 
+    func testComparisonTokenTotalReturnsNilForEmptyRangeNotZero() throws {
+        let store = TokenUsageStore(fileURL: temporaryEventsURL())
+        try store.appendEvent(Self.safeEvent(
+            aiTool: .codex,
+            spanID: "span_comparison_1",
+            inputTokens: 100,
+            outputTokens: 50,
+            tokenAccounting: TokenUsageAccounting(uncachedInputTokens: 40),
+            createdAt: "2026-07-10T12:00:00Z"
+        ))
+        let dayStart = try XCTUnwrap(ISO8601DateFormatter.parseTokenUsageDate(from: "2026-07-10T00:00:00Z"))
+        let dayEnd = try XCTUnwrap(ISO8601DateFormatter.parseTokenUsageDate(from: "2026-07-11T00:00:00Z"))
+        let emptyDayStart = try XCTUnwrap(ISO8601DateFormatter.parseTokenUsageDate(from: "2026-07-01T00:00:00Z"))
+        let emptyDayEnd = try XCTUnwrap(ISO8601DateFormatter.parseTokenUsageDate(from: "2026-07-02T00:00:00Z"))
+
+        XCTAssertEqual(
+            store.comparisonTokenTotal(startingAt: dayStart, endingBefore: dayEnd),
+            150
+        )
+        XCTAssertEqual(
+            store.comparisonTokenTotal(startingAt: dayStart, endingBefore: dayEnd, inputScope: .freshOnly),
+            90
+        )
+        // A range with no events must read as "no comparison data" (nil), not a real zero total.
+        XCTAssertNil(store.comparisonTokenTotal(startingAt: emptyDayStart, endingBefore: emptyDayEnd))
+    }
+
+    func testGroupedTaskTypeAndStageTotalsMatchPerEventSwiftAggregation() throws {
+        let store = TokenUsageStore(fileURL: temporaryEventsURL())
+        try store.appendEvent(Self.safeEvent(
+            aiTool: .codex,
+            spanID: "span_task_1",
+            inputTokens: 100,
+            outputTokens: 50,
+            taskType: .debugging,
+            stage: .implement
+        ))
+        try store.appendEvent(Self.safeEvent(
+            aiTool: .claude,
+            spanID: "span_task_2",
+            inputTokens: 60,
+            outputTokens: 20,
+            taskType: .debugging,
+            stage: .verify
+        ))
+        try store.appendEvent(Self.safeEvent(
+            aiTool: .codex,
+            spanID: "span_task_3",
+            inputTokens: 40,
+            outputTokens: 10,
+            taskType: .codeReview,
+            stage: .implement
+        ))
+
+        let taskTotals = store.groupedTaskTypeTotals()
+        XCTAssertEqual(taskTotals["debugging"], 230)
+        XCTAssertEqual(taskTotals["code_review"], 50)
+
+        let stageTotals = store.groupedStageTotals()
+        XCTAssertEqual(stageTotals["implement"], 200)
+        XCTAssertEqual(stageTotals["verify"], 80)
+    }
+
     func testPanelSummaryProjectsFreshOnlyHeadlineWithoutChangingWorkflowRows() throws {
         let store = TokenUsageStore(fileURL: temporaryEventsURL())
         try store.replaceEvents([
