@@ -16,6 +16,7 @@ extension TokenUsageStoreTests {
         let dashboardSetupPanel = try Self.source(named: "TokenMeteringDashboardSetupPanel.swift")
         let historyImportSection = try Self.source(named: "TokenUsageHistoryImportSection.swift")
         let adapterStatusSection = try Self.source(named: "TokenMeteringAdapterStatusSection.swift")
+        let spillBarAISection = try Self.source(named: "SpillBarAISection.swift")
 
         XCTAssertTrue(promptCard.contains("TokenMeteringSetupActionControls("))
         XCTAssertTrue(setupControls.contains("store.installOrRepair(installedTools: installedTools)"))
@@ -30,6 +31,8 @@ extension TokenUsageStoreTests {
         XCTAssertTrue(setupControls.contains("t(.setupWorkflowLabelsTitle)"))
         XCTAssertFalse(dashboardAgentStatus.contains("TokenMeteringSetupActionControls("))
         XCTAssertTrue(dashboardSetupPanel.contains("TokenMeteringSetupActionControls("))
+        XCTAssertFalse(dashboardAgentStatus.contains("isLocalAIToolVisible(status.kind)"))
+        XCTAssertFalse(spillBarAISection.contains("isLocalAIToolVisible(status.kind)"))
         XCTAssertTrue(preferencesSection.contains("installedHistoryImportTools"))
         XCTAssertTrue(preferencesSection.contains("startImport(for: installedTools)"))
         XCTAssertTrue(historyImportSection.contains("availableSnapshots"))
@@ -44,7 +47,7 @@ extension TokenUsageStoreTests {
 }
 
 extension TokenUsageStoreTests {
-    func testDashboardToolVisibilityRequiresInstalledToolsButNotRunningProcesses() {
+    func testDashboardToolVisibilityUsesSupportedToolsAndUserPreference() {
         let statuses = [
             LocalAIToolStatus(
                 kind: .codex,
@@ -67,39 +70,34 @@ extension TokenUsageStoreTests {
         ]
 
         XCTAssertEqual(
-            TokenUsageDashboardToolVisibility.visibleTools(statuses: statuses, hiddenTools: []),
-            Set([.codex, .antigravity])
+            TokenUsageDashboardToolVisibility.visibleTools(hiddenTools: []),
+            Set(TokenUsageAITool.dashboardTools)
         )
         XCTAssertEqual(
             TokenUsageDashboardToolVisibility.visibleTools(
-                statuses: statuses,
                 hiddenTools: [.codex]
             ),
-            Set([.antigravity])
+            Set([.claude, .antigravity])
         )
         XCTAssertEqual(
             TokenUsageDashboardToolVisibility.visibleTools(
-                statuses: statuses,
                 hiddenTools: [.openAI, .unknown]
             ),
-            Set([.codex, .antigravity])
-        )
-        XCTAssertEqual(
-            TokenUsageDashboardToolVisibility.visibleTools(statuses: [], hiddenTools: []),
-            []
+            Set(TokenUsageAITool.dashboardTools)
         )
         XCTAssertEqual(
             TokenUsageDashboardToolVisibility.dashboardFilterTools(
-                visibleInstalledTools: [.codex],
+                visibleTools: [.codex],
                 showAdvancedTools: false
             ),
             [.codex]
         )
-        XCTAssertNil(
+        XCTAssertEqual(
             TokenUsageDashboardToolVisibility.dashboardFilterTools(
-                visibleInstalledTools: [.codex],
+                visibleTools: [.codex],
                 showAdvancedTools: true
-            )
+            ),
+            Set([.codex, .openAI, .unknown])
         )
         XCTAssertEqual(
             TokenMeteringToolAvailability.installedHistoryImportTools(from: statuses),
@@ -107,15 +105,9 @@ extension TokenUsageStoreTests {
         )
     }
 
-    func testInstalledLocalToolKindsUsesRuntimeInstallationOnly() {
-        let statuses = [
-            LocalAIToolStatus(kind: .codex, value: "Ready", subtitle: nil, state: .normal),
-            LocalAIToolStatus(kind: .claude, value: "Ready", subtitle: nil, state: .normal),
-            LocalAIToolStatus(kind: .antigravity, value: "Ready", subtitle: nil, state: .normal)
-        ]
-
+    func testSupportedLocalToolKindsAlwaysIncludesAllDashboardAgents() {
         XCTAssertEqual(
-            TokenMeteringToolAvailability.installedLocalToolKinds(from: statuses),
+            TokenMeteringToolAvailability.supportedLocalToolKinds,
             [.codex, .claude, .antigravity]
         )
     }
@@ -123,14 +115,14 @@ extension TokenUsageStoreTests {
 
 extension TokenUsageStoreTests {
     @MainActor
-    func testMenuBarServerHealthUsesOnlyVisibleInstalledTools() throws {
+    func testMenuBarServerHealthUsesOnlyInstalledTools() throws {
         let defaultsName = "spill.tests.menu-bar-health.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: defaultsName))
         defer {
             defaults.removePersistentDomain(forName: defaultsName)
         }
         let settings = SpillSettings(defaults: defaults)
-        settings.setTokenUsageAITool(.claude, isVisible: false)
+        settings.setTokenUsageAITool(.codex, isVisible: false)
 
         let cacheDirectoryURL = temporaryDirectoryURL()
         try FileManager.default.createDirectory(
@@ -172,12 +164,6 @@ extension TokenUsageStoreTests {
                     value: "Ready",
                     subtitle: nil,
                     state: .normal
-                ),
-                LocalAIToolStatus(
-                    kind: .claude,
-                    value: "Ready",
-                    subtitle: nil,
-                    state: .normal
                 )
             ]),
             usageStore: TokenUsageStore(fileURL: temporaryEventsURL())
@@ -188,7 +174,7 @@ extension TokenUsageStoreTests {
 }
 
 extension TokenUsageStoreTests {
-    func testMenuBarTokenTotalsRespectVisibleInstalledTools() throws {
+    func testMenuBarTokenTotalsRespectVisibleSupportedTools() throws {
         let store = TokenUsageStore(fileURL: temporaryEventsURL())
         let start = Date(timeIntervalSince1970: 1_800_000_000)
         let end = start.addingTimeInterval(60)
@@ -1097,7 +1083,7 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(unsupportedSelection.toolFilters.first?.isSelected == true)
     }
 
-    func testDashboardSnapshotShowsOnlyVisibleInstalledAgentTools() {
+    func testDashboardSnapshotShowsOnlyVisibleSupportedAgentTools() {
         let codex = Self.safeEvent(
             aiTool: .codex,
             spanID: "span_visible_codex",
@@ -1136,6 +1122,51 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(hiddenSelection.totalTokens, 110)
         XCTAssertTrue(hiddenSelection.toolFilters.first?.isSelected == true)
         XCTAssertNil(hiddenSelection.toolFilters.first { $0.tool == .claude })
+    }
+
+    func testAdvancedDashboardRetainsHiddenSupportedTools() {
+        let visibleTools = TokenUsageDashboardToolVisibility.dashboardFilterTools(
+            visibleTools: [.codex],
+            showAdvancedTools: true
+        )
+        let snapshot = TokenUsageDashboardSnapshot(
+            events: [
+                Self.safeEvent(
+                    aiTool: .codex,
+                    spanID: "span_advanced_codex",
+                    inputTokens: 100,
+                    outputTokens: 10
+                ),
+                Self.safeEvent(
+                    aiTool: .claude,
+                    spanID: "span_advanced_hidden_claude",
+                    inputTokens: 200,
+                    outputTokens: 20
+                ),
+                Self.safeEvent(
+                    aiTool: .openAI,
+                    spanID: "span_advanced_openai",
+                    inputTokens: 300,
+                    outputTokens: 30
+                ),
+                Self.safeEvent(
+                    aiTool: .unknown,
+                    spanID: "span_advanced_unknown",
+                    inputTokens: 400,
+                    outputTokens: 40
+                )
+            ],
+            showAdvancedTools: true,
+            visibleTools: visibleTools
+        )
+
+        XCTAssertEqual(snapshot.eventCount, 3)
+        XCTAssertEqual(snapshot.totalTokens, 880)
+        XCTAssertEqual(
+            Set(snapshot.toolFilters.compactMap(\.tool)),
+            Set([.codex, .openAI, .unknown])
+        )
+        XCTAssertNil(snapshot.toolFilters.first { $0.tool == .claude })
     }
 
     func testDashboardSnapshotAggregatesModelRows() {
@@ -1311,9 +1342,11 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertFalse(preferencesSection.contains("copyInboxPathAction"))
         XCTAssertTrue(preferencesSection.contains("aiToolVisibilitySection"))
         XCTAssertTrue(preferencesSection.contains("TokenMeteringAIToolVisibilitySection("))
-        XCTAssertTrue(aiToolVisibilitySection.contains("TokenMeteringToolAvailability.installedLocalToolKinds"))
+        XCTAssertTrue(aiToolVisibilitySection.contains("TokenMeteringToolAvailability.supportedLocalToolKinds"))
+        XCTAssertFalse(aiToolVisibilitySection.contains("installedLocalToolKinds"))
         XCTAssertFalse(aiToolVisibilitySection.contains("installedAndAdapterConnectedLocalToolKinds"))
         XCTAssertTrue(aiToolVisibilitySection.contains("settings.setLocalAITool(kind, isVisible: $0)"))
+        XCTAssertFalse(aiToolVisibilitySection.contains("aiStatusStore"))
         XCTAssertFalse(aiToolVisibilitySection.contains("adapterStatuses"))
         XCTAssertTrue(preferencesSection.contains(".onChange(of: aiStatusStore.statuses)"))
         XCTAssertTrue(preferencesSection.contains("privacyBoundarySection"))

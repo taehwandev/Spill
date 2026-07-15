@@ -61,9 +61,10 @@ the local token metering dashboard.
   explicit actions: direct `Install`/`Reinstall` using the bundled helper and
   `Copy Setup Instructions` as an alternative. It must not duplicate the full
   Preferences setup form or run installation on appearance.
-- Dashboard tool tabs, AI Visible toggles, history-import rows, and agent-status
-  tool rows all use the same installed-runtime availability mapping. Running
-  state may decorate an installed tool but must not decide eligibility.
+- Dashboard tool tabs and AI Visible toggles use the supported token-agent set
+  minus the user's hidden tools. History-import rows and agent-status tool rows
+  use the installed-runtime mapping instead. Running state may decorate an
+  installed tool but must not decide eligibility.
 
 Preferences should keep menu bar scanning out of primary settings unless it
 becomes a clear user workflow. Preserve the existing Spill theme. Future

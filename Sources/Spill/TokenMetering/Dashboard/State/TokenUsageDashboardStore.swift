@@ -163,7 +163,7 @@ final class TokenUsageDashboardStore: ObservableObject {
     var hasDashboardEvents: Bool {
         let showAdvancedTools = SpillSettings.shared.tokenUsageShowAdvancedTools
         let dashboardFilterTools = TokenUsageDashboardToolVisibility.dashboardFilterTools(
-            visibleInstalledTools: visibleAITools,
+            visibleTools: visibleAITools,
             showAdvancedTools: showAdvancedTools
         )
         let hasLoadedDashboardEvents = displayEvents(for: events).contains { event in
@@ -562,7 +562,7 @@ extension TokenUsageDashboardStore {
             localAliases: SpillSettings.shared.tokenUsageLocalAliases,
             showAdvancedTools: showAdvancedTools,
             visibleAITools: TokenUsageDashboardToolVisibility.dashboardFilterTools(
-                visibleInstalledTools: visibleAITools,
+                visibleTools: visibleAITools,
                 showAdvancedTools: showAdvancedTools
             ),
             now: Date(),

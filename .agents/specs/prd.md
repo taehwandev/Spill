@@ -277,14 +277,14 @@ Requirements:
   `Install` when setup is absent and `Reinstall` or `Repair` when setup already
   exists. This check is setup state, not evidence that a real AI turn produced
   token usage.
-- The Preferences "AI tool visibility" list must offer a show/hide toggle when
-  the corresponding runtime is actually installed on the user's computer. It
-  must not depend on Spill setup files, adapter hooks, importers, or a prior
-  Spill installation. A runtime that is not installed must never appear, even
-  if old adapter files remain. Adapter connection state belongs to the separate
-  Setup UI. The toggle is a further, separate preference: the user may hide an
-  installed tool from dashboards without affecting saved token records or local
-  collection.
+- The Preferences "AI tool visibility" list must always offer Codex, Claude
+  Code, and Antigravity/AGY show/hide toggles by default. It must not depend on
+  local runtime installation, Spill setup files, adapter hooks, importers, or a
+  prior Spill installation. The toggle is a display preference only: the user
+  may hide a supported tool from token dashboards and menu-bar token totals
+  without affecting saved token records or local collection. Runtime
+  installation and adapter connection state belong to the separate Setup and
+  status UI, and do not follow this display preference.
 - Setup UI should describe basic metering as exact totals without work-type or
   stage labels. It should describe workflow-aware setup as an optional copied
   instruction that is run from the workflow-owning directory, without scanning
@@ -472,14 +472,13 @@ Dashboard UX requirements:
 
 - Default time range is `Today`, with explicit `7 days`, `30 days`, and `All`
   controls.
-- Default agent content includes only first-class local agent tools that are
-  installed on this Mac and enabled by the user's AI visibility setting.
-  Installation eligibility is shared separately across history-import targets,
-  AI visibility controls, and agent connection status so an installed but hidden
-  tool remains available to re-enable. Legacy `unknown`, optional direct OpenAI
-  SDK events, and stored rows for a runtime that is no longer installed belong
-  behind diagnostics or an advanced filter; they remain stored unless the user
-  explicitly deletes them.
+- Default token content includes all first-class local agent tools except those
+  hidden by the user's AI visibility setting, regardless of local installation.
+  Installation eligibility is used separately for history-import targets and
+  agent connection status; it is not a token display gate. Legacy `unknown`,
+  optional direct OpenAI SDK events, and stored rows for a runtime that is no
+  longer installed belong behind diagnostics or an advanced filter; they remain
+  stored unless the user explicitly deletes them.
 - The first dashboard read should answer whether usage was large, whether the
   cost came mostly from input or output, which model/tool/work type/stage
   dominated, and whether workflow labels covered the selected records.

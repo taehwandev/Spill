@@ -2,7 +2,6 @@ import SwiftUI
 
 struct TokenMeteringAIToolVisibilitySection: View {
     @ObservedObject var settings: SpillSettings
-    @ObservedObject var aiStatusStore: AIStatusStore
     let language: TokenMeteringLanguage
 
     private func t(_ key: TokenMeteringTextKey) -> String {
@@ -25,26 +24,13 @@ struct TokenMeteringAIToolVisibilitySection: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             VStack(spacing: 8) {
-                if installedToolKinds.isEmpty {
-                    Text(TokenMeteringSetupL10n.text(.aiToolVisibilityNoInstalledTools, language: language))
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 8)
-                } else {
-                    ForEach(installedToolKinds, id: \.self) { kind in
-                        visibilityRow(for: kind)
-                    }
+                ForEach(TokenMeteringToolAvailability.supportedLocalToolKinds, id: \.self) { kind in
+                    visibilityRow(for: kind)
                 }
             }
         }
         .padding(10)
         .background(tokenMeteringOptionBackground)
-    }
-
-    private var installedToolKinds: [LocalAIToolKind] {
-        TokenMeteringToolAvailability.installedLocalToolKinds(from: aiStatusStore.statuses)
     }
 
     private func visibilityRow(for kind: LocalAIToolKind) -> some View {

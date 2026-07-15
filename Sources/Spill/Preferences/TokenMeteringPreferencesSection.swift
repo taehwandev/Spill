@@ -124,7 +124,6 @@ private extension TokenMeteringPreferencesSection {
     private var aiToolVisibilitySection: some View {
         TokenMeteringAIToolVisibilitySection(
             settings: settings,
-            aiStatusStore: aiStatusStore,
             language: currentLanguage
         )
     }

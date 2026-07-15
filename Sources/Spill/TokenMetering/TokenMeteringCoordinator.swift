@@ -77,7 +77,7 @@ extension TokenMeteringCoordinator {
         self.usageEventsDidChange = usageEventsDidChange
         TokenMeteringSetupInstaller.refreshInstalledFilesIfPresent()
         aiStatusStore.refreshInBackground()
-        syncVisibleAIToolsFromStatusStore()
+        syncVisibleAITools()
         observeUsageEvents()
         observeAIToolVisibility()
         inboxMonitor.start()
@@ -137,7 +137,7 @@ extension TokenMeteringCoordinator {
     }
 
     func refreshPanelSummary() {
-        syncVisibleAIToolsFromStatusStore()
+        syncVisibleAITools()
         dashboardStore.refreshPanelSummary()
     }
 }
@@ -179,7 +179,6 @@ extension TokenMeteringCoordinator {
         let refreshGeneration = menuBarTokenRefreshGeneration
         let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? now
         let visibleTools = visibleAITools ?? TokenUsageDashboardToolVisibility.visibleTools(
-            statuses: aiStatusStore.statuses,
             hiddenTools: settings.hiddenTokenUsageAITools
         )
         let inputScope = settings.tokenUsageInputScope
@@ -225,11 +224,10 @@ extension TokenMeteringCoordinator {
             return nil
         }
 
-        let visibleTools = visibleAITools ?? TokenUsageDashboardToolVisibility.visibleTools(
-            statuses: aiStatusStore.statuses,
-            hiddenTools: settings.hiddenTokenUsageAITools
+        let installedTools = TokenMeteringToolAvailability.installedTools(
+            from: aiStatusStore.statuses
         )
-        let dashboardToolStatuses = visibleTools.compactMap { tool in
+        let dashboardToolStatuses = installedTools.compactMap { tool in
             CloudServiceStatusPresentation.serviceStatus(for: tool, in: snapshot)
         }
         guard !dashboardToolStatuses.isEmpty else {
@@ -346,21 +344,6 @@ extension TokenMeteringCoordinator {
             }
             .store(in: &cancellables)
 
-        aiStatusStore.$statuses
-            .dropFirst()
-            .receive(on: RunLoop.main)
-            .sink { [weak self] _ in
-                self?.scheduleVisibleAIToolsSync()
-            }
-            .store(in: &cancellables)
-
-        aiStatusStore.$hasCompletedRefresh
-            .dropFirst()
-            .receive(on: RunLoop.main)
-            .sink { [weak self] _ in
-                self?.scheduleVisibleAIToolsSync()
-            }
-            .store(in: &cancellables)
     }
 
     private func observePrivateUsageUploadOpportunities() {
@@ -392,13 +375,12 @@ extension TokenMeteringCoordinator {
             }
 
             self.visibleAIToolsSyncTask = nil
-            self.syncVisibleAIToolsFromStatusStore()
+            self.syncVisibleAITools()
         }
     }
 
-    private func syncVisibleAIToolsFromStatusStore() {
+    private func syncVisibleAITools() {
         let visibleTools = TokenUsageDashboardToolVisibility.visibleTools(
-            statuses: aiStatusStore.statuses,
             hiddenTools: settings.hiddenTokenUsageAITools
         )
         guard self.visibleAITools != visibleTools else {

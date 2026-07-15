@@ -457,61 +457,49 @@ Rules:
   `span_id` input component while storing cache-read-inclusive raw
   `input_tokens`.
 
-### ARD-005B2: Token Usage Separates Installation Eligibility and User Visibility
+### ARD-005B2: Token Usage Separates Runtime Diagnostics and User Visibility
 
 Decision:
 
-Dashboard, panel, Preferences, and history-import surfaces derive installation
-eligibility from one shared predicate: the local runtime is installed.
-Installation is determined from safe executable or app bundle presence. Normal
-usage content applies the user's AI visibility setting after installation
-eligibility; controls that let the user re-enable a hidden tool use installation
-eligibility alone. Current process presence must not be used as a gate. Eligible
-usage totals still come from the app-owned `TokenUsageStore`.
+Dashboard, panel, Preferences, and menu-bar token content use the supported
+agent set (Codex, Claude Code, and Antigravity/AGY) minus the user's hidden
+tools. Runtime installation is not a display gate. Current process presence is
+not a display gate. Eligible usage totals still come from the app-owned
+`TokenUsageStore`.
 
-The Preferences AI Visible toggle list follows the same installation
-eligibility: it uses only runtime presence on the user's computer. Spill setup
-files, adapter hooks, importers, and prior Spill installation state do not
-change whether a row appears. A runtime that is uninstalled stays hidden even
-when old adapter files remain. The user's show/hide preference (`hiddenTools`)
-is a separate layer applied within that installed set. Adapter connection state
-remains visible in the separate Setup UI.
+The Preferences AI Visible toggle list always shows the three supported agent
+tools. Spill setup files, adapter hooks, importers, prior Spill installation,
+and runtime discovery do not change whether a row appears. The user's show/hide
+preference (`hiddenTools`) is the only normal display filter. Runtime and
+adapter connection state remain visible in the separate Setup and status UI.
 
 Rationale:
 
 Process presence answers "is this tool running now?" Installation answers
-"can this runtime be used on this Mac?" Adapter connection answers "is Spill
-actually collecting for this tool?" Token usage answers "what exact usage has
-been recorded?" These signals have different lifecycles. A valid stored Codex
-row remains visible after the Codex process exits because Codex remains
-installed. If a runtime is uninstalled, its stored rows remain in the local
-store but leave normal dashboard, import, and AI-visible surfaces until the
-runtime is installed again or an advanced diagnostic surface is selected. The
-AI Visible toggle controls dashboard display for an installed runtime; setup
-and connection state remain separately inspectable and repairable.
+"can setup or history import target this runtime?" Adapter connection answers
+"is Spill actually collecting for this tool?" Token usage answers "what exact
+usage has been recorded?" These signals have different lifecycles. A valid
+stored Codex row must remain visible even when runtime discovery misses a
+user-managed installation path. The AI Visible toggle controls token display;
+setup and connection state remain separately inspectable and repairable.
 
 Rules:
 
-- `TokenMeteringToolAvailability` owns the mapping from installed
-  `LocalAIToolStatus` values to first-class token tools. Dashboard visibility,
-  AI Visible controls, agent connection status, and history-import rows must
-  consume this mapping rather than rebuilding tool lists independently.
+- `TokenMeteringToolAvailability` owns the supported token-agent set and the
+  separate installed-runtime mapping used by Setup and history import.
 - Dashboard, panel, and menu-bar token content includes only
-  `installedTools - hiddenTools` in normal mode.
-- The Preferences AI Visible toggle list uses `installedLocalToolKinds`. It
-  must update when `AIStatusStore.statuses` receives a completed local runtime
-  scan and must not read or depend on adapter connection diagnostics, shared
-  setup-script roots, hook files, importer state, or `TokenMeteringSetupActionStore`.
-  Its empty state means no supported runtime is installed on this computer.
-- Agent connection status panels and history-import targets use
-  `installedTools` alone (not the adapter-connected intersection) so hidden or
-  not-yet-connected tools remain inspectable and repairable from those
+  `supportedTools - hiddenTools` in normal mode.
+- The Preferences AI Visible toggle list uses `supportedLocalToolKinds`. It
+  must not read or depend on runtime discovery, adapter connection diagnostics,
+  shared setup-script roots, hook files, importer state, or
+  `TokenMeteringSetupActionStore`.
+- Agent connection status panels, menu-bar server health, and history-import
+  targets use `installedTools` alone. They do not obey `hiddenTools`, so only
+  real local runtime targets are inspected, reported, or repaired from those
   surfaces.
-- Advanced dashboard mode may include stored OpenAI SDK, `unknown`, and
-  uninstalled-runtime history without changing normal eligibility or deleting
-  those rows.
-  Empty or not-yet-refreshed installation detection must not fall back to all
-  three tools; the UI may show a quiet loading or no-installed-tools state.
+- Advanced dashboard mode may add stored OpenAI SDK and `unknown` history to
+  the current token-display set, but it must retain `hiddenTools` for supported
+  agents and must not delete any rows.
 - AI process status panels may read running state from `AIStatusStore`, but
   token totals, tool tabs, panel summaries, Work Items, dashboard filters,
   history-import rows, and AI-visible toggles must never use running process

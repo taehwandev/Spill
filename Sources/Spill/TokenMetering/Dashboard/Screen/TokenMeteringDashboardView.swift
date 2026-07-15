@@ -55,7 +55,7 @@ struct TokenMeteringDashboardView: View {
             }
             aiStatusStore.refreshInBackground()
             if syncsVisibleAITools {
-                syncVisibleAIToolsFromStatusStore()
+                syncVisibleAITools()
             }
             store.refreshAsyncIfIdle()
         }
@@ -80,12 +80,6 @@ struct TokenMeteringDashboardView: View {
             scheduleVisibleAIToolsSync()
         }
         .onChange(of: settings.hiddenLocalAIToolKinds) { _, _ in
-            scheduleVisibleAIToolsSync()
-        }
-        .onChange(of: aiStatusStore.statuses) { _, _ in
-            scheduleVisibleAIToolsSync()
-        }
-        .onChange(of: aiStatusStore.hasCompletedRefresh) { _, _ in
             scheduleVisibleAIToolsSync()
         }
         .onChange(of: store.selectedSessionID) { _, newID in
@@ -324,10 +318,9 @@ extension TokenMeteringDashboardView {
         )
     }
 
-    private func syncVisibleAIToolsFromStatusStore() {
+    private func syncVisibleAITools() {
         store.setVisibleAITools(
             TokenUsageDashboardToolVisibility.visibleTools(
-                statuses: aiStatusStore.statuses,
                 hiddenTools: settings.hiddenTokenUsageAITools
             )
         )
@@ -346,7 +339,7 @@ extension TokenMeteringDashboardView {
             }
 
             visibleAIToolsSyncTask = nil
-            syncVisibleAIToolsFromStatusStore()
+            syncVisibleAITools()
         }
     }
 
@@ -409,7 +402,7 @@ extension TokenMeteringDashboardView {
         refreshAction()
         aiStatusStore.refreshInBackground()
         if syncsVisibleAITools {
-            syncVisibleAIToolsFromStatusStore()
+            syncVisibleAITools()
         }
         store.refreshAsync()
     }
@@ -604,7 +597,6 @@ extension TokenMeteringDashboardView {
     private var agentStatusPanel: some View {
         TokenMeteringDashboardAgentStatusPanel(
             aiStatusStore: aiStatusStore,
-            settings: settings,
             language: currentLanguage,
             appLanguage: settings.appLanguage
         )

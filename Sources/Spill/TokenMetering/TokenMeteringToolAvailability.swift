@@ -1,4 +1,7 @@
 enum TokenMeteringToolAvailability {
+    static let supportedTools = Set(TokenUsageAITool.dashboardTools)
+    static let supportedLocalToolKinds = TokenUsageAITool.dashboardTools.compactMap(\.localAIToolKind)
+
     static func installedTools(from statuses: [LocalAIToolStatus]) -> Set<TokenUsageAITool> {
         Set(statuses.compactMap { status in
             guard status.kind.isTokenDashboardAgentTool else {
@@ -8,18 +11,8 @@ enum TokenMeteringToolAvailability {
         })
     }
 
-    static func visibleTools(
-        from statuses: [LocalAIToolStatus],
-        hiddenTools: Set<TokenUsageAITool>
-    ) -> Set<TokenUsageAITool> {
-        installedTools(from: statuses).subtracting(hiddenTools)
-    }
-
-    static func installedLocalToolKinds(from statuses: [LocalAIToolStatus]) -> [LocalAIToolKind] {
-        let installed = installedTools(from: statuses)
-        return LocalAIToolKind.allCases.filter { kind in
-            kind.tokenUsageDashboardTool.map(installed.contains) ?? false
-        }
+    static func visibleTools(hiddenTools: Set<TokenUsageAITool>) -> Set<TokenUsageAITool> {
+        supportedTools.subtracting(hiddenTools)
     }
 
     static func installedHistoryImportTools(
