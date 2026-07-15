@@ -4334,6 +4334,58 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(stageTotals["verify"], 80)
     }
 
+    func testGroupedModelTotalsMatchesModelKeyNormalization() throws {
+        // TokenUsageEvent.validate() requires model to match ^[A-Za-z0-9_.:-]{2,80}$, so an
+        // empty or whitespace-padded model can never actually reach the database -- this only
+        // exercises the reachable equivalence class: real model IDs that happen to spell one of
+        // modelKey's recognized "unknown" placeholders, in any case.
+        let store = TokenUsageStore(fileURL: temporaryEventsURL())
+        try store.appendEvent(Self.safeEvent(
+            aiTool: .codex,
+            spanID: "span_model_1",
+            inputTokens: 100,
+            outputTokens: 50,
+            model: "Claude-Sonnet-5"
+        ))
+        // Same key as above: must merge into one total.
+        try store.appendEvent(Self.safeEvent(
+            aiTool: .codex,
+            spanID: "span_model_2",
+            inputTokens: 40,
+            outputTokens: 10,
+            model: "Claude-Sonnet-5"
+        ))
+        // Known "unknown" spellings, in any case, all collapse into model_unavailable.
+        try store.appendEvent(Self.safeEvent(
+            aiTool: .claude,
+            spanID: "span_model_4",
+            inputTokens: 20,
+            outputTokens: 10,
+            model: "UNKNOWN"
+        ))
+        try store.appendEvent(Self.safeEvent(
+            aiTool: .claude,
+            spanID: "span_model_5",
+            inputTokens: 15,
+            outputTokens: 5,
+            model: "model_unknown"
+        ))
+
+        let events = store.loadEvents(startingAt: nil, endingBefore: nil)
+        let expected = TokenUsageDashboardSnapshot.tokenTotals(
+            events: events.map { TokenUsageDashboardParsedEvent(event: $0, calendar: .autoupdatingCurrent) },
+            inputScope: .includeCache
+        ) { TokenUsageDashboardSnapshot.modelKey($0.event.model) }
+
+        let actual = store.groupedModelTotals()
+        XCTAssertEqual(actual["Claude-Sonnet-5"], expected["Claude-Sonnet-5"])
+        XCTAssertEqual(actual["Claude-Sonnet-5"], 200)
+        XCTAssertEqual(actual["model_unavailable"], expected["model_unavailable"])
+        XCTAssertEqual(actual["model_unavailable"], 50)
+        XCTAssertNil(actual["unknown"])
+        XCTAssertNil(actual["UNKNOWN"])
+    }
+
     func testPanelSummaryProjectsFreshOnlyHeadlineWithoutChangingWorkflowRows() throws {
         let store = TokenUsageStore(fileURL: temporaryEventsURL())
         try store.replaceEvents([

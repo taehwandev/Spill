@@ -237,6 +237,31 @@ extension TokenUsageStore {
         }
     }
 
+    func groupedModelTotals(
+        startingAt startDate: Date? = nil,
+        endingBefore endDate: Date? = nil,
+        dashboardToolsOnly: Bool = true,
+        visibleTools: Set<TokenUsageAITool>? = nil
+    ) -> [String: Int] {
+        lock.withLock {
+            let database: OpaquePointer
+            do {
+                database = try openDatabase()
+            } catch {
+                return [:]
+            }
+            defer { sqlite3_close(database) }
+
+            return loadGroupedModelTotals(
+                startingAt: startDate,
+                endingBefore: endDate,
+                dashboardToolsOnly: dashboardToolsOnly,
+                visibleTools: visibleTools,
+                database: database
+            )
+        }
+    }
+
     // loadGroupedTokenTotals sums total_tokens only (includeCache), matching every other
     // caller of it today (dashboardSummary's toolTotals/taskTotals). The Swift-side
     // taskRows/stageRows reducer these are meant to eventually replace is inputScope-aware;

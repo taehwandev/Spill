@@ -264,6 +264,57 @@ extension TokenUsageStore {
         return totals
     }
 
+    /// Mirrors TokenUsageDashboardSnapshot.modelKey in SQL: collapses empty/whitespace-only and
+    /// known "unknown" spellings into "model_unavailable", otherwise groups by the trimmed model
+    /// string as-is (case preserved). SQLite's two-arg TRIM only strips the listed characters
+    /// (space/tab/CR/LF here), a narrower set than Swift's .whitespacesAndNewlines CharacterSet
+    /// (which also covers some Unicode spaces) -- acceptable since model name strings from CLI
+    /// tools don't contain those in practice, but a real divergence if one ever did.
+    func loadGroupedModelTotals(
+        startingAt startDate: Date? = nil,
+        endingBefore endDate: Date? = nil,
+        dashboardToolsOnly: Bool,
+        visibleTools: Set<TokenUsageAITool>? = nil,
+        database: OpaquePointer
+    ) -> [String: Int] {
+        let trimExpr = "TRIM(model, ' ' || char(9) || char(10) || char(13))"
+        let keyExpr = """
+        CASE
+            WHEN \(trimExpr) = ''
+                OR LOWER(\(trimExpr)) IN ('unknown', 'unknown_model', 'model_unknown', 'unavailable')
+            THEN 'model_unavailable'
+            ELSE \(trimExpr)
+        END
+        """
+        let sql = """
+        SELECT \(keyExpr), COALESCE(SUM(total_tokens), 0)
+        FROM token_usage_events
+        \(Self.dashboardWhereClause(startingAt: startDate, endingBefore: endDate, dashboardToolsOnly: dashboardToolsOnly, visibleTools: visibleTools))
+        GROUP BY 1
+        """
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
+              let statement
+        else {
+            return [:]
+        }
+        defer { sqlite3_finalize(statement) }
+        Self.bindDashboardDateRange(startingAt: startDate, endingBefore: endDate, statement: statement)
+
+        var totals = [String: Int]()
+        while sqlite3_step(statement) == SQLITE_ROW {
+            guard let keyText = sqlite3_column_text(statement, 0) else {
+                continue
+            }
+            let key = String(cString: keyText)
+            guard !key.isEmpty else {
+                continue
+            }
+            totals[key] = Int(sqlite3_column_int64(statement, 1))
+        }
+        return totals
+    }
+
     func loadSourceTokenTotals(
         startingAt startDate: Date? = nil,
         endingBefore endDate: Date? = nil,
