@@ -128,7 +128,10 @@ private extension SpillBarAISection {
     }
 
     private var visibleStatuses: [LocalAIToolStatus] {
-        aiStatusStore.statuses
+        aiStatusStore.statuses.filter { status in
+            status.kind.isTokenDashboardAgentTool
+                && settings.isLocalAIToolVisible(status.kind)
+        }
     }
 }
 

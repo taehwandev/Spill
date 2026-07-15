@@ -597,6 +597,7 @@ extension TokenMeteringDashboardView {
     private var agentStatusPanel: some View {
         TokenMeteringDashboardAgentStatusPanel(
             aiStatusStore: aiStatusStore,
+            settings: settings,
             language: currentLanguage,
             appLanguage: settings.appLanguage
         )

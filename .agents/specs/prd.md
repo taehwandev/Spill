@@ -280,11 +280,11 @@ Requirements:
 - The Preferences "AI tool visibility" list must always offer Codex, Claude
   Code, and Antigravity/AGY show/hide toggles by default. It must not depend on
   local runtime installation, Spill setup files, adapter hooks, importers, or a
-  prior Spill installation. The toggle is a display preference only: the user
-  may hide a supported tool from token dashboards and menu-bar token totals
-  without affecting saved token records or local collection. Runtime
-  installation and adapter connection state belong to the separate Setup and
-  status UI, and do not follow this display preference.
+  prior Spill installation. The toggle is the shared display preference for AI
+  dashboard usage, dashboard agent-status cards, compact-panel AI cards, and
+  menu-bar token totals. It does not affect saved token records or local
+  collection. Runtime installation and adapter connection state remain
+  available through Setup and history-import UI.
 - Setup UI should describe basic metering as exact totals without work-type or
   stage labels. It should describe workflow-aware setup as an optional copied
   instruction that is run from the workflow-owning directory, without scanning

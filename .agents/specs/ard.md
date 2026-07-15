@@ -470,8 +470,9 @@ not a display gate. Eligible usage totals still come from the app-owned
 The Preferences AI Visible toggle list always shows the three supported agent
 tools. Spill setup files, adapter hooks, importers, prior Spill installation,
 and runtime discovery do not change whether a row appears. The user's show/hide
-preference (`hiddenTools`) is the only normal display filter. Runtime and
-adapter connection state remain visible in the separate Setup and status UI.
+preference (`hiddenTools`) is the only normal display filter across the AI
+dashboard and compact-panel AI surfaces. Runtime and adapter connection state
+remain available through separate Setup and history-import UI.
 
 Rationale:
 
@@ -493,10 +494,10 @@ Rules:
   must not read or depend on runtime discovery, adapter connection diagnostics,
   shared setup-script roots, hook files, importer state, or
   `TokenMeteringSetupActionStore`.
-- Agent connection status panels, menu-bar server health, and history-import
-  targets use `installedTools` alone. They do not obey `hiddenTools`, so only
-  real local runtime targets are inspected, reported, or repaired from those
-  surfaces.
+- Dashboard agent-status cards and compact-panel AI cards use the supported
+  tools minus `hiddenTools`. Menu-bar server health and history-import targets
+  continue to use `installedTools` alone, so only real local runtime targets
+  are inspected, reported, or repaired from those surfaces.
 - Advanced dashboard mode may add stored OpenAI SDK and `unknown` history to
   the current token-display set, but it must retain `hiddenTools` for supported
   agents and must not delete any rows.
