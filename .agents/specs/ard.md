@@ -404,18 +404,22 @@ Rules:
   for `Include cache`, or exact uncached input for `Fresh only`, and keeps output
   unchanged. The menu bar store query applies the same projection to both daily
   and all-time AI values without changing stored totals. Unclassified input is
-  never inferred as fresh. Raw accounting, workflow/task/stage/work-item
-  grouping, stored events, and synced totals keep their cache-inclusive baseline
-  regardless of this local preference.
+  never inferred as fresh. Raw accounting, stored events, and synced totals keep
+  their cache-inclusive baseline regardless of this local preference. The local
+  AI dashboard projects Work Type, Work Step, and Work Item aggregates from the
+  selected scope without rewriting the stored event totals.
 - Dashboard snapshot construction receives the selected input scope and uses a
   single exact token projection (`total_tokens` for Include cache, or
   `output_tokens + accounting_uncached_input_tokens` for Fresh only) for usage
   KPIs, period filters, tool filters and rows, model/project rows, trend buckets,
-  comparisons, and calendar totals. Period and calendar store queries return
-  both raw and exact-fresh totals in one SQL read so a scope change can rebuild
-  from loaded events without reloading event history. Workflow, task, stage,
-  work-item, source-detail, and raw input accounting projections continue to
-  use raw totals.
+  comparisons, calendar totals, Work Type, Work Step, and Work Item totals and
+  shares. Period and calendar store queries return both raw and exact-fresh
+  totals in one SQL read so a scope change can rebuild from loaded events
+  without reloading event history. Work Type, Work Step, and Work Item grouping
+  must use that same event-level projection (`total_tokens` for Include cache,
+  or `output_tokens + accounting_uncached_input_tokens` for Fresh only) instead
+  of a separate raw `total_tokens` sum. Workflow coverage, source-detail, and
+  raw input accounting projections continue to use raw totals.
 - The compact panel summary query returns both the complete raw total and the
   exact fresh total in the same store read. `TokenUsagePanelSummarySnapshot`
   projects only its headline total from `SpillSettings.tokenUsageInputScope`;

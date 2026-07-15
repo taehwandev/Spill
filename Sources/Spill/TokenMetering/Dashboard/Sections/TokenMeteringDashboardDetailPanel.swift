@@ -3,6 +3,7 @@ import SwiftUI
 struct TokenMeteringDashboardDetailPanel: View {
     let session: TokenUsageDashboardSessionRow
     let snapshot: TokenUsageDashboardSnapshot
+    let inputScope: TokenUsageInputScope
     @Binding var aliasText: String
     let language: TokenMeteringLanguage
     let liveUpdateMarker: TokenUsageLiveUpdateMarker
@@ -17,7 +18,7 @@ extension TokenMeteringDashboardDetailPanel {
     }
 
     private var kpisByID: [String: TokenUsageDashboardKPI] {
-        Dictionary(uniqueKeysWithValues: snapshot.kpis.map { ($0.id, $0) })
+        Dictionary(uniqueKeysWithValues: snapshot.usageKPIs(for: inputScope, language: language).map { ($0.id, $0) })
     }
 
     var body: some View {

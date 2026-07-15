@@ -904,7 +904,7 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(claudeSnapshot.usageKPIs(for: .freshOnly, language: .english).first?.value, "27")
     }
 
-    func testFreshOnlyDashboardScopesUsageSurfacesButKeepsWorkflowRowsRaw() throws {
+    func testFreshOnlyDashboardScopesUsageSurfacesAndWorkflowGroups() throws {
         let timeZone = try XCTUnwrap(TimeZone(identifier: "UTC"))
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone
@@ -952,9 +952,28 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(snapshot.toolRows.map(\.value), ["27 (73.0%)", "10 (27.0%)"])
         XCTAssertEqual(snapshot.modelRows.map(\.value), ["27 (73.0%)", "10 (27.0%)"])
         XCTAssertEqual(snapshot.trendBuckets.last { $0.hasEvents }?.totalTokens, 37)
-        XCTAssertEqual(snapshot.taskRows.first?.value, "202 (100.0%)")
-        XCTAssertEqual(snapshot.stageRows.first?.value, "202 (100.0%)")
+        XCTAssertEqual(snapshot.taskRows.first?.value, "37 (100.0%)")
+        XCTAssertEqual(snapshot.stageRows.first?.value, "37 (100.0%)")
+        XCTAssertEqual(snapshot.sessions.first?.value, "37")
         XCTAssertEqual(snapshot.inputAccounting.rawInputTokens, 185)
+
+        let selectedWorkItemID = try XCTUnwrap(snapshot.sessions.first?.id)
+        let selectedSnapshot = TokenUsageDashboardSnapshot(
+            events: [codex, claude],
+            selectedPeriod: .sevenDays,
+            selectedSessionID: selectedWorkItemID,
+            language: .english,
+            now: now,
+            inputScope: .freshOnly,
+            calendar: calendar,
+            locale: Locale(identifier: "en_US_POSIX"),
+            timeZone: timeZone
+        )
+        XCTAssertEqual(selectedSnapshot.selectedSession?.value, "37")
+        XCTAssertEqual(
+            selectedSnapshot.usageKPIs(for: .freshOnly, language: .english).map(\.value),
+            ["37", "20", "17"]
+        )
     }
 
     func testDashboardSnapshotFiltersByAITool() {
@@ -2785,7 +2804,7 @@ final class TokenUsageStoreTests: XCTestCase {
     }
 
     @MainActor
-    func testDashboardStoreScopeChangeRebuildsUsageSurfacesAndKeepsWorkflowRowsRaw() async throws {
+    func testDashboardStoreScopeChangeRebuildsUsageSurfacesAndWorkflowGroups() async throws {
         let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
         var calendar = Calendar.autoupdatingCurrent
         calendar.firstWeekday = 1
@@ -2834,7 +2853,8 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(dashboardStore.snapshot.periodFilters.first { $0.period == .today }?.detail, "37")
         XCTAssertEqual(dashboardStore.snapshot.toolRows.map(\.value), ["27 (73.0%)", "10 (27.0%)"])
         XCTAssertEqual(dashboardStore.snapshot.modelRows.map(\.value), ["27 (73.0%)", "10 (27.0%)"])
-        XCTAssertEqual(dashboardStore.snapshot.taskRows.first?.value, "202 (100.0%)")
+        XCTAssertEqual(dashboardStore.snapshot.taskRows.first?.value, "37 (100.0%)")
+        XCTAssertEqual(dashboardStore.snapshot.sessions.first?.value, "37")
     }
 
     @MainActor

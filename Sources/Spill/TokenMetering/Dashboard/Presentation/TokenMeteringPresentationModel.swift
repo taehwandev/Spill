@@ -111,6 +111,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
         } ?? periodEvents
         let sessionRows = Self.sessionRows(
             events: visibleEvents,
+            inputScope: inputScope,
             language: language,
             localAliases: localAliases,
             calendar: calendar,
@@ -135,10 +136,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
             capturedUsageTokens += Self.usageTokens(for: focusedEvent.event, inputScope: inputScope)
         }
         totalTokens = capturedTotalTokens
-        let visibleCapturedToolTokens = Self.toolTotals(
-            events: focusedEvents,
-            inputScope: inputScope
-        )
+        let visibleCapturedToolTokens = Self.toolTotals(events: focusedEvents, inputScope: inputScope)
             .filter { tool, _ in
                 visibleTools?.contains(tool) ?? true
             }
@@ -226,18 +224,18 @@ struct TokenUsageDashboardSnapshot: Equatable {
             label: { Self.modelLabel($0, language: language) }
         )
 
-        let taskTokens = Self.tokenTotals(events: focusedEvents) { $0.event.taskType }
+        let taskTokens = Self.tokenTotals(events: focusedEvents, inputScope: inputScope) { $0.event.taskType }
         taskRows = TokenUsageDashboardRowBuilder.rows(
             tokenValues: taskTokens,
-            totalTokens: totalTokens,
+            totalTokens: capturedUsageTokens,
             id: { $0.rawValue },
             label: { $0.dashboardLabel(language: language) }
         )
 
-        let stageTokens = Self.tokenTotals(events: focusedEvents) { $0.event.stage }
+        let stageTokens = Self.tokenTotals(events: focusedEvents, inputScope: inputScope) { $0.event.stage }
         stageRows = TokenUsageDashboardRowBuilder.rows(
             tokenValues: stageTokens,
-            totalTokens: totalTokens,
+            totalTokens: capturedUsageTokens,
             id: { $0.rawValue },
             label: { $0.dashboardLabel(language: language) }
         )

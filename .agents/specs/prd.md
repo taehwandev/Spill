@@ -373,23 +373,24 @@ Requirements:
 - Token Meter settings must offer a persisted local usage-input scope with
   `Include cache` and `Fresh only` choices. `Include cache` is the default.
   `Fresh only` changes dashboard usage KPIs, period totals, AI-tool filters and
-  distribution, model and project usage, trends, calendar totals, the compact
-  Spill Panel Token Metering headline, and the clock-area AI token value to
-  exact uncached input plus the unchanged output count. Daily and all-time menu
-  bar modes must use the same scope. Input without an exact runtime accounting
-  split is not guessed and is not counted as fresh. The setting must include an
-  accessible information button explaining that exact-data boundary.
+  distribution, model and project usage, trends, calendar totals, Work Type,
+  Work Step, and Work Item totals and shares, the compact Spill Panel Token
+  Metering headline, and the clock-area AI token value to exact uncached input
+  plus the unchanged output count. Daily and all-time menu bar modes must use
+  the same scope. Input without an exact runtime accounting split is not guessed
+  and is not counted as fresh. The setting must include an accessible information
+  button explaining that exact-data boundary.
 - Changing the usage-input scope must update the running main menu bar process
   including its compact panel summary, and the separate local token dashboard
   helper immediately. Neither surface may require a restart, reopen, manual
   refresh, or Private Usage Upload sync to observe this device-local
   presentation setting.
-- The usage-input scope must not filter the raw input accounting card or change
-  workflow, task, stage, work-item, source-detail, raw event, storage, or sync
-  totals. Those surfaces remain cache-inclusive so labels keep the same
-  comparable runtime baseline. The raw input accounting card always shows the
-  complete available fresh/cache-write/cache-read/unsplit breakdown and has no
-  scope control.
+- The usage-input scope must not filter the raw input accounting card,
+  source-detail rows, raw events, stored totals, or sync totals. Work Type,
+  Work Step, and Work Item display projections must use the same selected scope
+  as the surrounding local AI dashboard; workflow coverage remains an event
+  ratio. The raw input accounting card always shows the complete available
+  fresh/cache-write/cache-read/unsplit breakdown and has no scope control.
 - The local app usage-input scope is a device-local presentation preference and
   does not alter web cost estimates. The web estimator may persist its own
   `Include cache` / `Fresh only` cost scope, but both cost modes must derive from
@@ -490,9 +491,10 @@ Dashboard UX requirements:
 - The accounting card keeps its information affordance but no display filter.
   The `Include cache` / `Fresh only` control belongs in Settings > Token Meter.
   Its information content must explain that dashboard usage totals and
-  breakdowns, the compact panel Token Metering headline, and the clock-area AI
-  token value change, output is unchanged, unsplit input is not guessed as
-  fresh, and raw/workflow totals remain cache-inclusive.
+  breakdowns, including Work Type, Work Step, and Work Item values, the compact
+  panel Token Metering headline, and the clock-area AI token value change;
+  output is unchanged, unsplit input is not guessed as fresh, and raw
+  accounting, storage, and sync totals remain cache-inclusive.
 - Top AI tool filter tabs may show each tool's share of the current All-tool
   token scope, but the share must be secondary to the tool name. The percentage
   belongs on the tab's second line with the token detail, not in the primary
@@ -573,9 +575,9 @@ Acceptance:
   scope immediately, while its workflow/detail subtitle and grouped tool/task/
   source rows remain cache-inclusive.
 - The local AI dashboard applies the persisted usage-input scope consistently
-  to KPI, period, tool, model, project, trend, and calendar usage values. Its
-  workflow, task, stage, work-item, source-detail, and raw input accounting
-  values remain cache-inclusive.
+  to KPI, period, tool, model, project, trend, calendar, Work Type, Work Step,
+  and Work Item usage values and shares. Workflow coverage, source-detail, and
+  raw input accounting values remain cache-inclusive.
 
 ### 5. System Status Strip
 

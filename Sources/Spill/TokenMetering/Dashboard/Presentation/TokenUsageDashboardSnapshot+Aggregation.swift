@@ -263,6 +263,7 @@ extension TokenUsageDashboardSnapshot {
 
     static func sessionRows(
         events: [TokenUsageDashboardParsedEvent],
+        inputScope: TokenUsageInputScope,
         language: TokenMeteringLanguage,
         localAliases: [String: String],
         calendar: Calendar,
@@ -274,7 +275,9 @@ extension TokenUsageDashboardSnapshot {
             workItemKey(for: event)
         }
             .map { key, groupedEvents in
-                let totalT = groupedEvents.reduce(0) { $0 + $1.event.totalTokens }
+                let totalT = groupedEvents.reduce(0) {
+                    $0 + usageTokens(for: $1.event, inputScope: inputScope)
+                }
                 let latency = groupedEvents.reduce(0) { $0 + $1.event.latencyMS }
                 let latestDate = groupedEvents
                     .compactMap(\.createdAt)

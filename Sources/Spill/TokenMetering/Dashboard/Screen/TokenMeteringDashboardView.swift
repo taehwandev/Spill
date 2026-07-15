@@ -185,7 +185,8 @@ extension TokenMeteringDashboardView {
                     .frame(maxWidth: .infinity, alignment: .topLeading)
                 }
 
-                if let selectedSession = store.snapshot.selectedSession {
+                if let selectedSession = store.snapshot.selectedSession,
+                   !showsDashboardPlaceholder {
                     receiverPanel(selectedSession)
                 } else {
                     rightRail
@@ -218,6 +219,7 @@ extension TokenMeteringDashboardView {
         TokenMeteringDashboardDetailPanel(
             session: selectedSession,
             snapshot: store.snapshot,
+            inputScope: store.snapshotInputScope,
             aliasText: $aliasText,
             language: currentLanguage,
             liveUpdateMarker: store.liveUpdateMarker,
