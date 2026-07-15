@@ -261,17 +261,6 @@ extension TokenUsageDashboardStore {
                 return
             }
 
-            let loadedEventScope = Self.loadEvents(
-                from: usageStore,
-                for: request,
-                cachedEvents: cachedEvents,
-                cachedDateRange: cachedEventsDateRange
-            )
-            guard snapshotBuildGate.isCurrent(generation) else {
-                return
-            }
-
-            let loadedEvents = loadedEventScope.events
             let periodFilterTotals = cachedPeriodFilterTotals.isEmpty
                 ? Self.loadPeriodFilterTotals(from: usageStore, for: request)
                 : cachedPeriodFilterTotals
@@ -282,20 +271,45 @@ extension TokenUsageDashboardStore {
             let panelSummary = refreshesPanelSummary ? Self.loadPanelSummary(from: usageStore, for: request) : nil
             let dateBounds = Self.loadDateBounds(from: usageStore, for: request)
             let buildRequest = request.replacingAvailableDateBounds(dateBounds)
-            let calendarMonthSummary = Self.loadCalendarMonthSummary(from: usageStore, for: buildRequest)
             guard snapshotBuildGate.isCurrent(generation) else {
                 return
             }
 
-            let displayEvents = usesPreviewDataSource ? TokenUsageDashboardPreviewDataSource.onboardingEvents : loadedEvents
-            let snapshotOutput = Self.buildSnapshotOutput(
-                events: displayEvents,
-                request: buildRequest,
-                periodFilterTotals: periodFilterTotals,
-                calendarDayTotals: calendarMonthSummary.dayTokenTotals,
-                cachedContext: cachedContext,
-                cachedContextKey: cachedContextKey
-            )
+            let loadedEvents: [TokenUsageEvent]
+            let loadedEventsCacheCoverageRange: TokenUsageDashboardSnapshot.DateRange?
+            let snapshotOutput: TokenUsageDashboardSnapshotBuildOutput
+            if !usesPreviewDataSource, Self.canBuildSnapshotFromSQL(for: buildRequest) {
+                loadedEvents = []
+                loadedEventsCacheCoverageRange = nil
+                snapshotOutput = Self.buildSnapshotOutputFromSQL(usageStore: usageStore, request: buildRequest)
+            } else {
+                let loadedEventScope = Self.loadEvents(
+                    from: usageStore,
+                    for: request,
+                    cachedEvents: cachedEvents,
+                    cachedDateRange: cachedEventsDateRange
+                )
+                guard snapshotBuildGate.isCurrent(generation) else {
+                    return
+                }
+                loadedEvents = loadedEventScope.events
+                loadedEventsCacheCoverageRange = loadedEventScope.cacheCoverageDateRange
+
+                let calendarMonthSummary = Self.loadCalendarMonthSummary(from: usageStore, for: buildRequest)
+                guard snapshotBuildGate.isCurrent(generation) else {
+                    return
+                }
+
+                let displayEvents = usesPreviewDataSource ? TokenUsageDashboardPreviewDataSource.onboardingEvents : loadedEvents
+                snapshotOutput = Self.buildSnapshotOutput(
+                    events: displayEvents,
+                    request: buildRequest,
+                    periodFilterTotals: periodFilterTotals,
+                    calendarDayTotals: calendarMonthSummary.dayTokenTotals,
+                    cachedContext: cachedContext,
+                    cachedContextKey: cachedContextKey
+                )
+            }
 
             DispatchQueue.main.async { [weak self] in
                 guard let self, self.snapshotBuildGate.isCurrent(generation) else {
@@ -318,7 +332,7 @@ extension TokenUsageDashboardStore {
                     previousEvents: previousEvents,
                     previousSnapshot: previousSnapshot,
                     previousUnfilteredSnapshot: previousUnfilteredSnapshot,
-                    loadedEventsDateRange: loadedEventScope.cacheCoverageDateRange,
+                    loadedEventsDateRange: loadedEventsCacheCoverageRange,
                     periodFilterTotals: periodFilterTotals,
                     panelSummary: appliedPanelSummary,
                     availableDateBounds: dateBounds,
@@ -428,7 +442,8 @@ extension TokenUsageDashboardStore {
     ) {
         let generation = snapshotBuildGate.next()
         let currentEvents = events
-        let displayEvents = displayEvents(for: currentEvents)
+        let currentEventsDateRange = loadedEventsDateRange
+        let usesPreviewDataSource = isOnboardingPreviewEnabled
         let request = snapshotBuildRequest()
         let previousSnapshot = snapshot
         let previousUnfilteredSnapshot = unfilteredSnapshot
@@ -447,19 +462,53 @@ extension TokenUsageDashboardStore {
 
             let dateBounds = Self.loadDateBounds(from: usageStore, for: request)
             let buildRequest = request.replacingAvailableDateBounds(dateBounds)
-            let calendarMonthSummary = Self.loadCalendarMonthSummary(from: usageStore, for: buildRequest)
             guard snapshotBuildGate.isCurrent(generation) else {
                 return
             }
 
-            let snapshotOutput = Self.buildSnapshotOutput(
-                events: displayEvents,
-                request: buildRequest,
-                periodFilterTotals: currentPeriodFilterTotals,
-                calendarDayTotals: calendarMonthSummary.dayTokenTotals,
-                cachedContext: cachedContext,
-                cachedContextKey: cachedContextKey
-            )
+            // currentEvents can be empty here even when real data exists: the previous refresh
+            // may have taken the SQL-only path (canBuildSnapshotFromSQL), which never populates
+            // `events` at all. Route the same way rather than "rebuilding" from an array that was
+            // never loaded.
+            let snapshotOutput: TokenUsageDashboardSnapshotBuildOutput
+            let appliedLoadedEvents: [TokenUsageEvent]
+            let appliedLoadedEventsDateRange: TokenUsageDashboardSnapshot.DateRange?
+            if Self.canBuildSnapshotFromSQL(for: buildRequest) {
+                snapshotOutput = Self.buildSnapshotOutputFromSQL(usageStore: usageStore, request: buildRequest)
+                appliedLoadedEvents = []
+                appliedLoadedEventsDateRange = nil
+            } else {
+                // currentEvents is only a valid cache when it actually covers this request's
+                // range; loadEvents' own cache-hit check (keyed on cachedDateRange) reuses it
+                // when it does and transparently falls back to a real SQL load otherwise --
+                // exactly the fallback needed when currentEvents is empty because the previous
+                // refresh took the SQL-only path above.
+                let loadedEventScope = Self.loadEvents(
+                    from: usageStore,
+                    for: request,
+                    cachedEvents: currentEvents,
+                    cachedDateRange: currentEventsDateRange
+                )
+                guard snapshotBuildGate.isCurrent(generation) else {
+                    return
+                }
+                let loadedEvents = loadedEventScope.events
+                let displayEvents = usesPreviewDataSource ? TokenUsageDashboardPreviewDataSource.onboardingEvents : loadedEvents
+                let calendarMonthSummary = Self.loadCalendarMonthSummary(from: usageStore, for: buildRequest)
+                guard snapshotBuildGate.isCurrent(generation) else {
+                    return
+                }
+                snapshotOutput = Self.buildSnapshotOutput(
+                    events: displayEvents,
+                    request: buildRequest,
+                    periodFilterTotals: currentPeriodFilterTotals,
+                    calendarDayTotals: calendarMonthSummary.dayTokenTotals,
+                    cachedContext: cachedContext,
+                    cachedContextKey: cachedContextKey
+                )
+                appliedLoadedEvents = loadedEvents
+                appliedLoadedEventsDateRange = loadedEventScope.cacheCoverageDateRange
+            }
 
             DispatchQueue.main.async { [weak self] in
                 guard let self, self.snapshotBuildGate.isCurrent(generation) else {
@@ -468,13 +517,13 @@ extension TokenUsageDashboardStore {
 
                 self.applySnapshotPair(
                     snapshotOutput.snapshotPair,
-                    loadedEvents: currentEvents,
+                    loadedEvents: appliedLoadedEvents,
                     inputScope: buildRequest.inputScope,
                     trackLiveUpdates: trackLiveUpdates && !self.isOnboardingPreviewEnabled,
                     previousEvents: previousEvents,
                     previousSnapshot: previousSnapshot,
                     previousUnfilteredSnapshot: previousUnfilteredSnapshot,
-                    loadedEventsDateRange: nil,
+                    loadedEventsDateRange: appliedLoadedEventsDateRange,
                     periodFilterTotals: nil,
                     panelSummary: nil,
                     availableDateBounds: dateBounds,
@@ -571,6 +620,74 @@ extension TokenUsageDashboardStore {
             periodOffset: periodOffset,
             inputScope: usageInputScope,
             availableDateBounds: availableDateBounds
+        )
+    }
+
+    /// No project/session/day drill-down and includeCache scope: every dashboard output can be
+    /// answered from SQL aggregate queries alone (see TokenUsageDashboardSnapshot+SQLFactory.swift),
+    /// so this skips loadEvents entirely rather than loading and holding the full raw row array
+    /// just to recompute totals the store already has SQL paths for.
+    nonisolated private static func canBuildSnapshotFromSQL(for request: TokenUsageDashboardBuildRequest) -> Bool {
+        request.selectedProjectID == nil
+            && request.selectedSessionID == nil
+            && request.selectedCalendarDayID == nil
+            && request.inputScope == .includeCache
+    }
+
+    nonisolated private static func buildSnapshotOutputFromSQL(
+        usageStore: TokenUsageStore,
+        request: TokenUsageDashboardBuildRequest
+    ) -> TokenUsageDashboardSnapshotBuildOutput {
+        let filtered = TokenUsageDashboardSnapshot.buildFromSQLAggregates(
+            usageStore: usageStore,
+            selectedTool: request.selectedTool,
+            selectedPeriod: request.selectedPeriod,
+            language: request.language,
+            localAliases: request.localAliases,
+            showAdvancedTools: request.showAdvancedTools,
+            visibleTools: request.visibleAITools,
+            now: request.now,
+            calendarMonthStart: request.proposedCalendarMonthStart,
+            periodOffset: request.periodOffset,
+            calendar: request.calendar
+        )
+        let unfiltered = request.selectedTool == nil
+            ? filtered
+            : TokenUsageDashboardSnapshot.buildFromSQLAggregates(
+                usageStore: usageStore,
+                selectedTool: nil,
+                selectedPeriod: request.selectedPeriod,
+                language: request.language,
+                localAliases: request.localAliases,
+                showAdvancedTools: request.showAdvancedTools,
+                visibleTools: request.visibleAITools,
+                now: request.now,
+                calendarMonthStart: request.proposedCalendarMonthStart,
+                periodOffset: request.periodOffset,
+                calendar: request.calendar
+            )
+        // calendarMonth resolution depends only on availableDateBounds/now/proposedMonthStart
+        // (never on selectedTool), so it is identical for the filtered and unfiltered snapshots
+        // above, matching buildPair's single shared displayCalendarMonth.
+        let calendarMonth = TokenUsageDashboardSnapshot.normalizedCalendarMonthStart(
+            availableDateBounds: request.availableDateBounds,
+            now: request.now,
+            proposedMonthStart: request.proposedCalendarMonthStart,
+            calendar: request.calendar
+        )
+        let context = TokenUsageDashboardSnapshotBuildContext(
+            events: [],
+            showAdvancedTools: request.showAdvancedTools,
+            calendar: request.calendar
+        )
+        return TokenUsageDashboardSnapshotBuildOutput(
+            snapshotPair: TokenUsageDashboardSnapshotPair(
+                filtered: filtered,
+                unfiltered: unfiltered,
+                calendarMonthStart: calendarMonth
+            ),
+            context: context,
+            contextKey: TokenUsageDashboardContextCacheKey(events: [], request: request)
         )
     }
 
@@ -1024,14 +1141,26 @@ extension TokenUsageDashboardStore {
         let now = Date()
         var calendar = Calendar.autoupdatingCurrent
         calendar.firstWeekday = 1
+        // `events` can be empty here even with real data loaded: selecting a work item is
+        // reached from the unfiltered view, which the SQL-only refresh path (see
+        // canBuildSnapshotFromSQL) never populates it for. Reuse the same cache-hit/miss check
+        // loadEvents already does elsewhere instead of trusting the property directly.
+        let request = snapshotBuildRequest()
+        let loadedEventScope = Self.loadEvents(
+            from: usageStore,
+            for: request,
+            cachedEvents: events,
+            cachedDateRange: loadedEventsDateRange
+        )
+        let resolvedEvents = loadedEventScope.events
         let displayCalendarMonth = TokenUsageDashboardSnapshot.normalizedCalendarMonthStart(
-            events: events.filter { $0.aiTool.isDashboardTool },
+            events: resolvedEvents.filter { $0.aiTool.isDashboardTool },
             now: now,
             proposedMonthStart: calendarMonthStart,
             calendar: calendar
         )
         return TokenUsageDashboardSnapshot(
-            events: events,
+            events: resolvedEvents,
             selectedTool: selectedTool,
             selectedPeriod: selectedPeriod,
             selectedCalendarDayID: selectedCalendarDayID,
@@ -1143,8 +1272,12 @@ extension TokenUsageDashboardStore {
             if scope == .all {
                 try usageStore.clearEvents()
             } else {
+                // A fresh, complete load -- not the cached `events` property, which can be empty
+                // even with real data present (see events(matching:) above for why trusting it
+                // here would risk wiping the store instead of narrowing it).
+                let allEvents = usageStore.loadEvents()
                 let matchingSpanIDs = Set(events(matching: scope).map(\.spanID))
-                let remainingEvents = events.filter { !matchingSpanIDs.contains($0.spanID) }
+                let remainingEvents = allEvents.filter { !matchingSpanIDs.contains($0.spanID) }
                 try usageStore.replaceEvents(remainingEvents)
             }
             selfTestMessage = nil
@@ -1166,11 +1299,17 @@ extension TokenUsageDashboardStore {
         let now = Date()
         var calendar = Calendar.autoupdatingCurrent
         calendar.firstWeekday = 1
-        let dashboardEvents = events.filter { $0.aiTool.isDashboardTool }
+        // Deliberately a fresh, complete load rather than the cached `events` property: clearing
+        // is destructive (clearEvents(in:) below replaces the whole store with whatever this
+        // function excludes), and `events` can be empty even with real data present -- the
+        // SQL-only refresh path (canBuildSnapshotFromSQL) never populates it. Trusting a stale
+        // empty cache here would compute an empty "remaining" set and wipe the store.
+        let allEvents = usageStore.loadEvents()
+        let dashboardEvents = allEvents.filter { $0.aiTool.isDashboardTool }
 
         switch scope {
         case .all:
-            return events
+            return allEvents
         case .currentScope:
             let periodEvents = TokenUsageDashboardSnapshot.filterEvents(
                 dashboardEvents,
@@ -1256,24 +1395,36 @@ extension TokenUsageDashboardStore {
         isRefreshing = true
 
         snapshotBuildQueue.async {
-            let loadedEventScope = Self.loadEvents(
-                from: usageStore,
-                for: request,
-                cachedEvents: currentEvents,
-                cachedDateRange: currentLoadedEventsDateRange
-            )
-            let loadedEvents = loadedEventScope.events
             let dateBounds = Self.loadDateBounds(from: usageStore, for: request)
             let buildRequest = request.replacingAvailableDateBounds(dateBounds)
-            let calendarMonthSummary = Self.loadCalendarMonthSummary(from: usageStore, for: buildRequest)
-            let snapshotOutput = Self.buildSnapshotOutput(
-                events: loadedEvents,
-                request: buildRequest,
-                periodFilterTotals: currentPeriodFilterTotals,
-                calendarDayTotals: calendarMonthSummary.dayTokenTotals,
-                cachedContext: cachedContext,
-                cachedContextKey: cachedContextKey
-            )
+
+            let snapshotOutput: TokenUsageDashboardSnapshotBuildOutput
+            let appliedLoadedEvents: [TokenUsageEvent]
+            let appliedLoadedEventsDateRange: TokenUsageDashboardSnapshot.DateRange?
+            if Self.canBuildSnapshotFromSQL(for: buildRequest) {
+                snapshotOutput = Self.buildSnapshotOutputFromSQL(usageStore: usageStore, request: buildRequest)
+                appliedLoadedEvents = []
+                appliedLoadedEventsDateRange = nil
+            } else {
+                let loadedEventScope = Self.loadEvents(
+                    from: usageStore,
+                    for: request,
+                    cachedEvents: currentEvents,
+                    cachedDateRange: currentLoadedEventsDateRange
+                )
+                let loadedEvents = loadedEventScope.events
+                let calendarMonthSummary = Self.loadCalendarMonthSummary(from: usageStore, for: buildRequest)
+                snapshotOutput = Self.buildSnapshotOutput(
+                    events: loadedEvents,
+                    request: buildRequest,
+                    periodFilterTotals: currentPeriodFilterTotals,
+                    calendarDayTotals: calendarMonthSummary.dayTokenTotals,
+                    cachedContext: cachedContext,
+                    cachedContextKey: cachedContextKey
+                )
+                appliedLoadedEvents = loadedEvents
+                appliedLoadedEventsDateRange = loadedEventScope.cacheCoverageDateRange
+            }
 
             DispatchQueue.main.async { [weak self] in
                 guard let self, self.snapshotBuildGate.isCurrent(generation) else {
@@ -1282,13 +1433,13 @@ extension TokenUsageDashboardStore {
 
                 self.applySnapshotPair(
                     snapshotOutput.snapshotPair,
-                    loadedEvents: loadedEvents,
+                    loadedEvents: appliedLoadedEvents,
                     inputScope: buildRequest.inputScope,
                     trackLiveUpdates: false,
                     previousEvents: nil,
                     previousSnapshot: previousSnapshot,
                     previousUnfilteredSnapshot: previousUnfilteredSnapshot,
-                    loadedEventsDateRange: loadedEventScope.cacheCoverageDateRange,
+                    loadedEventsDateRange: appliedLoadedEventsDateRange,
                     periodFilterTotals: nil,
                     panelSummary: nil,
                     availableDateBounds: dateBounds,

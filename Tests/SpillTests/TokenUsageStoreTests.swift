@@ -2641,6 +2641,33 @@ final class TokenUsageStoreTests: XCTestCase {
     }
 
     @MainActor
+    func testScopedClearAfterSQLOnlyRefreshDoesNotWipeStore() async throws {
+        // Regression test: the SQL-only dashboard refresh path (no project/session/day
+        // drill-down, includeCache scope) never populates the store's cached `events` array.
+        // clearEvents(in:) for anything other than .all used to compute "events to keep" by
+        // subtracting from that cached array directly -- with an empty cache, that produced an
+        // empty "remaining" set and called usageStore.replaceEvents([]), silently deleting every
+        // stored event instead of only the ones in scope. events(matching:)/clearEvents(in:) now
+        // always do a fresh load instead of trusting the cache.
+        let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
+        let dashboardStore = dashboardStore(usageStore: usageStore)
+        let codex = Self.safeEvent(aiTool: .codex, spanID: "span_wipe_guard_codex")
+        let claude = Self.safeEvent(aiTool: .claude, spanID: "span_wipe_guard_claude")
+        try usageStore.replaceEvents([codex, claude])
+
+        // Unfiltered, includeCache: eligible for the SQL-only path, so this refresh must not
+        // need to hold the raw events array to answer with the correct totals.
+        dashboardStore.refreshAsyncIfIdle()
+        try await waitForDashboardStoreRefreshToLoadEvents(dashboardStore, eventCount: 2)
+        XCTAssertEqual(dashboardStore.snapshot.toolFilters.first?.detail, "2 records / 300 tokens")
+
+        dashboardStore.clearEvents(in: .tool(.claude))
+
+        // Only the Claude event must be gone -- a stale-cache bug here would have deleted both.
+        XCTAssertEqual(usageStore.loadEvents().map(\.spanID), ["span_wipe_guard_codex"])
+    }
+
+    @MainActor
     func testDashboardStoreUnfilteredSnapshotBypassesSelectedToolAndProjectFilters() async throws {
         let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
         let dashboardStore = dashboardStore(usageStore: usageStore)
