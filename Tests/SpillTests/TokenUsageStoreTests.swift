@@ -4486,6 +4486,61 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(monthlyBuckets.reduce(0) { $0 + $1.eventCount }, 4)
     }
 
+    func testDashboardFocusedTotalsAndLastUpdatedByToolMatchPerEventSwiftAggregation() throws {
+        let store = TokenUsageStore(fileURL: temporaryEventsURL())
+        // Assisted: taskType != .uncategorized (debugging here), so isAssisted is true
+        // regardless of stage.
+        try store.appendEvent(Self.safeEvent(
+            aiTool: .codex,
+            spanID: "span_focused_1",
+            inputTokens: 100,
+            outputTokens: 50,
+            taskType: .debugging,
+            stage: .summarize,
+            createdAt: "2026-07-10T12:00:00Z"
+        ))
+        // Not assisted: uncategorized task AND summarize stage.
+        try store.appendEvent(Self.safeEvent(
+            aiTool: .claude,
+            spanID: "span_focused_2",
+            inputTokens: 60,
+            outputTokens: 20,
+            tokenAccounting: TokenUsageAccounting(uncachedInputTokens: 50),
+            taskType: .uncategorized,
+            stage: .summarize,
+            createdAt: "2026-07-12T09:00:00Z"
+        ))
+        // Assisted: stage != .summarize.
+        try store.appendEvent(Self.safeEvent(
+            aiTool: .codex,
+            spanID: "span_focused_3",
+            inputTokens: 40,
+            outputTokens: 10,
+            taskType: .uncategorized,
+            stage: .implement,
+            createdAt: "2026-07-11T15:00:00Z"
+        ))
+
+        let totals = store.dashboardFocusedTotals()
+        XCTAssertEqual(totals.eventCount, 3)
+        XCTAssertEqual(totals.totalTokens, 280)
+        XCTAssertEqual(totals.inputTokens, 200)
+        XCTAssertEqual(totals.outputTokens, 80)
+        // Assisted rows are span_focused_1 (100+50) and span_focused_3 (40+10).
+        XCTAssertEqual(totals.assistedEventCount, 2)
+        XCTAssertEqual(totals.assistedTotalTokens, 200)
+
+        let lastUpdated = store.lastUpdatedByTool()
+        XCTAssertEqual(
+            lastUpdated[.codex],
+            ISO8601DateFormatter.parseTokenUsageDate(from: "2026-07-11T15:00:00Z")
+        )
+        XCTAssertEqual(
+            lastUpdated[.claude],
+            ISO8601DateFormatter.parseTokenUsageDate(from: "2026-07-12T09:00:00Z")
+        )
+    }
+
     func testPanelSummaryProjectsFreshOnlyHeadlineWithoutChangingWorkflowRows() throws {
         let store = TokenUsageStore(fileURL: temporaryEventsURL())
         try store.replaceEvents([

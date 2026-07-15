@@ -145,6 +145,118 @@ extension TokenUsageStore {
         )
     }
 
+    struct DashboardFocusedTotals {
+        let eventCount: Int
+        let totalTokens: Int
+        let exactFreshTotalTokens: Int
+        let inputTokens: Int
+        let outputTokens: Int
+        let assistedEventCount: Int
+        let assistedTotalTokens: Int
+    }
+
+    /// One round trip for every scalar total TokenMeteringPresentationModel.init currently
+    /// derives from focusedEvents.reduce(...): the KPI row (event/input/output totals) and
+    /// workflowUsage's assisted-work ratio (TokenUsageWorkflowAssistance.isAssisted mirrored as
+    /// `task_type != 'uncategorized' OR stage != 'summarize'`). assistedTotalTokens intentionally
+    /// sums total_tokens only (includeCache), matching the existing Swift reducer, which is not
+    /// inputScope-aware here either.
+    func loadDashboardFocusedTotals(
+        startingAt startDate: Date? = nil,
+        endingBefore endDate: Date? = nil,
+        dashboardToolsOnly: Bool,
+        visibleTools: Set<TokenUsageAITool>? = nil,
+        database: OpaquePointer
+    ) -> DashboardFocusedTotals {
+        let assistedCondition = "(task_type != 'uncategorized' OR stage != 'summarize')"
+        let sql = """
+        SELECT COUNT(*),
+               COALESCE(SUM(total_tokens), 0),
+               COALESCE(SUM(\(Self.dashboardFreshTokenSQL)), 0),
+               COALESCE(SUM(input_tokens), 0),
+               COALESCE(SUM(output_tokens), 0),
+               COUNT(CASE WHEN \(assistedCondition) THEN 1 END),
+               COALESCE(SUM(CASE WHEN \(assistedCondition) THEN total_tokens ELSE 0 END), 0)
+        FROM token_usage_events
+        \(Self.dashboardWhereClause(startingAt: startDate, endingBefore: endDate, dashboardToolsOnly: dashboardToolsOnly, visibleTools: visibleTools))
+        """
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
+              let statement
+        else {
+            return DashboardFocusedTotals(
+                eventCount: 0, totalTokens: 0, exactFreshTotalTokens: 0,
+                inputTokens: 0, outputTokens: 0, assistedEventCount: 0, assistedTotalTokens: 0
+            )
+        }
+        defer { sqlite3_finalize(statement) }
+        Self.bindDashboardDateRange(startingAt: startDate, endingBefore: endDate, statement: statement)
+
+        guard sqlite3_step(statement) == SQLITE_ROW else {
+            return DashboardFocusedTotals(
+                eventCount: 0, totalTokens: 0, exactFreshTotalTokens: 0,
+                inputTokens: 0, outputTokens: 0, assistedEventCount: 0, assistedTotalTokens: 0
+            )
+        }
+
+        return DashboardFocusedTotals(
+            eventCount: Int(sqlite3_column_int64(statement, 0)),
+            totalTokens: Int(sqlite3_column_int64(statement, 1)),
+            exactFreshTotalTokens: Int(sqlite3_column_int64(statement, 2)),
+            inputTokens: Int(sqlite3_column_int64(statement, 3)),
+            outputTokens: Int(sqlite3_column_int64(statement, 4)),
+            assistedEventCount: Int(sqlite3_column_int64(statement, 5)),
+            assistedTotalTokens: Int(sqlite3_column_int64(statement, 6))
+        )
+    }
+
+    /// Mirrors TokenUsageDashboardSnapshot.lastUpdatedDates: MAX(created_at) per tool over the
+    /// same dashboardToolsOnly/visibleTools-scoped rows, plus an overall max across all of them.
+    func loadLastUpdatedByTool(
+        startingAt startDate: Date? = nil,
+        endingBefore endDate: Date? = nil,
+        dashboardToolsOnly: Bool,
+        visibleTools: Set<TokenUsageAITool>? = nil,
+        database: OpaquePointer
+    ) -> [TokenUsageAITool: Date] {
+        let sql = """
+        SELECT ai_tool, MAX(created_at)
+        FROM token_usage_events
+        \(Self.dashboardWhereClause(startingAt: startDate, endingBefore: endDate, dashboardToolsOnly: dashboardToolsOnly, visibleTools: visibleTools))
+        GROUP BY ai_tool
+        """
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
+              let statement
+        else {
+            return [:]
+        }
+        defer { sqlite3_finalize(statement) }
+        Self.bindDashboardDateRange(startingAt: startDate, endingBefore: endDate, statement: statement)
+
+        var result = [TokenUsageAITool: Date]()
+        while sqlite3_step(statement) == SQLITE_ROW {
+            guard let aiToolRaw = Self.columnString(statement, 0),
+                  let maxCreatedAtText = Self.columnString(statement, 1),
+                  let maxCreatedAt = ISO8601DateFormatter.parseTokenUsageDate(from: maxCreatedAtText)
+            else {
+                continue
+            }
+
+            let aiTool: TokenUsageAITool
+            switch aiToolRaw {
+            case "agy":
+                aiTool = .antigravity
+            case "ollama":
+                aiTool = .unknown
+            default:
+                aiTool = TokenUsageAITool(rawValue: aiToolRaw) ?? .unknown
+            }
+            result[aiTool] = maxCreatedAt
+        }
+        return result
+    }
+
     func loadMenuBarTokenTotalIfAvailable(
         startingAt startDate: Date? = nil,
         endingBefore endDate: Date? = nil,

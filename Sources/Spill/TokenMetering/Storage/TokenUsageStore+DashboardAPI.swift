@@ -237,6 +237,59 @@ extension TokenUsageStore {
         }
     }
 
+    func dashboardFocusedTotals(
+        startingAt startDate: Date? = nil,
+        endingBefore endDate: Date? = nil,
+        dashboardToolsOnly: Bool = true,
+        visibleTools: Set<TokenUsageAITool>? = nil
+    ) -> DashboardFocusedTotals {
+        lock.withLock {
+            let database: OpaquePointer
+            do {
+                database = try openDatabase()
+            } catch {
+                return DashboardFocusedTotals(
+                    eventCount: 0, totalTokens: 0, exactFreshTotalTokens: 0,
+                    inputTokens: 0, outputTokens: 0, assistedEventCount: 0, assistedTotalTokens: 0
+                )
+            }
+            defer { sqlite3_close(database) }
+
+            return loadDashboardFocusedTotals(
+                startingAt: startDate,
+                endingBefore: endDate,
+                dashboardToolsOnly: dashboardToolsOnly,
+                visibleTools: visibleTools,
+                database: database
+            )
+        }
+    }
+
+    func lastUpdatedByTool(
+        startingAt startDate: Date? = nil,
+        endingBefore endDate: Date? = nil,
+        dashboardToolsOnly: Bool = true,
+        visibleTools: Set<TokenUsageAITool>? = nil
+    ) -> [TokenUsageAITool: Date] {
+        lock.withLock {
+            let database: OpaquePointer
+            do {
+                database = try openDatabase()
+            } catch {
+                return [:]
+            }
+            defer { sqlite3_close(database) }
+
+            return loadLastUpdatedByTool(
+                startingAt: startDate,
+                endingBefore: endDate,
+                dashboardToolsOnly: dashboardToolsOnly,
+                visibleTools: visibleTools,
+                database: database
+            )
+        }
+    }
+
     func groupedModelTotals(
         startingAt startDate: Date? = nil,
         endingBefore endDate: Date? = nil,
