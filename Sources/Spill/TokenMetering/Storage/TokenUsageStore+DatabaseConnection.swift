@@ -28,6 +28,22 @@ extension TokenUsageStore {
     func openDatabase() throws -> OpaquePointer {
         try Self.createPrivateDirectoryIfNeeded(at: databaseURL.deletingLastPathComponent())
 
+        var lastError: Error = TokenUsageStoreError.databaseOpenFailed
+        for attempt in 0..<3 {
+            do {
+                return try openDatabaseOnce()
+            } catch {
+                lastError = error
+                if attempt < 2 {
+                    Thread.sleep(forTimeInterval: 0.05 * Double(attempt + 1))
+                }
+            }
+        }
+        throw lastError
+    }
+
+    private func openDatabaseOnce() throws -> OpaquePointer {
+
         var database: OpaquePointer?
         let flags = SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX
         guard sqlite3_open_v2(databaseURL.path, &database, flags, nil) == SQLITE_OK,

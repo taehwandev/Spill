@@ -281,7 +281,10 @@ extension TokenUsageDashboardStore {
             if !usesPreviewDataSource, Self.canBuildSnapshotFromSQL(for: buildRequest) {
                 loadedEvents = []
                 loadedEventsCacheCoverageRange = nil
-                snapshotOutput = Self.buildSnapshotOutputFromSQL(usageStore: usageStore, request: buildRequest)
+                guard let sqlOutput = Self.buildSnapshotOutputFromSQL(usageStore: usageStore, request: buildRequest) else {
+                    return
+                }
+                snapshotOutput = sqlOutput
             } else {
                 let loadedEventScope = Self.loadEvents(
                     from: usageStore,
@@ -478,7 +481,10 @@ extension TokenUsageDashboardStore {
             let appliedLoadedEvents: [TokenUsageEvent]
             let appliedLoadedEventsDateRange: TokenUsageDashboardSnapshot.DateRange?
             if Self.canBuildSnapshotFromSQL(for: buildRequest) {
-                snapshotOutput = Self.buildSnapshotOutputFromSQL(usageStore: usageStore, request: buildRequest)
+                guard let sqlOutput = Self.buildSnapshotOutputFromSQL(usageStore: usageStore, request: buildRequest) else {
+                    return
+                }
+                snapshotOutput = sqlOutput
                 appliedLoadedEvents = []
                 appliedLoadedEventsDateRange = nil
             } else {
@@ -640,7 +646,18 @@ extension TokenUsageDashboardStore {
     nonisolated private static func buildSnapshotOutputFromSQL(
         usageStore: TokenUsageStore,
         request: TokenUsageDashboardBuildRequest
-    ) -> TokenUsageDashboardSnapshotBuildOutput {
+    ) -> TokenUsageDashboardSnapshotBuildOutput? {
+        // A transient open/PRAGMA failure must abort the entire SQL snapshot. Returning
+        // an output built from aggregate methods that silently substituted zero values
+        // produces a partial empty dashboard and overwrites the last known good snapshot.
+        guard usageStore.dashboardSummaryIfAvailable(
+            startingAt: nil,
+            endingBefore: nil,
+            dashboardToolsOnly: !request.showAdvancedTools,
+            visibleTools: request.visibleAITools
+        ) != nil else {
+            return nil
+        }
         let filtered = TokenUsageDashboardSnapshot.buildFromSQLAggregates(
             usageStore: usageStore,
             selectedTool: request.selectedTool,
@@ -1416,7 +1433,10 @@ extension TokenUsageDashboardStore {
             let appliedLoadedEvents: [TokenUsageEvent]
             let appliedLoadedEventsDateRange: TokenUsageDashboardSnapshot.DateRange?
             if Self.canBuildSnapshotFromSQL(for: buildRequest) {
-                snapshotOutput = Self.buildSnapshotOutputFromSQL(usageStore: usageStore, request: buildRequest)
+                guard let sqlOutput = Self.buildSnapshotOutputFromSQL(usageStore: usageStore, request: buildRequest) else {
+                    return
+                }
+                snapshotOutput = sqlOutput
                 appliedLoadedEvents = []
                 appliedLoadedEventsDateRange = nil
             } else {

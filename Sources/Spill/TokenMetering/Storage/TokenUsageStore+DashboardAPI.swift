@@ -176,8 +176,8 @@ extension TokenUsageStore {
     /// Callers that already have a rendered summary can preserve it instead of replacing it
     /// with the indistinguishable empty snapshot used for a valid zero-event range.
     func dashboardSummaryIfAvailable(
-        startingAt startDate: Date,
-        endingBefore endDate: Date,
+        startingAt startDate: Date? = nil,
+        endingBefore endDate: Date? = nil,
         dashboardToolsOnly: Bool = true,
         visibleTools: Set<TokenUsageAITool>? = nil
     ) -> TokenUsageDashboardSummary? {
