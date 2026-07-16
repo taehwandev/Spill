@@ -172,6 +172,44 @@ extension TokenUsageStore {
         }
     }
 
+    /// Returns nil when the database cannot produce even its primary count/total query.
+    /// Callers that already have a rendered summary can preserve it instead of replacing it
+    /// with the indistinguishable empty snapshot used for a valid zero-event range.
+    func dashboardSummaryIfAvailable(
+        startingAt startDate: Date,
+        endingBefore endDate: Date,
+        dashboardToolsOnly: Bool = true,
+        visibleTools: Set<TokenUsageAITool>? = nil
+    ) -> TokenUsageDashboardSummary? {
+        lock.withLock {
+            let database: OpaquePointer
+            do {
+                database = try openDatabase()
+            } catch {
+                return nil
+            }
+            defer { sqlite3_close(database) }
+
+            guard loadDashboardCountAndTotalIfAvailable(
+                startingAt: startDate,
+                endingBefore: endDate,
+                dashboardToolsOnly: dashboardToolsOnly,
+                visibleTools: visibleTools,
+                database: database
+            ) != nil else {
+                return nil
+            }
+
+            return loadDashboardSummary(
+                startingAt: startDate,
+                endingBefore: endDate,
+                dashboardToolsOnly: dashboardToolsOnly,
+                visibleTools: visibleTools,
+                database: database
+            )
+        }
+    }
+
     /// Reuses loadDashboardCountAndTotalIfAvailable rather than a SUM-only query so an empty
     /// range (eventCount == 0) can return nil -- matching the existing comparisonTotalTokens
     /// Swift reducer's `compEvents.isEmpty ? nil : ...`, which COALESCE(SUM(...), 0) alone can't

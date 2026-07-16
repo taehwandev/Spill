@@ -11,13 +11,15 @@ extension TokenUsageStore {
         visibleTools: Set<TokenUsageAITool>? = nil,
         database: OpaquePointer
     ) -> TokenUsageDashboardSummary {
-        let totals = loadDashboardCountAndTotal(
+        guard let totals = loadDashboardCountAndTotalIfAvailable(
             startingAt: startDate,
             endingBefore: endDate,
             dashboardToolsOnly: dashboardToolsOnly,
             visibleTools: visibleTools,
             database: database
-        )
+        ) else {
+            return .empty
+        }
         return TokenUsageDashboardSummary(
             eventCount: totals.eventCount,
             totalTokens: totals.totalTokens,

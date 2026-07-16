@@ -358,10 +358,14 @@ extension TokenUsageDashboardStore {
         let usageStore = usageStore
 
         snapshotBuildQueue.async {
-            let panelSummary = Self.loadPanelSummary(from: usageStore, for: request)
+            let panelSummary = Self.loadPanelSummaryIfAvailable(from: usageStore, for: request)
 
             DispatchQueue.main.async { [weak self] in
                 guard let self, self.panelSummaryRefreshGate.isCurrent(generation) else {
+                    return
+                }
+
+                guard let panelSummary else {
                     return
                 }
 
@@ -828,7 +832,7 @@ extension TokenUsageDashboardStore {
 
 extension TokenUsageDashboardStore {
     private func loadPanelSummary(for request: TokenUsageDashboardBuildRequest) -> TokenUsagePanelSummarySnapshot {
-        Self.loadPanelSummary(from: usageStore, for: request)
+        Self.loadPanelSummaryIfAvailable(from: usageStore, for: request) ?? .empty
     }
 
     private func loadPeriodFilterTotals(
@@ -886,14 +890,23 @@ extension TokenUsageDashboardStore {
         from usageStore: TokenUsageStore,
         for request: TokenUsageDashboardBuildRequest
     ) -> TokenUsagePanelSummarySnapshot {
+        loadPanelSummaryIfAvailable(from: usageStore, for: request) ?? .empty
+    }
+
+    nonisolated private static func loadPanelSummaryIfAvailable(
+        from usageStore: TokenUsageStore,
+        for request: TokenUsageDashboardBuildRequest
+    ) -> TokenUsagePanelSummarySnapshot? {
         let dayStart = request.calendar.startOfDay(for: request.now)
         let dayEnd = request.calendar.date(byAdding: .day, value: 1, to: dayStart) ?? request.now
-        let summary = usageStore.dashboardSummary(
+        guard let summary = usageStore.dashboardSummaryIfAvailable(
             startingAt: dayStart,
             endingBefore: dayEnd,
             dashboardToolsOnly: !request.showAdvancedTools,
             visibleTools: request.visibleAITools
-        )
+        ) else {
+            return nil
+        }
         return TokenUsagePanelSummarySnapshot(
             summary: summary,
             language: request.language

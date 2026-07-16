@@ -1629,6 +1629,7 @@ final class TokenUsageStoreTests: XCTestCase {
     func testDashboardLocalRefreshIsSeparatedFromServerStatusRefresh() throws {
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let dashboardView = try Self.source(named: "TokenMeteringDashboardView.swift")
+        let dashboardStore = try Self.source(named: "TokenUsageDashboardStore.swift")
         let panelController = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Panel/SpillPanelController.swift"))
         let spillBarView = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Panel/SpillBarView.swift"))
         let spillBarAISection = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Panel/SpillBarAISection.swift"))
@@ -1659,6 +1660,8 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(spillBarAITokenSummary.contains(".webSyncEnabled"))
         XCTAssertTrue(spillBarAITokenSummary.contains("snapshot.usageTotal(for: settings.tokenUsageInputScope)"))
         XCTAssertFalse(spillBarAITokenSummary.contains("tokenUsageDashboardStore.refreshPanelSummary()"))
+        XCTAssertTrue(dashboardStore.contains("loadPanelSummaryIfAvailable"))
+        XCTAssertTrue(dashboardStore.contains("guard let panelSummary else"))
         XCTAssertFalse(spillBarAITokenSummary.contains("let displayTotalTokens = snapshot.totalTokens"))
         XCTAssertTrue(spillBarAITokenSummary.contains("if snapshot.totalTokens > 0, !visibleToolRows.isEmpty"))
         XCTAssertTrue(spillBarAIToolCard.contains("status.kind.dashboardTint"))
