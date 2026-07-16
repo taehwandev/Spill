@@ -3410,6 +3410,70 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(dashboardStore.snapshot.periodFilters.map(\.detail), ["100", "130", "130", "130"])
     }
 
+    /// The SQL-eligible refresh (no project/session/day drill-down) now reads the period-filter
+    /// chips and the panel summary inside buildSnapshotOutputFromSQL's single connection and returns
+    /// them alongside the snapshot, instead of pre-reading them on separate connections. This pins
+    /// that one such refresh publishes a snapshot whose period chips agree with an independent
+    /// allPeriodInputScopeTotals query AND a non-empty panel summary consistent with the same data,
+    /// so the rewiring keeps every field sourced from one build. (Single-transaction atomicity under
+    /// a concurrent writer is not cheaply unit-testable; the SQL path structurally prevents the
+    /// cross-connection seam this replaces.)
+    @MainActor
+    func testDashboardStoreSQLRefreshPublishesPeriodTotalsAndPanelSummaryTogether() async throws {
+        let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        let todayStart = calendar.startOfDay(for: Date())
+        let today = try XCTUnwrap(calendar.date(byAdding: .hour, value: 1, to: todayStart))
+        let sixDaysAgo = try XCTUnwrap(calendar.date(byAdding: .day, value: -6, to: todayStart))
+        try usageStore.replaceEvents([
+            Self.safeEvent(
+                aiTool: .codex,
+                spanID: "span_sql_together_today_codex",
+                inputTokens: 80,
+                outputTokens: 20,
+                createdAt: ISO8601DateFormatter.tokenUsage.string(from: today)
+            ),
+            Self.safeEvent(
+                aiTool: .claude,
+                spanID: "span_sql_together_today_claude",
+                inputTokens: 160,
+                outputTokens: 40,
+                createdAt: ISO8601DateFormatter.tokenUsage.string(from: today)
+            ),
+            Self.safeEvent(
+                aiTool: .codex,
+                spanID: "span_sql_together_week_codex",
+                inputTokens: 70,
+                outputTokens: 30,
+                createdAt: ISO8601DateFormatter.tokenUsage.string(from: sixDaysAgo)
+            )
+        ])
+
+        let dashboardStore = TokenUsageDashboardStore(
+            usageStore: usageStore,
+            loadsInitialPanelSummary: false
+        )
+
+        // refreshAsyncIfIdle takes the SQL path here: no project/session/day is selected.
+        dashboardStore.refreshAsyncIfIdle()
+        try await waitForDashboardStoreRefresh(dashboardStore)
+
+        // Today's chip must match today's total (300) and the week chip the 7-day total (400),
+        // i.e. the stored period-filter totals returned by the SQL build.
+        XCTAssertEqual(dashboardStore.snapshot.periodFilters.map(\.detail), ["300", "400", "400", "400"])
+
+        // The panel summary is now returned by the same SQL build; it must be populated (not left
+        // at .empty) and consistent with today's aggregate from an independent query.
+        let todaySummary = usageStore.dashboardSummary(
+            startingAt: todayStart,
+            endingBefore: try XCTUnwrap(calendar.date(byAdding: .day, value: 1, to: todayStart))
+        )
+        XCTAssertEqual(todaySummary.eventCount, 2)
+        XCTAssertEqual(dashboardStore.panelSummary.eventCount, todaySummary.eventCount)
+        XCTAssertEqual(dashboardStore.panelSummary.totalTokens, todaySummary.totalTokens)
+    }
+
     @MainActor
     func testDashboardStoreVisibleToolsBeforeFirstLoadDoesNotBlockInitialRefresh() async throws {
         let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())

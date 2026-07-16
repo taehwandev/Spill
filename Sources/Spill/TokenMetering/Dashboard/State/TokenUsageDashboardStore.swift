@@ -14,73 +14,6 @@ private struct TokenUsageDashboardCalendarMonthSummary {
     let dayTokenTotals: [String: TokenUsageInputScopeTotals]
 }
 
-private struct TokenUsageDashboardContextCacheKey: Equatable {
-    let eventCount: Int
-    let firstSpanID: String?
-    let firstCreatedAt: String?
-    let lastSpanID: String?
-    let lastCreatedAt: String?
-    let totalTokens: Int
-    let eventFingerprint: Int
-    let showAdvancedTools: Bool
-    let visibleAITools: [String]?
-    let calendarIdentifier: String
-    let calendarTimeZone: String
-    let firstWeekday: Int
-
-    init(events: [TokenUsageEvent], request: TokenUsageDashboardBuildRequest) {
-        eventCount = events.count
-        firstSpanID = events.first?.spanID
-        firstCreatedAt = events.first?.createdAt
-        lastSpanID = events.last?.spanID
-        lastCreatedAt = events.last?.createdAt
-        var total = 0
-        var hasher = Hasher()
-        for event in events {
-            total += event.totalTokens
-            hasher.combine(event.spanID)
-            hasher.combine(event.createdAt)
-            hasher.combine(event.aiTool.rawValue)
-            hasher.combine(event.totalTokens)
-            hasher.combine(event.inputTokens)
-            hasher.combine(event.outputTokens)
-            hasher.combine(event.tokenAccounting?.uncachedInputTokens)
-        }
-        totalTokens = total
-        eventFingerprint = hasher.finalize()
-        showAdvancedTools = request.showAdvancedTools
-        visibleAITools = request.visibleAITools?.map(\.rawValue).sorted()
-        calendarIdentifier = String(describing: request.calendar.identifier)
-        calendarTimeZone = request.calendar.timeZone.identifier
-        firstWeekday = request.calendar.firstWeekday
-    }
-}
-
-private struct TokenUsageDashboardSnapshotBuildOutput {
-    let snapshotPair: TokenUsageDashboardSnapshotPair
-    let context: TokenUsageDashboardSnapshotBuildContext
-    let contextKey: TokenUsageDashboardContextCacheKey
-}
-
-private final class TokenUsageDashboardSnapshotBuildGate: @unchecked Sendable {
-    private let lock = NSLock()
-    private var generation = 0
-
-    @discardableResult
-    func next() -> Int {
-        lock.withLock {
-            generation += 1
-            return generation
-        }
-    }
-
-    func isCurrent(_ candidate: Int) -> Bool {
-        lock.withLock {
-            generation == candidate
-        }
-    }
-}
-
 @MainActor
 final class TokenUsageDashboardStore: ObservableObject {
     @Published private(set) var snapshot = TokenUsageDashboardSnapshot.empty
@@ -261,34 +194,54 @@ extension TokenUsageDashboardStore {
                 return
             }
 
-            let periodFilterTotals = cachedPeriodFilterTotals.isEmpty
-                ? Self.loadPeriodFilterTotals(from: usageStore, for: request)
-                : cachedPeriodFilterTotals
-            guard snapshotBuildGate.isCurrent(generation) else {
-                return
-            }
-
-            let panelSummary = refreshesPanelSummary ? Self.loadPanelSummary(from: usageStore, for: request) : nil
-            let dateBounds = Self.loadDateBounds(from: usageStore, for: request)
-            let buildRequest = request.replacingAvailableDateBounds(dateBounds)
-            guard snapshotBuildGate.isCurrent(generation) else {
-                return
-            }
-
             let loadedEvents: [TokenUsageEvent]
             let loadedEventsCacheCoverageRange: TokenUsageDashboardSnapshot.DateRange?
             let snapshotOutput: TokenUsageDashboardSnapshotBuildOutput
-            if !usesPreviewDataSource, Self.canBuildSnapshotFromSQL(for: buildRequest) {
-                loadedEvents = []
-                loadedEventsCacheCoverageRange = nil
-                guard let sqlOutput = Self.buildSnapshotOutputFromSQL(usageStore: usageStore, request: buildRequest) else {
+            let periodFilterTotals: [TokenUsageDashboardPeriod: TokenUsageInputScopeTotals]
+            let panelSummary: TokenUsagePanelSummarySnapshot?
+            let dateBounds: TokenUsageDashboardDateBounds
+            let inputScope: TokenUsageInputScope
+            // canBuildSnapshotFromSQL inspects only project/session/day selection, so it is safe to
+            // gate on the raw request here before availableDateBounds are known: the SQL build derives
+            // its own bounds-filled buildRequest internally. Taking the SQL path means dateBounds, the
+            // period chips, the panel summary, and both snapshot halves are all read on one shared
+            // transaction, so none of them can reflect a different DB commit point than the snapshot
+            // body -- the events-based else-branch keeps its own separate-connection pre-reads.
+            if !usesPreviewDataSource, Self.canBuildSnapshotFromSQL(for: request) {
+                guard let sqlResult = Self.buildSnapshotOutputFromSQL(
+                    usageStore: usageStore,
+                    request: request,
+                    loadsPeriodFilterTotals: true,
+                    cachedPeriodFilterTotals: cachedPeriodFilterTotals,
+                    loadsPanelSummary: refreshesPanelSummary
+                ) else {
                     DispatchQueue.main.async { [weak self] in
                         self?.restoreStateAfterFailedSQLBuild(generation: generation, resetLoadState: true)
                     }
                     return
                 }
-                snapshotOutput = sqlOutput
+                loadedEvents = []
+                loadedEventsCacheCoverageRange = nil
+                snapshotOutput = sqlResult.output
+                periodFilterTotals = sqlResult.periodFilterTotals
+                panelSummary = sqlResult.panelSummary
+                dateBounds = sqlResult.dateBounds
+                inputScope = request.inputScope
             } else {
+                let resolvedPeriodFilterTotals = cachedPeriodFilterTotals.isEmpty
+                    ? Self.loadPeriodFilterTotals(from: usageStore, for: request)
+                    : cachedPeriodFilterTotals
+                guard snapshotBuildGate.isCurrent(generation) else {
+                    return
+                }
+
+                let loadedPanelSummary = refreshesPanelSummary ? Self.loadPanelSummary(from: usageStore, for: request) : nil
+                let loadedDateBounds = Self.loadDateBounds(from: usageStore, for: request)
+                let buildRequest = request.replacingAvailableDateBounds(loadedDateBounds)
+                guard snapshotBuildGate.isCurrent(generation) else {
+                    return
+                }
+
                 let loadedEventScope = Self.loadEvents(
                     from: usageStore,
                     for: request,
@@ -310,11 +263,15 @@ extension TokenUsageDashboardStore {
                 snapshotOutput = Self.buildSnapshotOutput(
                     events: displayEvents,
                     request: buildRequest,
-                    periodFilterTotals: periodFilterTotals,
+                    periodFilterTotals: resolvedPeriodFilterTotals,
                     calendarDayTotals: calendarMonthSummary.dayTokenTotals,
                     cachedContext: cachedContext,
                     cachedContextKey: cachedContextKey
                 )
+                periodFilterTotals = resolvedPeriodFilterTotals
+                panelSummary = loadedPanelSummary
+                dateBounds = loadedDateBounds
+                inputScope = buildRequest.inputScope
             }
 
             DispatchQueue.main.async { [weak self] in
@@ -333,7 +290,7 @@ extension TokenUsageDashboardStore {
                 self.applySnapshotPair(
                     snapshotOutput.snapshotPair,
                     loadedEvents: loadedEvents,
-                    inputScope: buildRequest.inputScope,
+                    inputScope: inputScope,
                     trackLiveUpdates: shouldTrackLiveUpdates,
                     previousEvents: previousEvents,
                     previousSnapshot: previousSnapshot,
@@ -489,31 +446,44 @@ extension TokenUsageDashboardStore {
                 return
             }
 
-            let dateBounds = Self.loadDateBounds(from: usageStore, for: request)
-            let buildRequest = request.replacingAvailableDateBounds(dateBounds)
-            guard snapshotBuildGate.isCurrent(generation) else {
-                return
-            }
-
             // currentEvents can be empty here even when real data exists: the previous refresh
             // may have taken the SQL-only path (canBuildSnapshotFromSQL), which never populates
             // `events` at all. Route the same way rather than "rebuilding" from an array that was
-            // never loaded.
+            // never loaded. canBuildSnapshotFromSQL depends only on project/session/day, so gating
+            // on the raw request is equivalent to gating on the bounds-filled buildRequest.
             let snapshotOutput: TokenUsageDashboardSnapshotBuildOutput
             let appliedLoadedEvents: [TokenUsageEvent]
             let appliedLoadedEventsDateRange: TokenUsageDashboardSnapshot.DateRange?
-            if Self.canBuildSnapshotFromSQL(for: buildRequest) {
-                guard let sqlOutput = Self.buildSnapshotOutputFromSQL(usageStore: usageStore, request: buildRequest) else {
+            let dateBounds: TokenUsageDashboardDateBounds
+            let inputScope: TokenUsageInputScope
+            if Self.canBuildSnapshotFromSQL(for: request) {
+                // The SQL build reads its own dateBounds on the shared transaction; this path adds
+                // no period-total or panel-summary query, exactly as before (it publishes
+                // periodFilterTotals: nil / panelSummary: nil below).
+                guard let sqlResult = Self.buildSnapshotOutputFromSQL(
+                    usageStore: usageStore,
+                    request: request,
+                    loadsPeriodFilterTotals: false,
+                    cachedPeriodFilterTotals: [:],
+                    loadsPanelSummary: false
+                ) else {
                     // This path set only isRefreshing (never loadState), so restore only that.
                     DispatchQueue.main.async { [weak self] in
                         self?.restoreStateAfterFailedSQLBuild(generation: generation, resetLoadState: false)
                     }
                     return
                 }
-                snapshotOutput = sqlOutput
+                snapshotOutput = sqlResult.output
                 appliedLoadedEvents = []
                 appliedLoadedEventsDateRange = nil
+                dateBounds = sqlResult.dateBounds
+                inputScope = request.inputScope
             } else {
+                let loadedDateBounds = Self.loadDateBounds(from: usageStore, for: request)
+                let buildRequest = request.replacingAvailableDateBounds(loadedDateBounds)
+                guard snapshotBuildGate.isCurrent(generation) else {
+                    return
+                }
                 // currentEvents is only a valid cache when it actually covers this request's
                 // range; loadEvents' own cache-hit check (keyed on cachedDateRange) reuses it
                 // when it does and transparently falls back to a real SQL load otherwise --
@@ -544,6 +514,8 @@ extension TokenUsageDashboardStore {
                 )
                 appliedLoadedEvents = loadedEvents
                 appliedLoadedEventsDateRange = loadedEventScope.cacheCoverageDateRange
+                dateBounds = loadedDateBounds
+                inputScope = buildRequest.inputScope
             }
 
             DispatchQueue.main.async { [weak self] in
@@ -554,7 +526,7 @@ extension TokenUsageDashboardStore {
                 self.applySnapshotPair(
                     snapshotOutput.snapshotPair,
                     loadedEvents: appliedLoadedEvents,
-                    inputScope: buildRequest.inputScope,
+                    inputScope: inputScope,
                     trackLiveUpdates: trackLiveUpdates && !self.isOnboardingPreviewEnabled,
                     previousEvents: previousEvents,
                     previousSnapshot: previousSnapshot,
@@ -657,98 +629,6 @@ extension TokenUsageDashboardStore {
             inputScope: usageInputScope,
             availableDateBounds: availableDateBounds
         )
-    }
-
-    /// No project/session/day drill-down: every dashboard output can be answered from SQL
-    /// aggregate queries alone (see TokenUsageDashboardSnapshot+SQLFactory.swift), for either
-    /// inputScope, so this skips loadEvents entirely rather than loading and holding the full
-    /// raw row array just to recompute totals the store already has SQL paths for.
-    nonisolated private static func canBuildSnapshotFromSQL(for request: TokenUsageDashboardBuildRequest) -> Bool {
-        request.selectedProjectID == nil
-            && request.selectedSessionID == nil
-            && request.selectedCalendarDayID == nil
-    }
-
-    nonisolated private static func buildSnapshotOutputFromSQL(
-        usageStore: TokenUsageStore,
-        request: TokenUsageDashboardBuildRequest
-    ) -> TokenUsageDashboardSnapshotBuildOutput? {
-        // Open one connection (and one read transaction) here and thread it into both
-        // buildFromSQLAggregates passes, so the filtered and the selectedTool==nil unfiltered
-        // snapshot read the exact same WAL snapshot. If each opened its own connection+transaction
-        // (as before), a writer committing between the two passes could give the filtered and
-        // unfiltered halves inconsistent totals for the same instant. buildFromSQLAggregates still
-        // returns nil on any open/statement failure -- checking its result directly is a strictly
-        // more accurate signal than probing a separate connection first (a prior version called
-        // dashboardSummaryIfAvailable as a canary on its own independent connection, which said
-        // nothing about whether the build's connection would also open, so a canary-pass +
-        // build-fail could slip an empty snapshot through). A nil out of the shared connection
-        // (open failure) is likewise propagated as nil here.
-        usageStore.withDatabaseConnection(nil, default: nil) { database in
-            guard let filtered = TokenUsageDashboardSnapshot.buildFromSQLAggregates(
-                usageStore: usageStore,
-                selectedTool: request.selectedTool,
-                selectedPeriod: request.selectedPeriod,
-                inputScope: request.inputScope,
-                language: request.language,
-                localAliases: request.localAliases,
-                showAdvancedTools: request.showAdvancedTools,
-                visibleTools: request.visibleAITools,
-                now: request.now,
-                calendarMonthStart: request.proposedCalendarMonthStart,
-                periodOffset: request.periodOffset,
-                calendar: request.calendar,
-                database: database
-            ) else {
-                return nil
-            }
-            let unfiltered: TokenUsageDashboardSnapshot
-            if request.selectedTool == nil {
-                unfiltered = filtered
-            } else {
-                guard let computedUnfiltered = TokenUsageDashboardSnapshot.buildFromSQLAggregates(
-                    usageStore: usageStore,
-                    selectedTool: nil,
-                    selectedPeriod: request.selectedPeriod,
-                    inputScope: request.inputScope,
-                    language: request.language,
-                    localAliases: request.localAliases,
-                    showAdvancedTools: request.showAdvancedTools,
-                    visibleTools: request.visibleAITools,
-                    now: request.now,
-                    calendarMonthStart: request.proposedCalendarMonthStart,
-                    periodOffset: request.periodOffset,
-                    calendar: request.calendar,
-                    database: database
-                ) else {
-                    return nil
-                }
-                unfiltered = computedUnfiltered
-            }
-            // calendarMonth resolution depends only on availableDateBounds/now/proposedMonthStart
-            // (never on selectedTool), so it is identical for the filtered and unfiltered snapshots
-            // above, matching buildPair's single shared displayCalendarMonth.
-            let calendarMonth = TokenUsageDashboardSnapshot.normalizedCalendarMonthStart(
-                availableDateBounds: request.availableDateBounds,
-                now: request.now,
-                proposedMonthStart: request.proposedCalendarMonthStart,
-                calendar: request.calendar
-            )
-            let context = TokenUsageDashboardSnapshotBuildContext(
-                events: [],
-                showAdvancedTools: request.showAdvancedTools,
-                calendar: request.calendar
-            )
-            return TokenUsageDashboardSnapshotBuildOutput(
-                snapshotPair: TokenUsageDashboardSnapshotPair(
-                    filtered: filtered,
-                    unfiltered: unfiltered,
-                    calendarMonthStart: calendarMonth
-                ),
-                context: context,
-                contextKey: TokenUsageDashboardContextCacheKey(events: [], request: request)
-            )
-        }
     }
 
     nonisolated private static func buildSnapshotOutput(
@@ -1464,24 +1344,37 @@ extension TokenUsageDashboardStore {
         isRefreshing = true
 
         snapshotBuildQueue.async {
-            let dateBounds = Self.loadDateBounds(from: usageStore, for: request)
-            let buildRequest = request.replacingAvailableDateBounds(dateBounds)
-
+            // canBuildSnapshotFromSQL depends only on project/session/day, so gating on the raw
+            // request is equivalent to gating on the bounds-filled buildRequest. The SQL path reads
+            // its own dateBounds on the shared transaction and adds no period-total or panel-summary
+            // query (it publishes periodFilterTotals: nil / panelSummary: nil below, as before).
             let snapshotOutput: TokenUsageDashboardSnapshotBuildOutput
             let appliedLoadedEvents: [TokenUsageEvent]
             let appliedLoadedEventsDateRange: TokenUsageDashboardSnapshot.DateRange?
-            if Self.canBuildSnapshotFromSQL(for: buildRequest) {
-                guard let sqlOutput = Self.buildSnapshotOutputFromSQL(usageStore: usageStore, request: buildRequest) else {
+            let dateBounds: TokenUsageDashboardDateBounds
+            let inputScope: TokenUsageInputScope
+            if Self.canBuildSnapshotFromSQL(for: request) {
+                guard let sqlResult = Self.buildSnapshotOutputFromSQL(
+                    usageStore: usageStore,
+                    request: request,
+                    loadsPeriodFilterTotals: false,
+                    cachedPeriodFilterTotals: [:],
+                    loadsPanelSummary: false
+                ) else {
                     // This path set only isRefreshing (never loadState), so restore only that.
                     DispatchQueue.main.async { [weak self] in
                         self?.restoreStateAfterFailedSQLBuild(generation: generation, resetLoadState: false)
                     }
                     return
                 }
-                snapshotOutput = sqlOutput
+                snapshotOutput = sqlResult.output
                 appliedLoadedEvents = []
                 appliedLoadedEventsDateRange = nil
+                dateBounds = sqlResult.dateBounds
+                inputScope = request.inputScope
             } else {
+                let loadedDateBounds = Self.loadDateBounds(from: usageStore, for: request)
+                let buildRequest = request.replacingAvailableDateBounds(loadedDateBounds)
                 let loadedEventScope = Self.loadEvents(
                     from: usageStore,
                     for: request,
@@ -1500,6 +1393,8 @@ extension TokenUsageDashboardStore {
                 )
                 appliedLoadedEvents = loadedEvents
                 appliedLoadedEventsDateRange = loadedEventScope.cacheCoverageDateRange
+                dateBounds = loadedDateBounds
+                inputScope = buildRequest.inputScope
             }
 
             DispatchQueue.main.async { [weak self] in
@@ -1510,7 +1405,7 @@ extension TokenUsageDashboardStore {
                 self.applySnapshotPair(
                     snapshotOutput.snapshotPair,
                     loadedEvents: appliedLoadedEvents,
-                    inputScope: buildRequest.inputScope,
+                    inputScope: inputScope,
                     trackLiveUpdates: false,
                     previousEvents: nil,
                     previousSnapshot: previousSnapshot,
@@ -1899,48 +1794,6 @@ extension TokenUsageDashboardStore {
             ),
             latencyMS: 320 + index * 20,
             createdAt: ISO8601DateFormatter.tokenUsage.string(from: Date())
-        )
-    }
-}
-
-private struct TokenUsageDashboardBuildRequest {
-    let selectedTool: TokenUsageAITool?
-    let selectedPeriod: TokenUsageDashboardPeriod
-    let selectedCalendarDayID: String?
-    let selectedProjectID: String?
-    let selectedSessionID: String?
-    let language: TokenMeteringLanguage
-    let localAliases: [String: String]
-    let showAdvancedTools: Bool
-    let visibleAITools: Set<TokenUsageAITool>?
-    let now: Date
-    let proposedCalendarMonthStart: Date?
-    let calendar: Calendar
-    let periodOffset: Int
-    let inputScope: TokenUsageInputScope
-    let availableDateBounds: TokenUsageDashboardDateBounds
-}
-
-private extension TokenUsageDashboardBuildRequest {
-    func replacingAvailableDateBounds(
-        _ bounds: TokenUsageDashboardDateBounds
-    ) -> TokenUsageDashboardBuildRequest {
-        TokenUsageDashboardBuildRequest(
-            selectedTool: selectedTool,
-            selectedPeriod: selectedPeriod,
-            selectedCalendarDayID: selectedCalendarDayID,
-            selectedProjectID: selectedProjectID,
-            selectedSessionID: selectedSessionID,
-            language: language,
-            localAliases: localAliases,
-            showAdvancedTools: showAdvancedTools,
-            visibleAITools: visibleAITools,
-            now: now,
-            proposedCalendarMonthStart: proposedCalendarMonthStart,
-            calendar: calendar,
-            periodOffset: periodOffset,
-            inputScope: inputScope,
-            availableDateBounds: bounds
         )
     }
 }

@@ -172,26 +172,25 @@ extension TokenUsageStore {
     /// Callers that already have a rendered summary can preserve it instead of replacing it
     /// with the indistinguishable empty snapshot used for a valid zero-event range.
     func dashboardSummaryIfAvailable(
-        startingAt startDate: Date? = nil,
-        endingBefore endDate: Date? = nil,
+        startingAt startDate: Date,
+        endingBefore endDate: Date,
         dashboardToolsOnly: Bool = true,
-        visibleTools: Set<TokenUsageAITool>? = nil
+        visibleTools: Set<TokenUsageAITool>? = nil,
+        database: OpaquePointer? = nil,
+        failureObserver: TokenUsageQueryFailureObserver? = nil
     ) -> TokenUsageDashboardSummary? {
-        lock.withLock {
-            let database: OpaquePointer
-            do {
-                database = try openDatabase()
-            } catch {
-                return nil
-            }
-            defer { sqlite3_close(database) }
-
+        // Route through withDatabaseConnection like the other range-scoped dashboard readers so a
+        // caller (e.g. the dashboard SQL snapshot build) can pass its own already-open connection
+        // and read the panel summary inside the same transaction as the rest of the snapshot,
+        // rather than on a second connection that could observe a different WAL commit point.
+        withDatabaseConnection(database, default: nil) { database -> TokenUsageDashboardSummary? in
             guard loadDashboardCountAndTotalIfAvailable(
                 startingAt: startDate,
                 endingBefore: endDate,
                 dashboardToolsOnly: dashboardToolsOnly,
                 visibleTools: visibleTools,
-                database: database
+                database: database,
+                failureObserver: failureObserver
             ) != nil else {
                 return nil
             }
