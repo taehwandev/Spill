@@ -236,6 +236,7 @@ extension SpillPanelController {
         let visualEffectView = NSVisualEffectView(frame: NSRect(origin: .zero, size: frame.size))
         visualEffectView.autoresizingMask = [.width, .height]
         visualEffectView.blendingMode = .behindWindow
+        visualEffectView.material = .popover
         visualEffectView.state = .active
         visualEffectView.wantsLayer = true
         visualEffectView.layer?.cornerRadius = 22
@@ -243,7 +244,6 @@ extension SpillPanelController {
         visualEffectView.layer?.masksToBounds = true
         visualEffectView.layer?.borderWidth = 0.8
         panelVisualEffectView = visualEffectView
-        updateVisualEffectMaterial()
         applyPanelBorderColor()
 
         let hostingView = NSHostingView(
@@ -383,7 +383,6 @@ extension SpillPanelController {
             .sink { [weak self] theme in
                 self?.panel?.appearance = theme.nsAppearance
                 self?.applyPanelBorderColor()
-                self?.updateVisualEffectMaterial()
             }
             .store(in: &cancellables)
 
@@ -549,24 +548,5 @@ struct SpillPanelLayoutReport {
             .joined(separator: ",")
 
         return "[\(values)]"
-    }
-}
-
-extension SpillPanelController {
-    private func updateVisualEffectMaterial() {
-        guard let visualEffectView = panelVisualEffectView else { return }
-
-        let systemIsDark = NSApplication.shared.effectiveAppearance.name.rawValue.lowercased().contains("dark")
-        let isMismatch: Bool
-        switch settings.appearanceTheme {
-        case .system:
-            isMismatch = false
-        case .light:
-            isMismatch = systemIsDark
-        case .dark:
-            isMismatch = !systemIsDark
-        }
-
-        visualEffectView.material = isMismatch ? .popover : .hudWindow
     }
 }
