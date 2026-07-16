@@ -512,7 +512,7 @@ final class LocalAIStatusProviderTests: XCTestCase {
         XCTAssertEqual(statuses.first?.subtitle, "Ready locally")
     }
 
-    func testRunningCommandIsHiddenWhenToolIsNotInstalled() {
+    func testRunningCommandIsShownWhenToolIsNotInSpillPath() {
         let statuses = LocalAIStatusProvider.statuses(
             environment: [:],
             processNames: [],
@@ -520,7 +520,8 @@ final class LocalAIStatusProviderTests: XCTestCase {
             installedExecutableNames: []
         )
 
-        XCTAssertEqual(statuses, [])
+        XCTAssertEqual(statuses.map(\.kind), [.claude])
+        XCTAssertEqual(statuses.first?.value, "Running")
     }
 
     func testCommandLineDetectionDoesNotMatchExecutableOnlyFromArguments() {

@@ -396,7 +396,10 @@ private extension LocalAIStatusProvider {
         let isInstalled = executableNames.contains { installedExecutableNames.contains($0) }
             || applicationNames.contains { installedApplicationNames.contains($0.lowercased()) }
 
-        guard isInstalled else {
+        // A running process is authoritative even when the GUI-launched Spill process
+        // cannot see the shell's PATH (for example an nvm/npm installation). Installation
+        // lookup is only a fallback for showing a ready, not-running tool.
+        guard isInstalled || processSummary.isRunning else {
             return nil
         }
 

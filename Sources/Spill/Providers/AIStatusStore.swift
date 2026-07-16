@@ -38,7 +38,7 @@ final class AIStatusStore: ObservableObject {
     }
 
     func refresh() {
-        statuses = reader()
+        statuses = Self.withDashboardAgentPlaceholders(reader())
         hasCompletedRefresh = true
     }
 
@@ -83,9 +83,23 @@ final class AIStatusStore: ObservableObject {
                 return
             }
 
-            self.statuses = statuses
+            self.statuses = Self.withDashboardAgentPlaceholders(statuses)
             self.hasCompletedRefresh = true
         }
+    }
+
+    private static func withDashboardAgentPlaceholders(_ statuses: [LocalAIToolStatus]) -> [LocalAIToolStatus] {
+        var normalized = statuses
+        let existingKinds = Set(statuses.map(\.kind))
+        for kind in LocalAIToolKind.allCases where kind.isTokenDashboardAgentTool && !existingKinds.contains(kind) {
+            normalized.append(LocalAIToolStatus(
+                kind: kind,
+                value: "Ready",
+                subtitle: "Ready locally",
+                state: .normal
+            ))
+        }
+        return normalized
     }
 }
 

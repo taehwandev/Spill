@@ -15,7 +15,8 @@ final class AIStatusStoreTests: XCTestCase {
         })
 
         store.refresh()
-        XCTAssertEqual(store.statuses, [])
+        XCTAssertEqual(store.statuses.map(\.kind), [.codex, .claude, .antigravity])
+        XCTAssertTrue(store.statuses.allSatisfy { $0.value == "Ready" })
 
         store.refresh()
         XCTAssertEqual(store.statuses.first { $0.kind == .codex }?.value, "Running")
