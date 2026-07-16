@@ -150,6 +150,15 @@ extension TokenUsageStore {
     /// existing single-query wrapper. Centralizes that fallback so per-query wrapper functions
     /// can accept an optional pre-opened connection without duplicating the lock/open/close
     /// boilerplate at each call site.
+    ///
+    /// When it owns the connection, it also wraps `body` in an explicit read transaction.
+    /// Without one, each statement `body` runs is its own implicit transaction and can observe
+    /// a different commit point if a writer (the importer process) commits in between --
+    /// sharing one connection alone only shrinks that window, it doesn't close it. BEGIN
+    /// DEFERRED's first read acquires a WAL snapshot that every later read in the same
+    /// transaction keeps seeing, even if other connections commit afterward. If BEGIN itself
+    /// fails, `body` still runs without one rather than discarding the whole batch, matching
+    /// this function's existing best-effort/fall-back-to-defaults behavior.
     func withDatabaseConnection<T>(
         _ database: OpaquePointer?,
         default defaultValue: T,
@@ -166,6 +175,20 @@ extension TokenUsageStore {
                 return defaultValue
             }
             defer { sqlite3_close(ownedDatabase) }
+
+            var transactionStarted = false
+            do {
+                try execute("BEGIN DEFERRED", database: ownedDatabase)
+                transactionStarted = true
+            } catch {
+                // Fall through and read without an explicit transaction.
+            }
+            defer {
+                if transactionStarted {
+                    try? execute("COMMIT", database: ownedDatabase)
+                }
+            }
+
             return body(ownedDatabase)
         }
     }

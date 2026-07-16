@@ -4752,7 +4752,7 @@ final class TokenUsageStoreTests: XCTestCase {
                     timeZone: .autoupdatingCurrent
                 )
 
-                let actual = TokenUsageDashboardSnapshot.buildFromSQLAggregates(
+                let actual = try XCTUnwrap(TokenUsageDashboardSnapshot.buildFromSQLAggregates(
                     usageStore: store,
                     selectedTool: selectedTool,
                     selectedPeriod: period,
@@ -4764,7 +4764,7 @@ final class TokenUsageStoreTests: XCTestCase {
                     calendar: calendar,
                     locale: .autoupdatingCurrent,
                     timeZone: .autoupdatingCurrent
-                )
+                ))
 
                 let expected = expectedPair.filtered
                 let label = "period \(period), selectedTool \(String(describing: selectedTool)), inputScope \(inputScope)"

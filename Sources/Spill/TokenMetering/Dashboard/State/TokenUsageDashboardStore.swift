@@ -647,18 +647,14 @@ extension TokenUsageDashboardStore {
         usageStore: TokenUsageStore,
         request: TokenUsageDashboardBuildRequest
     ) -> TokenUsageDashboardSnapshotBuildOutput? {
-        // A transient open/PRAGMA failure must abort the entire SQL snapshot. Returning
-        // an output built from aggregate methods that silently substituted zero values
-        // produces a partial empty dashboard and overwrites the last known good snapshot.
-        guard usageStore.dashboardSummaryIfAvailable(
-            startingAt: nil,
-            endingBefore: nil,
-            dashboardToolsOnly: !request.showAdvancedTools,
-            visibleTools: request.visibleAITools
-        ) != nil else {
-            return nil
-        }
-        let filtered = TokenUsageDashboardSnapshot.buildFromSQLAggregates(
+        // buildFromSQLAggregates returns nil precisely when its own shared connection couldn't
+        // be opened -- the same connection every one of its reads uses -- so checking its result
+        // directly is a strictly more accurate signal than probing a separate connection first
+        // (a prior version of this guard called dashboardSummaryIfAvailable as a canary on its
+        // own independent connection before calling buildFromSQLAggregates; that canary passing
+        // said nothing about whether buildFromSQLAggregates's own, separate connection would
+        // also open, so a canary-pass + build-fail could still slip an empty snapshot through).
+        guard let filtered = TokenUsageDashboardSnapshot.buildFromSQLAggregates(
             usageStore: usageStore,
             selectedTool: request.selectedTool,
             selectedPeriod: request.selectedPeriod,
@@ -671,10 +667,14 @@ extension TokenUsageDashboardStore {
             calendarMonthStart: request.proposedCalendarMonthStart,
             periodOffset: request.periodOffset,
             calendar: request.calendar
-        )
-        let unfiltered = request.selectedTool == nil
-            ? filtered
-            : TokenUsageDashboardSnapshot.buildFromSQLAggregates(
+        ) else {
+            return nil
+        }
+        let unfiltered: TokenUsageDashboardSnapshot
+        if request.selectedTool == nil {
+            unfiltered = filtered
+        } else {
+            guard let computedUnfiltered = TokenUsageDashboardSnapshot.buildFromSQLAggregates(
                 usageStore: usageStore,
                 selectedTool: nil,
                 selectedPeriod: request.selectedPeriod,
@@ -687,7 +687,11 @@ extension TokenUsageDashboardStore {
                 calendarMonthStart: request.proposedCalendarMonthStart,
                 periodOffset: request.periodOffset,
                 calendar: request.calendar
-            )
+            ) else {
+                return nil
+            }
+            unfiltered = computedUnfiltered
+        }
         // calendarMonth resolution depends only on availableDateBounds/now/proposedMonthStart
         // (never on selectedTool), so it is identical for the filtered and unfiltered snapshots
         // above, matching buildPair's single shared displayCalendarMonth.

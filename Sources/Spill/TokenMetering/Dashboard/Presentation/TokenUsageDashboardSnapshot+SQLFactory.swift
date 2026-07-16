@@ -25,7 +25,7 @@ extension TokenUsageDashboardSnapshot {
         calendar: Calendar = .autoupdatingCurrent,
         locale: Locale = .autoupdatingCurrent,
         timeZone: TimeZone = .autoupdatingCurrent
-    ) -> TokenUsageDashboardSnapshot {
+    ) -> TokenUsageDashboardSnapshot? {
         let dashboardToolsOnly = !showAdvancedTools
         let selectedDashboardTool = selectedTool.flatMap { tool in
             tool.isDashboardTool && (visibleTools?.contains(tool) ?? true) ? tool : nil
@@ -42,11 +42,13 @@ extension TokenUsageDashboardSnapshot {
         // chances for a transient open failure to silently zero just that field, and no
         // guarantee the fields it did get were read from the same point-in-time view of the
         // database under concurrent writes from the importer process. Sharing one connection
-        // collapses that down to a single open (with its own retry inside openDatabase()) and a
-        // consistent read for the whole snapshot. If the shared connection can't be opened at
-        // all, this falls back to the same empty snapshot every one of these calls already
-        // defaulted to individually.
-        return usageStore.withDatabaseConnection(nil, default: TokenUsageDashboardSnapshot.empty) { database in
+        // (wrapped in a read transaction, see withDatabaseConnection) collapses that down to a
+        // single open and a consistent read for the whole snapshot. If the shared connection
+        // can't be opened at all, this returns nil instead of an empty snapshot: a nil here is
+        // what lets the caller (buildSnapshotOutputFromSQL) tell "genuinely nothing to show" and
+        // "couldn't read right now" apart, and keep showing the last known-good snapshot for the
+        // latter instead of overwriting it with a blank one.
+        return usageStore.withDatabaseConnection(nil, default: nil) { database in
         let dateBounds = usageStore.dashboardDateBounds(
             dashboardToolsOnly: dashboardToolsOnly,
             visibleTools: visibleTools,
