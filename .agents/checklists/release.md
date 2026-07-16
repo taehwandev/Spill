@@ -35,21 +35,19 @@ procedure. This checklist is the Spill-specific quick gate before closeout.
 
 ## Packaging
 
-- [ ] `SPILL_VERSION=<version> ./scripts/package-release.sh` (`SPILL_BUILD` defaults to `<version>`)
+- [ ] `SPILL_SKIP_ENV_LOCAL=1 SPILL_VERSION=<version> SPILL_BUILD_PRIVATE_USAGE_ENVIRONMENT=production ./scripts/package-release.sh` (`SPILL_BUILD` defaults to `<version>`)
 - [ ] Telemetry key source is explicit: shell environment, `.env.local`, GitHub
       Secrets, or intentionally disabled.
 - [ ] Versioned DMG exists.
-- [ ] Versioned ZIP exists.
 - [ ] Stable `Spill-macos.dmg` exists.
-- [ ] Stable `Spill-macos.zip` exists.
 - [ ] `update.json` exists.
-- [ ] `appcast.xml` exists.
+- [ ] `appcast.xml` exists after the official workflow prepares Sparkle assets.
 - [ ] `checksums.txt` exists.
 
 ## Artifact Verification
 
 - [ ] `hdiutil verify .build/release-artifacts/Spill-<version>-macos.dmg`
-- [ ] `unzip -t .build/release-artifacts/Spill-<version>-macos.zip`
+- [ ] `hdiutil verify .build/release-artifacts/Spill-macos.dmg`
 - [ ] `codesign --verify --deep --strict --verbose=2 .build/Spill.app`
 - [ ] `xcrun stapler validate .build/release-artifacts/Spill-<version>-macos.dmg`
       when notarized.
@@ -57,7 +55,7 @@ procedure. This checklist is the Spill-specific quick gate before closeout.
 - [ ] `CFBundleVersion` equals `<version>` (build number = full version string).
 - [ ] `update.json.latestVersion` equals `<version>`.
 - [ ] `update.json.downloadURL` points at the stable latest DMG URL.
-- [ ] `appcast.xml` points at the versioned ZIP URL.
+- [ ] `appcast.xml` points at the stable latest DMG URL.
 
 ## Signing And Notarization
 
@@ -86,7 +84,7 @@ procedure. This checklist is the Spill-specific quick gate before closeout.
       write-capable release token.
 - [ ] GitHub `Release` workflow completed successfully.
 - [ ] GitHub Release for `v<version>` exists.
-- [ ] Stable and versioned assets are attached.
+- [ ] Stable `Spill-macos.dmg` is attached.
 - [ ] `update.json` is attached.
 - [ ] `appcast.xml` is attached.
 - [ ] `checksums.txt` is attached.
@@ -94,7 +92,6 @@ procedure. This checklist is the Spill-specific quick gate before closeout.
 ## Public URL Checks
 
 - [ ] Latest stable DMG URL resolves.
-- [ ] Latest stable ZIP URL resolves.
 - [ ] Latest `update.json` URL resolves.
 - [ ] Latest `appcast.xml` URL resolves.
 - [ ] `https://spill.thdev.app/` resolves when the hosted web portal is part

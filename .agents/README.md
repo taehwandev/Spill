@@ -100,6 +100,10 @@ Check that repository text content is English-only:
 python3 .agents/scripts/workflow.py language-gates
 ```
 
+The language gate excludes app-owned localization sources and local generated
+output such as `graphify-out/`; it continues to enforce English for repository
+documentation, workflow policy, and non-localized source files.
+
 Run bundled app runtime smoke verification:
 
 ```bash

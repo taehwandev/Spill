@@ -57,9 +57,11 @@ EXCLUDED_DIRS = {
     ".swiftpm",
     "DerivedData",
     "dist",
+    "graphify-out",
     "node_modules",
 }
 LOCALIZED_CONTENT_FILES = {
+    "Sources/Spill/Settings/SpillAppLanguage.swift",
     "Sources/Spill/Settings/SpillSettings.swift",
     "Sources/Spill/App/AppLocalization.swift",
     "Sources/Spill/Preferences/PreferencesLegalLocalization.swift",
