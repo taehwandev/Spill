@@ -213,7 +213,7 @@ extension TokenUsageStore {
     /// guarantee its callers depend on.
     func withDatabaseConnection<T>(
         _ database: OpaquePointer?,
-        default defaultValue: T,
+        default defaultValue: @autoclosure () -> T,
         _ body: (OpaquePointer) -> T
     ) -> T {
         if let database {
@@ -224,7 +224,7 @@ extension TokenUsageStore {
             do {
                 ownedDatabase = try openDatabase()
             } catch {
-                return defaultValue
+                return defaultValue()
             }
             defer { sqlite3_close(ownedDatabase) }
 
@@ -236,7 +236,7 @@ extension TokenUsageStore {
             do {
                 try execute(TokenUsageTransactionMode.deferred.beginStatement, database: ownedDatabase)
             } catch {
-                return defaultValue
+                return defaultValue()
             }
             defer { try? execute(TokenUsageTransactionMode.commitStatement, database: ownedDatabase) }
 

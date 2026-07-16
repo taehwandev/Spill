@@ -480,38 +480,6 @@ extension TokenUsageStore {
         }
     }
 
-    func groupedTokenTotalsByTool(
-        startingAt startDate: Date? = nil,
-        endingBefore endDate: Date? = nil,
-        dashboardToolsOnly: Bool = true,
-        visibleTools: Set<TokenUsageAITool>? = nil
-    ) -> [TokenUsageAITool: Int] {
-        let raw: [String: Int] = lock.withLock {
-            let database: OpaquePointer
-            do {
-                database = try openDatabase()
-            } catch {
-                return [:]
-            }
-            defer { sqlite3_close(database) }
-
-            return loadGroupedTokenTotals(
-                column: "ai_tool",
-                startingAt: startDate,
-                endingBefore: endDate,
-                dashboardToolsOnly: dashboardToolsOnly,
-                visibleTools: visibleTools,
-                database: database
-            )
-        }
-        var totals = [TokenUsageAITool: Int]()
-        for (key, value) in raw {
-            let tool: TokenUsageAITool = key == "agy" ? .antigravity : (TokenUsageAITool(rawValue: key) ?? .unknown)
-            totals[tool, default: 0] += value
-        }
-        return totals
-    }
-
     func sourceTokenTotals(
         startingAt startDate: Date? = nil,
         endingBefore endDate: Date? = nil,

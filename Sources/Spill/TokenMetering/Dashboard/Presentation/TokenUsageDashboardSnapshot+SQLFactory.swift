@@ -518,7 +518,7 @@ private extension TokenUsageDashboardSnapshot {
         calendar: Calendar,
         dashboardToolsOnly: Bool,
         visibleTools: Set<TokenUsageAITool>?,
-        database: OpaquePointer? = nil,
+        database: OpaquePointer,
         failureObserver: TokenUsageQueryFailureObserver? = nil
     ) -> Int? {
         switch selectedPeriod {
