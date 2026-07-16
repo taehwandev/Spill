@@ -1658,6 +1658,7 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(spillBarAITokenSummary.contains("settings.privateUsageUploadEnabled"))
         XCTAssertTrue(spillBarAITokenSummary.contains(".webSyncEnabled"))
         XCTAssertTrue(spillBarAITokenSummary.contains("snapshot.usageTotal(for: settings.tokenUsageInputScope)"))
+        XCTAssertFalse(spillBarAITokenSummary.contains("tokenUsageDashboardStore.refreshPanelSummary()"))
         XCTAssertFalse(spillBarAITokenSummary.contains("let displayTotalTokens = snapshot.totalTokens"))
         XCTAssertTrue(spillBarAITokenSummary.contains("if snapshot.totalTokens > 0, !visibleToolRows.isEmpty"))
         XCTAssertTrue(spillBarAIToolCard.contains("status.kind.dashboardTint"))

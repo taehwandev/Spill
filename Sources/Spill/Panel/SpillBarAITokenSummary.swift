@@ -81,9 +81,6 @@ private extension SpillBarAITokenSummary {
         .onHover { hovering in
             isHovered = hovering
         }
-        .onAppear {
-            tokenUsageDashboardStore.refreshPanelSummary()
-        }
         .help(AppL10n.text(.openLocalTokenMeteringDetails, appLanguage: settings.appLanguage))
         .accessibilityLabel(
             AppL10n.tokenMeteringAccessibility(
