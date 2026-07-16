@@ -467,6 +467,17 @@ tools. Runtime installation is not a display gate. Current process presence is
 not a display gate. Eligible usage totals still come from the app-owned
 `TokenUsageStore`.
 
+Agent-status presentation uses the canonical ordered projection Codex, Claude
+Code, then Antigravity/AGY. `AIStatusStore` keeps the raw provider result
+separately from the presentation list. Each refresh merges a detected status
+into the matching canonical card by `LocalAIToolKind`; missing supported tools
+receive a neutral presentation state without changing the order. Additional
+non-dashboard statuses may follow the three canonical agent cards.
+
+Setup, adapter diagnostics, and history-import availability consume the raw
+detected-status list. They must never infer installation from the presentation
+list or its neutral cards.
+
 The Preferences AI Visible toggle list always shows the three supported agent
 tools. Spill setup files, adapter hooks, importers, prior Spill installation,
 and runtime discovery do not change whether a row appears. The user's show/hide
@@ -1269,9 +1280,12 @@ MVP detection:
   - optional default model from explicit OpenAI model environment keys
   - never display secret values
 
-The panel should render only detected or configured AI tools. Missing local tools
-should be omitted from the compact strip, and the whole AI strip should be hidden
-when every local AI signal is absent.
+The compact panel and dashboard render the supported agent cards in canonical
+Codex, Claude Code, and Antigravity/AGY order, minus the user's hidden tools.
+The sparse provider result remains the source for actual installation and
+process detection, while `AIStatusStore` projects that state onto the stable
+presentation list. A missing runtime therefore keeps a neutral display card but
+does not become installed for Setup or history import.
 
 Model and version labels are best-effort metadata. Spill should not inspect chat
 transcripts, private session stores, or secret-bearing config files to infer an

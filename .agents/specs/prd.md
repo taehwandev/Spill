@@ -285,6 +285,13 @@ Requirements:
   menu-bar token totals. It does not affect saved token records or local
   collection. Runtime installation and adapter connection state remain
   available through Setup and history-import UI.
+- Visible agent-status cards must keep the canonical order Codex, Claude Code,
+  then Antigravity/AGY on every refresh. A detected runtime status replaces the
+  matching card's neutral display state by tool identity; detection order must
+  never reorder the cards.
+- Display-only agent states must not be treated as runtime installation
+  evidence. Setup, adapter diagnostics, and history-import availability must use
+  the raw detected-runtime state rather than the always-present display cards.
 - Setup UI should describe basic metering as exact totals without work-type or
   stage labels. It should describe workflow-aware setup as an optional copied
   instruction that is run from the workflow-owning directory, without scanning
@@ -626,8 +633,8 @@ Layout requirements:
 - The strip is a compact cluster of AI tool status pills plus one token usage
   summary pill.
 - The AI area may include a small process-state visualization that shows how
-  many supported AI tools are currently detected and how they are distributed by
-  safe local status such as running, configured, or unavailable.
+  many supported AI tools are visible and how they are distributed by safe local
+  status such as running, ready, or unavailable.
 - The token summary appears in the same AI strip, after local tool status, and
   may wrap to a second compact line only when the panel width requires it.
 - Clicking the token summary opens the local token dashboard helper.
@@ -639,7 +646,10 @@ Behavior requirements:
 - No external API calls in MVP unless explicitly configured.
 - Never display API keys.
 - Treat AI providers as pluggable.
-- Show only locally detected or configured tools in the compact panel.
+- Show Codex, Claude Code, and Antigravity/AGY cards in that fixed order,
+  filtered only by the shared AI tool visibility preference. Runtime detection
+  enriches the matching card with running process and metadata state; it does
+  not control card presence or ordering.
 - The process-state visualization must be derived from existing local process
   and configuration status. It must not inspect prompts, transcripts, commands,
   file paths, repository names, shell history, logs, diffs, source content, or
@@ -655,7 +665,9 @@ Acceptance:
 - AI status can be understood at a glance through both status pills and a small
   process-state chart/count summary.
 - Token metering placement is visually and conceptually part of AI status.
-- Missing tools do not create errors, noise, or placeholder panel rows.
+- A missing runtime does not create an error or reorder the panel. Its neutral
+  display card remains presentation-only and does not make Setup or history
+  import report the runtime as installed.
 
 ### 7. Pinned Actions And Pin Management
 

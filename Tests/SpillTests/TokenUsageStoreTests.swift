@@ -43,6 +43,8 @@ extension TokenUsageStoreTests {
         XCTAssertTrue(adapterStatusSection.contains("adapter.aiTool == .antigravity"))
         XCTAssertTrue(preferencesSection.contains("TokenMeteringSetupActionStore.shared"))
         XCTAssertTrue(dashboardSetupPanel.contains("TokenMeteringSetupActionStore.shared"))
+        XCTAssertTrue(preferencesSection.contains("aiStatusStore.detectedStatuses"))
+        XCTAssertTrue(dashboardSetupPanel.contains("aiStatusStore.detectedStatuses"))
     }
 }
 
@@ -1348,7 +1350,7 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(aiToolVisibilitySection.contains("settings.setLocalAITool(kind, isVisible: $0)"))
         XCTAssertFalse(aiToolVisibilitySection.contains("aiStatusStore"))
         XCTAssertFalse(aiToolVisibilitySection.contains("adapterStatuses"))
-        XCTAssertTrue(preferencesSection.contains(".onChange(of: aiStatusStore.statuses)"))
+        XCTAssertTrue(preferencesSection.contains(".onChange(of: aiStatusStore.detectedStatuses)"))
         XCTAssertTrue(preferencesSection.contains("privacyBoundarySection"))
         XCTAssertTrue(privacyBoundarySection.contains("t(.privacyBoundaryDetail)"))
         XCTAssertTrue(privacyBoundarySection.contains("TokenMeteringPreferencesModel.forbiddenContentLabels"))

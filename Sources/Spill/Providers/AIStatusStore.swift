@@ -7,6 +7,7 @@ final class AIStatusStore: ObservableObject {
     typealias BackgroundReader = @Sendable (@escaping @Sendable () -> Bool) -> [LocalAIToolStatus]
 
     @Published private(set) var statuses: [LocalAIToolStatus]
+    @Published private(set) var detectedStatuses: [LocalAIToolStatus]
     @Published private(set) var hasCompletedRefresh = false
 
     private let reader: Reader
@@ -26,6 +27,7 @@ final class AIStatusStore: ObservableObject {
         }
     ) {
         self.statuses = statuses
+        self.detectedStatuses = statuses
         self.reader = reader
         self.backgroundReader = backgroundReader
     }
@@ -38,7 +40,9 @@ final class AIStatusStore: ObservableObject {
     }
 
     func refresh() {
-        statuses = Self.withDashboardAgentPlaceholders(reader())
+        let detectedStatuses = reader()
+        self.detectedStatuses = detectedStatuses
+        statuses = Self.withOrderedDashboardAgentPlaceholders(detectedStatuses)
         hasCompletedRefresh = true
     }
 
@@ -66,7 +70,7 @@ final class AIStatusStore: ObservableObject {
         backgroundRefreshCancellation = cancellation
         let backgroundReader = backgroundReader
         backgroundRefreshTask = Task { @MainActor [weak self, cancellation] in
-            let statuses = await Task.detached(priority: .utility) {
+            let detectedStatuses = await Task.detached(priority: .utility) {
                 backgroundReader { cancellation.isCancelled() }
             }.value
 
@@ -83,23 +87,27 @@ final class AIStatusStore: ObservableObject {
                 return
             }
 
-            self.statuses = Self.withDashboardAgentPlaceholders(statuses)
+            self.detectedStatuses = detectedStatuses
+            self.statuses = Self.withOrderedDashboardAgentPlaceholders(detectedStatuses)
             self.hasCompletedRefresh = true
         }
     }
 
-    private static func withDashboardAgentPlaceholders(_ statuses: [LocalAIToolStatus]) -> [LocalAIToolStatus] {
-        var normalized = statuses
-        let existingKinds = Set(statuses.map(\.kind))
-        for kind in LocalAIToolKind.allCases where kind.isTokenDashboardAgentTool && !existingKinds.contains(kind) {
-            normalized.append(LocalAIToolStatus(
-                kind: kind,
-                value: "Ready",
-                subtitle: "Ready locally",
-                state: .normal
-            ))
-        }
-        return normalized
+    private static func withOrderedDashboardAgentPlaceholders(
+        _ detectedStatuses: [LocalAIToolStatus]
+    ) -> [LocalAIToolStatus] {
+        let dashboardStatuses = LocalAIToolKind.allCases
+            .filter(\.isTokenDashboardAgentTool)
+            .map { kind in
+                detectedStatuses.first { $0.kind == kind } ?? LocalAIToolStatus(
+                    kind: kind,
+                    value: "Ready",
+                    subtitle: "Ready locally",
+                    state: .normal
+                )
+            }
+        let otherStatuses = detectedStatuses.filter { !$0.kind.isTokenDashboardAgentTool }
+        return dashboardStatuses + otherStatuses
     }
 }
 

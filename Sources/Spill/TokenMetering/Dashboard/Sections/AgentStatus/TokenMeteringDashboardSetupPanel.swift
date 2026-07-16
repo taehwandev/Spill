@@ -29,13 +29,13 @@ struct TokenMeteringDashboardSetupPanel: View {
         .onAppear {
             setupActionStore.refresh(installedTools: installedTokenTools)
         }
-        .onChange(of: aiStatusStore.statuses) { _, _ in
+        .onChange(of: aiStatusStore.detectedStatuses) { _, _ in
             setupActionStore.refresh(installedTools: installedTokenTools)
         }
     }
 
     private var installedTokenTools: Set<TokenUsageAITool> {
-        TokenMeteringToolAvailability.installedTools(from: aiStatusStore.statuses)
+        TokenMeteringToolAvailability.installedTools(from: aiStatusStore.detectedStatuses)
     }
 
     private func copySetupPrompt() {

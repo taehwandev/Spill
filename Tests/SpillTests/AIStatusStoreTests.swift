@@ -17,10 +17,52 @@ final class AIStatusStoreTests: XCTestCase {
         store.refresh()
         XCTAssertEqual(store.statuses.map(\.kind), [.codex, .claude, .antigravity])
         XCTAssertTrue(store.statuses.allSatisfy { $0.value == "Ready" })
+        XCTAssertEqual(store.detectedStatuses, [])
 
         store.refresh()
         XCTAssertEqual(store.statuses.first { $0.kind == .codex }?.value, "Running")
         XCTAssertEqual(store.statuses.first { $0.kind == .openAI }?.value, "Configured")
+        XCTAssertEqual(store.detectedStatuses.map(\.kind), [.codex, .openAI])
+    }
+
+    func testRefreshKeepsCanonicalAgentOrderAndPreservesDetectedState() {
+        let claudeStatus = LocalAIToolStatus(
+            kind: .claude,
+            value: "Running",
+            subtitle: "2 processes",
+            state: .active,
+            metadata: LocalAIToolMetadata(
+                model: "claude-opus",
+                version: "2.1.209",
+                source: "Command"
+            ),
+            processSummary: LocalAIProcessSummary(
+                processes: [],
+                fallbackProcessCount: 2
+            )
+        )
+        let openAIStatus = LocalAIToolStatus(
+            kind: .openAI,
+            value: "Configured",
+            subtitle: "Environment",
+            state: .normal
+        )
+        let store = AIStatusStore(reader: {
+            [claudeStatus, openAIStatus]
+        })
+
+        store.refresh()
+
+        XCTAssertEqual(
+            store.statuses.map(\.kind),
+            [.codex, .claude, .antigravity, .openAI]
+        )
+        XCTAssertEqual(store.statuses[1], claudeStatus)
+        XCTAssertEqual(store.detectedStatuses, [claudeStatus, openAIStatus])
+        XCTAssertEqual(
+            TokenMeteringToolAvailability.installedTools(from: store.detectedStatuses),
+            [.claude]
+        )
     }
 
     func testCancelRefreshPreventsBackgroundStatusUpdate() async {
@@ -47,5 +89,6 @@ final class AIStatusStoreTests: XCTestCase {
 
         try? await Task.sleep(nanoseconds: 100_000_000)
         XCTAssertEqual(store.statuses, [])
+        XCTAssertEqual(store.detectedStatuses, [])
     }
 }

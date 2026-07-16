@@ -103,7 +103,7 @@ struct TokenMeteringPreferencesSection: View {
                 refreshAdapterStatuses()
             }
         }
-        .onChange(of: aiStatusStore.statuses) { _, _ in
+        .onChange(of: aiStatusStore.detectedStatuses) { _, _ in
             refreshAdapterStatuses()
         }
     }
@@ -111,7 +111,7 @@ struct TokenMeteringPreferencesSection: View {
 
 private extension TokenMeteringPreferencesSection {
     private var installedTokenTools: Set<TokenUsageAITool> {
-        TokenMeteringToolAvailability.installedTools(from: aiStatusStore.statuses)
+        TokenMeteringToolAvailability.installedTools(from: aiStatusStore.detectedStatuses)
     }
 
     private var localSyncAndDisplaySettingsSection: some View {
@@ -229,7 +229,7 @@ private extension TokenMeteringPreferencesSection {
 
     private var historyImportSection: some View {
         let installedTools = TokenMeteringToolAvailability.installedHistoryImportTools(
-            from: aiStatusStore.statuses
+            from: aiStatusStore.detectedStatuses
         )
         return TokenUsageHistoryImportSection(
             snapshot: tokenHistoryImportCoordinator.snapshot,
