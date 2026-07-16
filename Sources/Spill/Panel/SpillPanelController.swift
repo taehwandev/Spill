@@ -236,7 +236,7 @@ extension SpillPanelController {
         let visualEffectView = NSVisualEffectView(frame: NSRect(origin: .zero, size: frame.size))
         visualEffectView.autoresizingMask = [.width, .height]
         visualEffectView.blendingMode = .behindWindow
-        visualEffectView.material = .popover
+        visualEffectView.material = .hudWindow
         visualEffectView.state = .active
         visualEffectView.wantsLayer = true
         visualEffectView.layer?.cornerRadius = 22

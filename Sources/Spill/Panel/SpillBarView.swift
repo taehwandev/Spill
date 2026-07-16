@@ -51,15 +51,7 @@ struct SpillBarView: View {
             .frame(maxWidth: .infinity, alignment: .top)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(
-            Color(nsColor: NSColor(name: nil) { appearance in
-                if appearance.name.rawValue.lowercased().contains("dark") {
-                    return NSColor(white: 0.08, alpha: 0.45)
-                } else {
-                    return NSColor(white: 0.98, alpha: 0.60)
-                }
-            })
-        )
+        .background(Color.clear)
         .onChange(of: panelState.pendingDismiss) { _, pendingDismiss in
             updatePendingDismiss(pendingDismiss)
         }
