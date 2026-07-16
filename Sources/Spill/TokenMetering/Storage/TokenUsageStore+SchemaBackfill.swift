@@ -48,15 +48,10 @@ extension TokenUsageStore {
             return
         }
 
-        try execute("BEGIN IMMEDIATE TRANSACTION", database: database)
-        do {
+        try withTransaction(.immediate, database: database) {
             for event in events {
                 try updateDashboardColumns(for: event, database: database)
             }
-            try execute("COMMIT", database: database)
-        } catch {
-            try? execute("ROLLBACK", database: database)
-            throw error
         }
     }
 
@@ -99,8 +94,7 @@ extension TokenUsageStore {
             return
         }
 
-        try execute("BEGIN IMMEDIATE TRANSACTION", database: database)
-        do {
+        try withTransaction(.immediate, database: database) {
             for update in updates {
                 try updateCreatedAt(
                     spanID: update.spanID,
@@ -108,10 +102,6 @@ extension TokenUsageStore {
                     database: database
                 )
             }
-            try execute("COMMIT", database: database)
-        } catch {
-            try? execute("ROLLBACK", database: database)
-            throw error
         }
     }
 

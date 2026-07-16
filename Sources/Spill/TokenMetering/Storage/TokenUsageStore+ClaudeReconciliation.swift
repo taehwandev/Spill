@@ -73,27 +73,31 @@ extension TokenUsageStore {
             }
             defer { sqlite3_close(database) }
 
+            // `withTransaction` owns BEGIN/COMMIT/ROLLBACK. This site adds two behaviors on
+            // top: the temp table is dropped in the outer catch as well (so a failure after
+            // BEGIN failed, i.e. no transaction to roll it back, still cleans up), and any
+            // failure degrades to `return 0` instead of rethrowing — reconciliation is
+            // best-effort and must never surface an error to its caller.
             do {
-                try execute("BEGIN IMMEDIATE TRANSACTION", database: database)
-                try execute(
-                    """
-                    CREATE TEMP TABLE IF NOT EXISTS claude_reconcile_authoritative (
-                        run_id TEXT NOT NULL,
-                        span_id TEXT NOT NULL
+                return try withTransaction(.immediate, database: database) {
+                    try execute(
+                        """
+                        CREATE TEMP TABLE IF NOT EXISTS claude_reconcile_authoritative (
+                            run_id TEXT NOT NULL,
+                            span_id TEXT NOT NULL
+                        )
+                        """,
+                        database: database
                     )
-                    """,
-                    database: database
-                )
-                try execute("DELETE FROM claude_reconcile_authoritative", database: database)
-                try insertAuthoritativePairs(scannedRuns, database: database)
+                    try execute("DELETE FROM claude_reconcile_authoritative", database: database)
+                    try insertAuthoritativePairs(scannedRuns, database: database)
 
-                let deleted = try deleteStaleClaudeEvents(cutoffRowID: cutoffRowID, database: database)
+                    let deleted = try deleteStaleClaudeEvents(cutoffRowID: cutoffRowID, database: database)
 
-                try execute("DROP TABLE IF EXISTS claude_reconcile_authoritative", database: database)
-                try execute("COMMIT", database: database)
-                return deleted
+                    try execute("DROP TABLE IF EXISTS claude_reconcile_authoritative", database: database)
+                    return deleted
+                }
             } catch {
-                try? execute("ROLLBACK", database: database)
                 try? execute("DROP TABLE IF EXISTS claude_reconcile_authoritative", database: database)
                 return 0
             }

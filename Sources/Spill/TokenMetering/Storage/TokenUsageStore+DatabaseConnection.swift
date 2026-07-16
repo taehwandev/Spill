@@ -1,6 +1,32 @@
 import Foundation
 import SQLite3
 
+/// Which explicit SQLite transaction a `withTransaction` call opens. Centralizes the
+/// BEGIN/COMMIT/ROLLBACK statement spellings so every transaction site shares one set of
+/// control strings instead of hand-writing them (the store previously used two divergent
+/// idioms, including inconsistent `BEGIN IMMEDIATE` vs `BEGIN IMMEDIATE TRANSACTION`).
+enum TokenUsageTransactionMode {
+    /// Read transactions: the first read acquires a stable WAL snapshot without taking a
+    /// write lock, so later reads in the same transaction keep seeing that snapshot even if
+    /// another connection commits meanwhile.
+    case deferred
+    /// Write transactions: take the reserved write lock up front so a concurrent writer
+    /// cannot invalidate work performed mid-transaction.
+    case immediate
+
+    var beginStatement: String {
+        switch self {
+        case .deferred: return "BEGIN DEFERRED"
+        case .immediate: return "BEGIN IMMEDIATE TRANSACTION"
+        }
+    }
+
+    /// Shared across every transaction site (write helper and the read path below) so the
+    /// COMMIT/ROLLBACK spellings live in exactly one place.
+    static let commitStatement = "COMMIT"
+    static let rollbackStatement = "ROLLBACK"
+}
+
 extension TokenUsageStore {
     func readEventsWithoutLock() -> [TokenUsageEvent] {
         let database: OpaquePointer
@@ -144,6 +170,31 @@ extension TokenUsageStore {
         }
     }
 
+    /// Runs `body` inside an explicit `mode` transaction on `database`, committing on a
+    /// normal return and rolling back on failure. This is the single owner of the
+    /// BEGIN/COMMIT/ROLLBACK ordering for every write path in the store.
+    ///
+    /// BEGIN runs before the do/catch: if it fails no transaction was opened, so the error
+    /// propagates directly without a (meaningless) ROLLBACK, and the caller decides whether
+    /// to fail closed or degrade. If `body` (or COMMIT) throws, the transaction is rolled
+    /// back best-effort — matching every original site, ROLLBACK errors are swallowed with
+    /// `try?` because the original error is the one worth surfacing — and then rethrown.
+    func withTransaction<T>(
+        _ mode: TokenUsageTransactionMode,
+        database: OpaquePointer,
+        _ body: () throws -> T
+    ) throws -> T {
+        try execute(mode.beginStatement, database: database)
+        do {
+            let result = try body()
+            try execute(TokenUsageTransactionMode.commitStatement, database: database)
+            return result
+        } catch {
+            try? execute(TokenUsageTransactionMode.rollbackStatement, database: database)
+            throw error
+        }
+    }
+
     /// Runs `body` against `database` if the caller already has one open (e.g. a dashboard
     /// snapshot build batching many reads onto a single shared connection instead of one
     /// open/close per query), otherwise opens+closes a private connection exactly like every
@@ -177,12 +228,17 @@ extension TokenUsageStore {
             }
             defer { sqlite3_close(ownedDatabase) }
 
+            // `body` here is non-throwing, so this read path is not expressed through
+            // `withTransaction`: it needs a best-effort COMMIT rather than the write helper's
+            // throwing one. A read that already produced its result has nothing to lose if
+            // releasing the WAL snapshot fails, so COMMIT stays `try?` and the body result is
+            // returned regardless. BEGIN still fails closed (see the method doc above).
             do {
-                try execute("BEGIN DEFERRED", database: ownedDatabase)
+                try execute(TokenUsageTransactionMode.deferred.beginStatement, database: ownedDatabase)
             } catch {
                 return defaultValue
             }
-            defer { try? execute("COMMIT", database: ownedDatabase) }
+            defer { try? execute(TokenUsageTransactionMode.commitStatement, database: ownedDatabase) }
 
             return body(ownedDatabase)
         }

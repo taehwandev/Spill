@@ -14,31 +14,21 @@ extension TokenUsageStore {
     }
 
     func insertEvents(_ events: [TokenUsageEvent], database: OpaquePointer) throws -> Int {
-        try execute("BEGIN IMMEDIATE TRANSACTION", database: database)
-        var insertedCount = 0
-        do {
+        try withTransaction(.immediate, database: database) {
+            var insertedCount = 0
             for event in events {
                 insertedCount += try insertEvent(event, database: database)
             }
-            try execute("COMMIT", database: database)
             return insertedCount
-        } catch {
-            try? execute("ROLLBACK", database: database)
-            throw error
         }
     }
 
     func replaceDatabaseEvents(_ events: [TokenUsageEvent], database: OpaquePointer) throws {
-        try execute("BEGIN IMMEDIATE TRANSACTION", database: database)
-        do {
+        try withTransaction(.immediate, database: database) {
             try execute("DELETE FROM token_usage_events", database: database)
             for event in events {
                 _ = try insertEvent(event, database: database)
             }
-            try execute("COMMIT", database: database)
-        } catch {
-            try? execute("ROLLBACK", database: database)
-            throw error
         }
     }
 
