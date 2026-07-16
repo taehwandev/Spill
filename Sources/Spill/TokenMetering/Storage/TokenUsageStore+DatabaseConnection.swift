@@ -157,8 +157,9 @@ extension TokenUsageStore {
     /// sharing one connection alone only shrinks that window, it doesn't close it. BEGIN
     /// DEFERRED's first read acquires a WAL snapshot that every later read in the same
     /// transaction keeps seeing, even if other connections commit afterward. If BEGIN itself
-    /// fails, `body` still runs without one rather than discarding the whole batch, matching
-    /// this function's existing best-effort/fall-back-to-defaults behavior.
+    /// fails the connection is already broken (every query in `body` would fail too), so this
+    /// fails closed and returns `defaultValue` rather than running `body` without the consistency
+    /// guarantee its callers depend on.
     func withDatabaseConnection<T>(
         _ database: OpaquePointer?,
         default defaultValue: T,
@@ -176,18 +177,12 @@ extension TokenUsageStore {
             }
             defer { sqlite3_close(ownedDatabase) }
 
-            var transactionStarted = false
             do {
                 try execute("BEGIN DEFERRED", database: ownedDatabase)
-                transactionStarted = true
             } catch {
-                // Fall through and read without an explicit transaction.
+                return defaultValue
             }
-            defer {
-                if transactionStarted {
-                    try? execute("COMMIT", database: ownedDatabase)
-                }
-            }
+            defer { try? execute("COMMIT", database: ownedDatabase) }
 
             return body(ownedDatabase)
         }

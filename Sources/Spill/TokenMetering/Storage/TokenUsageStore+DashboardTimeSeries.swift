@@ -7,7 +7,8 @@ extension TokenUsageStore {
         calendar: Calendar,
         dashboardToolsOnly: Bool,
         visibleTools: Set<TokenUsageAITool>? = nil,
-        database: OpaquePointer
+        database: OpaquePointer,
+        failureObserver: TokenUsageQueryFailureObserver? = nil
     ) -> [TokenUsageDashboardPeriod: TokenUsageInputScopeTotals] {
         let todayRange = TokenUsageDashboardSnapshot.cutoffDateRange(for: .today, periodOffset: 0, now: now, calendar: calendar)
         let sevenRange = TokenUsageDashboardSnapshot.cutoffDateRange(for: .sevenDays, periodOffset: 0, now: now, calendar: calendar)
@@ -20,7 +21,8 @@ extension TokenUsageStore {
             let allTotals = loadDashboardCountAndTotal(
                 dashboardToolsOnly: dashboardToolsOnly,
                 visibleTools: visibleTools,
-                database: database
+                database: database,
+                failureObserver: failureObserver
             )
             return [
                 .today: .zero,
@@ -55,6 +57,7 @@ extension TokenUsageStore {
         guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
               let statement
         else {
+            failureObserver?.markFailure()
             return [:]
         }
         defer { sqlite3_finalize(statement) }
@@ -74,6 +77,7 @@ extension TokenUsageStore {
         sqlite3_bind_text(statement, 12, fmt.string(from: thirtyEnd), -1, SQLITE_TRANSIENT)
 
         guard sqlite3_step(statement) == SQLITE_ROW else {
+            failureObserver?.markFailure()
             return [:]
         }
 
@@ -138,7 +142,8 @@ extension TokenUsageStore {
         calendar: Calendar,
         dashboardToolsOnly: Bool,
         visibleTools: Set<TokenUsageAITool>? = nil,
-        database: OpaquePointer
+        database: OpaquePointer,
+        failureObserver: TokenUsageQueryFailureObserver? = nil
     ) -> [String: TokenUsageInputScopeTotals] {
         var sql = """
         SELECT created_at,
@@ -158,6 +163,7 @@ extension TokenUsageStore {
         guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
               let statement
         else {
+            failureObserver?.markFailure()
             return [:]
         }
         defer { sqlite3_finalize(statement) }
@@ -168,7 +174,9 @@ extension TokenUsageStore {
         sqlite3_bind_text(statement, 2, endValue, -1, SQLITE_TRANSIENT)
 
         var totals = [String: TokenUsageInputScopeTotals]()
-        while sqlite3_step(statement) == SQLITE_ROW {
+        var stepResult = sqlite3_step(statement)
+        while stepResult == SQLITE_ROW {
+            defer { stepResult = sqlite3_step(statement) }
             guard let createdAt = Self.columnString(statement, 0),
                   let date = ISO8601DateFormatter.parseTokenUsageDate(from: createdAt)
             else {
@@ -180,6 +188,9 @@ extension TokenUsageStore {
                 includeCache: current.includeCache + Int(sqlite3_column_int64(statement, 1)),
                 freshOnly: current.freshOnly + Int(sqlite3_column_int64(statement, 2))
             )
+        }
+        if stepResult != SQLITE_DONE {
+            failureObserver?.markFailure()
         }
         return totals
     }

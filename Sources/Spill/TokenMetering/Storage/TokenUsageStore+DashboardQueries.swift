@@ -54,7 +54,8 @@ extension TokenUsageStore {
         selectedTool: TokenUsageAITool?,
         dashboardToolsOnly: Bool,
         visibleTools: Set<TokenUsageAITool>? = nil,
-        database: OpaquePointer
+        database: OpaquePointer,
+        failureObserver: TokenUsageQueryFailureObserver? = nil
     ) -> TokenUsageDashboardDateBounds {
         var conditions = [String]()
         if selectedTool != nil {
@@ -78,6 +79,7 @@ extension TokenUsageStore {
         guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
               let statement
         else {
+            failureObserver?.markFailure()
             return .empty
         }
         defer { sqlite3_finalize(statement) }
@@ -87,6 +89,7 @@ extension TokenUsageStore {
         }
 
         guard sqlite3_step(statement) == SQLITE_ROW else {
+            failureObserver?.markFailure()
             return .empty
         }
 
@@ -102,23 +105,32 @@ extension TokenUsageStore {
         endingBefore endDate: Date? = nil,
         dashboardToolsOnly: Bool,
         visibleTools: Set<TokenUsageAITool>? = nil,
-        database: OpaquePointer
+        database: OpaquePointer,
+        failureObserver: TokenUsageQueryFailureObserver? = nil
     ) -> (eventCount: Int, totalTokens: Int, exactFreshTotalTokens: Int) {
         loadDashboardCountAndTotalIfAvailable(
             startingAt: startDate,
             endingBefore: endDate,
             dashboardToolsOnly: dashboardToolsOnly,
             visibleTools: visibleTools,
-            database: database
+            database: database,
+            failureObserver: failureObserver
         ) ?? (0, 0, 0)
     }
 
+    /// Returns nil for two different reasons the caller must keep distinct: a prepare/step
+    /// failure (marks `failureObserver`, so a batch caller can fail closed) versus this query
+    /// simply not being asked for -- it never returns nil for a valid empty range, since an empty
+    /// range still steps one COUNT/SUM row of zeros. Only genuine statement failure marks the
+    /// observer here; comparisonTokenTotal's own eventCount == 0 -> nil mapping stays a legitimate
+    /// no-data result and must not be treated as a failure.
     func loadDashboardCountAndTotalIfAvailable(
         startingAt startDate: Date? = nil,
         endingBefore endDate: Date? = nil,
         dashboardToolsOnly: Bool,
         visibleTools: Set<TokenUsageAITool>? = nil,
-        database: OpaquePointer
+        database: OpaquePointer,
+        failureObserver: TokenUsageQueryFailureObserver? = nil
     ) -> (eventCount: Int, totalTokens: Int, exactFreshTotalTokens: Int)? {
         let sql = """
         SELECT COUNT(*),
@@ -131,12 +143,14 @@ extension TokenUsageStore {
         guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
               let statement
         else {
+            failureObserver?.markFailure()
             return nil
         }
         defer { sqlite3_finalize(statement) }
         Self.bindDashboardDateRange(startingAt: startDate, endingBefore: endDate, statement: statement)
 
         guard sqlite3_step(statement) == SQLITE_ROW else {
+            failureObserver?.markFailure()
             return nil
         }
 
@@ -168,7 +182,8 @@ extension TokenUsageStore {
         endingBefore endDate: Date? = nil,
         dashboardToolsOnly: Bool,
         visibleTools: Set<TokenUsageAITool>? = nil,
-        database: OpaquePointer
+        database: OpaquePointer,
+        failureObserver: TokenUsageQueryFailureObserver? = nil
     ) -> DashboardFocusedTotals {
         let assistedCondition = "(task_type != 'uncategorized' OR stage != 'summarize')"
         let sql = """
@@ -186,6 +201,7 @@ extension TokenUsageStore {
         guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
               let statement
         else {
+            failureObserver?.markFailure()
             return DashboardFocusedTotals(
                 eventCount: 0, totalTokens: 0, exactFreshTotalTokens: 0,
                 inputTokens: 0, outputTokens: 0, assistedEventCount: 0, assistedTotalTokens: 0
@@ -195,6 +211,7 @@ extension TokenUsageStore {
         Self.bindDashboardDateRange(startingAt: startDate, endingBefore: endDate, statement: statement)
 
         guard sqlite3_step(statement) == SQLITE_ROW else {
+            failureObserver?.markFailure()
             return DashboardFocusedTotals(
                 eventCount: 0, totalTokens: 0, exactFreshTotalTokens: 0,
                 inputTokens: 0, outputTokens: 0, assistedEventCount: 0, assistedTotalTokens: 0
@@ -219,7 +236,8 @@ extension TokenUsageStore {
         endingBefore endDate: Date? = nil,
         dashboardToolsOnly: Bool,
         visibleTools: Set<TokenUsageAITool>? = nil,
-        database: OpaquePointer
+        database: OpaquePointer,
+        failureObserver: TokenUsageQueryFailureObserver? = nil
     ) -> [TokenUsageAITool: Date] {
         let sql = """
         SELECT ai_tool, MAX(created_at)
@@ -231,13 +249,16 @@ extension TokenUsageStore {
         guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
               let statement
         else {
+            failureObserver?.markFailure()
             return [:]
         }
         defer { sqlite3_finalize(statement) }
         Self.bindDashboardDateRange(startingAt: startDate, endingBefore: endDate, statement: statement)
 
         var result = [TokenUsageAITool: Date]()
-        while sqlite3_step(statement) == SQLITE_ROW {
+        var stepResult = sqlite3_step(statement)
+        while stepResult == SQLITE_ROW {
+            defer { stepResult = sqlite3_step(statement) }
             guard let aiToolRaw = Self.columnString(statement, 0),
                   let maxCreatedAtText = Self.columnString(statement, 1),
                   let maxCreatedAt = ISO8601DateFormatter.parseTokenUsageDate(from: maxCreatedAtText)
@@ -255,6 +276,9 @@ extension TokenUsageStore {
                 aiTool = TokenUsageAITool(rawValue: aiToolRaw) ?? .unknown
             }
             result[aiTool] = maxCreatedAt
+        }
+        if stepResult != SQLITE_DONE {
+            failureObserver?.markFailure()
         }
         return result
     }
@@ -338,7 +362,8 @@ extension TokenUsageStore {
         endingBefore endDate: Date? = nil,
         dashboardToolsOnly: Bool,
         visibleTools: Set<TokenUsageAITool>? = nil,
-        database: OpaquePointer
+        database: OpaquePointer,
+        failureObserver: TokenUsageQueryFailureObserver? = nil
     ) -> [String: (eventCount: Int, totals: TokenUsageInputScopeTotals)] {
         let sql = """
         SELECT project_id,
@@ -353,13 +378,16 @@ extension TokenUsageStore {
         guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
               let statement
         else {
+            failureObserver?.markFailure()
             return [:]
         }
         defer { sqlite3_finalize(statement) }
         Self.bindDashboardDateRange(startingAt: startDate, endingBefore: endDate, statement: statement)
 
         var totals = [String: (eventCount: Int, totals: TokenUsageInputScopeTotals)]()
-        while sqlite3_step(statement) == SQLITE_ROW {
+        var stepResult = sqlite3_step(statement)
+        while stepResult == SQLITE_ROW {
+            defer { stepResult = sqlite3_step(statement) }
             guard let keyText = sqlite3_column_text(statement, 0) else {
                 continue
             }
@@ -375,6 +403,9 @@ extension TokenUsageStore {
                 )
             )
         }
+        if stepResult != SQLITE_DONE {
+            failureObserver?.markFailure()
+        }
         return totals
     }
 
@@ -387,7 +418,8 @@ extension TokenUsageStore {
         endingBefore endDate: Date? = nil,
         dashboardToolsOnly: Bool,
         visibleTools: Set<TokenUsageAITool>? = nil,
-        database: OpaquePointer
+        database: OpaquePointer,
+        failureObserver: TokenUsageQueryFailureObserver? = nil
     ) -> [String: TokenUsageInputScopeTotals] {
         let sql = """
         SELECT \(column),
@@ -401,13 +433,16 @@ extension TokenUsageStore {
         guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
               let statement
         else {
+            failureObserver?.markFailure()
             return [:]
         }
         defer { sqlite3_finalize(statement) }
         Self.bindDashboardDateRange(startingAt: startDate, endingBefore: endDate, statement: statement)
 
         var totals = [String: TokenUsageInputScopeTotals]()
-        while sqlite3_step(statement) == SQLITE_ROW {
+        var stepResult = sqlite3_step(statement)
+        while stepResult == SQLITE_ROW {
+            defer { stepResult = sqlite3_step(statement) }
             guard let keyText = sqlite3_column_text(statement, 0) else {
                 continue
             }
@@ -420,6 +455,9 @@ extension TokenUsageStore {
                 freshOnly: Int(sqlite3_column_int64(statement, 2))
             )
         }
+        if stepResult != SQLITE_DONE {
+            failureObserver?.markFailure()
+        }
         return totals
     }
 
@@ -430,7 +468,8 @@ extension TokenUsageStore {
         endingBefore endDate: Date? = nil,
         dashboardToolsOnly: Bool,
         visibleTools: Set<TokenUsageAITool>? = nil,
-        database: OpaquePointer
+        database: OpaquePointer,
+        failureObserver: TokenUsageQueryFailureObserver? = nil
     ) -> [String: TokenUsageInputScopeTotals] {
         let trimExpr = "TRIM(model, ' ' || char(9) || char(10) || char(13))"
         let keyExpr = """
@@ -453,13 +492,16 @@ extension TokenUsageStore {
         guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
               let statement
         else {
+            failureObserver?.markFailure()
             return [:]
         }
         defer { sqlite3_finalize(statement) }
         Self.bindDashboardDateRange(startingAt: startDate, endingBefore: endDate, statement: statement)
 
         var totals = [String: TokenUsageInputScopeTotals]()
-        while sqlite3_step(statement) == SQLITE_ROW {
+        var stepResult = sqlite3_step(statement)
+        while stepResult == SQLITE_ROW {
+            defer { stepResult = sqlite3_step(statement) }
             guard let keyText = sqlite3_column_text(statement, 0) else {
                 continue
             }
@@ -471,6 +513,9 @@ extension TokenUsageStore {
                 includeCache: Int(sqlite3_column_int64(statement, 1)),
                 freshOnly: Int(sqlite3_column_int64(statement, 2))
             )
+        }
+        if stepResult != SQLITE_DONE {
+            failureObserver?.markFailure()
         }
         return totals
     }
@@ -531,7 +576,8 @@ extension TokenUsageStore {
         endingBefore endDate: Date? = nil,
         dashboardToolsOnly: Bool,
         visibleTools: Set<TokenUsageAITool>? = nil,
-        database: OpaquePointer
+        database: OpaquePointer,
+        failureObserver: TokenUsageQueryFailureObserver? = nil
     ) -> [String: Int] {
         let sql = """
         SELECT
@@ -549,12 +595,14 @@ extension TokenUsageStore {
         guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
               let statement
         else {
+            failureObserver?.markFailure()
             return [:]
         }
         defer { sqlite3_finalize(statement) }
         Self.bindDashboardDateRange(startingAt: startDate, endingBefore: endDate, statement: statement)
 
         guard sqlite3_step(statement) == SQLITE_ROW else {
+            failureObserver?.markFailure()
             return [:]
         }
 
@@ -578,7 +626,8 @@ extension TokenUsageStore {
         endingBefore endDate: Date? = nil,
         dashboardToolsOnly: Bool,
         visibleTools: Set<TokenUsageAITool>? = nil,
-        database: OpaquePointer
+        database: OpaquePointer,
+        failureObserver: TokenUsageQueryFailureObserver? = nil
     ) -> [String: Int] {
         let hasAccounting = """
         accounting_uncached_input_tokens IS NOT NULL \
@@ -617,12 +666,14 @@ extension TokenUsageStore {
         guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
               let statement
         else {
+            failureObserver?.markFailure()
             return [:]
         }
         defer { sqlite3_finalize(statement) }
         Self.bindDashboardDateRange(startingAt: startDate, endingBefore: endDate, statement: statement)
 
         guard sqlite3_step(statement) == SQLITE_ROW else {
+            failureObserver?.markFailure()
             return [:]
         }
 

@@ -9,6 +9,12 @@ import Foundation
 /// Every field here mirrors TokenMeteringPresentationModel's private init exactly for this same
 /// unfiltered case; TokenUsageDashboardStore is responsible for falling back to the existing
 /// events-based init(context:...) whenever a project/session/day is selected.
+///
+/// A nil return always means "could not read right now" -- the shared connection failed to open,
+/// or any one statement in the batch failed to prepare or step (see TokenUsageQueryFailureObserver).
+/// It never means "no data": an empty store reads back a non-nil empty snapshot. Callers rely on
+/// that distinction to keep showing the last known-good snapshot on a transient failure instead of
+/// overwriting it with a blank one.
 extension TokenUsageDashboardSnapshot {
     static func buildFromSQLAggregates(
         usageStore: TokenUsageStore,
@@ -24,7 +30,8 @@ extension TokenUsageDashboardSnapshot {
         periodOffset: Int = 0,
         calendar: Calendar = .autoupdatingCurrent,
         locale: Locale = .autoupdatingCurrent,
-        timeZone: TimeZone = .autoupdatingCurrent
+        timeZone: TimeZone = .autoupdatingCurrent,
+        database: OpaquePointer? = nil
     ) -> TokenUsageDashboardSnapshot? {
         let dashboardToolsOnly = !showAdvancedTools
         let selectedDashboardTool = selectedTool.flatMap { tool in
@@ -48,11 +55,20 @@ extension TokenUsageDashboardSnapshot {
         // what lets the caller (buildSnapshotOutputFromSQL) tell "genuinely nothing to show" and
         // "couldn't read right now" apart, and keep showing the last known-good snapshot for the
         // latter instead of overwriting it with a blank one.
-        return usageStore.withDatabaseConnection(nil, default: nil) { database in
+        //
+        // When `database` is non-nil the caller owns both the connection and its transaction (the
+        // filtered+unfiltered pair reads the same WAL snapshot); withDatabaseConnection then runs
+        // the body directly on it without opening or nesting anything. The failureObserver extends
+        // the same fail-closed contract past connection open: any single statement that fails to
+        // prepare or step marks it, and the guard below discards the whole (partially-defaulted)
+        // snapshot rather than publishing zeros for the fields that silently defaulted.
+        let failureObserver = TokenUsageQueryFailureObserver()
+        return usageStore.withDatabaseConnection(database, default: nil) { database in
         let dateBounds = usageStore.dashboardDateBounds(
             dashboardToolsOnly: dashboardToolsOnly,
             visibleTools: visibleTools,
-            database: database
+            database: database,
+            failureObserver: failureObserver
         )
         // Period tabs always total across every visible tool, independent of which single tool
         // chip is currently selected -- matches the original init reading periodFilterTotals
@@ -62,7 +78,8 @@ extension TokenUsageDashboardSnapshot {
             calendar: calendar,
             dashboardToolsOnly: dashboardToolsOnly,
             visibleTools: visibleTools,
-            database: database
+            database: database,
+            failureObserver: failureObserver
         )
 
         let focused = usageStore.dashboardFocusedTotals(
@@ -70,7 +87,8 @@ extension TokenUsageDashboardSnapshot {
             endingBefore: requestRange.end,
             dashboardToolsOnly: dashboardToolsOnly,
             visibleTools: effectiveVisibleTools,
-            database: database
+            database: database,
+            failureObserver: failureObserver
         )
         let eventCount = focused.eventCount
         let totalTokens = focused.totalTokens
@@ -117,7 +135,8 @@ extension TokenUsageDashboardSnapshot {
             endingBefore: requestRange.end,
             dashboardToolsOnly: dashboardToolsOnly,
             visibleTools: visibleTools,
-            database: database
+            database: database,
+            failureObserver: failureObserver
         ).mapValues { $0.total(for: inputScope) }
         // toolFilters' own totals/count intentionally ignore the single selectedTool narrowing
         // (only visibleTools) -- it needs the period+project scope shared by every tool chip,
@@ -129,7 +148,8 @@ extension TokenUsageDashboardSnapshot {
             endingBefore: requestRange.end,
             dashboardToolsOnly: dashboardToolsOnly,
             visibleTools: visibleTools,
-            database: database
+            database: database,
+            failureObserver: failureObserver
         ).eventCount
         let toolFilters = Self.toolFilters(
             selectedTool: selectedDashboardTool,
@@ -145,7 +165,8 @@ extension TokenUsageDashboardSnapshot {
             endingBefore: requestRange.end,
             dashboardToolsOnly: dashboardToolsOnly,
             visibleTools: effectiveVisibleTools,
-            database: database
+            database: database,
+            failureObserver: failureObserver
         )
         let projectFilters = Self.projectFiltersFromTotals(
             projectTotals,
@@ -159,7 +180,8 @@ extension TokenUsageDashboardSnapshot {
             endingBefore: requestRange.end,
             dashboardToolsOnly: dashboardToolsOnly,
             visibleTools: effectiveVisibleTools,
-            database: database
+            database: database,
+            failureObserver: failureObserver
         )
         var accountingTotals = [TokenUsageInputAccountingCategory: Int]()
         for (key, value) in inputAccountingSQL {
@@ -187,7 +209,8 @@ extension TokenUsageDashboardSnapshot {
             endingBefore: requestRange.end,
             dashboardToolsOnly: dashboardToolsOnly,
             visibleTools: effectiveVisibleTools,
-            database: database
+            database: database,
+            failureObserver: failureObserver
         ).mapValues { $0.total(for: inputScope) }
         let toolRows = TokenUsageDashboardRowBuilder.rows(
             tokenValues: toolRowTotals.filter { tool, _ in visibleTools?.contains(tool) ?? true },
@@ -201,7 +224,8 @@ extension TokenUsageDashboardSnapshot {
             endingBefore: requestRange.end,
             dashboardToolsOnly: dashboardToolsOnly,
             visibleTools: effectiveVisibleTools,
-            database: database
+            database: database,
+            failureObserver: failureObserver
         ).mapValues { $0.total(for: inputScope) }
         let modelRows = TokenUsageDashboardRowBuilder.rows(
             tokenValues: modelTotalsSQL,
@@ -215,7 +239,8 @@ extension TokenUsageDashboardSnapshot {
             endingBefore: requestRange.end,
             dashboardToolsOnly: dashboardToolsOnly,
             visibleTools: effectiveVisibleTools,
-            database: database
+            database: database,
+            failureObserver: failureObserver
         )
         var taskTotals = [TokenUsageTaskType: Int]()
         for (key, value) in taskTotalsSQL {
@@ -233,7 +258,8 @@ extension TokenUsageDashboardSnapshot {
             endingBefore: requestRange.end,
             dashboardToolsOnly: dashboardToolsOnly,
             visibleTools: effectiveVisibleTools,
-            database: database
+            database: database,
+            failureObserver: failureObserver
         )
         var stageTotals = [TokenUsageStage: Int]()
         for (key, value) in stageTotalsSQL {
@@ -251,7 +277,8 @@ extension TokenUsageDashboardSnapshot {
             endingBefore: requestRange.end,
             dashboardToolsOnly: dashboardToolsOnly,
             visibleTools: effectiveVisibleTools,
-            database: database
+            database: database,
+            failureObserver: failureObserver
         )
         var sourceTotals = [TokenUsageSource: Int]()
         for (key, value) in sourceTotalsSQL {
@@ -295,7 +322,8 @@ extension TokenUsageDashboardSnapshot {
             selectedTool: nil,
             projectID: nil,
             calendar: calendar,
-            database: database
+            database: database,
+            failureObserver: failureObserver
         )
         let sessions = sessionRows(
             sourceRows: sourceRowsData,
@@ -318,7 +346,8 @@ extension TokenUsageDashboardSnapshot {
             dashboardToolsOnly: dashboardToolsOnly,
             visibleTools: effectiveVisibleTools,
             calendar: calendar,
-            database: database
+            database: database,
+            failureObserver: failureObserver
         )
         let trendBuckets = TokenUsageDashboardTrendBucketBuilder.buckets(
             sourceRows: trendRows,
@@ -345,7 +374,8 @@ extension TokenUsageDashboardSnapshot {
                 calendar: calendar,
                 dashboardToolsOnly: dashboardToolsOnly,
                 visibleTools: effectiveVisibleTools,
-                database: database
+                database: database,
+                failureObserver: failureObserver
             )
         }
 
@@ -371,7 +401,8 @@ extension TokenUsageDashboardSnapshot {
             calendar: calendar,
             dashboardToolsOnly: dashboardToolsOnly,
             visibleTools: visibleTools,
-            database: database
+            database: database,
+            failureObserver: failureObserver
         ).mapValues { $0.total(for: inputScope) }
         let calendarDays = Self.calendarDays(
             events: [],
@@ -388,7 +419,8 @@ extension TokenUsageDashboardSnapshot {
         let lastUpdated = usageStore.lastUpdatedByTool(
             dashboardToolsOnly: dashboardToolsOnly,
             visibleTools: visibleTools,
-            database: database
+            database: database,
+            failureObserver: failureObserver
         )
         let overallLastUpdated = lastUpdated.values.max()
 
@@ -416,6 +448,14 @@ extension TokenUsageDashboardSnapshot {
         } else {
             canNavigatePreviousPeriod = false
             canNavigateNextPeriod = false
+        }
+
+        // Any statement above that failed to prepare or step silently returned its empty default,
+        // leaving a snapshot that mixes real fields with zeroed ones. Discard the whole thing so
+        // buildSnapshotOutputFromSQL keeps the last known-good snapshot instead of publishing that
+        // partial blank -- the same fail-closed contract as a connection that never opened.
+        if failureObserver.didFail {
+            return nil
         }
 
         return TokenUsageDashboardSnapshot(
@@ -478,7 +518,8 @@ private extension TokenUsageDashboardSnapshot {
         calendar: Calendar,
         dashboardToolsOnly: Bool,
         visibleTools: Set<TokenUsageAITool>?,
-        database: OpaquePointer? = nil
+        database: OpaquePointer? = nil,
+        failureObserver: TokenUsageQueryFailureObserver? = nil
     ) -> Int? {
         switch selectedPeriod {
         case .today:
@@ -490,7 +531,8 @@ private extension TokenUsageDashboardSnapshot {
                 inputScope: inputScope,
                 dashboardToolsOnly: dashboardToolsOnly,
                 visibleTools: visibleTools,
-                database: database
+                database: database,
+                failureObserver: failureObserver
             )
         case .sevenDays:
             let sevenDaysAgo = periodStartDate(dayCount: 7, now: now, calendar: calendar)
@@ -501,7 +543,8 @@ private extension TokenUsageDashboardSnapshot {
                 inputScope: inputScope,
                 dashboardToolsOnly: dashboardToolsOnly,
                 visibleTools: visibleTools,
-                database: database
+                database: database,
+                failureObserver: failureObserver
             )
         case .thirtyDays:
             let thirtyDaysAgo = periodStartDate(dayCount: 30, now: now, calendar: calendar)
@@ -512,7 +555,8 @@ private extension TokenUsageDashboardSnapshot {
                 inputScope: inputScope,
                 dashboardToolsOnly: dashboardToolsOnly,
                 visibleTools: visibleTools,
-                database: database
+                database: database,
+                failureObserver: failureObserver
             )
         case .all:
             return nil

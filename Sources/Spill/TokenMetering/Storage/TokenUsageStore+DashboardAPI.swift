@@ -111,7 +111,8 @@ extension TokenUsageStore {
         calendar: Calendar,
         dashboardToolsOnly: Bool = true,
         visibleTools: Set<TokenUsageAITool>? = nil,
-        database: OpaquePointer? = nil
+        database: OpaquePointer? = nil,
+        failureObserver: TokenUsageQueryFailureObserver? = nil
     ) -> [TokenUsageDashboardPeriod: TokenUsageInputScopeTotals] {
         withDatabaseConnection(database, default: [:]) { database in
             loadAllPeriodTotalTokens(
@@ -119,7 +120,8 @@ extension TokenUsageStore {
                 calendar: calendar,
                 dashboardToolsOnly: dashboardToolsOnly,
                 visibleTools: visibleTools,
-                database: database
+                database: database,
+                failureObserver: failureObserver
             )
         }
     }
@@ -214,7 +216,8 @@ extension TokenUsageStore {
         inputScope: TokenUsageInputScope = .includeCache,
         dashboardToolsOnly: Bool = true,
         visibleTools: Set<TokenUsageAITool>? = nil,
-        database: OpaquePointer? = nil
+        database: OpaquePointer? = nil,
+        failureObserver: TokenUsageQueryFailureObserver? = nil
     ) -> Int? {
         withDatabaseConnection(database, default: nil) { database -> Int? in
             guard let totals = loadDashboardCountAndTotalIfAvailable(
@@ -222,7 +225,8 @@ extension TokenUsageStore {
                 endingBefore: endDate,
                 dashboardToolsOnly: dashboardToolsOnly,
                 visibleTools: visibleTools,
-                database: database
+                database: database,
+                failureObserver: failureObserver
             ), totals.eventCount > 0
             else {
                 return nil
@@ -242,7 +246,8 @@ extension TokenUsageStore {
         endingBefore endDate: Date? = nil,
         dashboardToolsOnly: Bool = true,
         visibleTools: Set<TokenUsageAITool>? = nil,
-        database: OpaquePointer? = nil
+        database: OpaquePointer? = nil,
+        failureObserver: TokenUsageQueryFailureObserver? = nil
     ) -> [String: Int] {
         withDatabaseConnection(database, default: [:]) { database in
             loadInputAccountingTotals(
@@ -250,7 +255,8 @@ extension TokenUsageStore {
                 endingBefore: endDate,
                 dashboardToolsOnly: dashboardToolsOnly,
                 visibleTools: visibleTools,
-                database: database
+                database: database,
+                failureObserver: failureObserver
             )
         }
     }
@@ -260,7 +266,8 @@ extension TokenUsageStore {
         endingBefore endDate: Date? = nil,
         dashboardToolsOnly: Bool = true,
         visibleTools: Set<TokenUsageAITool>? = nil,
-        database: OpaquePointer? = nil
+        database: OpaquePointer? = nil,
+        failureObserver: TokenUsageQueryFailureObserver? = nil
     ) -> DashboardFocusedTotals {
         withDatabaseConnection(
             database,
@@ -274,7 +281,8 @@ extension TokenUsageStore {
                 endingBefore: endDate,
                 dashboardToolsOnly: dashboardToolsOnly,
                 visibleTools: visibleTools,
-                database: database
+                database: database,
+                failureObserver: failureObserver
             )
         }
     }
@@ -284,7 +292,8 @@ extension TokenUsageStore {
         endingBefore endDate: Date? = nil,
         dashboardToolsOnly: Bool = true,
         visibleTools: Set<TokenUsageAITool>? = nil,
-        database: OpaquePointer? = nil
+        database: OpaquePointer? = nil,
+        failureObserver: TokenUsageQueryFailureObserver? = nil
     ) -> [TokenUsageAITool: Date] {
         withDatabaseConnection(database, default: [:]) { database in
             loadLastUpdatedByTool(
@@ -292,7 +301,8 @@ extension TokenUsageStore {
                 endingBefore: endDate,
                 dashboardToolsOnly: dashboardToolsOnly,
                 visibleTools: visibleTools,
-                database: database
+                database: database,
+                failureObserver: failureObserver
             )
         }
     }
@@ -327,7 +337,8 @@ extension TokenUsageStore {
         endingBefore endDate: Date? = nil,
         dashboardToolsOnly: Bool = true,
         visibleTools: Set<TokenUsageAITool>? = nil,
-        database: OpaquePointer? = nil
+        database: OpaquePointer? = nil,
+        failureObserver: TokenUsageQueryFailureObserver? = nil
     ) -> [TokenUsageAITool: TokenUsageInputScopeTotals] {
         let raw: [String: TokenUsageInputScopeTotals] = withDatabaseConnection(database, default: [:]) { database in
             loadGroupedInputScopeTotals(
@@ -336,7 +347,8 @@ extension TokenUsageStore {
                 endingBefore: endDate,
                 dashboardToolsOnly: dashboardToolsOnly,
                 visibleTools: visibleTools,
-                database: database
+                database: database,
+                failureObserver: failureObserver
             )
         }
         var totals = [TokenUsageAITool: TokenUsageInputScopeTotals]()
@@ -356,7 +368,8 @@ extension TokenUsageStore {
         endingBefore endDate: Date? = nil,
         dashboardToolsOnly: Bool = true,
         visibleTools: Set<TokenUsageAITool>? = nil,
-        database: OpaquePointer? = nil
+        database: OpaquePointer? = nil,
+        failureObserver: TokenUsageQueryFailureObserver? = nil
     ) -> [String: TokenUsageInputScopeTotals] {
         withDatabaseConnection(database, default: [:]) { database in
             loadGroupedInputScopeTotals(
@@ -365,7 +378,8 @@ extension TokenUsageStore {
                 endingBefore: endDate,
                 dashboardToolsOnly: dashboardToolsOnly,
                 visibleTools: visibleTools,
-                database: database
+                database: database,
+                failureObserver: failureObserver
             )
         }
     }
@@ -375,7 +389,8 @@ extension TokenUsageStore {
         endingBefore endDate: Date? = nil,
         dashboardToolsOnly: Bool = true,
         visibleTools: Set<TokenUsageAITool>? = nil,
-        database: OpaquePointer? = nil
+        database: OpaquePointer? = nil,
+        failureObserver: TokenUsageQueryFailureObserver? = nil
     ) -> [String: TokenUsageInputScopeTotals] {
         withDatabaseConnection(database, default: [:]) { database in
             loadGroupedInputScopeTotals(
@@ -384,7 +399,8 @@ extension TokenUsageStore {
                 endingBefore: endDate,
                 dashboardToolsOnly: dashboardToolsOnly,
                 visibleTools: visibleTools,
-                database: database
+                database: database,
+                failureObserver: failureObserver
             )
         }
     }
@@ -394,7 +410,8 @@ extension TokenUsageStore {
         endingBefore endDate: Date? = nil,
         dashboardToolsOnly: Bool = true,
         visibleTools: Set<TokenUsageAITool>? = nil,
-        database: OpaquePointer? = nil
+        database: OpaquePointer? = nil,
+        failureObserver: TokenUsageQueryFailureObserver? = nil
     ) -> [String: TokenUsageInputScopeTotals] {
         withDatabaseConnection(database, default: [:]) { database in
             loadGroupedModelInputScopeTotals(
@@ -402,7 +419,8 @@ extension TokenUsageStore {
                 endingBefore: endDate,
                 dashboardToolsOnly: dashboardToolsOnly,
                 visibleTools: visibleTools,
-                database: database
+                database: database,
+                failureObserver: failureObserver
             )
         }
     }
@@ -500,7 +518,8 @@ extension TokenUsageStore {
         endingBefore endDate: Date? = nil,
         dashboardToolsOnly: Bool = true,
         visibleTools: Set<TokenUsageAITool>? = nil,
-        database: OpaquePointer? = nil
+        database: OpaquePointer? = nil,
+        failureObserver: TokenUsageQueryFailureObserver? = nil
     ) -> [String: Int] {
         withDatabaseConnection(database, default: [:]) { database in
             loadSourceTokenTotals(
@@ -508,7 +527,8 @@ extension TokenUsageStore {
                 endingBefore: endDate,
                 dashboardToolsOnly: dashboardToolsOnly,
                 visibleTools: visibleTools,
-                database: database
+                database: database,
+                failureObserver: failureObserver
             )
         }
     }
@@ -518,7 +538,8 @@ extension TokenUsageStore {
         endingBefore endDate: Date? = nil,
         dashboardToolsOnly: Bool = true,
         visibleTools: Set<TokenUsageAITool>? = nil,
-        database: OpaquePointer? = nil
+        database: OpaquePointer? = nil,
+        failureObserver: TokenUsageQueryFailureObserver? = nil
     ) -> [String: (eventCount: Int, totals: TokenUsageInputScopeTotals)] {
         withDatabaseConnection(database, default: [:]) { database in
             loadGroupedProjectTotals(
@@ -526,7 +547,8 @@ extension TokenUsageStore {
                 endingBefore: endDate,
                 dashboardToolsOnly: dashboardToolsOnly,
                 visibleTools: visibleTools,
-                database: database
+                database: database,
+                failureObserver: failureObserver
             )
         }
     }
@@ -535,14 +557,16 @@ extension TokenUsageStore {
         selectedTool: TokenUsageAITool? = nil,
         dashboardToolsOnly: Bool = true,
         visibleTools: Set<TokenUsageAITool>? = nil,
-        database: OpaquePointer? = nil
+        database: OpaquePointer? = nil,
+        failureObserver: TokenUsageQueryFailureObserver? = nil
     ) -> TokenUsageDashboardDateBounds {
         withDatabaseConnection(database, default: .empty) { database in
             loadDashboardDateBounds(
                 selectedTool: selectedTool,
                 dashboardToolsOnly: dashboardToolsOnly,
                 visibleTools: visibleTools,
-                database: database
+                database: database,
+                failureObserver: failureObserver
             )
         }
     }
@@ -570,7 +594,8 @@ extension TokenUsageStore {
         calendar: Calendar,
         dashboardToolsOnly: Bool = true,
         visibleTools: Set<TokenUsageAITool>? = nil,
-        database: OpaquePointer? = nil
+        database: OpaquePointer? = nil,
+        failureObserver: TokenUsageQueryFailureObserver? = nil
     ) -> [String: TokenUsageInputScopeTotals] {
         withDatabaseConnection(database, default: [:]) { database in
             loadDashboardDayTokenTotals(
@@ -579,7 +604,8 @@ extension TokenUsageStore {
                 calendar: calendar,
                 dashboardToolsOnly: dashboardToolsOnly,
                 visibleTools: visibleTools,
-                database: database
+                database: database,
+                failureObserver: failureObserver
             )
         }
     }

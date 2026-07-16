@@ -33,7 +33,8 @@ extension TokenUsageStore {
         selectedTool: TokenUsageAITool? = nil,
         projectID: String? = nil,
         calendar: Calendar,
-        database: OpaquePointer
+        database: OpaquePointer,
+        failureObserver: TokenUsageQueryFailureObserver? = nil
     ) -> [TokenUsageDashboardSessionSourceRow] {
         var conditions = [String]()
         if startDate != nil, endDate != nil {
@@ -62,6 +63,7 @@ extension TokenUsageStore {
         guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
               let statement
         else {
+            failureObserver?.markFailure()
             return []
         }
         defer { sqlite3_finalize(statement) }
@@ -81,7 +83,9 @@ extension TokenUsageStore {
         }
 
         var rows = [TokenUsageDashboardSessionSourceRow]()
-        while sqlite3_step(statement) == SQLITE_ROW {
+        var stepResult = sqlite3_step(statement)
+        while stepResult == SQLITE_ROW {
+            defer { stepResult = sqlite3_step(statement) }
             guard let projectIDText = Self.columnString(statement, 0),
                   let taskTypeText = Self.columnString(statement, 1),
                   let stageText = Self.columnString(statement, 2),
@@ -113,6 +117,9 @@ extension TokenUsageStore {
                 latencyMS: Int(sqlite3_column_int64(statement, 7))
             ))
         }
+        if stepResult != SQLITE_DONE {
+            failureObserver?.markFailure()
+        }
         return rows
     }
 
@@ -124,7 +131,8 @@ extension TokenUsageStore {
         selectedTool: TokenUsageAITool? = nil,
         projectID: String? = nil,
         calendar: Calendar = .autoupdatingCurrent,
-        database: OpaquePointer? = nil
+        database: OpaquePointer? = nil,
+        failureObserver: TokenUsageQueryFailureObserver? = nil
     ) -> [TokenUsageDashboardSessionSourceRow] {
         withDatabaseConnection(database, default: []) { database in
             loadSessionSourceRows(
@@ -135,7 +143,8 @@ extension TokenUsageStore {
                 selectedTool: selectedTool,
                 projectID: projectID,
                 calendar: calendar,
-                database: database
+                database: database,
+                failureObserver: failureObserver
             )
         }
     }

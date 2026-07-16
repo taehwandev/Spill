@@ -4801,6 +4801,132 @@ final class TokenUsageStoreTests: XCTestCase {
         }
     }
 
+    /// A raw connection to a fresh, schema-less database makes every statement in the batch fail
+    /// with "no such table". The failure observer must catch that and force buildFromSQLAggregates
+    /// to fail closed (nil), rather than publishing the silently-defaulted all-zero snapshot.
+    func testSQLSnapshotFactoryFailsClosedOnStatementLevelFailure() throws {
+        let store = TokenUsageStore(fileURL: temporaryEventsURL())
+        try store.appendEvent(Self.safeEvent(aiTool: .codex, spanID: "span_fail_closed_1"))
+        let now = Date()
+        let calendar = Calendar.autoupdatingCurrent
+
+        // A healthy build over the real store returns a non-nil snapshot.
+        XCTAssertNotNil(TokenUsageDashboardSnapshot.buildFromSQLAggregates(
+            usageStore: store,
+            now: now,
+            calendar: calendar
+        ))
+
+        let emptyDatabaseURL = temporaryDirectoryURL().appendingPathComponent("empty.sqlite3")
+        try FileManager.default.createDirectory(
+            at: emptyDatabaseURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        var rawConnection: OpaquePointer?
+        let flags = SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE
+        XCTAssertEqual(sqlite3_open_v2(emptyDatabaseURL.path, &rawConnection, flags, nil), SQLITE_OK)
+        let connection = try XCTUnwrap(rawConnection)
+        defer { sqlite3_close(connection) }
+
+        XCTAssertNil(TokenUsageDashboardSnapshot.buildFromSQLAggregates(
+            usageStore: store,
+            now: now,
+            calendar: calendar,
+            database: connection
+        ))
+    }
+
+    /// Focused check of the observer wiring on one representative wrapper: a schema-less connection
+    /// marks the observer and yields the empty default; the store's own healthy connection does not.
+    func testGroupedInputScopeTotalsByToolMarksFailureObserver() throws {
+        let store = TokenUsageStore(fileURL: temporaryEventsURL())
+        try store.appendEvent(Self.safeEvent(aiTool: .codex, spanID: "span_observer_wiring_1"))
+
+        let emptyDatabaseURL = temporaryDirectoryURL().appendingPathComponent("empty.sqlite3")
+        try FileManager.default.createDirectory(
+            at: emptyDatabaseURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        var rawConnection: OpaquePointer?
+        let flags = SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE
+        XCTAssertEqual(sqlite3_open_v2(emptyDatabaseURL.path, &rawConnection, flags, nil), SQLITE_OK)
+        let connection = try XCTUnwrap(rawConnection)
+        defer { sqlite3_close(connection) }
+
+        let failingObserver = TokenUsageQueryFailureObserver()
+        let failingResult = store.groupedInputScopeTotalsByTool(
+            database: connection,
+            failureObserver: failingObserver
+        )
+        XCTAssertTrue(failingObserver.didFail)
+        XCTAssertTrue(failingResult.isEmpty)
+
+        let healthyObserver = TokenUsageQueryFailureObserver()
+        let healthyResult = store.groupedInputScopeTotalsByTool(
+            database: nil,
+            failureObserver: healthyObserver
+        )
+        XCTAssertFalse(healthyObserver.didFail)
+        XCTAssertFalse(healthyResult.isEmpty)
+    }
+
+    /// Passing the store's own pre-opened connection+transaction must produce the same snapshot as
+    /// letting buildFromSQLAggregates open its own -- the shared-connection path is purely about
+    /// read consistency, never about changing the result.
+    func testSQLSnapshotFactoryWithStoreOwnedConnectionMatchesPlainCall() throws {
+        let store = TokenUsageStore(fileURL: temporaryEventsURL())
+        try store.appendEvent(Self.safeEvent(aiTool: .codex, spanID: "span_shared_conn_1", inputTokens: 100, outputTokens: 50))
+        try store.appendEvent(Self.safeEvent(aiTool: .claude, spanID: "span_shared_conn_2", inputTokens: 60, outputTokens: 20))
+        let now = Date()
+        let calendar = Calendar.autoupdatingCurrent
+
+        let plain = try XCTUnwrap(TokenUsageDashboardSnapshot.buildFromSQLAggregates(
+            usageStore: store,
+            now: now,
+            calendar: calendar
+        ))
+
+        let viaConnection = store.withDatabaseConnection(nil, default: nil as TokenUsageDashboardSnapshot?) { database in
+            TokenUsageDashboardSnapshot.buildFromSQLAggregates(
+                usageStore: store,
+                now: now,
+                calendar: calendar,
+                database: database
+            )
+        }
+        XCTAssertEqual(viaConnection, plain)
+    }
+
+    /// Fix 1 regression: a transient SQL-build failure must not leave isRefreshing stuck true.
+    /// The store points at an unopenable database (a regular file occupies the directory path its
+    /// database file needs), so every open fails and the SQL build returns nil. The refresh must
+    /// still settle back to "not refreshing" instead of permanently disabling refreshAsyncIfIdle.
+    @MainActor
+    func testDashboardStoreRestoresRefreshingAfterFailedSQLBuild() async throws {
+        let baseDirectory = temporaryDirectoryURL()
+        try FileManager.default.createDirectory(
+            at: baseDirectory.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        // Occupy the would-be token-metering directory path with a regular file so
+        // createPrivateDirectoryIfNeeded -- and therefore every openDatabase -- throws.
+        XCTAssertTrue(FileManager.default.createFile(atPath: baseDirectory.path, contents: Data()))
+        let usageStore = TokenUsageStore(fileURL: baseDirectory.appendingPathComponent("events.json"))
+
+        let store = TokenUsageDashboardStore(usageStore: usageStore, loadsInitialPanelSummary: false)
+        store.refreshAsync()
+
+        var settled = false
+        for _ in 0..<60 {
+            if !store.isDashboardRefreshInProgress {
+                settled = true
+                break
+            }
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        XCTAssertTrue(settled, "isRefreshing must return to false after a failed SQL build")
+    }
+
     func testPanelSummaryProjectsFreshOnlyHeadlineWithoutChangingWorkflowRows() throws {
         let store = TokenUsageStore(fileURL: temporaryEventsURL())
         try store.replaceEvents([

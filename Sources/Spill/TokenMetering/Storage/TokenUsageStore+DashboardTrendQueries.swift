@@ -25,7 +25,8 @@ extension TokenUsageStore {
         dashboardToolsOnly: Bool,
         visibleTools: Set<TokenUsageAITool>? = nil,
         calendar: Calendar,
-        database: OpaquePointer
+        database: OpaquePointer,
+        failureObserver: TokenUsageQueryFailureObserver? = nil
     ) -> [TokenUsageDashboardTrendSourceRow] {
         let whereClause = Self.dashboardWhereClause(
             startingAt: startDate,
@@ -42,13 +43,16 @@ extension TokenUsageStore {
         guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
               let statement
         else {
+            failureObserver?.markFailure()
             return []
         }
         defer { sqlite3_finalize(statement) }
         Self.bindDashboardDateRange(startingAt: startDate, endingBefore: endDate, statement: statement)
 
         var rows = [TokenUsageDashboardTrendSourceRow]()
-        while sqlite3_step(statement) == SQLITE_ROW {
+        var stepResult = sqlite3_step(statement)
+        while stepResult == SQLITE_ROW {
+            defer { stepResult = sqlite3_step(statement) }
             guard let aiToolRaw = Self.columnString(statement, 0),
                   let createdAtText = Self.columnString(statement, 1)
             else {
@@ -87,6 +91,9 @@ extension TokenUsageStore {
                 freshTokens: Int(sqlite3_column_int64(statement, 3))
             ))
         }
+        if stepResult != SQLITE_DONE {
+            failureObserver?.markFailure()
+        }
         return rows
     }
 
@@ -96,7 +103,8 @@ extension TokenUsageStore {
         dashboardToolsOnly: Bool = true,
         visibleTools: Set<TokenUsageAITool>? = nil,
         calendar: Calendar = .autoupdatingCurrent,
-        database: OpaquePointer? = nil
+        database: OpaquePointer? = nil,
+        failureObserver: TokenUsageQueryFailureObserver? = nil
     ) -> [TokenUsageDashboardTrendSourceRow] {
         withDatabaseConnection(database, default: []) { database in
             loadTrendSourceRows(
@@ -105,7 +113,8 @@ extension TokenUsageStore {
                 dashboardToolsOnly: dashboardToolsOnly,
                 visibleTools: visibleTools,
                 calendar: calendar,
-                database: database
+                database: database,
+                failureObserver: failureObserver
             )
         }
     }

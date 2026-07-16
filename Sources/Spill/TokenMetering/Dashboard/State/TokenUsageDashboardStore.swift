@@ -282,6 +282,9 @@ extension TokenUsageDashboardStore {
                 loadedEvents = []
                 loadedEventsCacheCoverageRange = nil
                 guard let sqlOutput = Self.buildSnapshotOutputFromSQL(usageStore: usageStore, request: buildRequest) else {
+                    DispatchQueue.main.async { [weak self] in
+                        self?.restoreStateAfterFailedSQLBuild(generation: generation, resetLoadState: true)
+                    }
                     return
                 }
                 snapshotOutput = sqlOutput
@@ -353,6 +356,25 @@ extension TokenUsageDashboardStore {
             return
         }
         refreshAsync(trackLiveUpdates: trackLiveUpdates, refreshesPanelSummary: refreshesPanelSummary)
+    }
+
+    /// Restores the pre-refresh transient state when a background SQL build bails out (returns
+    /// nil, i.e. "couldn't read right now") instead of producing a snapshot. Without this, a
+    /// transient DB failure leaves `isRefreshing` stuck true -- disabling the refresh button and
+    /// permanently guarding off refreshAsyncIfIdle -- because only applySnapshotPair clears it.
+    /// The last-known-good snapshot is deliberately left untouched. The generation guard makes a
+    /// stale bail-out a no-op: if a newer refresh has already started, restoring here would stomp
+    /// its in-flight `isRefreshing = true`. `resetLoadState` is true only for the refresh path
+    /// that set `loadState = .loading`; when true and still loading, it falls back to `.loaded`
+    /// if a snapshot was ever built, otherwise `.idle` so refreshAsyncIfIdle can retry.
+    private func restoreStateAfterFailedSQLBuild(generation: Int, resetLoadState: Bool) {
+        guard snapshotBuildGate.isCurrent(generation) else {
+            return
+        }
+        isRefreshing = false
+        if resetLoadState, loadState == .loading {
+            loadState = hasRebuiltSnapshot ? .loaded : .idle
+        }
     }
 
     func refreshPanelSummary() {
@@ -482,6 +504,10 @@ extension TokenUsageDashboardStore {
             let appliedLoadedEventsDateRange: TokenUsageDashboardSnapshot.DateRange?
             if Self.canBuildSnapshotFromSQL(for: buildRequest) {
                 guard let sqlOutput = Self.buildSnapshotOutputFromSQL(usageStore: usageStore, request: buildRequest) else {
+                    // This path set only isRefreshing (never loadState), so restore only that.
+                    DispatchQueue.main.async { [weak self] in
+                        self?.restoreStateAfterFailedSQLBuild(generation: generation, resetLoadState: false)
+                    }
                     return
                 }
                 snapshotOutput = sqlOutput
@@ -647,36 +673,21 @@ extension TokenUsageDashboardStore {
         usageStore: TokenUsageStore,
         request: TokenUsageDashboardBuildRequest
     ) -> TokenUsageDashboardSnapshotBuildOutput? {
-        // buildFromSQLAggregates returns nil precisely when its own shared connection couldn't
-        // be opened -- the same connection every one of its reads uses -- so checking its result
-        // directly is a strictly more accurate signal than probing a separate connection first
-        // (a prior version of this guard called dashboardSummaryIfAvailable as a canary on its
-        // own independent connection before calling buildFromSQLAggregates; that canary passing
-        // said nothing about whether buildFromSQLAggregates's own, separate connection would
-        // also open, so a canary-pass + build-fail could still slip an empty snapshot through).
-        guard let filtered = TokenUsageDashboardSnapshot.buildFromSQLAggregates(
-            usageStore: usageStore,
-            selectedTool: request.selectedTool,
-            selectedPeriod: request.selectedPeriod,
-            inputScope: request.inputScope,
-            language: request.language,
-            localAliases: request.localAliases,
-            showAdvancedTools: request.showAdvancedTools,
-            visibleTools: request.visibleAITools,
-            now: request.now,
-            calendarMonthStart: request.proposedCalendarMonthStart,
-            periodOffset: request.periodOffset,
-            calendar: request.calendar
-        ) else {
-            return nil
-        }
-        let unfiltered: TokenUsageDashboardSnapshot
-        if request.selectedTool == nil {
-            unfiltered = filtered
-        } else {
-            guard let computedUnfiltered = TokenUsageDashboardSnapshot.buildFromSQLAggregates(
+        // Open one connection (and one read transaction) here and thread it into both
+        // buildFromSQLAggregates passes, so the filtered and the selectedTool==nil unfiltered
+        // snapshot read the exact same WAL snapshot. If each opened its own connection+transaction
+        // (as before), a writer committing between the two passes could give the filtered and
+        // unfiltered halves inconsistent totals for the same instant. buildFromSQLAggregates still
+        // returns nil on any open/statement failure -- checking its result directly is a strictly
+        // more accurate signal than probing a separate connection first (a prior version called
+        // dashboardSummaryIfAvailable as a canary on its own independent connection, which said
+        // nothing about whether the build's connection would also open, so a canary-pass +
+        // build-fail could slip an empty snapshot through). A nil out of the shared connection
+        // (open failure) is likewise propagated as nil here.
+        usageStore.withDatabaseConnection(nil, default: nil) { database in
+            guard let filtered = TokenUsageDashboardSnapshot.buildFromSQLAggregates(
                 usageStore: usageStore,
-                selectedTool: nil,
+                selectedTool: request.selectedTool,
                 selectedPeriod: request.selectedPeriod,
                 inputScope: request.inputScope,
                 language: request.language,
@@ -686,35 +697,58 @@ extension TokenUsageDashboardStore {
                 now: request.now,
                 calendarMonthStart: request.proposedCalendarMonthStart,
                 periodOffset: request.periodOffset,
-                calendar: request.calendar
+                calendar: request.calendar,
+                database: database
             ) else {
                 return nil
             }
-            unfiltered = computedUnfiltered
+            let unfiltered: TokenUsageDashboardSnapshot
+            if request.selectedTool == nil {
+                unfiltered = filtered
+            } else {
+                guard let computedUnfiltered = TokenUsageDashboardSnapshot.buildFromSQLAggregates(
+                    usageStore: usageStore,
+                    selectedTool: nil,
+                    selectedPeriod: request.selectedPeriod,
+                    inputScope: request.inputScope,
+                    language: request.language,
+                    localAliases: request.localAliases,
+                    showAdvancedTools: request.showAdvancedTools,
+                    visibleTools: request.visibleAITools,
+                    now: request.now,
+                    calendarMonthStart: request.proposedCalendarMonthStart,
+                    periodOffset: request.periodOffset,
+                    calendar: request.calendar,
+                    database: database
+                ) else {
+                    return nil
+                }
+                unfiltered = computedUnfiltered
+            }
+            // calendarMonth resolution depends only on availableDateBounds/now/proposedMonthStart
+            // (never on selectedTool), so it is identical for the filtered and unfiltered snapshots
+            // above, matching buildPair's single shared displayCalendarMonth.
+            let calendarMonth = TokenUsageDashboardSnapshot.normalizedCalendarMonthStart(
+                availableDateBounds: request.availableDateBounds,
+                now: request.now,
+                proposedMonthStart: request.proposedCalendarMonthStart,
+                calendar: request.calendar
+            )
+            let context = TokenUsageDashboardSnapshotBuildContext(
+                events: [],
+                showAdvancedTools: request.showAdvancedTools,
+                calendar: request.calendar
+            )
+            return TokenUsageDashboardSnapshotBuildOutput(
+                snapshotPair: TokenUsageDashboardSnapshotPair(
+                    filtered: filtered,
+                    unfiltered: unfiltered,
+                    calendarMonthStart: calendarMonth
+                ),
+                context: context,
+                contextKey: TokenUsageDashboardContextCacheKey(events: [], request: request)
+            )
         }
-        // calendarMonth resolution depends only on availableDateBounds/now/proposedMonthStart
-        // (never on selectedTool), so it is identical for the filtered and unfiltered snapshots
-        // above, matching buildPair's single shared displayCalendarMonth.
-        let calendarMonth = TokenUsageDashboardSnapshot.normalizedCalendarMonthStart(
-            availableDateBounds: request.availableDateBounds,
-            now: request.now,
-            proposedMonthStart: request.proposedCalendarMonthStart,
-            calendar: request.calendar
-        )
-        let context = TokenUsageDashboardSnapshotBuildContext(
-            events: [],
-            showAdvancedTools: request.showAdvancedTools,
-            calendar: request.calendar
-        )
-        return TokenUsageDashboardSnapshotBuildOutput(
-            snapshotPair: TokenUsageDashboardSnapshotPair(
-                filtered: filtered,
-                unfiltered: unfiltered,
-                calendarMonthStart: calendarMonth
-            ),
-            context: context,
-            contextKey: TokenUsageDashboardContextCacheKey(events: [], request: request)
-        )
     }
 
     nonisolated private static func buildSnapshotOutput(
@@ -1438,6 +1472,10 @@ extension TokenUsageDashboardStore {
             let appliedLoadedEventsDateRange: TokenUsageDashboardSnapshot.DateRange?
             if Self.canBuildSnapshotFromSQL(for: buildRequest) {
                 guard let sqlOutput = Self.buildSnapshotOutputFromSQL(usageStore: usageStore, request: buildRequest) else {
+                    // This path set only isRefreshing (never loadState), so restore only that.
+                    DispatchQueue.main.async { [weak self] in
+                        self?.restoreStateAfterFailedSQLBuild(generation: generation, resetLoadState: false)
+                    }
                     return
                 }
                 snapshotOutput = sqlOutput
