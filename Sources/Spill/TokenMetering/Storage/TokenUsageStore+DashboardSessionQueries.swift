@@ -123,18 +123,11 @@ extension TokenUsageStore {
         visibleTools: Set<TokenUsageAITool>? = nil,
         selectedTool: TokenUsageAITool? = nil,
         projectID: String? = nil,
-        calendar: Calendar = .autoupdatingCurrent
+        calendar: Calendar = .autoupdatingCurrent,
+        database: OpaquePointer? = nil
     ) -> [TokenUsageDashboardSessionSourceRow] {
-        lock.withLock {
-            let database: OpaquePointer
-            do {
-                database = try openDatabase()
-            } catch {
-                return []
-            }
-            defer { sqlite3_close(database) }
-
-            return loadSessionSourceRows(
+        withDatabaseConnection(database, default: []) { database in
+            loadSessionSourceRows(
                 startingAt: startDate,
                 endingBefore: endDate,
                 dashboardToolsOnly: dashboardToolsOnly,

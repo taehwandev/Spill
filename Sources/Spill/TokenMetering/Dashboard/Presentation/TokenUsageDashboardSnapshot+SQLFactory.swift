@@ -35,9 +35,22 @@ extension TokenUsageDashboardSnapshot {
         let effectiveVisibleTools = selectedDashboardTool.map { Set([$0]) } ?? visibleTools
 
         let requestRange = cutoffDateRange(for: selectedPeriod, periodOffset: periodOffset, now: now, calendar: calendar)
+
+        // Every aggregate read below shares this one connection instead of each of the ~19
+        // calls independently opening/closing its own: that used to mean one refresh could see
+        // up to ~19 (or ~38, when a tool filter forces a filtered+unfiltered pass) independent
+        // chances for a transient open failure to silently zero just that field, and no
+        // guarantee the fields it did get were read from the same point-in-time view of the
+        // database under concurrent writes from the importer process. Sharing one connection
+        // collapses that down to a single open (with its own retry inside openDatabase()) and a
+        // consistent read for the whole snapshot. If the shared connection can't be opened at
+        // all, this falls back to the same empty snapshot every one of these calls already
+        // defaulted to individually.
+        return usageStore.withDatabaseConnection(nil, default: TokenUsageDashboardSnapshot.empty) { database in
         let dateBounds = usageStore.dashboardDateBounds(
             dashboardToolsOnly: dashboardToolsOnly,
-            visibleTools: visibleTools
+            visibleTools: visibleTools,
+            database: database
         )
         // Period tabs always total across every visible tool, independent of which single tool
         // chip is currently selected -- matches the original init reading periodFilterTotals
@@ -46,14 +59,16 @@ extension TokenUsageDashboardSnapshot {
             now: now,
             calendar: calendar,
             dashboardToolsOnly: dashboardToolsOnly,
-            visibleTools: visibleTools
+            visibleTools: visibleTools,
+            database: database
         )
 
         let focused = usageStore.dashboardFocusedTotals(
             startingAt: requestRange.start,
             endingBefore: requestRange.end,
             dashboardToolsOnly: dashboardToolsOnly,
-            visibleTools: effectiveVisibleTools
+            visibleTools: effectiveVisibleTools,
+            database: database
         )
         let eventCount = focused.eventCount
         let totalTokens = focused.totalTokens
@@ -99,7 +114,8 @@ extension TokenUsageDashboardSnapshot {
             startingAt: requestRange.start,
             endingBefore: requestRange.end,
             dashboardToolsOnly: dashboardToolsOnly,
-            visibleTools: visibleTools
+            visibleTools: visibleTools,
+            database: database
         ).mapValues { $0.total(for: inputScope) }
         // toolFilters' own totals/count intentionally ignore the single selectedTool narrowing
         // (only visibleTools) -- it needs the period+project scope shared by every tool chip,
@@ -110,7 +126,8 @@ extension TokenUsageDashboardSnapshot {
             startingAt: requestRange.start,
             endingBefore: requestRange.end,
             dashboardToolsOnly: dashboardToolsOnly,
-            visibleTools: visibleTools
+            visibleTools: visibleTools,
+            database: database
         ).eventCount
         let toolFilters = Self.toolFilters(
             selectedTool: selectedDashboardTool,
@@ -125,7 +142,8 @@ extension TokenUsageDashboardSnapshot {
             startingAt: requestRange.start,
             endingBefore: requestRange.end,
             dashboardToolsOnly: dashboardToolsOnly,
-            visibleTools: effectiveVisibleTools
+            visibleTools: effectiveVisibleTools,
+            database: database
         )
         let projectFilters = Self.projectFiltersFromTotals(
             projectTotals,
@@ -138,7 +156,8 @@ extension TokenUsageDashboardSnapshot {
             startingAt: requestRange.start,
             endingBefore: requestRange.end,
             dashboardToolsOnly: dashboardToolsOnly,
-            visibleTools: effectiveVisibleTools
+            visibleTools: effectiveVisibleTools,
+            database: database
         )
         var accountingTotals = [TokenUsageInputAccountingCategory: Int]()
         for (key, value) in inputAccountingSQL {
@@ -165,7 +184,8 @@ extension TokenUsageDashboardSnapshot {
             startingAt: requestRange.start,
             endingBefore: requestRange.end,
             dashboardToolsOnly: dashboardToolsOnly,
-            visibleTools: effectiveVisibleTools
+            visibleTools: effectiveVisibleTools,
+            database: database
         ).mapValues { $0.total(for: inputScope) }
         let toolRows = TokenUsageDashboardRowBuilder.rows(
             tokenValues: toolRowTotals.filter { tool, _ in visibleTools?.contains(tool) ?? true },
@@ -178,7 +198,8 @@ extension TokenUsageDashboardSnapshot {
             startingAt: requestRange.start,
             endingBefore: requestRange.end,
             dashboardToolsOnly: dashboardToolsOnly,
-            visibleTools: effectiveVisibleTools
+            visibleTools: effectiveVisibleTools,
+            database: database
         ).mapValues { $0.total(for: inputScope) }
         let modelRows = TokenUsageDashboardRowBuilder.rows(
             tokenValues: modelTotalsSQL,
@@ -191,7 +212,8 @@ extension TokenUsageDashboardSnapshot {
             startingAt: requestRange.start,
             endingBefore: requestRange.end,
             dashboardToolsOnly: dashboardToolsOnly,
-            visibleTools: effectiveVisibleTools
+            visibleTools: effectiveVisibleTools,
+            database: database
         )
         var taskTotals = [TokenUsageTaskType: Int]()
         for (key, value) in taskTotalsSQL {
@@ -208,7 +230,8 @@ extension TokenUsageDashboardSnapshot {
             startingAt: requestRange.start,
             endingBefore: requestRange.end,
             dashboardToolsOnly: dashboardToolsOnly,
-            visibleTools: effectiveVisibleTools
+            visibleTools: effectiveVisibleTools,
+            database: database
         )
         var stageTotals = [TokenUsageStage: Int]()
         for (key, value) in stageTotalsSQL {
@@ -225,7 +248,8 @@ extension TokenUsageDashboardSnapshot {
             startingAt: requestRange.start,
             endingBefore: requestRange.end,
             dashboardToolsOnly: dashboardToolsOnly,
-            visibleTools: effectiveVisibleTools
+            visibleTools: effectiveVisibleTools,
+            database: database
         )
         var sourceTotals = [TokenUsageSource: Int]()
         for (key, value) in sourceTotalsSQL {
@@ -268,7 +292,8 @@ extension TokenUsageDashboardSnapshot {
             visibleTools: effectiveVisibleTools,
             selectedTool: nil,
             projectID: nil,
-            calendar: calendar
+            calendar: calendar,
+            database: database
         )
         let sessions = sessionRows(
             sourceRows: sourceRowsData,
@@ -290,7 +315,8 @@ extension TokenUsageDashboardSnapshot {
             endingBefore: requestRange.end,
             dashboardToolsOnly: dashboardToolsOnly,
             visibleTools: effectiveVisibleTools,
-            calendar: calendar
+            calendar: calendar,
+            database: database
         )
         let trendBuckets = TokenUsageDashboardTrendBucketBuilder.buckets(
             sourceRows: trendRows,
@@ -316,7 +342,8 @@ extension TokenUsageDashboardSnapshot {
                 now: now,
                 calendar: calendar,
                 dashboardToolsOnly: dashboardToolsOnly,
-                visibleTools: effectiveVisibleTools
+                visibleTools: effectiveVisibleTools,
+                database: database
             )
         }
 
@@ -341,7 +368,8 @@ extension TokenUsageDashboardSnapshot {
             endingBefore: calendar.date(byAdding: .month, value: 1, to: calendarMonth) ?? calendarMonth,
             calendar: calendar,
             dashboardToolsOnly: dashboardToolsOnly,
-            visibleTools: visibleTools
+            visibleTools: visibleTools,
+            database: database
         ).mapValues { $0.total(for: inputScope) }
         let calendarDays = Self.calendarDays(
             events: [],
@@ -357,7 +385,8 @@ extension TokenUsageDashboardSnapshot {
 
         let lastUpdated = usageStore.lastUpdatedByTool(
             dashboardToolsOnly: dashboardToolsOnly,
-            visibleTools: visibleTools
+            visibleTools: visibleTools,
+            database: database
         )
         let overallLastUpdated = lastUpdated.values.max()
 
@@ -434,6 +463,7 @@ extension TokenUsageDashboardSnapshot {
             canNavigatePreviousPeriod: canNavigatePreviousPeriod,
             canNavigateNextPeriod: canNavigateNextPeriod
         )
+        }
     }
 }
 
@@ -445,7 +475,8 @@ private extension TokenUsageDashboardSnapshot {
         now: Date,
         calendar: Calendar,
         dashboardToolsOnly: Bool,
-        visibleTools: Set<TokenUsageAITool>?
+        visibleTools: Set<TokenUsageAITool>?,
+        database: OpaquePointer? = nil
     ) -> Int? {
         switch selectedPeriod {
         case .today:
@@ -456,7 +487,8 @@ private extension TokenUsageDashboardSnapshot {
                 endingBefore: todayStart,
                 inputScope: inputScope,
                 dashboardToolsOnly: dashboardToolsOnly,
-                visibleTools: visibleTools
+                visibleTools: visibleTools,
+                database: database
             )
         case .sevenDays:
             let sevenDaysAgo = periodStartDate(dayCount: 7, now: now, calendar: calendar)
@@ -466,7 +498,8 @@ private extension TokenUsageDashboardSnapshot {
                 endingBefore: sevenDaysAgo,
                 inputScope: inputScope,
                 dashboardToolsOnly: dashboardToolsOnly,
-                visibleTools: visibleTools
+                visibleTools: visibleTools,
+                database: database
             )
         case .thirtyDays:
             let thirtyDaysAgo = periodStartDate(dayCount: 30, now: now, calendar: calendar)
@@ -476,7 +509,8 @@ private extension TokenUsageDashboardSnapshot {
                 endingBefore: thirtyDaysAgo,
                 inputScope: inputScope,
                 dashboardToolsOnly: dashboardToolsOnly,
-                visibleTools: visibleTools
+                visibleTools: visibleTools,
+                database: database
             )
         case .all:
             return nil

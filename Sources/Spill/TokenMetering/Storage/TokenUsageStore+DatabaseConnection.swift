@@ -144,6 +144,32 @@ extension TokenUsageStore {
         }
     }
 
+    /// Runs `body` against `database` if the caller already has one open (e.g. a dashboard
+    /// snapshot build batching many reads onto a single shared connection instead of one
+    /// open/close per query), otherwise opens+closes a private connection exactly like every
+    /// existing single-query wrapper. Centralizes that fallback so per-query wrapper functions
+    /// can accept an optional pre-opened connection without duplicating the lock/open/close
+    /// boilerplate at each call site.
+    func withDatabaseConnection<T>(
+        _ database: OpaquePointer?,
+        default defaultValue: T,
+        _ body: (OpaquePointer) -> T
+    ) -> T {
+        if let database {
+            return body(database)
+        }
+        return lock.withLock {
+            let ownedDatabase: OpaquePointer
+            do {
+                ownedDatabase = try openDatabase()
+            } catch {
+                return defaultValue
+            }
+            defer { sqlite3_close(ownedDatabase) }
+            return body(ownedDatabase)
+        }
+    }
+
 
     func removeLegacyEventsFileWithoutLock() throws {
         if FileManager.default.fileExists(atPath: fileURL.path),

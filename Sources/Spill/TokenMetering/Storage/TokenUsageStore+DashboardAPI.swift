@@ -110,17 +110,11 @@ extension TokenUsageStore {
         now: Date,
         calendar: Calendar,
         dashboardToolsOnly: Bool = true,
-        visibleTools: Set<TokenUsageAITool>? = nil
+        visibleTools: Set<TokenUsageAITool>? = nil,
+        database: OpaquePointer? = nil
     ) -> [TokenUsageDashboardPeriod: TokenUsageInputScopeTotals] {
-        lock.withLock {
-            let database: OpaquePointer
-            do {
-                database = try openDatabase()
-            } catch {
-                return [:]
-            }
-            defer { sqlite3_close(database) }
-            return loadAllPeriodTotalTokens(
+        withDatabaseConnection(database, default: [:]) { database in
+            loadAllPeriodTotalTokens(
                 now: now,
                 calendar: calendar,
                 dashboardToolsOnly: dashboardToolsOnly,
@@ -219,17 +213,10 @@ extension TokenUsageStore {
         endingBefore endDate: Date,
         inputScope: TokenUsageInputScope = .includeCache,
         dashboardToolsOnly: Bool = true,
-        visibleTools: Set<TokenUsageAITool>? = nil
+        visibleTools: Set<TokenUsageAITool>? = nil,
+        database: OpaquePointer? = nil
     ) -> Int? {
-        lock.withLock { () -> Int? in
-            let database: OpaquePointer
-            do {
-                database = try openDatabase()
-            } catch {
-                return nil
-            }
-            defer { sqlite3_close(database) }
-
+        withDatabaseConnection(database, default: nil) { database -> Int? in
             guard let totals = loadDashboardCountAndTotalIfAvailable(
                 startingAt: startDate,
                 endingBefore: endDate,
@@ -254,18 +241,11 @@ extension TokenUsageStore {
         startingAt startDate: Date? = nil,
         endingBefore endDate: Date? = nil,
         dashboardToolsOnly: Bool = true,
-        visibleTools: Set<TokenUsageAITool>? = nil
+        visibleTools: Set<TokenUsageAITool>? = nil,
+        database: OpaquePointer? = nil
     ) -> [String: Int] {
-        lock.withLock {
-            let database: OpaquePointer
-            do {
-                database = try openDatabase()
-            } catch {
-                return [:]
-            }
-            defer { sqlite3_close(database) }
-
-            return loadInputAccountingTotals(
+        withDatabaseConnection(database, default: [:]) { database in
+            loadInputAccountingTotals(
                 startingAt: startDate,
                 endingBefore: endDate,
                 dashboardToolsOnly: dashboardToolsOnly,
@@ -279,21 +259,17 @@ extension TokenUsageStore {
         startingAt startDate: Date? = nil,
         endingBefore endDate: Date? = nil,
         dashboardToolsOnly: Bool = true,
-        visibleTools: Set<TokenUsageAITool>? = nil
+        visibleTools: Set<TokenUsageAITool>? = nil,
+        database: OpaquePointer? = nil
     ) -> DashboardFocusedTotals {
-        lock.withLock {
-            let database: OpaquePointer
-            do {
-                database = try openDatabase()
-            } catch {
-                return DashboardFocusedTotals(
-                    eventCount: 0, totalTokens: 0, exactFreshTotalTokens: 0,
-                    inputTokens: 0, outputTokens: 0, assistedEventCount: 0, assistedTotalTokens: 0
-                )
-            }
-            defer { sqlite3_close(database) }
-
-            return loadDashboardFocusedTotals(
+        withDatabaseConnection(
+            database,
+            default: DashboardFocusedTotals(
+                eventCount: 0, totalTokens: 0, exactFreshTotalTokens: 0,
+                inputTokens: 0, outputTokens: 0, assistedEventCount: 0, assistedTotalTokens: 0
+            )
+        ) { database in
+            loadDashboardFocusedTotals(
                 startingAt: startDate,
                 endingBefore: endDate,
                 dashboardToolsOnly: dashboardToolsOnly,
@@ -307,18 +283,11 @@ extension TokenUsageStore {
         startingAt startDate: Date? = nil,
         endingBefore endDate: Date? = nil,
         dashboardToolsOnly: Bool = true,
-        visibleTools: Set<TokenUsageAITool>? = nil
+        visibleTools: Set<TokenUsageAITool>? = nil,
+        database: OpaquePointer? = nil
     ) -> [TokenUsageAITool: Date] {
-        lock.withLock {
-            let database: OpaquePointer
-            do {
-                database = try openDatabase()
-            } catch {
-                return [:]
-            }
-            defer { sqlite3_close(database) }
-
-            return loadLastUpdatedByTool(
+        withDatabaseConnection(database, default: [:]) { database in
+            loadLastUpdatedByTool(
                 startingAt: startDate,
                 endingBefore: endDate,
                 dashboardToolsOnly: dashboardToolsOnly,
@@ -357,18 +326,11 @@ extension TokenUsageStore {
         startingAt startDate: Date? = nil,
         endingBefore endDate: Date? = nil,
         dashboardToolsOnly: Bool = true,
-        visibleTools: Set<TokenUsageAITool>? = nil
+        visibleTools: Set<TokenUsageAITool>? = nil,
+        database: OpaquePointer? = nil
     ) -> [TokenUsageAITool: TokenUsageInputScopeTotals] {
-        let raw: [String: TokenUsageInputScopeTotals] = lock.withLock {
-            let database: OpaquePointer
-            do {
-                database = try openDatabase()
-            } catch {
-                return [:]
-            }
-            defer { sqlite3_close(database) }
-
-            return loadGroupedInputScopeTotals(
+        let raw: [String: TokenUsageInputScopeTotals] = withDatabaseConnection(database, default: [:]) { database in
+            loadGroupedInputScopeTotals(
                 column: "ai_tool",
                 startingAt: startDate,
                 endingBefore: endDate,
@@ -393,18 +355,11 @@ extension TokenUsageStore {
         startingAt startDate: Date? = nil,
         endingBefore endDate: Date? = nil,
         dashboardToolsOnly: Bool = true,
-        visibleTools: Set<TokenUsageAITool>? = nil
+        visibleTools: Set<TokenUsageAITool>? = nil,
+        database: OpaquePointer? = nil
     ) -> [String: TokenUsageInputScopeTotals] {
-        lock.withLock {
-            let database: OpaquePointer
-            do {
-                database = try openDatabase()
-            } catch {
-                return [:]
-            }
-            defer { sqlite3_close(database) }
-
-            return loadGroupedInputScopeTotals(
+        withDatabaseConnection(database, default: [:]) { database in
+            loadGroupedInputScopeTotals(
                 column: "task_type",
                 startingAt: startDate,
                 endingBefore: endDate,
@@ -419,18 +374,11 @@ extension TokenUsageStore {
         startingAt startDate: Date? = nil,
         endingBefore endDate: Date? = nil,
         dashboardToolsOnly: Bool = true,
-        visibleTools: Set<TokenUsageAITool>? = nil
+        visibleTools: Set<TokenUsageAITool>? = nil,
+        database: OpaquePointer? = nil
     ) -> [String: TokenUsageInputScopeTotals] {
-        lock.withLock {
-            let database: OpaquePointer
-            do {
-                database = try openDatabase()
-            } catch {
-                return [:]
-            }
-            defer { sqlite3_close(database) }
-
-            return loadGroupedInputScopeTotals(
+        withDatabaseConnection(database, default: [:]) { database in
+            loadGroupedInputScopeTotals(
                 column: "stage",
                 startingAt: startDate,
                 endingBefore: endDate,
@@ -445,18 +393,11 @@ extension TokenUsageStore {
         startingAt startDate: Date? = nil,
         endingBefore endDate: Date? = nil,
         dashboardToolsOnly: Bool = true,
-        visibleTools: Set<TokenUsageAITool>? = nil
+        visibleTools: Set<TokenUsageAITool>? = nil,
+        database: OpaquePointer? = nil
     ) -> [String: TokenUsageInputScopeTotals] {
-        lock.withLock {
-            let database: OpaquePointer
-            do {
-                database = try openDatabase()
-            } catch {
-                return [:]
-            }
-            defer { sqlite3_close(database) }
-
-            return loadGroupedModelInputScopeTotals(
+        withDatabaseConnection(database, default: [:]) { database in
+            loadGroupedModelInputScopeTotals(
                 startingAt: startDate,
                 endingBefore: endDate,
                 dashboardToolsOnly: dashboardToolsOnly,
@@ -558,18 +499,11 @@ extension TokenUsageStore {
         startingAt startDate: Date? = nil,
         endingBefore endDate: Date? = nil,
         dashboardToolsOnly: Bool = true,
-        visibleTools: Set<TokenUsageAITool>? = nil
+        visibleTools: Set<TokenUsageAITool>? = nil,
+        database: OpaquePointer? = nil
     ) -> [String: Int] {
-        lock.withLock {
-            let database: OpaquePointer
-            do {
-                database = try openDatabase()
-            } catch {
-                return [:]
-            }
-            defer { sqlite3_close(database) }
-
-            return loadSourceTokenTotals(
+        withDatabaseConnection(database, default: [:]) { database in
+            loadSourceTokenTotals(
                 startingAt: startDate,
                 endingBefore: endDate,
                 dashboardToolsOnly: dashboardToolsOnly,
@@ -583,18 +517,11 @@ extension TokenUsageStore {
         startingAt startDate: Date? = nil,
         endingBefore endDate: Date? = nil,
         dashboardToolsOnly: Bool = true,
-        visibleTools: Set<TokenUsageAITool>? = nil
+        visibleTools: Set<TokenUsageAITool>? = nil,
+        database: OpaquePointer? = nil
     ) -> [String: (eventCount: Int, totals: TokenUsageInputScopeTotals)] {
-        lock.withLock {
-            let database: OpaquePointer
-            do {
-                database = try openDatabase()
-            } catch {
-                return [:]
-            }
-            defer { sqlite3_close(database) }
-
-            return loadGroupedProjectTotals(
+        withDatabaseConnection(database, default: [:]) { database in
+            loadGroupedProjectTotals(
                 startingAt: startDate,
                 endingBefore: endDate,
                 dashboardToolsOnly: dashboardToolsOnly,
@@ -607,18 +534,11 @@ extension TokenUsageStore {
     func dashboardDateBounds(
         selectedTool: TokenUsageAITool? = nil,
         dashboardToolsOnly: Bool = true,
-        visibleTools: Set<TokenUsageAITool>? = nil
+        visibleTools: Set<TokenUsageAITool>? = nil,
+        database: OpaquePointer? = nil
     ) -> TokenUsageDashboardDateBounds {
-        lock.withLock {
-            let database: OpaquePointer
-            do {
-                database = try openDatabase()
-            } catch {
-                return .empty
-            }
-            defer { sqlite3_close(database) }
-
-            return loadDashboardDateBounds(
+        withDatabaseConnection(database, default: .empty) { database in
+            loadDashboardDateBounds(
                 selectedTool: selectedTool,
                 dashboardToolsOnly: dashboardToolsOnly,
                 visibleTools: visibleTools,
@@ -649,18 +569,11 @@ extension TokenUsageStore {
         endingBefore endDate: Date,
         calendar: Calendar,
         dashboardToolsOnly: Bool = true,
-        visibleTools: Set<TokenUsageAITool>? = nil
+        visibleTools: Set<TokenUsageAITool>? = nil,
+        database: OpaquePointer? = nil
     ) -> [String: TokenUsageInputScopeTotals] {
-        lock.withLock {
-            let database: OpaquePointer
-            do {
-                database = try openDatabase()
-            } catch {
-                return [:]
-            }
-            defer { sqlite3_close(database) }
-
-            return loadDashboardDayTokenTotals(
+        withDatabaseConnection(database, default: [:]) { database in
+            loadDashboardDayTokenTotals(
                 startingAt: startDate,
                 endingBefore: endDate,
                 calendar: calendar,

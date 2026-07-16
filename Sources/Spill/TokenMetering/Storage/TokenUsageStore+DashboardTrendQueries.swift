@@ -95,18 +95,11 @@ extension TokenUsageStore {
         endingBefore endDate: Date? = nil,
         dashboardToolsOnly: Bool = true,
         visibleTools: Set<TokenUsageAITool>? = nil,
-        calendar: Calendar = .autoupdatingCurrent
+        calendar: Calendar = .autoupdatingCurrent,
+        database: OpaquePointer? = nil
     ) -> [TokenUsageDashboardTrendSourceRow] {
-        lock.withLock {
-            let database: OpaquePointer
-            do {
-                database = try openDatabase()
-            } catch {
-                return []
-            }
-            defer { sqlite3_close(database) }
-
-            return loadTrendSourceRows(
+        withDatabaseConnection(database, default: []) { database in
+            loadTrendSourceRows(
                 startingAt: startDate,
                 endingBefore: endDate,
                 dashboardToolsOnly: dashboardToolsOnly,
