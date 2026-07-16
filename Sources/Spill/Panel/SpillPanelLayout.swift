@@ -32,8 +32,8 @@ struct SpillPanelLayout {
         let minX = visibleFrame.minX + SpillPanelMetrics.edgeInset
         let maxX = visibleFrame.maxX - SpillPanelMetrics.edgeInset - width
         let x = (anchorX - width / 2).clamped(to: minX...max(minX, maxX))
-        let fallbackY = visibleFrame.maxY - height - 10
-        let anchoredY = validAnchorFrame.map { min($0.minY - 8, visibleFrame.maxY - 8) - height }
+        let fallbackY = visibleFrame.maxY - height - 4
+        let anchoredY = validAnchorFrame.map { min($0.minY - 3, visibleFrame.maxY - 3) - height }
         let minY = visibleFrame.minY + SpillPanelMetrics.edgeInset
         let maxY = visibleFrame.maxY - SpillPanelMetrics.edgeInset - height
         let y = (anchoredY ?? fallbackY).clamped(to: minY...max(minY, maxY))

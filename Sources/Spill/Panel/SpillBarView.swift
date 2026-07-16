@@ -23,6 +23,18 @@ struct SpillBarView: View {
         panelStore.state
     }
 
+    private var isAppearanceMismatch: Bool {
+        let systemIsDark = NSApplication.shared.effectiveAppearance.name.rawValue.lowercased().contains("dark")
+        switch settings.appearanceTheme {
+        case .system:
+            return false
+        case .light:
+            return systemIsDark
+        case .dark:
+            return !systemIsDark
+        }
+    }
+
     var body: some View {
         ScrollView(.vertical) {
             VStack(spacing: settings.panelSectionSpacing) {
@@ -51,7 +63,15 @@ struct SpillBarView: View {
             .frame(maxWidth: .infinity, alignment: .top)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(Color.clear)
+        .background(
+            isAppearanceMismatch ? Color(nsColor: NSColor(name: nil) { appearance in
+                if appearance.name.rawValue.lowercased().contains("dark") {
+                    return NSColor(white: 0.08, alpha: 0.45)
+                } else {
+                    return NSColor(white: 0.98, alpha: 0.60)
+                }
+            }) : Color.clear
+        )
         .onChange(of: panelState.pendingDismiss) { _, pendingDismiss in
             updatePendingDismiss(pendingDismiss)
         }

@@ -12,7 +12,7 @@ final class SpillPanelLayoutTests: XCTestCase {
         let frame = layout.defaultFrame(in: visibleFrame, screen: nil, anchorFrame: anchorFrame)
 
         XCTAssertEqual(frame.midX, anchorFrame.midX, accuracy: 0.001)
-        XCTAssertEqual(frame.maxY, anchorFrame.minY - 8, accuracy: 0.001)
+        XCTAssertEqual(frame.maxY, anchorFrame.minY - 3, accuracy: 0.001)
     }
 
     func testDefaultFrameClampsAnchoredPanelToRightEdge() {
@@ -23,7 +23,7 @@ final class SpillPanelLayoutTests: XCTestCase {
         let frame = layout.defaultFrame(in: visibleFrame, screen: nil, anchorFrame: anchorFrame)
 
         XCTAssertEqual(frame.maxX, visibleFrame.maxX - SpillPanelMetrics.edgeInset, accuracy: 0.001)
-        XCTAssertEqual(frame.maxY, anchorFrame.minY - 8, accuracy: 0.001)
+        XCTAssertEqual(frame.maxY, anchorFrame.minY - 3, accuracy: 0.001)
     }
 
     func testDefaultFrameIgnoresAnchorOutsideMenuBarArea() {
