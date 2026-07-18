@@ -37,6 +37,14 @@ enum TokenMeteringDashboardProcess {
         identifier?.hasSuffix(helperBundleIdentifierSuffix) == true
     }
 
+    static func shouldRequestMainAppLaunch(
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        hasRequestedLaunch: Bool
+    ) -> Bool {
+        let wasLaunchedByMainApp = environment[mainBundleIdentifierEnvironmentKey]?.isEmpty == false
+        return !wasLaunchedByMainApp && !hasRequestedLaunch
+    }
+
     static func mainBundleIdentifierForDashboardHelper(
         helperBundleIdentifier: String? = Bundle.main.bundleIdentifier,
         environment: [String: String] = ProcessInfo.processInfo.environment
@@ -81,7 +89,9 @@ enum TokenMeteringDashboardProcess {
             .deletingLastPathComponent()
         return candidate.pathExtension == "app" && fileExists(candidate.path) ? candidate : nil
     }
+}
 
+extension TokenMeteringDashboardProcess {
     static func postOpenPreferencesRequest(tab: String = tokenMeteringPreferencesTab) {
         DistributedNotificationCenter.default().postNotificationName(
             openPreferencesNotification,

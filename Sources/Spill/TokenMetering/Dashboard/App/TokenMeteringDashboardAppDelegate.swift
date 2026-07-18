@@ -16,6 +16,7 @@ final class TokenMeteringDashboardAppDelegate: NSObject, NSApplicationDelegate {
         loadsInitialPanelSummary: false
     )
     private var windowController: TokenMeteringDashboardWindowController?
+    private var hasRequestedMainAppLaunch = false
 
     override init() {
         tokenUsageStore = Self.makeTokenUsageStore()
@@ -151,21 +152,24 @@ extension TokenMeteringDashboardAppDelegate {
 
 extension TokenMeteringDashboardAppDelegate {
     private func openMainAppIfNeeded(completion: (@MainActor @Sendable () -> Void)? = nil) {
-        guard !isSmokeTest,
-              let mainAppURL = TokenMeteringDashboardProcess.mainAppURLForDashboardHelper(),
-              let mainBundleIdentifier = TokenMeteringDashboardProcess.mainBundleIdentifierForDashboardHelper()
-        else {
+        guard !isSmokeTest else {
             completion?()
             return
         }
 
-        let isRunning = NSWorkspace.shared.runningApplications.contains {
-            $0.bundleIdentifier == mainBundleIdentifier
-        }
-        if isRunning {
+        guard TokenMeteringDashboardProcess.shouldRequestMainAppLaunch(
+            hasRequestedLaunch: hasRequestedMainAppLaunch
+        ) else {
             completion?()
             return
         }
+
+        guard let mainAppURL = TokenMeteringDashboardProcess.mainAppURLForDashboardHelper() else {
+            completion?()
+            return
+        }
+
+        hasRequestedMainAppLaunch = true
 
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.activates = false

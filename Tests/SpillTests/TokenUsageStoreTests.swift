@@ -2264,6 +2264,7 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(process.contains(#"static let helperBundleName = "Spill Token Dashboard.app""#))
         XCTAssertTrue(process.contains(#"static let helperBundleIdentifierSuffix = ".TokenDashboard""#))
         XCTAssertTrue(process.contains("mainBundleIdentifierForDashboardHelper"))
+        XCTAssertTrue(process.contains("shouldRequestMainAppLaunch"))
         XCTAssertTrue(process.contains("settingsDidChangeNotification"))
         XCTAssertTrue(process.contains("postAppLanguageDidChange"))
         XCTAssertTrue(process.contains("postTokenUsageDashboardOnboardingPreviewDidChange"))
@@ -2324,7 +2325,12 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(helperDelegate.contains("SPILL_TOKEN_DASHBOARD_SMOKE_NO_WINDOW"))
         XCTAssertTrue(helperDelegate.contains("openMainAppTokenMeteringSettings"))
         XCTAssertTrue(helperDelegate.contains("launchMainAppIfNeeded()"))
-        XCTAssertTrue(helperDelegate.contains("NSWorkspace.shared.runningApplications"))
+        XCTAssertTrue(helperDelegate.contains("private var hasRequestedMainAppLaunch = false"))
+        XCTAssertTrue(helperDelegate.contains("TokenMeteringDashboardProcess.shouldRequestMainAppLaunch"))
+        XCTAssertTrue(helperDelegate.contains("hasRequestedLaunch: hasRequestedMainAppLaunch"))
+        XCTAssertFalse(helperDelegate.contains("NSWorkspace.shared.runningApplications"))
+        XCTAssertTrue(helperDelegate.contains("configuration.activates = false"))
+        XCTAssertTrue(helperDelegate.contains("NSWorkspace.shared.openApplication(at: mainAppURL"))
         XCTAssertTrue(helperDelegate.contains("TokenMeteringWorkspaceOpenCompletion.runOnMainActor(completion)"))
         XCTAssertTrue(helperDelegate.contains("openMainAppDeveloperOptions"))
         XCTAssertTrue(helperDelegate.contains("TokenMeteringDashboardProcess.postOpenPreferencesRequest(tab: tab)"))
@@ -2441,6 +2447,20 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertNil(TokenMeteringDashboardLifecycle.dashboardBundleIdentifier(forMainBundleIdentifier: nil))
         XCTAssertTrue(TokenMeteringDashboardProcess.isDashboardBundleIdentifier("dev.spill.Spill.TokenDashboard"))
         XCTAssertFalse(TokenMeteringDashboardProcess.isDashboardBundleIdentifier("dev.spill.Spill"))
+        XCTAssertFalse(TokenMeteringDashboardProcess.shouldRequestMainAppLaunch(
+            environment: [
+                TokenMeteringDashboardProcess.mainBundleIdentifierEnvironmentKey: "dev.spill.Spill"
+            ],
+            hasRequestedLaunch: false
+        ))
+        XCTAssertTrue(TokenMeteringDashboardProcess.shouldRequestMainAppLaunch(
+            environment: [:],
+            hasRequestedLaunch: false
+        ))
+        XCTAssertFalse(TokenMeteringDashboardProcess.shouldRequestMainAppLaunch(
+            environment: [:],
+            hasRequestedLaunch: true
+        ))
     }
 
     func testTokenUsageCollectorResolvesNodeWithoutRelyingOnGUIPath() {

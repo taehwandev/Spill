@@ -415,6 +415,14 @@ Rules:
 - The local store remains app-owned and token-only. The helper must not add
   cloud sync, auth, prompt logging, transcript inspection, or broad filesystem
   access.
+- The launcher passes the main bundle identifier into a helper it starts. That
+  launch evidence means the main app is already running, so collection and
+  status refreshes post distributed notifications without calling
+  LaunchServices back into the main app. A directly started helper may use the
+  asynchronous `NSWorkspace.openApplication` completion path once per helper
+  process, but repeated refreshes must not emit reopen requests. The helper must
+  not synchronously enumerate `runningApplications` or read each application's
+  bundle identifier on the main actor.
 - Token metering resource and language bundles are resolved once per helper
   process and reused across SwiftUI text lookups.
 - One shared dashboard window-metrics owner defines the AppKit and SwiftUI

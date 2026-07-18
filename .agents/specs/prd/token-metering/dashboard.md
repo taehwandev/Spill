@@ -140,6 +140,13 @@
   SwiftUI appearance must not start a second copy of the same initial refresh
   or timer loop. A deferred collection request may ask the main app for newer
   local data, but it must not duplicate the initial local-store refresh.
+- Dashboard launch and refresh must not synchronously enumerate running
+  applications or rebuild localization bundles on the main actor.
+- A dashboard helper launched by the running main app must never send a
+  background LaunchServices reopen request back to that app. A helper launched
+  directly may request a nonactivating main-app launch at most once during its
+  process lifetime; later collection and status refreshes use notifications
+  without reopening the compact panel.
 
 ## Acceptance
 
@@ -149,6 +156,8 @@
 - Token detail is presented as optional exact detail and `unknown` as
   unavailable attribution.
 - Work Item rows update a safe detail panel.
+- Leaving the token dashboard open through multiple refresh intervals does not
+  reopen the main app's compact panel.
 - The compact panel headline follows the persisted usage-input scope immediately,
   while workflow/detail subtitles and grouped rows remain cache-inclusive.
 - Dashboard KPI, period, tool, model, project, trend, calendar, Work Type, Work
