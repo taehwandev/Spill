@@ -277,7 +277,6 @@ extension SpillBarView {
             sleepGuardHeaderControl
             statusDot
             headerCommand(symbolName: "gearshape.fill", title: AppL10n.text(.settings, appLanguage: settings.appLanguage), action: settingsAction)
-            headerCommand(symbolName: "xmark", title: AppL10n.text(.close, appLanguage: settings.appLanguage), action: dismissAction)
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Spill")
