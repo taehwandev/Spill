@@ -1312,18 +1312,18 @@ private struct CPUCoreBarChartView: View {
 
                 let barColor: Color
                 if value >= 0.9 {
-                    barColor = .red
+                    barColor = Color(red: 0.90, green: 0.38, blue: 0.38)
                 } else if value >= 0.8 {
-                    barColor = .orange
+                    barColor = Color(red: 0.94, green: 0.60, blue: 0.38)
                 } else if value >= 0.7 {
-                    barColor = .yellow
+                    barColor = Color(red: 0.96, green: 0.79, blue: 0.42)
                 } else {
                     barColor = tint
                 }
 
                 context.fill(
                     Path(roundedRect: rect, cornerRadius: min(barWidth * 0.45, 1.8)),
-                    with: .color(barColor.opacity(opacity))
+                    with: .color(barColor.opacity(opacity * 0.85))
                 )
             }
         }

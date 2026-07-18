@@ -60,18 +60,18 @@ extension MenuBarMetricSparklineView {
             let coreVal = coreValues[index]
             let baseColor: NSColor
             if coreVal >= 0.9 {
-                baseColor = .systemRed
+                baseColor = NSColor(red: 0.90, green: 0.38, blue: 0.38, alpha: 1.0)
             } else if coreVal >= 0.8 {
-                baseColor = .systemOrange
+                baseColor = NSColor(red: 0.94, green: 0.60, blue: 0.38, alpha: 1.0)
             } else if coreVal >= 0.7 {
-                baseColor = .systemYellow
+                baseColor = NSColor(red: 0.96, green: 0.79, blue: 0.42, alpha: 1.0)
             } else {
                 baseColor = renderedSeries.color
             }
 
             let gradient = NSGradient(
-                starting: baseColor.withAlphaComponent(0.25),
-                ending: baseColor.withAlphaComponent(0.95)
+                starting: baseColor.withAlphaComponent(0.20),
+                ending: baseColor.withAlphaComponent(0.80)
             )
             gradient?.draw(in: barPath, angle: 90)
         }
