@@ -133,6 +133,9 @@
 - Loading, empty, onboarding, and normal states keep the same major layout
   regions so the UI does not jump during refresh.
 - UI copy states that exact counts are required and estimates should not be sent.
+- The standalone dashboard uses one shared minimum content-size contract of
+  `1060×640` for both its AppKit window and SwiftUI root view. An autosaved or
+  reopened window must be constrained to that contract before display.
 
 ## Acceptance
 

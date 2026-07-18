@@ -4,8 +4,8 @@ import SwiftUI
 @MainActor
 final class TokenMeteringDashboardWindowController: NSObject, NSWindowDelegate {
     private let autosaveName = NSWindow.FrameAutosaveName("SpillTokenMeteringDashboard")
-    private let preferredSize = NSSize(width: 860, height: 680)
-    private let minimumSize = NSSize(width: 720, height: 520)
+    private let preferredSize = TokenMeteringDashboardWindowMetrics.preferredContentSize
+    private let minimumSize = TokenMeteringDashboardWindowMetrics.minimumContentSize
     private let screenPadding: CGFloat = 32
     private let store: TokenUsageDashboardStore
     private let cloudServiceStatusStore: CloudServiceStatusStore
@@ -165,7 +165,7 @@ extension TokenMeteringDashboardWindowController {
         window.titlebarAppearsTransparent = true
         window.isReleasedWhenClosed = false
         window.isRestorable = false
-        window.minSize = minimumSize
+        window.contentMinSize = minimumSize
         window.collectionBehavior = [.moveToActiveSpace]
         window.setFrameAutosaveName(autosaveName)
         window.contentView = NSHostingView(rootView: contentView)

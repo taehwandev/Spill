@@ -417,6 +417,8 @@ Rules:
   access.
 - Token metering resource and language bundles are resolved once per helper
   process and reused across SwiftUI text lookups.
+- One shared dashboard window-metrics owner defines the AppKit and SwiftUI
+  minimum content size (`1060×640`).
 
 ### ARD-005B: Local Token Metering Uses App-Owned Local Receivers
 

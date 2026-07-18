@@ -41,7 +41,10 @@ struct TokenMeteringDashboardView: View {
             dashboardBody
         }
         .background(VisualEffectView(material: .sidebar, blendingMode: .withinWindow))
-        .frame(minWidth: 1060, minHeight: 640)
+        .frame(
+            minWidth: TokenMeteringDashboardWindowMetrics.minimumContentSize.width,
+            minHeight: TokenMeteringDashboardWindowMetrics.minimumContentSize.height
+        )
         .focusEffectDisabled()
         .onAppear {
             let language = TokenMeteringLanguage.current(appLanguage: settings.appLanguage)
