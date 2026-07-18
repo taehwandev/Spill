@@ -3,7 +3,11 @@ import AppKit
 @MainActor
 final class TokenMeteringDashboardAppDelegate: NSObject, NSApplicationDelegate {
     private let settings = SpillSettings.shared
-    private let cloudServiceStatusStore = CloudServiceStatusStore()
+    private lazy var cloudServiceStatusStore = CloudServiceStatusStore(
+        remoteRefreshRequest: { [weak self] force in
+            self?.requestCloudServiceStatusRefresh(force: force)
+        }
+    )
     private let aiStatusStore = AIStatusStore()
     private let tokenUsageStore: TokenUsageStore
     private lazy var tokenUsageDashboardStore = TokenUsageDashboardStore(
@@ -23,6 +27,7 @@ final class TokenMeteringDashboardAppDelegate: NSObject, NSApplicationDelegate {
         NSApp.appearance = settings.appearanceTheme.nsAppearance
         configureMainMenu()
         observeSettingsChanges()
+        observeCloudServiceStatusChanges()
         launchMainAppIfNeeded()
         if !shouldHideWindowInSmokeTest {
             dashboardWindowController().show()
@@ -39,10 +44,16 @@ final class TokenMeteringDashboardAppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         aiStatusStore.cancelRefresh()
+        cloudServiceStatusStore.cancelRefresh()
         windowController?.prepareForTermination()
         DistributedNotificationCenter.default().removeObserver(
             self,
             name: TokenMeteringDashboardProcess.settingsDidChangeNotification,
+            object: nil
+        )
+        DistributedNotificationCenter.default().removeObserver(
+            self,
+            name: TokenMeteringDashboardProcess.cloudServiceStatusDidChangeNotification,
             object: nil
         )
         SpillCrashReporter.markCleanShutdown(processRole: "token_dashboard")
@@ -130,6 +141,12 @@ extension TokenMeteringDashboardAppDelegate {
         }
     }
 
+    private func requestCloudServiceStatusRefresh(force: Bool) {
+        openMainAppIfNeeded {
+            TokenMeteringDashboardProcess.postCloudServiceStatusRefreshRequest(force: force)
+        }
+    }
+
 }
 
 extension TokenMeteringDashboardAppDelegate {
@@ -163,6 +180,19 @@ extension TokenMeteringDashboardAppDelegate {
             name: TokenMeteringDashboardProcess.settingsDidChangeNotification,
             object: nil
         )
+    }
+
+    private func observeCloudServiceStatusChanges() {
+        DistributedNotificationCenter.default().addObserver(
+            self,
+            selector: #selector(cloudServiceStatusDidChangeFromMainApp(_:)),
+            name: TokenMeteringDashboardProcess.cloudServiceStatusDidChangeNotification,
+            object: nil
+        )
+    }
+
+    @objc private func cloudServiceStatusDidChangeFromMainApp(_ notification: Notification) {
+        cloudServiceStatusStore.reloadFromCacheIfNewer()
     }
 
     @objc private func settingsDidChangeFromMainApp(_ notification: Notification) {

@@ -169,6 +169,110 @@ final class CloudServiceStatusStoreTests: XCTestCase {
         XCTAssertNotEqual(store.snapshot, cachedSnapshot)
     }
 
+    func testRemoteRefreshRequestsNetworkOwnerWithoutCallingProvider() async {
+        let cacheURL = temporaryCacheURL()
+        let requestCounter = RequestCounter()
+        var delegatedForces = [Bool]()
+        let store = CloudServiceStatusStore(
+            provider: CloudServiceStatusProvider { _ in
+                await requestCounter.increment()
+                return Data("[]".utf8)
+            },
+            cacheURL: cacheURL,
+            remoteRefreshRequest: { force in
+                delegatedForces.append(force)
+            }
+        )
+
+        store.refreshIfNeeded(force: true)
+
+        XCTAssertEqual(delegatedForces, [true])
+        XCTAssertTrue(store.isLoading)
+        let requestCount = await requestCounter.currentValue()
+        XCTAssertEqual(requestCount, 0)
+        store.cancelRefresh()
+    }
+
+    func testRemoteRefreshUsesFreshSharedCacheWithoutDelegating() throws {
+        let cacheURL = temporaryCacheURL()
+        let now = Date(timeIntervalSince1970: 2_000)
+        let cachedSnapshot = CloudServiceStatusSnapshot(
+            fetchedAt: now.addingTimeInterval(-30),
+            items: [cachedItem(health: .operational)]
+        )
+        try writeCache(cachedSnapshot, to: cacheURL)
+        var delegatedForces = [Bool]()
+        let store = CloudServiceStatusStore(
+            cacheURL: cacheURL,
+            now: { now },
+            remoteRefreshRequest: { force in
+                delegatedForces.append(force)
+            }
+        )
+
+        store.refreshIfNeeded()
+
+        XCTAssertTrue(delegatedForces.isEmpty)
+        XCTAssertEqual(store.state, .loaded(cachedSnapshot))
+    }
+
+    func testRemoteRefreshReloadsNewerSharedCacheSnapshot() throws {
+        let cacheURL = temporaryCacheURL()
+        let initialSnapshot = CloudServiceStatusSnapshot(
+            fetchedAt: Date(timeIntervalSince1970: 1_000),
+            items: [cachedItem(health: .operational)]
+        )
+        let updatedSnapshot = CloudServiceStatusSnapshot(
+            fetchedAt: Date(timeIntervalSince1970: 2_000),
+            items: [cachedItem(health: .degraded)]
+        )
+        try writeCache(initialSnapshot, to: cacheURL)
+        let store = CloudServiceStatusStore(
+            cacheURL: cacheURL,
+            remoteRefreshRequest: { _ in }
+        )
+
+        store.refreshIfNeeded(force: true)
+        try writeCache(updatedSnapshot, to: cacheURL)
+
+        XCTAssertTrue(store.reloadFromCacheIfNewer())
+        XCTAssertEqual(store.state, .loaded(updatedSnapshot))
+        XCTAssertFalse(store.isLoading)
+    }
+
+    func testNetworkOwnerPublishesCacheUpdateAfterSuccessfulRefresh() async throws {
+        let cacheURL = temporaryCacheURL()
+        let openAIStatusJSON = Self.operationalStatusPageJSON
+        let claudeStatusJSON = Self.operationalClaudeStatusJSON
+        var cacheUpdateCount = 0
+        let store = CloudServiceStatusStore(
+            provider: CloudServiceStatusProvider { url in
+                switch url {
+                case CloudServiceStatusProvider.openAIStatusURL:
+                    return Data(openAIStatusJSON.utf8)
+                case CloudServiceStatusProvider.claudeStatusURL:
+                    return Data(claudeStatusJSON.utf8)
+                case CloudServiceStatusProvider.googleCloudIncidentsURL:
+                    return Data("[]".utf8)
+                default:
+                    throw CloudServiceStatusError.invalidHTTPStatus(404)
+                }
+            },
+            cacheURL: cacheURL,
+            cacheDidUpdate: {
+                cacheUpdateCount += 1
+            }
+        )
+
+        store.refreshIfNeeded(force: true)
+        try await waitForLoadedState(in: store)
+
+        XCTAssertEqual(cacheUpdateCount, 1)
+        let cachedData = try Data(contentsOf: cacheURL)
+        let cachedSnapshot = try JSONDecoder().decode(CloudServiceStatusSnapshot.self, from: cachedData)
+        XCTAssertEqual(cachedSnapshot, store.snapshot)
+    }
+
     private func waitForLoadedState(in store: CloudServiceStatusStore) async throws {
         for _ in 0..<50 {
             if case .loaded = store.state {

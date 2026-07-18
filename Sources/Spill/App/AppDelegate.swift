@@ -11,7 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let sleepGuard = SleepGuardController()
     private let statusStore = SystemStatusStore(cpuInitialSampleIntervalNanoseconds: 250_000_000)
     private let aiStatusStore = AIStatusStore()
-    private let cloudServiceStatusStore = CloudServiceStatusStore()
+    private let cloudServiceStatusStore: CloudServiceStatusStore
     private let tokenMeteringCoordinator: TokenMeteringCoordinator
     private let windowActionStore = WindowActionStore()
     private let sparkleUpdateController: SparkleUpdateController
@@ -80,6 +80,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var cancellables = Set<AnyCancellable>()
 
     override init() {
+        let cloudServiceStatusStore = CloudServiceStatusStore(
+            cacheDidUpdate: {
+                TokenMeteringDashboardProcess.postCloudServiceStatusDidChange()
+            }
+        )
+        self.cloudServiceStatusStore = cloudServiceStatusStore
         tokenMeteringCoordinator = TokenMeteringCoordinator(
             settings: settings,
             cloudServiceStatusStore: cloudServiceStatusStore,
@@ -340,6 +346,11 @@ extension AppDelegate {
         DistributedNotificationCenter.default().removeObserver(
             self,
             name: TokenMeteringDashboardProcess.collectionRequestNotification,
+            object: nil
+        )
+        DistributedNotificationCenter.default().removeObserver(
+            self,
+            name: TokenMeteringDashboardProcess.cloudServiceStatusRefreshRequestNotification,
             object: nil
         )
         statusRefreshTask?.cancel()
@@ -782,6 +793,12 @@ extension AppDelegate {
             name: TokenMeteringDashboardProcess.collectionRequestNotification,
             object: nil
         )
+        DistributedNotificationCenter.default().addObserver(
+            self,
+            selector: #selector(cloudServiceStatusRefreshRequestFromDashboard(_:)),
+            name: TokenMeteringDashboardProcess.cloudServiceStatusRefreshRequestNotification,
+            object: nil
+        )
     }
 
     @objc private func showPreferencesFromDashboardRequest(_ notification: Notification) {
@@ -792,6 +809,11 @@ extension AppDelegate {
     @objc private func tokenUsageCollectionRequestFromDashboard(_ notification: Notification) {
         let reason = notification.userInfo?[TokenMeteringDashboardProcess.collectionReasonUserInfoKey] as? String
         tokenMeteringCoordinator.requestCollection(reason: reason ?? "dashboard_refresh")
+    }
+
+    @objc private func cloudServiceStatusRefreshRequestFromDashboard(_ notification: Notification) {
+        let force = notification.userInfo?[TokenMeteringDashboardProcess.forceRefreshUserInfoKey] as? Bool ?? false
+        cloudServiceStatusStore.refreshIfNeeded(force: force)
     }
 }
 

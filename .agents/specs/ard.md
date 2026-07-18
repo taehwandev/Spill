@@ -304,6 +304,80 @@ Rules:
 - It should degrade to the existing AI status pills when no chartable state is
   available.
 
+### ARD-005A2: Official AI Service Status Uses One Local Network Owner
+
+Decision:
+
+The main Spill process is the only network owner for official AI service-status
+requests. The separate token dashboard helper never constructs an independent
+official-status fetch path. Both processes render one app-owned local JSON
+snapshot and use content-free distributed notifications for refresh requests
+and cache invalidation.
+
+Data flow:
+
+```text
+Main panel click/refresh
+  -> main CloudServiceStatusStore
+  -> official provider status endpoints
+  -> atomic local JSON cache write
+  -> status-did-change notification
+
+Token dashboard helper click/refresh
+  -> refresh-request notification (force boolean only)
+  -> main CloudServiceStatusStore
+  -> official provider status endpoints when stale or forced
+  -> atomic local JSON cache write
+  -> status-did-change notification
+  -> helper reloads only a newer cached snapshot
+```
+
+Rationale:
+
+The official status is informational display state, not account data. A single
+network owner avoids duplicate three-provider request batches and prevents the
+main panel and helper from retaining unrelated in-memory snapshots. The local
+cache already provides the persistence needed across process lifecycles, while
+notifications provide immediate invalidation without polling or cloud state.
+
+Rules:
+
+- The existing healthy and incident cache TTLs remain the freshness policy.
+- Opening a status popover may request a stale refresh; the explicit refresh
+  button may force one. No launch-time, timer-based, or background polling path
+  is added.
+- The refresh-request notification contains only the force-refresh boolean.
+  The change notification contains no payload. The official public snapshot is
+  exchanged through the existing atomic local cache file.
+- The helper reloads only a snapshot with a newer `fetchedAt` value so an older
+  or duplicated notification cannot roll visible status backward.
+- If the main process is not running, the helper activates it without bringing
+  it to the foreground, then posts the refresh request. If no newer cache
+  arrives within the bounded request window, the helper keeps the previous
+  snapshot and returns to a retryable idle state.
+- A successful main-process cache write posts one change notification. Cache
+  write failure must not create another network side effect.
+- Status guidance is a pure presentation mapping over loading state and the
+  cached snapshot. Healthy official services direct users to local process and
+  setup checks; incidents direct users to affected official services; unknown
+  or incomplete status directs users to refresh or the official status page.
+- The cache and notifications must not write token usage events, telemetry,
+  account records, Private Usage Upload data, web dashboard data, settings sync,
+  agent-facing summaries, prompts, commands, paths, logs, or source content.
+
+Surface impact:
+
+- Preferences: not applicable; no setting or control changes.
+- Main-process compact Spill Panel/general dashboard: affected; it owns the
+  official fetch and receives the shared guidance.
+- Separate `Spill - AI Token Metering` helper: affected; it requests refreshes
+  and reloads cache instead of fetching directly.
+- Clock-adjacent AI glance: affected only through the existing main-process
+  store; no new timer or request path is added.
+- Web dashboard, Private Usage Upload, sync payloads, and agent-facing
+  summaries: not applicable; official service status remains local-only and is
+  excluded from those contracts.
+
 ### ARD-005C: Spill - AI Token Metering Uses A Separate Helper App
 
 Decision:

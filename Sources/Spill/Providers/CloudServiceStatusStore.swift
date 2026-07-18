@@ -3,6 +3,8 @@ import SwiftUI
 
 @MainActor
 final class CloudServiceStatusStore: ObservableObject {
+    private static let remoteRefreshTimeoutNanoseconds: UInt64 = 15_000_000_000
+
     @Published private(set) var state: CloudServiceStatusState
 
     private let provider: CloudServiceStatusProvider
@@ -10,6 +12,8 @@ final class CloudServiceStatusStore: ObservableObject {
     private let cacheTTL: TimeInterval
     private let issueCacheTTL: TimeInterval
     private let now: () -> Date
+    private let remoteRefreshRequest: ((Bool) -> Void)?
+    private let cacheDidUpdate: (() -> Void)?
     private var refreshTask: Task<Void, Never>?
 
     init(
@@ -17,13 +21,17 @@ final class CloudServiceStatusStore: ObservableObject {
         cacheURL: URL = CloudServiceStatusStore.defaultCacheURL(),
         cacheTTL: TimeInterval = CloudServiceStatusProvider.defaultCacheTTL,
         issueCacheTTL: TimeInterval = CloudServiceStatusProvider.issueCacheTTL,
-        now: @escaping () -> Date = Date.init
+        now: @escaping () -> Date = Date.init,
+        remoteRefreshRequest: ((Bool) -> Void)? = nil,
+        cacheDidUpdate: (() -> Void)? = nil
     ) {
         self.provider = provider
         self.cacheURL = cacheURL
         self.cacheTTL = cacheTTL
         self.issueCacheTTL = issueCacheTTL
         self.now = now
+        self.remoteRefreshRequest = remoteRefreshRequest
+        self.cacheDidUpdate = cacheDidUpdate
         state = .idle(snapshot: Self.readCache(from: cacheURL))
     }
 
@@ -56,6 +64,7 @@ final class CloudServiceStatusStore: ObservableObject {
             return
         }
 
+        _ = reloadFromCacheIfNewer()
         let cachedSnapshot = state.snapshot
         if !force,
            let cachedSnapshot,
@@ -66,9 +75,16 @@ final class CloudServiceStatusStore: ObservableObject {
 
         state = .loading(snapshot: cachedSnapshot)
         refreshTask?.cancel()
+        if let remoteRefreshRequest {
+            remoteRefreshRequest(force)
+            scheduleRemoteRefreshTimeout(preserving: cachedSnapshot)
+            return
+        }
+
         let provider = provider
         let cacheURL = cacheURL
         let now = now
+        let cacheDidUpdate = cacheDidUpdate
 
         refreshTask = Task { @MainActor [weak self] in
             let snapshot = await provider.snapshot(now: now())
@@ -76,8 +92,47 @@ final class CloudServiceStatusStore: ObservableObject {
                 return
             }
 
-            Self.writeCache(snapshot, to: cacheURL)
+            if Self.writeCache(snapshot, to: cacheURL) {
+                cacheDidUpdate?()
+            }
             self?.state = .loaded(snapshot)
+            self?.refreshTask = nil
+        }
+    }
+
+    @discardableResult
+    func reloadFromCacheIfNewer() -> Bool {
+        guard let cachedSnapshot = Self.readCache(from: cacheURL) else {
+            return false
+        }
+
+        if let currentSnapshot = state.snapshot,
+           cachedSnapshot.fetchedAt <= currentSnapshot.fetchedAt {
+            return false
+        }
+
+        refreshTask?.cancel()
+        refreshTask = nil
+        state = .loaded(cachedSnapshot)
+        return true
+    }
+
+    private func scheduleRemoteRefreshTimeout(preserving snapshot: CloudServiceStatusSnapshot?) {
+        refreshTask = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(nanoseconds: Self.remoteRefreshTimeoutNanoseconds)
+            } catch {
+                return
+            }
+
+            guard let self else {
+                return
+            }
+
+            refreshTask = nil
+            if !reloadFromCacheIfNewer() {
+                state = .idle(snapshot: snapshot)
+            }
         }
     }
 
@@ -94,7 +149,8 @@ final class CloudServiceStatusStore: ObservableObject {
         return try? JSONDecoder().decode(CloudServiceStatusSnapshot.self, from: data)
     }
 
-    private static func writeCache(_ snapshot: CloudServiceStatusSnapshot, to url: URL) {
+    @discardableResult
+    private static func writeCache(_ snapshot: CloudServiceStatusSnapshot, to url: URL) -> Bool {
         do {
             try FileManager.default.createDirectory(
                 at: url.deletingLastPathComponent(),
@@ -102,9 +158,10 @@ final class CloudServiceStatusStore: ObservableObject {
             )
             let data = try JSONEncoder().encode(snapshot)
             try data.write(to: url, options: [.atomic])
+            return true
         } catch {
             // Cache failure should not create any extra network side effect.
-            return
+            return false
         }
     }
 }

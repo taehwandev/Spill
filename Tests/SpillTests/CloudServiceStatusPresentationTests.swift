@@ -130,6 +130,67 @@ final class CloudServiceStatusPresentationTests: XCTestCase {
         )
     }
 
+    func testGuidanceDirectsHealthyOfficialStatusToLocalChecks() {
+        let snapshot = CloudServiceStatusSnapshot(
+            fetchedAt: Date(),
+            items: [
+                item(kind: .codex, health: .operational),
+                item(kind: .claudeCode, health: .operational),
+                item(kind: .geminiAPI, health: .operational)
+            ]
+        )
+
+        let guidance = CloudServiceStatusGuidance.make(
+            snapshot: snapshot,
+            isLoading: false,
+            appLanguage: .english
+        )
+
+        XCTAssertEqual(guidance.title, "Official services look healthy")
+        XCTAssertEqual(guidance.symbolName, "checkmark.circle.fill")
+        XCTAssertEqual(guidance.health, .operational)
+        XCTAssertTrue(guidance.detail.contains("local process and setup"))
+    }
+
+    func testGuidancePrioritizesOfficialIncidents() {
+        let snapshot = CloudServiceStatusSnapshot(
+            fetchedAt: Date(),
+            items: [
+                item(kind: .codex, health: .operational),
+                item(kind: .claudeCode, health: .outage)
+            ]
+        )
+
+        let guidance = CloudServiceStatusGuidance.make(
+            snapshot: snapshot,
+            isLoading: false,
+            appLanguage: .english
+        )
+
+        XCTAssertEqual(guidance.title, "1 official service issue")
+        XCTAssertEqual(guidance.symbolName, "exclamationmark.triangle.fill")
+        XCTAssertEqual(guidance.health, .outage)
+        XCTAssertTrue(guidance.detail.contains("affected service"))
+    }
+
+    func testGuidanceExplainsUnavailableOfficialStatus() {
+        let snapshot = CloudServiceStatusSnapshot(
+            fetchedAt: Date(),
+            items: [item(kind: .openAI, health: .unknown)]
+        )
+
+        let guidance = CloudServiceStatusGuidance.make(
+            snapshot: snapshot,
+            isLoading: false,
+            appLanguage: .english
+        )
+
+        XCTAssertEqual(guidance.title, "Official status is incomplete")
+        XCTAssertEqual(guidance.symbolName, "questionmark.circle.fill")
+        XCTAssertEqual(guidance.health, .unknown)
+        XCTAssertTrue(guidance.detail.contains("Refresh or open"))
+    }
+
     private func item(kind: CloudServiceKind, health: CloudServiceHealth) -> CloudServiceStatusItem {
         CloudServiceStatusItem(
             kind: kind,

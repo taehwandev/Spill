@@ -119,6 +119,14 @@ extension AppL10n {
         String(format: text(.openStatusPage, appLanguage: appLanguage), service)
     }
 
+    static func serviceGuidanceIssueTitle(
+        _ issueCount: Int,
+        appLanguage: SpillAppLanguage = .persisted()
+    ) -> String {
+        let key: AppTextKey = issueCount == 1 ? .serviceGuidanceIssueTitleOne : .serviceGuidanceIssueTitleMany
+        return String(format: text(key, appLanguage: appLanguage), issueCount)
+    }
+
     static func eventsSummary(
         eventCount: Int,
         task: String,

@@ -7,6 +7,7 @@ struct CloudServiceStatusDashboardView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             header
+            guidanceCard
 
             if store.isLoading {
                 ProgressView()
@@ -53,6 +54,54 @@ struct CloudServiceStatusDashboardView: View {
 }
 
 private extension CloudServiceStatusDashboardView {
+    private var guidance: CloudServiceStatusGuidance {
+        CloudServiceStatusGuidance.make(
+            snapshot: store.snapshot,
+            isLoading: store.isLoading,
+            appLanguage: .persisted()
+        )
+    }
+
+    private var guidanceTint: Color {
+        if store.isLoading {
+            return .blue
+        }
+
+        return guidance.health?.serverStatusTint ?? .secondary
+    }
+
+    private var guidanceCard: some View {
+        HStack(alignment: .top, spacing: 9) {
+            Image(systemName: guidance.symbolName)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(guidanceTint)
+                .frame(width: 20, height: 20)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(guidance.title)
+                    .font(.system(size: 10.5, weight: .bold))
+                    .foregroundStyle(.primary)
+
+                Text(guidance.detail)
+                    .font(.system(size: 9.5, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(
+            guidanceTint.opacity(0.08),
+            in: RoundedRectangle(cornerRadius: 9, style: .continuous)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .stroke(guidanceTint.opacity(0.14), lineWidth: 0.5)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
     private var header: some View {
         HStack(alignment: .center, spacing: 8) {
             VStack(alignment: .leading, spacing: 2) {

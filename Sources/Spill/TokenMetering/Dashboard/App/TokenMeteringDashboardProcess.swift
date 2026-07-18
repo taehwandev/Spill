@@ -9,9 +9,16 @@ enum TokenMeteringDashboardProcess {
     static let openPreferencesNotification = Notification.Name("app.spill.open-preferences")
     static let settingsDidChangeNotification = Notification.Name("app.spill.settings-did-change")
     static let collectionRequestNotification = Notification.Name("app.spill.token-usage.collection-request")
+    static let cloudServiceStatusRefreshRequestNotification = Notification.Name(
+        "app.spill.cloud-service-status.refresh-request"
+    )
+    static let cloudServiceStatusDidChangeNotification = Notification.Name(
+        "app.spill.cloud-service-status.did-change"
+    )
     static let preferencesTabUserInfoKey = "tab"
     static let settingsKeyUserInfoKey = "key"
     static let collectionReasonUserInfoKey = "reason"
+    static let forceRefreshUserInfoKey = "force"
     static let tokenMeteringPreferencesTab = "tokens"
     static let developerOptionsPreferencesTab = "developer"
     static let appLanguageSettingsKey = "appLanguage"
@@ -89,6 +96,24 @@ enum TokenMeteringDashboardProcess {
             collectionRequestNotification,
             object: nil,
             userInfo: [collectionReasonUserInfoKey: reason],
+            deliverImmediately: true
+        )
+    }
+
+    static func postCloudServiceStatusRefreshRequest(force: Bool) {
+        DistributedNotificationCenter.default().postNotificationName(
+            cloudServiceStatusRefreshRequestNotification,
+            object: nil,
+            userInfo: [forceRefreshUserInfoKey: force],
+            deliverImmediately: true
+        )
+    }
+
+    static func postCloudServiceStatusDidChange() {
+        DistributedNotificationCenter.default().postNotificationName(
+            cloudServiceStatusDidChangeNotification,
+            object: nil,
+            userInfo: nil,
             deliverImmediately: true
         )
     }
