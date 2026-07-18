@@ -15,6 +15,22 @@ final class SpillPanelLayoutTests: XCTestCase {
         XCTAssertEqual(frame.maxY, anchorFrame.minY, accuracy: 0.001)
     }
 
+    func testDefaultFrameAttachesToMenuBarBoundaryWithoutTopGap() {
+        let layout = SpillPanelLayout()
+        let visibleFrame = NSRect(x: 0, y: 0, width: 1_440, height: 900)
+        let anchorFrame = NSRect(x: 707, y: visibleFrame.maxY, width: 26, height: 22)
+
+        let frame = layout.defaultFrame(
+            in: visibleFrame,
+            screen: nil,
+            anchorFrame: anchorFrame,
+            preferredSize: NSSize(width: 560, height: 480)
+        )
+
+        XCTAssertEqual(frame.midX, anchorFrame.midX, accuracy: 0.001)
+        XCTAssertEqual(frame.maxY, anchorFrame.minY, accuracy: 0.001)
+    }
+
     func testDefaultFrameClampsAnchoredPanelToRightEdge() {
         let layout = SpillPanelLayout()
         let visibleFrame = NSRect(x: 0, y: 0, width: 1_440, height: 900)

@@ -35,7 +35,8 @@ struct SpillPanelLayout {
         let fallbackY = visibleFrame.maxY - height
         let anchoredY = validAnchorFrame.map { min($0.minY, visibleFrame.maxY) - height }
         let minY = visibleFrame.minY + SpillPanelMetrics.edgeInset
-        let maxY = visibleFrame.maxY - SpillPanelMetrics.edgeInset - height
+        let topInset: CGFloat = validAnchorFrame == nil ? SpillPanelMetrics.edgeInset : 0
+        let maxY = visibleFrame.maxY - topInset - height
         let y = (anchoredY ?? fallbackY).clamped(to: minY...max(minY, maxY))
 
         return NSRect(x: x, y: y, width: width, height: height)
