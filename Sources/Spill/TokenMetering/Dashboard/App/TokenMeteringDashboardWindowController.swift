@@ -49,7 +49,6 @@ final class TokenMeteringDashboardWindowController: NSObject, NSWindowDelegate {
     }
 
     func show() {
-        let isReusingWindow = window != nil
         let window = ensureWindow()
         updateWindowTitle(window)
         constrainToVisibleScreen(window)
@@ -58,17 +57,15 @@ final class TokenMeteringDashboardWindowController: NSObject, NSWindowDelegate {
         window.orderFrontRegardless()
         window.makeKey()
         aiStatusStore.refreshInBackground()
+        store.refreshAsyncIfIdle()
         startAIStatusRefreshLoop()
         startTokenDataRefreshLoop()
-        if isReusingWindow {
-            store.refreshAsyncIfIdle()
-        }
-        scheduleDeferredRefreshAction()
+        scheduleDeferredCollectionRequest()
     }
 }
 
 extension TokenMeteringDashboardWindowController {
-    private func scheduleDeferredRefreshAction() {
+    private func scheduleDeferredCollectionRequest() {
         deferredRefreshTask?.cancel()
         deferredRefreshTask = Task { @MainActor [weak self] in
             let delay = self?.deferredRefreshDelayNanoseconds ?? 1_500_000_000
@@ -80,7 +77,7 @@ extension TokenMeteringDashboardWindowController {
             guard let self else {
                 return
             }
-            self.requestTokenDataRefresh()
+            self.refreshAction()
         }
     }
 
@@ -127,10 +124,10 @@ extension TokenMeteringDashboardWindowController {
     }
 
     private func requestTokenDataRefresh() {
-        refreshAction()
         guard !store.isDashboardRefreshInProgress else {
             return
         }
+        refreshAction()
         store.refreshAsync()
     }
 }

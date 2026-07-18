@@ -136,6 +136,10 @@
 - The standalone dashboard uses one shared minimum content-size contract of
   `1060×640` for both its AppKit window and SwiftUI root view. An autosaved or
   reopened window must be constrained to that contract before display.
+- Window lifecycle code owns automatic dashboard and AI-status refresh work.
+  SwiftUI appearance must not start a second copy of the same initial refresh
+  or timer loop. A deferred collection request may ask the main app for newer
+  local data, but it must not duplicate the initial local-store refresh.
 
 ## Acceptance
 

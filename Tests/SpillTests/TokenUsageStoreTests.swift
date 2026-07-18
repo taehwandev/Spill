@@ -1481,7 +1481,11 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(toolColor.contains("case .antigravity:"))
         XCTAssertTrue(dashboardStore.contains("rebuildSnapshotFromCurrentEventsAsync()"))
         XCTAssertTrue(dashboardView.contains("store.refreshAsync()"))
-        XCTAssertTrue(dashboardView.contains("store.refreshAsyncIfIdle()"))
+        XCTAssertFalse(dashboardView.contains("store.refreshAsyncIfIdle()"))
+        XCTAssertEqual(
+            dashboardView.components(separatedBy: "aiStatusStore.refreshInBackground()").count - 1,
+            1
+        )
         XCTAssertTrue(dashboardWindowController.contains("store.refreshAsyncIfIdle()"))
         XCTAssertTrue(dashboardWindowController.contains("store.refreshAsync()"))
         XCTAssertTrue(dashboardWindowController.contains("deferredRefreshDelayNanoseconds"))
@@ -2352,7 +2356,9 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(windowController.contains("window.isRestorable = false"))
         XCTAssertTrue(windowController.contains("func prepareForTermination()"))
         XCTAssertTrue(windowController.contains("aiStatusStore.cancelRefresh()"))
-        XCTAssertTrue(windowController.contains("scheduleDeferredRefreshAction()"))
+        XCTAssertFalse(windowController.contains("scheduleDeferredRefreshAction()"))
+        XCTAssertTrue(windowController.contains("scheduleDeferredCollectionRequest()"))
+        XCTAssertTrue(windowController.contains("self.refreshAction()"))
         XCTAssertTrue(windowController.contains("deferredRefreshDelayNanoseconds: UInt64 = 1_500_000_000"))
         XCTAssertTrue(windowController.contains("tokenDataRefreshIntervalNanoseconds: UInt64 = 15_000_000_000"))
         XCTAssertTrue(windowController.contains("Task.sleep(nanoseconds: delay)"))

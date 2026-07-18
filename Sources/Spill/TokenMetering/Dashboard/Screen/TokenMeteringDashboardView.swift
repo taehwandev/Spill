@@ -56,11 +56,9 @@ struct TokenMeteringDashboardView: View {
             if syncsVisibleAITools {
                 installAIToolVisibilityObserver()
             }
-            aiStatusStore.refreshInBackground()
             if syncsVisibleAITools {
                 syncVisibleAITools()
             }
-            store.refreshAsyncIfIdle()
         }
         .onDisappear {
             visibleAIToolsSyncTask?.cancel()
