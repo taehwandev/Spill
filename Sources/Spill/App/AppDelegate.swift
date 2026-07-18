@@ -332,6 +332,7 @@ extension AppDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        SpillCrashReporter.markCleanShutdown(processRole: "main_app")
         hotKeyController.stop()
         scanCoordinator.stop()
         aiStatusStore.cancelRefresh()
@@ -356,7 +357,6 @@ extension AppDelegate {
         statusRefreshTask?.cancel()
         sleepGuard.stop()
         spillPanelController.hide(animated: false)
-        SpillCrashReporter.markCleanShutdown(processRole: "main_app")
     }
 
     private func toggleSpillBar() {

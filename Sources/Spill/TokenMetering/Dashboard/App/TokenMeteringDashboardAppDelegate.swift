@@ -47,6 +47,7 @@ final class TokenMeteringDashboardAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        SpillCrashReporter.markCleanShutdown(processRole: "token_dashboard")
         aiStatusStore.cancelRefresh()
         cloudServiceStatusStore.cancelRefresh()
         windowController?.prepareForTermination()
@@ -60,7 +61,6 @@ final class TokenMeteringDashboardAppDelegate: NSObject, NSApplicationDelegate {
             name: TokenMeteringDashboardProcess.cloudServiceStatusDidChangeNotification,
             object: nil
         )
-        SpillCrashReporter.markCleanShutdown(processRole: "token_dashboard")
     }
 
 }

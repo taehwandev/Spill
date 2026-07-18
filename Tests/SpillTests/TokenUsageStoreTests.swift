@@ -2385,6 +2385,18 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(appDelegate.contains("aiStatusStore.cancelRefresh()"))
         XCTAssertTrue(appDelegate.contains("cloudServiceStatusStore.cancelRefresh()"))
         XCTAssertTrue(appDelegate.contains("preferencesWindowController.prepareForTermination()"))
+        XCTAssertLessThan(
+            try XCTUnwrap(
+                appDelegate.range(of: "SpillCrashReporter.markCleanShutdown(processRole: \"main_app\")")
+            ).lowerBound,
+            try XCTUnwrap(appDelegate.range(of: "tokenMeteringCoordinator.stop()")).lowerBound
+        )
+        XCTAssertLessThan(
+            try XCTUnwrap(
+                helperDelegate.range(of: "SpillCrashReporter.markCleanShutdown(processRole: \"token_dashboard\")")
+            ).lowerBound,
+            try XCTUnwrap(helperDelegate.range(of: "aiStatusStore.cancelRefresh()")).lowerBound
+        )
 
         XCTAssertTrue(buildScript.contains(#"HELPER_APP_NAME="Spill Token Dashboard.app""#))
         XCTAssertTrue(buildScript.contains("<string>Spill - AI Token Metering</string>"))
