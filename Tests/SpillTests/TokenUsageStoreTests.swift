@@ -2462,6 +2462,38 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertNil(resolved)
     }
 
+    func testTokenUsageCollectorResolvesNodeAndPython3FromVersionManagerShims() {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+
+        let volta = TokenUsageCollectorCoordinator.nodeExecutableURL(
+            environment: [:],
+            isExecutableFile: { $0 == "\(home)/.volta/bin/node" },
+            isRegularFile: { $0 == "\(home)/.volta/bin/node" }
+        )
+        XCTAssertEqual(volta?.path, "\(home)/.volta/bin/node")
+
+        let asdfNode = TokenUsageCollectorCoordinator.nodeExecutableURL(
+            environment: [:],
+            isExecutableFile: { $0 == "\(home)/.asdf/shims/node" },
+            isRegularFile: { $0 == "\(home)/.asdf/shims/node" }
+        )
+        XCTAssertEqual(asdfNode?.path, "\(home)/.asdf/shims/node")
+
+        let asdfPython = TokenUsageCollectorCoordinator.python3ExecutableURL(
+            environment: [:],
+            isExecutableFile: { $0 == "\(home)/.asdf/shims/python3" },
+            isRegularFile: { $0 == "\(home)/.asdf/shims/python3" }
+        )
+        XCTAssertEqual(asdfPython?.path, "\(home)/.asdf/shims/python3")
+
+        let pyenvPython = TokenUsageCollectorCoordinator.python3ExecutableURL(
+            environment: [:],
+            isExecutableFile: { $0 == "\(home)/.pyenv/shims/python3" },
+            isRegularFile: { $0 == "\(home)/.pyenv/shims/python3" }
+        )
+        XCTAssertEqual(pyenvPython?.path, "\(home)/.pyenv/shims/python3")
+    }
+
     @MainActor
     func testDashboardStoreAddsAndClearsLocalTestEvents() {
         let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())

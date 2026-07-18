@@ -16,11 +16,16 @@ extension TokenUsageCollectorCoordinator {
         // is set by many unrelated tools and shell profiles, so honoring it here would let
         // any local process or dotfile that happens to export NODE_BINARY redirect which
         // binary Spill executes.
+        let homeDirectory = FileManager.default.homeDirectoryForCurrentUser.path
         let candidates = [
             environment["SPILL_TOKEN_USAGE_NODE"],
             "/opt/homebrew/bin/node",
             "/usr/local/bin/node",
             "/usr/bin/node",
+            // Fixed shim locations for version managers (unlike PATH, these can't be
+            // redirected by an unrelated env var or dotfile).
+            "\(homeDirectory)/.volta/bin/node",
+            "\(homeDirectory)/.asdf/shims/node",
         ].compactMap { $0 }
 
         for candidate in candidates {
@@ -49,11 +54,16 @@ extension TokenUsageCollectorCoordinator {
             return !isDirectory.boolValue
         }
     ) -> URL? {
+        let homeDirectory = FileManager.default.homeDirectoryForCurrentUser.path
         let candidates = [
             environment["SPILL_TOKEN_USAGE_PYTHON3"],
             "/opt/homebrew/bin/python3",
             "/usr/local/bin/python3",
             "/usr/bin/python3",
+            // Fixed shim locations for version managers (unlike PATH, these can't be
+            // redirected by an unrelated env var or dotfile).
+            "\(homeDirectory)/.asdf/shims/python3",
+            "\(homeDirectory)/.pyenv/shims/python3",
         ].compactMap { $0 }
 
         for candidate in candidates {
