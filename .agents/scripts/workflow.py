@@ -12,6 +12,7 @@ Commands:
   python3 .agents/scripts/workflow.py code-gates
   python3 .agents/scripts/workflow.py build
   python3 .agents/scripts/workflow.py runtime-smoke
+  python3 .agents/scripts/workflow.py token-dashboard-render-smoke
   python3 .agents/scripts/workflow.py panel-open-smoke
   python3 .agents/scripts/workflow.py status-click-smoke
   python3 .agents/scripts/workflow.py panel-layout-smoke
@@ -393,6 +394,14 @@ def runtime_smoke() -> None:
     subprocess.run([str(ROOT / "scripts" / "verify-runtime-smoke.sh")], cwd=ROOT, check=True)
 
 
+def token_dashboard_render_smoke() -> None:
+    subprocess.run(
+        [str(ROOT / "scripts" / "verify-token-dashboard-render-smoke.sh")],
+        cwd=ROOT,
+        check=True,
+    )
+
+
 def panel_open_smoke() -> None:
     subprocess.run([str(ROOT / "scripts" / "verify-panel-open-smoke.sh")], cwd=ROOT, check=True)
 
@@ -432,6 +441,7 @@ def main() -> None:
     commands.add_parser("code-gates")
     commands.add_parser("build")
     commands.add_parser("runtime-smoke")
+    commands.add_parser("token-dashboard-render-smoke")
     commands.add_parser("panel-open-smoke")
     commands.add_parser("status-click-smoke")
     commands.add_parser("panel-layout-smoke")
@@ -457,6 +467,8 @@ def main() -> None:
         build()
     elif args.command == "runtime-smoke":
         runtime_smoke()
+    elif args.command == "token-dashboard-render-smoke":
+        token_dashboard_render_smoke()
     elif args.command == "panel-open-smoke":
         panel_open_smoke()
     elif args.command == "status-click-smoke":

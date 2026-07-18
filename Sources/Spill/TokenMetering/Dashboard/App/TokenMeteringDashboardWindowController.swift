@@ -188,6 +188,17 @@ extension TokenMeteringDashboardWindowController {
         window?.orderOut(nil)
     }
 
+    func prepareVisibleRenderForSmokeTest() -> CGSize? {
+        guard let window, window.isVisible, let contentView = window.contentView else {
+            return nil
+        }
+
+        contentView.layoutSubtreeIfNeeded()
+        contentView.displayIfNeeded()
+        window.displayIfNeeded()
+        return contentView.bounds.size
+    }
+
     private func cancelRefreshTasks() {
         aiStatusRefreshTask?.cancel()
         aiStatusRefreshTask = nil

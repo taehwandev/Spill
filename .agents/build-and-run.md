@@ -312,6 +312,7 @@ Use the narrowest command that proves the changed surface.
 | Swift package compile or tests | `swift build`, `swift test` |
 | Local app bundle | `./scripts/build-app.sh` |
 | Runtime app launch smoke | `python3 .agents/scripts/workflow.py runtime-smoke` |
+| Visible token dashboard release render | `python3 .agents/scripts/workflow.py token-dashboard-render-smoke` |
 | Token metering queue/adapters | `python3 .agents/scripts/workflow.py token-metering-smoke` |
 | Status item click path | `python3 .agents/scripts/workflow.py status-click-smoke` |
 | Hosted web portal | Private `taehwandev/Spill-web` repo: `cd web && npm test && npm run build` |
@@ -324,6 +325,24 @@ git diff --check
 
 Run broader commands only when the changed text describes behavior that must be
 proved or when repo-local workflow gates require them.
+
+### Visible Token Dashboard Render Smoke
+
+Use this after changing dashboard localization, AppKit/SwiftUI window sizing,
+dashboard refresh ownership, or helper launch behavior:
+
+```bash
+python3 .agents/scripts/workflow.py token-dashboard-render-smoke
+```
+
+The command builds the release `.build/Spill.app`, starts the nested dashboard
+helper directly in smoke mode, shows its real window, forces the first AppKit
+layout/display pass, and exits the helper. It fails when the helper does not
+report a visible render, the content is smaller than `1060×640`, or the measured
+launch-to-render interval is `1500 ms` or more. This complements
+`runtime-smoke`, whose standalone helper check intentionally uses
+`SPILL_TOKEN_DASHBOARD_SMOKE_NO_WINDOW=1` and therefore cannot detect SwiftUI
+layout hangs.
 
 ## Common Failure Modes
 

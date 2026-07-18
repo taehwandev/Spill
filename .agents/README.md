@@ -112,6 +112,13 @@ Run bundled app runtime smoke verification:
 python3 .agents/scripts/workflow.py runtime-smoke
 ```
 
+Run the release-bundled token dashboard with a real visible window and enforce
+its render-time and minimum-size budgets:
+
+```bash
+python3 .agents/scripts/workflow.py token-dashboard-render-smoke
+```
+
 Run compact panel layout smoke verification:
 
 ```bash

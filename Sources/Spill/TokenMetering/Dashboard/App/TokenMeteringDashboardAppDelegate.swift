@@ -24,6 +24,9 @@ final class TokenMeteringDashboardAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        let renderStartedAt = isRenderPerformanceSmokeTest
+            ? ProcessInfo.processInfo.systemUptime
+            : nil
         NSApp.setActivationPolicy(.regular)
         NSApp.appearance = settings.appearanceTheme.nsAppearance
         configureMainMenu()
@@ -35,7 +38,7 @@ final class TokenMeteringDashboardAppDelegate: NSObject, NSApplicationDelegate {
         }
 
         if isSmokeTest {
-            startSmokeTestExitTimer()
+            startSmokeTestExitTimer(renderStartedAt: renderStartedAt)
         }
     }
 
@@ -73,6 +76,10 @@ extension TokenMeteringDashboardAppDelegate {
 
     private var shouldHideWindowInSmokeTest: Bool {
         isSmokeTest && ProcessInfo.processInfo.environment["SPILL_TOKEN_DASHBOARD_SMOKE_NO_WINDOW"] == "1"
+    }
+
+    private var isRenderPerformanceSmokeTest: Bool {
+        isSmokeTest && ProcessInfo.processInfo.environment["SPILL_TOKEN_DASHBOARD_RENDER_SMOKE"] == "1"
     }
 
     private func dashboardWindowController() -> TokenMeteringDashboardWindowController {
@@ -233,8 +240,9 @@ extension TokenMeteringDashboardAppDelegate {
         }
     }
 
-    private func startSmokeTestExitTimer() {
+    private func startSmokeTestExitTimer(renderStartedAt: TimeInterval?) {
         print("SPILL_TOKEN_DASHBOARD_SMOKE_READY")
+        reportVisibleRenderIfNeeded(renderStartedAt: renderStartedAt)
 
         let configuredDelay = ProcessInfo.processInfo.environment["SPILL_SMOKE_TEST_EXIT_AFTER"]
             .flatMap(TimeInterval.init)
@@ -243,6 +251,29 @@ extension TokenMeteringDashboardAppDelegate {
         DispatchQueue.main.asyncAfter(deadline: .now() + exitDelay) {
             print("SPILL_TOKEN_DASHBOARD_SMOKE_EXIT")
             NSApp.terminate(nil)
+        }
+    }
+
+    private func reportVisibleRenderIfNeeded(renderStartedAt: TimeInterval?) {
+        guard isRenderPerformanceSmokeTest, let renderStartedAt else {
+            return
+        }
+
+        DispatchQueue.main.async { [weak self] in
+            guard let size = self?.windowController?.prepareVisibleRenderForSmokeTest() else {
+                print("SPILL_TOKEN_DASHBOARD_RENDER_FAILED")
+                return
+            }
+
+            let elapsedMilliseconds = max(
+                Int((ProcessInfo.processInfo.systemUptime - renderStartedAt) * 1_000),
+                0
+            )
+            print(
+                "SPILL_TOKEN_DASHBOARD_RENDER_READY "
+                    + "elapsed_ms=\(elapsedMilliseconds) "
+                    + "width=\(Int(size.width)) height=\(Int(size.height))"
+            )
         }
     }
 

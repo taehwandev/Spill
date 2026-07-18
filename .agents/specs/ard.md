@@ -429,6 +429,10 @@ Rules:
   minimum content size (`1060×640`). The AppKit window controller owns initial
   refresh, deferred collection, and visible-window refresh-loop lifetimes;
   SwiftUI appearance owns settings/observer synchronization only.
+- Release verification must exercise the visible helper window rather than the
+  existing no-window lifecycle smoke alone. The render smoke forces the first
+  layout/display, validates the shared minimum content size, and enforces a
+  local `1500 ms` regression budget before the Sentry `2000 ms` AppHang limit.
 
 ### ARD-005B: Local Token Metering Uses App-Owned Local Receivers
 

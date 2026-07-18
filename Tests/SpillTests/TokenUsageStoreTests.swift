@@ -2253,6 +2253,10 @@ final class TokenUsageStoreTests: XCTestCase {
         let windowController = try Self.source(named: "TokenMeteringDashboardWindowController.swift")
         let buildScript = try String(contentsOf: root.appendingPathComponent("scripts/build-app.sh"))
         let smokeScript = try String(contentsOf: root.appendingPathComponent("scripts/verify-runtime-smoke.sh"))
+        let renderSmokeScript = try String(
+            contentsOf: root.appendingPathComponent("scripts/verify-token-dashboard-render-smoke.sh")
+        )
+        let workflowScript = try String(contentsOf: root.appendingPathComponent(".agents/scripts/workflow.py"))
 
         XCTAssertTrue(main.contains("TokenMeteringDashboardProcess.isDashboardProcess"))
         XCTAssertTrue(main.contains("TokenMeteringDashboardLifecycle.shared.observeDashboardMainApplicationTermination"))
@@ -2319,6 +2323,8 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(helperDelegate.contains("applicationShouldTerminateAfterLastWindowClosed"))
         XCTAssertTrue(helperDelegate.contains("SPILL_TOKEN_DASHBOARD_SMOKE_READY"))
         XCTAssertTrue(helperDelegate.contains("SPILL_TOKEN_DASHBOARD_SMOKE_EXIT"))
+        XCTAssertTrue(helperDelegate.contains("SPILL_TOKEN_DASHBOARD_RENDER_SMOKE"))
+        XCTAssertTrue(helperDelegate.contains("SPILL_TOKEN_DASHBOARD_RENDER_READY"))
         XCTAssertTrue(helperDelegate.contains("Spill - AI Token Metering"))
         XCTAssertTrue(helperDelegate.contains("Quit Spill - AI Token Metering"))
         XCTAssertTrue(helperDelegate.contains("shouldHideWindowInSmokeTest"))
@@ -2373,6 +2379,7 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(windowController.contains("requestTokenDataRefresh()"))
         XCTAssertTrue(windowController.contains("store.refreshAsync()"))
         XCTAssertTrue(windowController.contains("!store.isDashboardRefreshInProgress"))
+        XCTAssertTrue(windowController.contains("prepareVisibleRenderForSmokeTest()"))
         XCTAssertTrue(appDelegate.contains("SpillCrashReporter.markCleanShutdown(processRole: \"main_app\")"))
         XCTAssertTrue(appDelegate.contains("tokenMeteringCoordinator.stop()"))
         XCTAssertTrue(appDelegate.contains("aiStatusStore.cancelRefresh()"))
@@ -2396,6 +2403,11 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(smokeScript.contains("SPILL_TOKEN_DASHBOARD_LAUNCH_SMOKE_DUPLICATE_IGNORED"))
         XCTAssertTrue(smokeScript.contains("SPILL_TOKEN_DASHBOARD_SMOKE_READY"))
         XCTAssertTrue(smokeScript.contains("SPILL_TOKEN_DASHBOARD_SMOKE_EXIT"))
+        XCTAssertTrue(renderSmokeScript.contains("SPILL_TOKEN_DASHBOARD_RENDER_SMOKE=1"))
+        XCTAssertTrue(renderSmokeScript.contains("SPILL_TOKEN_DASHBOARD_RENDER_READY"))
+        XCTAssertTrue(renderSmokeScript.contains("RENDER_BUDGET_MS=1500"))
+        XCTAssertFalse(renderSmokeScript.contains("SPILL_TOKEN_DASHBOARD_SMOKE_NO_WINDOW"))
+        XCTAssertTrue(workflowScript.contains("token-dashboard-render-smoke"))
     }
 
     func testTokenDashboardHelperURLResolution() {

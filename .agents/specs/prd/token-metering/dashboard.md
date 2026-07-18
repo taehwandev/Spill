@@ -170,3 +170,7 @@
 - Verify every scope-sensitive surface updates immediately and consistently.
 - Verify raw accounting, storage, and sync remain cache-inclusive.
 - Verify loading, empty, onboarding, and normal layouts retain their major regions.
+- Verify the release-bundled helper with
+  `python3 .agents/scripts/workflow.py token-dashboard-render-smoke`. The smoke
+  must show the real window, force its first layout/display, confirm content is
+  at least `1060×640`, and stay below the local regression budget of `1500 ms`.
