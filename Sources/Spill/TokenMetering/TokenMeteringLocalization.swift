@@ -326,6 +326,34 @@ enum TokenMeteringTextKey: String {
 enum TokenMeteringL10n {
     private static let tableName = "TokenMetering"
     private static let keyPrefix = "token_metering"
+    private static let cachedResourceBundle: Bundle? = {
+        if let packagedBundle = packagedResourceBundle() {
+            return packagedBundle
+        }
+
+        #if DEBUG
+        return .module
+        #else
+        return nil
+        #endif
+    }()
+    private static let cachedLocalizedBundles: [TokenMeteringLanguage: Bundle] = {
+        guard let resourceBundle = cachedResourceBundle else {
+            return [:]
+        }
+
+        return Dictionary(uniqueKeysWithValues: TokenMeteringLanguage.allCases.compactMap { language in
+            guard let path = resourceBundle.path(
+                forResource: language.localizationResourceName,
+                ofType: "lproj"
+            ),
+                let bundle = Bundle(path: path)
+            else {
+                return nil
+            }
+            return (language, bundle)
+        })
+    }()
 
     private static let stringCatalog: StringCatalog? = {
         guard let bundle = resourceBundle() else {
@@ -536,24 +564,11 @@ private extension TokenMeteringL10n {
     }
 
     private static func localizedBundle(for language: TokenMeteringLanguage) -> Bundle? {
-        guard let path = resourceBundle()?.path(forResource: language.localizationResourceName, ofType: "lproj"),
-              let bundle = Bundle(path: path)
-        else {
-            return resourceBundle()
-        }
-        return bundle
+        cachedLocalizedBundles[language] ?? cachedResourceBundle
     }
 
     private static func resourceBundle() -> Bundle? {
-        if let packagedBundle = packagedResourceBundle() {
-            return packagedBundle
-        }
-
-        #if DEBUG
-        return .module
-        #else
-        return nil
-        #endif
+        return cachedResourceBundle
     }
 
     private static func packagedResourceBundle(

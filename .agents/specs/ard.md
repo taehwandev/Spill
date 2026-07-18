@@ -415,6 +415,8 @@ Rules:
 - The local store remains app-owned and token-only. The helper must not add
   cloud sync, auth, prompt logging, transcript inspection, or broad filesystem
   access.
+- Token metering resource and language bundles are resolved once per helper
+  process and reused across SwiftUI text lookups.
 
 ### ARD-005B: Local Token Metering Uses App-Owned Local Receivers
 
