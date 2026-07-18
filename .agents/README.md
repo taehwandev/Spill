@@ -27,9 +27,11 @@ helpers here.
 
 ## Documents
 
-- `specs/prd.md`: Product requirements and scope.
+- `specs/prd.md`: Product direction, cross-domain invariants, and the canonical PRD index.
+- `specs/prd/`: Canonical domain PRDs. Detailed requirements live in exactly one owning domain document.
+- `specs/prd/token-metering/history-import.md`: Canonical local token history import requirements for Codex, Claude Code, and Antigravity/AGY.
+- `specs/token-history-import.md`: Compatibility link for the former token history import path.
 - `specs/ard.md`: Architecture requirements, decisions, constraints, and module boundaries.
-- `specs/token-history-import.md`: Explicit local token history import requirements and architecture for Codex, Claude Code, and Antigravity/AGY.
 - `build-and-run.md`: Agent-facing app build, restart, packaging, adapter resource, and token metering hook verification guide.
 - `checklists/release.md`: Spill-specific release checklist used with AgentPlaybook release readiness.
 - `tasks/roadmap.yml`: Structured implementation milestones and acceptance checks.
@@ -58,7 +60,7 @@ The app should not:
 
 ## Agent Rules
 
-1. Read `specs/prd.md` and `specs/ard.md` before changing product behavior.
+1. Read `specs/prd.md`, every applicable linked domain PRD, and `specs/ard.md` before changing product behavior.
 2. Follow AgentPlaybook workflow cards for execution order and verification.
 3. Keep changes small and milestone-oriented.
 4. Prefer public macOS APIs. Accessibility is allowed when explicitly scoped.

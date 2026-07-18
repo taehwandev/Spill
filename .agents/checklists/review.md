@@ -6,9 +6,17 @@ Use this for verifier agents.
 
 List bugs, regressions, and missing tests before summary.
 
+## Commit Review Scope
+
+- [ ] When one dirty worktree will be split into independent commits, review each
+  planned commit with its explicit path set instead of treating the union as one
+  implementation scope.
+- [ ] Inspect the staged diff for each commit again before committing, even when
+  the same paths already passed the broader task verification.
+
 ## Product Alignment
 
-- [ ] Matches `.agents/specs/prd.md`.
+- [ ] Matches `.agents/specs/prd.md` and every applicable canonical domain PRD linked from it.
 - [ ] Does not turn Spill into a large dashboard.
 - [ ] Does not promise complete hidden menu bar recovery.
 

@@ -41,6 +41,7 @@ tasks:
       - Sources/Spill/<File.swift>
     read_scope:
       - .agents/specs/prd.md
+      - .agents/specs/prd/<owning-domain-prd>.md
       - .agents/specs/ard.md
     forbidden_scope:
       - Sources/Spill/<UnrelatedFile.swift>

@@ -296,7 +296,8 @@ Claude Code native active importer:
 Before PRD, ARD, task breakdown, or implementation work:
 
 1. Read `.agents/README.md`.
-2. Read `.agents/specs/prd.md` and `.agents/specs/ard.md`.
+2. Read `.agents/specs/prd.md`, every applicable canonical domain PRD linked
+   from that index, and `.agents/specs/ard.md`.
 3. Follow the relevant AgentPlaybook workflow cards, starting from
    `${AGENTPLAYBOOK_ROOT}/workflows/agent-task-lifecycle.md`.
 4. Apply the shared AgentPlaybook ambiguity gate before PRD, ARD, task

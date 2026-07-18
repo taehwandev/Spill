@@ -25,6 +25,7 @@ PRD authoring gate:
 Inputs:
 
 - `.agents/specs/prd.md`
+- `.agents/specs/prd/<owning-domain-prd>.md`
 - `.agents/runs/<feature>/00-intake.md`
 
 Output:
