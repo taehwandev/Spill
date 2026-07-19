@@ -1,12 +1,12 @@
-<!-- BEGIN MANAGED AGENTPLAYBOOK POINTER -->
-## AgentPlaybook Pointer
+<!-- BEGIN MANAGED TAO AGENT OS POINTER -->
+## Tao Agent OS Pointer
 
 Read this repository's `AGENTS.md` first. It contains the active shared
-AgentPlaybook routing block and repo-local priority rules. Keep this file thin:
+Tao Agent OS routing block and repo-local priority rules. Keep this file thin:
 only runtime-specific notes should live here, and shared workflow or skill
 guidance must route through `AGENTS.md`.
 
-<!-- END MANAGED AGENTPLAYBOOK POINTER -->
+<!-- END MANAGED TAO AGENT OS POINTER -->
 
 # Spill Agent Docs
 
@@ -15,12 +15,12 @@ repository commands, verification, and local constraints.
 
 Repo-local Spill docs define product direction, paths, commands, release policy,
 and macOS-specific constraints. Platform-neutral agent behavior lives in the
-shared AgentPlaybook checkout selected by `AGENTPLAYBOOK_HOME`. Keep personal
+shared Tao Agent OS checkout selected by `TAO_HOME`. Keep personal
 absolute checkout paths out of committed repo-local docs. If a future team
 pinned checkout is approved, use a repo-relative root such as
-`.agents/AgentPlaybook`.
+`.agents/tao-agent-os`.
 
-Use AgentPlaybook `index.md` to load only the smallest relevant common,
+Use Tao Agent OS `index.md` to load only the smallest relevant common,
 workflow, platform, or review cards. This repo does not keep local workflow
 overlays; keep only Spill-specific policy, commands, specs, and verification
 helpers here.
@@ -33,7 +33,7 @@ helpers here.
 - `specs/token-history-import.md`: Compatibility link for the former token history import path.
 - `specs/ard.md`: Architecture requirements, decisions, constraints, and module boundaries.
 - `build-and-run.md`: Agent-facing app build, restart, packaging, adapter resource, and token metering hook verification guide.
-- `checklists/release.md`: Spill-specific release checklist used with AgentPlaybook release readiness.
+- `checklists/release.md`: Spill-specific release checklist used with Tao Agent OS release readiness.
 - `tasks/roadmap.yml`: Structured implementation milestones and acceptance checks.
 - `design/stitch.md`: Stitch project and screen references for UI-scoped work.
 - `templates/`: Feature-run artifact templates.
@@ -61,12 +61,12 @@ The app should not:
 ## Agent Rules
 
 1. Read `specs/prd.md`, every applicable linked domain PRD, and `specs/ard.md` before changing product behavior.
-2. Follow AgentPlaybook workflow cards for execution order and verification.
+2. Follow Tao Agent OS workflow cards for execution order and verification.
 3. Keep changes small and milestone-oriented.
 4. Prefer public macOS APIs. Accessibility is allowed when explicitly scoped.
 5. When a behavior is best-effort, show that clearly in UI and docs.
-6. Before writing a feature PRD, complete the intake necessity check and the shared AgentPlaybook ambiguity gate.
-7. Follow AgentPlaybook for general agent discipline, editing safety, reviews, and verification policy.
+6. Before writing a feature PRD, complete the intake necessity check and the shared Tao Agent OS ambiguity gate.
+7. Follow Tao Agent OS for general agent discipline, editing safety, reviews, and verification policy.
 8. Write repository docs, task artifacts, comments, and scripts in English.
 9. For UI-scoped work, inspect the Stitch source in `design/stitch.md` before implementing SwiftUI changes.
 
@@ -140,7 +140,7 @@ python3 .agents/scripts/workflow.py status-click-smoke
 Release from the current repository state:
 
 ```bash
-sed -n '1,220p' "${AGENTPLAYBOOK_HOME}/workflows/skills/release-readiness/SKILL.md"
+sed -n '1,220p' "${TAO_HOME}/workflows/skills/release-readiness/SKILL.md"
 ```
 
 Use `README.md` distribution notes, `VIBEGUARD.md`, and

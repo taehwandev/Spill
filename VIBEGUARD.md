@@ -6,14 +6,14 @@ changes.
 
 Shared rules source:
 
-Default: `~/Documents/KeyFlowVault/AgentPlaybook`
+Default: `~/git/tao-agent-os`
 
-If the checkout lives elsewhere, set `AGENTPLAYBOOK_HOME` to that root.
+If the checkout lives elsewhere, set `TAO_HOME` to that root.
 
 Required command shape:
 
 ```bash
-npx --yes @taehwandev/vibeguard audit . --rules "${AGENTPLAYBOOK_HOME:-$HOME/Documents/KeyFlowVault/AgentPlaybook}"
+npx --yes @taehwandev/vibeguard audit . --rules "${TAO_HOME:-$HOME/git/tao-agent-os}"
 ```
 
 Use `--fix` only for low-risk VibeGuard fixes, then inspect the diff.
@@ -34,7 +34,7 @@ Use `--fix` only for low-risk VibeGuard fixes, then inspect the diff.
   confirm the source file and explain the generated-artifact limitation.
 - Current VibeGuard scans SwiftPM `.build` artifacts and does not expose an
   ignore-dir setting. `maxFileLines` is raised in `.vibeguard.json` to avoid
-  generated-artifact false blocks; use AgentPlaybook review and Spill workflow
+  generated-artifact false blocks; use Tao Agent OS review and Spill workflow
   gates to flag oversized source files.
 - Spill is a local macOS app. Adding backend services, analytics, paid APIs,
   model calls, telemetry, or recurring infrastructure requires explicit

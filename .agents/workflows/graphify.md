@@ -1,1 +1,1 @@
-../../.agentplaybook/skills/graphify/runtime/antigravity/workflow.md
+../../.tao/skills/graphify/runtime/antigravity/workflow.md

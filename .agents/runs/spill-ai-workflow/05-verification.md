@@ -12,8 +12,8 @@
 - [x] `python3 .agents/scripts/workflow.py code-gates`
 - [x] `python3 .agents/scripts/workflow.py panel-layout-smoke`
 - [x] `python3 .agents/scripts/workflow.py verify`
-- [x] `npx --yes @taehwandev/vibeguard audit . --rules /Users/taehwankwon/Documents/KeyFlowVault/AgentPlaybook`
-- [x] `npx --yes @taehwandev/vibeguard evidence . --rules /Users/taehwankwon/Documents/KeyFlowVault/AgentPlaybook`
+- [x] `npx --yes @taehwandev/vibeguard audit . --rules /Users/taehwankwon/git/tao-agent-os`
+- [x] `npx --yes @taehwandev/vibeguard evidence . --rules /Users/taehwankwon/git/tao-agent-os`
 
 ## Manual Checks
 

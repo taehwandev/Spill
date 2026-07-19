@@ -1,6 +1,6 @@
 # Release Checklist
 
-Use AgentPlaybook `workflows/release-readiness.md` as the shared release
+Use Tao Agent OS `workflows/release-readiness.md` as the shared release
 procedure. This checklist is the Spill-specific quick gate before closeout.
 
 ## Scope

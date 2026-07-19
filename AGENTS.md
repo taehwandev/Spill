@@ -1,47 +1,47 @@
-<!-- BEGIN MANAGED AGENTPLAYBOOK ROUTING -->
-## AgentPlaybook Active Routing
+<!-- BEGIN MANAGED TAO AGENT OS ROUTING -->
+## Tao Agent OS Active Routing
 
-This managed block is the active shared AgentPlaybook workflow link for this
+This managed block is the active shared Tao Agent OS workflow link for this
 repository. Keep repo-local instructions in this file as the source of truth for
 project paths, commands, domain rules, and product policy. If another
-AgentPlaybook section appears elsewhere, this managed block wins for shared
+Tao Agent OS section appears elsewhere, this managed block wins for shared
 workflow routing while repo-specific rules still win for local facts.
 
-Use the existing shared AgentPlaybook root. In committed repo-local files, keep
-the reference portable: set `AGENTPLAYBOOK_HOME` in the local shell/runtime, or
-use a repo-pinned `.agents/AgentPlaybook` only when this repo intentionally owns
-one. Do not clone, vendor, download, or commit a second AgentPlaybook root unless
+Use the existing shared Tao Agent OS root. In committed repo-local files, keep
+the reference portable: set `TAO_HOME` in the local shell/runtime, or
+use a repo-pinned `.agents/tao-agent-os` only when this repo intentionally owns
+one. Do not clone, vendor, download, or commit a second Tao Agent OS root unless
 the user explicitly approves after seeing the existing root path.
 
 Shared entrypoints:
 
 ```text
-${AGENTPLAYBOOK_HOME}/AGENTS.md
-${AGENTPLAYBOOK_HOME}/index.md
-${AGENTPLAYBOOK_HOME}/scripts/agent-entry.py
-${AGENTPLAYBOOK_HOME}/scripts/project-discover.py
-${AGENTPLAYBOOK_HOME}/scripts/agent-hook.py
-${AGENTPLAYBOOK_HOME}/scripts/workflow.py
-${AGENTPLAYBOOK_HOME}/scripts/agent-preflight.py
-${AGENTPLAYBOOK_HOME}/scripts/agent-finish-check.py
+${TAO_HOME}/AGENTS.md
+${TAO_HOME}/index.md
+${TAO_HOME}/scripts/agent-entry.py
+${TAO_HOME}/scripts/project-discover.py
+${TAO_HOME}/scripts/agent-hook.py
+${TAO_HOME}/scripts/workflow.py
+${TAO_HOME}/scripts/agent-preflight.py
+${TAO_HOME}/scripts/agent-finish-check.py
 ```
 
-Before project work, read repo-local guidance first, then use AgentPlaybook only
+Before project work, read repo-local guidance first, then use Tao Agent OS only
 to select the smallest relevant shared cards. Keep shared workflow and skill
-guidance in AgentPlaybook; do not create repo-local skill documents merely to
+guidance in Tao Agent OS; do not create repo-local skill documents merely to
 mirror shared behavior. Keep repo-local skills, workflows, wiki pages, or
 runbooks only when they contain product-specific facts, commands, domain policy,
 or verification that cannot be shared safely.
 
 For every multi-step task, run the start hook before selecting shared docs,
 editing, reviewing, committing, or reporting completion. When executing wrapper
-commands from an agent runtime, resolve `AGENTPLAYBOOK_HOME` to an absolute path
+commands from an agent runtime, resolve `TAO_HOME` to an absolute path
 first and use that absolute script path in the command. Do not leave `$HOME`,
-`${HOME}`, `~`, `$(pwd)`-based script paths, or relative AgentPlaybook paths in
+`${HOME}`, `~`, `$(pwd)`-based script paths, or relative Tao Agent OS paths in
 commands that may be persisted as permission rules.
 
 ```bash
-python3 /absolute/path/to/AgentPlaybook/scripts/agent-hook.py start --project "$(pwd)" --rules /absolute/path/to/AgentPlaybook --command <command> --request "<USER_REQUEST>"
+python3 /absolute/path/to/tao-agent-os/scripts/agent-hook.py start --project "$(pwd)" --rules /absolute/path/to/tao-agent-os --command <command> --request "<USER_REQUEST>"
 ```
 
 Use the returned route manifest as the task checklist. If the route includes
@@ -72,15 +72,15 @@ action, or acceptance criteria do or do not require a documentation update. The
 later `documentation` gate must prove the actual update or unchanged/not
 applicable decision.
 
-<!-- BEGIN MANAGED AGENTPLAYBOOK DOC ENFORCEMENT -->
+<!-- BEGIN MANAGED TAO AGENT OS DOC ENFORCEMENT -->
 Baseline documentation enforcement — the `documentation` gate always runs and is
 non-empty, `unchanged` needs inspection proof, skipping docs needs recorded user
 approval, and a `triage`/`plan` roadmap needs `product route re-entry` with PRD
-coverage — is enforced centrally by the shared AgentPlaybook finish-check and is
+coverage — is enforced centrally by the shared Tao Agent OS finish-check and is
 identical across Codex, Claude, and Antigravity. Do not duplicate the rules
 here. Source of truth and exception process:
-`workflows/skills/documentation-update/SKILL.md` in the shared AgentPlaybook.
-<!-- END MANAGED AGENTPLAYBOOK DOC ENFORCEMENT -->
+`workflows/skills/documentation-update/SKILL.md` in the shared Tao Agent OS.
+<!-- END MANAGED TAO AGENT OS DOC ENFORCEMENT -->
 
 If the route, repo workflow, or user asks for Grill-Me, use the actual Grill-Me
 protocol, skill, or `/grilling` session as the question drill. Do not replace it
@@ -100,41 +100,41 @@ another attempt.
 
 VibeGuard is required before documentation, code, configuration, dependency,
 data, deployment, or credential changes and again before finishing. Run it with
-the selected AgentPlaybook root as the rule source. Do not run VibeGuard `setup`
+the selected Tao Agent OS root as the rule source. Do not run VibeGuard `setup`
 or `update` blindly; preserve existing guardrails unless the user explicitly
 chooses a refresh/setup mode. Human-visible gate status must use only
 `🐱🟢 SUCCESS` or `🐱🔴 FAIL`.
-<!-- END MANAGED AGENTPLAYBOOK ROUTING -->
+<!-- END MANAGED TAO AGENT OS ROUTING -->
 # Agent Entry Point
 
 Repo-local Spill instructions remain the source of truth for product direction,
 paths, commands, release policy, and macOS-specific constraints. Agent workflow
-guidance comes from the local AgentPlaybook checkout; do not keep repo-local
-workflow overlays when a shared AgentPlaybook card covers the same behavior.
+guidance comes from the local Tao Agent OS checkout; do not keep repo-local
+workflow overlays when a shared Tao Agent OS card covers the same behavior.
 
-Shared AgentPlaybook library:
+Shared Tao Agent OS library:
 
-- Use the existing local checkout via `AGENTPLAYBOOK_HOME`, falling back to the
+- Use the existing local checkout via `TAO_HOME`, falling back to the
   current local shared checkout when the variable is unset.
-- Do not commit a personal absolute AgentPlaybook path into repo-local docs.
-- For personal shared installs, set `AGENTPLAYBOOK_HOME` in the runtime
+- Do not commit a personal absolute Tao Agent OS path into repo-local docs.
+- For personal shared installs, set `TAO_HOME` in the runtime
   environment.
 - For a future team-pinned install, use a repo-relative checkout such as
-  `.agents/AgentPlaybook` only after explicit approval.
+  `.agents/tao-agent-os` only after explicit approval.
 
 ```bash
-AGENTPLAYBOOK_ROOT="${AGENTPLAYBOOK_HOME:-$HOME/Documents/KeyFlowVault/AgentPlaybook}"
+TAO_ROOT="${TAO_HOME:-$HOME/git/tao-agent-os}"
 ```
 
-- `${AGENTPLAYBOOK_ROOT}/AGENTS.md`
-- `${AGENTPLAYBOOK_ROOT}/index.md`
-- `${AGENTPLAYBOOK_ROOT}/scripts/agent-hook.py`
-- `${AGENTPLAYBOOK_ROOT}/scripts/workflow.py`
-- `${AGENTPLAYBOOK_ROOT}/scripts/agent-preflight.py`
-- `${AGENTPLAYBOOK_ROOT}/scripts/agent-finish-check.py`
+- `${TAO_ROOT}/AGENTS.md`
+- `${TAO_ROOT}/index.md`
+- `${TAO_ROOT}/scripts/agent-hook.py`
+- `${TAO_ROOT}/scripts/workflow.py`
+- `${TAO_ROOT}/scripts/agent-preflight.py`
+- `${TAO_ROOT}/scripts/agent-finish-check.py`
 
 Use repo-local Spill instructions for product and command details. Use
-AgentPlaybook for common, workflow, platform, and review cards. Load the
+Tao Agent OS for common, workflow, platform, and review cards. Load the
 smallest relevant shared cards and link to them instead of copying shared
 workflow guidance into this repo.
 
@@ -143,7 +143,7 @@ Runtime-specific routing labels:
 - This `AGENTS.md` is the single project-root instruction entry point for Codex,
   Claude Code, and Antigravity/AGY. Do not add separate runtime-specific root
   docs when the same guidance can live here or in `.agents/`.
-- When running AgentPlaybook workflow, preflight, or finish commands from
+- When running Tao Agent OS workflow, preflight, or finish commands from
   Antigravity/AGY, use `SPILL_AI_TOOL=antigravity` or rely on the environment
   installed by Spill token metering setup. Use the current runtime tool label
   for other agents so safe workflow labels land in the correct label context.
@@ -222,7 +222,7 @@ Runtime hook evidence and privacy:
 Routing and executable evidence:
 
 - For multi-step tasks, run
-  `python3 "${AGENTPLAYBOOK_ROOT}/scripts/agent-hook.py" start --project "$(pwd)" --rules "${AGENTPLAYBOOK_ROOT}" --command <command> --request "<USER_REQUEST>"`
+  `python3 "${TAO_ROOT}/scripts/agent-hook.py" start --project "$(pwd)" --rules "${TAO_ROOT}" --command <command> --request "<USER_REQUEST>"`
   before selecting shared docs, editing, reviewing, committing, or reporting
   completion. If the current request is a direct question, answer it first, then
   run the start hook with `--request-classified --classification-evidence
@@ -243,7 +243,7 @@ Routing and executable evidence:
 - `--request-classified` must include `--classification-evidence`; if a request
   asks for a question drill, missing drill evidence is 🐱🔴 FAIL and requires
   missed-gate recovery.
-- Wrapper evidence under `.agentplaybook/` is local runtime evidence, not source.
+- Wrapper evidence under `.tao/` is local runtime evidence, not source.
 
 Cross-surface settings impact:
 
@@ -298,16 +298,16 @@ Before PRD, ARD, task breakdown, or implementation work:
 1. Read `.agents/README.md`.
 2. Read `.agents/specs/prd.md`, every applicable canonical domain PRD linked
    from that index, and `.agents/specs/ard.md`.
-3. Follow the relevant AgentPlaybook workflow cards, starting from
-   `${AGENTPLAYBOOK_ROOT}/workflows/agent-task-lifecycle.md`.
-4. Apply the shared AgentPlaybook ambiguity gate before PRD, ARD, task
+3. Follow the relevant Tao Agent OS workflow cards, starting from
+   `${TAO_ROOT}/workflows/agent-task-lifecycle.md`.
+4. Apply the shared Tao Agent OS ambiguity gate before PRD, ARD, task
    breakdown, implementation planning, or code work when scope or intent is
    unclear.
 5. For safety-sensitive work, follow `VIBEGUARD.md`.
 
 VibeGuard gate:
 
-- Run `npx --yes @taehwandev/vibeguard audit . --rules "${AGENTPLAYBOOK_ROOT}"` before and after documentation, code, config, dependency, data, deployment, or credential changes.
+- Run `npx --yes @taehwandev/vibeguard audit . --rules "${TAO_ROOT}"` before and after documentation, code, config, dependency, data, deployment, or credential changes.
 - Use `--fix` only for low-risk VibeGuard fixes, then inspect the diff.
 - Never print secret values. Ask before destructive data actions, production deploys, signing/notarization credential changes, paid-service/model usage increases, or recurring infrastructure.
 
