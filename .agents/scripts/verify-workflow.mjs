@@ -6,9 +6,9 @@ import path from "node:path";
 
 const root = process.cwd();
 const agentDocsPath = path.join(root, ".agents/agent-docs.json");
-const agentPlaybookRoot =
-  process.env.AGENTPLAYBOOK_HOME ??
-  path.join(os.homedir(), "Documents/KeyFlowVault/AgentPlaybook");
+const taoRoot =
+  process.env.TAO_HOME ??
+  path.join(os.homedir(), "git/tao-agent-os");
 
 function fail(message) {
   console.error(`FAIL: ${message}`);
@@ -38,15 +38,15 @@ for (const doc of agentDocs.requiredDocs ?? []) {
   }
 }
 
-if (!fs.existsSync(agentPlaybookRoot)) {
-  ok(`AgentPlaybook not installed at ${agentPlaybookRoot}; skipping shared docs check`);
+if (!fs.existsSync(taoRoot)) {
+  ok(`Tao Agent OS not installed at ${taoRoot}; skipping shared docs check`);
 } else {
-  for (const doc of agentDocs.requiredAgentPlaybookDocs ?? []) {
-    const fullPath = path.join(agentPlaybookRoot, doc);
+  for (const doc of agentDocs.requiredTaoDocs ?? []) {
+    const fullPath = path.join(taoRoot, doc);
     if (fs.existsSync(fullPath)) {
-      ok(`found AgentPlaybook ${doc}`);
+      ok(`found Tao Agent OS ${doc}`);
     } else {
-      fail(`missing AgentPlaybook ${doc} at ${agentPlaybookRoot}`);
+      fail(`missing Tao Agent OS ${doc} at ${taoRoot}`);
     }
   }
 }
