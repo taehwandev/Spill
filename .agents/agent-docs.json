@@ -1,6 +1,6 @@
 {
   "version": 3,
-  "name": "Spill Agent Docs With AgentPlaybook Workflow",
+  "name": "Spill Agent Docs With Tao Agent OS Workflow",
   "requiredDocs": [
     "AGENTS.md",
     "CLAUDE.md",
@@ -34,7 +34,7 @@
     "scripts/verify-runtime-smoke.sh",
     "VIBEGUARD.md"
   ],
-  "requiredAgentPlaybookDocs": [
+  "requiredTaoDocs": [
     "AGENTS.md",
     "index.md",
     "workflows/skills/agent-task-lifecycle/SKILL.md",
@@ -53,7 +53,7 @@
     "No private APIs in MVP",
     "One visible menu bar trigger",
     "Every feature unit must pass a necessity check before implementation",
-    "Agents must classify unknowns through the shared AgentPlaybook ambiguity gate before PRD authoring",
+    "Agents must classify unknowns through the shared Tao Agent OS ambiguity gate before PRD authoring",
     "Agents must ask the maintainer when blocker unknowns remain unresolved",
     "Every non-trivial feature must pass PRD and ARD gates before implementation",
     "App startup, lifecycle, packaging, and status item changes must run runtime smoke verification",

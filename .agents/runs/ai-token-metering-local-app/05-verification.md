@@ -9,7 +9,7 @@
 - [x] `npm test` from `web/` - passed; 4 sync-safe sanitizer tests.
 - [x] `npm run build` from `web/` - passed.
 - [x] `git diff --check` - passed.
-- [x] `npx --yes @taehwandev/vibeguard audit . --rules /Users/taehwankwon/Documents/KeyFlowVault/AgentPlaybook` - passed; Overall Ready, no findings.
+- [x] `npx --yes @taehwandev/vibeguard audit . --rules /Users/taehwankwon/git/tao-agent-os` - passed; Overall Ready, no findings.
 
 ## Manual Checks
 

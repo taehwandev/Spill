@@ -51,7 +51,7 @@ TEXT_SUFFIXES = {
 }
 TEXT_FILENAMES = {"Package.swift", ".gitignore"}
 EXCLUDED_DIRS = {
-    ".agentplaybook",
+    ".tao",
     ".claude",
     ".git",
     ".build",
@@ -109,23 +109,23 @@ def read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def agentplaybook_root() -> Path:
+def tao_root() -> Path:
     return Path(
         os.environ.get(
-            "AGENTPLAYBOOK_HOME",
-            str(Path.home() / "Documents" / "KeyFlowVault" / "AgentPlaybook"),
+            "TAO_HOME",
+            str(Path.home() / "git" / "tao-agent-os"),
         )
     ).expanduser()
 
 
-def agentplaybook_workflow_script() -> Path:
-    return agentplaybook_root() / "scripts" / "workflow.py"
+def tao_workflow_script() -> Path:
+    return tao_root() / "scripts" / "workflow.py"
 
 
-def route_agentplaybook(route_args: list[str]) -> None:
-    script = agentplaybook_workflow_script()
+def route_tao(route_args: list[str]) -> None:
+    script = tao_workflow_script()
     if not script.exists():
-        raise SystemExit(f"missing AgentPlaybook workflow script at {script}")
+        raise SystemExit(f"missing Tao Agent OS workflow script at {script}")
 
     completed = subprocess.run(
         [sys.executable, str(script), "route", *route_args],
@@ -179,13 +179,13 @@ def verify_docs() -> None:
         else:
             result.fail(f"missing {doc}")
 
-    playbook_root = agentplaybook_root()
-    for doc in agent_docs.get("requiredAgentPlaybookDocs", []):
-        path = playbook_root / doc
+    tao_root_path = tao_root()
+    for doc in agent_docs.get("requiredTaoDocs", []):
+        path = tao_root_path / doc
         if path.exists():
-            result.ok(f"found AgentPlaybook {doc}")
+            result.ok(f"found Tao Agent OS {doc}")
         else:
-            result.fail(f"missing AgentPlaybook {doc} at {playbook_root}")
+            result.fail(f"missing Tao Agent OS {doc} at {tao_root_path}")
 
     for run_dir in sorted(RUNS.glob("*")):
         if not run_dir.is_dir():
@@ -480,7 +480,7 @@ def main() -> None:
     elif args.command == "sleep-guard-smoke":
         sleep_guard_smoke()
     elif args.command == "route":
-        route_agentplaybook(args.route_args)
+        route_tao(args.route_args)
     elif args.command == "new-run":
         new_run(args.feature_id)
 

@@ -1,7 +1,7 @@
 {
   "mode": "guided",
   "display": "traffic-light",
-  "rulesPath": "~/Documents/KeyFlowVault/AgentPlaybook",
+  "rulesPath": "~/git/tao-agent-os",
   "maxFileLines": 5000,
   "repository": {
     "visibility": "public"

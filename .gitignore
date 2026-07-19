@@ -25,7 +25,7 @@ test_output.log
 
 # Local agent/tool state
 .antigravitycli/
-.agentplaybook/
+.tao/
 # VibeGuard local secrets
 .env.vibeguard.local
 !.env.sample
@@ -43,13 +43,13 @@ test_output.log
 # VibeGuard local state
 .vibeguard/
 
-# agentplaybook-project-assets:start
+# tao-project-assets:start
 # Runtime evidence is local, but canonical project skills are repository assets.
-!.agentplaybook/
-.agentplaybook/*
-!.agentplaybook/.gitignore
-!.agentplaybook/skills/
-.agentplaybook/skills/*
-!.agentplaybook/skills/graphify/
-!.agentplaybook/skills/graphify/**
-# agentplaybook-project-assets:end
+!.tao/
+.tao/*
+!.tao/.gitignore
+!.tao/skills/
+.tao/skills/*
+!.tao/skills/graphify/
+!.tao/skills/graphify/**
+# tao-project-assets:end

@@ -1,1 +1,1 @@
-../../.agentplaybook/skills/graphify/runtime/antigravity/rule.md
+../../.tao/skills/graphify/runtime/antigravity/rule.md

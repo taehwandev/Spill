@@ -28,7 +28,7 @@ Reason:
 
 ## Ambiguity Gate
 
-Use `${AGENTPLAYBOOK_HOME:-$HOME/Documents/KeyFlowVault/AgentPlaybook}/workflows/ambiguity-gate.md` before PRD authoring.
+Use `${TAO_HOME:-$HOME/git/tao-agent-os}/workflows/ambiguity-gate.md` before PRD authoring.
 
 Clarity: `clear | needs-clarification`
 

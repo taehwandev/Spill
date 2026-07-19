@@ -1,12 +1,12 @@
-<!-- BEGIN MANAGED AGENTPLAYBOOK POINTER -->
-## AgentPlaybook Pointer
+<!-- BEGIN MANAGED TAO AGENT OS POINTER -->
+## Tao Agent OS Pointer
 
 Read this repository's `AGENTS.md` first. It contains the active shared
-AgentPlaybook routing block and repo-local priority rules. Keep this file thin:
+Tao Agent OS routing block and repo-local priority rules. Keep this file thin:
 only runtime-specific notes should live here, and shared workflow or skill
 guidance must route through `AGENTS.md`.
 
-<!-- END MANAGED AGENTPLAYBOOK POINTER -->
+<!-- END MANAGED TAO AGENT OS POINTER -->
 
 # Claude Instructions
 
@@ -60,7 +60,7 @@ values, transcripts, shell history, or secrets to explain the output.
 ## Mandatory: Route Before Every Task
 
 **Every task — including direct questions, single-step edits, and reviews —
-requires an AgentPlaybook start hook before starting work.** This is not
+requires an Tao Agent OS start hook before starting work.** This is not
 optional. The hook runs the workflow route/preflight path and writes the Spill
 label context so token usage is correctly tagged by the Stop hook.
 
@@ -71,16 +71,16 @@ If you skip the route, the Stop hook records every event as `analysis/classify`.
 ### Start hook command shape
 
 ```bash
-AGENTPLAYBOOK_ROOT="${AGENTPLAYBOOK_HOME:-$HOME/Documents/KeyFlowVault/AgentPlaybook}"
-SPILL_AI_TOOL=claude python3 "${AGENTPLAYBOOK_ROOT}/scripts/agent-hook.py" start --project "$(pwd)" --rules "${AGENTPLAYBOOK_ROOT}" --command <command> --request "<USER_REQUEST>"
+TAO_ROOT="${TAO_HOME:-$HOME/git/tao-agent-os}"
+SPILL_AI_TOOL=claude python3 "${TAO_ROOT}/scripts/agent-hook.py" start --project "$(pwd)" --rules "${TAO_ROOT}" --command <command> --request "<USER_REQUEST>"
 ```
 
 For already-classified requests (second pass, follow-up, or any turn where the
 intent is unambiguous without further clarification):
 
 ```bash
-AGENTPLAYBOOK_ROOT="${AGENTPLAYBOOK_HOME:-$HOME/Documents/KeyFlowVault/AgentPlaybook}"
-SPILL_AI_TOOL=claude python3 "${AGENTPLAYBOOK_ROOT}/scripts/agent-hook.py" start --project "$(pwd)" --rules "${AGENTPLAYBOOK_ROOT}" --command <command> --request-classified --classification-evidence "<evidence>"
+TAO_ROOT="${TAO_HOME:-$HOME/git/tao-agent-os}"
+SPILL_AI_TOOL=claude python3 "${TAO_ROOT}/scripts/agent-hook.py" start --project "$(pwd)" --rules "${TAO_ROOT}" --command <command> --request-classified --classification-evidence "<evidence>"
 ```
 
 ### Command mapping
