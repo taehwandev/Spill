@@ -1,7 +1,17 @@
-# agentplaybook-graphify-inputs:start
-.agentplaybook/
-.agents/
-.claude/
-.codex/
+# tao-graphify-inputs:start
+.tao/
 graphify-out/
-# agentplaybook-graphify-inputs:end
+# tao-graphify-inputs:end
+
+# tao-graphify-inputs:start
+.tao/
+.agents/skills/graphify
+.agents/rules/graphify.md
+.agents/workflows/graphify.md
+.claude/skills/graphify
+.claude/settings.json
+.claude/settings.local.json
+.codex/skills/graphify
+.codex/hooks.json
+graphify-out/
+# tao-graphify-inputs:end
