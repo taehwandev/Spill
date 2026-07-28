@@ -142,6 +142,12 @@
   local data, but it must not duplicate the initial local-store refresh.
 - Dashboard launch and refresh must not synchronously enumerate running
   applications or rebuild localization bundles on the main actor.
+- Periodic refreshes publish dashboard snapshots and AI status arrays only when
+  their presentation values change. An identical refresh must not invalidate
+  the text-heavy dashboard tree.
+- Expanding Agent Status details must not use a move-based layout transition.
+  Opacity-only presentation keeps repeated refreshes from remeasuring the
+  expanded text hierarchy through `MoveTransition`.
 - A dashboard helper launched by the running main app must never send a
   background LaunchServices reopen request back to that app. A helper launched
   directly may request a nonactivating main-app launch at most once during its
@@ -158,6 +164,10 @@
 - Work Item rows update a safe detail panel.
 - Leaving the token dashboard open through multiple refresh intervals does not
   reopen the main app's compact panel.
+- Leaving the dashboard open through identical refresh intervals does not
+  republish unchanged dashboard snapshots or AI status presentation state.
+- Expanded Agent Status details remain responsive during refresh and do not
+  install a move-based layout transition.
 - The compact panel headline follows the persisted usage-input scope immediately,
   while workflow/detail subtitles and grouped rows remain cache-inclusive.
 - Dashboard KPI, period, tool, model, project, trend, calendar, Work Type, Work
@@ -170,6 +180,9 @@
 - Verify every scope-sensitive surface updates immediately and consistently.
 - Verify raw accounting, storage, and sync remain cache-inclusive.
 - Verify loading, empty, onboarding, and normal layouts retain their major regions.
+- Verify repeated identical AI-status and dashboard-store refreshes do not
+  republish unchanged presentation state.
+- Verify the expanded Agent Status detail subtree uses no move-based transition.
 - Verify the release-bundled helper with
   `python3 .agents/scripts/workflow.py token-dashboard-render-smoke`. The smoke
   must show the real window, force its first layout/display, confirm content is

@@ -17,6 +17,21 @@ enum TokenMeteringSetupL10n {
 
     private static let tableName = "TokenMetering"
     private static let keyPrefix = "token_metering"
+    private static let cachedResourceBundle = SpillResourceBundle.resourceBundle()
+    private static let cachedLocalizedBundles: [TokenMeteringLanguage: Bundle] = {
+        guard let resourceBundle = cachedResourceBundle else {
+            return [:]
+        }
+
+        return Dictionary(uniqueKeysWithValues: TokenMeteringLanguage.allCases.compactMap { language in
+            guard let path = resourceBundle.path(forResource: language.rawValue, ofType: "lproj"),
+                  let bundle = Bundle(path: path)
+            else {
+                return nil
+            }
+            return (language, bundle)
+        })
+    }()
 
     static func text(_ key: Key, language: TokenMeteringLanguage) -> String {
         let localizationKey = "\(keyPrefix).\(key.rawValue)"
@@ -30,13 +45,7 @@ enum TokenMeteringSetupL10n {
     }
 
     private static func localizedBundle(for language: TokenMeteringLanguage) -> Bundle? {
-        guard let resourceBundle = SpillResourceBundle.resourceBundle(),
-              let path = resourceBundle.path(forResource: language.rawValue, ofType: "lproj"),
-              let bundle = Bundle(path: path)
-        else {
-            return SpillResourceBundle.resourceBundle()
-        }
-        return bundle
+        cachedLocalizedBundles[language] ?? cachedResourceBundle
     }
 
     private static func stringCatalogValue(for key: String, language: TokenMeteringLanguage) -> String? {
@@ -48,7 +57,7 @@ enum TokenMeteringSetupL10n {
     }
 
     private static let stringCatalog: StringCatalog? = {
-        guard let bundle = SpillResourceBundle.resourceBundle() else {
+        guard let bundle = cachedResourceBundle else {
             return nil
         }
         let candidateURLs = [

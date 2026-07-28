@@ -1,3 +1,4 @@
+import Combine
 import XCTest
 @testable import Spill
 
@@ -63,6 +64,27 @@ final class AIStatusStoreTests: XCTestCase {
             TokenMeteringToolAvailability.installedTools(from: store.detectedStatuses),
             [.claude]
         )
+    }
+
+    func testRepeatedIdenticalRefreshDoesNotPublishStatusStateAgain() {
+        let detectedStatuses = LocalAIStatusProvider.statuses(
+            environment: ["OPENAI_BASE_URL": "http://localhost"],
+            processNames: ["codex"],
+            installedExecutableNames: ["codex"]
+        )
+        let store = AIStatusStore(reader: { detectedStatuses })
+
+        store.refresh()
+
+        var publicationCount = 0
+        let cancellable = store.objectWillChange.sink {
+            publicationCount += 1
+        }
+
+        store.refresh()
+
+        XCTAssertEqual(publicationCount, 0)
+        withExtendedLifetime(cancellable) {}
     }
 
     func testCancelRefreshPreventsBackgroundStatusUpdate() async {

@@ -59,7 +59,7 @@ private extension TokenMeteringDashboardAgentStatusPanel {
                         .opacity(0.45)
                     agentDetailsList(summary)
                 }
-                .transition(.opacity.combined(with: .move(edge: .top)))
+                .transition(.opacity)
             }
         }
     }
