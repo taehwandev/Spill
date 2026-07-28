@@ -13,6 +13,8 @@ final class TokenMeteringDashboardAgentStatusPanelTests: XCTestCase {
         XCTAssertTrue(source.contains("settings.isLocalAIToolVisible(status.kind)"))
         XCTAssertFalse(source.contains("private var summary: TokenMeteringDashboardAgentStatusSummary"))
         XCTAssertFalse(source.contains("private var summaryColumns: [GridItem]"))
+        XCTAssertTrue(source.contains(".transition(.opacity)"))
+        XCTAssertFalse(source.contains(".move(edge: .top)"))
     }
 
     func testAgentStatusSummaryCombinesMultipleAgentsWithProcessRows() throws {

@@ -573,19 +573,40 @@ extension TokenUsageDashboardStore {
             cachedSnapshotContext = nextSnapshotContext
             cachedSnapshotContextKey = nextSnapshotContextKey
         }
-        calendarMonthStart = snapshotPair.calendarMonthStart
+        if calendarMonthStart != snapshotPair.calendarMonthStart {
+            calendarMonthStart = snapshotPair.calendarMonthStart
+        }
         let filteredSnapshot = snapshotPair.filtered
-        selectedProjectID = filteredSnapshot.selectedProjectID
-        selectedSessionID = filteredSnapshot.selectedSession?.id
-        snapshotInputScope = inputScope
-        snapshot = filteredSnapshot
-        unfilteredSnapshot = snapshotPair.unfiltered
-        if let panelSummary {
+        if selectedProjectID != filteredSnapshot.selectedProjectID {
+            selectedProjectID = filteredSnapshot.selectedProjectID
+        }
+        if selectedSessionID != filteredSnapshot.selectedSession?.id {
+            selectedSessionID = filteredSnapshot.selectedSession?.id
+        }
+        if snapshotInputScope != inputScope {
+            snapshotInputScope = inputScope
+        }
+        if snapshot != filteredSnapshot {
+            snapshot = filteredSnapshot
+        }
+        if unfilteredSnapshot != snapshotPair.unfiltered {
+            unfilteredSnapshot = snapshotPair.unfiltered
+        }
+        if let panelSummary, self.panelSummary != panelSummary {
             self.panelSummary = panelSummary
         }
-        lastError = nil
-        loadState = isOnboardingPreviewEnabled ? .previewingEmpty : .loaded
-        isRefreshing = false
+        if lastError != nil {
+            lastError = nil
+        }
+        let nextLoadState: TokenUsageDashboardLoadState = isOnboardingPreviewEnabled
+            ? .previewingEmpty
+            : .loaded
+        if loadState != nextLoadState {
+            loadState = nextLoadState
+        }
+        if isRefreshing {
+            isRefreshing = false
+        }
         if trackLiveUpdates, let previousEvents {
             publishLiveUpdates(
                 previousEvents: previousEvents,

@@ -41,9 +41,7 @@ final class AIStatusStore: ObservableObject {
 
     func refresh() {
         let detectedStatuses = reader()
-        self.detectedStatuses = detectedStatuses
-        statuses = Self.withOrderedDashboardAgentPlaceholders(detectedStatuses)
-        hasCompletedRefresh = true
+        apply(detectedStatuses: detectedStatuses)
     }
 
     func cancelRefresh() {
@@ -87,9 +85,20 @@ final class AIStatusStore: ObservableObject {
                 return
             }
 
-            self.detectedStatuses = detectedStatuses
-            self.statuses = Self.withOrderedDashboardAgentPlaceholders(detectedStatuses)
-            self.hasCompletedRefresh = true
+            self.apply(detectedStatuses: detectedStatuses)
+        }
+    }
+
+    private func apply(detectedStatuses nextDetectedStatuses: [LocalAIToolStatus]) {
+        let nextStatuses = Self.withOrderedDashboardAgentPlaceholders(nextDetectedStatuses)
+        if detectedStatuses != nextDetectedStatuses {
+            detectedStatuses = nextDetectedStatuses
+        }
+        if statuses != nextStatuses {
+            statuses = nextStatuses
+        }
+        if !hasCompletedRefresh {
+            hasCompletedRefresh = true
         }
     }
 
