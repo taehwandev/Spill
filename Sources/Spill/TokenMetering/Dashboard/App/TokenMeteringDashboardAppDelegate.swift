@@ -13,7 +13,8 @@ final class TokenMeteringDashboardAppDelegate: NSObject, NSApplicationDelegate {
     private lazy var tokenUsageDashboardStore = TokenUsageDashboardStore(
         usageStore: tokenUsageStore,
         collectionCoordinator: nil,
-        loadsInitialPanelSummary: false
+        loadsInitialPanelSummary: false,
+        loadsGlanceSummary: false
     )
     private var windowController: TokenMeteringDashboardWindowController?
     private var hasRequestedMainAppLaunch = false

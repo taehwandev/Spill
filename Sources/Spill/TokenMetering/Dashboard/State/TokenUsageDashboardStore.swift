@@ -19,6 +19,7 @@ final class TokenUsageDashboardStore: ObservableObject {
     @Published private(set) var snapshot = TokenUsageDashboardSnapshot.empty
     @Published private(set) var unfilteredSnapshot = TokenUsageDashboardSnapshot.empty
     @Published private(set) var panelSummary = TokenUsagePanelSummarySnapshot.empty
+    @Published private(set) var glanceSummary = TokenUsagePanelSummarySnapshot.empty
     @Published private(set) var liveUpdateMarker = TokenUsageLiveUpdateMarker.empty
     @Published private(set) var loadState: TokenUsageDashboardLoadState = .idle
     @Published private(set) var isOnboardingPreviewEnabled = false
@@ -38,6 +39,8 @@ final class TokenUsageDashboardStore: ObservableObject {
     @Published private(set) var isRefreshing = false
 
     private let usageStore: TokenUsageStore
+    private let notificationCenter: NotificationCenter
+    private let loadsGlanceSummary: Bool
     private var events: [TokenUsageEvent] = []
     private var loadedEventsDateRange: TokenUsageDashboardSnapshot.DateRange?
     private var periodFilterTotals: [TokenUsageDashboardPeriod: TokenUsageInputScopeTotals] = [:]
@@ -48,6 +51,7 @@ final class TokenUsageDashboardStore: ObservableObject {
     private var eventsDidChangeObserver: NSObjectProtocol?
     private var distributedEventsDidChangeObserver: NSObjectProtocol?
     private var collectionDidFinishObserver: NSObjectProtocol?
+    private var calendarInvalidationObservers: [NSObjectProtocol] = []
     private var hasRebuiltSnapshot = false
     private var clearLiveUpdateTask: Task<Void, Never>?
     private var scheduledRefreshTask: Task<Void, Never>?
@@ -58,10 +62,14 @@ final class TokenUsageDashboardStore: ObservableObject {
     init(
         usageStore: TokenUsageStore,
         collectionCoordinator: AnyObject? = nil,
-        loadsInitialPanelSummary: Bool = true
+        loadsInitialPanelSummary: Bool = true,
+        loadsGlanceSummary: Bool = true,
+        notificationCenter: NotificationCenter = .default
     ) {
         self.usageStore = usageStore
-        eventsDidChangeObserver = NotificationCenter.default.addObserver(
+        self.notificationCenter = notificationCenter
+        self.loadsGlanceSummary = loadsGlanceSummary
+        eventsDidChangeObserver = notificationCenter.addObserver(
             forName: TokenUsageStore.eventsDidChangeNotification,
             object: usageStore,
             queue: .main
@@ -79,13 +87,29 @@ final class TokenUsageDashboardStore: ObservableObject {
                 self?.scheduleRefresh()
             }
         }
-        collectionDidFinishObserver = NotificationCenter.default.addObserver(
+        collectionDidFinishObserver = notificationCenter.addObserver(
             forName: TokenUsageCollectorCoordinator.collectionDidFinishNotification,
             object: collectionCoordinator,
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.scheduleRefresh()
+            }
+        }
+        let calendarInvalidationNames: [Notification.Name] = [
+            .NSCalendarDayChanged,
+            .NSSystemClockDidChange,
+            .NSSystemTimeZoneDidChange
+        ]
+        calendarInvalidationObservers = calendarInvalidationNames.map { name in
+            notificationCenter.addObserver(
+                forName: name,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    self?.scheduleRefresh(trackLiveUpdates: false)
+                }
             }
         }
         if loadsInitialPanelSummary {
@@ -117,14 +141,15 @@ final class TokenUsageDashboardStore: ObservableObject {
 
     deinit {
         if let eventsDidChangeObserver {
-            NotificationCenter.default.removeObserver(eventsDidChangeObserver)
+            notificationCenter.removeObserver(eventsDidChangeObserver)
         }
         if let distributedEventsDidChangeObserver {
             DistributedNotificationCenter.default().removeObserver(distributedEventsDidChangeObserver)
         }
         if let collectionDidFinishObserver {
-            NotificationCenter.default.removeObserver(collectionDidFinishObserver)
+            notificationCenter.removeObserver(collectionDidFinishObserver)
         }
+        calendarInvalidationObservers.forEach(notificationCenter.removeObserver)
         clearLiveUpdateTask?.cancel()
         scheduledRefreshTask?.cancel()
     }
@@ -148,11 +173,15 @@ extension TokenUsageDashboardStore {
         loadedEventsDateRange = loadedEventScope.cacheCoverageDateRange
         let nextPeriodFilterTotals = loadPeriodFilterTotals(for: request)
         let panelSummary = refreshesPanelSummary ? loadPanelSummary(for: request) : nil
+        let glanceSummary = refreshesPanelSummary && loadsGlanceSummary
+            ? loadGlanceSummary(for: request)
+            : nil
         rebuildSnapshot(
             trackLiveUpdates: shouldTrackLiveUpdates,
             previousEvents: previousEvents,
             periodFilterTotals: nextPeriodFilterTotals,
-            panelSummary: panelSummary
+            panelSummary: panelSummary,
+            glanceSummary: glanceSummary
         )
     }
 }
@@ -181,6 +210,7 @@ extension TokenUsageDashboardStore {
         )
         let request = snapshotBuildRequest()
         let usesPreviewDataSource = isOnboardingPreviewEnabled
+        let loadsGlanceSummary = loadsGlanceSummary
         let usageStore = usageStore
         let snapshotBuildGate = snapshotBuildGate
         let isAlreadyLoaded = loadState == .loaded
@@ -199,6 +229,7 @@ extension TokenUsageDashboardStore {
             let snapshotOutput: TokenUsageDashboardSnapshotBuildOutput
             let periodFilterTotals: [TokenUsageDashboardPeriod: TokenUsageInputScopeTotals]
             let panelSummary: TokenUsagePanelSummarySnapshot?
+            let glanceSummary: TokenUsagePanelSummarySnapshot?
             let dateBounds: TokenUsageDashboardDateBounds
             let inputScope: TokenUsageInputScope
             // canBuildSnapshotFromSQL inspects only project/session/day selection, so it is safe to
@@ -225,6 +256,9 @@ extension TokenUsageDashboardStore {
                 snapshotOutput = sqlResult.output
                 periodFilterTotals = sqlResult.periodFilterTotals
                 panelSummary = sqlResult.panelSummary
+                glanceSummary = refreshesPanelSummary && loadsGlanceSummary
+                    ? Self.loadGlanceSummaryIfAvailable(from: usageStore, for: request)
+                    : nil
                 dateBounds = sqlResult.dateBounds
                 inputScope = request.inputScope
             } else {
@@ -236,6 +270,9 @@ extension TokenUsageDashboardStore {
                 }
 
                 let loadedPanelSummary = refreshesPanelSummary ? Self.loadPanelSummary(from: usageStore, for: request) : nil
+                let loadedGlanceSummary = refreshesPanelSummary && loadsGlanceSummary
+                    ? Self.loadGlanceSummaryIfAvailable(from: usageStore, for: request)
+                    : nil
                 let loadedDateBounds = Self.loadDateBounds(from: usageStore, for: request)
                 let buildRequest = request.replacingAvailableDateBounds(loadedDateBounds)
                 guard snapshotBuildGate.isCurrent(generation) else {
@@ -270,6 +307,7 @@ extension TokenUsageDashboardStore {
                 )
                 periodFilterTotals = resolvedPeriodFilterTotals
                 panelSummary = loadedPanelSummary
+                glanceSummary = loadedGlanceSummary
                 dateBounds = loadedDateBounds
                 inputScope = buildRequest.inputScope
             }
@@ -280,11 +318,14 @@ extension TokenUsageDashboardStore {
                 }
 
                 let appliedPanelSummary: TokenUsagePanelSummarySnapshot?
+                let appliedGlanceSummary: TokenUsagePanelSummarySnapshot?
                 if let panelSummaryGeneration,
                    !self.panelSummaryRefreshGate.isCurrent(panelSummaryGeneration) {
                     appliedPanelSummary = nil
+                    appliedGlanceSummary = nil
                 } else {
                     appliedPanelSummary = panelSummary
+                    appliedGlanceSummary = glanceSummary
                 }
 
                 self.applySnapshotPair(
@@ -298,6 +339,7 @@ extension TokenUsageDashboardStore {
                     loadedEventsDateRange: loadedEventsCacheCoverageRange,
                     periodFilterTotals: periodFilterTotals,
                     panelSummary: appliedPanelSummary,
+                    glanceSummary: appliedGlanceSummary,
                     availableDateBounds: dateBounds,
                     snapshotContext: snapshotOutput.context,
                     snapshotContextKey: snapshotOutput.contextKey
@@ -337,10 +379,14 @@ extension TokenUsageDashboardStore {
     func refreshPanelSummary() {
         let generation = panelSummaryRefreshGate.next()
         let request = snapshotBuildRequest()
+        let loadsGlanceSummary = loadsGlanceSummary
         let usageStore = usageStore
 
         snapshotBuildQueue.async {
             let panelSummary = Self.loadPanelSummaryIfAvailable(from: usageStore, for: request)
+            let glanceSummary = loadsGlanceSummary
+                ? Self.loadGlanceSummaryIfAvailable(from: usageStore, for: request)
+                : nil
 
             DispatchQueue.main.async { [weak self] in
                 guard let self, self.panelSummaryRefreshGate.isCurrent(generation) else {
@@ -352,6 +398,9 @@ extension TokenUsageDashboardStore {
                 }
 
                 self.panelSummary = panelSummary
+                if let glanceSummary {
+                    self.glanceSummary = glanceSummary
+                }
                 self.lastError = nil
             }
         }
@@ -378,7 +427,8 @@ extension TokenUsageDashboardStore {
         trackLiveUpdates: Bool = false,
         previousEvents: [TokenUsageEvent]? = nil,
         periodFilterTotals nextPeriodFilterTotals: [TokenUsageDashboardPeriod: TokenUsageInputScopeTotals]? = nil,
-        panelSummary: TokenUsagePanelSummarySnapshot? = nil
+        panelSummary: TokenUsagePanelSummarySnapshot? = nil,
+        glanceSummary: TokenUsagePanelSummarySnapshot? = nil
     ) {
         snapshotBuildGate.next()
         if let nextPeriodFilterTotals {
@@ -414,6 +464,7 @@ extension TokenUsageDashboardStore {
             loadedEventsDateRange: nil,
             periodFilterTotals: periodFilterTotals,
             panelSummary: panelSummary,
+            glanceSummary: glanceSummary,
             availableDateBounds: nextDateBounds,
             snapshotContext: snapshotOutput.context,
             snapshotContextKey: snapshotOutput.contextKey
@@ -534,6 +585,7 @@ extension TokenUsageDashboardStore {
                     loadedEventsDateRange: appliedLoadedEventsDateRange,
                     periodFilterTotals: nil,
                     panelSummary: nil,
+                    glanceSummary: nil,
                     availableDateBounds: dateBounds,
                     snapshotContext: snapshotOutput.context,
                     snapshotContextKey: snapshotOutput.contextKey
@@ -555,6 +607,7 @@ extension TokenUsageDashboardStore {
         loadedEventsDateRange nextLoadedEventsDateRange: TokenUsageDashboardSnapshot.DateRange?,
         periodFilterTotals nextPeriodFilterTotals: [TokenUsageDashboardPeriod: TokenUsageInputScopeTotals]?,
         panelSummary: TokenUsagePanelSummarySnapshot?,
+        glanceSummary: TokenUsagePanelSummarySnapshot?,
         availableDateBounds nextAvailableDateBounds: TokenUsageDashboardDateBounds? = nil,
         snapshotContext nextSnapshotContext: TokenUsageDashboardSnapshotBuildContext? = nil,
         snapshotContextKey nextSnapshotContextKey: TokenUsageDashboardContextCacheKey? = nil
@@ -594,6 +647,9 @@ extension TokenUsageDashboardStore {
         }
         if let panelSummary, self.panelSummary != panelSummary {
             self.panelSummary = panelSummary
+        }
+        if let glanceSummary, self.glanceSummary != glanceSummary {
+            self.glanceSummary = glanceSummary
         }
         if lastError != nil {
             lastError = nil
@@ -791,6 +847,10 @@ extension TokenUsageDashboardStore {
         Self.loadPanelSummaryIfAvailable(from: usageStore, for: request) ?? .empty
     }
 
+    private func loadGlanceSummary(for request: TokenUsageDashboardBuildRequest) -> TokenUsagePanelSummarySnapshot {
+        Self.loadGlanceSummaryIfAvailable(from: usageStore, for: request) ?? .empty
+    }
+
     private func loadPeriodFilterTotals(
         for request: TokenUsageDashboardBuildRequest
     ) -> [TokenUsageDashboardPeriod: TokenUsageInputScopeTotals] {
@@ -860,6 +920,26 @@ extension TokenUsageDashboardStore {
             endingBefore: dayEnd,
             dashboardToolsOnly: !request.showAdvancedTools,
             visibleTools: request.visibleAITools
+        ) else {
+            return nil
+        }
+        return TokenUsagePanelSummarySnapshot(
+            summary: summary,
+            language: request.language
+        )
+    }
+
+    nonisolated private static func loadGlanceSummaryIfAvailable(
+        from usageStore: TokenUsageStore,
+        for request: TokenUsageDashboardBuildRequest
+    ) -> TokenUsagePanelSummarySnapshot? {
+        let dayStart = request.calendar.startOfDay(for: request.now)
+        let dayEnd = request.calendar.date(byAdding: .day, value: 1, to: dayStart) ?? request.now
+        guard let summary = usageStore.dashboardSummaryIfAvailable(
+            startingAt: dayStart,
+            endingBefore: dayEnd,
+            dashboardToolsOnly: true,
+            visibleTools: Set(TokenUsageAITool.dashboardTools)
         ) else {
             return nil
         }
@@ -1434,6 +1514,7 @@ extension TokenUsageDashboardStore {
                     loadedEventsDateRange: appliedLoadedEventsDateRange,
                     periodFilterTotals: nil,
                     panelSummary: nil,
+                    glanceSummary: nil,
                     availableDateBounds: dateBounds,
                     snapshotContext: snapshotOutput.context,
                     snapshotContextKey: snapshotOutput.contextKey

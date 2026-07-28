@@ -54,6 +54,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.openTokenDashboard(source: "panel_ai_section")
         }
     )
+    private lazy var spillGlanceStore = SpillGlanceStore(
+        settings: settings,
+        tokenUsageDashboardStore: tokenMeteringCoordinator.dashboardStore
+    )
+    private lazy var spillGlancePanelController = SpillGlancePanelController(
+        store: spillGlanceStore,
+        openDashboardAction: { [weak self] in
+            self?.openTokenDashboard(source: "glance")
+        },
+        openSettingsAction: { [weak self] in
+            self?.showPreferences(source: "glance", selectedTab: "glance")
+        }
+    )
     private lazy var preferencesWindowController = PreferencesWindowController(
         settings: settings,
         scanner: scanner,
@@ -155,6 +168,7 @@ extension AppDelegate {
         tokenMeteringCoordinator.start(isSmokeTest: isSmokeTest) { [weak self] in
             self?.statusItemController?.refresh()
         }
+        spillGlancePanelController.start()
         configureStatusRefreshLoop()
 
         if isSmokeTest {
@@ -356,6 +370,7 @@ extension AppDelegate {
         )
         statusRefreshTask?.cancel()
         sleepGuard.stop()
+        spillGlancePanelController.stop()
         spillPanelController.hide(animated: false)
     }
 

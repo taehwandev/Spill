@@ -4,6 +4,91 @@ import CoreGraphics
 
 @MainActor
 final class SpillSettingsTests: XCTestCase {
+    func testGlanceDefaultsToEnabledWithOnlyFixedModulesVisible() {
+        let defaults = makeDefaults()
+        let settings = SpillSettings(defaults: defaults)
+
+        XCTAssertTrue(settings.glanceEnabled)
+        XCTAssertTrue(settings.glanceWorkRotationEnabled)
+        XCTAssertTrue(settings.enabledGlanceModules.isEmpty)
+        XCTAssertEqual(settings.visibleGlanceModules, [.allToday, .workType])
+    }
+
+    func testGlanceWorkRotationPersistsDisabledChoice() {
+        let defaults = makeDefaults()
+        let settings = SpillSettings(defaults: defaults)
+
+        settings.glanceWorkRotationEnabled = false
+
+        XCTAssertEqual(defaults.object(forKey: "glanceWorkRotationEnabled") as? Bool, false)
+        XCTAssertFalse(SpillSettings(defaults: defaults).glanceWorkRotationEnabled)
+    }
+
+    func testGlancePersistsOptionalToolsWhileFixedModulesCannotBeDisabled() {
+        let defaults = makeDefaults()
+        let settings = SpillSettings(defaults: defaults)
+
+        for module in SpillGlanceModule.configurableToolModules {
+            settings.setGlanceModule(module, enabled: false)
+        }
+        settings.setGlanceModule(.allToday, enabled: false)
+        settings.setGlanceModule(.workType, enabled: false)
+
+        XCTAssertTrue(settings.enabledGlanceModules.isEmpty)
+        XCTAssertEqual(settings.visibleGlanceModules, [.allToday, .workType])
+        XCTAssertTrue(settings.isGlanceModuleEnabled(.allToday))
+        XCTAssertTrue(settings.isGlanceModuleEnabled(.workType))
+        XCTAssertEqual(defaults.stringArray(forKey: "enabledGlanceModules"), [])
+
+        let reloadedSettings = SpillSettings(defaults: defaults)
+        XCTAssertTrue(reloadedSettings.enabledGlanceModules.isEmpty)
+        XCTAssertEqual(reloadedSettings.visibleGlanceModules, [.allToday, .workType])
+
+        reloadedSettings.setGlanceModule(.claudeToday, enabled: true)
+
+        XCTAssertTrue(reloadedSettings.isGlanceModuleEnabled(.claudeToday))
+        XCTAssertEqual(defaults.stringArray(forKey: "enabledGlanceModules"), ["claudeToday"])
+
+        reloadedSettings.glanceEnabled = false
+
+        XCTAssertTrue(reloadedSettings.enabledGlanceModules.contains(.claudeToday))
+        XCTAssertTrue(reloadedSettings.visibleGlanceModules.isEmpty)
+    }
+
+    func testGlanceModulesNormalizeUnknownAndDuplicatePersistedValues() {
+        let defaults = makeDefaults()
+        defaults.set(
+            ["claudeToday", "unknown", "claudeToday", "allToday"],
+            forKey: "enabledGlanceModules"
+        )
+
+        let settings = SpillSettings(defaults: defaults)
+
+        XCTAssertEqual(settings.enabledGlanceModules, [.claudeToday])
+        XCTAssertEqual(settings.visibleGlanceModules, [.allToday, .claudeToday, .workType])
+        XCTAssertEqual(defaults.stringArray(forKey: "enabledGlanceModules"), ["claudeToday"])
+    }
+
+    func testGlanceMigratesLegacyDefaultModulesToEveryOptionalTool() {
+        let defaults = makeDefaults()
+        defaults.set(
+            ["aiStatus", "topTask", "todayTokens"],
+            forKey: "enabledGlanceModules"
+        )
+
+        let settings = SpillSettings(defaults: defaults)
+
+        XCTAssertEqual(
+            settings.enabledGlanceModules,
+            Set(SpillGlanceModule.configurableToolModules)
+        )
+        XCTAssertEqual(settings.visibleGlanceModules, SpillGlanceModule.defaultOrder)
+        XCTAssertEqual(
+            defaults.stringArray(forKey: "enabledGlanceModules"),
+            ["codexToday", "claudeToday", "antigravityToday"]
+        )
+    }
+
     func testStatusModuleSettingsDefaultToAllModulesEnabledInDefaultOrder() {
         let defaults = makeDefaults()
         let settings = SpillSettings(defaults: defaults)
@@ -536,6 +621,13 @@ final class SpillSettingsTests: XCTestCase {
         XCTAssertEqual(PreferencesL10n.text(.inline, appLanguage: .korean), "가로")
         XCTAssertEqual(PreferencesL10n.text(.clockAreaStatus, appLanguage: .korean), "시계 옆 상태")
         XCTAssertEqual(PreferencesL10n.text(.clockAreaTextSize, appLanguage: .korean), "시계 옆 텍스트 크기")
+        XCTAssertEqual(PreferencesL10n.text(.spillGlance, appLanguage: .english), "Spill Glance")
+        XCTAssertEqual(PreferencesL10n.text(.spillGlanceCodex, appLanguage: .korean), "Codex")
+        XCTAssertEqual(PreferencesL10n.text(.spillGlanceClaude, appLanguage: .japanese), "Claude")
+        XCTAssertEqual(
+            PreferencesL10n.text(.spillGlanceAntigravity, appLanguage: .english),
+            "Antigravity"
+        )
         XCTAssertEqual(PreferencesL10n.text(.iconOnly, appLanguage: .japanese), "アイコンのみ")
     }
 

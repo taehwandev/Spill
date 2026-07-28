@@ -163,6 +163,25 @@ final class SpillSettings: ObservableObject {
         didSet { defaults.set(menuBarTriggerIconStyle.rawValue, forKey: Keys.menuBarTriggerIconStyle) }
     }
 
+    @Published var glanceEnabled: Bool {
+        didSet { defaults.set(glanceEnabled, forKey: Keys.glanceEnabled) }
+    }
+
+    @Published var glanceWorkRotationEnabled: Bool {
+        didSet {
+            defaults.set(
+                glanceWorkRotationEnabled,
+                forKey: Keys.glanceWorkRotationEnabled
+            )
+        }
+    }
+
+    @Published private(set) var enabledGlanceModules: Set<SpillGlanceModule> {
+        didSet {
+            Self.persistEnabledGlanceModules(enabledGlanceModules, to: defaults)
+        }
+    }
+
     @Published var selectedItemKeys: Set<String> {
         didSet { defaults.set(Array(selectedItemKeys).sorted(), forKey: Keys.selectedItemKeys) }
     }
@@ -364,6 +383,15 @@ final class SpillSettings: ObservableObject {
         menuBarTriggerIconStyle = MenuBarTriggerIconStyle.normalized(
             rawValue: defaults.string(forKey: Keys.menuBarTriggerIconStyle)
         )
+        glanceEnabled = defaults.object(forKey: Keys.glanceEnabled) as? Bool ?? true
+        glanceWorkRotationEnabled =
+            defaults.object(forKey: Keys.glanceWorkRotationEnabled) as? Bool ?? true
+        let rawEnabledGlanceModules = defaults.stringArray(forKey: Keys.enabledGlanceModules)
+        let initialEnabledGlanceModules = SpillGlanceModule.normalizedEnabled(from: rawEnabledGlanceModules)
+        enabledGlanceModules = initialEnabledGlanceModules
+        if rawEnabledGlanceModules != nil {
+            Self.persistEnabledGlanceModules(initialEnabledGlanceModules, to: defaults)
+        }
         selectedItemKeys = Set(defaults.stringArray(forKey: Keys.selectedItemKeys) ?? [])
         hiddenItemKeys = Set(defaults.stringArray(forKey: Keys.hiddenItemKeys) ?? [])
         hotKeyEnabled = defaults.object(forKey: Keys.hotKeyEnabled) as? Bool ?? true
@@ -495,6 +523,46 @@ extension SpillSettings {
         }
 
         tokenUsageInputScope = persistedScope
+    }
+}
+
+extension SpillSettings {
+    var visibleGlanceModules: [SpillGlanceModule] {
+        guard glanceEnabled else {
+            return []
+        }
+
+        return SpillGlanceModule.defaultOrder.filter {
+            SpillGlanceModule.fixedModules.contains($0)
+                || enabledGlanceModules.contains($0)
+        }
+    }
+
+    func isGlanceModuleEnabled(_ module: SpillGlanceModule) -> Bool {
+        SpillGlanceModule.fixedModules.contains(module)
+            || enabledGlanceModules.contains(module)
+    }
+
+    func setGlanceModule(_ module: SpillGlanceModule, enabled: Bool) {
+        guard SpillGlanceModule.configurableToolModules.contains(module) else {
+            return
+        }
+
+        if enabled {
+            enabledGlanceModules.insert(module)
+        } else {
+            enabledGlanceModules.remove(module)
+        }
+    }
+
+    private static func persistEnabledGlanceModules(
+        _ modules: Set<SpillGlanceModule>,
+        to defaults: UserDefaults
+    ) {
+        let orderedEnabledModules = SpillGlanceModule.configurableToolModules
+            .filter { modules.contains($0) }
+            .map(\.rawValue)
+        defaults.set(orderedEnabledModules, forKey: Keys.enabledGlanceModules)
     }
 }
 
@@ -979,6 +1047,9 @@ private enum Keys {
     static let menuBarStatusFontSize = "menuBarStatusFontSize"
     static let menuBarStatusTextBold = "menuBarStatusTextBold"
     static let menuBarTriggerIconStyle = "menuBarTriggerIconStyle"
+    static let glanceEnabled = "glanceEnabled"
+    static let glanceWorkRotationEnabled = "glanceWorkRotationEnabled"
+    static let enabledGlanceModules = "enabledGlanceModules"
     static let selectedItemKeys = "selectedItemKeys"
     static let hiddenItemKeys = "hiddenItemKeys"
     static let hotKeyEnabled = "hotKeyEnabled"

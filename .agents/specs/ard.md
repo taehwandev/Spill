@@ -190,6 +190,11 @@ Constraints:
 - Avoid nested cards.
 - Use grouped pills and icon buttons.
 - Prefer icons and concise labels.
+- The root `NSVisualEffectView` owns a same-size public AppKit mask image with
+  the panel's continuous 22-point rounded outline. Layer corner radius remains
+  the border/compositing contract, while the effect mask clips
+  `behindWindow` material itself so rectangular translucency cannot survive in
+  the outer corners. The mask is regenerated when the content bounds change.
 
 ### ARD-0050: Onboarding Preview Uses Fixture Data Sources
 
@@ -958,6 +963,150 @@ Rules:
   data with opaque ids, safe enum labels, and numeric buckets only. It must be
   treated as optional diagnostics and must not read prompt text, commands, file
   paths, logs, source, environment values, or secrets.
+
+### ARD-005F: Spill Glance Uses A Main-Process Nonactivating Panel
+
+Decision:
+
+The always-visible Spill Glance surface is a main-process feature boundary under
+`Sources/Spill/Glance`. It uses a lightweight feature store for presentation
+state, SwiftUI for the one-row capsule composition, and an AppKit controller for
+`NSPanel` lifecycle and screen placement.
+
+Window contract:
+
+- Use a borderless nonactivating `NSPanel`.
+- The panel cannot become key or main, does not activate Spill, does not appear
+  in the window cycle, and remains visible when another application is active.
+- Use public collection behaviors to join Spaces and participate as a
+  full-screen auxiliary window.
+- On first launch, center the panel horizontally inside the chosen
+  `NSScreen.visibleFrame` and place it 10 points below that frame's top edge.
+  Do not overlap the menu bar, notch, or status items.
+- Keep one panel instance across all connected displays. During a drag, choose
+  the `NSScreen` whose frame contains the absolute pointer and constrain the
+  panel to that screen's `visibleFrame`; never create one panel per display.
+- Use a clear window background. SwiftUI owns one rounded material capsule with
+  internal module separators and a single material/glass layer; there is no
+  full-row opaque AppKit card, stacked tint material, or set of separately
+  floating capsules.
+- A SwiftUI drag gesture distinguishes a click from a drag and forwards the
+  initial translation to the controller. The controller reconstructs the
+  mouse-down point once, then follows the absolute public
+  `NSEvent.mouseLocation` screen coordinate so moving the window cannot feed
+  back into the gesture coordinate space.
+- Live drag updates move only the composited panel origin with
+  `setFrameOrigin`. They do not force unchanged transparent SwiftUI glass
+  content to display for every pointer event. The controller clamps the result
+  to the pointer-selected `visibleFrame` and saves the final frame through
+  `SpillGlanceFrameStore`.
+- On restoration, `SpillGlanceFrameStore` matches the saved frame center
+  against connected visible frames. If the saved display is unavailable, the
+  controller uses the primary-display fallback without saving over the external
+  frame. A later screen-parameter notification can therefore restore the saved
+  external-display position after reconnection.
+- Hide the panel when Glance is disabled or no module is enabled.
+
+Data and action flow:
+
+```text
+TokenUsageStore events ------------------------------\
+calendar-day / system-clock / timezone notifications -> TokenUsageDashboardStore
+                                                              |            |
+                                                              |            +-> panelSummary
+                                                              |                (dashboard hidden-tool filtered)
+                                                              |
+                                                              +-> glanceSummary
+                                                                  (unfiltered current day,
+                                                                   all supported tools)
+                                                                          |
+SpillSettings Glance preferences -----------------------------------------+-> SpillGlanceStore.state
+                                                                                  |
+                                                                                  v
+                                                                             SwiftUI row
+                                                                             /          \
+                                                                            v            v
+                                                        existing dashboard action   Glance Preferences
+```
+
+The store projects presentation-ready values and observes the existing
+publishers. `TokenUsageDashboardStore.panelSummary` keeps its existing
+dashboard hidden-tool filter. Its `glanceSummary` companion instead covers the
+current local calendar day across all supported tools, regardless of dashboard
+visibility, so hiding a dashboard agent never removes that agent from an
+explicitly enabled Glance segment or from All Today.
+
+The dashboard store rebuilds both summary companions when token usage store
+events arrive. It also observes macOS calendar-day, system-clock, and timezone
+change notifications and refreshes both companions so current-day boundaries
+remain correct without waiting for another token event. This adds no polling
+loop, database watcher, process probe, collector, network request, cloud service
+status request, or upload path.
+
+The separate dashboard helper disables the Glance companion load because it
+does not render Glance. It still consumes the same event-driven calendar
+invalidation for its own Today snapshot, so this optimization does not make an
+open helper stale or add a second lifecycle.
+
+`AppDelegate` remains the composition root and injects the same dashboard
+store, settings instance, dashboard-opening closure, and Preferences navigation
+closure already used by the compact panel and menu bar.
+
+Settings and propagation:
+
+- `SpillSettings` remains the persistence owner.
+- `SpillGlanceFrameStore` owns only the local last-valid window frame. It does
+  not become a user-visible setting or sync payload.
+- New installations default the surface to enabled with only All Today, Work
+  Type, and settings visible. Codex, Claude, and Antigravity are opt-in
+  segments. All Today and Work Type remain fixed while the surface is enabled.
+  `glanceWorkRotationEnabled` defaults to `true` when its persisted key is
+  absent, preserving the existing rolling presentation for upgrades.
+- Preferences and Glance live in the main process, so `@Published` delivery is
+  the explicit real-time propagation path. Changing Work rotation rebuilds the
+  Glance presentation without restart, reopen, manual refresh, polling, or
+  helper-process invalidation. Because `@Published` emits during `willSet`, the
+  AppKit bridge schedules presentation consumption on the next main-queue turn
+  and reads the store's committed value. This keeps the visible update within
+  one display frame instead of waiting for the three-second `TimelineView`
+  cadence.
+- The AppKit bridge tracks the ordered module layout separately from content
+  values. It reapplies the saved frame only when visibility or the ordered
+  module set changes; a token value or Work rotation preference update redraws
+  content without moving, resizing, or reordering the panel.
+- The dashboard helper, compact panel, clock-adjacent AI glance, web dashboard,
+  Private Usage Upload, sync payloads, and agent-facing summaries do not read
+  these presentation settings. No distributed notification or sync migration is
+  added for them.
+- Legacy AI Status, Top Task, and Today Tokens ids migrate to all three optional
+  tool segments. Unknown and duplicate ids normalize deterministically. An
+  empty optional-tool set is valid; fixed segments remain until the master
+  surface switch is disabled.
+
+Work Type rotation:
+
+- `TokenUsageDashboardStore.glanceSummary.taskRows` arrives in descending usage
+  order for the current local day across all supported tools. Glance projects
+  those labels into compact display values paired with each row's compact
+  formatted token total. The dashboard's hidden-tool-filtered `panelSummary`
+  remains independent and unchanged.
+- When `glanceWorkRotationEnabled` is true and more than one row exists,
+  SwiftUI `TimelineView` advances the display-only Work value every three
+  seconds. When false, the store projects only the first already-sorted row so
+  the highest-usage Work Type and token total remain fixed.
+- The preference is presentation-only and does not refresh storage, collectors,
+  processes, the network, the dashboard helper, the compact panel, the
+  clock-adjacent AI glance, web dashboards, upload payloads, sync payloads, or
+  agent-facing summaries.
+- Known long task categories use semantic short labels. Long custom safe slugs
+  use bounded initials so the compact surface never depends on an ellipsis.
+
+Rationale:
+
+This preserves Spill's glance-first product direction without expanding the
+menu bar status-item footprint or duplicating expensive collection work.
+Keeping window lifecycle behind a controller follows the lightweight feature
+store boundary while using only public AppKit and SwiftUI APIs.
 
 ### ARD-006: Permission Boundaries
 
