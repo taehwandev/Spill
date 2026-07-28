@@ -507,6 +507,23 @@ final class TokenUsageHistoryImportCoordinatorTests: XCTestCase {
         XCTAssertEqual(claudeHook, bundledClaudeHook)
         XCTAssertTrue(codexImporter.contains("options.all"))
         XCTAssertTrue(codexImporter.contains("--all                  Scan all supported local session history."))
+
+        // The Stop hook runs under a 30s timeout, so the shipped importer must
+        // read forward from a per-file checkpoint instead of re-parsing every
+        // selected session file on every run.
+        XCTAssertTrue(codexImporter.contains("readSessionFileChunk"))
+        XCTAssertTrue(codexImporter.contains("const STATE_SCHEMA_VERSION = 2"))
+        XCTAssertTrue(codexImporter.contains("sessionFiles: sanitizedSessionFiles(parsed.sessionFiles)"))
+        XCTAssertTrue(codexImporter.contains("if (rescan || start > size)"))
+        XCTAssertTrue(codexImporter.contains("combined.lastIndexOf(0x0a)"))
+        XCTAssertTrue(codexImporter.contains("--seed-offsets"))
+        XCTAssertTrue(codexImporter.contains("--bootstrap"))
+        // Checkpoints must never be written straight over the live file.
+        XCTAssertTrue(codexImporter.contains("await rename(temporaryPath, path)"))
+        // Whole-file reads would defeat the checkpoint entirely.
+        XCTAssertFalse(codexImporter.contains("createReadStream"))
+        // State is keyed by an opaque hash; source paths never reach it.
+        XCTAssertTrue(codexImporter.contains("const key = opaqueHash(path)"))
         XCTAssertTrue(claudeHook.contains("def scan_main(scan_dir: str, since_hours) -> dict:"))
         XCTAssertTrue(claudeHook.contains("if \"--json\" in _args:"))
         XCTAssertTrue(claudeHook.contains("transcript.parent / \"subagents\""))

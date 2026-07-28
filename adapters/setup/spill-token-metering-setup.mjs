@@ -203,6 +203,36 @@ async function configureCodex(scriptPath) {
   const target = join(homedir(), ".codex", "hooks.json");
   const command = `node ${shellQuote(scriptPath)} --since-hours 6`;
   await mergeStopHookFile(target, command, 30, "codex", /spill-(codex-session-importer|importer)\.mjs/);
+  await seedCodexImportOffsets(scriptPath);
+}
+
+/// Checkpoints the session files already on disk so the first Stop hook run has
+/// no backlog to work through inside its timeout.
+///
+/// Files the importer already tracks keep their checkpoint, so repeating setup
+/// never steps over records that have not been imported yet. Whole local
+/// history stays available through the app's own history import.
+async function seedCodexImportOffsets(scriptPath) {
+  if (!apply) {
+    results.push({ tool: "codex", action: "would_seed_import_offsets", path: scriptPath });
+    return;
+  }
+
+  try {
+    await execFileAsync(process.execPath, [scriptPath, "--seed-offsets", "--json"], {
+      timeout: 60_000,
+      maxBuffer: 1024 * 1024,
+    });
+    results.push({ tool: "codex", action: "seeded_import_offsets", path: scriptPath });
+  } catch (error) {
+    // Seeding is an optimisation, not a correctness requirement: without it the
+    // hook simply catches up across a few budgeted runs.
+    results.push({
+      tool: "codex",
+      action: "seed_import_offsets_skipped",
+      reason: error?.code ? String(error.code) : "seed_failed",
+    });
+  }
 }
 
 async function configureClaude(scriptPath) {
