@@ -25,6 +25,7 @@ test_output.log
 
 # Local agent/tool state
 .antigravitycli/
+.claude/worktrees/
 .tao/
 # VibeGuard local secrets
 .env.vibeguard.local

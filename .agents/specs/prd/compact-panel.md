@@ -15,6 +15,9 @@
 - Appears under the notch when notch geometry is available, otherwise under or
   near the trigger.
 - Glass tray style.
+- The glass backdrop is clipped at the visual-effect boundary to the same
+  continuous rounded outline as the visible panel border. No rectangular
+  translucent material may remain in the four outer corners.
 - Height target: 120-180px for MVP.
 - Sections:
   - Status Strip
@@ -46,9 +49,13 @@
 - AI status should not imply that a tool is actively generating solely because
   a process exists. The UI should show `Running` plus CPU/memory detail instead
   of a vague active count.
+- The panel's four outer corners remain fully transparent outside the rounded
+  tray outline in light and dark appearance and after a live panel resize.
 
 ## Verification
 
 - Verify notch and non-notch placement paths.
 - Verify compact layout for loading, empty, unavailable, and populated sections.
 - Verify the panel opens the detailed token dashboard instead of embedding it.
+- Verify the visual-effect mask follows panel size changes and visually inspect
+  that no rectangular backdrop remains outside the rounded border.

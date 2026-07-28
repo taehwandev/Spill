@@ -49,6 +49,11 @@ struct PreferencesSidebarView: View {
     private var navigationList: some View {
         VStack(spacing: 4) {
             sidebarItem(title: t(.general), imageName: "gearshape.fill", tag: "general")
+            sidebarItem(
+                title: t(.spillGlance),
+                imageName: "sparkles.rectangle.stack",
+                tag: "glance"
+            )
             sidebarItem(title: t(.menuBar), imageName: "menubar.rectangle", tag: "menubar")
             sidebarItem(title: t(.tokenMetering), imageName: "chart.bar.xaxis", tag: "tokens")
             sidebarItem(title: t(.windowManagement), imageName: "macwindow", tag: "windows")

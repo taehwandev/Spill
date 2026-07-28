@@ -73,6 +73,7 @@ private extension PreferencesView {
     private func tabTitle(for tab: String) -> String {
         switch tab {
         case "general": return t(.general)
+        case "glance": return t(.spillGlance)
         case "menubar": return t(.menuBarAndNotch)
         case "tokens": return t(.tokenMetering)
         case "windows": return t(.windowManagement)
@@ -96,6 +97,17 @@ private extension PreferencesView {
                 showPanelAction: showPanelAction,
                 language: settings.appLanguage
             )
+        case "glance":
+            PreferenceCard(
+                title: t(.spillGlance),
+                symbolName: "sparkles.rectangle.stack",
+                iconColor: .indigo
+            ) {
+                SpillGlancePreferencesSection(
+                    settings: settings,
+                    language: settings.appLanguage
+                )
+            }
         case "menubar":
             MenuBarPreferencesSection(
                 settings: settings,

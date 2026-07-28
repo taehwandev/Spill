@@ -233,15 +233,11 @@ extension SpillPanelController {
         panel.minSize = SpillPanelMetrics.minimumSize
         panel.appearance = settings.appearanceTheme.nsAppearance
 
-        let visualEffectView = NSVisualEffectView(frame: NSRect(origin: .zero, size: frame.size))
+        let visualEffectView = SpillPanelVisualEffectView(frame: NSRect(origin: .zero, size: frame.size))
         visualEffectView.autoresizingMask = [.width, .height]
         visualEffectView.blendingMode = .behindWindow
         visualEffectView.material = .popover
         visualEffectView.state = .active
-        visualEffectView.wantsLayer = true
-        visualEffectView.layer?.cornerRadius = 22
-        visualEffectView.layer?.cornerCurve = .continuous
-        visualEffectView.layer?.masksToBounds = true
         visualEffectView.layer?.borderWidth = 0.8
         panelVisualEffectView = visualEffectView
         applyPanelBorderColor()
