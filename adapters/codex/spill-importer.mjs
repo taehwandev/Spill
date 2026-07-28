@@ -1,9 +1,7 @@
 #!/usr/bin/env node
 
 import { createHash, randomUUID } from "node:crypto";
-import { createReadStream } from "node:fs";
-import { mkdir, readdir, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
-import { createInterface } from "node:readline";
+import { mkdir, open, readdir, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { homedir } from "node:os";
 
@@ -11,6 +9,17 @@ const DEFAULT_PORT = "48731";
 const DEFAULT_SINCE_HOURS = 24;
 const DEFAULT_WATCH_INTERVAL_MS = 5000;
 const MAX_LINE_BYTES = 1024 * 1024;
+const STATE_SCHEMA_VERSION = 2;
+// A hook run reads only the bytes appended since its last checkpoint. The
+// budget bounds a first catch-up pass over an untracked session file so a Stop
+// hook never has to finish a full bootstrap inside its timeout; whatever is
+// left resumes on the next run instead of being skipped.
+const DEFAULT_MAX_SCAN_BYTES = 64 * 1024 * 1024;
+const READ_CHUNK_BYTES = 4 * 1024 * 1024;
+// A pending line this far past MAX_LINE_BYTES can never parse, so consuming it
+// keeps one corrupt session file from stalling every later run.
+const MAX_CARRY_BYTES = MAX_LINE_BYTES * 2;
+const MAX_TRACKED_SESSION_FILES = 2000;
 const WRITE_TOOL_NAMES = new Set([
   "apply_patch",
   "edit",
@@ -56,15 +65,25 @@ const codexStateLabelSupport = {
       const parsed = JSON.parse(await readFile(path, "utf8"));
       if (parsed && Array.isArray(parsed.sentSpanIDs)) {
         return {
+          schemaVersion: STATE_SCHEMA_VERSION,
           updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : "",
           sentSpanIDs: parsed.sentSpanIDs.filter((value) => typeof value === "string"),
           sessionCursors: plainObject(parsed.sessionCursors) ? parsed.sessionCursors : {},
+          // Absent in schema 1 state. An empty map just means every session file
+          // is still untracked, so the next runs read them forward from zero.
+          sessionFiles: sanitizedSessionFiles(parsed.sessionFiles),
         };
       }
     } catch {
       // Missing or corrupt state should not block local metering.
     }
-    return { updatedAt: "", sentSpanIDs: [], sessionCursors: {} };
+    return {
+      schemaVersion: STATE_SCHEMA_VERSION,
+      updatedAt: "",
+      sentSpanIDs: [],
+      sessionCursors: {},
+      sessionFiles: {},
+    };
   },
 
   parseRuntimeLabel(parsed, expectedTool) {
@@ -172,97 +191,68 @@ if (Number.isNaN(afterDate.getTime())) {
   fail("invalid_after", true);
 }
 
+const seedOffsets = options.seedOffsets;
+// Explicit whole-history passes are install, migration, and repair steps that
+// own their own runtime. Only the default hook path is budgeted.
+const unboundedScan = Boolean(
+  options.bootstrap || options.all || markExisting || options.reconcileExisting,
+);
+const maxScanBytes = resolveMaxScanBytes(
+  options.maxBytes ?? process.env.SPILL_CODEX_IMPORT_MAX_BYTES,
+  unboundedScan,
+);
+// Re-emitting stored spans is only meaningful against whole files, so a
+// reconcile pass ignores the checkpoints instead of reading past them.
+const rescan = Boolean(options.rescan || options.reconcileExisting);
+
 async function importOnce() {
   const state = await codexStateLabelSupport.readState(statePath);
-  const sentSpans = new Set(state.sentSpanIDs);
-  const storedSpans = dryRun
-    ? new Set()
-    : transport === "http"
-      ? await codexTransportSupport.readBridgeSpanIDs(endpoint)
-      : await readLocalSpanIDs(eventsPath, inboxPath);
-  const emittedSpans = new Set();
   const sources = await discoverCodexSessionFiles(codexHome, afterDate);
-  let scannedFiles = 0;
-  let importedEvents = 0;
-  let markedExisting = 0;
-  let skippedSeen = 0;
-  const unsupportedRecords = { count: 0 };
-  const diagnostics = {
-    lastUsageEvents: 0,
-    cumulativeDeltaEvents: 0,
-    unsupportedCumulativeOnlyEvents: 0,
+  const run = {
+    state,
+    sentSpans: new Set(state.sentSpanIDs),
+    storedSpans: dryRun
+      ? new Set()
+      : transport === "http"
+        ? await codexTransportSupport.readBridgeSpanIDs(endpoint)
+        : await readLocalSpanIDs(eventsPath, inboxPath),
+    emittedSpans: new Set(),
+    pending: [],
+    unsupportedRecords: { count: 0 },
+    diagnostics: { lastUsageEvents: 0, cumulativeDeltaEvents: 0, unsupportedCumulativeOnlyEvents: 0 },
+    counts: { scannedFiles: 0, scannedBytes: 0, seededFiles: 0, deferredFiles: 0, importedEvents: 0, markedExisting: 0, skippedSeen: 0 },
+    usedRuntimeLabel: false,
+    remainingScanBytes: maxScanBytes,
   };
-  let usedRuntimeLabel = false;
-  let pendingFileRecords = [];
-
-  async function flushPendingFileEvents() {
-    if (pendingFileRecords.length === 0) return;
-    const records = pendingFileRecords;
-    pendingFileRecords = [];
-    await codexTransportSupport.appendInboxEvents(inboxPath, records);
-  }
 
   for (const source of sources) {
-    scannedFiles += 1;
-    const records = await parseSessionFile(source, afterDate, state, unsupportedRecords, diagnostics);
-    for (const record of records) {
-      const event = record.event;
-      const alreadySeen = emittedSpans.has(event.span_id)
-        || (!options.reconcileExisting && (sentSpans.has(event.span_id) || storedSpans.has(event.span_id)));
-      if (alreadySeen) {
-        skippedSeen += 1;
-        continue;
-      }
-
-      if (markExisting) {
-        markedExisting += 1;
-      } else if (dryRun) {
-        importedEvents += 1;
-      } else {
-        if (transport === "http") {
-          await codexTransportSupport.postEvent(endpoint, event);
-        } else {
-          pendingFileRecords.push(record);
-          if (pendingFileRecords.length >= 5000) {
-            await flushPendingFileEvents();
-          }
-        }
-        importedEvents += 1;
-        storedSpans.add(event.span_id);
-      }
-
-      if (record.usedRuntimeLabel) {
-        usedRuntimeLabel = true;
-      }
-      emittedSpans.add(event.span_id);
-      if (!sentSpans.has(event.span_id)) {
-        sentSpans.add(event.span_id);
-        state.sentSpanIDs.push(event.span_id);
-        if (state.sentSpanIDs.length > 5000) {
-          state.sentSpanIDs = state.sentSpanIDs.slice(-5000);
-        }
-      }
-    }
+    await importSessionSource(run, source);
   }
   if (!dryRun && transport !== "http") {
-    await flushPendingFileEvents();
+    await flushPendingEvents(run);
   }
 
   state.updatedAt = new Date().toISOString();
   if (!dryRun) {
     await writeState(statePath, state);
-    if (usedRuntimeLabel) {
-      await unlink(labelPath).catch(() => {});
-    }
+    if (run.usedRuntimeLabel) await unlink(labelPath).catch(() => {});
   }
 
   if (options.json) {
+    const { counts, diagnostics } = run;
     process.stdout.write(`${JSON.stringify({
-      scanned_files: scannedFiles,
-      imported_events: importedEvents,
-      marked_existing: markedExisting,
-      skipped_seen: skippedSeen,
-      unsupported_records: unsupportedRecords.count,
+      scanned_files: counts.scannedFiles,
+      scanned_bytes: counts.scannedBytes,
+      seeded_files: counts.seededFiles,
+      // Files with bytes left for the next run. Non-zero means the budget or a
+      // still-incomplete trailing record stopped this pass, never that data was
+      // dropped.
+      deferred_files: counts.deferredFiles,
+      state_schema_version: STATE_SCHEMA_VERSION,
+      imported_events: counts.importedEvents,
+      marked_existing: counts.markedExisting,
+      skipped_seen: counts.skippedSeen,
+      unsupported_records: run.unsupportedRecords.count,
       unsupported_cumulative_only: diagnostics.unsupportedCumulativeOnlyEvents,
       delta_sources: {
         last_usage: diagnostics.lastUsageEvents,
@@ -275,6 +265,107 @@ async function importOnce() {
       dry_run: dryRun,
       all: options.all,
     })}\n`);
+  }
+}
+
+async function flushPendingEvents(run) {
+  if (run.pending.length === 0) return;
+  const records = run.pending;
+  run.pending = [];
+  await codexTransportSupport.appendInboxEvents(inboxPath, records);
+}
+
+/// Reads one session file forward from its checkpoint and commits the new
+/// checkpoint only after that file's events are durably queued.
+async function importSessionSource(run, source) {
+  const tracked = trackedSessionFile(run.state, source.path);
+
+  // Seeding is the install/migration step: it marks what is already on disk as
+  // read so the first hook run has no backlog. Files that are already tracked
+  // keep their checkpoint, so repeating setup never steps over records the hook
+  // has not imported yet. Whole-history import stays the app's own job.
+  if (seedOffsets) {
+    run.counts.scannedFiles += 1;
+    if (tracked.seenAt) return;
+    run.counts.seededFiles += 1;
+    commitSessionFile(run.state, tracked, { offset: source.size, size: source.size });
+    return;
+  }
+
+  if (run.remainingScanBytes <= 0) {
+    run.counts.deferredFiles += 1;
+    return;
+  }
+
+  const chunk = await readSessionFileChunk(source, tracked, run.remainingScanBytes);
+  if (!chunk) {
+    // Nothing consumable this run. If bytes remain, they are waiting on a record
+    // that is still being written, so report them rather than letting the
+    // summary imply the file is fully caught up.
+    if (source.size > safeOffset(tracked.offset)) run.counts.deferredFiles += 1;
+    return;
+  }
+
+  run.counts.scannedFiles += 1;
+  run.counts.scannedBytes += chunk.consumedBytes;
+  run.remainingScanBytes -= chunk.consumedBytes;
+  if (chunk.pendingBytes > 0) run.counts.deferredFiles += 1;
+
+  const records = parseSessionChunk(
+    chunk, afterDate, run.state, run.unsupportedRecords, run.diagnostics,
+  );
+  for (const record of records) {
+    await emitSessionRecord(run, record);
+  }
+
+  // Queue this file's events before its checkpoint moves. If anything above
+  // threw, the offset still points at the last durably queued record, so the
+  // next run re-reads those bytes instead of stepping over them.
+  if (!dryRun && transport !== "http") {
+    await flushPendingEvents(run);
+  }
+  commitSessionFile(run.state, tracked, {
+    offset: chunk.nextOffset,
+    size: chunk.size,
+    sessionID: chunk.counters.sessionID,
+    model: chunk.counters.sessionModel,
+    ordinal: chunk.counters.ordinal,
+  });
+  if (!dryRun) await writeState(statePath, run.state);
+}
+
+async function emitSessionRecord(run, record) {
+  const event = record.event;
+  if (run.emittedSpans.has(event.span_id)
+    || (!options.reconcileExisting
+      && (run.sentSpans.has(event.span_id) || run.storedSpans.has(event.span_id)))) {
+    run.counts.skippedSeen += 1;
+    return;
+  }
+
+  if (markExisting) {
+    run.counts.markedExisting += 1;
+  } else if (dryRun) {
+    run.counts.importedEvents += 1;
+  } else {
+    if (transport === "http") {
+      await codexTransportSupport.postEvent(endpoint, event);
+    } else {
+      run.pending.push(record);
+      if (run.pending.length >= 5000) await flushPendingEvents(run);
+    }
+    run.counts.importedEvents += 1;
+    run.storedSpans.add(event.span_id);
+  }
+
+  if (record.usedRuntimeLabel) run.usedRuntimeLabel = true;
+  run.emittedSpans.add(event.span_id);
+  if (!run.sentSpans.has(event.span_id)) {
+    run.sentSpans.add(event.span_id);
+    run.state.sentSpanIDs.push(event.span_id);
+    if (run.state.sentSpanIDs.length > 5000) {
+      run.state.sentSpanIDs = run.state.sentSpanIDs.slice(-5000);
+    }
   }
 }
 
@@ -297,67 +388,148 @@ async function discoverCodexSessionFiles(root, after) {
           const info = await stat(path).catch(() => null);
           if (!info?.isFile()) continue;
           if (info.mtime < after) continue;
-          files.push(path);
+          files.push({ path, size: info.size, modifiedAt: info.mtime.getTime() });
         }
       }
     }
   }
-  return files.sort();
+  // Newest first so a budgeted run spends its bytes on the session that is
+  // actually being appended to right now.
+  return files.sort((left, right) =>
+    right.modifiedAt - left.modifiedAt || left.path.localeCompare(right.path));
 }
 
-async function parseSessionFile(path, after, state, unsupportedRecords = { count: 0 }, diagnostics = null) {
-  const counters = {
-    sessionID: "",
-    sessionModel: "",
-    toolNames: new Set(),
-  };
-  const records = [];
-  let tokenCountOrdinal = 0;
+/// Reads the bytes appended to one session file since its stored checkpoint.
+///
+/// Only whole newline-terminated records are returned. A trailing partial line
+/// is left unconsumed so its bytes stay outside the checkpoint until the record
+/// is complete on a later run.
+async function readSessionFileChunk(source, tracked, budgetBytes) {
+  const { path, size } = source;
+  let start = safeOffset(tracked.offset);
+  let restarted = false;
 
-  const stream = createReadStream(path, { encoding: "utf8" });
-  stream.on("error", () => {});
-  const lines = createInterface({ input: stream, crlfDelay: Infinity });
+  // A file shorter than its own checkpoint was truncated or rotated in place,
+  // so the stored offset now points into unrelated bytes.
+  if (rescan || start > size) {
+    start = 0;
+    restarted = true;
+  }
+  if (start === size) return null;
 
+  const counters = restarted
+    ? { sessionID: "", sessionModel: "", toolNames: new Set(), ordinal: 0 }
+    : {
+        sessionID: typeof tracked.sessionID === "string" ? tracked.sessionID : "",
+        sessionModel: typeof tracked.model === "string" ? tracked.model : "",
+        toolNames: new Set(),
+        ordinal: safeOffset(tracked.ordinal),
+      };
+
+  // The budget bounds throughput, but a window narrower than one maximal record
+  // could never contain a newline, so every run would consume nothing and the
+  // file would stall forever. Floor the window at one parseable line so progress
+  // is always possible; MAX_LINE_BYTES is the parser's own ceiling, so this
+  // reads at most one extra line beyond the budget.
+  const allowed = Math.min(size - start, Math.max(budgetBytes, MAX_LINE_BYTES + 1));
+  if (allowed <= 0) return null;
+
+  let carry = Buffer.alloc(0);
+  let consumed = 0;
+
+  const handle = await open(path, "r").catch(() => null);
+  if (!handle) return null;
   try {
-    for await (const line of lines) {
-      if (!line || line.length > MAX_LINE_BYTES) continue;
-      if (line.includes('"type":"session_meta"') || line.includes('"type": "session_meta"')) {
-        captureSessionMeta(line, counters);
-        continue;
-      }
-      if (line.includes('"type":"turn_context"') || line.includes('"type": "turn_context"')) {
-        const model = rawJSONField(line, "model");
-        if (model) counters.sessionModel = model;
-        continue;
-      }
-      if (mayContainToolMetadata(line)) {
-        collectSafeToolNames(safeJSON(line), counters.toolNames);
-      }
-      if (!line.includes('"token_count"')) continue;
+    const buffer = Buffer.allocUnsafe(Math.min(READ_CHUNK_BYTES, allowed));
+    while (consumed + carry.length < allowed) {
+      const want = Math.min(buffer.length, allowed - consumed - carry.length);
+      const { bytesRead } = await handle.read(buffer, 0, want, start + consumed + carry.length);
+      if (bytesRead <= 0) break;
 
-      const parsed = safeJSON(line);
-      if (!parsed || parsed.type !== "event_msg" || parsed.payload?.type !== "token_count") {
-        continue;
-      }
-      tokenCountOrdinal += 1;
-
-      const timestamp = codexEventSupport.parseEventTimestamp(parsed.timestamp);
-      if (!timestamp) {
-        unsupportedRecords.count += 1;
+      const combined = carry.length > 0
+        ? Buffer.concat([carry, buffer.subarray(0, bytesRead)])
+        : Buffer.from(buffer.subarray(0, bytesRead));
+      const boundary = combined.lastIndexOf(0x0a);
+      if (boundary < 0) {
+        carry = combined;
+        // Force progress past a record that could never be parsed anyway.
+        if (carry.length > MAX_CARRY_BYTES) {
+          consumed += carry.length;
+          carry = Buffer.alloc(0);
+        }
         continue;
       }
 
-      const usage = usageRecordFromTokenCount(parsed.payload.info);
-      if (!usage) {
-        unsupportedRecords.count += 1;
-        continue;
-      }
-
-      records.push({ timestamp, usage, eventIndex: tokenCountOrdinal });
+      // Folded per read rather than collected, so peak memory stays at one read
+      // buffer instead of every line in the window.
+      consumeChunkLines(combined.subarray(0, boundary + 1).toString("utf8"), counters);
+      consumed += boundary + 1;
+      carry = Buffer.from(combined.subarray(boundary + 1));
     }
   } finally {
-    lines.close();
-    stream.destroy();
+    await handle.close().catch(() => {});
+  }
+
+  if (consumed === 0) return null;
+
+  return {
+    path,
+    size,
+    counters,
+    records: counters.records ?? [],
+    consumedBytes: consumed,
+    nextOffset: start + consumed,
+    pendingBytes: size - (start + consumed),
+  };
+}
+
+function consumeChunkLines(text, counters) {
+  for (const line of text.split(/\r?\n/)) {
+    if (line.length > 0) consumeSessionLine(line, counters);
+  }
+}
+
+/// Folds one JSONL record into the running per-file counters.
+function consumeSessionLine(line, counters) {
+  if (!line || line.length > MAX_LINE_BYTES) return;
+  if (line.includes('"type":"session_meta"') || line.includes('"type": "session_meta"')) {
+    captureSessionMeta(line, counters);
+    return;
+  }
+  if (line.includes('"type":"turn_context"') || line.includes('"type": "turn_context"')) {
+    const model = rawJSONField(line, "model");
+    if (model) counters.sessionModel = model;
+    return;
+  }
+  if (mayContainToolMetadata(line)) {
+    collectSafeToolNames(safeJSON(line), counters.toolNames);
+  }
+  if (!line.includes('"token_count"')) return;
+
+  const parsed = safeJSON(line);
+  if (!parsed || parsed.type !== "event_msg" || parsed.payload?.type !== "token_count") {
+    return;
+  }
+  counters.ordinal += 1;
+  if (!counters.records) counters.records = [];
+  counters.records.push({ raw: parsed, eventIndex: counters.ordinal });
+}
+
+function parseSessionChunk(chunk, after, state, unsupportedRecords = { count: 0 }, diagnostics = null) {
+  const { path, counters } = chunk;
+  const records = [];
+  for (const entry of chunk.records) {
+    const timestamp = codexEventSupport.parseEventTimestamp(entry.raw.timestamp);
+    if (!timestamp) {
+      unsupportedRecords.count += 1;
+      continue;
+    }
+    const usage = usageRecordFromTokenCount(entry.raw.payload.info);
+    if (!usage) {
+      unsupportedRecords.count += 1;
+      continue;
+    }
+    records.push({ timestamp, usage, eventIndex: entry.eventIndex });
   }
 
   if (records.length === 0) return [];
@@ -825,7 +997,84 @@ function optionalOpaqueID(value) {
 
 async function writeState(path, state) {
   await mkdir(dirname(path), { recursive: true, mode: 0o700 });
-  await writeFile(path, `${JSON.stringify(state, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+  // Rename in the same directory so a run interrupted mid-write leaves the
+  // previous checkpoint intact rather than a truncated one.
+  const temporaryPath = `${path}.${process.pid}-${randomUUID().slice(0, 8)}.tmp`;
+  await writeFile(temporaryPath, `${JSON.stringify(state, null, 2)}\n`, {
+    encoding: "utf8",
+    mode: 0o600,
+    flag: "wx",
+  });
+  await rename(temporaryPath, path);
+}
+
+/// Rebuilds the per-file checkpoint map, dropping anything unrecognized.
+///
+/// Only opaque and safe metadata is kept: files are keyed by a hash of their
+/// path, never the path itself, and the retained values are Codex's own opaque
+/// session id and its model id.
+function sanitizedSessionFiles(value) {
+  if (!plainObject(value)) return {};
+  const files = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (!/^[a-f0-9]{24}$/.test(key) || !plainObject(entry)) continue;
+    files[key] = {
+      offset: safeOffset(entry.offset),
+      size: safeOffset(entry.size),
+      sessionID: optionalOpaqueID(entry.sessionID) ?? "",
+      model: typeof entry.model === "string" ? safeModel(entry.model) : "",
+      ordinal: safeOffset(entry.ordinal),
+      seenAt: typeof entry.seenAt === "string" ? entry.seenAt : "",
+    };
+  }
+  return files;
+}
+
+function trackedSessionFile(state, path) {
+  const key = opaqueHash(path);
+  const entry = state.sessionFiles[key];
+  return plainObject(entry)
+    ? { key, ...entry }
+    : { key, offset: 0, size: 0, sessionID: "", model: "", ordinal: 0, seenAt: "" };
+}
+
+function commitSessionFile(state, tracked, next) {
+  state.sessionFiles[tracked.key] = {
+    offset: safeOffset(next.offset),
+    size: safeOffset(next.size),
+    sessionID: optionalOpaqueID(next.sessionID ?? tracked.sessionID) ?? "",
+    model: next.model ? safeModel(next.model) : tracked.model || "",
+    ordinal: safeOffset(next.ordinal ?? tracked.ordinal),
+    seenAt: new Date().toISOString(),
+  };
+  pruneSessionFiles(state);
+}
+
+/// Keeps the checkpoint map bounded. Evicted files are simply untracked again,
+/// so they are re-read forward rather than skipped.
+function pruneSessionFiles(state) {
+  const keys = Object.keys(state.sessionFiles);
+  if (keys.length <= MAX_TRACKED_SESSION_FILES) return;
+  keys
+    .sort((left, right) =>
+      String(state.sessionFiles[left].seenAt).localeCompare(String(state.sessionFiles[right].seenAt)))
+    .slice(0, keys.length - MAX_TRACKED_SESSION_FILES)
+    .forEach((key) => delete state.sessionFiles[key]);
+}
+
+function safeOffset(value) {
+  return Number.isSafeInteger(value) && value > 0 ? value : 0;
+}
+
+function resolveMaxScanBytes(value, unbounded) {
+  if (value === undefined || value === null || value === "") {
+    return unbounded ? Number.POSITIVE_INFINITY : DEFAULT_MAX_SCAN_BYTES;
+  }
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    fail("invalid_max_bytes", true);
+  }
+  return parsed;
 }
 
 async function safeReadDir(path) {
@@ -848,6 +1097,10 @@ function parseArgs(args) {
     else if (arg === "--all") parsed.all = true;
     else if (arg === "--mark-existing") parsed.markExisting = true;
     else if (arg === "--reconcile-existing") parsed.reconcileExisting = true;
+    else if (arg === "--bootstrap") parsed.bootstrap = true;
+    else if (arg === "--seed-offsets") parsed.seedOffsets = true;
+    else if (arg === "--rescan") parsed.rescan = true;
+    else if (arg === "--max-bytes") parsed.maxBytes = requiredValue(args, ++index, arg);
     else if (arg === "--strict") parsed.strict = true;
     else if (arg === "--watch") parsed.watch = true;
     else if (arg === "--codex-home") parsed.codexHome = requiredValue(args, ++index, arg);
@@ -896,6 +1149,10 @@ Options:
   --strict               Exit non-zero when the selected transport is unavailable.
   --watch                Poll Codex sessions continuously. Not needed for hook-based metering.
   --all                  Scan all supported local session history.
+  --bootstrap            Explicit install/migration pass. Reads without the per-run byte budget.
+  --seed-offsets         Mark session files already on disk as read. Records checkpoints only.
+  --rescan               Ignore stored checkpoints and re-read selected files from the start.
+  --max-bytes BYTES      Per-run scan budget. Default: 67108864 unless a whole-history flag is set.
   --after ISO            Import token_count events at or after this timestamp.
   --since-hours HOURS    Import recent events. Default: 24.
   --interval-ms MS       Poll interval for --watch. Default: 5000.
@@ -908,6 +1165,12 @@ Options:
   --label-file PATH      Short-lived safe task/stage label file.
   --task-type SLUG       Override task_type with a safe workflow slug.
   --stage SLUG           Override stage with a safe workflow slug.
+
+Session files are read incrementally. Each file keeps a byte checkpoint keyed by
+an opaque hash of its path, so a run parses only the records appended since the
+previous run. Checkpoints advance only past whole newline-terminated records
+that were queued successfully, and reset to the start when a file is truncated
+or rotated. Source paths are never stored in state.
 
 Reads only Codex token_count records and safe opaque session/model metadata.
 It does not infer task or stage labels from prompts, commands, tool output,

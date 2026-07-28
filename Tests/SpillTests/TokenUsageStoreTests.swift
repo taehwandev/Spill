@@ -6206,6 +6206,14 @@ final class TokenUsageStoreTests: XCTestCase {
 
         XCTAssertTrue(codexImporter.contains("labelForTimestamp(runtimeLabel, record.timestamp)"))
         XCTAssertTrue(codexImporter.contains("const records = []"))
+        // Per-file checkpoints may keep only opaque, safe metadata.
+        XCTAssertTrue(codexImporter.contains("optionalOpaqueID(entry.sessionID)"))
+        XCTAssertTrue(codexImporter.contains("safeModel(entry.model)"))
+        // The setup helper must seed checkpoints so the first Stop hook run
+        // after install has no history backlog to work through.
+        XCTAssertTrue(helper.contains("seedCodexImportOffsets"))
+        XCTAssertTrue(publicHelper.contains("seedCodexImportOffsets"))
+        XCTAssertTrue(bundledHelper.contains("seedCodexImportOffsets"))
         XCTAssertTrue(codexImporter.contains("shouldAdvanceCursor(cursor, nextCursor)"))
         XCTAssertTrue(codexImporter.contains("timestamp < entry.updatedAt"))
         XCTAssertTrue(codexImporter.contains("timestamp > entry.expiresAt"))

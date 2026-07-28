@@ -565,6 +565,11 @@ if (event.task_type !== "code_generation" || event.stage !== "implement") {
 }
 NODE
 
+# Exercises the adapter that is actually bundled and installed, covering the
+# incremental byte-offset reader the Stop hook depends on.
+node "$ROOT_DIR/scripts/verify-codex-importer-incremental-smoke.mjs"
+node "$ROOT_DIR/scripts/verify-codex-importer-contract-smoke.mjs"
+
 INBOX_DIR="$INBOX_DIR" node --input-type=module <<'NODE'
 import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
