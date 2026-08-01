@@ -1162,10 +1162,14 @@ Ticker and full-screen policy:
   cadence — five seconds while rolling, one dwell per queued change while
   reactive — producing an electronic-sign rhythm without a data poll or a
   second timer.
-- The controller applies `.fullScreenAuxiliary` only when
-  `glanceShowInFullScreen` is true. A committed preference change orders the
+- The controller applies mutually exclusive full-screen policies:
+  `.fullScreenAuxiliary` only when `glanceShowInFullScreen` is true, and
+  `.fullScreenNone` when it is false. A committed preference change orders the
   panel out, updates its collection behavior, then restores visibility so the
-  Space assignment updates immediately while preserving placement.
+  Space assignment updates immediately while preserving placement. Explicitly
+  setting `.fullScreenNone` keeps `.canJoinAllSpaces` useful for ordinary
+  Spaces without letting `orderFrontRegardless()` surface the panel beside a
+  native full-screen app.
 
 Rationale:
 

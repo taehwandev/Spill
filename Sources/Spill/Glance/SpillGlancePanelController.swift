@@ -38,6 +38,22 @@ final class SpillGlancePanelController: NSObject {
         panel?.isVisible == true
     }
 
+    nonisolated static func collectionBehavior(
+        showInFullScreen: Bool
+    ) -> NSWindow.CollectionBehavior {
+        var behavior: NSWindow.CollectionBehavior = [
+            .canJoinAllSpaces,
+            .ignoresCycle,
+            .stationary
+        ]
+        if showInFullScreen {
+            behavior.insert(.fullScreenAuxiliary)
+        } else {
+            behavior.insert(.fullScreenNone)
+        }
+        return behavior
+    }
+
     func start() {
         guard !isStarted else {
             updatePanel(for: store.presentation)
@@ -183,15 +199,9 @@ private extension SpillGlancePanelController {
         to panel: NSPanel,
         showInFullScreen: Bool
     ) {
-        var behavior: NSWindow.CollectionBehavior = [
-            .canJoinAllSpaces,
-            .ignoresCycle,
-            .stationary
-        ]
-        if showInFullScreen {
-            behavior.insert(.fullScreenAuxiliary)
-        }
-        panel.collectionBehavior = behavior
+        panel.collectionBehavior = Self.collectionBehavior(
+            showInFullScreen: showInFullScreen
+        )
     }
 }
 
@@ -224,8 +234,11 @@ private extension SpillGlancePanelController {
         ) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.reposition()
-                if self?.store.presentation.isVisible == true,
-                   self?.store.presentation.showInFullScreen == true {
+                // Always re-front on a Space change. `.fullScreenNone` already
+                // keeps the panel off full-screen Spaces at the window level, so
+                // gating this on the preference only loses the ordering guarantee
+                // on ordinary Spaces, which is the default configuration.
+                if self?.store.presentation.isVisible == true {
                     self?.panel?.orderFrontRegardless()
                 }
             }

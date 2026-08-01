@@ -1,5 +1,7 @@
+import AppKit
 import Foundation
 import XCTest
+@testable import Spill
 
 final class SpillGlancePanelSourceTests: XCTestCase {
     func testPanelUsesNonactivatingWindowAndSpaceBehaviors() throws {
@@ -23,6 +25,10 @@ final class SpillGlancePanelSourceTests: XCTestCase {
             "Full-screen auxiliary behavior must be conditional instead of always on."
         )
         XCTAssertTrue(
+            source.contains("behavior.insert(.fullScreenNone)"),
+            "The default policy must explicitly exclude native full-screen Spaces."
+        )
+        XCTAssertTrue(
             source.contains("canBecomeKey") && source.contains("canBecomeMain"),
             "The panel subclass must explicitly document that it cannot become key or main."
         )
@@ -34,6 +40,22 @@ final class SpillGlancePanelSourceTests: XCTestCase {
             source.matches(#"canBecomeMain[^}]*\{\s*false\s*\}"#),
             "The panel must explicitly return false from canBecomeMain."
         )
+    }
+
+    func testFullScreenPreferenceSelectsMutuallyExclusiveCollectionBehaviors() {
+        let excludedBehavior = SpillGlancePanelController.collectionBehavior(
+            showInFullScreen: false
+        )
+        XCTAssertTrue(excludedBehavior.contains(.canJoinAllSpaces))
+        XCTAssertTrue(excludedBehavior.contains(.fullScreenNone))
+        XCTAssertFalse(excludedBehavior.contains(.fullScreenAuxiliary))
+
+        let includedBehavior = SpillGlancePanelController.collectionBehavior(
+            showInFullScreen: true
+        )
+        XCTAssertTrue(includedBehavior.contains(.canJoinAllSpaces))
+        XCTAssertTrue(includedBehavior.contains(.fullScreenAuxiliary))
+        XCTAssertFalse(includedBehavior.contains(.fullScreenNone))
     }
 
     func testGlanceBoundaryAddsNoIndependentPollingOrNetworkSource() throws {

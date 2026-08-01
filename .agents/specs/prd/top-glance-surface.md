@@ -237,7 +237,8 @@ content to invent a semantic current-task title.
 - The panel cannot become key or main and does not activate Spill.
 - The panel is absent from native full-screen Spaces by default. Enabling the
   full-screen option makes it an auxiliary full-screen panel immediately;
-  disabling the option removes it from those Spaces without an app restart.
+  disabling the option explicitly excludes it from those Spaces and removes it
+  without an app restart, even though it continues to join ordinary Spaces.
 - Clicking usage or Work Type segments uses the existing dashboard open action.
   Clicking the settings segment opens the existing `glance` Preferences tab.
 - Token and Work Type changes appear through the event-driven `glanceSummary`
