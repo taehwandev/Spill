@@ -6,8 +6,10 @@ final class SpillGlanceStore: ObservableObject {
     @Published private(set) var presentation: SpillGlancePresentation
 
     private let now: () -> Date
-    private var workRotationIdentity: SpillGlanceWorkRotationIdentity
-    private var workRotationEpoch: Date
+    private var rotationIdentity: SpillGlanceRotationIdentity
+    private var rotationEpoch: Date
+    private var changeQueue: SpillGlanceChangeQueue
+    private var changeBaseline: ChangeBaseline
     private var cancellables = Set<AnyCancellable>()
 
     init(
@@ -17,59 +19,67 @@ final class SpillGlanceStore: ObservableObject {
     ) {
         let glanceSummary = tokenUsageDashboardStore.glanceSummary
         let workRotationEnabled = settings.glanceWorkRotationEnabled
-        let rotationIdentity = Self.workRotationIdentity(
+        let reactiveRotationEnabled = settings.glanceReactiveRotationEnabled
+        let modules = settings.visibleGlanceModules
+        let initialRotationIdentity = Self.rotationIdentity(
             panelSummary: glanceSummary,
-            rotationEnabled: workRotationEnabled,
+            modules: modules,
+            workRotationEnabled: workRotationEnabled,
+            reactiveRotationEnabled: reactiveRotationEnabled,
+            displayStyle: settings.glanceDisplayStyle,
             surfaceEnabled: settings.glanceEnabled
         )
-        let rotationEpoch = now()
-        self.now = now
-        workRotationIdentity = rotationIdentity
-        workRotationEpoch = rotationEpoch
-        presentation = Self.makePresentation(
+        let initialRotationEpoch = now()
+        let initialPresentation = Self.makePresentation(
             enabled: settings.glanceEnabled,
-            modules: settings.visibleGlanceModules,
+            modules: modules,
             panelSummary: glanceSummary,
             inputScope: settings.tokenUsageInputScope,
+            displayStyle: settings.glanceDisplayStyle,
+            showInFullScreen: settings.glanceShowInFullScreen,
+            reactiveRotationEnabled: reactiveRotationEnabled,
             workRotationEnabled: workRotationEnabled,
-            workRotationEpoch: rotationEpoch
+            rotationEpoch: initialRotationEpoch
         )
+        self.now = now
+        rotationIdentity = initialRotationIdentity
+        rotationEpoch = initialRotationEpoch
+        changeQueue = SpillGlanceChangeQueue()
+        changeBaseline = Self.changeBaseline(
+            items: initialPresentation.items,
+            panelSummary: glanceSummary
+        )
+        presentation = initialPresentation
 
-        Publishers.CombineLatest4(
+        let configuration = Publishers.CombineLatest4(
             settings.$glanceEnabled,
             settings.$enabledGlanceModules,
             settings.$tokenUsageInputScope,
             settings.$glanceWorkRotationEnabled
         )
-        .combineLatest(tokenUsageDashboardStore.$glanceSummary)
-        .sink { [weak self] configuration, glanceSummary in
-            guard let self else {
-                return
-            }
-            let (enabled, enabledModules, inputScope, workRotationEnabled) = configuration
-            let nextRotationIdentity = Self.workRotationIdentity(
-                panelSummary: glanceSummary,
-                rotationEnabled: workRotationEnabled,
-                surfaceEnabled: enabled
-            )
-            if nextRotationIdentity != workRotationIdentity {
-                workRotationIdentity = nextRotationIdentity
-                workRotationEpoch = now()
-            }
+        let surface = Publishers.CombineLatest3(
+            settings.$glanceDisplayStyle,
+            settings.$glanceShowInFullScreen,
+            settings.$glanceReactiveRotationEnabled
+        )
 
-            presentation = Self.makePresentation(
-                enabled: enabled,
-                modules: SpillGlanceModule.defaultOrder.filter {
-                    SpillGlanceModule.fixedModules.contains($0)
-                        || enabledModules.contains($0)
-                },
-                panelSummary: glanceSummary,
-                inputScope: inputScope,
-                workRotationEnabled: workRotationEnabled,
-                workRotationEpoch: workRotationEpoch
-            )
-        }
-        .store(in: &cancellables)
+        configuration
+            .combineLatest(surface, tokenUsageDashboardStore.$glanceSummary)
+            .sink { [weak self] configuration, surface, glanceSummary in
+                let (enabled, enabledModules, inputScope, workRotationEnabled) = configuration
+                let (displayStyle, showInFullScreen, reactiveRotationEnabled) = surface
+                self?.apply(
+                    enabled: enabled,
+                    enabledModules: enabledModules,
+                    inputScope: inputScope,
+                    workRotationEnabled: workRotationEnabled,
+                    displayStyle: displayStyle,
+                    showInFullScreen: showInFullScreen,
+                    reactiveRotationEnabled: reactiveRotationEnabled,
+                    panelSummary: glanceSummary
+                )
+            }
+            .store(in: &cancellables)
     }
 
     static func makePresentation(
@@ -77,11 +87,20 @@ final class SpillGlanceStore: ObservableObject {
         modules: [SpillGlanceModule],
         panelSummary: TokenUsagePanelSummarySnapshot,
         inputScope: TokenUsageInputScope,
+        displayStyle: SpillGlanceDisplayStyle = .all,
+        showInFullScreen: Bool = false,
+        reactiveRotationEnabled: Bool = false,
         workRotationEnabled: Bool = true,
-        workRotationEpoch: Date = Date()
+        rotationEpoch: Date = Date(),
+        changeQueue: SpillGlanceChangeQueue = SpillGlanceChangeQueue()
     ) -> SpillGlancePresentation {
         guard enabled, !modules.isEmpty else {
-            return .hidden
+            return .hidden(
+                displayStyle: displayStyle,
+                showInFullScreen: showInFullScreen,
+                reactiveRotationEnabled: reactiveRotationEnabled,
+                rotationEpoch: rotationEpoch
+            )
         }
 
         var seenModules = Set<SpillGlanceModule>()
@@ -126,13 +145,89 @@ final class SpillGlanceStore: ObservableObject {
             case .workType:
                 return workTypeItem(
                     panelSummary: panelSummary,
-                    rotationEnabled: workRotationEnabled,
-                    rotationEpoch: workRotationEpoch
+                    rotationEnabled: workRotationEnabled && !reactiveRotationEnabled,
+                    rotationEpoch: rotationEpoch
                 )
             }
         }
 
-        return SpillGlancePresentation(isVisible: !items.isEmpty, items: items)
+        return SpillGlancePresentation(
+            isVisible: !items.isEmpty,
+            items: items,
+            displayStyle: displayStyle,
+            showInFullScreen: showInFullScreen,
+            reactiveRotationEnabled: reactiveRotationEnabled,
+            rotationEpoch: rotationEpoch,
+            changeQueue: changeQueue
+        )
+    }
+}
+
+private extension SpillGlanceStore {
+    func apply(
+        enabled: Bool,
+        enabledModules: Set<SpillGlanceModule>,
+        inputScope: TokenUsageInputScope,
+        workRotationEnabled: Bool,
+        displayStyle: SpillGlanceDisplayStyle,
+        showInFullScreen: Bool,
+        reactiveRotationEnabled: Bool,
+        panelSummary: TokenUsagePanelSummarySnapshot
+    ) {
+        let modules = SpillGlanceModule.defaultOrder.filter {
+            SpillGlanceModule.fixedModules.contains($0)
+                || enabledModules.contains($0)
+        }
+        let nextRotationIdentity = Self.rotationIdentity(
+            panelSummary: panelSummary,
+            modules: modules,
+            workRotationEnabled: workRotationEnabled,
+            reactiveRotationEnabled: reactiveRotationEnabled,
+            displayStyle: displayStyle,
+            surfaceEnabled: enabled
+        )
+        let didReconfigure = nextRotationIdentity.configuration != rotationIdentity.configuration
+        if nextRotationIdentity != rotationIdentity {
+            rotationIdentity = nextRotationIdentity
+            rotationEpoch = now()
+        }
+
+        let basePresentation = Self.makePresentation(
+            enabled: enabled,
+            modules: modules,
+            panelSummary: panelSummary,
+            inputScope: inputScope,
+            displayStyle: displayStyle,
+            showInFullScreen: showInFullScreen,
+            reactiveRotationEnabled: reactiveRotationEnabled,
+            workRotationEnabled: workRotationEnabled,
+            rotationEpoch: rotationEpoch
+        )
+        let items = basePresentation.items
+
+        let nextBaseline = Self.changeBaseline(items: items, panelSummary: panelSummary)
+        changeQueue = Self.advancedQueue(
+            changeQueue,
+            reactiveRotationEnabled: reactiveRotationEnabled,
+            didReconfigure: didReconfigure,
+            displayStyle: displayStyle,
+            workRotationEnabled: workRotationEnabled,
+            items: items,
+            previous: changeBaseline,
+            next: nextBaseline,
+            at: now()
+        )
+        changeBaseline = nextBaseline
+
+        presentation = SpillGlancePresentation(
+            isVisible: basePresentation.isVisible,
+            items: items,
+            displayStyle: displayStyle,
+            showInFullScreen: showInFullScreen,
+            reactiveRotationEnabled: reactiveRotationEnabled,
+            rotationEpoch: rotationEpoch,
+            changeQueue: changeQueue
+        )
     }
 }
 
@@ -183,16 +278,9 @@ extension SpillGlanceStore {
         rotationEnabled: Bool,
         rotationEpoch: Date
     ) -> SpillGlanceItem {
-        let orderedRows = orderedWorkRows(panelSummary: panelSummary)
-        let rows = rotationEnabled
-            ? orderedRows
-            : Array(orderedRows.prefix(1))
-        let displayValues = rows.map {
-            [
-                compactTaskTitle(id: $0.id, title: $0.title),
-                compactTokenValue(from: $0.value),
-            ].joined(separator: " ")
-        }
+        let orderedValues = orderedWorkValues(panelSummary: panelSummary)
+        let displayValues = (rotationEnabled ? orderedValues : Array(orderedValues.prefix(1)))
+            .map(\.value)
         guard !displayValues.isEmpty else {
             return SpillGlanceItem(
                 module: .workType,
@@ -218,28 +306,10 @@ extension SpillGlanceStore {
     }
 
     static func compactTaskTitle(id: String, title: String) -> String {
-        let knownTitles = [
-            "prd_drafting": "PRD",
-            "code_generation": "Code",
-            "ui_design": "UI",
-            "prompt_design": "Prompt",
-            "code_review": "Review",
-            "review_response": "Review",
-            "test_generation": "Tests",
-            "build_verification": "Build",
-            "bug_reproduction": "Repro",
-            "release_notes": "Notes",
-            "release_packaging": "Release",
-            "git_commit": "Commit",
-            "commit_message": "Commit",
-            "pull_request": "PR",
-            "workflow_setup": "Workflow",
-            "uncategorized": "Other",
-        ]
-        if let knownTitle = knownTitles[id] {
+        if let knownTitle = knownWorkTitles[id] {
             return knownTitle
         }
-        if title.count <= 12 {
+        if title.count <= maximumWorkTitleLength {
             return title
         }
 
@@ -252,15 +322,23 @@ extension SpillGlanceStore {
         return initials.isEmpty ? "Work" : initials
     }
 
-    static func workRotationIdentity(
+    static func rotationIdentity(
         panelSummary: TokenUsagePanelSummarySnapshot,
-        rotationEnabled: Bool,
+        modules: [SpillGlanceModule],
+        workRotationEnabled: Bool,
+        reactiveRotationEnabled: Bool = false,
+        displayStyle: SpillGlanceDisplayStyle,
         surfaceEnabled: Bool = true
-    ) -> SpillGlanceWorkRotationIdentity {
-        SpillGlanceWorkRotationIdentity(
-            orderedWorkIDs: orderedWorkRows(panelSummary: panelSummary).map(\.id),
-            rotationEnabled: rotationEnabled,
-            surfaceEnabled: surfaceEnabled
+    ) -> SpillGlanceRotationIdentity {
+        SpillGlanceRotationIdentity(
+            configuration: SpillGlanceRotationIdentity.Configuration(
+                orderedModules: modules,
+                workRotationEnabled: workRotationEnabled,
+                reactiveRotationEnabled: reactiveRotationEnabled,
+                displayStyle: displayStyle,
+                surfaceEnabled: surfaceEnabled
+            ),
+            orderedWorkIDs: orderedWorkRows(panelSummary: panelSummary).map(\.id)
         )
     }
 
@@ -274,4 +352,42 @@ extension SpillGlanceStore {
             return lhs.ratio > rhs.ratio
         }
     }
+
+    static func orderedWorkValues(
+        panelSummary: TokenUsagePanelSummarySnapshot
+    ) -> [WorkValue] {
+        orderedWorkRows(panelSummary: panelSummary).map { row in
+            WorkValue(
+                id: row.id,
+                value: [
+                    compactTaskTitle(id: row.id, title: row.title),
+                    compactTokenValue(from: row.value),
+                ].joined(separator: " ")
+            )
+        }
+    }
+
+    /// Titles long enough to overflow the fixed Work cell fall back to initials.
+    static let maximumWorkTitleLength = 12
+
+    static let knownWorkTitles: [String: String] = [
+        "prd_drafting": "PRD",
+        "architecture": "Arch",
+        "code_generation": "Code",
+        "ui_design": "UI",
+        "prompt_design": "Prompt",
+        "refactoring": "Refactor",
+        "code_review": "Review",
+        "review_response": "Review",
+        "test_generation": "Tests",
+        "build_verification": "Build",
+        "bug_reproduction": "Repro",
+        "release_notes": "Notes",
+        "release_packaging": "Release",
+        "git_commit": "Commit",
+        "commit_message": "Commit",
+        "pull_request": "PR",
+        "workflow_setup": "Workflow",
+        "uncategorized": "Other",
+    ]
 }

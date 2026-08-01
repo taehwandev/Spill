@@ -167,6 +167,23 @@ final class SpillSettings: ObservableObject {
         didSet { defaults.set(glanceEnabled, forKey: Keys.glanceEnabled) }
     }
 
+    @Published var glanceDisplayStyle: SpillGlanceDisplayStyle {
+        didSet { defaults.set(glanceDisplayStyle.rawValue, forKey: Keys.glanceDisplayStyle) }
+    }
+
+    @Published var glanceShowInFullScreen: Bool {
+        didSet { defaults.set(glanceShowInFullScreen, forKey: Keys.glanceShowInFullScreen) }
+    }
+
+    @Published var glanceReactiveRotationEnabled: Bool {
+        didSet {
+            defaults.set(
+                glanceReactiveRotationEnabled,
+                forKey: Keys.glanceReactiveRotationEnabled
+            )
+        }
+    }
+
     @Published var glanceWorkRotationEnabled: Bool {
         didSet {
             defaults.set(
@@ -384,6 +401,12 @@ final class SpillSettings: ObservableObject {
             rawValue: defaults.string(forKey: Keys.menuBarTriggerIconStyle)
         )
         glanceEnabled = defaults.object(forKey: Keys.glanceEnabled) as? Bool ?? true
+        glanceDisplayStyle = SpillGlanceDisplayStyle.normalized(
+            rawValue: defaults.string(forKey: Keys.glanceDisplayStyle)
+        )
+        glanceShowInFullScreen = defaults.object(forKey: Keys.glanceShowInFullScreen) as? Bool ?? false
+        glanceReactiveRotationEnabled =
+            defaults.object(forKey: Keys.glanceReactiveRotationEnabled) as? Bool ?? true
         glanceWorkRotationEnabled =
             defaults.object(forKey: Keys.glanceWorkRotationEnabled) as? Bool ?? true
         let rawEnabledGlanceModules = defaults.stringArray(forKey: Keys.enabledGlanceModules)
@@ -1048,6 +1071,9 @@ private enum Keys {
     static let menuBarStatusTextBold = "menuBarStatusTextBold"
     static let menuBarTriggerIconStyle = "menuBarTriggerIconStyle"
     static let glanceEnabled = "glanceEnabled"
+    static let glanceDisplayStyle = "glanceDisplayStyle"
+    static let glanceShowInFullScreen = "glanceShowInFullScreen"
+    static let glanceReactiveRotationEnabled = "glanceReactiveRotationEnabled"
     static let glanceWorkRotationEnabled = "glanceWorkRotationEnabled"
     static let enabledGlanceModules = "enabledGlanceModules"
     static let selectedItemKeys = "selectedItemKeys"

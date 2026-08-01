@@ -2,38 +2,55 @@ import AppKit
 
 struct SpillGlanceFrameStore {
     private let defaults: UserDefaults
-    private let key = "spillGlanceFrame"
+    private let placementKey = "spillGlancePlacementV2"
+    private let legacyFrameKey = "spillGlanceFrame"
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
     }
 
-    func restoredFrame(visibleFrame: NSRect, fallback: NSRect) -> NSRect {
-        restoredFrame(visibleFrames: [visibleFrame], fallback: fallback)
+    /// Rewrites a pre-anchor absolute frame into an anchored placement. Separate
+    /// from `restoredFrame` so the read path stays free of persistence writes; the
+    /// caller runs it before restoring, while the original display is connected.
+    func migrateLegacyPlacementIfNeeded(displays: [SpillGlanceScreenDescriptor]) {
+        guard savedPlacement == nil,
+              let legacyFrame,
+              let legacyDisplay = displays.first(where: {
+                  $0.visibleFrame.contains(CGPoint(x: legacyFrame.midX, y: legacyFrame.midY))
+              })
+        else {
+            return
+        }
+
+        save(SpillGlancePlacement.capture(frame: legacyFrame, display: legacyDisplay))
+        defaults.removeObject(forKey: legacyFrameKey)
     }
 
-    func restoredFrame(visibleFrames: [NSRect], fallback: NSRect) -> NSRect {
-        guard let savedFrame else {
-            return fallback
-        }
-        let savedCenter = NSPoint(x: savedFrame.midX, y: savedFrame.midY)
-        guard let visibleFrame = visibleFrames.first(where: { $0.contains(savedCenter) }) else {
-            return fallback
+    func restoredFrame(
+        displays: [SpillGlanceScreenDescriptor],
+        fallbackDisplay: SpillGlanceScreenDescriptor?,
+        contentSize: CGSize
+    ) -> NSRect {
+        guard let resolvedFallback = fallbackDisplay ?? displays.first else {
+            return .zero
         }
 
-        let resizedFrame = NSRect(
-            x: savedFrame.midX - (fallback.width / 2),
-            y: savedFrame.midY - (fallback.height / 2),
-            width: fallback.width,
-            height: fallback.height
-        )
-        return SpillGlanceLayout.constrainedFrame(
-            resizedFrame,
-            visibleFrame: visibleFrame
+        guard let savedPlacement else {
+            return SpillGlanceLayout.panelFrame(
+                contentSize: contentSize,
+                visibleFrame: resolvedFallback.visibleFrame
+            )
+        }
+
+        let targetDisplay = displays.first { $0.id == savedPlacement.displayID }
+            ?? resolvedFallback
+        return savedPlacement.frame(
+            contentSize: contentSize,
+            visibleFrame: targetDisplay.visibleFrame
         )
     }
 
-    func save(_ frame: NSRect) {
+    func save(_ frame: NSRect, display: SpillGlanceScreenDescriptor) {
         guard frame.width.isFinite,
               frame.height.isFinite,
               frame.minX.isFinite,
@@ -44,14 +61,20 @@ struct SpillGlanceFrameStore {
             return
         }
 
-        defaults.set(NSStringFromRect(frame), forKey: key)
+        save(SpillGlancePlacement.capture(frame: frame, display: display))
     }
 
-    private var savedFrame: NSRect? {
-        guard let value = defaults.string(forKey: key) else {
+    private var savedPlacement: SpillGlancePlacement? {
+        guard let data = defaults.data(forKey: placementKey) else {
             return nil
         }
+        return try? JSONDecoder().decode(SpillGlancePlacement.self, from: data)
+    }
 
+    private var legacyFrame: NSRect? {
+        guard let value = defaults.string(forKey: legacyFrameKey) else {
+            return nil
+        }
         let frame = NSRectFromString(value)
         guard frame.width.isFinite,
               frame.height.isFinite,
@@ -64,5 +87,12 @@ struct SpillGlanceFrameStore {
         }
 
         return frame
+    }
+
+    private func save(_ placement: SpillGlancePlacement) {
+        guard let data = try? JSONEncoder().encode(placement) else {
+            return
+        }
+        defaults.set(data, forKey: placementKey)
     }
 }

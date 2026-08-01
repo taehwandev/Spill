@@ -6,13 +6,15 @@ import SwiftUI
 final class SpillGlancePanelController: NSObject {
     private let store: SpillGlanceStore
     private let frameStore: SpillGlanceFrameStore
+    private let screenProvider: SpillGlanceScreenProvider
     private let openDashboardAction: () -> Void
     private let openSettingsAction: () -> Void
     private var panel: SpillGlancePanel?
     private var dragInitialFrame: NSRect?
     private var dragInitialPointerLocation: NSPoint?
-    private var dragVisibleFrame: NSRect?
-    private var presentedModules: [SpillGlanceModule]?
+    private var dragDisplay: SpillGlanceScreenDescriptor?
+    private var presentedLayoutSignature: SpillGlancePresentation.LayoutSignature?
+    private var presentedShowInFullScreen: Bool?
     private var presentationObservation: AnyCancellable?
     private var notificationObservers: [(center: NotificationCenter, token: NSObjectProtocol)] = []
     private var isStarted = false
@@ -20,11 +22,13 @@ final class SpillGlancePanelController: NSObject {
     init(
         store: SpillGlanceStore,
         frameStore: SpillGlanceFrameStore = SpillGlanceFrameStore(),
+        screenProvider: SpillGlanceScreenProvider = SpillGlanceScreenProvider(),
         openDashboardAction: @escaping () -> Void,
         openSettingsAction: @escaping () -> Void
     ) {
         self.store = store
         self.frameStore = frameStore
+        self.screenProvider = screenProvider
         self.openDashboardAction = openDashboardAction
         self.openSettingsAction = openSettingsAction
         super.init()
@@ -68,7 +72,8 @@ final class SpillGlancePanelController: NSObject {
         }
         notificationObservers.removeAll()
         resetDragState()
-        presentedModules = nil
+        presentedLayoutSignature = nil
+        presentedShowInFullScreen = nil
         panel?.orderOut(nil)
     }
 
@@ -88,16 +93,27 @@ final class SpillGlancePanelController: NSObject {
 private extension SpillGlancePanelController {
     func updatePanel(for presentation: SpillGlancePresentation) {
         guard isStarted, presentation.isVisible else {
-            presentedModules = nil
+            presentedLayoutSignature = nil
+            presentedShowInFullScreen = nil
             panel?.orderOut(nil)
             return
         }
 
-        let modules = presentation.items.map(\.module)
+        let layoutSignature = presentation.layoutSignature
         let panel = ensurePanel()
-        if presentedModules != modules {
+        if presentedShowInFullScreen != presentation.showInFullScreen {
+            if panel.isVisible {
+                panel.orderOut(nil)
+            }
+            applyCollectionBehavior(
+                to: panel,
+                showInFullScreen: presentation.showInFullScreen
+            )
+            presentedShowInFullScreen = presentation.showInFullScreen
+        }
+        if presentedLayoutSignature != layoutSignature {
             panel.setFrame(panelFrame(for: presentation), display: panel.isVisible)
-            presentedModules = modules
+            presentedLayoutSignature = layoutSignature
         }
         if !panel.isVisible {
             panel.orderFrontRegardless()
@@ -119,12 +135,10 @@ private extension SpillGlancePanelController {
         panel.isReleasedWhenClosed = false
         panel.isRestorable = false
         panel.level = .statusBar
-        panel.collectionBehavior = [
-            .canJoinAllSpaces,
-            .fullScreenAuxiliary,
-            .ignoresCycle,
-            .stationary
-        ]
+        applyCollectionBehavior(
+            to: panel,
+            showInFullScreen: store.presentation.showInFullScreen
+        )
         panel.backgroundColor = .clear
         panel.isOpaque = false
         panel.hasShadow = false
@@ -146,28 +160,42 @@ private extension SpillGlancePanelController {
         )
 
         self.panel = panel
+        presentedShowInFullScreen = store.presentation.showInFullScreen
         return panel
     }
 
     func panelFrame(for presentation: SpillGlancePresentation) -> CGRect {
-        let screen = preferredScreen()
+        let displays = screenProvider.descriptors()
+        let fallbackDisplay = screenProvider.preferredDescriptor()
         let contentSize = SpillGlanceLayout.contentSize(
-            modules: presentation.items.map(\.module)
+            modules: presentation.items.map(\.module),
+            displayStyle: presentation.displayStyle
         )
-        let fallback = SpillGlanceLayout.panelFrame(
-            contentSize: contentSize,
-            visibleFrame: screen?.visibleFrame ?? .zero
-        )
+        frameStore.migrateLegacyPlacementIfNeeded(displays: displays)
         return frameStore.restoredFrame(
-            visibleFrames: NSScreen.screens.map(\.visibleFrame),
-            fallback: fallback
+            displays: displays,
+            fallbackDisplay: fallbackDisplay,
+            contentSize: contentSize
         )
     }
 
-    func preferredScreen() -> NSScreen? {
-        NSScreen.main ?? NSScreen.screens.first
+    func applyCollectionBehavior(
+        to panel: NSPanel,
+        showInFullScreen: Bool
+    ) {
+        var behavior: NSWindow.CollectionBehavior = [
+            .canJoinAllSpaces,
+            .ignoresCycle,
+            .stationary
+        ]
+        if showInFullScreen {
+            behavior.insert(.fullScreenAuxiliary)
+        }
+        panel.collectionBehavior = behavior
     }
+}
 
+private extension SpillGlancePanelController {
     func observeDisplayChanges() {
         let center = NotificationCenter.default
         let names: [Notification.Name] = [
@@ -196,14 +224,14 @@ private extension SpillGlancePanelController {
         ) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.reposition()
-                if self?.store.presentation.isVisible == true {
+                if self?.store.presentation.isVisible == true,
+                   self?.store.presentation.showInFullScreen == true {
                     self?.panel?.orderFrontRegardless()
                 }
             }
         }
         notificationObservers.append((workspaceCenter, token))
     }
-
 }
 
 private extension SpillGlancePanelController {
@@ -224,7 +252,10 @@ private extension SpillGlancePanelController {
         case .ended:
             if dragInitialFrame != nil {
                 movePanelOrigin(panel, to: NSEvent.mouseLocation)
-                frameStore.save(panel.frame)
+                if let finalDisplay = dragDisplay
+                    ?? panel.screen.flatMap(screenProvider.descriptor(for:)) {
+                    frameStore.save(panel.frame, display: finalDisplay)
+                }
             }
             resetDragState()
         }
@@ -236,7 +267,8 @@ private extension SpillGlancePanelController {
         pointerLocation: NSPoint
     ) {
         guard dragInitialFrame == nil,
-              let visibleFrame = panel.screen?.visibleFrame ?? preferredScreen()?.visibleFrame
+              let display = panel.screen.flatMap(screenProvider.descriptor(for:))
+                ?? screenProvider.preferredDescriptor()
         else {
             return
         }
@@ -246,24 +278,24 @@ private extension SpillGlancePanelController {
             x: pointerLocation.x - initialTranslation.width,
             y: pointerLocation.y + initialTranslation.height
         )
-        dragVisibleFrame = visibleFrame
+        dragDisplay = display
     }
 
     func movePanelOrigin(_ panel: NSPanel, to pointerLocation: NSPoint) {
         guard let initialFrame = dragInitialFrame,
               let initialPointerLocation = dragInitialPointerLocation,
-              let visibleFrame = dragVisibleFrame
+              let display = dragDisplay
         else {
             return
         }
 
-        let targetVisibleFrame = screenVisibleFrame(containing: pointerLocation) ?? visibleFrame
-        dragVisibleFrame = targetVisibleFrame
+        let targetDisplay = screenProvider.descriptor(containing: pointerLocation) ?? display
+        dragDisplay = targetDisplay
         let constrainedFrame = SpillGlanceLayout.draggedFrame(
             initialFrame: initialFrame,
             initialPointerLocation: initialPointerLocation,
             currentPointerLocation: pointerLocation,
-            visibleFrame: targetVisibleFrame
+            visibleFrame: targetDisplay.visibleFrame
         )
         guard panel.frame.origin != constrainedFrame.origin else {
             return
@@ -271,15 +303,9 @@ private extension SpillGlancePanelController {
         panel.setFrameOrigin(constrainedFrame.origin)
     }
 
-    func screenVisibleFrame(containing pointerLocation: NSPoint) -> NSRect? {
-        NSScreen.screens.first {
-            NSMouseInRect(pointerLocation, $0.frame, false)
-        }?.visibleFrame
-    }
-
     func resetDragState() {
         dragInitialFrame = nil
         dragInitialPointerLocation = nil
-        dragVisibleFrame = nil
+        dragDisplay = nil
     }
 }

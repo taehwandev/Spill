@@ -970,16 +970,18 @@ Decision:
 
 The always-visible Spill Glance surface is a main-process feature boundary under
 `Sources/Spill/Glance`. It uses a lightweight feature store for presentation
-state, SwiftUI for the one-row capsule composition, and an AppKit controller for
-`NSPanel` lifecycle and screen placement.
+state, SwiftUI for one grouped horizontal composition with All and Ticker
+styles, and an AppKit controller for `NSPanel` lifecycle, screen placement, and
+full-screen Space policy.
 
 Window contract:
 
 - Use a borderless nonactivating `NSPanel`.
 - The panel cannot become key or main, does not activate Spill, does not appear
   in the window cycle, and remains visible when another application is active.
-- Use public collection behaviors to join Spaces and participate as a
-  full-screen auxiliary window.
+- Use public collection behaviors to join normal Spaces. Do not participate as
+  a full-screen auxiliary window by default; add that behavior only when the
+  user enables the native full-screen visibility preference.
 - On first launch, center the panel horizontally inside the chosen
   `NSScreen.visibleFrame` and place it 10 points below that frame's top edge.
   Do not overlap the menu bar, notch, or status items.
@@ -1000,11 +1002,23 @@ Window contract:
   content to display for every pointer event. The controller clamps the result
   to the pointer-selected `visibleFrame` and saves the final frame through
   `SpillGlanceFrameStore`.
-- On restoration, `SpillGlanceFrameStore` matches the saved frame center
-  against connected visible frames. If the saved display is unavailable, the
-  controller uses the primary-display fallback without saving over the external
-  frame. A later screen-parameter notification can therefore restore the saved
-  external-display position after reconnection.
+- `SpillGlanceFrameStore` persists display identity and a placement descriptor
+  relative to `NSScreen.visibleFrame`. Near-edge X/Y axes store leading,
+  trailing, top, or bottom anchors with fixed insets; free axes store normalized
+  ratios. This preserves corner intent such as right-bottom across resolution,
+  menu-bar, Dock, and work-area changes instead of replaying stale absolute
+  coordinates.
+- On restoration, the frame store resolves the preferred connected display and
+  applies the saved semantic placement to the current content size. If the saved
+  display is unavailable, the controller applies the same placement to the
+  primary-display fallback without overwriting the preferred display identity.
+  A later screen-parameter notification can therefore restore the external
+  display after reconnection. A legacy absolute frame migrates only when its
+  containing display is available.
+- Horizontal layout uses the saved semantic X/Y placement and remains draggable
+  across the full visible frame and connected displays. Top, bottom, and corner
+  anchors therefore survive display geometry changes without a separate
+  orientation or wall-side preference.
 - Hide the panel when Glance is disabled or no module is enabled.
 
 Data and action flow:
@@ -1023,7 +1037,7 @@ calendar-day / system-clock / timezone notifications -> TokenUsageDashboardStore
 SpillSettings Glance preferences -----------------------------------------+-> SpillGlanceStore.state
                                                                                   |
                                                                                   v
-                                                                             SwiftUI row
+                                                                       SwiftUI All/Ticker row
                                                                              /          \
                                                                             v            v
                                                         existing dashboard action   Glance Preferences
@@ -1055,25 +1069,31 @@ closure already used by the compact panel and menu bar.
 Settings and propagation:
 
 - `SpillSettings` remains the persistence owner.
-- `SpillGlanceFrameStore` owns only the local last-valid window frame. It does
-  not become a user-visible setting or sync payload.
+- `SpillGlanceFrameStore` owns only local display identity and semantic window
+  placement. It does not become a user-visible setting or sync payload.
 - New installations default the surface to enabled with only All Today, Work
   Type, and settings visible. Codex, Claude, and Antigravity are opt-in
   segments. All Today and Work Type remain fixed while the surface is enabled.
   `glanceWorkRotationEnabled` defaults to `true` when its persisted key is
   absent, preserving the existing rolling presentation for upgrades.
+  `glanceDisplayStyle` defaults to All when its persisted string is absent or
+  invalid, `glanceShowInFullScreen` defaults to `false`, and
+  `glanceReactiveRotationEnabled` defaults to `true`. The unreleased
+  orientation and wall-side keys have no readers after vertical mode removal.
 - Preferences and Glance live in the main process, so `@Published` delivery is
   the explicit real-time propagation path. Changing Work rotation rebuilds the
   Glance presentation without restart, reopen, manual refresh, polling, or
-  helper-process invalidation. Because `@Published` emits during `willSet`, the
+  helper-process invalidation. Display style and native full-screen visibility
+  use the same path. Because `@Published` emits during `willSet`, the
   AppKit bridge schedules presentation consumption on the next main-queue turn
   and reads the store's committed value. This keeps the visible update within
-  one display frame instead of waiting for the three-second `TimelineView`
+  one display frame instead of waiting for the five-second `TimelineView`
   cadence.
-- The AppKit bridge tracks the ordered module layout separately from content
-  values. It reapplies the saved frame only when visibility or the ordered
-  module set changes; a token value or Work rotation preference update redraws
-  content without moving, resizing, or reordering the panel.
+- The AppKit bridge tracks an explicit layout signature containing the ordered
+  modules and display style separately from content values. It
+  reapplies placement and content size only when that signature changes; a token
+  value or Work rotation update redraws content without moving, resizing, or
+  reordering the panel.
 - The dashboard helper, compact panel, clock-adjacent AI glance, web dashboard,
   Private Usage Upload, sync payloads, and agent-facing summaries do not read
   these presentation settings. No distributed notification or sync migration is
@@ -1090,16 +1110,62 @@ Work Type rotation:
   those labels into compact display values paired with each row's compact
   formatted token total. The dashboard's hidden-tool-filtered `panelSummary`
   remains independent and unchanged.
-- When `glanceWorkRotationEnabled` is true and more than one row exists,
-  SwiftUI `TimelineView` advances the display-only Work value every three
-  seconds. When false, the store projects only the first already-sorted row so
-  the highest-usage Work Type and token total remain fixed.
+- `glanceWorkRotationEnabled` decides whether Work may change value at all;
+  `glanceReactiveRotationEnabled` decides what drives every rotation.
+- Reactive rotation (default): `SpillGlanceStore` diffs consecutive
+  `glanceSummary` projections against a per-module and per-work-row baseline and
+  enqueues only what moved into `SpillGlanceChangeQueue`. Each change owns a
+  fixed dwell, and a module that changes again inside its own dwell updates that
+  entry in place instead of appending another, which bounds the queue to one
+  pending slot per module and throttles bursts. Ticker style renders the active
+  entry and rests on All Today when the queue is quiet; All style applies the
+  queue only to the Work slot and rests on the highest-usage row. Work changes
+  are diffed per task row, so a lower-usage category that just moved can take
+  the slot without reordering the queue. Surface reconfiguration — module set,
+  display style, or either rotation preference — clears the queue so that
+  configuration-induced value differences are never replayed as usage.
+- Rolling rotation (`glanceReactiveRotationEnabled == false`): `TimelineView`
+  advances the display-only Work value every five seconds in All style. Ticker
+  style assigns one ordered global slot to All Today, each enabled AI tool, and
+  Work. The Work slot advances to its next selected value once per completed
+  global queue cycle, so several Work values never outweigh the other modules.
+- When Work rotation is false, the store projects only the first already-sorted
+  Work row and never enqueues a Work change, so the highest-usage Work Type and
+  token total remain fixed in either style and either rotation model.
+- `SpillGlancePresentation.rotationSchedule` owns the schedule choice, and
+  `SpillGlanceRotationTimelineSchedule` adapts it to a single `TimelineView`:
+  periodic for rolling rotation, and the queue's explicit change boundaries for
+  reactive rotation, so the surface stops redrawing once the queue drains.
 - The preference is presentation-only and does not refresh storage, collectors,
   processes, the network, the dashboard helper, the compact panel, the
   clock-adjacent AI glance, web dashboards, upload payloads, sync payloads, or
   agent-facing summaries.
 - Known long task categories use semantic short labels. Long custom safe slugs
   use bounded initials so the compact surface never depends on an ellipsis.
+- Both display styles use fixed token/value typography. The SwiftUI view does
+  not use minimum-scale font reduction; bounded formatters and stable All/Ticker
+  width budgets own fit instead. `SpillGlanceLayout` sizes each module for its
+  icon, two internal gaps, label, representative maximum compact value,
+  horizontal padding, and a small rendering margin so fixed-size text cannot
+  cross a separator.
+
+Ticker and full-screen policy:
+
+- All style shows every selected module at once. Ticker style renders one
+  fixed-width slot plus the persistent settings action, so changing the active
+  item never resizes or repositions the panel.
+- All style gives optional tools short visible labels, fixed-width breathing
+  room, established color cues, and stronger separators while preserving one
+  continuous glass group and fixed typography.
+- Ticker transition identity includes the module and active display value.
+  SwiftUI applies one bottom-to-top slide/fade transition on the shared
+  cadence — five seconds while rolling, one dwell per queued change while
+  reactive — producing an electronic-sign rhythm without a data poll or a
+  second timer.
+- The controller applies `.fullScreenAuxiliary` only when
+  `glanceShowInFullScreen` is true. A committed preference change orders the
+  panel out, updates its collection behavior, then restores visibility so the
+  Space assignment updates immediately while preserving placement.
 
 Rationale:
 

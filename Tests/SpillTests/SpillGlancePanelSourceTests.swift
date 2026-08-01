@@ -15,7 +15,12 @@ final class SpillGlancePanelSourceTests: XCTestCase {
         )
         XCTAssertTrue(
             source.contains(".fullScreenAuxiliary"),
-            "The Glance panel must be eligible to appear alongside full-screen apps."
+            "The Glance panel must support the explicit full-screen opt-in."
+        )
+        XCTAssertTrue(
+            source.contains("if showInFullScreen")
+                && source.contains("behavior.insert(.fullScreenAuxiliary)"),
+            "Full-screen auxiliary behavior must be conditional instead of always on."
         )
         XCTAssertTrue(
             source.contains("canBecomeKey") && source.contains("canBecomeMain"),
@@ -92,8 +97,8 @@ final class SpillGlancePanelSourceTests: XCTestCase {
             "Glance movement needs a dedicated, injectable persistence boundary."
         )
         XCTAssertTrue(
-            controllerSource.contains("frameStore.save"),
-            "The controller must persist the final constrained frame after a drag ends."
+            controllerSource.contains("frameStore.save(panel.frame, display: finalDisplay)"),
+            "The controller must persist the final constrained frame with its display identity."
         )
         XCTAssertTrue(
             controllerSource.contains("NSEvent.mouseLocation"),
@@ -108,8 +113,8 @@ final class SpillGlancePanelSourceTests: XCTestCase {
             "Dragging a transparent glass panel must not force a full content redraw for every pointer event."
         )
         XCTAssertTrue(
-            controllerSource.contains("NSScreen.screens.first")
-                && controllerSource.contains("NSMouseInRect"),
+            allSource.contains("NSScreen.screens.first")
+                && allSource.contains("NSMouseInRect"),
             "The controller should select the connected display under the absolute pointer."
         )
     }
@@ -141,20 +146,29 @@ final class SpillGlancePanelSourceTests: XCTestCase {
         XCTAssertFalse(source.contains("fallbackTint"))
         XCTAssertFalse(source.contains(".scaleEffect"))
         XCTAssertFalse(source.contains(".tint(groupTint"))
-        XCTAssertTrue(source.contains(".clipShape(Capsule"))
+        XCTAssertTrue(source.contains(".clipShape(surfaceShape)"))
+        XCTAssertTrue(source.contains("RoundedRectangle("))
     }
 
-    func testOptionalToolsUseColorCodedIconValuesWithoutVisibleNames() throws {
+    func testAllModeUsesCompactToolLabelsAndColorCodedIcons() throws {
         let viewSource = try source(at: "Sources/Spill/Glance/SpillGlanceView.swift")
         let tintSource = try source(at: "Sources/Spill/Glance/SpillGlanceTint.swift")
+        let moduleSource = try source(at: "Sources/Spill/Settings/SpillGlanceModule.swift")
 
-        XCTAssertTrue(viewSource.contains("if !item.module.isTool"))
+        // Compact labels belong to the module, next to the full titles, so the
+        // view never becomes a second place that names the tools.
+        XCTAssertTrue(moduleSource.contains(#"return "CX""#))
+        XCTAssertTrue(moduleSource.contains(#"return "CL""#))
+        XCTAssertTrue(moduleSource.contains(#"return "AG""#))
+        XCTAssertTrue(viewSource.contains("item.module.compactTitle ?? item.title"))
+        XCTAssertFalse(viewSource.contains(#"return "CX""#))
+        XCTAssertTrue(viewSource.contains("item.tint.color.opacity(0.14)"))
         XCTAssertTrue(tintSource.contains("TokenUsageAITool.codex.dashboardTint"))
         XCTAssertTrue(tintSource.contains("TokenUsageAITool.claude.dashboardTint"))
         XCTAssertTrue(tintSource.contains("TokenUsageAITool.antigravity.dashboardTint"))
     }
 
-    func testWorkTypeUsesBoundedPresentationOnlyRollingSchedule() throws {
+    func testAllAndTickerUseOneBoundedPresentationOnlyRollingSchedule() throws {
         let viewSource = try source(at: "Sources/Spill/Glance/SpillGlanceView.swift")
         let storeSource = try source(at: "Sources/Spill/Glance/SpillGlanceStore.swift")
         let itemSource = try source(at: "Sources/Spill/Glance/SpillGlanceItem.swift")
@@ -164,18 +178,21 @@ final class SpillGlancePanelSourceTests: XCTestCase {
             1,
             "Only the root Glance surface should own the rotating schedule."
         )
-        XCTAssertTrue(viewSource.contains("if let workRotationEpoch"))
         XCTAssertTrue(
-            viewSource.contains("$0.module == .workType && $0.displayValues.count > 1"),
-            "The root schedule should exist only while Work has multiple values to rotate."
+            viewSource.contains("store.presentation.rotationSchedule"),
+            "The root schedule must come from the presentation, not from the view."
         )
-        XCTAssertTrue(viewSource.contains("SpillGlanceItem.rotationInterval"))
-        XCTAssertTrue(viewSource.contains("SpillGlanceSurface(items: store.presentation.items, date: date)"))
-        XCTAssertTrue(viewSource.contains(".accessibilityLabel(accessibilityLabel(at: date))"))
+        XCTAssertTrue(itemSource.contains("static let rotationInterval: TimeInterval = 5"))
+        XCTAssertTrue(viewSource.contains("store.presentation.visibleItems(at: date)"))
+        XCTAssertTrue(
+            viewSource.contains(".accessibilityLabel(accessibilityLabel(at: date))")
+                && viewSource.contains("store.presentation.items"),
+            "VoiceOver must read every module, not only the slot on screen."
+        )
         XCTAssertTrue(viewSource.contains("$0.displayValue(at: date)"))
         XCTAssertTrue(storeSource.contains("$glanceWorkRotationEnabled"))
-        XCTAssertTrue(storeSource.contains("nextRotationIdentity != workRotationIdentity"))
-        XCTAssertTrue(storeSource.contains("workRotationEpoch = now()"))
+        XCTAssertTrue(storeSource.contains("nextRotationIdentity != rotationIdentity"))
+        XCTAssertTrue(storeSource.contains("rotationEpoch = now()"))
         XCTAssertTrue(itemSource.contains("date.timeIntervalSince(rotationEpoch)"))
         XCTAssertFalse(itemSource.contains("timeIntervalSinceReferenceDate / interval"))
         XCTAssertFalse(viewSource.contains("Timer("))
@@ -208,12 +225,123 @@ final class SpillGlancePanelSourceTests: XCTestCase {
             "The explicit initial render should not also enqueue a duplicate presentation update."
         )
         XCTAssertTrue(
-            controllerSource.contains("presentedModules != modules"),
+            controllerSource.contains("presentedLayoutSignature != layoutSignature"),
             """
             Token or rotation-value changes must not reapply the saved window frame.
-            Only an ordered module-layout change should resize or reposition the panel.
+            Only an ordered module or display-style change should resize or reposition the panel.
             """
         )
+    }
+
+    func testFullScreenPreferenceReassignsTheVisiblePanelImmediately() throws {
+        let controllerSource = try source(
+            at: "Sources/Spill/Glance/SpillGlancePanelController.swift"
+        )
+
+        XCTAssertTrue(controllerSource.contains("presentedShowInFullScreen"))
+        XCTAssertTrue(
+            controllerSource.contains("if panel.isVisible")
+                && controllerSource.contains("panel.orderOut(nil)")
+        )
+        XCTAssertTrue(
+            controllerSource.contains("showInFullScreen: presentation.showInFullScreen")
+        )
+        XCTAssertTrue(
+            controllerSource.contains("if !panel.isVisible")
+                && controllerSource.contains("panel.orderFrontRegardless()")
+        )
+    }
+
+    func testDisplayStylesUseOneHorizontalSurfaceWithFixedTypography() throws {
+        let viewSource = try source(at: "Sources/Spill/Glance/SpillGlanceView.swift")
+        let storeSource = try source(at: "Sources/Spill/Glance/SpillGlanceStore.swift")
+        let preferencesSource = try source(
+            at: "Sources/Spill/Preferences/Sections/SpillGlancePreferencesSection.swift"
+        )
+
+        XCTAssertTrue(viewSource.contains("HStack(spacing: SpillGlanceLayout.itemSpacing)"))
+        XCTAssertFalse(viewSource.contains("VStack(spacing: SpillGlanceLayout.itemSpacing)"))
+        XCTAssertFalse(viewSource.contains("minimumScaleFactor"))
+        XCTAssertTrue(viewSource.contains(".fixedSize(horizontal: true, vertical: false)"))
+        XCTAssertTrue(viewSource.contains("case .all:"))
+        XCTAssertTrue(viewSource.contains("case .ticker:"))
+        XCTAssertTrue(viewSource.contains("SpillGlanceLayout.tickerItemWidth"))
+        XCTAssertTrue(viewSource.contains(".move(edge: .bottom)"))
+        XCTAssertTrue(viewSource.contains(".move(edge: .top)"))
+        XCTAssertTrue(storeSource.contains("$glanceDisplayStyle"))
+        XCTAssertTrue(storeSource.contains("$glanceShowInFullScreen"))
+        XCTAssertTrue(preferencesSource.contains("$settings.glanceDisplayStyle"))
+        XCTAssertTrue(preferencesSource.contains("$settings.glanceShowInFullScreen"))
+        XCTAssertTrue(preferencesSource.contains("$settings.glanceReactiveRotationEnabled"))
+        XCTAssertTrue(
+            preferencesSource.contains("VStack(alignment: .leading, spacing: 9)"),
+            "Detail copy must stay leading-aligned with the rest of the section."
+        )
+    }
+
+    func testReactiveRotationIsChangeDrivenThrottledAndPresentationOwned() throws {
+        let viewSource = try source(at: "Sources/Spill/Glance/SpillGlanceView.swift")
+        let storeSource = try source(at: "Sources/Spill/Glance/SpillGlanceStore.swift")
+        let queueSource = try source(at: "Sources/Spill/Glance/SpillGlanceChangeQueue.swift")
+        let detectionSource = try source(
+            at: "Sources/Spill/Glance/SpillGlanceChangeDetection.swift"
+        )
+        let scheduleSource = try source(
+            at: "Sources/Spill/Glance/SpillGlanceRotationTimelineSchedule.swift"
+        )
+
+        XCTAssertTrue(storeSource.contains("$glanceReactiveRotationEnabled"))
+        XCTAssertTrue(
+            detectionSource.contains("queue.enqueue(")
+                && detectionSource.contains("pendingChanges("),
+            "Reactive rotation must be fed by diffed snapshots, not by a periodic tick."
+        )
+        XCTAssertTrue(
+            detectionSource.contains("didReconfigure"),
+            "Reconfiguring the surface must not be mistaken for a usage change."
+        )
+        XCTAssertFalse(
+            detectionSource.contains("import Combine")
+                || detectionSource.contains("import AppKit")
+                || detectionSource.contains("import SwiftUI"),
+            "Change detection must stay pure snapshot-diff rules."
+        )
+        XCTAssertTrue(
+            queueSource.contains("entries.firstIndex(where: { $0.module == change.module })"),
+            "A module that keeps changing must coalesce into its pending slot."
+        )
+        XCTAssertTrue(queueSource.contains("entries.removeAll { $0.end <= date }"))
+        XCTAssertTrue(scheduleSource.contains("case let .explicit(dates)"))
+        XCTAssertTrue(scheduleSource.contains("case let .periodic(from, interval)"))
+        XCTAssertFalse(scheduleSource.contains("Timer("))
+        XCTAssertFalse(viewSource.contains("scheduledTimer"))
+    }
+
+    func testPlacementUsesStableDisplayIdentityAndVisibleFrameSemantics() throws {
+        let controllerSource = try source(
+            at: "Sources/Spill/Glance/SpillGlancePanelController.swift"
+        )
+        let placementSource = try source(
+            at: "Sources/Spill/Glance/SpillGlancePlacement.swift"
+        )
+        let screenProviderSource = try source(
+            at: "Sources/Spill/Glance/SpillGlanceScreenProvider.swift"
+        )
+        let frameStoreSource = try source(
+            at: "Sources/Spill/Glance/SpillGlanceFrameStore.swift"
+        )
+
+        XCTAssertTrue(controllerSource.contains("screenProvider.descriptors()"))
+        XCTAssertTrue(screenProviderSource.contains("CGDisplayCreateUUIDFromDisplayID"))
+        XCTAssertTrue(screenProviderSource.contains("visibleFrame: screen.visibleFrame"))
+        XCTAssertTrue(placementSource.contains("case leading"))
+        XCTAssertTrue(placementSource.contains("case trailing"))
+        XCTAssertTrue(placementSource.contains("case bottom"))
+        XCTAssertTrue(placementSource.contains("case top"))
+        XCTAssertTrue(placementSource.contains("normalizedX"))
+        XCTAssertTrue(placementSource.contains("normalizedY"))
+        XCTAssertTrue(frameStoreSource.contains("spillGlancePlacementV2"))
+        XCTAssertTrue(frameStoreSource.contains("legacyFrame"))
     }
 
     func testPanelPlatformObjectsKeepOneTopLevelOwnerPerSourceFile() throws {
@@ -223,7 +351,10 @@ final class SpillGlancePanelSourceTests: XCTestCase {
         )
         let storeSource = try source(at: "Sources/Spill/Glance/SpillGlanceStore.swift")
         let rotationIdentitySource = try source(
-            at: "Sources/Spill/Glance/SpillGlanceWorkRotationIdentity.swift"
+            at: "Sources/Spill/Glance/SpillGlanceRotationIdentity.swift"
+        )
+        let screenProviderSource = try source(
+            at: "Sources/Spill/Glance/SpillGlanceScreenProvider.swift"
         )
 
         XCTAssertTrue(panelSource.contains("final class SpillGlancePanel: NSPanel"))
@@ -231,11 +362,13 @@ final class SpillGlancePanelSourceTests: XCTestCase {
         XCTAssertTrue(hostingSource.contains("final class SpillGlanceHostingView"))
         XCTAssertFalse(hostingSource.contains("final class SpillGlancePanel: NSPanel"))
         XCTAssertTrue(storeSource.contains("final class SpillGlanceStore: ObservableObject"))
-        XCTAssertFalse(storeSource.contains("struct SpillGlanceWorkRotationIdentity"))
+        XCTAssertFalse(storeSource.contains("struct SpillGlanceRotationIdentity"))
         XCTAssertTrue(
-            rotationIdentitySource.contains("struct SpillGlanceWorkRotationIdentity: Equatable")
+            rotationIdentitySource.contains("struct SpillGlanceRotationIdentity: Equatable")
         )
         XCTAssertFalse(rotationIdentitySource.contains("final class SpillGlanceStore"))
+        XCTAssertTrue(screenProviderSource.contains("struct SpillGlanceScreenProvider"))
+        XCTAssertFalse(screenProviderSource.contains("final class SpillGlancePanelController"))
     }
 }
 
