@@ -12,9 +12,10 @@ final class TokenMeteringDashboardWindowController: NSObject, NSWindowDelegate {
     private let aiStatusStore: AIStatusStore
     private let settings: SpillSettings
     private let deferredRefreshDelayNanoseconds: UInt64 = 1_500_000_000
-    private let aiStatusRefreshIntervalNanoseconds: UInt64 = 8_000_000_000
+    private let aiStatusRefreshIntervalNanoseconds: UInt64 = 30_000_000_000
     private let tokenDataRefreshIntervalNanoseconds: UInt64 = 15_000_000_000
     private let refreshAction: () -> Void
+    private let manualRefreshAction: () -> Void
     private let settingsAction: () -> Void
     private let developerOptionsAction: () -> Void
     private let closeAction: () -> Void
@@ -31,6 +32,7 @@ final class TokenMeteringDashboardWindowController: NSObject, NSWindowDelegate {
         aiStatusStore: AIStatusStore = AIStatusStore(),
         settings: SpillSettings = .shared,
         refreshAction: @escaping () -> Void = {},
+        manualRefreshAction: (() -> Void)? = nil,
         settingsAction: @escaping () -> Void = {},
         developerOptionsAction: @escaping () -> Void = {},
         closeAction: @escaping () -> Void = {},
@@ -41,6 +43,11 @@ final class TokenMeteringDashboardWindowController: NSObject, NSWindowDelegate {
         self.aiStatusStore = aiStatusStore
         self.settings = settings
         self.refreshAction = refreshAction
+        // A user's refresh tap must bypass the collection pacing floor that the
+        // periodic loop is subject to, so the two flows carry distinct actions
+        // (distinct collection reasons). Callers that don't distinguish keep
+        // the single-action behavior.
+        self.manualRefreshAction = manualRefreshAction ?? refreshAction
         self.settingsAction = settingsAction
         self.developerOptionsAction = developerOptionsAction
         self.closeAction = closeAction
@@ -77,7 +84,10 @@ extension TokenMeteringDashboardWindowController {
             guard let self else {
                 return
             }
-            self.refreshAction()
+            // Opening the dashboard is a user action; the deferred first
+            // collection uses the forced reason so a fresh open shows current
+            // imports instead of waiting out the pacing floor.
+            self.manualRefreshAction()
         }
     }
 
@@ -87,7 +97,7 @@ extension TokenMeteringDashboardWindowController {
             while !Task.isCancelled {
                 do {
                     try await Task.sleep(
-                        nanoseconds: self?.aiStatusRefreshIntervalNanoseconds ?? 8_000_000_000
+                        nanoseconds: self?.aiStatusRefreshIntervalNanoseconds ?? 30_000_000_000
                     )
                 } catch {
                     return
@@ -128,7 +138,6 @@ extension TokenMeteringDashboardWindowController {
             return
         }
         refreshAction()
-        store.refreshAsync()
     }
 }
 
@@ -143,7 +152,7 @@ extension TokenMeteringDashboardWindowController {
             cloudServiceStatusStore: cloudServiceStatusStore,
             aiStatusStore: aiStatusStore,
             settings: settings,
-            refreshAction: refreshAction,
+            refreshAction: manualRefreshAction,
             settingsAction: settingsAction,
             developerOptionsAction: developerOptionsAction,
             syncsVisibleAITools: syncsVisibleAIToolsInView,

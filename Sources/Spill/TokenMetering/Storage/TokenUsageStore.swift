@@ -42,6 +42,24 @@ final class TokenUsageStore: @unchecked Sendable {
     let lock = NSLock()
     var preparedDatabaseSchemaCheckpoint: DatabaseSchemaCheckpoint?
 
+    /// Guards the aggregate cache and its revision independently of `lock`, so
+    /// cached reads never contend with (or re-enter) the database lock.
+    let aggregateCacheLock = NSLock()
+    var dataRevisionStorage: UInt64 = 0
+    var allPeriodTotalsCacheStorage: (
+        key: AllPeriodTotalsCacheKey,
+        totals: [TokenUsageDashboardPeriod: TokenUsageInputScopeTotals]
+    )?
+
+    struct AllPeriodTotalsCacheKey: Equatable {
+        let revision: UInt64
+        let dashboardToolsOnly: Bool
+        let visibleTools: Set<TokenUsageAITool>?
+        let dayStart: Date
+        let calendarIdentifier: Calendar.Identifier
+        let timeZoneIdentifier: String
+    }
+
     init(
         fileURL: URL = TokenUsageStore.defaultEventsURL(),
         inboxURL: URL? = nil

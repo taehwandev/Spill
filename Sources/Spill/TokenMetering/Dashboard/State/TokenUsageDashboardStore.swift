@@ -50,9 +50,14 @@ final class TokenUsageDashboardStore: ObservableObject {
     private var visibleAITools: Set<TokenUsageAITool>?
     private var eventsDidChangeObserver: NSObjectProtocol?
     private var distributedEventsDidChangeObserver: NSObjectProtocol?
-    private var collectionDidFinishObserver: NSObjectProtocol?
     private var calendarInvalidationObservers: [NSObjectProtocol] = []
     private var hasRebuiltSnapshot = false
+    /// Latches on the first external full-refresh request and never resets. A
+    /// transient first SQL failure restores `loadState` to `.idle` so the
+    /// refresh button can retry, but the dashboard surface that asked is still
+    /// out there — change notifications must keep retrying the full snapshot
+    /// for it rather than silently downgrading to panel-summary-only forever.
+    private var hasRequestedFullSnapshot = false
     private var clearLiveUpdateTask: Task<Void, Never>?
     private var scheduledRefreshTask: Task<Void, Never>?
     private let snapshotBuildQueue = DispatchQueue(label: "app.spill.token-dashboard.snapshot-build", qos: .userInitiated)
@@ -82,16 +87,14 @@ final class TokenUsageDashboardStore: ObservableObject {
             forName: TokenUsageStore.distributedEventsDidChangeNotification,
             object: nil,
             queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.scheduleRefresh()
+        ) { [weak self, weak usageStore] notification in
+            // The posting process already handled this change through the
+            // in-process notification above; reacting to its distributed echo
+            // would run the same reads a second time.
+            guard !TokenUsageStore.isOwnDistributedChangeEcho(notification) else {
+                return
             }
-        }
-        collectionDidFinishObserver = notificationCenter.addObserver(
-            forName: TokenUsageCollectorCoordinator.collectionDidFinishNotification,
-            object: collectionCoordinator,
-            queue: .main
-        ) { [weak self] _ in
+            usageStore?.noteDataChanged()
             Task { @MainActor [weak self] in
                 self?.scheduleRefresh()
             }
@@ -146,9 +149,6 @@ final class TokenUsageDashboardStore: ObservableObject {
         if let distributedEventsDidChangeObserver {
             DistributedNotificationCenter.default().removeObserver(distributedEventsDidChangeObserver)
         }
-        if let collectionDidFinishObserver {
-            notificationCenter.removeObserver(collectionDidFinishObserver)
-        }
         calendarInvalidationObservers.forEach(notificationCenter.removeObserver)
         clearLiveUpdateTask?.cancel()
         scheduledRefreshTask?.cancel()
@@ -157,6 +157,7 @@ final class TokenUsageDashboardStore: ObservableObject {
 
 extension TokenUsageDashboardStore {
     func refresh(trackLiveUpdates: Bool = true, refreshesPanelSummary: Bool = true) {
+        hasRequestedFullSnapshot = true
         scheduledRefreshTask?.cancel()
         scheduledRefreshTask = nil
         snapshotBuildGate.next()
@@ -193,6 +194,7 @@ extension TokenUsageDashboardStore {
         reusesLoadedEvents: Bool = false,
         reusesPeriodFilterTotals: Bool = false
     ) {
+        hasRequestedFullSnapshot = true
         scheduledRefreshTask?.cancel()
         scheduledRefreshTask = nil
         let generation = snapshotBuildGate.next()
@@ -414,11 +416,30 @@ extension TokenUsageDashboardStore {
             } catch {
                 return
             }
-            guard !Task.isCancelled else {
+            guard !Task.isCancelled, let self else {
                 return
             }
-            self?.refreshAsync(trackLiveUpdates: trackLiveUpdates)
+            // The main process holds this store only for the panel and Glance
+            // summaries until a dashboard surface performs its first full load.
+            // A store-change notification alone must not pay for a full SQL
+            // snapshot build that nothing reads; once any full refresh has run
+            // (dashboard helper or in-app fallback window), changes resume
+            // rebuilding the snapshot as before.
+            guard self.hasSnapshotConsumer else {
+                self.refreshPanelSummary()
+                return
+            }
+            self.refreshAsync(trackLiveUpdates: trackLiveUpdates)
         }
+    }
+
+    /// True once any caller has requested a full snapshot load, which is the
+    /// signal that a dashboard surface exists and change notifications should
+    /// rebuild the snapshot rather than only the panel summary. The latched
+    /// flag keeps this true across a transient first-load failure, whose
+    /// recovery path resets `loadState` back to `.idle`.
+    private var hasSnapshotConsumer: Bool {
+        hasRequestedFullSnapshot || hasRebuiltSnapshot || loadState != .idle || isRefreshing
     }
 }
 

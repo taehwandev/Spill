@@ -26,13 +26,15 @@ extension TokenUsageDashboardStore {
     /// bounds are known.
     ///
     /// Query set is caller-controlled so each call site pays exactly the queries it consumed before:
-    /// `loadsPeriodFilterTotals` + `cachedPeriodFilterTotals` mirror refreshAsync's reuse semantics
-    /// (only query when no cached copy was handed in), and `loadsPanelSummary` mirrors
-    /// `refreshesPanelSummary`. The rebuild/calendar paths pass both false so they add zero queries.
+    /// `loadsPeriodFilterTotals` controls whether the shared period map is returned to the caller;
+    /// `cachedPeriodFilterTotals` mirrors refreshAsync's reuse semantics and avoids the query when a
+    /// valid copy was handed in. Snapshot construction always needs that map for its period chips,
+    /// so rebuild/calendar paths may load it inside the snapshot query set without publishing it.
+    /// `loadsPanelSummary` mirrors `refreshesPanelSummary`.
     ///
-    /// Returns nil (fail closed) on any open/statement failure. The snapshot build is done first, so
-    /// a build failure skips the surrounding reads; checking its result directly is a strictly more
-    /// accurate signal than probing a separate connection first (a prior version used
+    /// Returns nil (fail closed) on any open/statement failure. The shared period map and snapshot
+    /// pair are built as one fail-closed unit, so a failure skips the surrounding panel-summary read;
+    /// checking that result directly is more accurate than probing a separate connection first (a prior version used
     /// dashboardSummaryIfAvailable as a canary on its own independent connection, which said nothing
     /// about whether the build's connection would also open, so a canary-pass + build-fail could slip
     /// an empty snapshot through).
@@ -52,27 +54,21 @@ extension TokenUsageDashboardStore {
             )
             let buildRequest = request.replacingAvailableDateBounds(dateBounds)
 
-            guard let output = buildSnapshotPairOutputFromSQL(
+            guard let pairResult = buildSnapshotPairOutputFromSQL(
                 usageStore: usageStore,
                 request: buildRequest,
+                cachedPeriodFilterTotals: cachedPeriodFilterTotals,
                 database: database
             ) else {
                 return nil
             }
+            let output = pairResult.output
 
-            // Read the surrounding aggregates only after the fail-closed build succeeded, but still
-            // on the same connection/transaction. periodFilterTotals honors the caller's cache the
-            // same way the events path does: a non-empty cached copy (reusesPeriodFilterTotals) is
-            // reused with no query.
+            // The pair already consumed the one shared period map. Publish that map only when the
+            // caller requested refreshed filter totals; otherwise preserve the caller's cache contract.
             let periodFilterTotals: [TokenUsageDashboardPeriod: TokenUsageInputScopeTotals]
-            if loadsPeriodFilterTotals, cachedPeriodFilterTotals.isEmpty {
-                periodFilterTotals = usageStore.allPeriodInputScopeTotals(
-                    now: buildRequest.now,
-                    calendar: buildRequest.calendar,
-                    dashboardToolsOnly: !buildRequest.showAdvancedTools,
-                    visibleTools: buildRequest.visibleAITools,
-                    database: database
-                )
+            if loadsPeriodFilterTotals {
+                periodFilterTotals = pairResult.periodFilterTotals
             } else {
                 periodFilterTotals = cachedPeriodFilterTotals
             }
@@ -98,8 +94,30 @@ extension TokenUsageDashboardStore {
     nonisolated private static func buildSnapshotPairOutputFromSQL(
         usageStore: TokenUsageStore,
         request: TokenUsageDashboardBuildRequest,
+        cachedPeriodFilterTotals: [TokenUsageDashboardPeriod: TokenUsageInputScopeTotals],
         database: OpaquePointer
-    ) -> TokenUsageDashboardSnapshotBuildOutput? {
+    ) -> (
+        output: TokenUsageDashboardSnapshotBuildOutput,
+        periodFilterTotals: [TokenUsageDashboardPeriod: TokenUsageInputScopeTotals]
+    )? {
+        let periodFilterTotals: [TokenUsageDashboardPeriod: TokenUsageInputScopeTotals]
+        if cachedPeriodFilterTotals.isEmpty {
+            let failureObserver = TokenUsageQueryFailureObserver()
+            periodFilterTotals = usageStore.allPeriodInputScopeTotals(
+                now: request.now,
+                calendar: request.calendar,
+                dashboardToolsOnly: !request.showAdvancedTools,
+                visibleTools: request.visibleAITools,
+                database: database,
+                failureObserver: failureObserver
+            )
+            guard !failureObserver.didFail else {
+                return nil
+            }
+        } else {
+            periodFilterTotals = cachedPeriodFilterTotals
+        }
+
         guard let filtered = TokenUsageDashboardSnapshot.buildFromSQLAggregates(
             usageStore: usageStore,
             selectedTool: request.selectedTool,
@@ -113,6 +131,7 @@ extension TokenUsageDashboardStore {
             calendarMonthStart: request.proposedCalendarMonthStart,
             periodOffset: request.periodOffset,
             calendar: request.calendar,
+            preloadedPeriodFilterTotals: periodFilterTotals,
             database: database
         ) else {
             return nil
@@ -134,6 +153,7 @@ extension TokenUsageDashboardStore {
                 calendarMonthStart: request.proposedCalendarMonthStart,
                 periodOffset: request.periodOffset,
                 calendar: request.calendar,
+                preloadedPeriodFilterTotals: periodFilterTotals,
                 database: database
             ) else {
                 return nil
@@ -154,14 +174,17 @@ extension TokenUsageDashboardStore {
             showAdvancedTools: request.showAdvancedTools,
             calendar: request.calendar
         )
-        return TokenUsageDashboardSnapshotBuildOutput(
-            snapshotPair: TokenUsageDashboardSnapshotPair(
-                filtered: filtered,
-                unfiltered: unfiltered,
-                calendarMonthStart: calendarMonth
+        return (
+            output: TokenUsageDashboardSnapshotBuildOutput(
+                snapshotPair: TokenUsageDashboardSnapshotPair(
+                    filtered: filtered,
+                    unfiltered: unfiltered,
+                    calendarMonthStart: calendarMonth
+                ),
+                context: context,
+                contextKey: TokenUsageDashboardContextCacheKey(events: [], request: request)
             ),
-            context: context,
-            contextKey: TokenUsageDashboardContextCacheKey(events: [], request: request)
+            periodFilterTotals: periodFilterTotals
         )
     }
 
