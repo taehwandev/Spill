@@ -272,7 +272,8 @@ content to invent a semantic current-task title.
   grouped glass composition, committed-state presentation delivery,
   layout-only frame invalidation, conditional full-screen collection behavior,
   one bounded five-second presentation schedule, one-slot Work weighting,
-  bottom-to-top fixed-width Ticker transitions, and
+  stable-identity crossfading fixed-width Ticker transitions, the occlusion
+  pause on the rotation schedule, and
   absence of collector timers or network work in the Glance boundary.
 - Package and launch the app, capture the top-center surface, and visually
   verify horizontal height, top and bottom placement, All and fixed-width Ticker

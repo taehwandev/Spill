@@ -75,7 +75,7 @@ reference supplies the dark glass treatment.
 
 Visual verification must preserve a horizontal row no taller than 34 points,
 content-hugging All style, stable fixed-width Ticker style with a short
-bottom-to-top electronic-sign transition on the active rotation cadence
+in-place crossfade on the active rotation cadence
 (five seconds while rolling, one dwell per queued change while reactive), one rounded
 continuous glass layer without stacked tint material, clear internal separation,
 short visible tool labels, fixed-size legible monospaced token

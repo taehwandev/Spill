@@ -295,6 +295,19 @@ Rules:
 - The first sample for a new process may report zero or fallback CPU until a
   later sample exists. Dashboard and panel refresh loops should provide a
   moderate visible-surface refresh cadence instead of high-frequency polling.
+- The separate token dashboard helper refreshes AI process status immediately
+  when shown, then no more often than every 30 seconds while its window remains
+  visible. Closing the window cancels that loop.
+- Within each process, `AIStatusStore` coalesces in-flight refreshes and enforces
+  a 15-second minimum between background process scans. The first request still
+  runs immediately, and unchanged results do not publish new status state.
+- The main status refresh loop keeps its 3-second cadence only while the Spill
+  panel is visible. In the background it follows the user's refresh-interval
+  preference, re-reading the delay on every tick so visibility and preference
+  changes apply at the next sleep. `autoRefreshEnabled` stays scoped to the AX
+  menu-bar item scan and does not gate this loop: the flag has no current
+  Preferences surface, and freezing the live system chips for users whose
+  stored legacy value is false would be a regression.
 - First-class AI tool colors are a token metering dashboard presentation
   contract. Codex, Claude Code, and Antigravity/AGY must resolve through one
   shared color mapping used by top tool tabs, AI Tool Distribution rows, and
@@ -523,6 +536,10 @@ Rules:
   tool, task, source, event-count, workflow, and detail rows continue to use the
   complete raw summary. Because the panel already observes `SpillSettings`, a
   scope change re-renders the headline without another store read or timer.
+- SQL dashboard snapshot construction loads or reuses the all-period input-scope
+  total map once per shared read transaction. The filtered and unfiltered
+  snapshot passes and the surrounding period-filter result consume that same
+  map instead of rescanning the complete event table for identical totals.
 - The main process observes usage-input scope changes, forces a menu bar token
   refresh, and posts the existing distributed settings-change notification with
   a dedicated setting key. The running dashboard helper reloads that key from
@@ -621,6 +638,43 @@ Rules:
 - Dashboard, panel, and menu bar refresh actions may request lightweight local
   collection or event inbox drains, but visible usage must refresh from the
   app-owned store through direct reads or store-change notifications.
+- A collection-completion notification without a store change must not rebuild
+  the full dashboard snapshot. Local and distributed store-change notifications
+  are the invalidation authority for newly imported usage.
+- The visible dashboard helper's periodic loop requests collection but does not
+  race that asynchronous request with an immediate pre-collection snapshot.
+  Initial display and explicit manual refresh may still read the store directly.
+- Timer-driven collection requests (`dashboard_refresh`, `menu_bar_status`) are
+  paced: each active importer runs at most once per its minimum interval, and
+  requests arriving mid-collection merge into one follow-up pass instead of
+  queueing one full re-run each. The inbox drain stays unthrottled so
+  hook-written events import immediately. Explicit user actions (`app_launch`,
+  `panel_open`, `manual_refresh`, `private_usage_upload`) always run every
+  importer. The dashboard helper distinguishes the two flows: its periodic loop
+  requests `dashboard_refresh`, while the user's refresh button and the
+  deferred open-time refresh request `manual_refresh` so a tap or a fresh open
+  never waits out the pacing floor.
+- Until a dashboard surface requests its first full snapshot load, store-change
+  notifications refresh only the panel and Glance summaries. The main process
+  holds a dashboard store solely for those summaries, so it must not pay for
+  full snapshot SQL builds nobody reads; the dashboard helper (or the in-app
+  fallback window) establishes the full-refresh contract with its first load
+  request. That request latches: a transient first-load SQL failure restores
+  `loadState` to `.idle` for retry, but change notifications keep retrying the
+  full snapshot for the surface that asked instead of downgrading to
+  panel-summary-only.
+- `allPeriodInputScopeTotals` is one full event-table scan and is cached against
+  the store's data revision plus the local day and filter set. Every local write
+  funnels through the change notification and bumps the revision; observers of
+  the distributed notification bump it for cross-process changes because both
+  processes share one database file. Reads on a caller-provided database
+  transaction bypass the cache in both directions: the transaction's snapshot
+  can be older than the current revision, so serving or storing it through the
+  revision-keyed cache could pin pre-write totals under a newer key. Only reads
+  on a fresh self-opened connection are cache-coherent.
+- The distributed store-change notification carries the posting process id, and
+  the posting process ignores its own echo: the in-process notification already
+  handled that change, so reacting to the echo would run the same reads twice.
 - If the read-only stats helper shows usage records while native UI is empty or
   stale, investigate store drain, notification propagation, dashboard filter
   state, and user-hidden tool settings before changing importers, upload sync,
@@ -850,6 +904,18 @@ Rules:
   go to `claude-last-empty.json`; invalid payloads, missing transcripts, or read
   failures go to `claude-last-mismatch.json`; successful enqueue goes to
   `claude-last-success.json`.
+- The collection coordinator retains one native Claude importer for its
+  lifetime and invokes it on the existing serial collection queue. This lets
+  content-free in-memory discovery and append-cursor caches survive collection
+  cycles without changing the persistent transcript cursor or event identity.
+- The retained importer reads the Claude label timeline from an in-memory byte
+  offset, parses only complete newly appended JSONL records, and keeps a partial
+  trailing record for the next read. File replacement or truncation resets the
+  timeline cache before labels are resolved.
+- Recursive Claude session discovery keeps a 60-second in-memory file-list
+  cache. Known session files still use their persistent byte offsets on every
+  collection; only a newly created session file may wait for cache expiry, and
+  every cache miss still performs the required full no-lookback discovery.
 - Diagnostic files are local-only support state. They may contain fixed
   booleans about payload shape, safe labels, model id, numeric token counts, and
   timestamps, but never raw payload values, prompts, responses, commands, file
@@ -1157,11 +1223,17 @@ Ticker and full-screen policy:
 - All style gives optional tools short visible labels, fixed-width breathing
   room, established color cues, and stronger separators while preserving one
   continuous glass group and fixed typography.
-- Ticker transition identity includes the module and active display value.
-  SwiftUI applies one bottom-to-top slide/fade transition on the shared
-  cadence — five seconds while rolling, one dwell per queued change while
-  reactive — producing an electronic-sign rhythm without a data poll or a
-  second timer.
+- The ticker keeps one stable module view whose icon, label, and value
+  crossfade in place on the shared cadence — five seconds while rolling, one
+  dwell per queued change while reactive — without a data poll or a second
+  timer. Swapping view identity with move transitions kept two CoreText layouts
+  alive per rotation and re-laid the strip out every five seconds, which showed
+  up in AppHang traces; compact cells keep interpolating their own numeric
+  value updates.
+- The rotation schedule pauses while the panel window reports itself fully
+  occluded (covered, or left behind on another Space under the default
+  full-screen policy) and while the controller is stopped. Presentation values
+  keep updating, so the strip is current the moment it becomes visible again.
 - The controller applies mutually exclusive full-screen policies:
   `.fullScreenAuxiliary` only when `glanceShowInFullScreen` is true, and
   `.fullScreenNone` when it is false. A committed preference change orders the
@@ -1563,7 +1635,10 @@ Likely APIs:
 - Battery: `IOPSCopyPowerSourcesInfo`
 - Network: `NWPathMonitor` plus optional byte counters later
 
-Keep sampling cheap and cache snapshots.
+Keep sampling cheap and cache snapshots. `SystemStatusStore` gathers one
+complete next status snapshot and publishes it atomically once per refresh;
+individual metric and history assignments must not emit separate SwiftUI
+invalidations for the same sample.
 Do not expose user-facing CPU calculation mode selection until a future PRD
 defines why users need to choose a different mode.
 
