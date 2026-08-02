@@ -112,6 +112,7 @@ final class SpillGlanceStoreTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: suiteName) }
 
         let settings = SpillSettings(defaults: defaults)
+        settings.glanceEnabled = true
         let usageStore = TokenUsageStore(fileURL: temporaryDatabaseURL())
         let dashboardStore = TokenUsageDashboardStore(
             usageStore: usageStore,
