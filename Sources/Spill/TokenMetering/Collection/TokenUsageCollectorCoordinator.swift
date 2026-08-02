@@ -18,6 +18,7 @@ final class TokenUsageCollectorCoordinator: TokenUsageExternalCollecting, @unche
         @escaping () -> Bool
     ) -> TokenUsageClaudeCodeImportSummary
     typealias FinalizationBoundaryHook = @Sendable () -> Void
+    typealias CodexLimitCaptureRunner = () -> Void
 
     static let collectionDidFinishNotification = Notification.Name("app.spill.token-usage-collector.collection-did-finish")
 
@@ -45,8 +46,10 @@ final class TokenUsageCollectorCoordinator: TokenUsageExternalCollecting, @unche
     private var hasPendingRequest = false
     private var pendingRequestForcesImporters = false
     private var currentRequestForcesImporters = false
+    private let codexLimitCaptureRunner: CodexLimitCaptureRunner
     private var lastAntigravityImportAt: Date?
     private var lastClaudeCodeImportAt: Date?
+    private var lastCodexLimitCaptureAt: Date?
     private var isStopping = false
     private var collectionCompletionHandlers: [@Sendable () -> Void] = []
 
@@ -57,11 +60,17 @@ final class TokenUsageCollectorCoordinator: TokenUsageExternalCollecting, @unche
         claudeCodeImportRunner: ClaudeCodeImportRunner? = nil,
         activeImporterMinimumInterval: TimeInterval = 30,
         now: @escaping () -> Date = Date.init,
-        finalizationBoundaryHook: FinalizationBoundaryHook? = nil
+        finalizationBoundaryHook: FinalizationBoundaryHook? = nil,
+        codexLimitCaptureRunner: CodexLimitCaptureRunner? = nil
     ) {
         self.activeImporterMinimumInterval = activeImporterMinimumInterval
         self.now = now
         self.finalizationBoundaryHook = finalizationBoundaryHook
+        self.codexLimitCaptureRunner = codexLimitCaptureRunner ?? {
+            TokenUsageCodexLimitCapture().captureLatestSnapshots(
+                into: TokenUsageLimitSnapshotStore()
+            )
+        }
         self.store = store
         self.antigravityImportRunner = antigravityImportRunner ?? { store, startDate, shouldCancel in
             TokenUsageAntigravityImporter().importRecentEvents(
@@ -168,6 +177,13 @@ extension TokenUsageCollectorCoordinator {
 
             runClaudeCodeActiveImporter()
 
+            guard !shouldStop else {
+                finishCollection()
+                return
+            }
+
+            runCodexLimitCapture()
+
             let postPassAction = lock.withLock {
                 if !isStopping, hasPendingRequest {
                     hasPendingRequest = false
@@ -211,6 +227,17 @@ extension TokenUsageCollectorCoordinator {
             self?.shouldStop ?? true
         }
         lock.withLock { lastClaudeCodeImportAt = now() }
+    }
+
+    /// Reads the newest Codex rate-limit snapshots (a handful of tail reads)
+    /// on the same pacing as the importers, so limit gauges refresh with the
+    /// data they sit beside.
+    private func runCodexLimitCapture() {
+        guard shouldRunImporter(lastImportAt: \.lastCodexLimitCaptureAt) else {
+            return
+        }
+        codexLimitCaptureRunner()
+        lock.withLock { lastCodexLimitCaptureAt = now() }
     }
 
     /// Timer-paced requests run an importer only after its minimum interval has
