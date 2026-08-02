@@ -4,6 +4,10 @@ import XCTest
 
 @MainActor
 final class AIStatusStoreTests: XCTestCase {
+    func testBackgroundRefreshUsesModerateProcessScanFloor() {
+        XCTAssertEqual(AIStatusStore.minimumBackgroundRefreshInterval, 15)
+    }
+
     func testRefreshUsesInjectedReader() {
         var readCount = 0
         let store = AIStatusStore(reader: {

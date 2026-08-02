@@ -1,3 +1,4 @@
+import Combine
 import XCTest
 @testable import Spill
 
@@ -100,6 +101,53 @@ final class SystemStatusStoreTests: XCTestCase {
         XCTAssertEqual(store.network.state, .refreshing)
         XCTAssertEqual(store.power.value, "80%")
         XCTAssertEqual(store.power.subtitle, "On Battery")
+    }
+
+    func testRefreshPublishesOneAtomicStatusSnapshot() async {
+        let store = SystemStatusStore(
+            memoryReader: {
+                SystemMemoryProvider.status(
+                    from: SystemMemoryReading(
+                        totalBytes: self.gib(8),
+                        freeBytes: self.gib(2),
+                        activeBytes: self.gib(2),
+                        inactiveBytes: 0,
+                        wiredBytes: self.gib(1),
+                        compressedBytes: 0
+                    )
+                )
+            },
+            storageReader: {
+                SystemStorageProvider.status(
+                    from: SystemStorageReading(totalBytes: self.gib(10), availableBytes: self.gib(4))
+                )
+            },
+            gpuReader: { .unavailableTestValue },
+            powerReader: {
+                SystemPowerProvider.status(
+                    from: SystemPowerReading(
+                        currentCapacity: 75,
+                        maxCapacity: 100,
+                        isCharging: false,
+                        isACPowered: false,
+                        hasBattery: true
+                    )
+                )
+            },
+            networkInitialSampleIntervalNanoseconds: 0
+        )
+        var publicationCount = 0
+        let cancellable = store.objectWillChange.sink {
+            publicationCount += 1
+        }
+
+        await store.refresh(enabledModules: [.memory, .storage, .gpu])
+
+        XCTAssertEqual(publicationCount, 1)
+        XCTAssertEqual(store.memory.value, "37.5%")
+        XCTAssertEqual(store.storage.value, "60.0%")
+        XCTAssertEqual(store.power.value, "75%")
+        withExtendedLifetime(cancellable) {}
     }
 
     func testCPURefreshUsesFirstReadingAsBaseline() async {
