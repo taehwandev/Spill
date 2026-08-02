@@ -71,8 +71,14 @@ as a separate, explicitly opt-in PRD.
      Preferences, else the high-water mark of window consumption Spill has ever
      observed for that window. Gauges carry an "estimated" badge; there is no
      unlabeled estimate anywhere.
-   - Window boundaries are the rolling window ending now; the countdown shows
-     when the oldest in-window usage ages out (the effective refresh moment).
+   - Window boundaries use fixed-window chaining, matching the tools' real
+     session semantics: a window opens at the first usage after the previous
+     window expires and resets a fixed interval later. The countdown is that
+     expiry (`window start + window length`), so estimated chips show a reset
+     time exactly like the exact Codex chips. When no window is active the
+     gauge reads empty and shows no countdown — the next turn opens a fresh
+     window. Hour-bucket granularity may shift the reset by up to an hour;
+     the mandated "~" badge covers this.
 4. **Antigravity gauges**
    - Credits: the AGY collection pass reads `modelCredits` read-only, parses
      the available-credits varint, and stores it as a `client_cache` snapshot.

@@ -688,6 +688,15 @@ Usage limit snapshots:
   importers) and stores one server-exact snapshot per named limit
   (`limit_id` + window) plus credits when a balance exists. It reads only
   numeric limit fields, safe identifiers, and timestamps.
+- `TokenUsageEstimatedLimitCapture` shares the same paced slot and produces
+  estimated Claude/AGY gauges from Spill's own hour-bucketed events (cached
+  against the store data revision). Consumption windows use fixed-window
+  chaining — a window opens at the first usage after the previous one expires —
+  so the current window start yields both the numerator and the reset
+  countdown; the denominator is the observed sliding high-water mark. No
+  active window means an empty gauge with no countdown. The AGY credits
+  balance is read read-only from the client state cache and tagged
+  `client_cache`.
 - The dashboard's Limits strip renders per-tool chips from the snapshot file
   and refreshes on the existing panel-summary publisher — no dedicated timer.
   Ring thresholds are shared surface-wide: warning at 20% remaining, critical

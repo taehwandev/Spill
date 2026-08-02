@@ -185,10 +185,51 @@ final class TokenUsageLimitTests: XCTestCase {
         XCTAssertEqual(
             TokenUsageEstimatedLimitCapture.windowTotal(
                 hourly: hourly,
-                windowSeconds: 5 * 3_600,
+                startingAt: base.addingTimeInterval(20 * 3_600),
                 endingAt: currentWindowEnd
             ),
             120
+        )
+    }
+
+    func testActiveWindowStartChainsFixedWindowsAndExpires() {
+        let base = Date(timeIntervalSince1970: 1_000_000)
+        func hour(_ offset: Double, _ tokens: Int) -> (hourStart: Date, totalTokens: Int) {
+            (base.addingTimeInterval(offset * 3_600), tokens)
+        }
+        let fiveHours: TimeInterval = 5 * 3_600
+        // First window opens at hour 0 and expires at hour 5; the hour-20
+        // bucket opens the next window, which covers hours 20-25.
+        let hourly = [hour(0, 100), hour(1, 100), hour(20, 40), hour(23, 30)]
+
+        XCTAssertEqual(
+            TokenUsageEstimatedLimitCapture.activeWindowStart(
+                hourly: hourly, windowSeconds: fiveHours, endingAt: base.addingTimeInterval(3 * 3_600)
+            ),
+            base
+        )
+        XCTAssertEqual(
+            TokenUsageEstimatedLimitCapture.activeWindowStart(
+                hourly: hourly, windowSeconds: fiveHours, endingAt: base.addingTimeInterval(23.5 * 3_600)
+            ),
+            base.addingTimeInterval(20 * 3_600)
+        )
+        // Hours 5-19 and 25+ have no active window: the next turn starts fresh.
+        XCTAssertNil(
+            TokenUsageEstimatedLimitCapture.activeWindowStart(
+                hourly: hourly, windowSeconds: fiveHours, endingAt: base.addingTimeInterval(10 * 3_600)
+            )
+        )
+        XCTAssertNil(
+            TokenUsageEstimatedLimitCapture.activeWindowStart(
+                hourly: hourly, windowSeconds: fiveHours, endingAt: base.addingTimeInterval(26 * 3_600)
+            )
+        )
+        // Before any usage there is no window either.
+        XCTAssertNil(
+            TokenUsageEstimatedLimitCapture.activeWindowStart(
+                hourly: hourly, windowSeconds: fiveHours, endingAt: base.addingTimeInterval(-1)
+            )
         )
     }
 
@@ -238,6 +279,9 @@ final class TokenUsageLimitTests: XCTestCase {
         for snapshot in claude {
             XCTAssertEqual(snapshot.source, .estimated)
             XCTAssertNotNil(snapshot.usedPercent)
+            // Events just landed, so both fixed windows are active and carry
+            // a reset countdown like the exact Codex snapshots do.
+            XCTAssertNotNil(snapshot.resetsAt)
         }
         // Events just landed, so the current window IS the high-water: 0% left.
         XCTAssertEqual(claude.first?.remainingPercent, 0)

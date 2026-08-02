@@ -6,7 +6,9 @@ import SQLite3
 /// Antigravity credits balance the client caches.
 ///
 /// Consumption numerators are exact — Spill's own imported per-turn events,
-/// hour-bucketed and summed over rolling five-hour and weekly windows. Only
+/// hour-bucketed and summed over chained fixed five-hour and weekly windows
+/// (a window opens at the first usage after the previous one expires, matching
+/// the tools' session semantics, which also yields the reset countdown). Only
 /// the denominator is estimated: the highest window consumption ever observed
 /// for that tool, so the gauge reads "how close am I to my own worst burn".
 /// Every produced snapshot is tagged `estimated`, which the UI renders with
@@ -74,7 +76,18 @@ extension TokenUsageEstimatedLimitCapture {
             guard highWater > 0 else {
                 return nil
             }
-            let current = Self.windowTotal(hourly: hourly, windowSeconds: window.seconds, endingAt: capturedAt)
+            // Fixed-window chaining mirrors the tools' real session semantics:
+            // a window opens at the first usage after the previous one expires
+            // and resets a fixed interval later. An expired window means the
+            // next turn starts fresh, so the gauge reads empty with no reset.
+            let windowStart = Self.activeWindowStart(
+                hourly: hourly,
+                windowSeconds: window.seconds,
+                endingAt: capturedAt
+            )
+            let current = windowStart.map {
+                Self.windowTotal(hourly: hourly, startingAt: $0, endingAt: capturedAt)
+            } ?? 0
             let usedPercent = min(100, Double(current) / Double(highWater) * 100)
             return TokenUsageLimitSnapshot(
                 aiTool: tool,
@@ -83,7 +96,7 @@ extension TokenUsageEstimatedLimitCapture {
                 usedPercent: usedPercent,
                 remainingCredits: nil,
                 windowMinutes: window.minutes,
-                resetsAt: nil,
+                resetsAt: windowStart?.addingTimeInterval(window.seconds),
                 capturedAt: capturedAt,
                 source: .estimated
             )
@@ -109,16 +122,44 @@ extension TokenUsageEstimatedLimitCapture {
         return hourly
     }
 
-    /// Sum of buckets whose hour start falls inside the window ending now.
-    /// Hour granularity is acceptable for an explicitly estimated gauge.
-    static func windowTotal(
+    /// Start of the fixed window covering `end`, chained from history: the
+    /// first bucket opens a window, and each later window opens at the first
+    /// bucket at or after the previous window's expiry. Returns nil when no
+    /// window is active (the next usage would open a fresh one). Hour-bucket
+    /// granularity shifts the start by up to an hour, acceptable for an
+    /// explicitly estimated gauge.
+    static func activeWindowStart(
         hourly: [(hourStart: Date, totalTokens: Int)],
         windowSeconds: TimeInterval,
         endingAt end: Date
+    ) -> Date? {
+        guard var windowStart = hourly.first?.hourStart, windowStart <= end else {
+            return nil
+        }
+        var index = hourly.startIndex
+        while true {
+            let expiry = windowStart.addingTimeInterval(windowSeconds)
+            if end < expiry {
+                return windowStart
+            }
+            while index < hourly.endIndex, hourly[index].hourStart < expiry {
+                index += 1
+            }
+            guard index < hourly.endIndex, hourly[index].hourStart <= end else {
+                return nil
+            }
+            windowStart = hourly[index].hourStart
+        }
+    }
+
+    /// Sum of buckets whose hour start falls inside the given fixed window.
+    static func windowTotal(
+        hourly: [(hourStart: Date, totalTokens: Int)],
+        startingAt start: Date,
+        endingAt end: Date
     ) -> Int {
-        let start = end.addingTimeInterval(-windowSeconds)
-        return hourly
-            .filter { $0.hourStart > start && $0.hourStart <= end }
+        hourly
+            .filter { $0.hourStart >= start && $0.hourStart <= end }
             .reduce(0) { $0 + $1.totalTokens }
     }
 
