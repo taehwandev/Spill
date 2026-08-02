@@ -39,6 +39,7 @@ enum TokenMeteringTextKey: String {
     case spillGlanceToggle
     case spillGlanceToggleOnDetail
     case spillGlanceToggleOffDetail
+    case limitsTitle
     case copied
     case copyPrompt
     case clear
@@ -387,6 +388,18 @@ enum TokenMeteringL10n {
 extension TokenMeteringL10n {
     static func text(_ key: TokenMeteringTextKey, language: TokenMeteringLanguage = .current()) -> String {
         localized(key.localizationKey, language: language)
+    }
+
+    static func limitsPercentLeft(_ percent: String, language: TokenMeteringLanguage = .current()) -> String {
+        localizedFormat("format.limits_percent_left", language: language, percent)
+    }
+
+    static func limitsResetsAt(_ time: String, language: TokenMeteringLanguage = .current()) -> String {
+        localizedFormat("format.limits_resets_at", language: language, time)
+    }
+
+    static func limitsCapturedAt(_ time: String, language: TokenMeteringLanguage = .current()) -> String {
+        localizedFormat("format.limits_captured_at", language: language, time)
     }
 
     static func eventsTokensDetail(

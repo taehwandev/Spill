@@ -20,6 +20,8 @@ struct TokenMeteringDashboardView: View {
     @State private var hoveredKPI: String? = nil
     @State private var aiToolVisibilityObserver: NSObjectProtocol?
     @State private var visibleAIToolsSyncTask: Task<Void, Never>?
+    @State private var limitSnapshots: [TokenUsageLimitSnapshot] = []
+    private let limitSnapshotStore = TokenUsageLimitSnapshotStore()
     private let refreshAction: () -> Void
     private let settingsAction: () -> Void
     private let developerOptionsAction: () -> Void
@@ -46,7 +48,14 @@ struct TokenMeteringDashboardView: View {
             minHeight: TokenMeteringDashboardWindowMetrics.minimumContentSize.height
         )
         .focusEffectDisabled()
+        // Limit snapshots refresh whenever the panel summary does — the same
+        // cadence that already tracks collection cycles — so the strip needs
+        // no timer of its own. The read is one tiny local JSON file.
+        .onReceive(store.$panelSummary) { _ in
+            limitSnapshots = limitSnapshotStore.allSnapshots()
+        }
         .onAppear {
+            limitSnapshots = limitSnapshotStore.allSnapshots()
             let language = TokenMeteringLanguage.current(appLanguage: settings.appLanguage)
             resolvedLanguage = language
             titleDidChange()
@@ -172,6 +181,10 @@ extension TokenMeteringDashboardView {
             HStack(alignment: .top, spacing: 16) {
                 ScrollView(.vertical, showsIndicators: true) {
                     LazyVStack(alignment: .leading, spacing: 16) {
+                        TokenMeteringDashboardLimitsStrip(
+                            snapshots: limitSnapshots,
+                            language: currentLanguage
+                        )
                         kpiStrip
                         analyticsGrid
                         sessionsTable
