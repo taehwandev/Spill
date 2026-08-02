@@ -400,7 +400,7 @@ final class SpillSettings: ObservableObject {
         menuBarTriggerIconStyle = MenuBarTriggerIconStyle.normalized(
             rawValue: defaults.string(forKey: Keys.menuBarTriggerIconStyle)
         )
-        glanceEnabled = defaults.object(forKey: Keys.glanceEnabled) as? Bool ?? true
+        glanceEnabled = defaults.object(forKey: Keys.glanceEnabled) as? Bool ?? false
         glanceDisplayStyle = SpillGlanceDisplayStyle.normalized(
             rawValue: defaults.string(forKey: Keys.glanceDisplayStyle)
         )
@@ -546,6 +546,19 @@ extension SpillSettings {
         }
 
         tokenUsageInputScope = persistedScope
+    }
+
+    /// The dashboard helper can toggle Spill Glance; the main process reloads
+    /// the shared default here when the distributed settings notification
+    /// carries the glance key, so the panel reacts without a restart.
+    func reloadGlanceEnabledFromDefaults() {
+        defaults.synchronize()
+        let persistedValue = defaults.object(forKey: Keys.glanceEnabled) as? Bool ?? false
+        guard glanceEnabled != persistedValue else {
+            return
+        }
+
+        glanceEnabled = persistedValue
     }
 }
 

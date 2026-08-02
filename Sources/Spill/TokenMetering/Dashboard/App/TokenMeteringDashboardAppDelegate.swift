@@ -216,7 +216,8 @@ extension TokenMeteringDashboardAppDelegate {
             TokenMeteringDashboardProcess.appLanguageSettingsKey,
             TokenMeteringDashboardProcess.appearanceThemeSettingsKey,
             TokenMeteringDashboardProcess.tokenUsageDashboardOnboardingPreviewSettingsKey,
-            TokenMeteringDashboardProcess.tokenUsageInputScopeSettingsKey
+            TokenMeteringDashboardProcess.tokenUsageInputScopeSettingsKey,
+            TokenMeteringDashboardProcess.glanceEnabledSettingsKey
         ]
         guard settingsKey == nil || supportedSettingsKeys.contains(settingsKey ?? "") else {
             return
@@ -241,6 +242,12 @@ extension TokenMeteringDashboardAppDelegate {
 
         if settingsKey == nil || settingsKey == TokenMeteringDashboardProcess.tokenUsageInputScopeSettingsKey {
             settings.reloadTokenUsageInputScopeFromDefaults()
+        }
+
+        // Keeps the dashboard's Glance toggle in sync when the user flips the
+        // setting in the main app's Preferences while the dashboard is open.
+        if settingsKey == nil || settingsKey == TokenMeteringDashboardProcess.glanceEnabledSettingsKey {
+            settings.reloadGlanceEnabledFromDefaults()
         }
     }
 

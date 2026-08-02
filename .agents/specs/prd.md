@@ -119,6 +119,7 @@ Spill is not:
 | Local token collection | [Local Token Collection](prd/token-metering/local-collection.md) | Safe event collection, setup, normalization, and accuracy |
 | Local token dashboard | [Token Metering Dashboard](prd/token-metering/dashboard.md) | Dashboard UX, Work Items, filters, cost display, and input scope |
 | Token history | [Token History Import](prd/token-metering/history-import.md) | Explicit historical reconciliation, cursors, and event identity |
+| Usage limits | [AI Usage Limits](prd/ai-usage-limits.md) | Remaining rate-limit percentages, credits, reset countdowns, and estimation policy |
 | Private upload | [Private Usage Upload](prd/token-metering/private-usage-upload.md) | Native encrypted aggregate upload and retry behavior |
 | Web boundary | [Web Companion Contract](prd/token-metering/web-companion-contract.md) | Cross-repository connection, role, authorization, and privacy contracts |
 | Privacy and diagnostics | [Privacy And Observability](prd/privacy-and-observability.md) | Product telemetry, diagnostics, and data lifecycle decisions |

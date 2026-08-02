@@ -4,17 +4,67 @@ import CoreGraphics
 
 @MainActor
 final class SpillSettingsTests: XCTestCase {
-    func testGlanceDefaultsToEnabledWithOnlyFixedModulesVisible() {
+    func testGlanceDefaultsToDisabledUntilTheUserOptsIn() {
         let defaults = makeDefaults()
         let settings = SpillSettings(defaults: defaults)
 
-        XCTAssertTrue(settings.glanceEnabled)
+        // The always-visible strip is opt-in: a fresh install shows nothing
+        // until the user enables it in Preferences or the dashboard toggle.
+        XCTAssertFalse(settings.glanceEnabled)
+        XCTAssertEqual(settings.visibleGlanceModules, [])
         XCTAssertEqual(settings.glanceDisplayStyle, .all)
         XCTAssertFalse(settings.glanceShowInFullScreen)
         XCTAssertTrue(settings.glanceReactiveRotationEnabled)
         XCTAssertTrue(settings.glanceWorkRotationEnabled)
         XCTAssertTrue(settings.enabledGlanceModules.isEmpty)
+
+        settings.glanceEnabled = true
         XCTAssertEqual(settings.visibleGlanceModules, [.allToday, .workType])
+    }
+
+    func testDashboardGlanceToggleWiresTheCrossProcessSettingsSync() throws {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        func source(_ path: String) throws -> String {
+            try String(contentsOf: root.appendingPathComponent(path), encoding: .utf8)
+        }
+        let dashboardView = try source(
+            "Sources/Spill/TokenMetering/Dashboard/Screen/TokenMeteringDashboardView.swift"
+        )
+        let process = try source(
+            "Sources/Spill/TokenMetering/Dashboard/App/TokenMeteringDashboardProcess.swift"
+        )
+        let helperDelegate = try source(
+            "Sources/Spill/TokenMetering/Dashboard/App/TokenMeteringDashboardAppDelegate.swift"
+        )
+        let appDelegate = try source("Sources/Spill/App/AppDelegate.swift")
+
+        // Dashboard header owns a Glance toggle that posts the settings key.
+        XCTAssertTrue(dashboardView.contains("settings.glanceEnabled.toggle()"))
+        XCTAssertTrue(dashboardView.contains("postGlanceEnabledDidChange()"))
+        XCTAssertTrue(process.contains("glanceEnabledSettingsKey = \"glanceEnabled\""))
+        // Both processes reload the shared default when the key arrives.
+        XCTAssertTrue(appDelegate.contains("reloadGlanceEnabledFromDefaults()"))
+        XCTAssertTrue(helperDelegate.contains("glanceEnabledSettingsKey"))
+        XCTAssertTrue(helperDelegate.contains("reloadGlanceEnabledFromDefaults()"))
+        // Preferences changes mirror back to the helper's toggle.
+        XCTAssertTrue(appDelegate.contains("settings.$glanceEnabled"))
+    }
+
+    func testGlanceEnabledReloadsFromSharedDefaultsForCrossProcessToggles() {
+        let defaults = makeDefaults()
+        let settings = SpillSettings(defaults: defaults)
+        XCTAssertFalse(settings.glanceEnabled)
+
+        // Another process (the dashboard helper) writes the shared default and
+        // posts the distributed settings notification; the receiving process
+        // republishes the value through this reload.
+        defaults.set(true, forKey: "glanceEnabled")
+        settings.reloadGlanceEnabledFromDefaults()
+        XCTAssertTrue(settings.glanceEnabled)
+
+        defaults.set(false, forKey: "glanceEnabled")
+        settings.reloadGlanceEnabledFromDefaults()
+        XCTAssertFalse(settings.glanceEnabled)
     }
 
     func testGlanceDisplayAndFullScreenPolicyPersistWithSafeInvalidFallbacks() {
@@ -64,6 +114,7 @@ final class SpillSettingsTests: XCTestCase {
 
     func testGlancePersistsOptionalToolsWhileFixedModulesCannotBeDisabled() {
         let defaults = makeDefaults()
+        defaults.set(true, forKey: "glanceEnabled")
         let settings = SpillSettings(defaults: defaults)
 
         for module in SpillGlanceModule.configurableToolModules {
@@ -95,6 +146,7 @@ final class SpillSettingsTests: XCTestCase {
 
     func testGlanceModulesNormalizeUnknownAndDuplicatePersistedValues() {
         let defaults = makeDefaults()
+        defaults.set(true, forKey: "glanceEnabled")
         defaults.set(
             ["claudeToday", "unknown", "claudeToday", "allToday"],
             forKey: "enabledGlanceModules"
@@ -109,6 +161,7 @@ final class SpillSettingsTests: XCTestCase {
 
     func testGlanceMigratesLegacyDefaultModulesToEveryOptionalTool() {
         let defaults = makeDefaults()
+        defaults.set(true, forKey: "glanceEnabled")
         defaults.set(
             ["aiStatus", "topTask", "todayTokens"],
             forKey: "enabledGlanceModules"
