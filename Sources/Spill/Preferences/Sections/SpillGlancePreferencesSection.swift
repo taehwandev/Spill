@@ -22,6 +22,66 @@ struct SpillGlancePreferencesSection: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
+            VStack(alignment: .leading, spacing: 9) {
+                HStack {
+                    Label(t(.spillGlanceDisplay), systemImage: "rectangle.split.3x1")
+                        .font(.callout)
+
+                    Spacer()
+
+                    Picker(t(.spillGlanceDisplay), selection: $settings.glanceDisplayStyle) {
+                        Text(t(.spillGlanceDisplayAll)).tag(SpillGlanceDisplayStyle.all)
+                        Text(t(.spillGlanceDisplayTicker)).tag(SpillGlanceDisplayStyle.ticker)
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+                    .frame(width: 150)
+                }
+
+                HStack {
+                    Label(t(.spillGlanceReactiveRotation), systemImage: "waveform.path.ecg")
+                        .font(.callout)
+
+                    Spacer()
+
+                    Toggle(
+                        t(.spillGlanceReactiveRotation),
+                        isOn: $settings.glanceReactiveRotationEnabled
+                    )
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                }
+
+                Text(t(.spillGlanceReactiveRotationDetail))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack {
+                    Label(t(.spillGlanceShowInFullScreen), systemImage: "rectangle.inset.filled")
+                        .font(.callout)
+
+                    Spacer()
+
+                    Toggle(
+                        t(.spillGlanceShowInFullScreen),
+                        isOn: $settings.glanceShowInFullScreen
+                    )
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                }
+
+                Text(t(.spillGlanceShowInFullScreenDetail))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .disabled(!settings.glanceEnabled)
+            .opacity(settings.glanceEnabled ? 1 : 0.55)
+
+            Divider()
+                .background(Color.primary.opacity(0.04))
+
             VStack(alignment: .leading, spacing: 5) {
                 HStack {
                     Label(t(.spillGlanceWorkRotation), systemImage: "repeat")

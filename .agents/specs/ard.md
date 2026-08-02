@@ -295,6 +295,19 @@ Rules:
 - The first sample for a new process may report zero or fallback CPU until a
   later sample exists. Dashboard and panel refresh loops should provide a
   moderate visible-surface refresh cadence instead of high-frequency polling.
+- The separate token dashboard helper refreshes AI process status immediately
+  when shown, then no more often than every 30 seconds while its window remains
+  visible. Closing the window cancels that loop.
+- Within each process, `AIStatusStore` coalesces in-flight refreshes and enforces
+  a 15-second minimum between background process scans. The first request still
+  runs immediately, and unchanged results do not publish new status state.
+- The main status refresh loop keeps its 3-second cadence only while the Spill
+  panel is visible. In the background it follows the user's refresh-interval
+  preference, re-reading the delay on every tick so visibility and preference
+  changes apply at the next sleep. `autoRefreshEnabled` stays scoped to the AX
+  menu-bar item scan and does not gate this loop: the flag has no current
+  Preferences surface, and freezing the live system chips for users whose
+  stored legacy value is false would be a regression.
 - First-class AI tool colors are a token metering dashboard presentation
   contract. Codex, Claude Code, and Antigravity/AGY must resolve through one
   shared color mapping used by top tool tabs, AI Tool Distribution rows, and
@@ -523,6 +536,10 @@ Rules:
   tool, task, source, event-count, workflow, and detail rows continue to use the
   complete raw summary. Because the panel already observes `SpillSettings`, a
   scope change re-renders the headline without another store read or timer.
+- SQL dashboard snapshot construction loads or reuses the all-period input-scope
+  total map once per shared read transaction. The filtered and unfiltered
+  snapshot passes and the surrounding period-filter result consume that same
+  map instead of rescanning the complete event table for identical totals.
 - The main process observes usage-input scope changes, forces a menu bar token
   refresh, and posts the existing distributed settings-change notification with
   a dedicated setting key. The running dashboard helper reloads that key from
@@ -621,6 +638,43 @@ Rules:
 - Dashboard, panel, and menu bar refresh actions may request lightweight local
   collection or event inbox drains, but visible usage must refresh from the
   app-owned store through direct reads or store-change notifications.
+- A collection-completion notification without a store change must not rebuild
+  the full dashboard snapshot. Local and distributed store-change notifications
+  are the invalidation authority for newly imported usage.
+- The visible dashboard helper's periodic loop requests collection but does not
+  race that asynchronous request with an immediate pre-collection snapshot.
+  Initial display and explicit manual refresh may still read the store directly.
+- Timer-driven collection requests (`dashboard_refresh`, `menu_bar_status`) are
+  paced: each active importer runs at most once per its minimum interval, and
+  requests arriving mid-collection merge into one follow-up pass instead of
+  queueing one full re-run each. The inbox drain stays unthrottled so
+  hook-written events import immediately. Explicit user actions (`app_launch`,
+  `panel_open`, `manual_refresh`, `private_usage_upload`) always run every
+  importer. The dashboard helper distinguishes the two flows: its periodic loop
+  requests `dashboard_refresh`, while the user's refresh button and the
+  deferred open-time refresh request `manual_refresh` so a tap or a fresh open
+  never waits out the pacing floor.
+- Until a dashboard surface requests its first full snapshot load, store-change
+  notifications refresh only the panel and Glance summaries. The main process
+  holds a dashboard store solely for those summaries, so it must not pay for
+  full snapshot SQL builds nobody reads; the dashboard helper (or the in-app
+  fallback window) establishes the full-refresh contract with its first load
+  request. That request latches: a transient first-load SQL failure restores
+  `loadState` to `.idle` for retry, but change notifications keep retrying the
+  full snapshot for the surface that asked instead of downgrading to
+  panel-summary-only.
+- `allPeriodInputScopeTotals` is one full event-table scan and is cached against
+  the store's data revision plus the local day and filter set. Every local write
+  funnels through the change notification and bumps the revision; observers of
+  the distributed notification bump it for cross-process changes because both
+  processes share one database file. Reads on a caller-provided database
+  transaction bypass the cache in both directions: the transaction's snapshot
+  can be older than the current revision, so serving or storing it through the
+  revision-keyed cache could pin pre-write totals under a newer key. Only reads
+  on a fresh self-opened connection are cache-coherent.
+- The distributed store-change notification carries the posting process id, and
+  the posting process ignores its own echo: the in-process notification already
+  handled that change, so reacting to the echo would run the same reads twice.
 - If the read-only stats helper shows usage records while native UI is empty or
   stale, investigate store drain, notification propagation, dashboard filter
   state, and user-hidden tool settings before changing importers, upload sync,
@@ -850,6 +904,18 @@ Rules:
   go to `claude-last-empty.json`; invalid payloads, missing transcripts, or read
   failures go to `claude-last-mismatch.json`; successful enqueue goes to
   `claude-last-success.json`.
+- The collection coordinator retains one native Claude importer for its
+  lifetime and invokes it on the existing serial collection queue. This lets
+  content-free in-memory discovery and append-cursor caches survive collection
+  cycles without changing the persistent transcript cursor or event identity.
+- The retained importer reads the Claude label timeline from an in-memory byte
+  offset, parses only complete newly appended JSONL records, and keeps a partial
+  trailing record for the next read. File replacement or truncation resets the
+  timeline cache before labels are resolved.
+- Recursive Claude session discovery keeps a 60-second in-memory file-list
+  cache. Known session files still use their persistent byte offsets on every
+  collection; only a newly created session file may wait for cache expiry, and
+  every cache miss still performs the required full no-lookback discovery.
 - Diagnostic files are local-only support state. They may contain fixed
   booleans about payload shape, safe labels, model id, numeric token counts, and
   timestamps, but never raw payload values, prompts, responses, commands, file
@@ -970,16 +1036,18 @@ Decision:
 
 The always-visible Spill Glance surface is a main-process feature boundary under
 `Sources/Spill/Glance`. It uses a lightweight feature store for presentation
-state, SwiftUI for the one-row capsule composition, and an AppKit controller for
-`NSPanel` lifecycle and screen placement.
+state, SwiftUI for one grouped horizontal composition with All and Ticker
+styles, and an AppKit controller for `NSPanel` lifecycle, screen placement, and
+full-screen Space policy.
 
 Window contract:
 
 - Use a borderless nonactivating `NSPanel`.
 - The panel cannot become key or main, does not activate Spill, does not appear
   in the window cycle, and remains visible when another application is active.
-- Use public collection behaviors to join Spaces and participate as a
-  full-screen auxiliary window.
+- Use public collection behaviors to join normal Spaces. Do not participate as
+  a full-screen auxiliary window by default; add that behavior only when the
+  user enables the native full-screen visibility preference.
 - On first launch, center the panel horizontally inside the chosen
   `NSScreen.visibleFrame` and place it 10 points below that frame's top edge.
   Do not overlap the menu bar, notch, or status items.
@@ -1000,11 +1068,23 @@ Window contract:
   content to display for every pointer event. The controller clamps the result
   to the pointer-selected `visibleFrame` and saves the final frame through
   `SpillGlanceFrameStore`.
-- On restoration, `SpillGlanceFrameStore` matches the saved frame center
-  against connected visible frames. If the saved display is unavailable, the
-  controller uses the primary-display fallback without saving over the external
-  frame. A later screen-parameter notification can therefore restore the saved
-  external-display position after reconnection.
+- `SpillGlanceFrameStore` persists display identity and a placement descriptor
+  relative to `NSScreen.visibleFrame`. Near-edge X/Y axes store leading,
+  trailing, top, or bottom anchors with fixed insets; free axes store normalized
+  ratios. This preserves corner intent such as right-bottom across resolution,
+  menu-bar, Dock, and work-area changes instead of replaying stale absolute
+  coordinates.
+- On restoration, the frame store resolves the preferred connected display and
+  applies the saved semantic placement to the current content size. If the saved
+  display is unavailable, the controller applies the same placement to the
+  primary-display fallback without overwriting the preferred display identity.
+  A later screen-parameter notification can therefore restore the external
+  display after reconnection. A legacy absolute frame migrates only when its
+  containing display is available.
+- Horizontal layout uses the saved semantic X/Y placement and remains draggable
+  across the full visible frame and connected displays. Top, bottom, and corner
+  anchors therefore survive display geometry changes without a separate
+  orientation or wall-side preference.
 - Hide the panel when Glance is disabled or no module is enabled.
 
 Data and action flow:
@@ -1023,7 +1103,7 @@ calendar-day / system-clock / timezone notifications -> TokenUsageDashboardStore
 SpillSettings Glance preferences -----------------------------------------+-> SpillGlanceStore.state
                                                                                   |
                                                                                   v
-                                                                             SwiftUI row
+                                                                       SwiftUI All/Ticker row
                                                                              /          \
                                                                             v            v
                                                         existing dashboard action   Glance Preferences
@@ -1055,25 +1135,31 @@ closure already used by the compact panel and menu bar.
 Settings and propagation:
 
 - `SpillSettings` remains the persistence owner.
-- `SpillGlanceFrameStore` owns only the local last-valid window frame. It does
-  not become a user-visible setting or sync payload.
+- `SpillGlanceFrameStore` owns only local display identity and semantic window
+  placement. It does not become a user-visible setting or sync payload.
 - New installations default the surface to enabled with only All Today, Work
   Type, and settings visible. Codex, Claude, and Antigravity are opt-in
   segments. All Today and Work Type remain fixed while the surface is enabled.
   `glanceWorkRotationEnabled` defaults to `true` when its persisted key is
   absent, preserving the existing rolling presentation for upgrades.
+  `glanceDisplayStyle` defaults to All when its persisted string is absent or
+  invalid, `glanceShowInFullScreen` defaults to `false`, and
+  `glanceReactiveRotationEnabled` defaults to `true`. The unreleased
+  orientation and wall-side keys have no readers after vertical mode removal.
 - Preferences and Glance live in the main process, so `@Published` delivery is
   the explicit real-time propagation path. Changing Work rotation rebuilds the
   Glance presentation without restart, reopen, manual refresh, polling, or
-  helper-process invalidation. Because `@Published` emits during `willSet`, the
+  helper-process invalidation. Display style and native full-screen visibility
+  use the same path. Because `@Published` emits during `willSet`, the
   AppKit bridge schedules presentation consumption on the next main-queue turn
   and reads the store's committed value. This keeps the visible update within
-  one display frame instead of waiting for the three-second `TimelineView`
+  one display frame instead of waiting for the five-second `TimelineView`
   cadence.
-- The AppKit bridge tracks the ordered module layout separately from content
-  values. It reapplies the saved frame only when visibility or the ordered
-  module set changes; a token value or Work rotation preference update redraws
-  content without moving, resizing, or reordering the panel.
+- The AppKit bridge tracks an explicit layout signature containing the ordered
+  modules and display style separately from content values. It
+  reapplies placement and content size only when that signature changes; a token
+  value or Work rotation update redraws content without moving, resizing, or
+  reordering the panel.
 - The dashboard helper, compact panel, clock-adjacent AI glance, web dashboard,
   Private Usage Upload, sync payloads, and agent-facing summaries do not read
   these presentation settings. No distributed notification or sync migration is
@@ -1090,16 +1176,72 @@ Work Type rotation:
   those labels into compact display values paired with each row's compact
   formatted token total. The dashboard's hidden-tool-filtered `panelSummary`
   remains independent and unchanged.
-- When `glanceWorkRotationEnabled` is true and more than one row exists,
-  SwiftUI `TimelineView` advances the display-only Work value every three
-  seconds. When false, the store projects only the first already-sorted row so
-  the highest-usage Work Type and token total remain fixed.
+- `glanceWorkRotationEnabled` decides whether Work may change value at all;
+  `glanceReactiveRotationEnabled` decides what drives every rotation.
+- Reactive rotation (default): `SpillGlanceStore` diffs consecutive
+  `glanceSummary` projections against a per-module and per-work-row baseline and
+  enqueues only what moved into `SpillGlanceChangeQueue`. Each change owns a
+  fixed dwell, and a module that changes again inside its own dwell updates that
+  entry in place instead of appending another, which bounds the queue to one
+  pending slot per module and throttles bursts. Ticker style renders the active
+  entry and rests on All Today when the queue is quiet; All style applies the
+  queue only to the Work slot and rests on the highest-usage row. Work changes
+  are diffed per task row, so a lower-usage category that just moved can take
+  the slot without reordering the queue. Surface reconfiguration — module set,
+  display style, or either rotation preference — clears the queue so that
+  configuration-induced value differences are never replayed as usage.
+- Rolling rotation (`glanceReactiveRotationEnabled == false`): `TimelineView`
+  advances the display-only Work value every five seconds in All style. Ticker
+  style assigns one ordered global slot to All Today, each enabled AI tool, and
+  Work. The Work slot advances to its next selected value once per completed
+  global queue cycle, so several Work values never outweigh the other modules.
+- When Work rotation is false, the store projects only the first already-sorted
+  Work row and never enqueues a Work change, so the highest-usage Work Type and
+  token total remain fixed in either style and either rotation model.
+- `SpillGlancePresentation.rotationSchedule` owns the schedule choice, and
+  `SpillGlanceRotationTimelineSchedule` adapts it to a single `TimelineView`:
+  periodic for rolling rotation, and the queue's explicit change boundaries for
+  reactive rotation, so the surface stops redrawing once the queue drains.
 - The preference is presentation-only and does not refresh storage, collectors,
   processes, the network, the dashboard helper, the compact panel, the
   clock-adjacent AI glance, web dashboards, upload payloads, sync payloads, or
   agent-facing summaries.
 - Known long task categories use semantic short labels. Long custom safe slugs
   use bounded initials so the compact surface never depends on an ellipsis.
+- Both display styles use fixed token/value typography. The SwiftUI view does
+  not use minimum-scale font reduction; bounded formatters and stable All/Ticker
+  width budgets own fit instead. `SpillGlanceLayout` sizes each module for its
+  icon, two internal gaps, label, representative maximum compact value,
+  horizontal padding, and a small rendering margin so fixed-size text cannot
+  cross a separator.
+
+Ticker and full-screen policy:
+
+- All style shows every selected module at once. Ticker style renders one
+  fixed-width slot plus the persistent settings action, so changing the active
+  item never resizes or repositions the panel.
+- All style gives optional tools short visible labels, fixed-width breathing
+  room, established color cues, and stronger separators while preserving one
+  continuous glass group and fixed typography.
+- The ticker keeps one stable module view whose icon, label, and value
+  crossfade in place on the shared cadence — five seconds while rolling, one
+  dwell per queued change while reactive — without a data poll or a second
+  timer. Swapping view identity with move transitions kept two CoreText layouts
+  alive per rotation and re-laid the strip out every five seconds, which showed
+  up in AppHang traces; compact cells keep interpolating their own numeric
+  value updates.
+- The rotation schedule pauses while the panel window reports itself fully
+  occluded (covered, or left behind on another Space under the default
+  full-screen policy) and while the controller is stopped. Presentation values
+  keep updating, so the strip is current the moment it becomes visible again.
+- The controller applies mutually exclusive full-screen policies:
+  `.fullScreenAuxiliary` only when `glanceShowInFullScreen` is true, and
+  `.fullScreenNone` when it is false. A committed preference change orders the
+  panel out, updates its collection behavior, then restores visibility so the
+  Space assignment updates immediately while preserving placement. Explicitly
+  setting `.fullScreenNone` keeps `.canJoinAllSpaces` useful for ordinary
+  Spaces without letting `orderFrontRegardless()` surface the panel beside a
+  native full-screen app.
 
 Rationale:
 
@@ -1493,7 +1635,10 @@ Likely APIs:
 - Battery: `IOPSCopyPowerSourcesInfo`
 - Network: `NWPathMonitor` plus optional byte counters later
 
-Keep sampling cheap and cache snapshots.
+Keep sampling cheap and cache snapshots. `SystemStatusStore` gathers one
+complete next status snapshot and publishes it atomically once per refresh;
+individual metric and history assignments must not emit separate SwiftUI
+invalidations for the same sample.
 Do not expose user-facing CPU calculation mode selection until a future PRD
 defines why users need to choose a different mode.
 

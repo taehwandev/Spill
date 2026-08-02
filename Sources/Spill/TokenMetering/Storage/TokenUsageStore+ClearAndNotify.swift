@@ -81,21 +81,45 @@ extension TokenUsageStore {
     }
 
 
+    /// Identifies which process posted a distributed events-did-change
+    /// notification, so the posting process can skip its own echo: it already
+    /// handled the same change through the in-process notification.
+    static let distributedChangeSenderKey = "sender_pid"
+
     func notifyEventsDidChange() {
         postEventsDidChange()
     }
 
     func postEventsDidChange() {
+        noteDataChanged()
         NotificationCenter.default.post(
             name: Self.eventsDidChangeNotification,
             object: self
         )
         DistributedNotificationCenter.default().postNotificationName(
             Self.distributedEventsDidChangeNotification,
-            object: nil,
+            object: String(ProcessInfo.processInfo.processIdentifier),
             userInfo: nil,
             deliverImmediately: true
         )
+    }
+
+    static func isOwnDistributedChangeEcho(_ notification: Notification) -> Bool {
+        guard let sender = notification.object as? String else {
+            return false
+        }
+        return sender == String(ProcessInfo.processInfo.processIdentifier)
+    }
+
+    /// Every local mutation funnels through `postEventsDidChange`, and observers
+    /// of the distributed notification call this for changes made by another
+    /// process (both processes share one database file). Bumping the revision
+    /// invalidates the aggregate caches keyed on it.
+    func noteDataChanged() {
+        aggregateCacheLock.withLock {
+            dataRevisionStorage &+= 1
+            allPeriodTotalsCacheStorage = nil
+        }
     }
 
     func resetImporterState(for aiTools: [TokenUsageAITool]) {

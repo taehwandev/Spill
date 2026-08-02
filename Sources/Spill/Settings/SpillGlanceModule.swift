@@ -34,6 +34,21 @@ enum SpillGlanceModule: String, CaseIterable, Identifiable, Sendable {
         Self.configurableToolModules.contains(self)
     }
 
+    /// Two-letter label used by the dense `all` layout, where a full tool name
+    /// does not fit the fixed cell width. `nil` means the item title already fits.
+    var compactTitle: String? {
+        switch self {
+        case .codexToday:
+            return "CX"
+        case .claudeToday:
+            return "CL"
+        case .antigravityToday:
+            return "AG"
+        case .allToday, .workType:
+            return nil
+        }
+    }
+
     static func normalizedEnabled(from rawValues: [String]?) -> Set<SpillGlanceModule> {
         guard let rawValues else {
             return []

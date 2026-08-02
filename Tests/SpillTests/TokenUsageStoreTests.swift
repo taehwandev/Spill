@@ -1487,9 +1487,9 @@ final class TokenUsageStoreTests: XCTestCase {
             1
         )
         XCTAssertTrue(dashboardWindowController.contains("store.refreshAsyncIfIdle()"))
-        XCTAssertTrue(dashboardWindowController.contains("store.refreshAsync()"))
+        XCTAssertFalse(dashboardWindowController.contains("store.refreshAsync()"))
         XCTAssertTrue(dashboardWindowController.contains("deferredRefreshDelayNanoseconds"))
-        XCTAssertTrue(dashboardWindowController.contains("aiStatusRefreshIntervalNanoseconds: UInt64 = 8_000_000_000"))
+        XCTAssertTrue(dashboardWindowController.contains("aiStatusRefreshIntervalNanoseconds: UInt64 = 30_000_000_000"))
         XCTAssertTrue(dashboardWindowController.contains("tokenDataRefreshIntervalNanoseconds: UInt64 = 15_000_000_000"))
         XCTAssertTrue(dashboardWindowController.contains("startAIStatusRefreshLoop()"))
         XCTAssertTrue(dashboardWindowController.contains("startTokenDataRefreshLoop()"))
@@ -1725,6 +1725,9 @@ final class TokenUsageStoreTests: XCTestCase {
             usageStore: usageStore,
             loadsInitialPanelSummary: false
         )
+        // Establish a dashboard consumer so the scheduled refresh below is a
+        // full snapshot rebuild rather than the panel-summary-only path.
+        dashboardStore.refresh(trackLiveUpdates: false)
         try usageStore.appendEvent(Self.safeEvent(spanID: "span_scheduled_refresh_survives_panel_summary"))
 
         NotificationCenter.default.post(
@@ -1754,7 +1757,8 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(collector.contains("runAntigravityActiveImporter()"))
         XCTAssertTrue(collector.contains("runClaudeCodeActiveImporter()"))
         XCTAssertTrue(collector.contains("TokenUsageAntigravityImporter().importRecentEvents"))
-        XCTAssertTrue(collector.contains("TokenUsageClaudeCodeImporter().importRecentSessions"))
+        XCTAssertTrue(collector.contains("let importer = TokenUsageClaudeCodeImporter()"))
+        XCTAssertTrue(collector.contains("importer.importRecentSessions"))
         XCTAssertTrue(collector.contains("func stop()"))
         XCTAssertTrue(collector.contains("private var isStopping = false"))
         XCTAssertTrue(collector.contains("shouldCancel: shouldCancel"))
@@ -1813,6 +1817,150 @@ final class TokenUsageStoreTests: XCTestCase {
         let startDate = lock.withLock { capturedStartDate }
         XCTAssertNotNil(startDate)
         XCTAssertEqual(startDate?.timeIntervalSince(beforeRequest.addingTimeInterval(-3600)) ?? 0, 0, accuracy: 2)
+    }
+
+    func testTokenUsageCollectorPacesTimerImportsAndForcesUserActions() async {
+        let store = TokenUsageStore(fileURL: temporaryEventsURL())
+        let lock = NSLock()
+        var antigravityRuns = 0
+        var claudeRuns = 0
+        var currentDate = Date(timeIntervalSince1970: 10_000)
+        let collector = TokenUsageCollectorCoordinator(
+            store: store,
+            antigravityImportRunner: { _, _, _ in
+                lock.withLock { antigravityRuns += 1 }
+                return TokenUsageAntigravityImportSummary(
+                    scannedDatabases: 0,
+                    scannedGenerationRows: 0,
+                    parsedUsageEvents: 0,
+                    importedEvents: 0,
+                    skippedDuplicateEvents: 0,
+                    unsupportedRecords: 0,
+                    splitOutputFallbackEvents: 0,
+                    cursorAdvancedDatabases: 0,
+                    failedToWriteEvents: false
+                )
+            },
+            claudeCodeImportRunner: { _, _ in
+                lock.withLock { claudeRuns += 1 }
+                return TokenUsageClaudeCodeImportSummary(
+                    scannedFiles: 0,
+                    parsedTurns: 0,
+                    importedEvents: 0,
+                    skippedDuplicateEvents: 0,
+                    cursorAdvancedFiles: 0,
+                    failedToWriteEvents: false
+                )
+            },
+            activeImporterMinimumInterval: 30,
+            now: { lock.withLock { currentDate } }
+        )
+
+        // First timer request runs both importers (no prior run to pace against).
+        await collector.requestCollectionAndWait(reason: "dashboard_refresh")
+        XCTAssertEqual(lock.withLock { antigravityRuns }, 1)
+        XCTAssertEqual(lock.withLock { claudeRuns }, 1)
+
+        // A second timer request inside the floor coalesces into an inbox-only pass.
+        lock.withLock { currentDate = currentDate.addingTimeInterval(15) }
+        await collector.requestCollectionAndWait(reason: "menu_bar_status")
+        XCTAssertEqual(lock.withLock { antigravityRuns }, 1)
+        XCTAssertEqual(lock.withLock { claudeRuns }, 1)
+
+        // A user action forces both importers even inside the floor.
+        await collector.requestCollectionAndWait(reason: "manual_refresh")
+        XCTAssertEqual(lock.withLock { antigravityRuns }, 2)
+        XCTAssertEqual(lock.withLock { claudeRuns }, 2)
+
+        // Once the floor elapses, timer requests import again.
+        lock.withLock { currentDate = currentDate.addingTimeInterval(31) }
+        await collector.requestCollectionAndWait(reason: "dashboard_refresh")
+        XCTAssertEqual(lock.withLock { antigravityRuns }, 3)
+        XCTAssertEqual(lock.withLock { claudeRuns }, 3)
+    }
+
+    func testAllPeriodInputScopeTotalsCachesUntilTheStoreChanges() throws {
+        // Two instances over one database file model the main app and the
+        // dashboard helper sharing the store across processes.
+        let eventsURL = temporaryEventsURL()
+        let reader = TokenUsageStore(fileURL: eventsURL)
+        let writer = TokenUsageStore(fileURL: eventsURL)
+        try reader.appendEvent(Self.safeEvent(inputTokens: 100, outputTokens: 50))
+        let now = Date()
+        let calendar = Calendar.autoupdatingCurrent
+
+        let first = reader.allPeriodInputScopeTotals(now: now, calendar: calendar)
+        XCTAssertEqual(first[.all]?.includeCache, 150)
+
+        // Another instance changes the shared database; this instance has not
+        // observed that change yet, so the read must answer from cache (a real
+        // rescan would already see 300).
+        try writer.appendEvent(
+            Self.safeEvent(spanID: "span_totals_cache_writer", inputTokens: 100, outputTokens: 50)
+        )
+        let cached = reader.allPeriodInputScopeTotals(now: now, calendar: calendar)
+        XCTAssertEqual(cached[.all]?.includeCache, 150)
+
+        // The distributed change observers call this for cross-process changes;
+        // it invalidates the cache so the next read rescans.
+        reader.noteDataChanged()
+        let refreshed = reader.allPeriodInputScopeTotals(now: now, calendar: calendar)
+        XCTAssertEqual(refreshed[.all]?.includeCache, 300)
+
+        // Filter changes miss the cache instead of returning the wrong totals.
+        let filtered = reader.allPeriodInputScopeTotals(
+            now: now,
+            calendar: calendar,
+            visibleTools: [.claude]
+        )
+        XCTAssertEqual(filtered[.all]?.includeCache, 0)
+    }
+
+    /// A caller-provided database connection is a read transaction that may be
+    /// older or newer than the cached revision, so it must bypass the cache in
+    /// both directions: never serve cached totals into a transaction, and never
+    /// store transaction reads into the cache.
+    func testAllPeriodTotalsBypassTheCacheForCallerProvidedTransactions() throws {
+        let eventsURL = temporaryEventsURL()
+        let reader = TokenUsageStore(fileURL: eventsURL)
+        let writer = TokenUsageStore(fileURL: eventsURL)
+        try reader.appendEvent(Self.safeEvent(inputTokens: 100, outputTokens: 50))
+        let now = Date()
+        let calendar = Calendar.autoupdatingCurrent
+
+        // Populate the cache at 150, then change the data through the other
+        // instance without this instance observing it.
+        XCTAssertEqual(
+            reader.allPeriodInputScopeTotals(now: now, calendar: calendar)[.all]?.includeCache,
+            150
+        )
+        try writer.appendEvent(
+            Self.safeEvent(spanID: "span_tx_bypass_writer", inputTokens: 100, outputTokens: 50)
+        )
+
+        // A transaction read must see its own connection's data (300), not the
+        // stale cached 150.
+        let database = try reader.lock.withLock { try reader.openDatabase() }
+        defer { sqlite3_close(database) }
+        let transactionTotals = reader.allPeriodInputScopeTotals(
+            now: now,
+            calendar: calendar,
+            database: database
+        )
+        XCTAssertEqual(transactionTotals[.all]?.includeCache, 300)
+
+        // And that read must not have been stored: the cached-path read still
+        // answers from the (stale but revision-consistent) cache until a change
+        // notification bumps the revision.
+        XCTAssertEqual(
+            reader.allPeriodInputScopeTotals(now: now, calendar: calendar)[.all]?.includeCache,
+            150
+        )
+        reader.noteDataChanged()
+        XCTAssertEqual(
+            reader.allPeriodInputScopeTotals(now: now, calendar: calendar)[.all]?.includeCache,
+            300
+        )
     }
 
     func testTokenUsageCollectorRunsClaudeCodeActiveImporter() {
@@ -1985,6 +2133,90 @@ final class TokenUsageStoreTests: XCTestCase {
         let secondSummary = importer.importRecentSessions(into: store)
         XCTAssertEqual(secondSummary.importedEvents, 0)
         XCTAssertEqual(store.loadEvents().count, 3)
+    }
+
+    func testClaudeCodeLabelTimelineReadsOnlyAppendedBytesAndResetsAfterTruncation() throws {
+        let rootURL = temporaryDirectoryURL()
+        try FileManager.default.createDirectory(at: rootURL, withIntermediateDirectories: true)
+        let timelineURL = rootURL.appendingPathComponent("claude-timeline.jsonl")
+        let firstLine = #"{"ai_tool":"claude","task_type":"debugging","stage":"implement","project_id":"project_one","updated_at":"2026-06-26T00:00:00.000Z","expires_at":"2026-06-26T00:10:00.000Z"}"#
+        let firstData = Data("\(firstLine)\n".utf8)
+        try firstData.write(to: timelineURL)
+
+        let importer = TokenUsageClaudeCodeImporter(
+            projectsDirectory: rootURL,
+            labelTimelineURL: timelineURL,
+            stateURL: nil
+        )
+        let firstTimestamp = try XCTUnwrap(
+            ISO8601DateFormatter.parseTokenUsageDate(from: "2026-06-26T00:05:00.000Z")
+        )
+
+        XCTAssertEqual(importer.readLabelTimeline().label(for: firstTimestamp).taskType, .debugging)
+        XCTAssertEqual(importer.labelTimelineBytesRead, firstData.count)
+
+        _ = importer.readLabelTimeline()
+        XCTAssertEqual(importer.labelTimelineBytesRead, firstData.count)
+
+        let secondLine = #"{"ai_tool":"claude","task_type":"testing","stage":"verify","project_id":"project_two","updated_at":"2026-06-26T00:10:00.000Z","expires_at":"2026-06-26T00:20:00.000Z"}"#
+        let appendedData = Data("\(secondLine)\n".utf8)
+        let appendHandle = try FileHandle(forWritingTo: timelineURL)
+        try appendHandle.seekToEnd()
+        try appendHandle.write(contentsOf: appendedData)
+        try appendHandle.close()
+
+        let secondTimestamp = try XCTUnwrap(
+            ISO8601DateFormatter.parseTokenUsageDate(from: "2026-06-26T00:15:00.000Z")
+        )
+        XCTAssertEqual(importer.readLabelTimeline().label(for: secondTimestamp).taskType, .testing)
+        XCTAssertEqual(importer.labelTimelineBytesRead, firstData.count + appendedData.count)
+
+        let replacementLine = #"{"ai_tool":"claude","task_type":"analysis","stage":"plan","updated_at":"2026-06-26T01:00:00.000Z","expires_at":"2026-06-26T01:10:00.000Z"}"#
+        let replacementData = Data("\(replacementLine)\n".utf8)
+        try replacementData.write(to: timelineURL)
+        let replacementTimestamp = try XCTUnwrap(
+            ISO8601DateFormatter.parseTokenUsageDate(from: "2026-06-26T01:05:00.000Z")
+        )
+
+        let replacementTimeline = importer.readLabelTimeline()
+        XCTAssertEqual(replacementTimeline.entries.count, 1)
+        XCTAssertEqual(replacementTimeline.label(for: replacementTimestamp).taskType, .analysis)
+        XCTAssertEqual(
+            importer.labelTimelineBytesRead,
+            firstData.count + appendedData.count + replacementData.count
+        )
+    }
+
+    func testClaudeCodeSessionDiscoveryReusesShortLivedCacheWithoutAddingLookback() throws {
+        let rootURL = temporaryDirectoryURL()
+        let projectURL = rootURL.appendingPathComponent("project-opaque", isDirectory: true)
+        try FileManager.default.createDirectory(at: projectURL, withIntermediateDirectories: true)
+        let firstSessionID = "11111111111111111111111111111111"
+        try Data().write(to: projectURL.appendingPathComponent("\(firstSessionID).jsonl"))
+
+        var currentDate = Date(timeIntervalSince1970: 1_000)
+        let importer = TokenUsageClaudeCodeImporter(
+            projectsDirectory: rootURL,
+            labelTimelineURL: rootURL.appendingPathComponent("missing-labels.jsonl"),
+            stateURL: nil,
+            sessionDiscoveryCacheLifetime: 60,
+            now: { currentDate }
+        )
+
+        XCTAssertEqual(importer.discoverSessionFiles().map(\.sessionID), [firstSessionID])
+        XCTAssertEqual(importer.sessionDiscoveryScanCount, 1)
+
+        let secondSessionID = "22222222222222222222222222222222"
+        try Data().write(to: projectURL.appendingPathComponent("\(secondSessionID).jsonl"))
+        XCTAssertEqual(importer.discoverSessionFiles().map(\.sessionID), [firstSessionID])
+        XCTAssertEqual(importer.sessionDiscoveryScanCount, 1)
+
+        currentDate.addTimeInterval(61)
+        XCTAssertEqual(
+            importer.discoverSessionFiles().map(\.sessionID).sorted(),
+            [firstSessionID, secondSessionID]
+        )
+        XCTAssertEqual(importer.sessionDiscoveryScanCount, 2)
     }
 
     func testClaudeCodeActiveImporterSkipsCrossBatchRequestIdDuplicates() throws {
@@ -2370,14 +2602,18 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(windowController.contains("aiStatusStore.cancelRefresh()"))
         XCTAssertFalse(windowController.contains("scheduleDeferredRefreshAction()"))
         XCTAssertTrue(windowController.contains("scheduleDeferredCollectionRequest()"))
-        XCTAssertTrue(windowController.contains("self.refreshAction()"))
+        // The user-facing refresh flows (deferred open refresh, view button)
+        // carry the forced manual reason; only the periodic loop stays paced.
+        XCTAssertTrue(windowController.contains("self.manualRefreshAction()"))
+        XCTAssertTrue(windowController.contains("refreshAction: manualRefreshAction"))
+        XCTAssertTrue(windowController.contains("refreshAction()"))
         XCTAssertTrue(windowController.contains("deferredRefreshDelayNanoseconds: UInt64 = 1_500_000_000"))
         XCTAssertTrue(windowController.contains("tokenDataRefreshIntervalNanoseconds: UInt64 = 15_000_000_000"))
         XCTAssertTrue(windowController.contains("Task.sleep(nanoseconds: delay)"))
         XCTAssertTrue(windowController.contains("startTokenDataRefreshLoop()"))
         XCTAssertTrue(windowController.contains("tokenDataRefreshTask?.cancel()"))
         XCTAssertTrue(windowController.contains("requestTokenDataRefresh()"))
-        XCTAssertTrue(windowController.contains("store.refreshAsync()"))
+        XCTAssertFalse(windowController.contains("store.refreshAsync()"))
         XCTAssertTrue(windowController.contains("!store.isDashboardRefreshInProgress"))
         XCTAssertTrue(windowController.contains("prepareVisibleRenderForSmokeTest()"))
         XCTAssertTrue(appDelegate.contains("SpillCrashReporter.markCleanShutdown(processRole: \"main_app\")"))
@@ -3335,6 +3571,10 @@ final class TokenUsageStoreTests: XCTestCase {
         let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
         let dashboardStore = dashboardStore(usageStore: usageStore)
 
+        // A dashboard surface must have loaded once before store changes
+        // rebuild the full snapshot; without a consumer only the panel summary
+        // refreshes (see testStoreChangeWithoutDashboardConsumer...).
+        dashboardStore.refresh(trackLiveUpdates: false)
         XCTAssertEqual(dashboardStore.snapshot.eventCount, 0)
 
         try usageStore.appendEvent(Self.safeEvent())
@@ -3345,48 +3585,40 @@ final class TokenUsageStoreTests: XCTestCase {
     }
 
     @MainActor
-    func testDashboardStoreRefreshesWhenLocalCollectionFinishes() async throws {
+    func testStoreChangeWithoutDashboardConsumerRefreshesOnlyPanelSummary() async throws {
         let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
-        try usageStore.appendEvent(Self.safeEvent(spanID: "span_collection_finish"))
         let dashboardStore = dashboardStore(usageStore: usageStore)
 
-        XCTAssertEqual(dashboardStore.snapshot.eventCount, 0)
+        try usageStore.appendEvent(Self.safeEvent(spanID: "span_no_consumer_panel_only"))
         try await waitForPanelSummary(dashboardStore, eventCount: 1)
+
+        // Give the 250ms scheduled-refresh debounce time to fire, then confirm
+        // it refreshed the panel summary without paying for a snapshot build.
+        try await Task.sleep(nanoseconds: 500_000_000)
         XCTAssertEqual(dashboardStore.panelSummary.eventCount, 1)
+        XCTAssertEqual(dashboardStore.snapshot.eventCount, 0)
+        XCTAssertEqual(dashboardStore.loadState, .idle)
+    }
+
+    @MainActor
+    func testDashboardStoreDoesNotRefreshOnlyBecauseLocalCollectionFinishes() async throws {
+        let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
+        try usageStore.appendEvent(Self.safeEvent(spanID: "span_collection_finish"))
+        let dashboardStore = TokenUsageDashboardStore(
+            usageStore: usageStore,
+            loadsInitialPanelSummary: false
+        )
+
+        XCTAssertEqual(dashboardStore.snapshot.eventCount, 0)
 
         NotificationCenter.default.post(
             name: TokenUsageCollectorCoordinator.collectionDidFinishNotification,
             object: nil
         )
-        try await waitForDashboardStoreRefreshToLoadEvents(dashboardStore, eventCount: 1)
-
-        XCTAssertEqual(dashboardStore.snapshot.eventCount, 1)
-        XCTAssertEqual(dashboardStore.snapshot.totalTokens, 150)
-    }
-
-    @MainActor
-    func testDashboardStoreRefreshesOnlyForObservedCollector() async throws {
-        let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
-        try usageStore.appendEvent(Self.safeEvent(spanID: "span_collection_finish_filtered"))
-        let observedCollector = TokenUsageCollectorCoordinator(store: usageStore)
-        let otherCollector = TokenUsageCollectorCoordinator(store: usageStore)
-        let dashboardStore = TokenUsageDashboardStore(
-            usageStore: usageStore,
-            collectionCoordinator: observedCollector
-        )
-
-        NotificationCenter.default.post(
-            name: TokenUsageCollectorCoordinator.collectionDidFinishNotification,
-            object: otherCollector
-        )
         try await Task.sleep(nanoseconds: 350_000_000)
-        XCTAssertEqual(dashboardStore.snapshot.eventCount, 0)
 
-        NotificationCenter.default.post(
-            name: TokenUsageCollectorCoordinator.collectionDidFinishNotification,
-            object: observedCollector
-        )
-        try await waitForDashboardStoreRefreshToLoadEvents(dashboardStore, eventCount: 1)
+        XCTAssertEqual(dashboardStore.snapshot.eventCount, 0)
+        XCTAssertEqual(dashboardStore.loadState, .idle)
     }
 
     @MainActor
@@ -5236,6 +5468,40 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(viaConnection, plain)
     }
 
+    func testSQLSnapshotFactoryUsesPreloadedPeriodFilterTotals() throws {
+        let store = TokenUsageStore(fileURL: temporaryEventsURL())
+        try store.appendEvent(Self.safeEvent(inputTokens: 400, outputTokens: 100))
+        let preloaded: [TokenUsageDashboardPeriod: TokenUsageInputScopeTotals] = [
+            .today: .init(includeCache: 101, freshOnly: 11),
+            .sevenDays: .init(includeCache: 202, freshOnly: 22),
+            .thirtyDays: .init(includeCache: 303, freshOnly: 33),
+            .all: .init(includeCache: 404, freshOnly: 44)
+        ]
+
+        let snapshot = try XCTUnwrap(TokenUsageDashboardSnapshot.buildFromSQLAggregates(
+            usageStore: store,
+            selectedPeriod: .today,
+            inputScope: .includeCache,
+            preloadedPeriodFilterTotals: preloaded
+        ))
+
+        XCTAssertEqual(
+            snapshot.periodFilters.map { $0.detail },
+            ["101", "202", "303", "404"]
+        )
+    }
+
+    func testSQLSnapshotBuildLoadsAllPeriodTotalsOnceForSharedSnapshotPair() throws {
+        let snapshotBuild = try Self.source(named: "TokenUsageDashboardStore+SQLSnapshotBuild.swift")
+        let snapshotFactory = try Self.source(named: "TokenUsageDashboardSnapshot+SQLFactory.swift")
+
+        XCTAssertEqual(
+            snapshotBuild.components(separatedBy: "usageStore.allPeriodInputScopeTotals(").count - 1,
+            1
+        )
+        XCTAssertTrue(snapshotFactory.contains("preloadedPeriodFilterTotals"))
+    }
+
     /// Fix 1 regression: a transient SQL-build failure must not leave isRefreshing stuck true.
     /// The store points at an unopenable database (a regular file occupies the directory path its
     /// database file needs), so every open fails and the SQL build returns nil. The refresh must
@@ -5264,6 +5530,40 @@ final class TokenUsageStoreTests: XCTestCase {
             try await Task.sleep(nanoseconds: 50_000_000)
         }
         XCTAssertTrue(settled, "isRefreshing must return to false after a failed SQL build")
+    }
+
+    /// A transient FIRST load failure resets `loadState` to `.idle`, but the
+    /// dashboard surface that requested it still exists. Once the database
+    /// recovers, a store-change notification must retry the full snapshot —
+    /// not stay downgraded to panel-summary-only until the user taps refresh.
+    @MainActor
+    func testChangeNotificationRetriesFullSnapshotAfterFailedFirstLoad() async throws {
+        let baseDirectory = temporaryDirectoryURL()
+        try FileManager.default.createDirectory(
+            at: baseDirectory.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        // First load fails: a regular file occupies the token-metering directory
+        // path, so every openDatabase throws and the SQL build returns nil.
+        XCTAssertTrue(FileManager.default.createFile(atPath: baseDirectory.path, contents: Data()))
+        let usageStore = TokenUsageStore(fileURL: baseDirectory.appendingPathComponent("events.json"))
+        let store = TokenUsageDashboardStore(usageStore: usageStore, loadsInitialPanelSummary: false)
+
+        store.refreshAsync()
+        for _ in 0..<60 where store.isDashboardRefreshInProgress {
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        XCTAssertEqual(store.loadState, .idle)
+        XCTAssertEqual(store.snapshot.eventCount, 0)
+
+        // The database recovers and new usage arrives; the resulting change
+        // notification must rebuild the full snapshot for the waiting surface.
+        try FileManager.default.removeItem(at: baseDirectory)
+        try usageStore.appendEvent(Self.safeEvent(spanID: "span_recovers_after_failed_first_load"))
+
+        try await waitForDashboardStoreRefreshToLoadEvents(store, eventCount: 1)
+        XCTAssertEqual(store.snapshot.eventCount, 1)
+        XCTAssertEqual(store.loadState, .loaded)
     }
 
     func testPanelSummaryProjectsFreshOnlyHeadlineWithoutChangingWorkflowRows() throws {

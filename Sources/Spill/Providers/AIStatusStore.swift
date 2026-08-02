@@ -17,7 +17,7 @@ final class AIStatusStore: ObservableObject {
     private var isBackgroundRefreshInFlight = false
     private var lastBackgroundRefreshStartedAt: Date?
 
-    private static let minimumBackgroundRefreshInterval: TimeInterval = 5.0
+    static let minimumBackgroundRefreshInterval: TimeInterval = 15.0
 
     init(
         statuses: [LocalAIToolStatus] = LocalAIStatusProvider.statuses(environment: [:], processNames: []),

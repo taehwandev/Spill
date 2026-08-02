@@ -10,13 +10,8 @@ struct SpillGlanceView: View {
 
     @ViewBuilder
     var body: some View {
-        if let workRotationEpoch {
-            TimelineView(
-                .periodic(
-                    from: workRotationEpoch,
-                    by: SpillGlanceItem.rotationInterval
-                )
-            ) { context in
+        if let rotationSchedule {
+            TimelineView(rotationSchedule) { context in
                 content(at: context.date)
             }
         } else {
@@ -24,50 +19,64 @@ struct SpillGlanceView: View {
         }
     }
 
-    private func content(at date: Date) -> some View {
-        SpillGlanceSurface(items: store.presentation.items, date: date)
-            .contentShape(Capsule(style: .continuous))
-            .gesture(
-                DragGesture(minimumDistance: 0, coordinateSpace: .local)
-                    .onChanged { value in
-                        guard isDragging || isDrag(value.translation) else {
-                            return
-                        }
-                        isDragging = true
-                        dragAction(.changed(value.translation))
-                    }
-                    .onEnded { value in
-                        let didDrag = isDragging || isDrag(value.translation)
-                        isDragging = false
-                        if didDrag {
-                            dragAction(.ended(value.translation))
-                        } else if isSettingsLocation(value.location) {
-                            openSettingsAction()
-                        } else {
-                            openDashboardAction()
-                        }
-                    }
-            )
-            .help("Open AI Token Dashboard · Drag to move")
-            .accessibilityLabel(accessibilityLabel(at: date))
-            .accessibilityAddTraits(.isButton)
-            .accessibilityAction(.default) {
-                openDashboardAction()
-            }
-            .accessibilityAction(named: Text("Open Spill Glance Settings")) {
-                openSettingsAction()
-            }
-    }
-
-    private var workRotationEpoch: Date? {
-        guard let workItem = store.presentation.items.first(where: {
-            $0.module == .workType && $0.displayValues.count > 1
-        }) else {
+    private var rotationSchedule: SpillGlanceRotationTimelineSchedule? {
+        guard !store.isRotationPaused else {
             return nil
         }
-        return workItem.rotationEpoch
+        let rotation = store.presentation.rotationSchedule
+        guard rotation != .none else {
+            return nil
+        }
+        return SpillGlanceRotationTimelineSchedule(rotation: rotation)
     }
 
+    private func content(at date: Date) -> some View {
+        let items = store.presentation.visibleItems(at: date)
+        return SpillGlanceSurface(
+            items: items,
+            displayStyle: store.presentation.displayStyle,
+            date: date
+        )
+        .contentShape(
+            RoundedRectangle(
+                cornerRadius: SpillGlanceLayout.cornerRadius,
+                style: .continuous
+            )
+        )
+        .gesture(
+            DragGesture(minimumDistance: 0, coordinateSpace: .local)
+                .onChanged { value in
+                    guard isDragging || isDrag(value.translation) else {
+                        return
+                    }
+                    isDragging = true
+                    dragAction(.changed(value.translation))
+                }
+                .onEnded { value in
+                    let didDrag = isDragging || isDrag(value.translation)
+                    isDragging = false
+                    if didDrag {
+                        dragAction(.ended(value.translation))
+                    } else if isSettingsLocation(value.location) {
+                        openSettingsAction()
+                    } else {
+                        openDashboardAction()
+                    }
+                }
+        )
+        .help("Open AI Token Dashboard · Drag to move")
+        .accessibilityLabel(accessibilityLabel(at: date))
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction(.default) {
+            openDashboardAction()
+        }
+        .accessibilityAction(named: Text("Open Spill Glance Settings")) {
+            openSettingsAction()
+        }
+    }
+
+    /// Always reads every module, not just the slot currently on screen: in
+    /// ticker styles the other values would otherwise be unreachable.
     private func accessibilityLabel(at date: Date) -> String {
         let summary = store.presentation.items
             .map { "\($0.title), \($0.displayValue(at: date))" }
@@ -76,10 +85,11 @@ struct SpillGlanceView: View {
     }
 
     private func isSettingsLocation(_ location: CGPoint) -> Bool {
-        let totalWidth = SpillGlanceLayout.contentSize(
-            modules: store.presentation.items.map(\.module)
-        ).width
-        return location.x >= totalWidth - SpillGlanceLayout.settingsControlWidth
+        let contentSize = SpillGlanceLayout.contentSize(
+            modules: store.presentation.items.map(\.module),
+            displayStyle: store.presentation.displayStyle
+        )
+        return location.x >= contentSize.width - SpillGlanceLayout.settingsControlWidth
     }
 
     private func isDrag(_ translation: CGSize) -> Bool {
@@ -89,11 +99,12 @@ struct SpillGlanceView: View {
 
 private struct SpillGlanceSurface: View {
     let items: [SpillGlanceItem]
+    let displayStyle: SpillGlanceDisplayStyle
     let date: Date
 
     var body: some View {
         groupedSurface
-            .clipShape(Capsule(style: .continuous))
+            .clipShape(surfaceShape)
     }
 
     @ViewBuilder
@@ -102,22 +113,32 @@ private struct SpillGlanceSurface: View {
             groupedContent
                 .glassEffect(
                     .regular.interactive(),
-                    in: Capsule(style: .continuous)
+                    in: surfaceShape
                 )
         } else {
             groupedContent
-                .background(.ultraThinMaterial, in: Capsule(style: .continuous))
+                .background(.ultraThinMaterial, in: surfaceShape)
         }
     }
 
+    @ViewBuilder
     private var groupedContent: some View {
+        switch displayStyle {
+        case .all:
+            allContent
+        case .ticker:
+            tickerContent
+        }
+    }
+
+    private var allContent: some View {
         HStack(spacing: SpillGlanceLayout.itemSpacing) {
             ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                 if index > 0 {
                     separator
                 }
 
-                SpillGlanceModuleContent(item: item, date: date)
+                SpillGlanceModuleContent(item: item, date: date, labelStyle: .compact)
                     .frame(
                         width: SpillGlanceLayout.itemWidth(for: item.module),
                         height: SpillGlanceLayout.contentHeight
@@ -125,16 +146,41 @@ private struct SpillGlanceSurface: View {
             }
 
             separator
-
-            SpillGlanceSettingsContent()
-                .frame(
-                    width: SpillGlanceLayout.settingsControlWidth,
-                    height: SpillGlanceLayout.contentHeight
-                )
+            settingsContent
         }
         .frame(
             width: SpillGlanceLayout.contentSize(
-                modules: items.map(\.module)
+                modules: items.map(\.module),
+                displayStyle: .all
+            ).width,
+            height: SpillGlanceLayout.contentHeight
+        )
+    }
+
+    private var tickerContent: some View {
+        HStack(spacing: SpillGlanceLayout.itemSpacing) {
+            // One stable module view whose texts crossfade in place. Identity-
+            // swapping views with move transitions here kept two CoreText
+            // layouts alive per rotation and re-laid the ticker out every five
+            // seconds, which showed up in AppHang traces.
+            ZStack {
+                if let item = items.first {
+                    SpillGlanceModuleContent(item: item, date: date, labelStyle: .full)
+                }
+            }
+            .frame(
+                width: SpillGlanceLayout.tickerItemWidth,
+                height: SpillGlanceLayout.contentHeight
+            )
+            .animation(.easeInOut(duration: 0.30), value: items.first?.renderID)
+
+            separator
+            settingsContent
+        }
+        .frame(
+            width: SpillGlanceLayout.contentSize(
+                modules: items.map(\.module),
+                displayStyle: .ticker
             ).width,
             height: SpillGlanceLayout.contentHeight
         )
@@ -142,38 +188,67 @@ private struct SpillGlanceSurface: View {
 
     private var separator: some View {
         Rectangle()
-            .fill(Color.primary.opacity(0.10))
+            .fill(Color.primary.opacity(0.18))
             .frame(
                 width: SpillGlanceLayout.separatorWidth,
-                height: 14
+                height: 18
             )
     }
+
+    private var settingsContent: some View {
+        SpillGlanceSettingsContent()
+            .frame(
+                width: SpillGlanceLayout.settingsControlWidth,
+                height: SpillGlanceLayout.contentHeight
+            )
+    }
+
+    private var surfaceShape: RoundedRectangle {
+        RoundedRectangle(
+            cornerRadius: SpillGlanceLayout.cornerRadius,
+            style: .continuous
+        )
+    }
+}
+
+private enum SpillGlanceLabelStyle {
+    case compact
+    case full
 }
 
 private struct SpillGlanceModuleContent: View {
     let item: SpillGlanceItem
     let date: Date
+    let labelStyle: SpillGlanceLabelStyle
 
     var body: some View {
-        HStack(spacing: 3) {
+        HStack(spacing: 4) {
             Image(systemName: item.symbolName)
                 .font(.system(size: 8.5, weight: .bold))
                 .symbolRenderingMode(.hierarchical)
                 .foregroundStyle(item.tint.color)
-                .frame(width: 10)
+                .frame(width: 14, height: 14)
+                .background(item.tint.color.opacity(0.14), in: Circle())
+                .contentTransition(.opacity)
 
-            if !item.module.isTool {
-                Text(item.title)
-                    .font(.system(size: 9.5, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .fixedSize(horizontal: true, vertical: false)
-            }
+            Text(displayTitle)
+                .font(.system(size: 9.5, weight: .semibold, design: .rounded))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+                .contentTransition(.opacity)
 
             valueText(item.displayValue(at: date))
         }
-        .padding(.horizontal, 5)
+        .padding(.horizontal, 6)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+    }
+
+    private var displayTitle: String {
+        guard labelStyle == .compact else {
+            return item.title
+        }
+        return item.module.compactTitle ?? item.title
     }
 
     private func valueText(_ value: String) -> some View {
@@ -182,8 +257,12 @@ private struct SpillGlanceModuleContent: View {
             .foregroundStyle(.primary)
             .monospacedDigit()
             .lineLimit(1)
-            .minimumScaleFactor(0.62)
-            .contentTransition(.interpolate)
+            .fixedSize(horizontal: true, vertical: false)
+            // The ticker swaps whole unrelated strings, where interpolation
+            // would morph glyphs between different layouts; a plain crossfade
+            // is cheaper and reads better. Compact cells keep interpolating
+            // their own value's digit updates.
+            .contentTransition(labelStyle == .full ? .opacity : .interpolate)
             .animation(.easeInOut(duration: 0.18), value: value)
     }
 }

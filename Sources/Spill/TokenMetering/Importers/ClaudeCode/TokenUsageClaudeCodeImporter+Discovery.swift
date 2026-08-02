@@ -6,12 +6,27 @@ extension TokenUsageClaudeCodeImporter {
         let sessionID: String
     }
 
+    struct SessionDiscoveryCache {
+        let discoveredAt: Date
+        let files: [SessionFile]
+    }
+
     func discoverSessionFiles() -> [SessionFile] {
+        let currentDate = now()
+        if let sessionDiscoveryCache {
+            let age = currentDate.timeIntervalSince(sessionDiscoveryCache.discoveredAt)
+            if age >= 0, age < sessionDiscoveryCacheLifetime {
+                return sessionDiscoveryCache.files
+            }
+        }
+
+        sessionDiscoveryScanCount += 1
         guard let enumerator = fileManager.enumerator(
             at: projectsDirectory,
             includingPropertiesForKeys: [.isRegularFileKey],
             options: [.skipsHiddenFiles]
         ) else {
+            sessionDiscoveryCache = SessionDiscoveryCache(discoveredAt: currentDate, files: [])
             return []
         }
 
@@ -28,6 +43,7 @@ extension TokenUsageClaudeCodeImporter {
             }
             results.append(SessionFile(url: url, sessionID: sessionID))
         }
+        sessionDiscoveryCache = SessionDiscoveryCache(discoveredAt: currentDate, files: results)
         return results
     }
 }

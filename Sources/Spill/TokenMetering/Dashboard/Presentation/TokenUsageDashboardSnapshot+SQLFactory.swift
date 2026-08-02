@@ -31,6 +31,7 @@ extension TokenUsageDashboardSnapshot {
         calendar: Calendar = .autoupdatingCurrent,
         locale: Locale = .autoupdatingCurrent,
         timeZone: TimeZone = .autoupdatingCurrent,
+        preloadedPeriodFilterTotals: [TokenUsageDashboardPeriod: TokenUsageInputScopeTotals]? = nil,
         database: OpaquePointer? = nil
     ) -> TokenUsageDashboardSnapshot? {
         let dashboardToolsOnly = !showAdvancedTools
@@ -73,14 +74,15 @@ extension TokenUsageDashboardSnapshot {
         // Period tabs always total across every visible tool, independent of which single tool
         // chip is currently selected -- matches the original init reading periodFilterTotals
         // (computed the same tool-unfiltered way) directly, with no selectedTool narrowing.
-        let periodFilterTotals = usageStore.allPeriodInputScopeTotals(
-            now: now,
-            calendar: calendar,
-            dashboardToolsOnly: dashboardToolsOnly,
-            visibleTools: visibleTools,
-            database: database,
-            failureObserver: failureObserver
-        )
+        let periodFilterTotals = preloadedPeriodFilterTotals
+            ?? usageStore.allPeriodInputScopeTotals(
+                now: now,
+                calendar: calendar,
+                dashboardToolsOnly: dashboardToolsOnly,
+                visibleTools: visibleTools,
+                database: database,
+                failureObserver: failureObserver
+            )
 
         let focused = usageStore.dashboardFocusedTotals(
             startingAt: requestRange.start,

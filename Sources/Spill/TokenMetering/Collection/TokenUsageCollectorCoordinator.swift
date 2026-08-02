@@ -1,6 +1,11 @@
 import Foundation
 
 final class TokenUsageCollectorCoordinator: TokenUsageExternalCollecting, @unchecked Sendable {
+    private enum PostPassAction {
+        case runAgain
+        case finish([@Sendable () -> Void])
+    }
+
     typealias AntigravityImportRunner = (
         TokenUsageStore,
         Date,
@@ -12,17 +17,36 @@ final class TokenUsageCollectorCoordinator: TokenUsageExternalCollecting, @unche
         TokenUsageStore,
         @escaping () -> Bool
     ) -> TokenUsageClaudeCodeImportSummary
+    typealias FinalizationBoundaryHook = @Sendable () -> Void
 
     static let collectionDidFinishNotification = Notification.Name("app.spill.token-usage-collector.collection-did-finish")
+
+    /// Reasons tied to an explicit user action or a correctness-critical read.
+    /// These bypass the per-importer pacing floor; periodic timer reasons
+    /// (`dashboard_refresh`, `menu_bar_status`) do not, so back-to-back timer
+    /// requests coalesce into inbox drains instead of full importer re-runs.
+    static let importerForcingReasons: Set<String> = [
+        "app_launch",
+        "panel_open",
+        "manual_refresh",
+        "private_usage_upload",
+    ]
 
     private let store: TokenUsageStore
     private let antigravityImportRunner: AntigravityImportRunner
     private let claudeCodeImportRunner: ClaudeCodeImportRunner
     private let antigravityLookbackInterval: TimeInterval
+    private let activeImporterMinimumInterval: TimeInterval
+    private let now: () -> Date
+    private let finalizationBoundaryHook: FinalizationBoundaryHook?
     private let queue = DispatchQueue(label: "app.spill.token-usage-collector")
     private let lock = NSLock()
     private var isCollecting = false
     private var hasPendingRequest = false
+    private var pendingRequestForcesImporters = false
+    private var currentRequestForcesImporters = false
+    private var lastAntigravityImportAt: Date?
+    private var lastClaudeCodeImportAt: Date?
     private var isStopping = false
     private var collectionCompletionHandlers: [@Sendable () -> Void] = []
 
@@ -30,8 +54,14 @@ final class TokenUsageCollectorCoordinator: TokenUsageExternalCollecting, @unche
         store: TokenUsageStore,
         antigravityImportRunner: AntigravityImportRunner? = nil,
         antigravityLookbackInterval: TimeInterval = 24 * 60 * 60,
-        claudeCodeImportRunner: ClaudeCodeImportRunner? = nil
+        claudeCodeImportRunner: ClaudeCodeImportRunner? = nil,
+        activeImporterMinimumInterval: TimeInterval = 30,
+        now: @escaping () -> Date = Date.init,
+        finalizationBoundaryHook: FinalizationBoundaryHook? = nil
     ) {
+        self.activeImporterMinimumInterval = activeImporterMinimumInterval
+        self.now = now
+        self.finalizationBoundaryHook = finalizationBoundaryHook
         self.store = store
         self.antigravityImportRunner = antigravityImportRunner ?? { store, startDate, shouldCancel in
             TokenUsageAntigravityImporter().importRecentEvents(
@@ -41,11 +71,16 @@ final class TokenUsageCollectorCoordinator: TokenUsageExternalCollecting, @unche
             )
         }
         self.antigravityLookbackInterval = antigravityLookbackInterval
-        self.claudeCodeImportRunner = claudeCodeImportRunner ?? { store, shouldCancel in
-            TokenUsageClaudeCodeImporter().importRecentSessions(
-                into: store,
-                shouldCancel: shouldCancel
-            )
+        if let claudeCodeImportRunner {
+            self.claudeCodeImportRunner = claudeCodeImportRunner
+        } else {
+            let importer = TokenUsageClaudeCodeImporter()
+            self.claudeCodeImportRunner = { store, shouldCancel in
+                importer.importRecentSessions(
+                    into: store,
+                    shouldCancel: shouldCancel
+                )
+            }
         }
     }
 }
@@ -63,7 +98,8 @@ extension TokenUsageCollectorCoordinator {
         }
     }
 
-    private func requestCollection(reason: String, completion: (@Sendable () -> Void)?) {
+    func requestCollection(reason: String, completion: (@Sendable () -> Void)?) {
+        let forcesImporters = Self.importerForcingReasons.contains(reason)
         var completionToRun: (@Sendable () -> Void)?
         let shouldStart = lock.withLock {
             guard !isStopping else {
@@ -74,11 +110,16 @@ extension TokenUsageCollectorCoordinator {
                 collectionCompletionHandlers.append(completion)
             }
             if isCollecting {
+                // Concurrent requests merge into one follow-up pass instead of
+                // queueing one full re-run each; force-ness is sticky so a manual
+                // request arriving mid-collection still gets a forced pass.
                 hasPendingRequest = true
+                pendingRequestForcesImporters = pendingRequestForcesImporters || forcesImporters
                 return false
             }
 
             isCollecting = true
+            currentRequestForcesImporters = forcesImporters
             return true
         }
 
@@ -127,23 +168,23 @@ extension TokenUsageCollectorCoordinator {
 
             runClaudeCodeActiveImporter()
 
-            let shouldRunAgain = lock.withLock {
-                if isStopping {
+            let postPassAction = lock.withLock {
+                if !isStopping, hasPendingRequest {
                     hasPendingRequest = false
-                    isCollecting = false
-                    return false
-                }
-                if hasPendingRequest {
-                    hasPendingRequest = false
-                    return true
+                    currentRequestForcesImporters = pendingRequestForcesImporters
+                    pendingRequestForcesImporters = false
+                    return PostPassAction.runAgain
                 }
 
-                isCollecting = false
-                return false
+                return PostPassAction.finish(prepareToFinishCollectionLocked())
             }
 
-            if !shouldRunAgain {
-                finishCollection()
+            switch postPassAction {
+            case .runAgain:
+                continue
+            case let .finish(completions):
+                finalizationBoundaryHook?()
+                completeCollection(completions)
                 return
             }
         }
@@ -152,15 +193,41 @@ extension TokenUsageCollectorCoordinator {
 
 extension TokenUsageCollectorCoordinator {
     private func runAntigravityActiveImporter() {
-        let startDate = Date().addingTimeInterval(-antigravityLookbackInterval)
+        guard shouldRunImporter(lastImportAt: \.lastAntigravityImportAt) else {
+            return
+        }
+        let startDate = now().addingTimeInterval(-antigravityLookbackInterval)
         _ = antigravityImportRunner(store, startDate) { [weak self] in
             self?.shouldStop ?? true
         }
+        lock.withLock { lastAntigravityImportAt = now() }
     }
 
     private func runClaudeCodeActiveImporter() {
+        guard shouldRunImporter(lastImportAt: \.lastClaudeCodeImportAt) else {
+            return
+        }
         _ = claudeCodeImportRunner(store) { [weak self] in
             self?.shouldStop ?? true
+        }
+        lock.withLock { lastClaudeCodeImportAt = now() }
+    }
+
+    /// Timer-paced requests run an importer only after its minimum interval has
+    /// elapsed; the inbox drain above stays unthrottled, so hook-written events
+    /// keep importing immediately. Forced reasons always run every importer.
+    private func shouldRunImporter(
+        lastImportAt: KeyPath<TokenUsageCollectorCoordinator, Date?>
+    ) -> Bool {
+        lock.withLock {
+            if currentRequestForcesImporters {
+                return true
+            }
+            guard let lastRunDate = self[keyPath: lastImportAt] else {
+                return true
+            }
+            let elapsed = now().timeIntervalSince(lastRunDate)
+            return elapsed < 0 || elapsed >= activeImporterMinimumInterval
         }
     }
 
@@ -185,12 +252,25 @@ extension TokenUsageCollectorCoordinator {
 
     private func finishCollection() {
         let completions = lock.withLock {
-            isCollecting = false
-            hasPendingRequest = false
-            let completions = collectionCompletionHandlers
-            collectionCompletionHandlers.removeAll()
-            return completions
+            prepareToFinishCollectionLocked()
         }
+        completeCollection(completions)
+    }
+
+    /// Must be called while holding `lock`. Detaching the current completion
+    /// batch in the same critical section as the idle transition prevents a
+    /// newly accepted request from being cleared or completed by the old pass.
+    private func prepareToFinishCollectionLocked() -> [@Sendable () -> Void] {
+        isCollecting = false
+        hasPendingRequest = false
+        pendingRequestForcesImporters = false
+        currentRequestForcesImporters = false
+        let completions = collectionCompletionHandlers
+        collectionCompletionHandlers.removeAll()
+        return completions
+    }
+
+    private func completeCollection(_ completions: [@Sendable () -> Void]) {
         for completion in completions {
             completion()
         }

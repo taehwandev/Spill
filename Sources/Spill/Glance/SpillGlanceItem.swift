@@ -1,7 +1,7 @@
 import Foundation
 
 struct SpillGlanceItem: Identifiable, Equatable {
-    static let rotationInterval: TimeInterval = 3
+    static let rotationInterval: TimeInterval = 5
 
     let module: SpillGlanceModule
     let title: String
@@ -49,6 +49,20 @@ struct SpillGlanceItem: Identifiable, Equatable {
 
     var value: String {
         displayValues[0]
+    }
+
+    var renderID: String {
+        "\(module.rawValue):\(value)"
+    }
+
+    func singleValue(_ value: String) -> SpillGlanceItem {
+        SpillGlanceItem(
+            module: module,
+            title: title,
+            value: value,
+            symbolName: symbolName,
+            tint: tint
+        )
     }
 
     func displayValue(

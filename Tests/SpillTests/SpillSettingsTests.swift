@@ -9,9 +9,47 @@ final class SpillSettingsTests: XCTestCase {
         let settings = SpillSettings(defaults: defaults)
 
         XCTAssertTrue(settings.glanceEnabled)
+        XCTAssertEqual(settings.glanceDisplayStyle, .all)
+        XCTAssertFalse(settings.glanceShowInFullScreen)
+        XCTAssertTrue(settings.glanceReactiveRotationEnabled)
         XCTAssertTrue(settings.glanceWorkRotationEnabled)
         XCTAssertTrue(settings.enabledGlanceModules.isEmpty)
         XCTAssertEqual(settings.visibleGlanceModules, [.allToday, .workType])
+    }
+
+    func testGlanceDisplayAndFullScreenPolicyPersistWithSafeInvalidFallbacks() {
+        let defaults = makeDefaults()
+        let settings = SpillSettings(defaults: defaults)
+
+        settings.glanceDisplayStyle = .ticker
+        settings.glanceShowInFullScreen = true
+
+        XCTAssertEqual(defaults.string(forKey: "glanceDisplayStyle"), "ticker")
+        XCTAssertEqual(defaults.object(forKey: "glanceShowInFullScreen") as? Bool, true)
+        XCTAssertEqual(SpillSettings(defaults: defaults).glanceDisplayStyle, .ticker)
+        XCTAssertTrue(SpillSettings(defaults: defaults).glanceShowInFullScreen)
+
+        defaults.set("marquee", forKey: "glanceDisplayStyle")
+        let normalized = SpillSettings(defaults: defaults)
+
+        XCTAssertEqual(normalized.glanceDisplayStyle, .all)
+        XCTAssertTrue(normalized.glanceShowInFullScreen)
+    }
+
+    func testGlanceReactiveRotationDefaultsOnAndPersistsTheDisabledChoice() {
+        let defaults = makeDefaults()
+        let settings = SpillSettings(defaults: defaults)
+
+        XCTAssertTrue(settings.glanceReactiveRotationEnabled)
+        XCTAssertNil(defaults.object(forKey: "glanceReactiveRotationEnabled"))
+
+        settings.glanceReactiveRotationEnabled = false
+
+        XCTAssertEqual(
+            defaults.object(forKey: "glanceReactiveRotationEnabled") as? Bool,
+            false
+        )
+        XCTAssertFalse(SpillSettings(defaults: defaults).glanceReactiveRotationEnabled)
     }
 
     func testGlanceWorkRotationPersistsDisabledChoice() {
@@ -624,6 +662,29 @@ final class SpillSettingsTests: XCTestCase {
         XCTAssertEqual(PreferencesL10n.text(.spillGlance, appLanguage: .english), "Spill Glance")
         XCTAssertEqual(PreferencesL10n.text(.spillGlanceCodex, appLanguage: .korean), "Codex")
         XCTAssertEqual(PreferencesL10n.text(.spillGlanceClaude, appLanguage: .japanese), "Claude")
+        XCTAssertEqual(PreferencesL10n.text(.spillGlanceDisplay, appLanguage: .korean), "표시 방식")
+        XCTAssertEqual(PreferencesL10n.text(.spillGlanceDisplayAll, appLanguage: .english), "All")
+        XCTAssertEqual(PreferencesL10n.text(.spillGlanceDisplayTicker, appLanguage: .japanese), "ティッカー")
+        XCTAssertEqual(
+            PreferencesL10n.text(.spillGlanceShowInFullScreen, appLanguage: .korean),
+            "전체 화면에서도 표시"
+        )
+        XCTAssertEqual(
+            PreferencesL10n.text(.spillGlanceReactiveRotation, appLanguage: .korean),
+            "반응형으로 보기"
+        )
+        XCTAssertEqual(
+            PreferencesL10n.text(.spillGlanceReactiveRotation, appLanguage: .english),
+            "Reactive View"
+        )
+        for language in [SpillAppLanguage.english, .korean, .japanese] {
+            XCTAssertFalse(
+                PreferencesL10n.text(
+                    .spillGlanceReactiveRotationDetail,
+                    appLanguage: language
+                ).isEmpty
+            )
+        }
         XCTAssertEqual(
             PreferencesL10n.text(.spillGlanceAntigravity, appLanguage: .english),
             "Antigravity"

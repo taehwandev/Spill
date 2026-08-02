@@ -96,6 +96,9 @@ extension TokenMeteringDashboardAppDelegate {
             refreshAction: { [weak self] in
                 self?.requestTokenUsageCollection(reason: "dashboard_refresh")
             },
+            manualRefreshAction: { [weak self] in
+                self?.requestTokenUsageCollection(reason: "manual_refresh")
+            },
             settingsAction: { [weak self] in
                 self?.openMainAppTokenMeteringSettings()
             },

@@ -747,6 +747,7 @@ extension AppDelegate {
             }
             .store(in: &cancellables)
 
+
         settings.$appLanguage
             .dropFirst()
             .sink { [weak self] _ in
@@ -844,11 +845,13 @@ extension AppDelegate {
             return
         }
 
+        // Note: `autoRefreshEnabled` deliberately does not gate this loop. That
+        // flag governs the AX menu-bar item scan (MenuBarScanCoordinator) and
+        // has no current Preferences surface; freezing the live system chips
+        // for users whose stored legacy value is false would be a regression.
         statusRefreshTask = Task { @MainActor [weak self] in
             if !startsImmediately {
-                do {
-                    try await Task.sleep(nanoseconds: Self.statusRefreshDelayNanoseconds)
-                } catch {
+                guard let self, await self.sleepForStatusRefreshTick() else {
                     return
                 }
             }
@@ -857,12 +860,27 @@ extension AppDelegate {
                 guard let self else { return }
                 await refreshMenuBarStatusData()
 
-                do {
-                    try await Task.sleep(nanoseconds: Self.statusRefreshDelayNanoseconds)
-                } catch {
+                guard await sleepForStatusRefreshTick() else {
                     return
                 }
             }
+        }
+    }
+
+    /// The visible Spill panel keeps the live 3-second cadence; the background
+    /// menu bar loop follows the user's refresh-interval preference (15s by
+    /// default) instead of a hard-coded 3 seconds. Reads the delay each tick so
+    /// a mid-loop visibility or preference change takes effect at the next
+    /// sleep even before the loop is reconfigured.
+    private func sleepForStatusRefreshTick() async -> Bool {
+        let delayNanoseconds = isSpillPanelVisible
+            ? Self.statusRefreshDelayNanoseconds
+            : UInt64(max(settings.refreshInterval, 3) * 1_000_000_000)
+        do {
+            try await Task.sleep(nanoseconds: delayNanoseconds)
+            return true
+        } catch {
+            return false
         }
     }
 

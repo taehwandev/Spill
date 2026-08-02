@@ -501,6 +501,14 @@ extension TokenMeteringCoordinator {
 
 extension TokenMeteringCoordinator {
     @objc private func tokenUsageEventsDidChangeFromDistributedNotification(_ notification: Notification) {
+        // The in-process events-did-change observer already forced a menu bar
+        // refresh for changes this process wrote; only another process's change
+        // needs a second read (and an aggregate-cache invalidation, because the
+        // two processes share one database file).
+        guard !TokenUsageStore.isOwnDistributedChangeEcho(notification) else {
+            return
+        }
+        usageStore.noteDataChanged()
         refreshMenuBarTokenTotal(force: true)
     }
 
@@ -561,6 +569,9 @@ extension TokenMeteringCoordinator {
             settings: settings,
             refreshAction: { [weak self] in
                 self?.requestCollection(reason: "dashboard_refresh")
+            },
+            manualRefreshAction: { [weak self] in
+                self?.requestCollection(reason: "manual_refresh")
             },
             settingsAction: {
                 showPreferences(

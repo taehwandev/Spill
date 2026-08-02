@@ -1,5 +1,17 @@
 import SwiftUI
 
+private struct SystemStatusSnapshot {
+    var cpu: SystemCPUStatus
+    var memory: SystemMemoryStatus
+    var storage: SystemStorageStatus
+    var gpu: SystemGPUStatus
+    var network: SystemNetworkStatus
+    var power: SystemPowerStatus
+    var metricHistory: [SpillStatusModule: [Double]]
+    var networkTrafficHistory: SystemNetworkTrafficHistory
+    var cpuCoreHistory: [[Double]]
+}
+
 @MainActor
 final class SystemStatusStore: ObservableObject {
     typealias CPUReader = () -> SystemCPUReading?
@@ -9,15 +21,17 @@ final class SystemStatusStore: ObservableObject {
     typealias NetworkReader = () -> SystemNetworkReading?
     typealias PowerReader = () -> SystemPowerStatus
 
-    @Published private(set) var cpu: SystemCPUStatus
-    @Published private(set) var memory: SystemMemoryStatus
-    @Published private(set) var storage: SystemStorageStatus
-    @Published private(set) var gpu: SystemGPUStatus
-    @Published private(set) var network: SystemNetworkStatus
-    @Published private(set) var power: SystemPowerStatus
-    @Published private(set) var metricHistory: [SpillStatusModule: [Double]]
-    @Published private(set) var networkTrafficHistory: SystemNetworkTrafficHistory
-    @Published private(set) var cpuCoreHistory: [[Double]]
+    @Published private var snapshot: SystemStatusSnapshot
+
+    var cpu: SystemCPUStatus { snapshot.cpu }
+    var memory: SystemMemoryStatus { snapshot.memory }
+    var storage: SystemStorageStatus { snapshot.storage }
+    var gpu: SystemGPUStatus { snapshot.gpu }
+    var network: SystemNetworkStatus { snapshot.network }
+    var power: SystemPowerStatus { snapshot.power }
+    var metricHistory: [SpillStatusModule: [Double]] { snapshot.metricHistory }
+    var networkTrafficHistory: SystemNetworkTrafficHistory { snapshot.networkTrafficHistory }
+    var cpuCoreHistory: [[Double]] { snapshot.cpuCoreHistory }
 
     private let cpuReader: CPUReader
     private let memoryReader: MemoryReader
@@ -48,24 +62,26 @@ final class SystemStatusStore: ObservableObject {
         cpuInitialSampleIntervalNanoseconds: UInt64 = 0,
         networkInitialSampleIntervalNanoseconds: UInt64 = 250_000_000
     ) {
-        self.cpu = cpu
-        self.memory = memory
-        self.storage = storage
-        self.gpu = gpu
-        self.network = network
-        self.power = power
         self.previousCPUReading = previousCPUReading
-        metricHistory = [
-            .cpu: Self.initialHistory(for: cpu.usageRatio, state: cpu.state),
-            .memory: Self.initialHistory(for: memory.usageRatio, state: memory.state),
-            .storage: Self.initialHistory(for: storage.usageRatio, state: storage.state),
-            .network: Self.initialHistory(for: network.activityRatio, state: network.state)
-        ]
-        networkTrafficHistory = SystemNetworkTrafficHistory(
-            received: Self.initialHistory(for: network.receivedActivityRatio, state: network.state),
-            sent: Self.initialHistory(for: network.sentActivityRatio, state: network.state)
+        snapshot = SystemStatusSnapshot(
+            cpu: cpu,
+            memory: memory,
+            storage: storage,
+            gpu: gpu,
+            network: network,
+            power: power,
+            metricHistory: [
+                .cpu: Self.initialHistory(for: cpu.usageRatio, state: cpu.state),
+                .memory: Self.initialHistory(for: memory.usageRatio, state: memory.state),
+                .storage: Self.initialHistory(for: storage.usageRatio, state: storage.state),
+                .network: Self.initialHistory(for: network.activityRatio, state: network.state)
+            ],
+            networkTrafficHistory: SystemNetworkTrafficHistory(
+                received: Self.initialHistory(for: network.receivedActivityRatio, state: network.state),
+                sent: Self.initialHistory(for: network.sentActivityRatio, state: network.state)
+            ),
+            cpuCoreHistory: Self.initialCoreHistory(for: cpu.coreUsageRatios, state: cpu.state)
         )
-        cpuCoreHistory = Self.initialCoreHistory(for: cpu.coreUsageRatios, state: cpu.state)
         self.cpuReader = cpuReader
         self.memoryReader = memoryReader
         self.storageReader = storageReader
@@ -82,60 +98,90 @@ extension SystemStatusStore {
         enabledModules: Set<SpillStatusModule> = SpillStatusModule.defaultEnabled,
         readsPower: Bool = true
     ) async {
+        var nextSnapshot = snapshot
+
         if enabledModules.contains(.memory) {
-            memory = memoryReader()
-            appendHistory(memory.usageRatio, for: .memory, state: memory.state)
+            nextSnapshot.memory = memoryReader()
+            appendHistory(
+                nextSnapshot.memory.usageRatio,
+                for: .memory,
+                state: nextSnapshot.memory.state,
+                to: &nextSnapshot
+            )
         } else {
-            memory = SystemMemoryProvider.status(from: nil)
+            nextSnapshot.memory = SystemMemoryProvider.status(from: nil)
         }
 
         if enabledModules.contains(.storage) {
-            storage = storageReader()
-            appendHistory(storage.usageRatio, for: .storage, state: storage.state)
+            nextSnapshot.storage = storageReader()
+            appendHistory(
+                nextSnapshot.storage.usageRatio,
+                for: .storage,
+                state: nextSnapshot.storage.state,
+                to: &nextSnapshot
+            )
         } else {
-            storage = SystemStorageProvider.status(from: nil)
+            nextSnapshot.storage = SystemStorageProvider.status(from: nil)
         }
 
         if enabledModules.contains(.network) {
             let previousReading = await networkPreviousReadingForRefresh()
             let currentNetworkReading = networkReader()
-            network = SystemNetworkProvider.status(previous: previousReading, current: currentNetworkReading)
+            nextSnapshot.network = SystemNetworkProvider.status(
+                previous: previousReading,
+                current: currentNetworkReading
+            )
             if let currentNetworkReading {
                 previousNetworkReading = currentNetworkReading
             }
-            appendHistory(network.activityRatio, for: .network, state: network.state)
-            appendNetworkTrafficHistory(network)
+            appendHistory(
+                nextSnapshot.network.activityRatio,
+                for: .network,
+                state: nextSnapshot.network.state,
+                to: &nextSnapshot
+            )
+            appendNetworkTrafficHistory(nextSnapshot.network, to: &nextSnapshot)
         } else {
-            network = SystemNetworkProvider.status(previous: nil, current: nil)
+            nextSnapshot.network = SystemNetworkProvider.status(previous: nil, current: nil)
             previousNetworkReading = nil
         }
 
         if enabledModules.contains(.gpu) {
-            gpu = gpuReader()
+            nextSnapshot.gpu = gpuReader()
         } else {
-            gpu = SystemGPUProvider.status(from: nil)
+            nextSnapshot.gpu = SystemGPUProvider.status(from: nil)
         }
 
         if readsPower {
-            power = powerReader()
+            nextSnapshot.power = powerReader()
         } else {
-            power = SystemPowerProvider.status(from: nil)
+            nextSnapshot.power = SystemPowerProvider.status(from: nil)
         }
 
         if enabledModules.contains(.cpu) {
             let previousReading = await cpuPreviousReadingForRefresh()
             let currentCPUReading = cpuReader()
-            cpu = SystemCPUProvider.status(previous: previousReading, current: currentCPUReading)
+            nextSnapshot.cpu = SystemCPUProvider.status(
+                previous: previousReading,
+                current: currentCPUReading
+            )
             if let currentCPUReading {
                 previousCPUReading = currentCPUReading
             }
-            appendHistory(cpu.usageRatio, for: .cpu, state: cpu.state)
-            appendCPUCoreHistory(cpu)
+            appendHistory(
+                nextSnapshot.cpu.usageRatio,
+                for: .cpu,
+                state: nextSnapshot.cpu.state,
+                to: &nextSnapshot
+            )
+            appendCPUCoreHistory(nextSnapshot.cpu, to: &nextSnapshot)
         } else {
-            cpu = SystemCPUProvider.unavailableStatus()
+            nextSnapshot.cpu = SystemCPUProvider.unavailableStatus()
             previousCPUReading = nil
-            cpuCoreHistory = []
+            nextSnapshot.cpuCoreHistory = []
         }
+
+        snapshot = nextSnapshot
     }
 
     private func cpuPreviousReadingForRefresh() async -> SystemCPUReading? {
@@ -157,44 +203,64 @@ extension SystemStatusStore {
     }
 
     func history(for module: SpillStatusModule) -> [Double] {
-        metricHistory[module] ?? []
+        snapshot.metricHistory[module] ?? []
     }
 }
 
 private extension SystemStatusStore {
-    private func appendHistory(_ value: Double, for module: SpillStatusModule, state: SpillStatusState) {
+    private func appendHistory(
+        _ value: Double,
+        for module: SpillStatusModule,
+        state: SpillStatusState,
+        to snapshot: inout SystemStatusSnapshot
+    ) {
         guard state != .unavailable, value.isFinite else {
             return
         }
 
-        metricHistory[module] = appendedHistoryValue(value, to: metricHistory[module] ?? [])
+        snapshot.metricHistory[module] = appendedHistoryValue(
+            value,
+            to: snapshot.metricHistory[module] ?? []
+        )
     }
 
-    private func appendNetworkTrafficHistory(_ status: SystemNetworkStatus) {
+    private func appendNetworkTrafficHistory(
+        _ status: SystemNetworkStatus,
+        to snapshot: inout SystemStatusSnapshot
+    ) {
         guard status.state != .unavailable else {
             return
         }
 
-        networkTrafficHistory = SystemNetworkTrafficHistory(
-            received: appendedHistoryValue(status.receivedActivityRatio, to: networkTrafficHistory.received),
-            sent: appendedHistoryValue(status.sentActivityRatio, to: networkTrafficHistory.sent)
+        snapshot.networkTrafficHistory = SystemNetworkTrafficHistory(
+            received: appendedHistoryValue(
+                status.receivedActivityRatio,
+                to: snapshot.networkTrafficHistory.received
+            ),
+            sent: appendedHistoryValue(
+                status.sentActivityRatio,
+                to: snapshot.networkTrafficHistory.sent
+            )
         )
     }
 
-    private func appendCPUCoreHistory(_ status: SystemCPUStatus) {
+    private func appendCPUCoreHistory(
+        _ status: SystemCPUStatus,
+        to snapshot: inout SystemStatusSnapshot
+    ) {
         guard status.state != .unavailable,
               !status.coreUsageRatios.isEmpty
         else {
-            cpuCoreHistory = []
+            snapshot.cpuCoreHistory = []
             return
         }
 
-        if cpuCoreHistory.count != status.coreUsageRatios.count {
-            cpuCoreHistory = Array(repeating: [], count: status.coreUsageRatios.count)
+        if snapshot.cpuCoreHistory.count != status.coreUsageRatios.count {
+            snapshot.cpuCoreHistory = Array(repeating: [], count: status.coreUsageRatios.count)
         }
 
-        cpuCoreHistory = status.coreUsageRatios.enumerated().map { index, ratio in
-            appendedHistoryValue(ratio, to: cpuCoreHistory[index])
+        snapshot.cpuCoreHistory = status.coreUsageRatios.enumerated().map { index, ratio in
+            appendedHistoryValue(ratio, to: snapshot.cpuCoreHistory[index])
         }
     }
 

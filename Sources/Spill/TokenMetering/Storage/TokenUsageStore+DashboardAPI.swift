@@ -106,6 +106,12 @@ extension TokenUsageStore {
         .mapValues(\.includeCache)
     }
 
+    /// The underlying query is one full scan of the event table, and the menu
+    /// bar, panel, Glance, and dashboard refresh loops all ask for the same
+    /// totals far more often than the data changes. Results are cached against
+    /// the store's data revision (bumped by every local write and by observed
+    /// cross-process changes) plus the local day and filter set, so unchanged
+    /// data answers from memory instead of rescanning history.
     func allPeriodInputScopeTotals(
         now: Date,
         calendar: Calendar,
@@ -114,7 +120,37 @@ extension TokenUsageStore {
         database: OpaquePointer? = nil,
         failureObserver: TokenUsageQueryFailureObserver? = nil
     ) -> [TokenUsageDashboardPeriod: TokenUsageInputScopeTotals] {
-        withDatabaseConnection(database, default: [:]) { database in
+        // A caller-provided connection is a read transaction whose data may be
+        // older than the current revision: another process can commit after the
+        // transaction started but before the key is computed, so caching that
+        // read under the newer key would pin pre-write totals until the next
+        // change. Transactions therefore bypass the cache in both directions;
+        // only reads on a fresh self-opened connection are cache-coherent.
+        if let database {
+            return loadAllPeriodTotalTokens(
+                now: now,
+                calendar: calendar,
+                dashboardToolsOnly: dashboardToolsOnly,
+                visibleTools: visibleTools,
+                database: database,
+                failureObserver: failureObserver
+            )
+        }
+
+        let cacheKey = AllPeriodTotalsCacheKey(
+            revision: aggregateCacheLock.withLock { dataRevisionStorage },
+            dashboardToolsOnly: dashboardToolsOnly,
+            visibleTools: visibleTools,
+            dayStart: calendar.startOfDay(for: now),
+            calendarIdentifier: calendar.identifier,
+            timeZoneIdentifier: calendar.timeZone.identifier
+        )
+        if let cached = aggregateCacheLock.withLock({ allPeriodTotalsCacheStorage }),
+           cached.key == cacheKey {
+            return cached.totals
+        }
+
+        let totals = withDatabaseConnection(nil, default: [:]) { database in
             loadAllPeriodTotalTokens(
                 now: now,
                 calendar: calendar,
@@ -124,6 +160,17 @@ extension TokenUsageStore {
                 failureObserver: failureObserver
             )
         }
+
+        // A failed or empty-connection read returns [:]; caching it would pin a
+        // transient failure until the next write. Only complete results cache.
+        if totals.count == TokenUsageDashboardPeriod.allCases.count {
+            aggregateCacheLock.withLock {
+                // Another writer may have bumped the revision while the scan ran;
+                // the stale key then never matches and the next read rescans.
+                allPeriodTotalsCacheStorage = (key: cacheKey, totals: totals)
+            }
+        }
+        return totals
     }
 
     func dashboardSummary(dashboardToolsOnly: Bool = true) -> TokenUsageDashboardSummary {
