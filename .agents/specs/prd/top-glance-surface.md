@@ -53,14 +53,21 @@ bar. It is a glance and entry point, not a second dashboard.
   connected. If that display is unavailable, the single surface temporarily falls
   back to the current primary display; this fallback does not overwrite the
   saved external-display position, so reconnecting the display can restore it.
-- Spill Glance is enabled by default with only All Today, Work Type, and the
-  trailing settings action visible. A dedicated **Spill Glance** destination in
-  the Preferences sidebar lets users disable the entire surface, choose **All**
-  or **Ticker** display style, turn **Reactive View** on or off, independently
+- Spill Glance is **disabled by default**: an always-visible strip must be an
+  explicit opt-in, not something a fresh install puts on screen. When enabled
+  it starts with only All Today, Work Type, and the trailing settings action
+  visible. A dedicated **Spill Glance** destination in the Preferences sidebar
+  lets users enable or disable the entire surface, choose **All** or
+  **Ticker** display style, turn **Reactive View** on or off, independently
   add the Codex, Claude, and Antigravity segments, choose whether Work Type
   contributes all current-day categories to the rotation queue, and opt into
   visibility in native full-screen Spaces, without having to infer that it
   belongs under Menu Bar.
+- The token metering dashboard header carries a Spill Glance on/off toggle so
+  users can flip the strip from where they watch usage. The toggle writes the
+  same shared setting; the dashboard helper and the main process stay in sync
+  through the existing distributed settings-change notification, and the strip
+  appears or disappears immediately without a restart.
 - **All** keeps every selected segment visible as the current compact row.
   **Ticker** keeps one fixed-width slot. The display style chooses the layout;
   **Reactive View** chooses what drives the rotation, and applies to both.
@@ -129,7 +136,7 @@ content to invent a semantic current-task title.
 | Contract | Decision |
 | --- | --- |
 | Persistence owner | Main-process `SpillSettings` for visibility, display style, full-screen policy, and module behavior plus a local Glance placement store for display-relative placement |
-| Defaults and migration | `glanceEnabled = true`; `glanceWorkRotationEnabled = true`; `glanceReactiveRotationEnabled = true`; `glanceDisplayStyle = all`; `glanceShowInFullScreen = false`; missing or invalid display style defaults to All; the unreleased orientation and wall-side preferences are ignored after vertical mode removal; Codex, Claude, and Antigravity stay off until selected; All Today and Work Type remain fixed; legacy absolute frames migrate to display-relative placement when their saved display is available; legacy `aiStatus`/`topTask`/`todayTokens` selections migrate to all three optional tools; unknown and duplicate values normalize deterministically |
+| Defaults and migration | `glanceEnabled = false` (opt-in surface); `glanceWorkRotationEnabled = true`; `glanceReactiveRotationEnabled = true`; `glanceDisplayStyle = all`; `glanceShowInFullScreen = false`; missing or invalid display style defaults to All; the unreleased orientation and wall-side preferences are ignored after vertical mode removal; Codex, Claude, and Antigravity stay off until selected; All Today and Work Type remain fixed; legacy absolute frames migrate to display-relative placement when their saved display is available; legacy `aiStatus`/`topTask`/`todayTokens` selections migrate to all three optional tools; unknown and duplicate values normalize deterministically |
 | Reading processes | Main Spill process only |
 | Propagation transport | In-process `@Published` updates; no distributed notification is required because no helper process reads these settings |
 | Refresh trigger | `SpillSettings` publisher updates rebuild Glance state, then the AppKit bridge consumes the committed presentation on the next main-queue turn; module or display-style changes reapply geometry, while full-screen policy updates the panel collection behavior |

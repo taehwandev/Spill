@@ -1137,9 +1137,16 @@ Settings and propagation:
 - `SpillSettings` remains the persistence owner.
 - `SpillGlanceFrameStore` owns only local display identity and semantic window
   placement. It does not become a user-visible setting or sync payload.
-- New installations default the surface to enabled with only All Today, Work
-  Type, and settings visible. Codex, Claude, and Antigravity are opt-in
+- New installations default the surface to disabled; `glanceEnabled` falls back
+  to `false` when its persisted key is absent, and enabling shows only All
+  Today, Work Type, and settings. Codex, Claude, and Antigravity are opt-in
   segments. All Today and Work Type remain fixed while the surface is enabled.
+- The dashboard helper toggles `glanceEnabled` by writing the shared default
+  and posting the distributed settings-change notification with the glance
+  key. The main process observes that notification and republishes the value
+  through `reloadGlanceEnabledFromDefaults()`, so the Glance store reacts in
+  process; the main process mirrors Preferences changes back with the same
+  key, and each side's equal-value reload guard stops notification echoes.
   `glanceWorkRotationEnabled` defaults to `true` when its persisted key is
   absent, preserving the existing rolling presentation for upgrades.
   `glanceDisplayStyle` defaults to All when its persisted string is absent or
