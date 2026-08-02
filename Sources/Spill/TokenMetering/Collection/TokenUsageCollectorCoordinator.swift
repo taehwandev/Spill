@@ -66,10 +66,19 @@ final class TokenUsageCollectorCoordinator: TokenUsageExternalCollecting, @unche
         self.activeImporterMinimumInterval = activeImporterMinimumInterval
         self.now = now
         self.finalizationBoundaryHook = finalizationBoundaryHook
-        self.codexLimitCaptureRunner = codexLimitCaptureRunner ?? {
-            TokenUsageCodexLimitCapture().captureLatestSnapshots(
-                into: TokenUsageLimitSnapshotStore()
-            )
+        if let codexLimitCaptureRunner {
+            self.codexLimitCaptureRunner = codexLimitCaptureRunner
+        } else {
+            // Both captures share one paced slot: exact Codex snapshots from
+            // session-file tails, and estimated Claude/AGY gauges (plus the
+            // AGY credits cache) from Spill's own data.
+            let snapshotStore = TokenUsageLimitSnapshotStore()
+            let codexCapture = TokenUsageCodexLimitCapture()
+            let estimatedCapture = TokenUsageEstimatedLimitCapture(usageStore: store)
+            self.codexLimitCaptureRunner = {
+                codexCapture.captureLatestSnapshots(into: snapshotStore)
+                estimatedCapture.captureEstimates(into: snapshotStore)
+            }
         }
         self.store = store
         self.antigravityImportRunner = antigravityImportRunner ?? { store, startDate, shouldCancel in

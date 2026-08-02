@@ -168,6 +168,107 @@ final class TokenUsageLimitTests: XCTestCase {
         XCTAssertTrue(strip.contains(#"source == .estimated ? "~" : """#))
     }
 
+    func testEstimatedWindowMathUsesSlidingHighWaterDenominators() {
+        let base = Date(timeIntervalSince1970: 1_000_000)
+        func hour(_ offset: Int, _ tokens: Int) -> (hourStart: Date, totalTokens: Int) {
+            (base.addingTimeInterval(TimeInterval(offset) * 3_600), tokens)
+        }
+        // Peak burst: hours 0-4 sum to 500; a quieter recent window sums to 120.
+        let hourly = [hour(0, 100), hour(1, 100), hour(2, 100), hour(3, 100), hour(4, 100),
+                      hour(20, 40), hour(22, 50), hour(23, 30)]
+
+        XCTAssertEqual(
+            TokenUsageEstimatedLimitCapture.maximumWindowTotal(hourly: hourly, windowSeconds: 5 * 3_600),
+            500
+        )
+        let currentWindowEnd = base.addingTimeInterval(23.5 * 3_600)
+        XCTAssertEqual(
+            TokenUsageEstimatedLimitCapture.windowTotal(
+                hourly: hourly,
+                windowSeconds: 5 * 3_600,
+                endingAt: currentWindowEnd
+            ),
+            120
+        )
+    }
+
+    func testAntigravityCreditsParserExtractsTheVarintAndFailsSilent() {
+        // Outer payload: key marker + protobuf-ish wrapper around the inner
+        // base64 "EKjDAQ==" (field tag 0x10, varint 25000).
+        var outer = Data("noise-availableCreditsSentinelKey".utf8)
+        outer.append(contentsOf: [0x12, 0x08])
+        outer.append(Data("EKjDAQ==".utf8))
+        outer.append(Data("trailing".utf8))
+        XCTAssertEqual(
+            TokenUsageEstimatedLimitCapture.parseAvailableCredits(
+                base64Payload: outer.base64EncodedString()
+            ),
+            25_000
+        )
+
+        XCTAssertNil(TokenUsageEstimatedLimitCapture.parseAvailableCredits(base64Payload: "not-base64!!"))
+        XCTAssertNil(
+            TokenUsageEstimatedLimitCapture.parseAvailableCredits(
+                base64Payload: Data("no-key-here".utf8).base64EncodedString()
+            )
+        )
+    }
+
+    func testEstimatedCaptureWritesTildeTaggedGaugesFromRealEvents() throws {
+        let eventsURL = temporaryDirectory().appendingPathComponent("events.json")
+        let usageStore = TokenUsageStore(fileURL: eventsURL)
+        _ = try usageStore.appendEvent(
+            TokenUsageLimitTests.claudeEvent(spanID: "span_est_1", totalTokens: 900)
+        )
+        _ = try usageStore.appendEvent(
+            TokenUsageLimitTests.claudeEvent(spanID: "span_est_2", totalTokens: 100)
+        )
+
+        let store = TokenUsageLimitSnapshotStore(
+            fileURL: temporaryDirectory().appendingPathComponent("limit-snapshots.json")
+        )
+        let capture = TokenUsageEstimatedLimitCapture(
+            usageStore: usageStore,
+            antigravityStateURL: nil
+        )
+        capture.captureEstimates(into: store)
+
+        let claude = store.snapshots(for: .claude)
+        XCTAssertEqual(Set(claude.map(\.limitKey)), ["session_5h", "week_all"])
+        for snapshot in claude {
+            XCTAssertEqual(snapshot.source, .estimated)
+            XCTAssertNotNil(snapshot.usedPercent)
+        }
+        // Events just landed, so the current window IS the high-water: 0% left.
+        XCTAssertEqual(claude.first?.remainingPercent, 0)
+        // No AGY events and no state database: nothing renders for AGY.
+        XCTAssertTrue(store.snapshots(for: .antigravity).isEmpty)
+    }
+
+    private static func claudeEvent(spanID: String, totalTokens: Int) -> TokenUsageEvent {
+        TokenUsageEvent(
+            schemaVersion: 1,
+            deviceID: "device_local_01",
+            projectID: "project_global",
+            artifactID: "artifact_global",
+            runID: "run_local_01",
+            spanID: spanID,
+            aiTool: .claude,
+            taskType: .analysis,
+            stage: .implement,
+            model: "claude-fable-5",
+            inputTokens: totalTokens - 10,
+            outputTokens: 10,
+            totalTokens: totalTokens,
+            tokenBreakdown: TokenUsageBreakdown(
+                system: 0, user: 0, history: 0, repoContext: 0,
+                toolOutput: 0, generatedOutput: 0, unknown: totalTokens
+            ),
+            latencyMS: 100,
+            createdAt: ISO8601DateFormatter.tokenUsage.string(from: Date())
+        )
+    }
+
     private func snapshot(
         tool: TokenUsageAITool,
         key: String,

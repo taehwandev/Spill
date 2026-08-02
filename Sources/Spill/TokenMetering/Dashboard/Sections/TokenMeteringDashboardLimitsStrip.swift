@@ -108,12 +108,23 @@ private extension TokenMeteringDashboardLimitsStrip {
         .frame(minWidth: 200, alignment: .leading)
     }
 
+    /// The chip must say which tool it describes — "Weekly 30%" alone is
+    /// unreadable in a strip that mixes tools.
     func chipText(for snapshot: TokenUsageLimitSnapshot) -> String {
-        var text = "\(snapshot.label) \(headlineValue(for: snapshot))"
+        var text = "\(compactToolName(snapshot.aiTool)) · \(snapshot.label) \(headlineValue(for: snapshot))"
         if let resetsAt = snapshot.resetsAt {
             text += " · \(TokenUsageLimitSnapshot.shortDateFormatter.string(from: resetsAt))"
         }
         return text
+    }
+
+    func compactToolName(_ tool: TokenUsageAITool) -> String {
+        switch tool {
+        case .antigravity:
+            return "AGY"
+        default:
+            return tool.dashboardLabel(language: language)
+        }
     }
 
     func chipTooltip(for snapshot: TokenUsageLimitSnapshot) -> String {

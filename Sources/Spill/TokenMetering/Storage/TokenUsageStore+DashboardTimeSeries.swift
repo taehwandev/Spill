@@ -101,6 +101,48 @@ extension TokenUsageStore {
         ]
     }
 
+    /// Hour-bucketed total tokens for one tool across all history, ordered by
+    /// hour (UTC). One indexed aggregate scan; callers cache the result against
+    /// the store's data revision because it only changes when events do.
+    func hourlyTotalTokens(for tool: TokenUsageAITool) -> [(hourStart: Date, totalTokens: Int)] {
+        withDatabaseConnection(nil, default: []) { database in
+            let sql = """
+            SELECT strftime('%Y-%m-%dT%H', created_at), SUM(total_tokens)
+            FROM token_usage_events
+            WHERE ai_tool = ?
+            GROUP BY 1
+            ORDER BY 1
+            """
+            var statement: OpaquePointer?
+            guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
+                  let statement
+            else {
+                return []
+            }
+            defer { sqlite3_finalize(statement) }
+            sqlite3_bind_text(statement, 1, tool.rawValue, -1, SQLITE_TRANSIENT)
+
+            var results: [(hourStart: Date, totalTokens: Int)] = []
+            while sqlite3_step(statement) == SQLITE_ROW {
+                guard let hourText = sqlite3_column_text(statement, 0),
+                      let hourStart = Self.hourBucketFormatter.date(from: String(cString: hourText))
+                else {
+                    continue
+                }
+                results.append((hourStart, Int(sqlite3_column_int64(statement, 1))))
+            }
+            return results
+        }
+    }
+
+    private static let hourBucketFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(identifier: "UTC")
+        formatter.dateFormat = "yyyy-MM-dd'T'HH"
+        return formatter
+    }()
+
     func loadTotalTokens(
         startingAt startDate: Date,
         endingBefore endDate: Date,
