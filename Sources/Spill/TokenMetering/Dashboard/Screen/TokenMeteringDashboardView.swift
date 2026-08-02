@@ -274,6 +274,16 @@ extension TokenMeteringDashboardView {
                 serviceStatusButton
 
                 headerActionButton(
+                    systemImage: "rectangle.topthird.inset.filled",
+                    accessibilityLabel: t(.spillGlanceToggle),
+                    helpText: settings.glanceEnabled
+                        ? t(.spillGlanceToggleOnDetail)
+                        : t(.spillGlanceToggleOffDetail),
+                    isActive: settings.glanceEnabled,
+                    action: toggleSpillGlance
+                )
+
+                headerActionButton(
                     systemImage: "safari",
                     accessibilityLabel: t(.privateUsageUploadOpenDashboard),
                     helpText: t(.privateUsageUploadOpenDashboardDetail),
@@ -734,16 +744,26 @@ extension TokenMeteringDashboardView {
         accessibilityLabel: String,
         helpText: String,
         isEnabled: Bool = true,
+        isActive: Bool = false,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
             Image(systemName: systemImage)
         }
-        .buttonStyle(HeaderActionButtonStyle(isEnabled: isEnabled))
+        .buttonStyle(HeaderActionButtonStyle(isEnabled: isEnabled, isActive: isActive))
         .disabled(!isEnabled)
         .help(helpText)
         .accessibilityLabel(Text(accessibilityLabel))
         .accessibilityHint(Text(helpText))
+        .accessibilityAddTraits(isActive ? .isSelected : [])
+    }
+
+    /// Toggles the always-visible Glance strip from the dashboard. The shared
+    /// default is the source of truth; the distributed settings notification
+    /// tells the main process to reload it so the panel reacts immediately.
+    private func toggleSpillGlance() {
+        settings.glanceEnabled.toggle()
+        TokenMeteringDashboardProcess.postGlanceEnabledDidChange()
     }
 
     private var dashboardCardBackground: some ShapeStyle {
@@ -753,12 +773,17 @@ extension TokenMeteringDashboardView {
 
 private struct HeaderActionButtonStyle: ButtonStyle {
     let isEnabled: Bool
+    var isActive = false
     @State private var isHovered = false
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: 12, weight: .semibold))
-            .foregroundStyle(isEnabled ? Color.primary.opacity(0.72) : Color.primary.opacity(0.28))
+            .foregroundStyle(
+                isActive
+                    ? AnyShapeStyle(.tint)
+                    : AnyShapeStyle(isEnabled ? Color.primary.opacity(0.72) : Color.primary.opacity(0.28))
+            )
             .frame(width: 28, height: 28)
             .background(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
