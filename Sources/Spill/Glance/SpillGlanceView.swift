@@ -20,6 +20,9 @@ struct SpillGlanceView: View {
     }
 
     private var rotationSchedule: SpillGlanceRotationTimelineSchedule? {
+        guard !store.isRotationPaused else {
+            return nil
+        }
         let rotation = store.presentation.rotationSchedule
         guard rotation != .none else {
             return nil
@@ -156,23 +159,19 @@ private struct SpillGlanceSurface: View {
 
     private var tickerContent: some View {
         HStack(spacing: SpillGlanceLayout.itemSpacing) {
+            // One stable module view whose texts crossfade in place. Identity-
+            // swapping views with move transitions here kept two CoreText
+            // layouts alive per rotation and re-laid the ticker out every five
+            // seconds, which showed up in AppHang traces.
             ZStack {
                 if let item = items.first {
                     SpillGlanceModuleContent(item: item, date: date, labelStyle: .full)
-                        .id(item.renderID)
-                        .transition(
-                            .asymmetric(
-                                insertion: .move(edge: .bottom).combined(with: .opacity),
-                                removal: .move(edge: .top).combined(with: .opacity)
-                            )
-                        )
                 }
             }
             .frame(
                 width: SpillGlanceLayout.tickerItemWidth,
                 height: SpillGlanceLayout.contentHeight
             )
-            .clipped()
             .animation(.easeInOut(duration: 0.30), value: items.first?.renderID)
 
             separator
@@ -230,12 +229,14 @@ private struct SpillGlanceModuleContent: View {
                 .foregroundStyle(item.tint.color)
                 .frame(width: 14, height: 14)
                 .background(item.tint.color.opacity(0.14), in: Circle())
+                .contentTransition(.opacity)
 
             Text(displayTitle)
                 .font(.system(size: 9.5, weight: .semibold, design: .rounded))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
+                .contentTransition(.opacity)
 
             valueText(item.displayValue(at: date))
         }
@@ -257,7 +258,11 @@ private struct SpillGlanceModuleContent: View {
             .monospacedDigit()
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: false)
-            .contentTransition(.interpolate)
+            // The ticker swaps whole unrelated strings, where interpolation
+            // would morph glyphs between different layouts; a plain crossfade
+            // is cheaper and reads better. Compact cells keep interpolating
+            // their own value's digit updates.
+            .contentTransition(labelStyle == .full ? .opacity : .interpolate)
             .animation(.easeInOut(duration: 0.18), value: value)
     }
 }

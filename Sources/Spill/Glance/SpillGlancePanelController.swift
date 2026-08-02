@@ -73,6 +73,12 @@ final class SpillGlancePanelController: NSObject {
             }
 
         observeDisplayChanges()
+        // stop() removes every observer but keeps the panel instance, and
+        // ensurePanel only observes at creation; re-observe on restart so a
+        // stop/start cycle does not lose the occlusion pause.
+        if let panel {
+            observeOcclusionState(of: panel)
+        }
         updatePanel(for: store.presentation)
     }
 
@@ -91,6 +97,10 @@ final class SpillGlancePanelController: NSObject {
         presentedLayoutSignature = nil
         presentedShowInFullScreen = nil
         panel?.orderOut(nil)
+        // The occlusion observer was just removed, so orderOut above cannot set
+        // the pause itself; a stopped surface must not keep a rotation schedule
+        // ticking inside the retained (hidden) hosting view.
+        store.setRotationPaused(true)
     }
 
     func reposition() {
@@ -177,6 +187,7 @@ private extension SpillGlancePanelController {
 
         self.panel = panel
         presentedShowInFullScreen = store.presentation.showInFullScreen
+        observeOcclusionState(of: panel)
         return panel
     }
 
@@ -244,6 +255,29 @@ private extension SpillGlancePanelController {
             }
         }
         notificationObservers.append((workspaceCenter, token))
+    }
+
+    /// Pauses the surface's rotation schedule while nothing of the panel is
+    /// visible — covered by other windows, or left behind on another Space
+    /// (the default full-screen policy). Ordering changes also fire this
+    /// notification, so orderOut/orderFront keep the flag in sync.
+    func observeOcclusionState(of panel: NSPanel) {
+        let center = NotificationCenter.default
+        let token = center.addObserver(
+            forName: NSWindow.didChangeOcclusionStateNotification,
+            object: panel,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, let panel = self.panel else {
+                    return
+                }
+                self.store.setRotationPaused(
+                    !panel.occlusionState.contains(.visible)
+                )
+            }
+        }
+        notificationObservers.append((center, token))
     }
 }
 

@@ -288,8 +288,19 @@ final class SpillGlancePanelSourceTests: XCTestCase {
         XCTAssertTrue(viewSource.contains("case .all:"))
         XCTAssertTrue(viewSource.contains("case .ticker:"))
         XCTAssertTrue(viewSource.contains("SpillGlanceLayout.tickerItemWidth"))
-        XCTAssertTrue(viewSource.contains(".move(edge: .bottom)"))
-        XCTAssertTrue(viewSource.contains(".move(edge: .top)"))
+        // The ticker keeps one stable module view whose texts crossfade; view
+        // identity swaps with move transitions re-laid text out every rotation.
+        XCTAssertFalse(viewSource.contains(".move(edge:"))
+        XCTAssertFalse(viewSource.contains(".id(item.renderID)"))
+        XCTAssertTrue(viewSource.contains(".contentTransition(.opacity)"))
+        XCTAssertTrue(
+            viewSource.contains("labelStyle == .full ? .opacity : .interpolate"),
+            "Ticker value swaps crossfade; compact digit updates keep interpolating."
+        )
+        XCTAssertTrue(
+            viewSource.contains("store.isRotationPaused"),
+            "An occluded panel must not keep a rotation schedule ticking."
+        )
         XCTAssertTrue(storeSource.contains("$glanceDisplayStyle"))
         XCTAssertTrue(storeSource.contains("$glanceShowInFullScreen"))
         XCTAssertTrue(preferencesSource.contains("$settings.glanceDisplayStyle"))

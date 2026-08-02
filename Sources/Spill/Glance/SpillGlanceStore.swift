@@ -4,6 +4,11 @@ import Foundation
 @MainActor
 final class SpillGlanceStore: ObservableObject {
     @Published private(set) var presentation: SpillGlancePresentation
+    /// True while the panel window is fully occluded (covered, or on another
+    /// Space). The surface stops its rotation schedule then: redrawing a strip
+    /// nobody can see is pure wasted layout. Values keep updating through
+    /// `presentation`, so the strip is current the moment it becomes visible.
+    @Published private(set) var isRotationPaused = false
 
     private let now: () -> Date
     private var rotationIdentity: SpillGlanceRotationIdentity
@@ -80,6 +85,13 @@ final class SpillGlanceStore: ObservableObject {
                 )
             }
             .store(in: &cancellables)
+    }
+
+    func setRotationPaused(_ paused: Bool) {
+        guard isRotationPaused != paused else {
+            return
+        }
+        isRotationPaused = paused
     }
 
     static func makePresentation(
