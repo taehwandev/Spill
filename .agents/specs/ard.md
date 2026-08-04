@@ -688,6 +688,15 @@ Usage limit snapshots:
   importers) and stores one server-exact snapshot per named limit
   (`limit_id` + window) plus credits when a balance exists. It reads only
   numeric limit fields, safe identifiers, and timestamps.
+- `TokenUsageClaudeLimitCapture` reads only the `cachedUsageUtilization`
+  limits entries from Claude Code's state file — numeric percents, reset
+  times, window kinds, safe scoped model display names — into `client_cache`
+  snapshots stamped with the cache's own fetch time. When it stores at least
+  one fresh snapshot, the estimated Claude gauges are skipped for that pass;
+  expired entries are dropped so a fully stale cache falls back to estimates.
+- No Antigravity credits gauge exists: the `modelCredits` state value is an
+  internal sentinel (`availableCreditsSentinelKey`), not a user-facing
+  balance.
 - `TokenUsageEstimatedLimitCapture` shares the same paced slot and produces
   estimated Claude/AGY gauges from Spill's own hour-bucketed events (cached
   against the store data revision). The five-hour gauge uses fixed-window

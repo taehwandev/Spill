@@ -1,9 +1,13 @@
 import Foundation
-import SQLite3
 
 /// Estimated remaining-allowance gauges for tools that do not persist their
-/// server percentages locally (Claude, Antigravity windows), plus the
-/// Antigravity credits balance the client caches.
+/// server percentages locally (Antigravity windows; Claude only when its
+/// client cache has no fresh exact reading).
+///
+/// The Antigravity "credits" value that lives in its state database is a
+/// sentinel (`availableCreditsSentinelKey`), not a user-facing balance — the
+/// user's Antigravity UI has no credits concept — so no credits gauge is
+/// produced from it.
 ///
 /// Consumption numerators are exact — Spill's own imported per-turn events,
 /// hour-bucketed. The five-hour gauge uses chained fixed windows (a window
@@ -16,7 +20,7 @@ import SQLite3
 /// the denominator is estimated: the highest window consumption ever observed
 /// for that tool, so the gauge reads "how close am I to my own worst burn".
 /// Every produced snapshot is tagged `estimated`, which the UI renders with
-/// the mandated `~` prefix; the AGY credits reading is tagged `client_cache`.
+/// the mandated `~` prefix.
 final class TokenUsageEstimatedLimitCapture: @unchecked Sendable {
     private struct Window {
         let key: String
@@ -32,7 +36,6 @@ final class TokenUsageEstimatedLimitCapture: @unchecked Sendable {
     ]
 
     private let usageStore: TokenUsageStore
-    private let antigravityStateURL: URL?
     private let now: () -> Date
     private let lock = NSLock()
     private var cachedHourlyByTool: [TokenUsageAITool: [(hourStart: Date, totalTokens: Int)]] = [:]
@@ -40,26 +43,20 @@ final class TokenUsageEstimatedLimitCapture: @unchecked Sendable {
 
     init(
         usageStore: TokenUsageStore,
-        antigravityStateURL: URL? = TokenUsageEstimatedLimitCapture.defaultAntigravityStateURL(),
         now: @escaping () -> Date = Date.init
     ) {
         self.usageStore = usageStore
-        self.antigravityStateURL = antigravityStateURL
         self.now = now
     }
 
-    static func defaultAntigravityStateURL() -> URL {
-        FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/Antigravity/User/globalStorage/state.vscdb")
-    }
-
-    func captureEstimates(into store: TokenUsageLimitSnapshotStore) {
-        for tool in [TokenUsageAITool.claude, .antigravity] {
-            var snapshots = estimatedWindowSnapshots(for: tool)
-            if tool == .antigravity, let credits = antigravityCreditsSnapshot() {
-                snapshots.append(credits)
-            }
-            store.replaceSnapshots(for: tool, with: snapshots)
+    /// Tools in `skipping` already received exact snapshots this pass, so
+    /// their estimates must not overwrite them.
+    func captureEstimates(
+        into store: TokenUsageLimitSnapshotStore,
+        skipping: Set<TokenUsageAITool> = []
+    ) {
+        for tool in [TokenUsageAITool.claude, .antigravity] where !skipping.contains(tool) {
+            store.replaceSnapshots(for: tool, with: estimatedWindowSnapshots(for: tool))
         }
     }
 }
@@ -201,116 +198,5 @@ extension TokenUsageEstimatedLimitCapture {
             maximum = max(maximum, runningTotal)
         }
         return maximum
-    }
-}
-
-extension TokenUsageEstimatedLimitCapture {
-    /// Reads the credits balance Antigravity's client caches in its state
-    /// database. Read-only, numeric varints only; any unexpected shape
-    /// captures nothing. The value is what the client last synced, so it is
-    /// tagged `client_cache` rather than server-exact.
-    func antigravityCreditsSnapshot() -> TokenUsageLimitSnapshot? {
-        guard let antigravityStateURL,
-              FileManager.default.fileExists(atPath: antigravityStateURL.path),
-              let credits = Self.readAvailableCredits(stateDatabaseURL: antigravityStateURL)
-        else {
-            return nil
-        }
-        return TokenUsageLimitSnapshot(
-            aiTool: .antigravity,
-            limitKey: "credits",
-            label: "Credits",
-            usedPercent: nil,
-            remainingCredits: credits,
-            windowMinutes: nil,
-            resetsAt: nil,
-            capturedAt: now(),
-            source: .clientCache
-        )
-    }
-
-    static func readAvailableCredits(stateDatabaseURL: URL) -> Int? {
-        var database: OpaquePointer?
-        let uri = "file:\(stateDatabaseURL.path)?mode=ro"
-        guard sqlite3_open_v2(uri, &database, SQLITE_OPEN_READONLY | SQLITE_OPEN_URI, nil) == SQLITE_OK,
-              let database
-        else {
-            sqlite3_close(database)
-            return nil
-        }
-        defer { sqlite3_close(database) }
-
-        let sql = "SELECT value FROM ItemTable WHERE key = 'antigravityUnifiedStateSync.modelCredits'"
-        var statement: OpaquePointer?
-        guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
-              let statement
-        else {
-            return nil
-        }
-        defer { sqlite3_finalize(statement) }
-        guard sqlite3_step(statement) == SQLITE_ROW,
-              let valueText = sqlite3_column_text(statement, 0)
-        else {
-            return nil
-        }
-        return parseAvailableCredits(base64Payload: String(cString: valueText))
-    }
-
-    /// The payload is base64 protobuf: entries of `key-string, value-bytes`,
-    /// where the available-credits entry's value is itself a small base64
-    /// protobuf whose field is a varint. Only that varint is extracted.
-    static func parseAvailableCredits(base64Payload: String) -> Int? {
-        guard let outer = Data(base64Encoded: base64Payload),
-              let keyRange = outer.range(of: Data("availableCreditsSentinelKey".utf8))
-        else {
-            return nil
-        }
-
-        // Scan a bounded region after the key for an inner base64 run.
-        let tail = outer[keyRange.upperBound ..< min(outer.endIndex, keyRange.upperBound + 64)]
-        let base64Characters = Set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/".utf8)
-        let padding = UInt8(ascii: "=")
-        var run: [UInt8] = []
-        var best: [UInt8] = []
-        func closeRun() {
-            if run.count > best.count { best = run }
-            run = []
-        }
-        for byte in tail {
-            if byte == padding {
-                // Padding ends a base64 token; anything after it is framing.
-                run.append(byte)
-                if run.count % 4 == 0 {
-                    closeRun()
-                }
-            } else if base64Characters.contains(byte) {
-                run.append(byte)
-            } else {
-                closeRun()
-            }
-        }
-        closeRun()
-        guard best.count >= 4,
-              let inner = Data(base64Encoded: String(decoding: best, as: UTF8.self))
-        else {
-            return nil
-        }
-
-        // Inner payload: protobuf tag byte then a varint value.
-        var index = inner.startIndex
-        guard index < inner.endIndex else { return nil }
-        index = inner.index(after: index)
-        var value = 0
-        var shift = 0
-        while index < inner.endIndex, shift <= 42 {
-            let byte = inner[index]
-            value |= Int(byte & 0x7F) << shift
-            if byte & 0x80 == 0 {
-                return value
-            }
-            shift += 7
-            index = inner.index(after: index)
-        }
-        return nil
     }
 }

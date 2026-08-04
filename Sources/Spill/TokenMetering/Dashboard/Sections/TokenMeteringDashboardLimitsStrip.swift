@@ -136,7 +136,11 @@ private extension TokenMeteringDashboardLimitsStrip {
             .joined(separator: ", ")
         return "\(group.tool.dashboardLabel(language: language)) \(gauges)"
     }
+}
 
+// MARK: - Popover and text formatting
+
+private extension TokenMeteringDashboardLimitsStrip {
     func limitPopover(for group: ToolGroup) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(group.tool.dashboardLabel(language: language))
@@ -223,6 +227,11 @@ private extension TokenMeteringDashboardLimitsStrip {
         return parts.joined(separator: " · ")
     }
 
+}
+
+// MARK: - Detail rows and value formatting
+
+private extension TokenMeteringDashboardLimitsStrip {
     func detailTitle(for snapshot: TokenUsageLimitSnapshot) -> String {
         "\(snapshot.label) \(headlineValue(for: snapshot))"
     }
@@ -259,8 +268,13 @@ private extension TokenMeteringDashboardLimitsStrip {
         return "—"
     }
 
+    /// Remaining percents floor instead of round: 99.8% remaining must read
+    /// "99", never a false "100", and 4.96% must not soften into "5.0".
     func formattedPercent(_ value: Double) -> String {
-        value >= 10 ? String(format: "%.0f", value) : String(format: "%.1f", value)
+        if value >= 10 {
+            return String(format: "%.0f", value.rounded(.down))
+        }
+        return String(format: "%.1f", (value * 10).rounded(.down) / 10)
     }
 }
 
