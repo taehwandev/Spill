@@ -160,6 +160,13 @@ final class TokenUsageLimitTests: XCTestCase {
         XCTAssertTrue(dashboardView.contains("TokenMeteringDashboardLimitsStrip("))
         // Refresh rides the panel-summary publisher; no dedicated timer.
         XCTAssertTrue(dashboardView.contains(".onReceive(store.$panelSummary)"))
+        // The strip honors the tool-hiding setting like every other surface.
+        XCTAssertTrue(dashboardView.contains("snapshots: visibleLimitSnapshots"))
+        XCTAssertTrue(
+            dashboardView.contains(
+                "return limitSnapshots.filter { visibleTools.contains($0.aiTool) }"
+            )
+        )
         XCTAssertFalse(strip.contains("Timer"))
         // Shared ring thresholds: warning at 20% remaining, critical at 5%.
         XCTAssertTrue(strip.contains("remaining <= 5"))

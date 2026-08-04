@@ -182,7 +182,7 @@ extension TokenMeteringDashboardView {
                 ScrollView(.vertical, showsIndicators: true) {
                     LazyVStack(alignment: .leading, spacing: 16) {
                         TokenMeteringDashboardLimitsStrip(
-                            snapshots: limitSnapshots,
+                            snapshots: visibleLimitSnapshots,
                             language: currentLanguage
                         )
                         kpiStrip
@@ -340,6 +340,15 @@ extension TokenMeteringDashboardView {
             SpillBuildOptions.developerOptionsEnabled
                 && settings.tokenUsageDashboardOnboardingPreviewEnabled
         )
+    }
+
+    /// The limits strip honors the same tool-hiding setting as every other
+    /// dashboard surface: hidden tools contribute no chips.
+    private var visibleLimitSnapshots: [TokenUsageLimitSnapshot] {
+        let visibleTools = TokenUsageDashboardToolVisibility.visibleTools(
+            hiddenTools: settings.hiddenTokenUsageAITools
+        )
+        return limitSnapshots.filter { visibleTools.contains($0.aiTool) }
     }
 
     private func syncVisibleAITools() {

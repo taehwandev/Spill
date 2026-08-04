@@ -702,7 +702,9 @@ Usage limit snapshots:
 - The dashboard Limits strip renders identical fixed window slots per chip
   (five-hour then weekly, extras and credits behind `+n` in the popover)
   instead of a per-tool "most constrained" headline, so every tool reads on
-  the same basis.
+  the same basis. The strip consumes snapshots pre-filtered through the same
+  `TokenUsageDashboardToolVisibility.visibleTools` rule as every other
+  dashboard surface, so user-hidden tools render no limit chips.
 - The dashboard's Limits strip renders per-tool chips from the snapshot file
   and refreshes on the existing panel-summary publisher — no dedicated timer.
   Ring thresholds are shared surface-wide: warning at 20% remaining, critical
