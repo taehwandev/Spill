@@ -27,8 +27,8 @@ instead of pretending all three are equal.
 | Tool | Signal | Local source | Quality |
 | --- | --- | --- | --- |
 | Codex | Named limit windows (`limit_id`, `limit_name`, `used_percent`, `window_minutes`, `resets_at`) plus credits `balance`. Accounts carry a variable set — the observed reference account shows a general weekly limit and a separate model-specific weekly limit — so the set of gauges is data-driven, never hardcoded to five-hour/weekly | `~/.codex/sessions/**/*.jsonl` `rate_limits` snapshots inside `token_count` events, written on every turn; the incremental Codex importer already reads these files | Exact, server-authoritative |
-| Claude Code | None persisted locally (`/usage` renders live server data and discards it) | Spill's own imported per-turn usage: exact five-hour-window and weekly consumption computed from `token_usage_events` | Consumption exact; the limit denominator is an estimate (see Estimation policy) |
-| Antigravity | Credits balance cached by the client; per-group window percentages are fetched live by `/usage` and are not cached locally | `state.vscdb` → `antigravityUnifiedStateSync.modelCredits` (base64 protobuf varints: available credits, minimum-per-use), read-only; plus Spill's own imported AGY usage for estimated windows | Credits exact-as-cached; window gauge estimated |
+| Claude Code | Server-computed used percent and reset time per window (session, weekly all-model, weekly model-scoped), cached by the client after `/usage`-style fetches | `~/.claude.json` → `cachedUsageUtilization.utilization.limits` (`kind`, `percent`, `resets_at`, safe scoped model display name), read-only; only that key is decoded | Exact as of `fetchedAtMs`; snapshots tagged `client_cache`. Spill's own-event estimate remains only as a fallback when the cache is absent or every window in it has expired |
+| Antigravity | Per-group window percentages are fetched live by `/usage` and are not cached locally. The `modelCredits` state value is a sentinel (`availableCreditsSentinelKey`), not a user-facing balance — no credits gauge is derived from it | Spill's own imported AGY usage for estimated windows | Window gauge estimated |
 
 Explicitly out of scope for this PRD: calling any vendor endpoint with the
 tool's OAuth credentials. That would require credential access and network
@@ -60,36 +60,44 @@ as a separate, explicitly opt-in PRD.
      from `resets_at` at render time. When `resets_at` has passed and no newer
      snapshot exists, the gauge renders as replenished (100%) with a
      "as of <captured_at>" hint rather than a stale countdown.
-3. **Claude estimated gauges**
-   - Spill mirrors the shape of Claude's own usage screen: a five-hour session
-     window, an all-model weekly window, and per-model-group weekly windows
-     where Spill's per-model events allow it (model ids map to display
-     groups). Consumption is computed exactly from Spill's imported Claude
-     events (input+output totals, cache included, matching the
-     comparable-totals contract); only the denominators are estimated.
+3. **Claude gauges — exact first, estimated fallback**
+   - Primary: `TokenUsageClaudeLimitCapture` reads the client-cached
+     utilization limits (session, weekly all-model, weekly model-scoped) and
+     stores them as `client_cache` snapshots whose `capturedAt` is the
+     cache's own fetch time. These are the same numbers `/usage` shows,
+     including reset times, so no "~" badge applies. Entries whose reset time
+     has passed are dropped; unknown entry kinds (spend, credits) are never
+     guessed at.
+   - Fallback only when the cache is absent or fully expired: the estimated
+     gauges below.
+   - Estimated fallback shape mirrors Claude's own usage screen: a five-hour
+     session window and an all-model weekly window. Consumption is computed
+     exactly from Spill's imported Claude events (input+output totals, cache
+     included, matching the comparable-totals contract); only the
+     denominators are estimated.
    - The denominator comes from, in priority order: a user-entered limit in
      Preferences, else the high-water mark of window consumption Spill has ever
      observed for that window. Gauges carry an "estimated" badge; there is no
      unlabeled estimate anywhere.
-   - Window boundaries use fixed-window chaining, matching the tools' real
-     session semantics: a window opens at the first usage after the previous
-     window expires and resets a fixed interval later. The countdown is that
-     expiry (`window start + window length`), so estimated chips show a reset
-     time exactly like the exact Codex chips. When no window is active the
-     gauge reads empty and shows no countdown — the next turn opens a fresh
-     window. Hour-bucket granularity may shift the reset by up to an hour;
-     the mandated "~" badge covers this.
+   - Five-hour window boundaries use fixed-window chaining, matching the
+     tools' real session semantics: a window opens at the first usage after
+     the previous window expires and resets a fixed interval later. The
+     countdown is that expiry (`window start + window length`). Any usage gap
+     longer than the window re-anchors the chain, so the stamp stays honest.
+     When no window is active the gauge reads empty and shows no countdown.
+     Hour-bucket granularity may shift the reset by up to an hour; the
+     mandated "~" badge covers this.
+   - Weekly estimated gauges are rolling seven-day windows and never show a
+     reset stamp: week-long usage gaps do not occur, so a chained weekly
+     anchor would just replay whenever local collection began and produce a
+     confidently wrong date. A wrong date is worse than no date.
 4. **Antigravity gauges**
-   - Credits: the AGY collection pass reads `modelCredits` read-only, parses
-     the available-credits varint, and stores it as a `client_cache` snapshot.
-     Parse failures are silent-skip with a content-free local diagnostic
-     boolean; the gauge simply does not render. The parser must tolerate
-     unknown fields and never write to the database.
-   - Windows: same estimated five-hour/weekly gauge machinery as Claude, fed by
-     imported AGY usage, labeled estimated.
-   - When the user has verified the credits reading against Antigravity's own
-     UI once (a Preferences confirmation), the credits gauge may show a percent
-     against a user-entered plan total; until then it shows the raw balance.
+   - Windows: the estimated five-hour/weekly gauge machinery, fed by imported
+     AGY usage, labeled estimated.
+   - No credits gauge. The `modelCredits` state value decodes, but its key
+     (`availableCreditsSentinelKey`) marks it as an internal sentinel and the
+     user confirmed Antigravity's own UI exposes no credits balance. Showing
+     it misread an implementation detail as an account fact; it was removed.
 5. **Display surfaces — three surfaces, graduated detail, one visual language**
    - The shared visual language is a **remaining-ratio ring**: a circular arc
      filled by the remaining fraction, colored by threshold only (default tint
@@ -99,11 +107,17 @@ as a separate, explicitly opt-in PRD.
      appropriate to each surface. The more permanently visible the surface,
      the less it shows.
    - **Token metering dashboard (most detail)**: a single-row "Limits" strip
-     directly under the header — one compact chip per tool showing the ring,
-     the tool's most constrained limit as `label percent · reset`, and an
-     `~` prefix on estimated percentages. Clicking a chip opens a popover
-     listing every named limit for that tool with countdowns, source badges,
-     and captured-at freshness. No large card.
+     directly under the header — one compact chip per tool rendering the same
+     fixed window slots in the same order (`5h`, then `Wk`), each slot with
+     its own ring, remaining percent (`~` prefix on estimates), and reset
+     stamp when one is known (`5h ~31% (20:00) · Wk 29% (8/8)`). A fixed slot
+     order is the point: a "most constrained" headline made every tool read
+     on a different basis and was unintelligible. Displayed remaining
+     percents floor rather than round — 99.8% remaining reads "99", never a
+     false "100". Extra named limits and
+     credit balances appear as a `+n` indicator; clicking the chip opens a
+     popover listing every limit for that tool with countdowns, source
+     badges, and captured-at freshness. No large card.
    - **Compact panel (medium)**: the existing AI-section tool rows gain a
      trailing ring plus a short percent (for example `Codex 1M ◕40%`). No new
      rows; details stay in the dashboard.

@@ -160,12 +160,25 @@ final class TokenUsageLimitTests: XCTestCase {
         XCTAssertTrue(dashboardView.contains("TokenMeteringDashboardLimitsStrip("))
         // Refresh rides the panel-summary publisher; no dedicated timer.
         XCTAssertTrue(dashboardView.contains(".onReceive(store.$panelSummary)"))
+        // The strip honors the tool-hiding setting like every other surface.
+        XCTAssertTrue(dashboardView.contains("snapshots: visibleLimitSnapshots"))
+        XCTAssertTrue(
+            dashboardView.contains(
+                "return limitSnapshots.filter { visibleTools.contains($0.aiTool) }"
+            )
+        )
         XCTAssertFalse(strip.contains("Timer"))
         // Shared ring thresholds: warning at 20% remaining, critical at 5%.
         XCTAssertTrue(strip.contains("remaining <= 5"))
         XCTAssertTrue(strip.contains("remaining <= 20"))
         // Estimated readings carry the mandated tilde prefix.
         XCTAssertTrue(strip.contains(#"source == .estimated ? "~" : """#))
+        // Chips render the same fixed window slots on every tool so the
+        // basis is comparable: five-hour then weekly, extras behind +n.
+        XCTAssertTrue(strip.contains("fiveHourWindowMinutes = 300"))
+        XCTAssertTrue(strip.contains("weeklyWindowMinutes = 10_080"))
+        XCTAssertTrue(strip.contains("[Self.fiveHourWindowMinutes, Self.weeklyWindowMinutes]"))
+        XCTAssertTrue(strip.contains(#"Text("+\(group.extraCount)")"#))
     }
 
     func testEstimatedWindowMathUsesSlidingHighWaterDenominators() {
@@ -233,25 +246,60 @@ final class TokenUsageLimitTests: XCTestCase {
         )
     }
 
-    func testAntigravityCreditsParserExtractsTheVarintAndFailsSilent() {
-        // Outer payload: key marker + protobuf-ish wrapper around the inner
-        // base64 "EKjDAQ==" (field tag 0x10, varint 25000).
-        var outer = Data("noise-availableCreditsSentinelKey".utf8)
-        outer.append(contentsOf: [0x12, 0x08])
-        outer.append(Data("EKjDAQ==".utf8))
-        outer.append(Data("trailing".utf8))
-        XCTAssertEqual(
-            TokenUsageEstimatedLimitCapture.parseAvailableCredits(
-                base64Payload: outer.base64EncodedString()
-            ),
-            25_000
-        )
+    func testClaudeCaptureReadsExactCachedUtilization() {
+        let now = Date(timeIntervalSince1970: 1_785_852_800)
+        let cache: [String: Any] = [
+            "fetchedAtMs": 1_785_852_770_507.0,
+            "utilization": [
+                "limits": [
+                    ["kind": "session", "percent": 13.0, "severity": "normal",
+                     "resets_at": "2026-08-04T18:10:00.390172+00:00"],
+                    ["kind": "weekly_all", "percent": 30.0,
+                     "resets_at": "2026-08-07T18:00:00.390204+00:00"],
+                    ["kind": "weekly_scoped", "percent": 29.0,
+                     "resets_at": "2026-08-07T18:00:00.390666+00:00",
+                     "scope": ["model": ["display_name": "Fable"]]],
+                    // Expired windows and unknown kinds are dropped.
+                    ["kind": "session", "percent": 99.0,
+                     "resets_at": "2026-08-01T00:00:00+00:00"],
+                    ["kind": "spend", "percent": 0.0],
+                ] as [[String: Any]],
+            ] as [String: Any],
+        ]
 
-        XCTAssertNil(TokenUsageEstimatedLimitCapture.parseAvailableCredits(base64Payload: "not-base64!!"))
-        XCTAssertNil(
-            TokenUsageEstimatedLimitCapture.parseAvailableCredits(
-                base64Payload: Data("no-key-here".utf8).base64EncodedString()
-            )
+        let snapshots = TokenUsageClaudeLimitCapture.snapshots(
+            cachedUsageUtilization: cache,
+            now: now
+        )
+        XCTAssertEqual(snapshots.count, 3)
+        XCTAssertTrue(snapshots.allSatisfy { $0.source == .clientCache })
+        XCTAssertTrue(snapshots.allSatisfy { $0.aiTool == .claude })
+        // capturedAt is the cache's own fetch time, not the read time.
+        XCTAssertEqual(
+            snapshots.first?.capturedAt.timeIntervalSince1970 ?? 0,
+            1_785_852_770.507,
+            accuracy: 0.01
+        )
+        let session = snapshots.first { $0.limitKey == "session_5h" }
+        XCTAssertEqual(session?.usedPercent, 13)
+        XCTAssertEqual(session?.windowMinutes, 300)
+        XCTAssertNotNil(session?.resetsAt)
+        let weekly = snapshots.first { $0.limitKey == "week_all" }
+        XCTAssertEqual(weekly?.label, "Weekly")
+        XCTAssertEqual(weekly?.usedPercent, 30)
+        let scoped = snapshots.first { $0.limitKey == "weekly_scoped_fable" }
+        XCTAssertEqual(scoped?.label, "Fable")
+        XCTAssertEqual(scoped?.windowMinutes, 10_080)
+
+        // Malformed or absent caches produce nothing.
+        XCTAssertTrue(
+            TokenUsageClaudeLimitCapture.snapshots(cachedUsageUtilization: nil, now: now).isEmpty
+        )
+        XCTAssertTrue(
+            TokenUsageClaudeLimitCapture.snapshots(
+                cachedUsageUtilization: ["utilization": ["limits": "nope"]],
+                now: now
+            ).isEmpty
         )
     }
 
@@ -268,10 +316,7 @@ final class TokenUsageLimitTests: XCTestCase {
         let store = TokenUsageLimitSnapshotStore(
             fileURL: temporaryDirectory().appendingPathComponent("limit-snapshots.json")
         )
-        let capture = TokenUsageEstimatedLimitCapture(
-            usageStore: usageStore,
-            antigravityStateURL: nil
-        )
+        let capture = TokenUsageEstimatedLimitCapture(usageStore: usageStore)
         capture.captureEstimates(into: store)
 
         let claude = store.snapshots(for: .claude)
@@ -279,14 +324,28 @@ final class TokenUsageLimitTests: XCTestCase {
         for snapshot in claude {
             XCTAssertEqual(snapshot.source, .estimated)
             XCTAssertNotNil(snapshot.usedPercent)
-            // Events just landed, so both fixed windows are active and carry
-            // a reset countdown like the exact Codex snapshots do.
-            XCTAssertNotNil(snapshot.resetsAt)
         }
+        // The five-hour gauge chains fixed windows, so fresh events open an
+        // active window with a reset stamp. The weekly gauge is rolling and
+        // must never claim a reset date — its anchor is unknowable locally.
+        XCTAssertNotNil(claude.first { $0.limitKey == "session_5h" }?.resetsAt)
+        XCTAssertNil(claude.first { $0.limitKey == "week_all" }?.resetsAt)
         // Events just landed, so the current window IS the high-water: 0% left.
         XCTAssertEqual(claude.first?.remainingPercent, 0)
-        // No AGY events and no state database: nothing renders for AGY.
+        // No AGY events: nothing renders for AGY, and no credits gauge exists
+        // anywhere — the state-database value is a sentinel, not a balance.
         XCTAssertTrue(store.snapshots(for: .antigravity).isEmpty)
+
+        // A tool with an exact capture this pass must keep it: skipping
+        // prevents the estimate from overwriting the exact snapshots.
+        let exact = TokenUsageLimitSnapshot(
+            aiTool: .claude, limitKey: "week_all", label: "Weekly",
+            usedPercent: 30, remainingCredits: nil, windowMinutes: 10_080,
+            resetsAt: nil, capturedAt: Date(), source: .clientCache
+        )
+        store.replaceSnapshots(for: .claude, with: [exact])
+        capture.captureEstimates(into: store, skipping: [.claude])
+        XCTAssertEqual(store.snapshots(for: .claude).map(\.source), [.clientCache])
     }
 
     private static func claudeEvent(spanID: String, totalTokens: Int) -> TokenUsageEvent {

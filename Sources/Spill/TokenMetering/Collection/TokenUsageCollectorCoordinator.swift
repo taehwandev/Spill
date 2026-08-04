@@ -69,15 +69,21 @@ final class TokenUsageCollectorCoordinator: TokenUsageExternalCollecting, @unche
         if let codexLimitCaptureRunner {
             self.codexLimitCaptureRunner = codexLimitCaptureRunner
         } else {
-            // Both captures share one paced slot: exact Codex snapshots from
-            // session-file tails, and estimated Claude/AGY gauges (plus the
-            // AGY credits cache) from Spill's own data.
+            // All limit captures share one paced slot: exact Codex snapshots
+            // from session-file tails, exact Claude snapshots from its client
+            // cache, and estimated gauges from Spill's own data for whatever
+            // has no exact reading this pass.
             let snapshotStore = TokenUsageLimitSnapshotStore()
             let codexCapture = TokenUsageCodexLimitCapture()
+            let claudeCapture = TokenUsageClaudeLimitCapture()
             let estimatedCapture = TokenUsageEstimatedLimitCapture(usageStore: store)
             self.codexLimitCaptureRunner = {
                 codexCapture.captureLatestSnapshots(into: snapshotStore)
-                estimatedCapture.captureEstimates(into: snapshotStore)
+                let claudeIsExact = claudeCapture.captureLatestSnapshots(into: snapshotStore)
+                estimatedCapture.captureEstimates(
+                    into: snapshotStore,
+                    skipping: claudeIsExact ? [.claude] : []
+                )
             }
         }
         self.store = store

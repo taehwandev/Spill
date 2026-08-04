@@ -688,15 +688,32 @@ Usage limit snapshots:
   importers) and stores one server-exact snapshot per named limit
   (`limit_id` + window) plus credits when a balance exists. It reads only
   numeric limit fields, safe identifiers, and timestamps.
+- `TokenUsageClaudeLimitCapture` reads only the `cachedUsageUtilization`
+  limits entries from Claude Code's state file — numeric percents, reset
+  times, window kinds, safe scoped model display names — into `client_cache`
+  snapshots stamped with the cache's own fetch time. When it stores at least
+  one fresh snapshot, the estimated Claude gauges are skipped for that pass;
+  expired entries are dropped so a fully stale cache falls back to estimates.
+- No Antigravity credits gauge exists: the `modelCredits` state value is an
+  internal sentinel (`availableCreditsSentinelKey`), not a user-facing
+  balance.
 - `TokenUsageEstimatedLimitCapture` shares the same paced slot and produces
   estimated Claude/AGY gauges from Spill's own hour-bucketed events (cached
-  against the store data revision). Consumption windows use fixed-window
-  chaining — a window opens at the first usage after the previous one expires —
-  so the current window start yields both the numerator and the reset
-  countdown; the denominator is the observed sliding high-water mark. No
-  active window means an empty gauge with no countdown. The AGY credits
-  balance is read read-only from the client state cache and tagged
+  against the store data revision). The five-hour gauge uses fixed-window
+  chaining — a window opens at the first usage after the previous one
+  expires — so the window start yields both the numerator and the reset
+  countdown, and gaps longer than the window re-anchor the chain. The weekly
+  gauge is a rolling window with `resetsAt` nil: a chained weekly anchor
+  cannot re-anchor locally and would emit a confidently wrong date. The
+  denominator for both is the observed sliding high-water mark. The AGY
+  credits balance is read read-only from the client state cache and tagged
   `client_cache`.
+- The dashboard Limits strip renders identical fixed window slots per chip
+  (five-hour then weekly, extras and credits behind `+n` in the popover)
+  instead of a per-tool "most constrained" headline, so every tool reads on
+  the same basis. The strip consumes snapshots pre-filtered through the same
+  `TokenUsageDashboardToolVisibility.visibleTools` rule as every other
+  dashboard surface, so user-hidden tools render no limit chips.
 - The dashboard's Limits strip renders per-tool chips from the snapshot file
   and refreshes on the existing panel-summary publisher — no dedicated timer.
   Ring thresholds are shared surface-wide: warning at 20% remaining, critical
