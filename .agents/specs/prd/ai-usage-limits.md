@@ -71,8 +71,14 @@ as a separate, explicitly opt-in PRD.
      Preferences, else the high-water mark of window consumption Spill has ever
      observed for that window. Gauges carry an "estimated" badge; there is no
      unlabeled estimate anywhere.
-   - Window boundaries are the rolling window ending now; the countdown shows
-     when the oldest in-window usage ages out (the effective refresh moment).
+   - Window boundaries use fixed-window chaining, matching the tools' real
+     session semantics: a window opens at the first usage after the previous
+     window expires and resets a fixed interval later. The countdown is that
+     expiry (`window start + window length`), so estimated chips show a reset
+     time exactly like the exact Codex chips. When no window is active the
+     gauge reads empty and shows no countdown — the next turn opens a fresh
+     window. Hour-bucket granularity may shift the reset by up to an hour;
+     the mandated "~" badge covers this.
 4. **Antigravity gauges**
    - Credits: the AGY collection pass reads `modelCredits` read-only, parses
      the available-credits varint, and stores it as a `client_cache` snapshot.
@@ -84,19 +90,35 @@ as a separate, explicitly opt-in PRD.
    - When the user has verified the credits reading against Antigravity's own
      UI once (a Preferences confirmation), the credits gauge may show a percent
      against a user-entered plan total; until then it shows the raw balance.
-5. **Display surfaces**
-   - Dashboard: a "Limits" card listing every tool's gauges with source badges,
-     countdowns, and captured-at freshness.
-   - Glance: an optional Limit segment (off by default) showing the single most
-     constrained gauge across enabled tools (lowest remaining percent), with
-     its tool icon and countdown. Ticker mode gives it one slot like any other
-     module. The existing single Glance timeline drives countdown re-rendering
-     at one-minute granularity; no second schedule.
-   - Menu bar: out of MVP; revisit after the Glance segment proves useful.
+5. **Display surfaces — three surfaces, graduated detail, one visual language**
+   - The shared visual language is a **remaining-ratio ring**: a circular arc
+     filled by the remaining fraction, colored by threshold only (default tint
+     above 20% remaining, warning at ≤ 20%, critical at ≤ 5%). Rings never
+     carry embedded numbers; the percent, limit name, reset time, source
+     badge, and captured-at age live in the adjacent text or tooltip
+     appropriate to each surface. The more permanently visible the surface,
+     the less it shows.
+   - **Token metering dashboard (most detail)**: a single-row "Limits" strip
+     directly under the header — one compact chip per tool showing the ring,
+     the tool's most constrained limit as `label percent · reset`, and an
+     `~` prefix on estimated percentages. Clicking a chip opens a popover
+     listing every named limit for that tool with countdowns, source badges,
+     and captured-at freshness. No large card.
+   - **Compact panel (medium)**: the existing AI-section tool rows gain a
+     trailing ring plus a short percent (for example `Codex 1M ◕40%`). No new
+     rows; details stay in the dashboard.
+   - **Glance (minimal, always visible)**: the remaining-ratio ring is drawn
+     on the circumference of the existing 14-point tool icon circle, adding
+     zero width to the strip. The most constrained limit for that tool drives
+     the ring; hover shows `label percent left · resets <time>`. No separate
+     Limit segment; the existing single Glance timeline drives countdown and
+     ring re-rendering at one-minute granularity with no second schedule.
+   - Menu bar: out of MVP; revisit after the three surfaces prove useful.
 6. **Freshness and trust**
    - Every gauge exposes its `captured_at` age on hover/tooltip.
-   - Thresholds: remaining ≤ 20% renders in the warning tint, ≤ 5% in the
-     critical tint, matching dashboard tint conventions.
+   - Ring thresholds (shared across all three surfaces): remaining ≤ 20%
+     renders in the warning tint, ≤ 5% in the critical tint, matching
+     dashboard tint conventions.
    - A tool with no snapshot and no usage renders nothing (no empty gauges).
 
 ## Privacy
@@ -113,8 +135,8 @@ as a separate, explicitly opt-in PRD.
 
 | Concern | Decision |
 | --- | --- |
-| Feature flag | Limits card on by default in the dashboard; Glance Limit segment off by default |
-| New settings | `limitGaugeClaudeWindowTokens` (optional user-entered limits), `limitGaugeAntigravityPlanCredits` (optional), `glanceLimitSegmentEnabled = false` |
+| Feature flag | Limits strip on by default in the dashboard; panel and Glance rings render whenever a snapshot exists (they add no space, so no separate toggle) |
+| New settings | `limitGaugeClaudeWindowTokens` (optional user-entered limits), `limitGaugeAntigravityPlanCredits` (optional) |
 | Schema | New local snapshot store; `token_usage_events` unchanged |
 | Estimation labeling | `estimated` badge is mandatory wherever the denominator is not server-provided |
 
@@ -137,8 +159,8 @@ as a separate, explicitly opt-in PRD.
 
 ## Open decisions
 
-- Whether the Glance Limit segment should rotate through all tools in Ticker
-  mode or always pin the most constrained gauge (MVP: most constrained).
+- Whether Glance ticker mode needs any limit-specific behavior beyond the icon
+  ring, which already travels with whichever module is on screen (MVP: no).
 - Whether Codex credits (`balance`) deserve their own gauge or stay a tooltip
   detail (MVP: tooltip detail).
 - Antigravity `/usage` per-group server percentages via opt-in authenticated
@@ -146,6 +168,6 @@ as a separate, explicitly opt-in PRD.
 
 ## Phasing
 
-1. Phase 1: snapshot store + Codex exact gauges + dashboard Limits card.
+1. Phase 1: snapshot store + Codex exact gauges + dashboard Limits strip.
 2. Phase 2: Claude/AGY estimated gauges + AGY credits + Preferences entries.
-3. Phase 3: Glance Limit segment.
+3. Phase 3: compact-panel and Glance rings.

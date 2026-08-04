@@ -675,6 +675,32 @@ Rules:
 - The distributed store-change notification carries the posting process id, and
   the posting process ignores its own echo: the in-process notification already
   handled that change, so reacting to the echo would run the same reads twice.
+
+Usage limit snapshots:
+
+- `TokenUsageLimitSnapshotStore` persists the latest limit reading per
+  `(ai_tool, limit_key)` in one local JSON file beside the token-metering
+  store, separate from the strict usage-event schema. Writers replace a tool's
+  whole set per capture, which implements the PRD's age-out rule; corrupt or
+  missing files render no gauges and never affect metering.
+- `TokenUsageCodexLimitCapture` tail-reads only the newest few Codex session
+  files during the collector's paced pass (same pacing state as the active
+  importers) and stores one server-exact snapshot per named limit
+  (`limit_id` + window) plus credits when a balance exists. It reads only
+  numeric limit fields, safe identifiers, and timestamps.
+- `TokenUsageEstimatedLimitCapture` shares the same paced slot and produces
+  estimated Claude/AGY gauges from Spill's own hour-bucketed events (cached
+  against the store data revision). Consumption windows use fixed-window
+  chaining — a window opens at the first usage after the previous one expires —
+  so the current window start yields both the numerator and the reset
+  countdown; the denominator is the observed sliding high-water mark. No
+  active window means an empty gauge with no countdown. The AGY credits
+  balance is read read-only from the client state cache and tagged
+  `client_cache`.
+- The dashboard's Limits strip renders per-tool chips from the snapshot file
+  and refreshes on the existing panel-summary publisher — no dedicated timer.
+  Ring thresholds are shared surface-wide: warning at 20% remaining, critical
+  at 5%; estimated readings always carry a `~` prefix.
 - If the read-only stats helper shows usage records while native UI is empty or
   stale, investigate store drain, notification propagation, dashboard filter
   state, and user-hidden tool settings before changing importers, upload sync,
