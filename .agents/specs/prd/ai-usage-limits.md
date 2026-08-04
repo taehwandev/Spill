@@ -71,14 +71,18 @@ as a separate, explicitly opt-in PRD.
      Preferences, else the high-water mark of window consumption Spill has ever
      observed for that window. Gauges carry an "estimated" badge; there is no
      unlabeled estimate anywhere.
-   - Window boundaries use fixed-window chaining, matching the tools' real
-     session semantics: a window opens at the first usage after the previous
-     window expires and resets a fixed interval later. The countdown is that
-     expiry (`window start + window length`), so estimated chips show a reset
-     time exactly like the exact Codex chips. When no window is active the
-     gauge reads empty and shows no countdown — the next turn opens a fresh
-     window. Hour-bucket granularity may shift the reset by up to an hour;
-     the mandated "~" badge covers this.
+   - Five-hour window boundaries use fixed-window chaining, matching the
+     tools' real session semantics: a window opens at the first usage after
+     the previous window expires and resets a fixed interval later. The
+     countdown is that expiry (`window start + window length`). Any usage gap
+     longer than the window re-anchors the chain, so the stamp stays honest.
+     When no window is active the gauge reads empty and shows no countdown.
+     Hour-bucket granularity may shift the reset by up to an hour; the
+     mandated "~" badge covers this.
+   - Weekly estimated gauges are rolling seven-day windows and never show a
+     reset stamp: week-long usage gaps do not occur, so a chained weekly
+     anchor would just replay whenever local collection began and produce a
+     confidently wrong date. A wrong date is worse than no date.
 4. **Antigravity gauges**
    - Credits: the AGY collection pass reads `modelCredits` read-only, parses
      the available-credits varint, and stores it as a `client_cache` snapshot.
@@ -99,11 +103,15 @@ as a separate, explicitly opt-in PRD.
      appropriate to each surface. The more permanently visible the surface,
      the less it shows.
    - **Token metering dashboard (most detail)**: a single-row "Limits" strip
-     directly under the header — one compact chip per tool showing the ring,
-     the tool's most constrained limit as `label percent · reset`, and an
-     `~` prefix on estimated percentages. Clicking a chip opens a popover
-     listing every named limit for that tool with countdowns, source badges,
-     and captured-at freshness. No large card.
+     directly under the header — one compact chip per tool rendering the same
+     fixed window slots in the same order (`5h`, then `Wk`), each slot with
+     its own ring, remaining percent (`~` prefix on estimates), and reset
+     stamp when one is known (`5h ~31% (20:00) · Wk 29% (8/8)`). A fixed slot
+     order is the point: a "most constrained" headline made every tool read
+     on a different basis and was unintelligible. Extra named limits and
+     credit balances appear as a `+n` indicator; clicking the chip opens a
+     popover listing every limit for that tool with countdowns, source
+     badges, and captured-at freshness. No large card.
    - **Compact panel (medium)**: the existing AI-section tool rows gain a
      trailing ring plus a short percent (for example `Codex 1M ◕40%`). No new
      rows; details stay in the dashboard.

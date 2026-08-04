@@ -166,6 +166,12 @@ final class TokenUsageLimitTests: XCTestCase {
         XCTAssertTrue(strip.contains("remaining <= 20"))
         // Estimated readings carry the mandated tilde prefix.
         XCTAssertTrue(strip.contains(#"source == .estimated ? "~" : """#))
+        // Chips render the same fixed window slots on every tool so the
+        // basis is comparable: five-hour then weekly, extras behind +n.
+        XCTAssertTrue(strip.contains("fiveHourWindowMinutes = 300"))
+        XCTAssertTrue(strip.contains("weeklyWindowMinutes = 10_080"))
+        XCTAssertTrue(strip.contains("[Self.fiveHourWindowMinutes, Self.weeklyWindowMinutes]"))
+        XCTAssertTrue(strip.contains(#"Text("+\(group.extraCount)")"#))
     }
 
     func testEstimatedWindowMathUsesSlidingHighWaterDenominators() {
@@ -279,10 +285,12 @@ final class TokenUsageLimitTests: XCTestCase {
         for snapshot in claude {
             XCTAssertEqual(snapshot.source, .estimated)
             XCTAssertNotNil(snapshot.usedPercent)
-            // Events just landed, so both fixed windows are active and carry
-            // a reset countdown like the exact Codex snapshots do.
-            XCTAssertNotNil(snapshot.resetsAt)
         }
+        // The five-hour gauge chains fixed windows, so fresh events open an
+        // active window with a reset stamp. The weekly gauge is rolling and
+        // must never claim a reset date — its anchor is unknowable locally.
+        XCTAssertNotNil(claude.first { $0.limitKey == "session_5h" }?.resetsAt)
+        XCTAssertNil(claude.first { $0.limitKey == "week_all" }?.resetsAt)
         // Events just landed, so the current window IS the high-water: 0% left.
         XCTAssertEqual(claude.first?.remainingPercent, 0)
         // No AGY events and no state database: nothing renders for AGY.

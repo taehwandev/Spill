@@ -35,35 +35,81 @@ private extension TokenMeteringDashboardLimitsStrip {
     struct ToolGroup {
         let tool: TokenUsageAITool
         let snapshots: [TokenUsageLimitSnapshot]
-        let headline: TokenUsageLimitSnapshot
+        let gauges: [TokenUsageLimitSnapshot]
+        let extraCount: Int
     }
+
+    static let fiveHourWindowMinutes = 300
+    static let weeklyWindowMinutes = 10_080
 
     var toolGroups: [ToolGroup] {
         Self.toolOrder.compactMap { tool in
             let toolSnapshots = snapshots.filter { $0.aiTool == tool }
-            // The chip headline is the most constrained percentage gauge;
-            // credit-only tools fall back to their credits reading.
-            guard let headline = TokenUsageLimitSnapshotStore.mostConstrained(in: toolSnapshots)
-                ?? toolSnapshots.first(where: { $0.remainingCredits != nil })
-            else {
+            guard !toolSnapshots.isEmpty else {
                 return nil
             }
-            return ToolGroup(tool: tool, snapshots: toolSnapshots, headline: headline)
+            // Every chip renders the same fixed slots in the same order —
+            // five-hour then weekly — so the basis is comparable across
+            // tools. Extra named limits and credit balances stay in the
+            // popover behind a +n indicator.
+            var gauges = [Self.fiveHourWindowMinutes, Self.weeklyWindowMinutes]
+                .compactMap { windowGauge(minutes: $0, in: toolSnapshots) }
+            if gauges.isEmpty,
+               let fallback = TokenUsageLimitSnapshotStore.mostConstrained(in: toolSnapshots)
+                   ?? toolSnapshots.first(where: { $0.remainingCredits != nil }) {
+                gauges = [fallback]
+            }
+            guard !gauges.isEmpty else {
+                return nil
+            }
+            return ToolGroup(
+                tool: tool,
+                snapshots: toolSnapshots,
+                gauges: gauges,
+                extraCount: toolSnapshots.count - gauges.count
+            )
         }
+    }
+
+    /// The slot gauge for a window length. When a tool carries several limits
+    /// on the same window (Codex general weekly plus model-specific weeklies),
+    /// the plain window limit represents the slot and the rest count as +n.
+    func windowGauge(minutes: Int, in toolSnapshots: [TokenUsageLimitSnapshot]) -> TokenUsageLimitSnapshot? {
+        let group = toolSnapshots.filter { $0.windowMinutes == minutes && $0.remainingPercent != nil }
+        if group.count > 1 {
+            let plainLabels: Set<String> = ["5-hour", "Weekly"]
+            return group.first { plainLabels.contains($0.label) }
+                ?? TokenUsageLimitSnapshotStore.mostConstrained(in: group)
+        }
+        return group.first
     }
 
     func limitChip(for group: ToolGroup) -> some View {
         Button {
             popoverTool = group.tool
         } label: {
-            HStack(spacing: 5) {
-                TokenUsageLimitRing(snapshot: group.headline, diameter: 12)
-
-                Text(chipText(for: group.headline))
-                    .font(.system(size: 11, weight: .medium))
-                    .monospacedDigit()
+            HStack(spacing: 6) {
+                Text(compactToolName(group.tool))
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.primary.opacity(0.8))
-                    .lineLimit(1)
+
+                ForEach(group.gauges, id: \.limitKey) { gauge in
+                    HStack(spacing: 4) {
+                        TokenUsageLimitRing(snapshot: gauge, diameter: 12)
+                        Text(gaugeText(for: gauge))
+                            .font(.system(size: 11, weight: .medium))
+                            .monospacedDigit()
+                            .foregroundStyle(.primary.opacity(0.8))
+                            .lineLimit(1)
+                    }
+                    .help(chipTooltip(for: gauge))
+                }
+
+                if group.extraCount > 0 {
+                    Text("+\(group.extraCount)")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(.secondary)
+                }
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
@@ -73,8 +119,7 @@ private extension TokenMeteringDashboardLimitsStrip {
             )
         }
         .buttonStyle(.plain)
-        .help(chipTooltip(for: group.headline))
-        .accessibilityLabel(Text("\(group.tool.dashboardLabel(language: language)) \(chipText(for: group.headline))"))
+        .accessibilityLabel(Text(accessibilityText(for: group)))
         .popover(
             isPresented: Binding(
                 get: { popoverTool == group.tool },
@@ -83,6 +128,13 @@ private extension TokenMeteringDashboardLimitsStrip {
         ) {
             limitPopover(for: group)
         }
+    }
+
+    func accessibilityText(for group: ToolGroup) -> String {
+        let gauges = group.gauges
+            .map { "\(slotLabel(for: $0)) \(headlineValue(for: $0))" }
+            .joined(separator: ", ")
+        return "\(group.tool.dashboardLabel(language: language)) \(gauges)"
     }
 
     func limitPopover(for group: ToolGroup) -> some View {
@@ -108,14 +160,34 @@ private extension TokenMeteringDashboardLimitsStrip {
         .frame(minWidth: 200, alignment: .leading)
     }
 
-    /// The chip must say which tool it describes — "Weekly 30%" alone is
-    /// unreadable in a strip that mixes tools.
-    func chipText(for snapshot: TokenUsageLimitSnapshot) -> String {
-        var text = "\(compactToolName(snapshot.aiTool)) · \(snapshot.label) \(headlineValue(for: snapshot))"
-        if let resetsAt = snapshot.resetsAt {
-            text += " · \(TokenUsageLimitSnapshot.shortDateFormatter.string(from: resetsAt))"
+    /// One slot inside a chip: "5h ~31% (20:00)" / "Wk 29% (8/8)". The slot
+    /// label names the window so every tool reads on the same basis, and the
+    /// parenthesized stamp is that window's reset moment.
+    func gaugeText(for gauge: TokenUsageLimitSnapshot) -> String {
+        var text = "\(slotLabel(for: gauge)) \(headlineValue(for: gauge))"
+        if let resetsAt = gauge.resetsAt {
+            text += " (\(resetStamp(for: resetsAt)))"
         }
         return text
+    }
+
+    func slotLabel(for gauge: TokenUsageLimitSnapshot) -> String {
+        switch gauge.windowMinutes {
+        case Self.fiveHourWindowMinutes:
+            return "5h"
+        case Self.weeklyWindowMinutes:
+            return "Wk"
+        default:
+            return gauge.label
+        }
+    }
+
+    /// Same-day resets show the clock time; later resets show the date.
+    func resetStamp(for resetsAt: Date) -> String {
+        if Calendar.autoupdatingCurrent.isDate(resetsAt, inSameDayAs: Date()) {
+            return TokenUsageLimitSnapshot.shortTimeFormatter.string(from: resetsAt)
+        }
+        return TokenUsageLimitSnapshot.shortDayFormatter.string(from: resetsAt)
     }
 
     func compactToolName(_ tool: TokenUsageAITool) -> String {
@@ -229,11 +301,27 @@ struct TokenUsageLimitRing: View {
 }
 
 extension TokenUsageLimitSnapshot {
-    /// Short "8/8 12:46" style stamp shared by chip text and tooltips.
+    /// Short "8/8 12:46" style stamp shared by tooltips and popover detail.
     static let shortDateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = .autoupdatingCurrent
         formatter.setLocalizedDateFormatFromTemplate("Md HH:mm")
+        return formatter
+    }()
+
+    /// "12:46" — chip reset stamp for a same-day reset.
+    static let shortTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = .autoupdatingCurrent
+        formatter.setLocalizedDateFormatFromTemplate("HH:mm")
+        return formatter
+    }()
+
+    /// "8/8" — chip reset stamp for a reset on a later day.
+    static let shortDayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = .autoupdatingCurrent
+        formatter.setLocalizedDateFormatFromTemplate("Md")
         return formatter
     }()
 }

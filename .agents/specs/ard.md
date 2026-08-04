@@ -690,13 +690,19 @@ Usage limit snapshots:
   numeric limit fields, safe identifiers, and timestamps.
 - `TokenUsageEstimatedLimitCapture` shares the same paced slot and produces
   estimated Claude/AGY gauges from Spill's own hour-bucketed events (cached
-  against the store data revision). Consumption windows use fixed-window
-  chaining — a window opens at the first usage after the previous one expires —
-  so the current window start yields both the numerator and the reset
-  countdown; the denominator is the observed sliding high-water mark. No
-  active window means an empty gauge with no countdown. The AGY credits
-  balance is read read-only from the client state cache and tagged
+  against the store data revision). The five-hour gauge uses fixed-window
+  chaining — a window opens at the first usage after the previous one
+  expires — so the window start yields both the numerator and the reset
+  countdown, and gaps longer than the window re-anchor the chain. The weekly
+  gauge is a rolling window with `resetsAt` nil: a chained weekly anchor
+  cannot re-anchor locally and would emit a confidently wrong date. The
+  denominator for both is the observed sliding high-water mark. The AGY
+  credits balance is read read-only from the client state cache and tagged
   `client_cache`.
+- The dashboard Limits strip renders identical fixed window slots per chip
+  (five-hour then weekly, extras and credits behind `+n` in the popover)
+  instead of a per-tool "most constrained" headline, so every tool reads on
+  the same basis.
 - The dashboard's Limits strip renders per-tool chips from the snapshot file
   and refreshes on the existing panel-summary publisher — no dedicated timer.
   Ring thresholds are shared surface-wide: warning at 20% remaining, critical

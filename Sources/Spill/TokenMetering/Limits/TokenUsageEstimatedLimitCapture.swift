@@ -6,9 +6,13 @@ import SQLite3
 /// Antigravity credits balance the client caches.
 ///
 /// Consumption numerators are exact — Spill's own imported per-turn events,
-/// hour-bucketed and summed over chained fixed five-hour and weekly windows
-/// (a window opens at the first usage after the previous one expires, matching
-/// the tools' session semantics, which also yields the reset countdown). Only
+/// hour-bucketed. The five-hour gauge uses chained fixed windows (a window
+/// opens at the first usage after the previous one expires, matching the
+/// tools' session semantics), which also yields a trustworthy reset stamp
+/// because any usage gap longer than the window re-anchors the chain. The
+/// weekly gauge deliberately stays a rolling window with no reset stamp:
+/// week-long gaps never happen, so a chained weekly anchor would just replay
+/// whenever local collection began and show a confidently wrong date. Only
 /// the denominator is estimated: the highest window consumption ever observed
 /// for that tool, so the gauge reads "how close am I to my own worst burn".
 /// Every produced snapshot is tagged `estimated`, which the UI renders with
@@ -19,11 +23,12 @@ final class TokenUsageEstimatedLimitCapture: @unchecked Sendable {
         let label: String
         let seconds: TimeInterval
         let minutes: Int
+        let usesChainedFixedWindows: Bool
     }
 
     private static let windows: [Window] = [
-        Window(key: "session_5h", label: "5-hour", seconds: 5 * 3_600, minutes: 300),
-        Window(key: "week_all", label: "Weekly", seconds: 7 * 24 * 3_600, minutes: 10_080),
+        Window(key: "session_5h", label: "5-hour", seconds: 5 * 3_600, minutes: 300, usesChainedFixedWindows: true),
+        Window(key: "week_all", label: "Weekly", seconds: 7 * 24 * 3_600, minutes: 10_080, usesChainedFixedWindows: false),
     ]
 
     private let usageStore: TokenUsageStore
@@ -76,18 +81,31 @@ extension TokenUsageEstimatedLimitCapture {
             guard highWater > 0 else {
                 return nil
             }
-            // Fixed-window chaining mirrors the tools' real session semantics:
-            // a window opens at the first usage after the previous one expires
-            // and resets a fixed interval later. An expired window means the
-            // next turn starts fresh, so the gauge reads empty with no reset.
-            let windowStart = Self.activeWindowStart(
-                hourly: hourly,
-                windowSeconds: window.seconds,
-                endingAt: capturedAt
-            )
-            let current = windowStart.map {
-                Self.windowTotal(hourly: hourly, startingAt: $0, endingAt: capturedAt)
-            } ?? 0
+            // Five-hour gauges chain fixed windows (a window opens at the
+            // first usage after the previous one expires) so the reset stamp
+            // matches the tools' real session semantics; an expired window
+            // reads empty with no reset. Weekly gauges stay rolling with no
+            // reset stamp — a chained weekly anchor is unknowable locally.
+            let current: Int
+            let resetsAt: Date?
+            if window.usesChainedFixedWindows {
+                let windowStart = Self.activeWindowStart(
+                    hourly: hourly,
+                    windowSeconds: window.seconds,
+                    endingAt: capturedAt
+                )
+                current = windowStart.map {
+                    Self.windowTotal(hourly: hourly, startingAt: $0, endingAt: capturedAt)
+                } ?? 0
+                resetsAt = windowStart?.addingTimeInterval(window.seconds)
+            } else {
+                current = Self.windowTotal(
+                    hourly: hourly,
+                    startingAt: capturedAt.addingTimeInterval(-window.seconds),
+                    endingAt: capturedAt
+                )
+                resetsAt = nil
+            }
             let usedPercent = min(100, Double(current) / Double(highWater) * 100)
             return TokenUsageLimitSnapshot(
                 aiTool: tool,
@@ -96,7 +114,7 @@ extension TokenUsageEstimatedLimitCapture {
                 usedPercent: usedPercent,
                 remainingCredits: nil,
                 windowMinutes: window.minutes,
-                resetsAt: windowStart?.addingTimeInterval(window.seconds),
+                resetsAt: resetsAt,
                 capturedAt: capturedAt,
                 source: .estimated
             )
