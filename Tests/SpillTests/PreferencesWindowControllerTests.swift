@@ -1,7 +1,7 @@
 import XCTest
 
 final class PreferencesWindowControllerTests: XCTestCase {
-    func testSpillGlanceHasDedicatedPreferencesSidebarRoute() throws {
+    func testStandaloneSpillGlanceSurfaceIsRemoved() throws {
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let preferencesView = try source(
             at: "Sources/Spill/Preferences/PreferencesView.swift",
@@ -11,18 +11,32 @@ final class PreferencesWindowControllerTests: XCTestCase {
             at: "Sources/Spill/Preferences/Components/PreferencesSidebarView.swift",
             root: root
         )
-        let menuBarSection = try source(
-            at: "Sources/Spill/Preferences/Sections/MenuBarPreferencesSection.swift",
+        let appDelegate = try source(at: "Sources/Spill/App/AppDelegate.swift", root: root)
+        let settings = try source(at: "Sources/Spill/Settings/SpillSettings.swift", root: root)
+        let dashboardView = try source(
+            at: "Sources/Spill/TokenMetering/Dashboard/Screen/TokenMeteringDashboardView.swift",
+            root: root
+        )
+        let dashboardProcess = try source(
+            at: "Sources/Spill/TokenMetering/Dashboard/App/TokenMeteringDashboardProcess.swift",
+            root: root
+        )
+        let dashboardStore = try source(
+            at: "Sources/Spill/TokenMetering/Dashboard/State/TokenUsageDashboardStore.swift",
             root: root
         )
 
-        XCTAssertTrue(sidebarView.contains(#"tag: "glance""#))
-        XCTAssertTrue(sidebarView.contains("title: t(.spillGlance)"))
-        XCTAssertTrue(preferencesView.contains(#"case "glance": return t(.spillGlance)"#))
-        XCTAssertTrue(preferencesView.contains("SpillGlancePreferencesSection("))
+        XCTAssertFalse(sidebarView.contains(#"tag: "glance""#))
+        XCTAssertFalse(preferencesView.contains("SpillGlancePreferencesSection"))
+        XCTAssertFalse(appDelegate.contains("SpillGlancePanelController"))
+        XCTAssertFalse(settings.contains("glanceEnabled"))
+        XCTAssertFalse(dashboardView.contains("toggleSpillGlance"))
+        XCTAssertFalse(dashboardProcess.contains("glanceEnabledSettingsKey"))
+        XCTAssertFalse(dashboardStore.contains("glanceSummary"))
         XCTAssertFalse(
-            menuBarSection.contains("SpillGlancePreferencesSection"),
-            "Glance should have one discoverable Settings owner instead of a buried duplicate."
+            FileManager.default.fileExists(
+                atPath: root.appendingPathComponent("Sources/Spill/Glance").path
+            )
         )
     }
 

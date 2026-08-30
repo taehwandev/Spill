@@ -111,7 +111,7 @@ Spill is not:
 | --- | --- | --- |
 | App foundation | [App Foundation](prd/app-foundation.md) | First-run, onboarding, permissions, and app-wide Preferences foundations |
 | Menu bar | [Menu Bar Surface](prd/menu-bar-surface.md) | Spill trigger, status items, glance modes, and status menu |
-| Top glance | [Top Glance Surface](prd/top-glance-surface.md) | Always-visible grouped top bar, module visibility, placement, and dashboard entry |
+| Standalone glance (retired) | [Spill Glance Retirement Contract](prd/top-glance-surface.md) | Absence contract for the removed always-visible widget; menu-bar status and compact panel remain separate |
 | Compact panel | [Compact Panel](prd/compact-panel.md) | Panel composition, size, placement, and panel-level UX |
 | System status | [System Status](prd/system-status.md) | CPU, memory, battery, network, storage decisions, and resource constraints |
 | AI status | [AI Status](prd/ai-status.md) | Local AI process/config state and official service status |

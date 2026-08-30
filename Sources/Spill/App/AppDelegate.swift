@@ -54,19 +54,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.openTokenDashboard(source: "panel_ai_section")
         }
     )
-    private lazy var spillGlanceStore = SpillGlanceStore(
-        settings: settings,
-        tokenUsageDashboardStore: tokenMeteringCoordinator.dashboardStore
-    )
-    private lazy var spillGlancePanelController = SpillGlancePanelController(
-        store: spillGlanceStore,
-        openDashboardAction: { [weak self] in
-            self?.openTokenDashboard(source: "glance")
-        },
-        openSettingsAction: { [weak self] in
-            self?.showPreferences(source: "glance", selectedTab: "glance")
-        }
-    )
     private lazy var preferencesWindowController = PreferencesWindowController(
         settings: settings,
         scanner: scanner,
@@ -168,7 +155,6 @@ extension AppDelegate {
         tokenMeteringCoordinator.start(isSmokeTest: isSmokeTest) { [weak self] in
             self?.statusItemController?.refresh()
         }
-        spillGlancePanelController.start()
         configureStatusRefreshLoop()
 
         if isSmokeTest {
@@ -368,14 +354,8 @@ extension AppDelegate {
             name: TokenMeteringDashboardProcess.cloudServiceStatusRefreshRequestNotification,
             object: nil
         )
-        DistributedNotificationCenter.default().removeObserver(
-            self,
-            name: TokenMeteringDashboardProcess.settingsDidChangeNotification,
-            object: nil
-        )
         statusRefreshTask?.cancel()
         sleepGuard.stop()
-        spillGlancePanelController.stop()
         spillPanelController.hide(animated: false)
     }
 
@@ -752,18 +732,6 @@ extension AppDelegate {
             }
             .store(in: &cancellables)
 
-        // Mirrors the Glance master switch to the dashboard helper so its
-        // toggle reflects Preferences changes. A reload triggered by the
-        // helper's own toggle re-posts once; the helper's equal-value reload
-        // guard stops the echo there.
-        settings.$glanceEnabled
-            .dropFirst()
-            .sink { _ in
-                TokenMeteringDashboardProcess.postGlanceEnabledDidChange()
-            }
-            .store(in: &cancellables)
-
-
         settings.$appLanguage
             .dropFirst()
             .sink { [weak self] _ in
@@ -831,23 +799,6 @@ extension AppDelegate {
             name: TokenMeteringDashboardProcess.cloudServiceStatusRefreshRequestNotification,
             object: nil
         )
-        DistributedNotificationCenter.default().addObserver(
-            self,
-            selector: #selector(settingsDidChangeFromDashboard(_:)),
-            name: TokenMeteringDashboardProcess.settingsDidChangeNotification,
-            object: nil
-        )
-    }
-
-    /// The dashboard helper writes shared defaults directly (its own
-    /// `SpillSettings` lives in another process), so the main process reloads
-    /// the changed key here to publish it to its observers — today that is the
-    /// Glance toggle, whose store then shows or hides the panel immediately.
-    @objc private func settingsDidChangeFromDashboard(_ notification: Notification) {
-        let settingsKey = notification.userInfo?[TokenMeteringDashboardProcess.settingsKeyUserInfoKey] as? String
-        if settingsKey == TokenMeteringDashboardProcess.glanceEnabledSettingsKey {
-            settings.reloadGlanceEnabledFromDefaults()
-        }
     }
 
     @objc private func showPreferencesFromDashboardRequest(_ notification: Notification) {

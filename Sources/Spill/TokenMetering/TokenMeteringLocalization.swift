@@ -36,9 +36,6 @@ enum TokenMeteringTextKey: String {
     case dashboardTitle
     case dashboardSubtitle
     case refresh
-    case spillGlanceToggle
-    case spillGlanceToggleOnDetail
-    case spillGlanceToggleOffDetail
     case limitsTitle
     case copied
     case copyPrompt
