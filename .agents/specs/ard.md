@@ -736,16 +736,13 @@ Usage limit snapshots:
 - No Antigravity credits gauge exists: the `modelCredits` state value is an
   internal sentinel (`availableCreditsSentinelKey`), not a user-facing
   balance.
-- `TokenUsageEstimatedLimitCapture` shares the same paced slot and produces
-  estimated Claude/AGY gauges from Spill's own hour-bucketed events (cached
-  against the store data revision). The five-hour gauge uses fixed-window
-  chaining — a window opens at the first usage after the previous one
-  expires — so the window start yields both the numerator and the reset
-  countdown, and gaps longer than the window re-anchor the chain. The weekly
-  gauge is a rolling window with `resetsAt` nil: a chained weekly anchor
-  cannot re-anchor locally and would emit a confidently wrong date. The
-  denominator for both is the observed sliding high-water mark. No AGY credits
-  gauge is produced, per the sentinel note above.
+- No estimated gauge exists. `TokenUsageEstimatedLimitCapture` derived a
+  percentage from the tool's own observed high-water burn, which is a different
+  quantity from the vendor limit percentage the chip appears to report; beside a
+  real server number in identical units it read as fact. It was removed, and the
+  snapshot store filters any `estimated` row still on disk out of every read so
+  retired values cannot resurface. The `estimated` source case survives only so
+  older snapshot files keep decoding.
 - The dashboard Limits strip derives its chip slots from the windows present
   in the data — shortest `window_minutes` first, at most two, labels derived
   from the number (`300` → `5h`, `10080` → `Wk`) — instead of a per-tool "most
@@ -761,7 +758,13 @@ Usage limit snapshots:
   ambiguous bare `Wk` or `5h`. Extras, unwindowed limits, and credits sit behind
   `+n` in the popover. Every source is passive — each gauge comes from a file
   the tool writes while it runs — so chips state their reading's age past 30
-  minutes and dim once it outlives the window it describes. The strip consumes
+  minutes and dim once it outlives the window it describes. A chip is drawn for
+  every unhidden tool that can report a limit, whether or not a reading exists
+  yet, because a chip that comes and goes is harder to read than one that is
+  blank until its tool reports. Antigravity is excluded from that placeholder
+  set because it persists no window percentage, so its blank would mean never
+  rather than not yet; the exclusion is display-only, and any tool with an
+  actual reading renders regardless of the placeholder set. The strip consumes
   snapshots pre-filtered through the same
   `TokenUsageDashboardToolVisibility.visibleTools` rule as every other
   dashboard surface, so user-hidden tools render no limit chips.

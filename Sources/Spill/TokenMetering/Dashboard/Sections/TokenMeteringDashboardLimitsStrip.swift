@@ -15,11 +15,23 @@ import SwiftUI
 /// recent, rather than presenting a stale number as the current one.
 struct TokenMeteringDashboardLimitsStrip: View {
     let snapshots: [TokenUsageLimitSnapshot]
+    /// Every tool the user has not hidden. A chip is drawn for each one even
+    /// with no reading, because a chip that comes and goes is harder to read
+    /// than one that is simply blank until its tool reports again.
+    var tools: Set<TokenUsageAITool> = []
     let language: TokenMeteringLanguage
 
     @State private var popoverTool: TokenUsageAITool?
 
     private static let toolOrder: [TokenUsageAITool] = [.codex, .claude, .antigravity]
+
+    /// Tools that hold a blank chip while waiting for a reading, because a
+    /// reading can still arrive for them. Antigravity fetches its window
+    /// percentages live and persists none, so a blank chip there would mean
+    /// "never" rather than "not yet" — it is left out of the row instead. It
+    /// is not special-cased anywhere else: the moment a real Antigravity
+    /// reading exists it appears here on its own, with no code change.
+    private static let placeholderTools: Set<TokenUsageAITool> = [.codex, .claude]
 
     var body: some View {
         let groups = toolGroups
@@ -39,7 +51,9 @@ struct TokenMeteringDashboardLimitsStrip: View {
     }
 }
 
-private extension TokenMeteringDashboardLimitsStrip {
+/// Chip grouping, kept internal so the rule that every visible tool holds a
+/// chip can be verified directly rather than through a rendered view.
+extension TokenMeteringDashboardLimitsStrip {
     struct ToolGroup {
         let tool: TokenUsageAITool
         let snapshots: [TokenUsageLimitSnapshot]
@@ -62,19 +76,18 @@ private extension TokenMeteringDashboardLimitsStrip {
 
     var toolGroups: [ToolGroup] {
         let now = Date()
-        return Self.toolOrder.compactMap { tool in
+        // Tools that get a blank placeholder, plus every tool that actually
+        // has a reading. The second half is what lets a tool with no
+        // placeholder still appear once its data exists.
+        let visible = tools.intersection(Self.placeholderTools)
+            .union(snapshots.map(\.aiTool))
+        return Self.toolOrder.filter(visible.contains).map { tool in
             let toolSnapshots = snapshots.filter { $0.aiTool == tool }
-            guard !toolSnapshots.isEmpty else {
-                return nil
-            }
             var gauges = Self.slotGauges(in: toolSnapshots)
             if gauges.isEmpty,
                let fallback = toolSnapshots.first(where: { $0.remainingCredits != nil })
                    ?? TokenUsageLimitSnapshotStore.mostConstrained(in: toolSnapshots) {
                 gauges = [fallback]
-            }
-            guard !gauges.isEmpty else {
-                return nil
             }
             let age = gauges.map { $0.age(at: now) }.max() ?? 0
             let shortestWindow = gauges.compactMap(\.windowDuration).min()
@@ -82,9 +95,11 @@ private extension TokenMeteringDashboardLimitsStrip {
                 tool: tool,
                 snapshots: toolSnapshots,
                 gauges: gauges,
-                extraCount: toolSnapshots.count - gauges.count,
+                extraCount: max(0, toolSnapshots.count - gauges.count),
                 age: age,
-                outlivesItsWindow: shortestWindow.map { age > $0 } ?? false
+                outlivesItsWindow: gauges.isEmpty
+                    ? false
+                    : (shortestWindow.map { age > $0 } ?? false)
             )
         }
     }
@@ -102,6 +117,16 @@ private extension TokenMeteringDashboardLimitsStrip {
                 Text(compactToolName(group.tool))
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.primary.opacity(0.8))
+
+                if group.gauges.isEmpty {
+                    // No exact reading. The chip stays so the row keeps its
+                    // shape, but it states nothing rather than inventing a
+                    // percentage the tool never reported.
+                    Text("—")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .help(TokenMeteringL10n.text(.limitsNoReading, language: language))
+                }
 
                 ForEach(group.gauges, id: \.limitKey) { gauge in
                     HStack(spacing: 4) {
@@ -152,6 +177,10 @@ private extension TokenMeteringDashboardLimitsStrip {
     }
 
     func accessibilityText(for group: ToolGroup) -> String {
+        guard !group.gauges.isEmpty else {
+            return "\(group.tool.dashboardLabel(language: language)) "
+                + TokenMeteringL10n.text(.limitsNoReading, language: language)
+        }
         let gauges = group.gauges
             .map { "\(slotLabel(for: $0)) \(headlineValue(for: $0))" }
             .joined(separator: ", ")
@@ -293,6 +322,12 @@ private extension TokenMeteringDashboardLimitsStrip {
         VStack(alignment: .leading, spacing: 8) {
             Text(group.tool.dashboardLabel(language: language))
                 .font(.system(size: 12, weight: .semibold))
+
+            if group.snapshots.isEmpty {
+                Text(TokenMeteringL10n.text(.limitsNoReading, language: language))
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
 
             ForEach(group.snapshots, id: \.limitKey) { snapshot in
                 HStack(spacing: 8) {

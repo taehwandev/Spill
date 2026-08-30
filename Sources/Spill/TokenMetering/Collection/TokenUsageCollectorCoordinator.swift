@@ -69,21 +69,18 @@ final class TokenUsageCollectorCoordinator: TokenUsageExternalCollecting, @unche
         if let codexLimitCaptureRunner {
             self.codexLimitCaptureRunner = codexLimitCaptureRunner
         } else {
-            // All limit captures share one paced slot: exact Codex snapshots
-            // from session-file tails, exact Claude snapshots from its client
-            // cache, and estimated gauges from Spill's own data for whatever
-            // has no exact reading this pass.
+            // Both limit captures share one paced slot: exact Codex snapshots
+            // from session-file tails and exact Claude snapshots from its
+            // client cache. Nothing fills in for a tool that reported nothing:
+            // a gauge derived from Spill's own history could only express a
+            // fraction of the user's own past burn, which is not the quantity
+            // the chip's percentage claims to be.
             let snapshotStore = TokenUsageLimitSnapshotStore()
             let codexCapture = TokenUsageCodexLimitCapture()
             let claudeCapture = TokenUsageClaudeLimitCapture()
-            let estimatedCapture = TokenUsageEstimatedLimitCapture(usageStore: store)
             self.codexLimitCaptureRunner = {
                 codexCapture.captureLatestSnapshots(into: snapshotStore)
-                let claudeIsExact = claudeCapture.captureLatestSnapshots(into: snapshotStore)
-                estimatedCapture.captureEstimates(
-                    into: snapshotStore,
-                    skipping: claudeIsExact ? [.claude] : []
-                )
+                claudeCapture.captureLatestSnapshots(into: snapshotStore)
             }
         }
         self.store = store
