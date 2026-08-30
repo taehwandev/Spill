@@ -5256,6 +5256,43 @@ final class TokenUsageStoreTests: XCTestCase {
         }
     }
 
+    func testAllPeriodDailyRollupPreservesLocalDayEdgesAndToolFilters() throws {
+        let store = TokenUsageStore(fileURL: temporaryEventsURL())
+        let events: [TokenUsageEvent] = [
+            Self.safeEvent(spanID: "span_rollup_before", inputTokens: 7, outputTokens: 3, createdAt: "2026-08-25T14:59:59.000Z"),
+            Self.safeEvent(spanID: "span_rollup_start", inputTokens: 14, outputTokens: 6, createdAt: "2026-08-25T15:00:00.000Z"),
+            Self.safeEvent(spanID: "span_rollup_inside", inputTokens: 21, outputTokens: 9, createdAt: "2026-08-26T14:59:59.000Z"),
+            Self.safeEvent(spanID: "span_rollup_end", inputTokens: 28, outputTokens: 12, createdAt: "2026-08-26T15:00:00.000Z"),
+            Self.safeEvent(aiTool: .openAI, spanID: "span_rollup_openai", inputTokens: 35, outputTokens: 15, createdAt: "2026-08-26T03:00:00.000Z")
+        ]
+        _ = try store.appendEventsWithoutLoading(events)
+
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "Asia/Seoul"))
+        let now = try Self.date("2026-08-26T03:00:00.000Z")
+
+        let dashboardTotals = store.allPeriodInputScopeTotals(now: now, calendar: calendar)
+        XCTAssertEqual(dashboardTotals[.today], TokenUsageInputScopeTotals(includeCache: 50, freshOnly: 15))
+        XCTAssertEqual(dashboardTotals[.all], TokenUsageInputScopeTotals(includeCache: 100, freshOnly: 30))
+
+        let allToolTotals = store.allPeriodInputScopeTotals(
+            now: now,
+            calendar: calendar,
+            dashboardToolsOnly: false
+        )
+        XCTAssertEqual(allToolTotals[.today], TokenUsageInputScopeTotals(includeCache: 100, freshOnly: 30))
+        XCTAssertEqual(allToolTotals[.all], TokenUsageInputScopeTotals(includeCache: 150, freshOnly: 45))
+
+        let openAITotals = store.allPeriodInputScopeTotals(
+            now: now,
+            calendar: calendar,
+            dashboardToolsOnly: false,
+            visibleTools: [.openAI]
+        )
+        XCTAssertEqual(openAITotals[.today], TokenUsageInputScopeTotals(includeCache: 50, freshOnly: 15))
+        XCTAssertEqual(openAITotals[.all], TokenUsageInputScopeTotals(includeCache: 50, freshOnly: 15))
+    }
+
     /// A raw connection to a fresh, schema-less database makes every statement in the batch fail
     /// with "no such table". The failure observer must catch that and force buildFromSQLAggregates
     /// to fail closed (nil), rather than publishing the silently-defaulted all-zero snapshot.

@@ -54,6 +54,7 @@ extension TokenUsageStore {
         )
 
         try prepareDatabaseMigrations(database: database)
+        try prepareDashboardDailyRollups(database: database)
         try preparePrivateUsageChangeTracking(database: database)
 
         try execute(
