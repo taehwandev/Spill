@@ -18,20 +18,17 @@ struct TokenUsageCodexLimitCapture {
     /// installs with hundreds of session files.
     let scannedFileLimit: Int
     let tailByteLimit: Int
-    let now: () -> Date
 
     init(
         sessionsDirectory: URL = TokenUsageCodexLimitCapture.defaultSessionsDirectory(),
         fileManager: FileManager = .default,
         scannedFileLimit: Int = 5,
-        tailByteLimit: Int = 262_144,
-        now: @escaping () -> Date = Date.init
+        tailByteLimit: Int = 262_144
     ) {
         self.sessionsDirectory = sessionsDirectory
         self.fileManager = fileManager
         self.scannedFileLimit = scannedFileLimit
         self.tailByteLimit = tailByteLimit
-        self.now = now
     }
 
     static func defaultSessionsDirectory() -> URL {
@@ -43,12 +40,17 @@ struct TokenUsageCodexLimitCapture {
     /// Scans the newest session-file tails and writes the freshest snapshot
     /// per named limit into the store. Missing directories, unreadable files,
     /// or absent rate-limit lines simply capture nothing.
+    ///
+    /// The newest `rate_limits` line only describes the windows the account
+    /// actually has — a plan with no five-hour window sends `secondary: null`
+    /// — so the result is merged per limit rather than replacing Codex's whole
+    /// set, which used to erase the window this pass happened not to see.
     func captureLatestSnapshots(into store: TokenUsageLimitSnapshotStore) {
         var newestByKey: [String: (timestamp: Date, snapshots: [TokenUsageLimitSnapshot])] = [:]
 
         for fileURL in newestSessionFiles() {
             for line in rateLimitLines(in: fileURL) {
-                guard let parsed = Self.parseRateLimitLine(line, capturedAt: now()) else {
+                guard let parsed = Self.parseRateLimitLine(line) else {
                     continue
                 }
                 let existing = newestByKey[parsed.groupKey]
@@ -62,7 +64,7 @@ struct TokenUsageCodexLimitCapture {
             return
         }
         let snapshots = newestByKey.values.flatMap(\.snapshots)
-        store.replaceSnapshots(for: .codex, with: snapshots)
+        store.mergeSnapshots(for: .codex, with: snapshots)
     }
 }
 
@@ -77,7 +79,13 @@ extension TokenUsageCodexLimitCapture {
     /// Parses one session JSONL line shaped as
     /// `{timestamp, payload: {type: "token_count", rate_limits: {...}}}`.
     /// Only numeric limit fields, safe identifiers, and timestamps are read.
-    static func parseRateLimitLine(_ line: String, capturedAt: Date) -> ParsedRateLimits? {
+    ///
+    /// `capturedAt` is the line's own timestamp — the moment the reading was
+    /// true — not the moment Spill happened to scan the file. Stamping the
+    /// scan time made every Codex gauge look permanently fresh no matter how
+    /// long ago Codex last ran, which is precisely what the as-of display
+    /// exists to prevent.
+    static func parseRateLimitLine(_ line: String) -> ParsedRateLimits? {
         guard let data = line.data(using: .utf8),
               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let timestampValue = object["timestamp"] as? String,
@@ -88,6 +96,7 @@ extension TokenUsageCodexLimitCapture {
             return nil
         }
 
+        let capturedAt = timestamp
         let limitID = (rateLimits["limit_id"] as? String) ?? "codex"
         let limitName = rateLimits["limit_name"] as? String
         var snapshots: [TokenUsageLimitSnapshot] = []

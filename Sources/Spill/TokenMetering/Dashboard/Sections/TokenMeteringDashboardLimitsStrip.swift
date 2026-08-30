@@ -1,10 +1,16 @@
 import SwiftUI
 
 /// One-row strip of per-tool remaining-limit chips under the dashboard
-/// header. Each chip shows the shared remaining-ratio ring plus the tool's
-/// most constrained limit; clicking opens a popover listing every named
-/// limit with countdowns and captured-at freshness. Tools without snapshots
-/// render nothing, so the strip disappears entirely when no limits are known.
+/// header. Each chip shows the shared remaining-ratio ring for every window
+/// the tool actually reports, plus how old the reading is; clicking opens a
+/// popover listing every named limit with countdowns and freshness. Tools
+/// without snapshots render nothing, so the strip disappears entirely when no
+/// limits are known.
+///
+/// Nothing here refreshes on a clock, because none of the sources do: every
+/// gauge comes from a file the tool itself writes while it runs. A chip is
+/// therefore always an "as of" reading, and says so once it stops being
+/// recent, rather than presenting a stale number as the current one.
 struct TokenMeteringDashboardLimitsStrip: View {
     let snapshots: [TokenUsageLimitSnapshot]
     let language: TokenMeteringLanguage
@@ -37,53 +43,55 @@ private extension TokenMeteringDashboardLimitsStrip {
         let snapshots: [TokenUsageLimitSnapshot]
         let gauges: [TokenUsageLimitSnapshot]
         let extraCount: Int
+        /// Age of the least recently refreshed gauge in the chip: the honest
+        /// "as of" for everything the chip shows.
+        let age: TimeInterval
+        /// True when even the shortest window on the chip is longer ago than
+        /// the reading itself covers, so the number cannot describe the
+        /// current window any more.
+        let outlivesItsWindow: Bool
     }
 
-    static let fiveHourWindowMinutes = 300
-    static let weeklyWindowMinutes = 10_080
+    /// How many gauges fit in one chip before the rest fall behind `+n`.
+    static let slotCount = 2
+    /// Below this, "as of" is noise; above it, the reading's age is part of
+    /// what the number means.
+    static let staleThreshold: TimeInterval = 30 * 60
 
     var toolGroups: [ToolGroup] {
-        Self.toolOrder.compactMap { tool in
+        let now = Date()
+        return Self.toolOrder.compactMap { tool in
             let toolSnapshots = snapshots.filter { $0.aiTool == tool }
             guard !toolSnapshots.isEmpty else {
                 return nil
             }
-            // Every chip renders the same fixed slots in the same order —
-            // five-hour then weekly — so the basis is comparable across
-            // tools. Extra named limits and credit balances stay in the
-            // popover behind a +n indicator.
-            var gauges = [Self.fiveHourWindowMinutes, Self.weeklyWindowMinutes]
-                .compactMap { windowGauge(minutes: $0, in: toolSnapshots) }
+            var gauges = Self.slotGauges(in: toolSnapshots)
             if gauges.isEmpty,
-               let fallback = TokenUsageLimitSnapshotStore.mostConstrained(in: toolSnapshots)
-                   ?? toolSnapshots.first(where: { $0.remainingCredits != nil }) {
+               let fallback = toolSnapshots.first(where: { $0.remainingCredits != nil })
+                   ?? TokenUsageLimitSnapshotStore.mostConstrained(in: toolSnapshots) {
                 gauges = [fallback]
             }
             guard !gauges.isEmpty else {
                 return nil
             }
+            let age = gauges.map { $0.age(at: now) }.max() ?? 0
+            let shortestWindow = gauges.compactMap(\.windowDuration).min()
             return ToolGroup(
                 tool: tool,
                 snapshots: toolSnapshots,
                 gauges: gauges,
-                extraCount: toolSnapshots.count - gauges.count
+                extraCount: toolSnapshots.count - gauges.count,
+                age: age,
+                outlivesItsWindow: shortestWindow.map { age > $0 } ?? false
             )
         }
     }
 
-    /// The slot gauge for a window length. When a tool carries several limits
-    /// on the same window (Codex general weekly plus model-specific weeklies),
-    /// the plain window limit represents the slot and the rest count as +n.
-    func windowGauge(minutes: Int, in toolSnapshots: [TokenUsageLimitSnapshot]) -> TokenUsageLimitSnapshot? {
-        let group = toolSnapshots.filter { $0.windowMinutes == minutes && $0.remainingPercent != nil }
-        if group.count > 1 {
-            let plainLabels: Set<String> = ["5-hour", "Weekly"]
-            return group.first { plainLabels.contains($0.label) }
-                ?? TokenUsageLimitSnapshotStore.mostConstrained(in: group)
-        }
-        return group.first
-    }
+}
 
+// MARK: - Chip rendering
+
+private extension TokenMeteringDashboardLimitsStrip {
     func limitChip(for group: ToolGroup) -> some View {
         Button {
             popoverTool = group.tool
@@ -110,6 +118,13 @@ private extension TokenMeteringDashboardLimitsStrip {
                         .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(.secondary)
                 }
+
+                if group.age > Self.staleThreshold {
+                    Text(TokenMeteringL10n.limitsAge(Self.compactDuration(group.age), language: language))
+                        .font(.system(size: 10))
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                }
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
@@ -117,6 +132,10 @@ private extension TokenMeteringDashboardLimitsStrip {
                 Capsule(style: .continuous)
                     .fill(Color.primary.opacity(0.05))
             )
+            // A reading older than its own window can no longer describe the
+            // current one. It stays visible — it is still the last thing the
+            // tool said — but it stops looking current.
+            .opacity(group.outlivesItsWindow ? 0.6 : 1)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(Text(accessibilityText(for: group)))
@@ -134,7 +153,120 @@ private extension TokenMeteringDashboardLimitsStrip {
         let gauges = group.gauges
             .map { "\(slotLabel(for: $0)) \(headlineValue(for: $0))" }
             .joined(separator: ", ")
-        return "\(group.tool.dashboardLabel(language: language)) \(gauges)"
+        var text = "\(group.tool.dashboardLabel(language: language)) \(gauges)"
+        if group.age > Self.staleThreshold {
+            text += ", " + TokenMeteringL10n.limitsAge(
+                Self.compactDuration(group.age),
+                language: language
+            )
+        }
+        return text
+    }
+}
+
+// MARK: - Slot selection and formatting
+
+/// Pure slot and label rules, kept out of the view body so they can be
+/// verified directly: which gauges a chip shows is now a function of the
+/// windows present in the data, not of a hardcoded pair.
+extension TokenMeteringDashboardLimitsStrip {
+    /// One gauge per window length the tool actually reports, shortest window
+    /// first, capped at the chip's slot count.
+    ///
+    /// The slots used to be the fixed pair five-hour-then-weekly, which fought
+    /// the data: a Codex plan whose only window is weekly sends no five-hour
+    /// limit at all, and a plan change rewrites which windows exist. Reading
+    /// the slots off `windowMinutes` means a new or renamed window appears
+    /// without a release, and a window the account does not have simply is not
+    /// drawn.
+    static func slotGauges(in toolSnapshots: [TokenUsageLimitSnapshot]) -> [TokenUsageLimitSnapshot] {
+        let windowed = toolSnapshots
+            .filter { $0.remainingPercent != nil && $0.windowMinutes != nil }
+            .sorted { $0.limitKey < $1.limitKey }
+        let byWindow = Dictionary(grouping: windowed) { $0.windowMinutes ?? 0 }
+        return byWindow.keys.sorted()
+            .prefix(slotCount)
+            .compactMap { representative(of: byWindow[$0] ?? []) }
+    }
+
+    /// When several limits share a window — a general weekly beside
+    /// model-scoped weeklies — the unscoped limit represents the slot, because
+    /// that is the one comparable across tools. Among equals the tightest one
+    /// wins, since that is the limit that will actually stop the user.
+    static func representative(of group: [TokenUsageLimitSnapshot]) -> TokenUsageLimitSnapshot? {
+        let unscoped = group.filter { !$0.isScopedVariant }
+        let candidates = unscoped.isEmpty ? group : unscoped
+        return TokenUsageLimitSnapshotStore.mostConstrained(in: candidates) ?? candidates.first
+    }
+
+    /// "31%" for window gauges (remaining), "25,000" for credit balances.
+    /// Estimated sources carry the mandated tilde prefix.
+    func headlineValue(for snapshot: TokenUsageLimitSnapshot) -> String {
+        let prefix = snapshot.source == .estimated ? "~" : ""
+        if let remaining = snapshot.remainingPercent {
+            return "\(prefix)\(formattedPercent(remaining))%"
+        }
+        if let credits = snapshot.remainingCredits {
+            return prefix + (NumberFormatter.tokenUsageFull.string(from: NSNumber(value: credits)) ?? "\(credits)")
+        }
+        return "—"
+    }
+
+    /// Remaining percents floor instead of round: 99.8% remaining must read
+    /// "99", never a false "100", and 4.96% must not soften into "5.0".
+    func formattedPercent(_ value: Double) -> String {
+        if value >= 10 {
+            return String(format: "%.0f", value.rounded(.down))
+        }
+        return String(format: "%.1f", (value * 10).rounded(.down) / 10)
+    }
+
+    /// One slot inside a chip: "5h ~31% (20:00)" / "Wk 29% (8/8)". The slot
+    /// label names the window so every tool reads on the same basis, and the
+    /// parenthesized stamp is that window's reset moment.
+    func gaugeText(for gauge: TokenUsageLimitSnapshot) -> String {
+        var text = "\(slotLabel(for: gauge)) \(headlineValue(for: gauge))"
+        if let resetsAt = gauge.resetsAt {
+            text += " (\(resetStamp(for: resetsAt)))"
+        }
+        return text
+    }
+
+    func slotLabel(for gauge: TokenUsageLimitSnapshot) -> String {
+        Self.slotLabel(windowMinutes: gauge.windowMinutes) ?? gauge.label
+    }
+
+    /// The window length as a compact unit, derived from the number rather
+    /// than from a table of the windows that happened to exist when this was
+    /// written: 300 reads "5h", 10080 reads "Wk", and a window nobody has
+    /// shipped yet still gets a sensible label.
+    static func slotLabel(windowMinutes: Int?) -> String? {
+        guard let minutes = windowMinutes, minutes > 0 else {
+            return nil
+        }
+        if minutes % 10_080 == 0 {
+            let weeks = minutes / 10_080
+            return weeks == 1 ? "Wk" : "\(weeks)w"
+        }
+        if minutes % 1_440 == 0 {
+            return "\(minutes / 1_440)d"
+        }
+        if minutes % 60 == 0 {
+            return "\(minutes / 60)h"
+        }
+        return "\(minutes)m"
+    }
+
+    /// "12m", "3h", "2d" — the coarsest unit that still says something.
+    static func compactDuration(_ seconds: TimeInterval) -> String {
+        let minutes = Int(seconds / 60)
+        if minutes < 60 {
+            return "\(max(1, minutes))m"
+        }
+        if minutes < 24 * 60 {
+            return "\(minutes / 60)h"
+        }
+        return "\(minutes / (24 * 60))d"
     }
 }
 
@@ -161,29 +293,7 @@ private extension TokenMeteringDashboardLimitsStrip {
             }
         }
         .padding(12)
-        .frame(minWidth: 200, alignment: .leading)
-    }
-
-    /// One slot inside a chip: "5h ~31% (20:00)" / "Wk 29% (8/8)". The slot
-    /// label names the window so every tool reads on the same basis, and the
-    /// parenthesized stamp is that window's reset moment.
-    func gaugeText(for gauge: TokenUsageLimitSnapshot) -> String {
-        var text = "\(slotLabel(for: gauge)) \(headlineValue(for: gauge))"
-        if let resetsAt = gauge.resetsAt {
-            text += " (\(resetStamp(for: resetsAt)))"
-        }
-        return text
-    }
-
-    func slotLabel(for gauge: TokenUsageLimitSnapshot) -> String {
-        switch gauge.windowMinutes {
-        case Self.fiveHourWindowMinutes:
-            return "5h"
-        case Self.weeklyWindowMinutes:
-            return "Wk"
-        default:
-            return gauge.label
-        }
+        .frame(minWidth: 220, alignment: .leading)
     }
 
     /// Same-day resets show the clock time; later resets show the date.
@@ -218,15 +328,36 @@ private extension TokenMeteringDashboardLimitsStrip {
                 )
             )
         }
-        parts.append(
+        parts.append(contentsOf: freshnessParts(for: snapshot))
+        return parts.joined(separator: " · ")
+    }
+
+    /// Where the number came from and how old it is — the part of a limit
+    /// reading that a passive, file-backed source makes load-bearing.
+    func freshnessParts(for snapshot: TokenUsageLimitSnapshot) -> [String] {
+        var parts = [
             TokenMeteringL10n.limitsCapturedAt(
                 TokenUsageLimitSnapshot.shortDateFormatter.string(from: snapshot.capturedAt),
                 language: language
             )
+        ]
+        let age = snapshot.age(at: Date())
+        if age > Self.staleThreshold {
+            parts.append(
+                TokenMeteringL10n.limitsAge(Self.compactDuration(age), language: language)
+            )
+        }
+        if snapshot.locallyReset {
+            parts.append(TokenMeteringL10n.text(.limitsWindowReset, language: language))
+        }
+        parts.append(
+            TokenMeteringL10n.text(
+                snapshot.source == .estimated ? .limitsSourceEstimated : .limitsSourceExact,
+                language: language
+            )
         )
-        return parts.joined(separator: " · ")
+        return parts
     }
-
 }
 
 // MARK: - Detail rows and value formatting
@@ -246,36 +377,10 @@ private extension TokenMeteringDashboardLimitsStrip {
                 )
             )
         }
-        parts.append(
-            TokenMeteringL10n.limitsCapturedAt(
-                TokenUsageLimitSnapshot.shortDateFormatter.string(from: snapshot.capturedAt),
-                language: language
-            )
-        )
+        parts.append(contentsOf: freshnessParts(for: snapshot))
         return parts.joined(separator: " · ")
     }
 
-    /// "31%" for window gauges (remaining), "25,000" for credit balances.
-    /// Estimated sources carry the mandated tilde prefix.
-    func headlineValue(for snapshot: TokenUsageLimitSnapshot) -> String {
-        let prefix = snapshot.source == .estimated ? "~" : ""
-        if let remaining = snapshot.remainingPercent {
-            return "\(prefix)\(formattedPercent(remaining))%"
-        }
-        if let credits = snapshot.remainingCredits {
-            return prefix + (NumberFormatter.tokenUsageFull.string(from: NSNumber(value: credits)) ?? "\(credits)")
-        }
-        return "—"
-    }
-
-    /// Remaining percents floor instead of round: 99.8% remaining must read
-    /// "99", never a false "100", and 4.96% must not soften into "5.0".
-    func formattedPercent(_ value: Double) -> String {
-        if value >= 10 {
-            return String(format: "%.0f", value.rounded(.down))
-        }
-        return String(format: "%.1f", (value * 10).rounded(.down) / 10)
-    }
 }
 
 /// The shared remaining-ratio ring: an arc filled by the remaining fraction,

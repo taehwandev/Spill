@@ -50,13 +50,16 @@ final class TokenUsageEstimatedLimitCapture: @unchecked Sendable {
     }
 
     /// Tools in `skipping` already received exact snapshots this pass, so
-    /// their estimates must not overwrite them.
+    /// their estimates must not overwrite them. The store guards the rest:
+    /// merging an estimate over a still-fresh exact reading is refused, so a
+    /// client cache that goes missing for one pass cannot downgrade a real
+    /// server number to a guess.
     func captureEstimates(
         into store: TokenUsageLimitSnapshotStore,
         skipping: Set<TokenUsageAITool> = []
     ) {
         for tool in [TokenUsageAITool.claude, .antigravity] where !skipping.contains(tool) {
-            store.replaceSnapshots(for: tool, with: estimatedWindowSnapshots(for: tool))
+            store.mergeSnapshots(for: tool, with: estimatedWindowSnapshots(for: tool))
         }
     }
 }

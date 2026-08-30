@@ -26,7 +26,7 @@ instead of pretending all three are equal.
 | Tool | Signal | Local source | Quality |
 | --- | --- | --- | --- |
 | Codex | Named limit windows (`limit_id`, `limit_name`, `used_percent`, `window_minutes`, `resets_at`) plus credits `balance`. Accounts carry a variable set — the observed reference account shows a general weekly limit and a separate model-specific weekly limit — so the set of gauges is data-driven, never hardcoded to five-hour/weekly | `~/.codex/sessions/**/*.jsonl` `rate_limits` snapshots inside `token_count` events, written on every turn; the incremental Codex importer already reads these files | Exact, server-authoritative |
-| Claude Code | Server-computed used percent and reset time per window (session, weekly all-model, weekly model-scoped), cached by the client after `/usage`-style fetches | `~/.claude.json` → `cachedUsageUtilization.utilization.limits` (`kind`, `percent`, `resets_at`, safe scoped model display name), read-only; only that key is decoded | Exact as of `fetchedAtMs`; snapshots tagged `client_cache`. Spill's own-event estimate remains only as a fallback when the cache is absent or every window in it has expired |
+| Claude Code | Server-computed used percent and reset time per window (session, weekly all-model, weekly model-scoped), cached by the client after `/usage`-style fetches | `~/.claude.json`, read-only. The payload is located by shape rather than by key name — `cachedUsageUtilization` is tried first, then top-level values are scanned for an object holding limit entries — because the client has already renamed this state once. Only `kind`, `percent`, `resets_at`, and the safe scoped model display name are decoded | Exact as of `fetchedAtMs`; snapshots tagged `client_cache`. Spill's own-event estimate is the fallback when no exact payload can be located, and a content-free diagnostic records which of the two happened |
 | Antigravity | Per-group window percentages are fetched live by `/usage` and are not cached locally. The `modelCredits` state value is a sentinel (`availableCreditsSentinelKey`), not a user-facing balance — no credits gauge is derived from it | Spill's own imported AGY usage for estimated windows | Window gauge estimated |
 
 Explicitly out of scope for this PRD: calling any vendor endpoint with the
@@ -49,12 +49,26 @@ as a separate, explicitly opt-in PRD.
    - Snapshot refresh piggybacks on existing collection cycles (Codex importer
      pass, AGY importer pass, panel-summary refresh). No new timers, pollers,
      or file watchers.
+   - Writers merge **one limit at a time**, keyed by `limit_key`. A capture
+     pass only sees the limits the tool happened to write down, so whole-set
+     replacement turned every partial payload into "the other gauge is gone"
+     and made chips flicker between weekly-only and five-hour-only. Limits the
+     pass did not see keep their stored reading.
+   - Age-out runs on each limit's own retention clock: two windows, floored at
+     seven days, so a limit removed by a plan change disappears while a tool
+     nobody used this week keeps its chip.
+   - On conflict, an exact reading always outranks an estimate, and a
+     still-fresh exact reading (younger than its own window) is not downgraded
+     to an estimate just because the tool's cache went missing for one pass.
 2. **Codex exact gauges**
    - The Codex session importer captures the newest `rate_limits` snapshot it
      encounters during its incremental pass and stores one entry per named
      limit it finds (using `limit_name` as the display label), plus credits
      when present. New limit names appear as new gauges without a code
-     change; limits absent from the newest snapshot age out.
+     change; limits absent from the newest snapshot age out on their own
+     retention clock rather than on the next partial capture. Accounts differ
+     in which windows exist at all — a plan with no five-hour window sends
+     `secondary: null` — so a missing window is data, not a failure.
    - Remaining percent renders as `100 − used_percent`. Countdown text derives
      from `resets_at` at render time. When `resets_at` has passed and no newer
      snapshot exists, the gauge renders as replenished (100%) with a
@@ -64,11 +78,31 @@ as a separate, explicitly opt-in PRD.
      utilization limits (session, weekly all-model, weekly model-scoped) and
      stores them as `client_cache` snapshots whose `capturedAt` is the
      cache's own fetch time. These are the same numbers `/usage` shows,
-     including reset times, so no "~" badge applies. Entries whose reset time
-     has passed are dropped; unknown entry kinds (spend, credits) are never
-     guessed at.
-   - Fallback only when the cache is absent or fully expired: the estimated
-     gauges below.
+     including reset times, so no "~" badge applies.
+   - The client owns that state's shape and has already changed it once, which
+     silently demoted every Claude gauge to an estimate with nothing recording
+     it. So the payload is located **structurally**: the known key is tried
+     first, then top-level values are scanned in sorted key order for an object
+     carrying limit entries. A rename degrades to "found it elsewhere", not to
+     silent estimates.
+   - Entries are recognised by shape rather than by the vendor's names for
+     them: a percentage plus a reset moment is a window gauge, which admits a
+     renamed window while still excluding the spend and credit rows that share
+     the array. A recognised `kind` keeps its established key, label, and
+     window length; an unrecognised one becomes a gauge with no window length,
+     so it lists in the popover instead of claiming a chip slot.
+   - Entries whose reset time has passed are **kept**, not dropped — the store
+     resolves a closed window to its post-reset value (see Freshness below).
+   - Every pass writes a content-free diagnostic
+     (`token-metering/diagnostics/claude-limit-capture-last.json`) holding only
+     fixed booleans, counts, and a timestamp: whether the state file was found
+     and parsed, whether a utilization payload was located, whether it was
+     found by structural scan, and how many limit entries and windowed limits
+     resulted. No paths, keys, or inspected values are stored. This is what
+     makes "the exact source moved" distinguishable from "no exact source
+     exists".
+   - Fallback only when no exact reading can be located: the estimated gauges
+     below.
    - Estimated fallback shape mirrors Claude's own usage screen: a five-hour
      session window and an all-model weekly window. Consumption is computed
      exactly from Spill's imported Claude events (input+output totals, cache
@@ -105,16 +139,23 @@ as a separate, explicitly opt-in PRD.
      badge, and captured-at age live in the adjacent text or tooltip
      appropriate to each surface.
    - **Token metering dashboard (most detail)**: a single-row "Limits" strip
-     directly under the header — one compact chip per tool rendering the same
-     fixed window slots in the same order (`5h`, then `Wk`), each slot with
+     directly under the header — one compact chip per tool, each slot with
      its own ring, remaining percent (`~` prefix on estimates), and reset
-     stamp when one is known (`5h ~31% (20:00) · Wk 29% (8/8)`). A fixed slot
-     order is the point: a "most constrained" headline made every tool read
-     on a different basis and was unintelligible. Displayed remaining
-     percents floor rather than round — 99.8% remaining reads "99", never a
-     false "100". Extra named limits and
-     credit balances appear as a `+n` indicator; clicking the chip opens a
-     popover listing every limit for that tool with countdowns, source
+     stamp when one is known (`5h ~31% (20:00) · Wk 29% (8/8)`).
+   - Slots are **derived from the windows present in the data**, shortest
+     window first, capped at two per chip. Ordering by window length is the
+     point: a "most constrained" headline made every tool read on a different
+     basis and was unintelligible. But the pair itself is not fixed — hardcoding
+     `5h` then `Wk` fought the data, because a plan whose only window is weekly
+     has no five-hour limit to draw and a plan change rewrites which windows
+     exist. Window labels are derived from `window_minutes` (`300` → `5h`,
+     `10080` → `Wk`, `1440` → `1d`), so a window nobody hardcoded still renders.
+   - When several limits share a window, the unscoped limit represents the slot
+     so chips stay comparable across tools; among unscoped peers the tightest
+     one wins. Displayed remaining percents floor rather than round — 99.8%
+     remaining reads "99", never a false "100". Extra named limits, unwindowed
+     limits, and credit balances appear as a `+n` indicator; clicking the chip
+     opens a popover listing every limit for that tool with countdowns, source
      badges, and captured-at freshness. No large card.
    - **Compact panel (medium)**: the existing AI-section tool rows gain a
      trailing ring plus a short percent (for example `Codex 1M ◕40%`). No new
@@ -122,7 +163,33 @@ as a separate, explicitly opt-in PRD.
    - Menu bar: out of MVP; revisit after the dashboard and compact-panel
      surfaces prove useful.
 6. **Freshness and trust**
-   - Every gauge exposes its `captured_at` age on hover/tooltip.
+   - Every source here is passive: each gauge comes from a file the tool
+     itself writes while it runs, so nothing refreshes while a tool sits
+     unused. That is not a polling defect and cannot be fixed by polling
+     harder; a live reading would need a network call to the vendor's usage
+     endpoint with the user's credentials, which the local read-only privacy
+     contract does not permit. The answer is an honest **as-of** display, not
+     a fabricated current one.
+   - A gauge is therefore always a reading "as of" a moment. Chips state that
+     age once it exceeds 30 minutes, and dim once the reading is older than
+     the window it describes and so can no longer describe the current one.
+   - `captured_at` is the moment the reading was **true**, never the moment
+     Spill scanned for it: Claude's cache fetch time (`fetchedAtMs`) and the
+     Codex session line's own timestamp. Stamping the scan time would make
+     every server-exact gauge look permanently fresh however long ago the tool
+     last ran, which is exactly what the as-of display exists to prevent. Only
+     estimates are stamped now, because an estimate genuinely is computed now.
+   - **Closed windows resolve locally instead of disappearing.** Once a
+     window's `resets_at` has passed, its allowance is known to have been full
+     again at that moment — derivable exactly, with no source needed. The
+     gauge is re-stamped at the reset moment, marked `window reset`, and
+     renders 100% remaining. It claims **no** next reset time, because a
+     session window opens on first use rather than on a clock, so the next one
+     is not derivable. Dropping these is what used to make a chip vanish
+     whenever a tool sat unused.
+   - Every gauge exposes its `captured_at` age on hover/tooltip, alongside
+     whether the reading is exact or estimated and whether it was locally
+     reset.
    - Ring thresholds (shared across both surfaces): remaining ≤ 20%
      renders in the warning tint, ≤ 5% in the critical tint, matching
      dashboard tint conventions.

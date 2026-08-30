@@ -692,20 +692,43 @@ Usage limit snapshots:
 
 - `TokenUsageLimitSnapshotStore` persists the latest limit reading per
   `(ai_tool, limit_key)` in one local JSON file beside the token-metering
-  store, separate from the strict usage-event schema. Writers replace a tool's
-  whole set per capture, which implements the PRD's age-out rule; corrupt or
-  missing files render no gauges and never affect metering.
+  store, separate from the strict usage-event schema. Writers merge one limit
+  at a time by `limit_key`: a capture pass only sees the limits the tool
+  happened to write down, so whole-set replacement deleted whatever that pass
+  missed and made chips flicker between windows. Age-out runs on each limit's
+  own clock — two windows, floored at seven days — and reads resolve closed
+  windows to their post-reset value. An exact reading outranks an estimate,
+  and a still-fresh exact reading is not downgraded when a cache goes missing
+  for one pass. Corrupt or missing files render no gauges and never affect
+  metering.
 - `TokenUsageCodexLimitCapture` tail-reads only the newest few Codex session
   files during the collector's paced pass (same pacing state as the active
   importers) and stores one server-exact snapshot per named limit
   (`limit_id` + window) plus credits when a balance exists. It reads only
-  numeric limit fields, safe identifiers, and timestamps.
-- `TokenUsageClaudeLimitCapture` reads only the `cachedUsageUtilization`
-  limits entries from Claude Code's state file — numeric percents, reset
-  times, window kinds, safe scoped model display names — into `client_cache`
-  snapshots stamped with the cache's own fetch time. When it stores at least
-  one fresh snapshot, the estimated Claude gauges are skipped for that pass;
-  expired entries are dropped so a fully stale cache falls back to estimates.
+  numeric limit fields, safe identifiers, and timestamps. Each snapshot's
+  `capturedAt` is the session line's own timestamp — the moment the reading was
+  true — not the scan time, so a Codex gauge ages honestly once Codex stops
+  running. Claude does the same with the cache's `fetchedAtMs`; only estimates
+  are stamped now, because an estimate is computed now.
+- `TokenUsageClaudeLimitCapture` reads the cached utilization limits from
+  Claude Code's state file — numeric percents, reset times, window kinds, safe
+  scoped model display names — into `client_cache` snapshots stamped with the
+  cache's own fetch time. The client has already renamed that state once,
+  silently demoting every Claude gauge to an estimate, so the payload is
+  located by shape: `cachedUsageUtilization` first, then a deterministic
+  sorted-key scan of top-level values for an object holding limit entries. An
+  entry qualifies as a window gauge when it carries a percentage *and* a reset
+  moment, which admits a renamed window while excluding spend and credit rows;
+  an unrecognised `kind` becomes a gauge with no window length, so it lists in
+  the popover rather than claiming a slot. Expired entries are kept, because
+  the store resolves a closed window to its post-reset value. When at least one
+  snapshot is stored the estimated Claude gauges are skipped for that pass.
+- `TokenUsageLimitCaptureDiagnostics` writes one content-free record per Claude
+  capture pass to `token-metering/diagnostics/claude-limit-capture-last.json`:
+  fixed booleans and counts only (state file found/parsed, utilization found,
+  found by structural scan, limit entry count, windowed limit count) plus a
+  timestamp. It stores no paths, keys, or inspected values. Without it, an
+  exact source that moves is indistinguishable from one that never existed.
 - No Antigravity credits gauge exists: the `modelCredits` state value is an
   internal sentinel (`availableCreditsSentinelKey`), not a user-facing
   balance.
@@ -717,13 +740,21 @@ Usage limit snapshots:
   countdown, and gaps longer than the window re-anchor the chain. The weekly
   gauge is a rolling window with `resetsAt` nil: a chained weekly anchor
   cannot re-anchor locally and would emit a confidently wrong date. The
-  denominator for both is the observed sliding high-water mark. The AGY
-  credits balance is read read-only from the client state cache and tagged
-  `client_cache`.
-- The dashboard Limits strip renders identical fixed window slots per chip
-  (five-hour then weekly, extras and credits behind `+n` in the popover)
-  instead of a per-tool "most constrained" headline, so every tool reads on
-  the same basis. The strip consumes snapshots pre-filtered through the same
+  denominator for both is the observed sliding high-water mark. No AGY credits
+  gauge is produced, per the sentinel note above.
+- The dashboard Limits strip derives its chip slots from the windows present
+  in the data — shortest `window_minutes` first, at most two, labels derived
+  from the number (`300` → `5h`, `10080` → `Wk`) — instead of a per-tool "most
+  constrained" headline. Ordering by window length keeps every tool on the same
+  basis; deriving the pair rather than hardcoding `5h`/`Wk` keeps the strip
+  honest about accounts that have no five-hour window at all (Codex sends
+  `secondary: null` on those plans) and lets a new window render without a
+  release. When several limits share a window the unscoped one represents the
+  slot, then the tightest; extras, unwindowed limits, and credits sit behind
+  `+n` in the popover. Every source is passive — each gauge comes from a file
+  the tool writes while it runs — so chips state their reading's age past 30
+  minutes and dim once it outlives the window it describes. The strip consumes
+  snapshots pre-filtered through the same
   `TokenUsageDashboardToolVisibility.visibleTools` rule as every other
   dashboard surface, so user-hidden tools render no limit chips.
 - The dashboard's Limits strip renders per-tool chips from the snapshot file
