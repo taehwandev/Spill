@@ -21,7 +21,11 @@ extension TokenUsageAntigravityImporter {
                 return nil
             }
 
-            for suffix in ["-wal", "-shm"] {
+            // WAL carries database content; SHM is only SQLite's shared-memory
+            // index and can be touched by Spill's own read transaction. Using
+            // SHM modification time as a freshness signal keeps otherwise idle
+            // conversations inside the lookback window indefinitely.
+            for suffix in ["-wal"] {
                 let sidecarURL = url.deletingLastPathComponent()
                     .appendingPathComponent(url.lastPathComponent + suffix)
                 if let values = try? sidecarURL.resourceValues(forKeys: [.contentModificationDateKey]),

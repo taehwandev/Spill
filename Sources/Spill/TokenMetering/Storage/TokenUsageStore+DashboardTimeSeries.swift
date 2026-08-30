@@ -35,70 +35,37 @@ extension TokenUsageStore {
             ]
         }
 
-        let toolFilter = Self.dashboardToolCondition(
+        guard let today = loadDashboardPeriodTotalsFromDailyRollup(
+            startingAt: todayStart,
+            endingBefore: todayEnd,
             dashboardToolsOnly: dashboardToolsOnly,
-            visibleTools: visibleTools
-        ).map { " AND \($0)" } ?? ""
-        let sql = """
-        SELECT
-          COALESCE(SUM(CASE WHEN created_at >= ? AND created_at < ? THEN total_tokens ELSE 0 END), 0),
-          COALESCE(SUM(CASE WHEN created_at >= ? AND created_at < ? THEN \(Self.dashboardFreshTokenSQL) ELSE 0 END), 0),
-          COALESCE(SUM(CASE WHEN created_at >= ? AND created_at < ? THEN total_tokens ELSE 0 END), 0),
-          COALESCE(SUM(CASE WHEN created_at >= ? AND created_at < ? THEN \(Self.dashboardFreshTokenSQL) ELSE 0 END), 0),
-          COALESCE(SUM(CASE WHEN created_at >= ? AND created_at < ? THEN total_tokens ELSE 0 END), 0),
-          COALESCE(SUM(CASE WHEN created_at >= ? AND created_at < ? THEN \(Self.dashboardFreshTokenSQL) ELSE 0 END), 0),
-          COALESCE(SUM(total_tokens), 0),
-          COALESCE(SUM(\(Self.dashboardFreshTokenSQL)), 0)
-        FROM token_usage_events
-        WHERE 1=1\(toolFilter)
-        """
-
-        var statement: OpaquePointer?
-        guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
-              let statement
-        else {
-            failureObserver?.markFailure()
-            return [:]
-        }
-        defer { sqlite3_finalize(statement) }
-
-        let fmt = ISO8601DateFormatter.tokenUsage
-        sqlite3_bind_text(statement, 1, fmt.string(from: todayStart), -1, SQLITE_TRANSIENT)
-        sqlite3_bind_text(statement, 2, fmt.string(from: todayEnd), -1, SQLITE_TRANSIENT)
-        sqlite3_bind_text(statement, 3, fmt.string(from: todayStart), -1, SQLITE_TRANSIENT)
-        sqlite3_bind_text(statement, 4, fmt.string(from: todayEnd), -1, SQLITE_TRANSIENT)
-        sqlite3_bind_text(statement, 5, fmt.string(from: sevenStart), -1, SQLITE_TRANSIENT)
-        sqlite3_bind_text(statement, 6, fmt.string(from: sevenEnd), -1, SQLITE_TRANSIENT)
-        sqlite3_bind_text(statement, 7, fmt.string(from: sevenStart), -1, SQLITE_TRANSIENT)
-        sqlite3_bind_text(statement, 8, fmt.string(from: sevenEnd), -1, SQLITE_TRANSIENT)
-        sqlite3_bind_text(statement, 9, fmt.string(from: thirtyStart), -1, SQLITE_TRANSIENT)
-        sqlite3_bind_text(statement, 10, fmt.string(from: thirtyEnd), -1, SQLITE_TRANSIENT)
-        sqlite3_bind_text(statement, 11, fmt.string(from: thirtyStart), -1, SQLITE_TRANSIENT)
-        sqlite3_bind_text(statement, 12, fmt.string(from: thirtyEnd), -1, SQLITE_TRANSIENT)
-
-        guard sqlite3_step(statement) == SQLITE_ROW else {
-            failureObserver?.markFailure()
+            visibleTools: visibleTools,
+            database: database,
+            failureObserver: failureObserver
+        ), let sevenDays = loadDashboardPeriodTotalsFromDailyRollup(
+            startingAt: sevenStart,
+            endingBefore: sevenEnd,
+            dashboardToolsOnly: dashboardToolsOnly,
+            visibleTools: visibleTools,
+            database: database,
+            failureObserver: failureObserver
+        ), let thirtyDays = loadDashboardPeriodTotalsFromDailyRollup(
+            startingAt: thirtyStart,
+            endingBefore: thirtyEnd,
+            dashboardToolsOnly: dashboardToolsOnly,
+            visibleTools: visibleTools,
+            database: database,
+            failureObserver: failureObserver
+        ), let all = loadDashboardDailyRollupTotals(
+            dashboardToolsOnly: dashboardToolsOnly,
+            visibleTools: visibleTools,
+            database: database,
+            failureObserver: failureObserver
+        ) else {
             return [:]
         }
 
-        return [
-            .today: TokenUsageInputScopeTotals(
-                includeCache: Int(sqlite3_column_int64(statement, 0)),
-                freshOnly: Int(sqlite3_column_int64(statement, 1))
-            ),
-            .sevenDays: TokenUsageInputScopeTotals(
-                includeCache: Int(sqlite3_column_int64(statement, 2)),
-                freshOnly: Int(sqlite3_column_int64(statement, 3))
-            ),
-            .thirtyDays: TokenUsageInputScopeTotals(
-                includeCache: Int(sqlite3_column_int64(statement, 4)),
-                freshOnly: Int(sqlite3_column_int64(statement, 5))
-            ),
-            .all: TokenUsageInputScopeTotals(
-                includeCache: Int(sqlite3_column_int64(statement, 6)),
-                freshOnly: Int(sqlite3_column_int64(statement, 7))
-            )
-        ]
+        return [.today: today, .sevenDays: sevenDays, .thirtyDays: thirtyDays, .all: all]
     }
 
     /// Hour-bucketed total tokens for one tool across all history, ordered by

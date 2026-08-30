@@ -8,8 +8,9 @@ import Foundation
 ///
 /// The set of gauges is data-driven: one entry per named limit found
 /// (`limit_id` + window), so a new account limit appears without a code
-/// change and limits absent from the newest capture age out through the
-/// store's replace semantics.
+/// change. Each newest `limit_id` payload replaces only its own complete
+/// group, so an explicit null retires a sibling without erasing other named
+/// pools.
 struct TokenUsageCodexLimitCapture {
     let sessionsDirectory: URL
     let fileManager: FileManager
@@ -18,20 +19,17 @@ struct TokenUsageCodexLimitCapture {
     /// installs with hundreds of session files.
     let scannedFileLimit: Int
     let tailByteLimit: Int
-    let now: () -> Date
 
     init(
         sessionsDirectory: URL = TokenUsageCodexLimitCapture.defaultSessionsDirectory(),
         fileManager: FileManager = .default,
         scannedFileLimit: Int = 5,
-        tailByteLimit: Int = 262_144,
-        now: @escaping () -> Date = Date.init
+        tailByteLimit: Int = 262_144
     ) {
         self.sessionsDirectory = sessionsDirectory
         self.fileManager = fileManager
         self.scannedFileLimit = scannedFileLimit
         self.tailByteLimit = tailByteLimit
-        self.now = now
     }
 
     static func defaultSessionsDirectory() -> URL {
@@ -43,12 +41,16 @@ struct TokenUsageCodexLimitCapture {
     /// Scans the newest session-file tails and writes the freshest snapshot
     /// per named limit into the store. Missing directories, unreadable files,
     /// or absent rate-limit lines simply capture nothing.
+    ///
+    /// One `rate_limits` payload is complete for its own `limit_id`: a plan
+    /// with no five-hour window sends `secondary: null`. Replacing that small
+    /// group retires the absent sibling while independent named pools remain.
     func captureLatestSnapshots(into store: TokenUsageLimitSnapshotStore) {
         var newestByKey: [String: (timestamp: Date, snapshots: [TokenUsageLimitSnapshot])] = [:]
 
         for fileURL in newestSessionFiles() {
             for line in rateLimitLines(in: fileURL) {
-                guard let parsed = Self.parseRateLimitLine(line, capturedAt: now()) else {
+                guard let parsed = Self.parseRateLimitLine(line) else {
                     continue
                 }
                 let existing = newestByKey[parsed.groupKey]
@@ -61,8 +63,16 @@ struct TokenUsageCodexLimitCapture {
         guard !newestByKey.isEmpty else {
             return
         }
-        let snapshots = newestByKey.values.flatMap(\.snapshots)
-        store.replaceSnapshots(for: .codex, with: snapshots)
+        let groups = newestByKey.keys.sorted().compactMap { groupKey in
+            newestByKey[groupKey].map {
+                TokenUsageLimitSnapshotStore.CompleteGroup(
+                    keyPrefix: "\(groupKey):",
+                    capturedAt: $0.timestamp,
+                    snapshots: $0.snapshots
+                )
+            }
+        }
+        store.replaceCompleteGroups(for: .codex, with: groups)
     }
 }
 
@@ -77,7 +87,13 @@ extension TokenUsageCodexLimitCapture {
     /// Parses one session JSONL line shaped as
     /// `{timestamp, payload: {type: "token_count", rate_limits: {...}}}`.
     /// Only numeric limit fields, safe identifiers, and timestamps are read.
-    static func parseRateLimitLine(_ line: String, capturedAt: Date) -> ParsedRateLimits? {
+    ///
+    /// `capturedAt` is the line's own timestamp — the moment the reading was
+    /// true — not the moment Spill happened to scan the file. Stamping the
+    /// scan time made every Codex gauge look permanently fresh no matter how
+    /// long ago Codex last ran, which is precisely what the as-of display
+    /// exists to prevent.
+    static func parseRateLimitLine(_ line: String) -> ParsedRateLimits? {
         guard let data = line.data(using: .utf8),
               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let timestampValue = object["timestamp"] as? String,
@@ -88,6 +104,7 @@ extension TokenUsageCodexLimitCapture {
             return nil
         }
 
+        let capturedAt = timestamp
         let limitID = (rateLimits["limit_id"] as? String) ?? "codex"
         let limitName = rateLimits["limit_name"] as? String
         var snapshots: [TokenUsageLimitSnapshot] = []
@@ -146,10 +163,9 @@ extension TokenUsageCodexLimitCapture {
         return ParsedRateLimits(groupKey: limitID, timestamp: timestamp, snapshots: snapshots)
     }
 
-    /// "Weekly" / "5-hour" style labels. A server-provided `limit_name` is
-    /// already the display name (for example "GPT-5.3-Codex-Spark"), so it is
-    /// used alone; only nameless non-default limits get a humanized
-    /// `limit_id` prefix so two weekly gauges stay distinguishable.
+    /// "Weekly" / "5-hour" for the overall Codex pool; named pools use only
+    /// their server name or humanized identifier. The chip adds the compact
+    /// window suffix, keeping pool identity and time basis separate.
     static func displayLabel(limitID: String, limitName: String?, windowMinutes: Int?) -> String {
         if let limitName, !limitName.isEmpty {
             return limitName
@@ -180,7 +196,7 @@ extension TokenUsageCodexLimitCapture {
             .split(separator: "-")
             .map { $0.count <= 3 ? $0.uppercased() : $0.capitalized }
             .joined(separator: " ")
-        return "\(humanizedID) \(windowLabel)"
+        return humanizedID
     }
 
     private static func doubleValue(_ value: Any?) -> Double? {

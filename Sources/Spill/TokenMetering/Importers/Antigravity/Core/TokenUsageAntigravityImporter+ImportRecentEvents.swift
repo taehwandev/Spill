@@ -18,6 +18,7 @@ extension TokenUsageAntigravityImporter {
         var splitOutputFallbackEvents = 0
         var cursorAdvancedDatabases = Set<String>()
         var scannedDatabases = 0
+        var scannedModificationDates = [String: Date]()
 
         for source in sources {
             guard !shouldCancel() else {
@@ -25,6 +26,9 @@ extension TokenUsageAntigravityImporter {
             }
 
             let sourceKey = Self.sourceStateKey(for: source)
+            if lastScannedModificationDateBySource[sourceKey] == source.modifiedAt {
+                continue
+            }
             let previousMaxIndex = importState.maxGenerationIndexBySource[sourceKey]
             let readResult = readGenerationRecords(from: source, after: previousMaxIndex)
             scannedDatabases += 1
@@ -53,6 +57,10 @@ extension TokenUsageAntigravityImporter {
 
             if cancelledDuringSource {
                 break
+            }
+
+            if readResult.didReadDatabase {
+                scannedModificationDates[sourceKey] = source.modifiedAt
             }
 
             if let maxEventIndex,
@@ -86,6 +94,7 @@ extension TokenUsageAntigravityImporter {
             importedEvents = try store.appendEventsWithoutLoading(candidateEvents)
             skippedDuplicates += candidateEvents.count - importedEvents
             writeImportState(importState)
+            lastScannedModificationDateBySource.merge(scannedModificationDates) { _, latest in latest }
             persistedCursorAdvancedDatabases = cursorAdvancedDatabases.count
         } catch {
             importedEvents = 0

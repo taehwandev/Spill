@@ -37,6 +37,9 @@ enum TokenMeteringTextKey: String {
     case dashboardSubtitle
     case refresh
     case limitsTitle
+    case limitsWindowReset
+    case limitsSourceEstimated
+    case limitsSourceExact
     case copied
     case copyPrompt
     case clear
@@ -397,6 +400,10 @@ extension TokenMeteringL10n {
 
     static func limitsCapturedAt(_ time: String, language: TokenMeteringLanguage = .current()) -> String {
         localizedFormat("format.limits_captured_at", language: language, time)
+    }
+
+    static func limitsAge(_ duration: String, language: TokenMeteringLanguage = .current()) -> String {
+        localizedFormat("format.limits_age", language: language, duration)
     }
 
     static func eventsTokensDetail(

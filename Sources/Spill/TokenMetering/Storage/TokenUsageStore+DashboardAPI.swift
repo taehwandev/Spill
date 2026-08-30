@@ -106,12 +106,11 @@ extension TokenUsageStore {
         .mapValues(\.includeCache)
     }
 
-    /// The underlying query is one full scan of the event table, and the menu
-    /// bar, panel, Glance, and dashboard refresh loops all ask for the same
-    /// totals far more often than the data changes. Results are cached against
-    /// the store's data revision (bumped by every local write and by observed
-    /// cross-process changes) plus the local day and filter set, so unchanged
-    /// data answers from memory instead of rescanning history.
+    /// The underlying query uses compact daily rollups plus raw events from
+    /// partial UTC boundary days. Results are also cached against the store's
+    /// data revision (bumped by every local write and by observed cross-process
+    /// changes) plus the local day and filter set, so unchanged data answers
+    /// from memory without touching SQLite.
     func allPeriodInputScopeTotals(
         now: Date,
         calendar: Calendar,

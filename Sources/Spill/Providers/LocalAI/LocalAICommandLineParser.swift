@@ -69,6 +69,18 @@ enum LocalAICommandLineParser {
         }
     }
 
+    /// Extracts a command token's final path component without asking the file
+    /// system to resolve or inspect the path. Process snapshots run this for
+    /// every visible process, so `URL(fileURLWithPath:)` would otherwise turn a
+    /// pure name comparison into hundreds of `lstat` calls per refresh.
+    static func executableName(from token: String) -> String {
+        let trimmedToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmedToken
+            .split(separator: "/", omittingEmptySubsequences: true)
+            .last
+            .map(String.init) ?? trimmedToken
+    }
+
     static func modelArgument(in commandLine: String) -> String? {
         let tokens = tokens(from: commandLine)
 
@@ -118,7 +130,6 @@ extension String {
         let lowercasedName = name.lowercased()
 
         return lowercasedToken == lowercasedName
-            || lowercasedToken.hasSuffix("/\(lowercasedName)")
-            || URL(fileURLWithPath: lowercasedToken).lastPathComponent == lowercasedName
+            || LocalAICommandLineParser.executableName(from: lowercasedToken) == lowercasedName
     }
 }

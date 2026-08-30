@@ -10,7 +10,12 @@ extension TokenUsageAntigravityImporter {
         after previousMaxIndex: Int?
     ) -> GenerationRecordReadResult {
         guard let openedDatabase = openReadableDatabase(for: source.url) else {
-            return GenerationRecordReadResult(scannedRowCount: 0, unsupportedRecordCount: 0, records: [])
+            return GenerationRecordReadResult(
+                didReadDatabase: false,
+                scannedRowCount: 0,
+                unsupportedRecordCount: 0,
+                records: []
+            )
         }
         let database = openedDatabase.database
         defer { sqlite3_close(database) }
@@ -30,7 +35,12 @@ extension TokenUsageAntigravityImporter {
         guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
               let statement
         else {
-            return GenerationRecordReadResult(scannedRowCount: 0, unsupportedRecordCount: 0, records: [])
+            return GenerationRecordReadResult(
+                didReadDatabase: false,
+                scannedRowCount: 0,
+                unsupportedRecordCount: 0,
+                records: []
+            )
         }
         defer { sqlite3_finalize(statement) }
         if let previousMaxIndex {
@@ -57,6 +67,7 @@ extension TokenUsageAntigravityImporter {
             }
         }
         return GenerationRecordReadResult(
+            didReadDatabase: true,
             scannedRowCount: scannedRows,
             unsupportedRecordCount: unsupportedRecords,
             records: records

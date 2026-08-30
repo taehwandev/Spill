@@ -68,7 +68,7 @@ extension LocalAIProcessSnapshotReader {
             return "Process"
         }
 
-        let lastPathComponent = URL(fileURLWithPath: executableToken).lastPathComponent
+        let lastPathComponent = LocalAICommandLineParser.executableName(from: executableToken)
         return lastPathComponent.isEmpty ? executableToken : lastPathComponent
     }
 }

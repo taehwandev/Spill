@@ -87,12 +87,17 @@ final class TokenUsageCollectorCoordinator: TokenUsageExternalCollecting, @unche
             }
         }
         self.store = store
-        self.antigravityImportRunner = antigravityImportRunner ?? { store, startDate, shouldCancel in
-            TokenUsageAntigravityImporter().importRecentEvents(
-                into: store,
-                since: startDate,
-                shouldCancel: shouldCancel
-            )
+        if let antigravityImportRunner {
+            self.antigravityImportRunner = antigravityImportRunner
+        } else {
+            let importer = TokenUsageAntigravityImporter()
+            self.antigravityImportRunner = { store, startDate, shouldCancel in
+                importer.importRecentEvents(
+                    into: store,
+                    since: startDate,
+                    shouldCancel: shouldCancel
+                )
+            }
         }
         self.antigravityLookbackInterval = antigravityLookbackInterval
         if let claudeCodeImportRunner {
