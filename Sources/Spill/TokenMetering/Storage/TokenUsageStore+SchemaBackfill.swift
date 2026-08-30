@@ -2,6 +2,32 @@ import Foundation
 import SQLite3
 
 extension TokenUsageStore {
+    /// Schema version stamped once the one-time history maintenance below has run.
+    /// Must stay above every version written by `prepareDatabaseMigrations` and
+    /// `prepareDashboardDailyRollups`; bump it only when a new whole-history pass is
+    /// genuinely required.
+    static let historyMaintenanceUserVersion = 13
+
+    /// Runs the whole-history backfill and created_at normalization exactly once per
+    /// store, gated on `user_version`. Both passes used to run on every database open:
+    /// the backfill predicate touches seventeen columns that live in the same row
+    /// record as `payload_json`, so checking it means reading the entire event table —
+    /// about 1.2 s for ~330k events on a warm cache, longer cold — to find zero rows,
+    /// because the insert path already fills every dashboard column. That per-open scan
+    /// was the multi-second main-thread hang Sentry reported as the store grew.
+    ///
+    /// Returns true when the passes ran; the caller stamps the version only after the
+    /// rest of the schema chain has completed, so an interrupted open retries the whole
+    /// sequence next time instead of skipping migrations that never ran.
+    func runOneTimeHistoryMaintenanceIfNeeded(database: OpaquePointer) throws -> Bool {
+        guard databaseUserVersion(database: database) < Self.historyMaintenanceUserVersion else {
+            return false
+        }
+        try backfillDashboardColumns(database: database)
+        try normalizeStoredCreatedAtValues(database: database)
+        return true
+    }
+
     func backfillDashboardColumns(database: OpaquePointer) throws {
         let sql = """
         SELECT span_id, payload_json
