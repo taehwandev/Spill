@@ -676,6 +676,18 @@ Rules:
   the posting process ignores its own echo: the in-process notification already
   handled that change, so reacting to the echo would run the same reads twice.
 
+Store open cost:
+
+- Opening the events database must not scale with history. Whole-history
+  maintenance passes (`backfillDashboardColumns`,
+  `normalizeStoredCreatedAtValues`) run once per store behind the
+  `historyMaintenanceUserVersion` stamp, which is written only after the rest
+  of the schema chain completes. They previously ran on every open and read
+  the entire event table to find zero rows (about 1.2 s at ~330k events on a
+  warm cache), which surfaced as multi-second main-thread App Hang reports.
+  Any new maintenance pass that scans history must be version-gated the same
+  way, never run unconditionally at open.
+
 Usage limit snapshots:
 
 - `TokenUsageLimitSnapshotStore` persists the latest limit reading per

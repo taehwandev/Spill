@@ -26,8 +26,9 @@ extension TokenUsageStore {
             database: database
         )
         try ensureDashboardColumns(database: database)
-        try backfillDashboardColumns(database: database)
-        try normalizeStoredCreatedAtValues(database: database)
+        // Whole-history passes run once per store (see runOneTimeHistoryMaintenanceIfNeeded);
+        // the version stamp lands at the end of this function so it also covers the chain below.
+        let ranOneTimeHistoryMaintenance = try runOneTimeHistoryMaintenanceIfNeeded(database: database)
         try execute(
             """
             CREATE INDEX IF NOT EXISTS idx_token_usage_events_created_at
@@ -97,6 +98,13 @@ extension TokenUsageStore {
             """,
             database: database
         )
+
+        if ranOneTimeHistoryMaintenance {
+            try execute(
+                "PRAGMA user_version = \(Self.historyMaintenanceUserVersion)",
+                database: database
+            )
+        }
     }
 
     private func prepareDatabaseMigrations(database: OpaquePointer) throws {
