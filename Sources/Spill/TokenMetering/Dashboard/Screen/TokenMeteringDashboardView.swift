@@ -287,16 +287,6 @@ extension TokenMeteringDashboardView {
                 serviceStatusButton
 
                 headerActionButton(
-                    systemImage: "rectangle.topthird.inset.filled",
-                    accessibilityLabel: t(.spillGlanceToggle),
-                    helpText: settings.glanceEnabled
-                        ? t(.spillGlanceToggleOnDetail)
-                        : t(.spillGlanceToggleOffDetail),
-                    isActive: settings.glanceEnabled,
-                    action: toggleSpillGlance
-                )
-
-                headerActionButton(
                     systemImage: "safari",
                     accessibilityLabel: t(.privateUsageUploadOpenDashboard),
                     helpText: t(.privateUsageUploadOpenDashboardDetail),
@@ -778,14 +768,6 @@ extension TokenMeteringDashboardView {
         .accessibilityLabel(Text(accessibilityLabel))
         .accessibilityHint(Text(helpText))
         .accessibilityAddTraits(isActive ? .isSelected : [])
-    }
-
-    /// Toggles the always-visible Glance strip from the dashboard. The shared
-    /// default is the source of truth; the distributed settings notification
-    /// tells the main process to reload it so the panel reacts immediately.
-    private func toggleSpillGlance() {
-        settings.glanceEnabled.toggle()
-        TokenMeteringDashboardProcess.postGlanceEnabledDidChange()
     }
 
     private var dashboardCardBackground: some ShapeStyle {

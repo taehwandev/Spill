@@ -3066,104 +3066,6 @@ final class TokenUsageStoreTests: XCTestCase {
     }
 
     @MainActor
-    func testDashboardGlanceSummaryIgnoresPanelToolVisibilityInSummaryOnlyRefresh() async throws {
-        let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
-        try usageStore.replaceEvents([
-            Self.safeEvent(
-                aiTool: .codex,
-                spanID: "span_glance_summary_codex",
-                inputTokens: 80,
-                outputTokens: 20
-            ),
-            Self.safeEvent(
-                aiTool: .claude,
-                spanID: "span_glance_summary_claude",
-                inputTokens: 160,
-                outputTokens: 40
-            ),
-            Self.safeEvent(
-                aiTool: .antigravity,
-                spanID: "span_glance_summary_antigravity",
-                inputTokens: 240,
-                outputTokens: 60
-            ),
-            Self.safeEvent(
-                aiTool: .openAI,
-                spanID: "span_glance_summary_openai",
-                inputTokens: 320,
-                outputTokens: 80
-            )
-        ])
-        let dashboardStore = TokenUsageDashboardStore(
-            usageStore: usageStore,
-            loadsInitialPanelSummary: false
-        )
-
-        dashboardStore.setVisibleAITools([.codex])
-        try await waitForPanelSummary(dashboardStore, eventCount: 1, totalTokens: 100)
-        try await waitForGlanceSummary(dashboardStore, eventCount: 3, totalTokens: 600)
-
-        XCTAssertEqual(dashboardStore.snapshot.eventCount, 0)
-        XCTAssertEqual(dashboardStore.panelSummary.toolRows.map(\.id), ["codex"])
-        XCTAssertEqual(
-            Set(dashboardStore.glanceSummary.toolRows.map(\.id)),
-            Set(TokenUsageAITool.dashboardTools.map(\.rawValue))
-        )
-    }
-
-    @MainActor
-    func testDashboardGlanceSummaryRefreshesThroughSyncSQLAndNonSQLPaths() async throws {
-        let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
-        try usageStore.replaceEvents([
-            Self.safeEvent(
-                aiTool: .codex,
-                spanID: "span_glance_sync_codex",
-                inputTokens: 80,
-                outputTokens: 20
-            ),
-            Self.safeEvent(
-                aiTool: .claude,
-                spanID: "span_glance_sync_claude",
-                inputTokens: 160,
-                outputTokens: 40
-            )
-        ])
-        let dashboardStore = TokenUsageDashboardStore(
-            usageStore: usageStore,
-            loadsInitialPanelSummary: false
-        )
-        dashboardStore.setVisibleAITools([.codex])
-
-        dashboardStore.refresh(trackLiveUpdates: false)
-        XCTAssertEqual(dashboardStore.panelSummary.totalTokens, 100)
-        XCTAssertEqual(dashboardStore.glanceSummary.totalTokens, 300)
-
-        try usageStore.appendEvent(Self.safeEvent(
-            aiTool: .antigravity,
-            spanID: "span_glance_async_sql_antigravity",
-            inputTokens: 240,
-            outputTokens: 60
-        ))
-        dashboardStore.refreshAsync(trackLiveUpdates: false)
-        try await waitForGlanceSummary(dashboardStore, eventCount: 3, totalTokens: 600)
-        XCTAssertEqual(dashboardStore.panelSummary.totalTokens, 100)
-
-        dashboardStore.setSelectedProjectID("project_local")
-        try await waitForDashboardStoreRefresh(dashboardStore)
-        try usageStore.appendEvent(Self.safeEvent(
-            aiTool: .claude,
-            spanID: "span_glance_async_events_claude",
-            inputTokens: 320,
-            outputTokens: 80
-        ))
-        dashboardStore.refreshAsync(trackLiveUpdates: false)
-        try await waitForGlanceSummary(dashboardStore, eventCount: 4, totalTokens: 1_000)
-
-        XCTAssertEqual(dashboardStore.panelSummary.totalTokens, 100)
-        XCTAssertEqual(dashboardStore.glanceSummary.toolRows.count, 3)
-    }
-
-    @MainActor
     func testDashboardCalendarInvalidationNotificationsRunFullRefresh() async throws {
         let previousAdvancedTools = SpillSettings.shared.tokenUsageShowAdvancedTools
         defer {
@@ -3196,7 +3098,6 @@ final class TokenUsageStoreTests: XCTestCase {
 
         XCTAssertEqual(dashboardStore.snapshot.eventCount, 1)
         XCTAssertEqual(dashboardStore.panelSummary.eventCount, 1)
-        XCTAssertEqual(dashboardStore.glanceSummary.eventCount, 1)
 
         let invalidations: [(Notification.Name, Bool, Int)] = [
             (.NSCalendarDayChanged, true, 2),
@@ -3212,7 +3113,6 @@ final class TokenUsageStoreTests: XCTestCase {
             )
 
             XCTAssertEqual(dashboardStore.panelSummary.eventCount, expectedCount)
-            XCTAssertEqual(dashboardStore.glanceSummary.eventCount, 1)
             XCTAssertEqual(dashboardStore.liveUpdateMarker, .empty)
         }
     }
@@ -3711,23 +3611,6 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(dashboardStore.loadState, .loaded)
         XCTAssertEqual(dashboardStore.snapshot.eventCount, 1)
         XCTAssertEqual(dashboardStore.panelSummary.eventCount, 1)
-    }
-
-    @MainActor
-    func testDashboardHelperCanSkipUnusedGlanceSummaryLoad() async throws {
-        let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
-        try usageStore.appendEvent(Self.safeEvent(spanID: "span_helper_without_glance_summary"))
-        let dashboardStore = TokenUsageDashboardStore(
-            usageStore: usageStore,
-            loadsInitialPanelSummary: false,
-            loadsGlanceSummary: false
-        )
-
-        dashboardStore.refreshAsyncIfIdle()
-        try await waitForDashboardStoreRefresh(dashboardStore)
-
-        XCTAssertEqual(dashboardStore.panelSummary.eventCount, 1)
-        XCTAssertEqual(dashboardStore.glanceSummary, .empty)
     }
 
     @MainActor
@@ -7929,22 +7812,6 @@ final class TokenUsageStoreTests: XCTestCase {
             try await Task.sleep(nanoseconds: 50_000_000)
         }
         XCTFail("Dashboard panel summary did not refresh")
-    }
-
-    @MainActor
-    private func waitForGlanceSummary(
-        _ store: TokenUsageDashboardStore,
-        eventCount: Int,
-        totalTokens: Int? = nil
-    ) async throws {
-        for _ in 0..<30 {
-            if store.glanceSummary.eventCount == eventCount,
-               totalTokens == nil || store.glanceSummary.totalTokens == totalTokens {
-                return
-            }
-            try await Task.sleep(nanoseconds: 50_000_000)
-        }
-        XCTFail("Dashboard glance summary did not refresh")
     }
 
     @MainActor
