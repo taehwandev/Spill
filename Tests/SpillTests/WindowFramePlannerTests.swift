@@ -71,6 +71,80 @@ final class WindowFramePlannerTests: XCTestCase {
         )
     }
 
+    func testArrowFromAQuadrantGrowsToThatHalfInsteadOfBeingIgnored() {
+        let visible = CGRect(x: 0, y: 0, width: 1440, height: 900)
+        func snapshot(_ frame: CGRect) -> WindowFrameSnapshot {
+            WindowFrameSnapshot(windowFrame: frame, visibleFrames: [visible])
+        }
+
+        // Already in a left quadrant: the left arrow must grow the window to the
+        // full left half. Re-deriving the same quadrant renders the keystroke a
+        // no-op, which reads to the user as the move being ignored.
+        XCTAssertEqual(
+            WindowFramePlanner.targetFrame(
+                for: .leftHalf,
+                snapshot: snapshot(CGRect(x: 0, y: 0, width: 720, height: 450)),
+                restoreFrame: nil
+            ),
+            CGRect(x: 0, y: 0, width: 720, height: 900)
+        )
+        XCTAssertEqual(
+            WindowFramePlanner.targetFrame(
+                for: .leftHalf,
+                snapshot: snapshot(CGRect(x: 0, y: 450, width: 720, height: 450)),
+                restoreFrame: nil
+            ),
+            CGRect(x: 0, y: 0, width: 720, height: 900)
+        )
+
+        // The mirrored case behaves the same way.
+        XCTAssertEqual(
+            WindowFramePlanner.targetFrame(
+                for: .rightHalf,
+                snapshot: snapshot(CGRect(x: 720, y: 0, width: 720, height: 450)),
+                restoreFrame: nil
+            ),
+            CGRect(x: 720, y: 0, width: 720, height: 900)
+        )
+        XCTAssertEqual(
+            WindowFramePlanner.targetFrame(
+                for: .rightHalf,
+                snapshot: snapshot(CGRect(x: 720, y: 450, width: 720, height: 450)),
+                restoreFrame: nil
+            ),
+            CGRect(x: 720, y: 0, width: 720, height: 900)
+        )
+
+        // Same rule on the vertical axis.
+        XCTAssertEqual(
+            WindowFramePlanner.targetFrame(
+                for: .topHalf,
+                snapshot: snapshot(CGRect(x: 0, y: 0, width: 720, height: 450)),
+                restoreFrame: nil
+            ),
+            CGRect(x: 0, y: 0, width: 1440, height: 450)
+        )
+        XCTAssertEqual(
+            WindowFramePlanner.targetFrame(
+                for: .bottomHalf,
+                snapshot: snapshot(CGRect(x: 720, y: 450, width: 720, height: 450)),
+                restoreFrame: nil
+            ),
+            CGRect(x: 0, y: 450, width: 1440, height: 450)
+        )
+
+        // The cross-quadrant move must keep working: from a right quadrant the
+        // left arrow still slides across while holding the vertical half.
+        XCTAssertEqual(
+            WindowFramePlanner.targetFrame(
+                for: .leftHalf,
+                snapshot: snapshot(CGRect(x: 720, y: 0, width: 720, height: 450)),
+                restoreFrame: nil
+            ),
+            CGRect(x: 0, y: 0, width: 720, height: 450)
+        )
+    }
+
     func testCenterPreservesCurrentSizeAndClampsToVisibleFrame() {
         let snapshot = WindowFrameSnapshot(
             windowFrame: CGRect(x: 50, y: 80, width: 1_600, height: 700),

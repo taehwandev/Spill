@@ -36,7 +36,12 @@ enum WindowFramePlanner {
 
         switch kind {
         case .leftHalf:
-            if let verticalPlacement = verticalPlacement(of: snapshot.windowFrame, in: visibleFrame) {
+            // Keeping the vertical half as a quarter is for a window arriving
+            // from elsewhere. A window already sitting on the left would just
+            // be handed back the frame it occupies, so the keystroke looks
+            // ignored; from a left quadrant the arrow grows it to the half.
+            if horizontalPlacement(of: snapshot.windowFrame, in: visibleFrame) != .leading,
+               let verticalPlacement = verticalPlacement(of: snapshot.windowFrame, in: visibleFrame) {
                 return quarterFrame(in: visibleFrame, horizontal: .leading, vertical: verticalPlacement)
             }
 
@@ -47,7 +52,8 @@ enum WindowFramePlanner {
                 height: visibleFrame.height
             ).integral
         case .rightHalf:
-            if let verticalPlacement = verticalPlacement(of: snapshot.windowFrame, in: visibleFrame) {
+            if horizontalPlacement(of: snapshot.windowFrame, in: visibleFrame) != .trailing,
+               let verticalPlacement = verticalPlacement(of: snapshot.windowFrame, in: visibleFrame) {
                 return quarterFrame(in: visibleFrame, horizontal: .trailing, vertical: verticalPlacement)
             }
 
@@ -58,7 +64,8 @@ enum WindowFramePlanner {
                 height: visibleFrame.height
             ).integral
         case .topHalf:
-            if let horizontalPlacement = horizontalPlacement(of: snapshot.windowFrame, in: visibleFrame) {
+            if verticalPlacement(of: snapshot.windowFrame, in: visibleFrame) != .top,
+               let horizontalPlacement = horizontalPlacement(of: snapshot.windowFrame, in: visibleFrame) {
                 return quarterFrame(in: visibleFrame, horizontal: horizontalPlacement, vertical: .top)
             }
 
@@ -69,7 +76,8 @@ enum WindowFramePlanner {
                 height: visibleFrame.height / 2
             ).integral
         case .bottomHalf:
-            if let horizontalPlacement = horizontalPlacement(of: snapshot.windowFrame, in: visibleFrame) {
+            if verticalPlacement(of: snapshot.windowFrame, in: visibleFrame) != .bottom,
+               let horizontalPlacement = horizontalPlacement(of: snapshot.windowFrame, in: visibleFrame) {
                 return quarterFrame(in: visibleFrame, horizontal: horizontalPlacement, vertical: .bottom)
             }
 
