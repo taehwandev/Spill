@@ -93,7 +93,12 @@ struct TokenUsageLimitSnapshot: Codable, Equatable {
     /// every limit key, so this is a local naming convention and not a vendor
     /// string being matched.
     var isScopedVariant: Bool {
-        limitKey.hasPrefix("weekly_scoped_")
+        if limitKey.hasPrefix("weekly_scoped_") {
+            return true
+        }
+        return aiTool == .codex
+            && limitKey.contains(":")
+            && !limitKey.hasPrefix("codex:")
     }
 }
 

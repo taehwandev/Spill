@@ -242,7 +242,7 @@ final class TokenUsageLimitTests: XCTestCase {
         )
 
         let spark = try XCTUnwrap(captured.first { $0.limitKey == "gpt-5.3-codex-spark:primary" })
-        XCTAssertEqual(spark.label, "GPT 5.3 Codex Spark Weekly")
+        XCTAssertEqual(spark.label, "GPT 5.3 Codex Spark")
         XCTAssertEqual(spark.remainingPercent, 100.0)
     }
 
@@ -263,6 +263,81 @@ final class TokenUsageLimitTests: XCTestCase {
         XCTAssertEqual(
             TokenUsageCodexLimitCapture.displayLabel(limitID: "codex", limitName: nil, windowMinutes: 300),
             "5-hour"
+        )
+        XCTAssertEqual(
+            TokenUsageCodexLimitCapture.displayLabel(
+                limitID: "gpt-5.3-codex-spark",
+                limitName: nil,
+                windowMinutes: 10_080
+            ),
+            "GPT 5.3 Codex Spark"
+        )
+    }
+
+    func testCodexCaptureRetiresMissingSiblingInsideACompleteLimitGroup() throws {
+        let sessionsRoot = temporaryDirectory()
+        let sessionURL = sessionsRoot.appendingPathComponent("session.jsonl")
+        let initialOverall = rateLimitLine(
+            timestamp: "2026-08-02T08:00:00.000Z",
+            limitID: "codex",
+            usedPercent: 30,
+            windowMinutes: 10_080,
+            resetsAt: 1_786_160_796,
+            secondaryUsedPercent: 40,
+            secondaryWindowMinutes: 300,
+            secondaryResetsAt: 1_786_125_196
+        )
+        let independentNamedPool = rateLimitLine(
+            timestamp: "2026-08-02T08:01:00.000Z",
+            limitID: "gpt-5.3-codex-spark",
+            usedPercent: 10,
+            windowMinutes: 10_080,
+            resetsAt: 1_786_253_160
+        )
+        try [initialOverall, independentNamedPool].joined(separator: "\n").write(
+            to: sessionURL,
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let now = try XCTUnwrap(
+            ISO8601DateFormatter.parseTokenUsageDate(from: "2026-08-02T08:03:00.000Z")
+        )
+        let store = TokenUsageLimitSnapshotStore(
+            fileURL: sessionsRoot.appendingPathComponent("limit-snapshots.json"),
+            now: { now }
+        )
+        let capture = TokenUsageCodexLimitCapture(sessionsDirectory: sessionsRoot)
+        capture.captureLatestSnapshots(into: store)
+        XCTAssertEqual(
+            Set(store.snapshots(for: .codex).map(\.limitKey)),
+            ["codex:primary", "codex:secondary", "gpt-5.3-codex-spark:primary"]
+        )
+
+        // The next overall payload is complete for `limit_id = codex` and says
+        // secondary is absent. That must retire only the old overall sibling;
+        // the independent named pool remains untouched.
+        let weeklyOnlyOverall = rateLimitLine(
+            timestamp: "2026-08-02T08:02:00.000Z",
+            limitID: "codex",
+            usedPercent: 31,
+            windowMinutes: 10_080,
+            resetsAt: 1_786_160_796
+        )
+        try [initialOverall, independentNamedPool, weeklyOnlyOverall].joined(separator: "\n").write(
+            to: sessionURL,
+            atomically: true,
+            encoding: .utf8
+        )
+        capture.captureLatestSnapshots(into: store)
+
+        XCTAssertEqual(
+            Set(store.snapshots(for: .codex).map(\.limitKey)),
+            ["codex:primary", "gpt-5.3-codex-spark:primary"]
+        )
+        XCTAssertEqual(
+            store.snapshots(for: .codex).first { $0.limitKey == "codex:primary" }?.usedPercent,
+            31
         )
     }
 
@@ -633,12 +708,15 @@ final class TokenUsageLimitTests: XCTestCase {
             "week_all"
         )
 
-        // Among unscoped peers the tightest wins: that is the one that stops you.
+        // Codex named pools are scoped too. The general account weekly remains
+        // the representative even when a separate Spark pool is tighter.
         let codex = [weekly(.codex, "codex:primary", 20), weekly(.codex, "spark:primary", 90)]
         XCTAssertEqual(
             TokenMeteringDashboardLimitsStrip.representative(of: codex)?.limitKey,
-            "spark:primary"
+            "codex:primary"
         )
+        XCTAssertFalse(codex[0].isScopedVariant)
+        XCTAssertTrue(codex[1].isScopedVariant)
     }
 
     func testChipTextRendersTheValueSourceAndResetAUserActuallyReads() throws {
@@ -685,6 +763,19 @@ final class TokenUsageLimitTests: XCTestCase {
             resetsAt: nil, capturedAt: resetsAt, source: .clientCache
         )
         XCTAssertEqual(strip.gaugeText(for: unwindowed), "Weekly Burst 96%")
+
+        // A named Codex pool that is the only weekly reading keeps its identity
+        // in the compact slot instead of masquerading as the overall Wk pool.
+        let namedCodexPool = TokenUsageLimitSnapshot(
+            aiTool: .codex, limitKey: "gpt-5.3-codex-spark:primary",
+            label: "GPT-5.3-Codex-Spark", usedPercent: 0,
+            remainingCredits: nil, windowMinutes: 10_080, resetsAt: nil,
+            capturedAt: resetsAt, source: .serverExact
+        )
+        XCTAssertEqual(
+            strip.gaugeText(for: namedCodexPool),
+            "GPT-5.3-Codex-Spark Wk 100%"
+        )
     }
 
     func testWindowAndAgeLabelsAreDerivedFromTheNumbers() {
@@ -795,13 +886,19 @@ final class TokenUsageLimitTests: XCTestCase {
         limitID: String,
         usedPercent: Double,
         windowMinutes: Int,
-        resetsAt: Int
+        resetsAt: Int,
+        secondaryUsedPercent: Double? = nil,
+        secondaryWindowMinutes: Int = 300,
+        secondaryResetsAt: Int = 0
     ) -> String {
-        """
+        let secondary = secondaryUsedPercent.map {
+            "{\"used_percent\":\($0),\"window_minutes\":\(secondaryWindowMinutes),\"resets_at\":\(secondaryResetsAt)}"
+        } ?? "null"
+        return """
         {"timestamp":"\(timestamp)","type":"event_msg","payload":{"type":"token_count",\
         "rate_limits":{"limit_id":"\(limitID)","limit_name":null,\
         "primary":{"used_percent":\(usedPercent),"window_minutes":\(windowMinutes),"resets_at":\(resetsAt)},\
-        "secondary":null,"credits":{"has_credits":false,"unlimited":false,"balance":"0"}}}}
+        "secondary":\(secondary),"credits":{"has_credits":false,"unlimited":false,"balance":"0"}}}}
         """
     }
 

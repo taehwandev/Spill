@@ -5,16 +5,17 @@ import Foundation
 /// store, so the main process (which captures) and the dashboard helper
 /// (which displays) share state without touching the usage-event schema.
 ///
-/// Writers merge one limit at a time rather than replacing a tool's whole
-/// set. A single capture pass only sees the limits the tool happened to write
-/// down — a plan with no five-hour window, a session file whose newest
-/// `rate_limits` line carries `primary` alone, a client cache that answered
-/// with the weekly window only — and whole-set replacement turned each of
-/// those into "the other gauge is gone", which is what made the chips flicker
-/// between weekly-only and five-hour-only. Limits that genuinely disappear
-/// still age out, but on their own retention clock instead of on the next
-/// partial capture.
+/// Partial writers merge one limit at a time rather than replacing a tool's
+/// whole set. A writer that receives an explicitly complete group can replace
+/// only that bounded key prefix, retiring missing siblings without disturbing
+/// independent groups from the same tool.
 final class TokenUsageLimitSnapshotStore: @unchecked Sendable {
+    struct CompleteGroup {
+        let keyPrefix: String
+        let capturedAt: Date
+        let snapshots: [TokenUsageLimitSnapshot]
+    }
+
     private let fileURL: URL
     private let lock = NSLock()
     private let now: () -> Date
@@ -59,9 +60,42 @@ final class TokenUsageLimitSnapshotStore: @unchecked Sendable {
         }
     }
 
+    /// Reconciles complete, independently timestamped groups in one locked
+    /// load/save pass. The group values live only for this capture call; no
+    /// extra cache or persisted scope field is introduced.
+    func replaceCompleteGroups(
+        for tool: TokenUsageAITool,
+        with groups: [CompleteGroup]
+    ) {
+        guard !groups.isEmpty else {
+            return
+        }
+        let moment = now()
+        lock.withLock {
+            var kept = loadLocked().filter { !Self.hasAgedOut($0, at: moment) }
+            for group in groups {
+                let newestStored = kept
+                    .filter { $0.aiTool == tool && $0.limitKey.hasPrefix(group.keyPrefix) }
+                    .map(\.capturedAt)
+                    .max()
+                if let newestStored, newestStored > group.capturedAt {
+                    continue
+                }
+
+                kept.removeAll {
+                    $0.aiTool == tool && $0.limitKey.hasPrefix(group.keyPrefix)
+                }
+                kept.append(contentsOf: group.snapshots.filter {
+                    $0.aiTool == tool && $0.limitKey.hasPrefix(group.keyPrefix)
+                })
+            }
+            saveLocked(kept)
+        }
+    }
+
     /// Replaces every snapshot for `tool` with the given set. An empty set
     /// clears the tool. Reads of other tools are unaffected. Captures use
-    /// `mergeSnapshots` instead; this stays for deliberate resets.
+    /// merge or group replacement instead; this stays for deliberate resets.
     func replaceSnapshots(for tool: TokenUsageAITool, with snapshots: [TokenUsageLimitSnapshot]) {
         lock.withLock {
             var all = loadLocked().filter { $0.aiTool != tool }

@@ -8,8 +8,9 @@ import Foundation
 ///
 /// The set of gauges is data-driven: one entry per named limit found
 /// (`limit_id` + window), so a new account limit appears without a code
-/// change and limits absent from the newest capture age out through the
-/// store's replace semantics.
+/// change. Each newest `limit_id` payload replaces only its own complete
+/// group, so an explicit null retires a sibling without erasing other named
+/// pools.
 struct TokenUsageCodexLimitCapture {
     let sessionsDirectory: URL
     let fileManager: FileManager
@@ -41,10 +42,9 @@ struct TokenUsageCodexLimitCapture {
     /// per named limit into the store. Missing directories, unreadable files,
     /// or absent rate-limit lines simply capture nothing.
     ///
-    /// The newest `rate_limits` line only describes the windows the account
-    /// actually has — a plan with no five-hour window sends `secondary: null`
-    /// — so the result is merged per limit rather than replacing Codex's whole
-    /// set, which used to erase the window this pass happened not to see.
+    /// One `rate_limits` payload is complete for its own `limit_id`: a plan
+    /// with no five-hour window sends `secondary: null`. Replacing that small
+    /// group retires the absent sibling while independent named pools remain.
     func captureLatestSnapshots(into store: TokenUsageLimitSnapshotStore) {
         var newestByKey: [String: (timestamp: Date, snapshots: [TokenUsageLimitSnapshot])] = [:]
 
@@ -63,8 +63,16 @@ struct TokenUsageCodexLimitCapture {
         guard !newestByKey.isEmpty else {
             return
         }
-        let snapshots = newestByKey.values.flatMap(\.snapshots)
-        store.mergeSnapshots(for: .codex, with: snapshots)
+        let groups = newestByKey.keys.sorted().compactMap { groupKey in
+            newestByKey[groupKey].map {
+                TokenUsageLimitSnapshotStore.CompleteGroup(
+                    keyPrefix: "\(groupKey):",
+                    capturedAt: $0.timestamp,
+                    snapshots: $0.snapshots
+                )
+            }
+        }
+        store.replaceCompleteGroups(for: .codex, with: groups)
     }
 }
 
@@ -155,10 +163,9 @@ extension TokenUsageCodexLimitCapture {
         return ParsedRateLimits(groupKey: limitID, timestamp: timestamp, snapshots: snapshots)
     }
 
-    /// "Weekly" / "5-hour" style labels. A server-provided `limit_name` is
-    /// already the display name (for example "GPT-5.3-Codex-Spark"), so it is
-    /// used alone; only nameless non-default limits get a humanized
-    /// `limit_id` prefix so two weekly gauges stay distinguishable.
+    /// "Weekly" / "5-hour" for the overall Codex pool; named pools use only
+    /// their server name or humanized identifier. The chip adds the compact
+    /// window suffix, keeping pool identity and time basis separate.
     static func displayLabel(limitID: String, limitName: String?, windowMinutes: Int?) -> String {
         if let limitName, !limitName.isEmpty {
             return limitName
@@ -189,7 +196,7 @@ extension TokenUsageCodexLimitCapture {
             .split(separator: "-")
             .map { $0.count <= 3 ? $0.uppercased() : $0.capitalized }
             .joined(separator: " ")
-        return "\(humanizedID) \(windowLabel)"
+        return humanizedID
     }
 
     private static func doubleValue(_ value: Any?) -> Double? {

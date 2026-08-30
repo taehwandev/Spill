@@ -233,7 +233,21 @@ extension TokenMeteringDashboardLimitsStrip {
     }
 
     func slotLabel(for gauge: TokenUsageLimitSnapshot) -> String {
-        Self.slotLabel(windowMinutes: gauge.windowMinutes) ?? gauge.label
+        guard let windowLabel = Self.slotLabel(windowMinutes: gauge.windowMinutes) else {
+            return gauge.label
+        }
+        guard gauge.isScopedVariant else {
+            return windowLabel
+        }
+
+        // Old on-disk Codex snapshots included the verbose window in `label`.
+        // Trim those two legacy suffixes at render time so upgrades do not
+        // briefly show "Weekly Wk" before the next capture refreshes them.
+        var scopeLabel = gauge.label
+        for suffix in [" Weekly", " 5-hour"] where scopeLabel.hasSuffix(suffix) {
+            scopeLabel.removeLast(suffix.count)
+        }
+        return "\(scopeLabel) \(windowLabel)"
     }
 
     /// The window length as a compact unit, derived from the number rather
