@@ -3,7 +3,9 @@ import SwiftUI
 /// One-row strip of per-tool remaining-limit chips under the dashboard
 /// header. Each chip shows the shared remaining-ratio ring for every window
 /// the tool actually reports, plus how old the reading is; clicking opens a
-/// popover listing every named limit with countdowns and freshness. Tools
+/// popover naming every limit and its remaining value. Reset time, capture
+/// stamp and source live in each row's tooltip rather than under it, because
+/// a second line on every row read as noise instead of as context. Tools
 /// without snapshots render nothing, so the strip disappears entirely when no
 /// limits are known.
 ///
@@ -295,19 +297,15 @@ private extension TokenMeteringDashboardLimitsStrip {
             ForEach(group.snapshots, id: \.limitKey) { snapshot in
                 HStack(spacing: 8) {
                     TokenUsageLimitRing(snapshot: snapshot, diameter: 12)
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(detailTitle(for: snapshot))
-                            .font(.system(size: 11, weight: .medium))
-                            .monospacedDigit()
-                        Text(detailSubtitle(for: snapshot))
-                            .font(.system(size: 10))
-                            .foregroundStyle(.secondary)
-                    }
+                    Text(detailTitle(for: snapshot))
+                        .font(.system(size: 11, weight: .medium))
+                        .monospacedDigit()
                 }
+                .help(chipTooltip(for: snapshot))
             }
         }
         .padding(12)
-        .frame(minWidth: 220, alignment: .leading)
+        .frame(minWidth: 160, alignment: .leading)
     }
 
     /// Same-day resets show the clock time; later resets show the date.
@@ -379,20 +377,6 @@ private extension TokenMeteringDashboardLimitsStrip {
 private extension TokenMeteringDashboardLimitsStrip {
     func detailTitle(for snapshot: TokenUsageLimitSnapshot) -> String {
         "\(snapshot.label) \(headlineValue(for: snapshot))"
-    }
-
-    func detailSubtitle(for snapshot: TokenUsageLimitSnapshot) -> String {
-        var parts: [String] = []
-        if let resetsAt = snapshot.resetsAt {
-            parts.append(
-                TokenMeteringL10n.limitsResetsAt(
-                    TokenUsageLimitSnapshot.shortDateFormatter.string(from: resetsAt),
-                    language: language
-                )
-            )
-        }
-        parts.append(contentsOf: freshnessParts(for: snapshot))
-        return parts.joined(separator: " · ")
     }
 
 }

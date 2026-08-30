@@ -165,6 +165,31 @@ final class TokenUsageLimitTests: XCTestCase {
         XCTAssertEqual(store.snapshots(for: .codex).count, 2)
     }
 
+    func testLimitsFormatStringsResolveInsteadOfRenderingTheirOwnKeys() {
+        // These four strings were registered as `format.limits_*` while
+        // `localizedFormat` looks them up under the `token_metering.` prefix
+        // every other format key uses, so the popover and tooltips rendered
+        // raw key names at the user. A failed lookup returns the key itself.
+        for language in TokenMeteringLanguage.allCases {
+            let rendered = [
+                TokenMeteringL10n.limitsPercentLeft("61", language: language),
+                TokenMeteringL10n.limitsResetsAt("8/30 15:00", language: language),
+                TokenMeteringL10n.limitsCapturedAt("8/30 13:41", language: language),
+                TokenMeteringL10n.limitsAge("3h", language: language),
+            ]
+            for text in rendered {
+                XCTAssertFalse(
+                    text.contains("token_metering."),
+                    "\(language.rawValue) leaked a localization key: \(text)"
+                )
+                XCTAssertFalse(text.contains("format.limits"), "unresolved key: \(text)")
+            }
+            // The substituted value must actually appear in the result.
+            XCTAssertTrue(rendered[1].contains("8/30 15:00"))
+            XCTAssertTrue(rendered[3].contains("3h"))
+        }
+    }
+
     func testMostConstrainedPicksTheLowestRemainingPercentage() {
         let snapshots = [
             snapshot(tool: .codex, key: "a", label: "Weekly", usedPercent: 60, capturedAt: Date()),
