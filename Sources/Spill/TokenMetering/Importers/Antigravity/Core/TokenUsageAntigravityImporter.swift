@@ -7,6 +7,7 @@ final class TokenUsageAntigravityImporter {
     let stateURL: URL?
     let fileManager: FileManager
     let forceTemporaryCopyFallback: Bool
+    var lastScannedModificationDateBySource = [String: Date]()
 
     init(
         conversationsDirectory: URL = TokenUsageAntigravityImporter.defaultConversationsDirectory(),

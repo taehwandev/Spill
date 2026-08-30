@@ -14,6 +14,7 @@ extension TokenUsageAntigravityImporter {
     }
 
     struct GenerationRecordReadResult {
+        let didReadDatabase: Bool
         let scannedRowCount: Int
         let unsupportedRecordCount: Int
         let records: [GenerationRecord]
