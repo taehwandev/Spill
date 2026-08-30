@@ -49,11 +49,14 @@ as a separate, explicitly opt-in PRD.
    - Snapshot refresh piggybacks on existing collection cycles (Codex importer
      pass, AGY importer pass, panel-summary refresh). No new timers, pollers,
      or file watchers.
-   - Writers merge **one limit at a time**, keyed by `limit_key`. A capture
-     pass only sees the limits the tool happened to write down, so whole-set
-     replacement turned every partial payload into "the other gauge is gone"
-     and made chips flicker between weekly-only and five-hour-only. Limits the
-     pass did not see keep their stored reading.
+   - Partial writers merge **one limit at a time**, keyed by `limit_key`, so a
+     payload that genuinely reports only one window does not erase another.
+     Codex is the bounded exception: its newest `rate_limits` line is complete
+     for one `limit_id`, so Spill atomically replaces only that `limit_id:`
+     group. A `secondary: null` therefore retires the old five-hour sibling,
+     while a separate named/model pool remains independent. This uses the
+     existing snapshot array during the capture pass; there is no additional
+     cache, timer, watcher, or persisted scope field.
    - Age-out runs on each limit's own retention clock: two windows, floored at
      seven days, so a limit removed by a plan change disappears while a tool
      nobody used this week keeps its chip.
@@ -61,14 +64,16 @@ as a separate, explicitly opt-in PRD.
      still-fresh exact reading (younger than its own window) is not downgraded
      to an estimate just because the tool's cache went missing for one pass.
 2. **Codex exact gauges**
-   - The Codex session importer captures the newest `rate_limits` snapshot it
-     encounters during its incremental pass and stores one entry per named
-     limit it finds (using `limit_name` as the display label), plus credits
-     when present. New limit names appear as new gauges without a code
-     change; limits absent from the newest snapshot age out on their own
-     retention clock rather than on the next partial capture. Accounts differ
-     in which windows exist at all — a plan with no five-hour window sends
-     `secondary: null` — so a missing window is data, not a failure.
+   - The Codex session importer captures the newest `rate_limits` snapshot per
+     `limit_id` during its incremental pass and stores one entry per window it
+     finds (using `limit_name` as the pool label), plus credits when present.
+     New limit names appear as new gauges without a code change. Within a
+     present `limit_id`, a missing/null sibling is removed immediately because
+     the payload is complete for that group; an entirely absent independent
+     group retains its own reading until refreshed or aged out. Accounts
+     differ in which windows exist at all — a plan with no five-hour window
+     sends `secondary: null` — so that null is authoritative data, not a
+     capture failure.
    - Remaining percent renders as `100 − used_percent`. Countdown text derives
      from `resets_at` at render time. When `resets_at` has passed and no newer
      snapshot exists, the gauge renders as replenished (100%) with a
@@ -152,11 +157,17 @@ as a separate, explicitly opt-in PRD.
      `10080` → `Wk`, `1440` → `1d`), so a window nobody hardcoded still renders.
    - When several limits share a window, the unscoped limit represents the slot
      so chips stay comparable across tools; among unscoped peers the tightest
-     one wins. Displayed remaining percents floor rather than round — 99.8%
-     remaining reads "99", never a false "100". Extra named limits, unwindowed
-     limits, and credit balances appear as a `+n` indicator; clicking the chip
-     opens a popover listing every limit for that tool with countdowns, source
-     badges, and captured-at freshness. No large card.
+     one wins. For Codex, the default `codex:` group is the account-wide pool;
+     every other `limit_id:` is a named/model-specific pool. Scope is computed
+     from this existing key convention instead of stored as another field. If
+     a named pool is the only limit for a window, its chip slot keeps both the
+     pool identity and time basis (for example `GPT-5.3-Codex-Spark Wk 100%`);
+     it never falls back to an ambiguous plain `Wk`. Displayed remaining
+     percents floor rather than round — 99.8% remaining reads "99", never a
+     false "100". Extra named limits, unwindowed limits, and credit balances
+     appear as a `+n` indicator; clicking the chip opens a popover listing
+     every limit for that tool with countdowns, source badges, and captured-at
+     freshness. No large card.
    - **Compact panel (medium)**: the existing AI-section tool rows gain a
      trailing ring plus a short percent (for example `Codex 1M ◕40%`). No new
      rows; details stay in the dashboard.
@@ -220,6 +231,11 @@ as a separate, explicitly opt-in PRD.
   limit whose labels, percentages, and reset times match Codex `/status`
   output at capture time (including model-specific weekly limits), with
   countdowns that tick without any new polling loop.
+- When the newest complete Codex payload changes `secondary` to null, the old
+  five-hour sibling disappears without deleting another named pool. When an
+  account-wide and a named/model-specific pool share a weekly window, the
+  account-wide value represents the slot; a named-only slot includes its pool
+  name beside `Wk` or the applicable window label.
 - With Claude usage imported, the Claude gauge's consumption numerator equals
   the sum Spill's own dashboard reports for the same window, and the gauge
   carries the estimated badge.

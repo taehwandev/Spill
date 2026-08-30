@@ -663,15 +663,16 @@ Rules:
   `loadState` to `.idle` for retry, but change notifications keep retrying the
   full snapshot for the surface that asked instead of downgrading to
   panel-summary-only.
-- `allPeriodInputScopeTotals` is one full event-table scan and is cached against
-  the store's data revision plus the local day and filter set. Every local write
-  funnels through the change notification and bumps the revision; observers of
-  the distributed notification bump it for cross-process changes because both
-  processes share one database file. Reads on a caller-provided database
-  transaction bypass the cache in both directions: the transaction's snapshot
-  can be older than the current revision, so serving or storing it through the
-  revision-keyed cache could pin pre-write totals under a newer key. Only reads
-  on a fresh self-opened connection are cache-coherent.
+- `allPeriodInputScopeTotals` reads a per-tool, per-UTC-day SQLite rollup kept in
+  the same write transaction as `token_usage_events`. The all-time value and
+  complete UTC days come from the compact rollup; only partial UTC days at a
+  local-calendar period boundary read raw indexed events. Insert, update, and
+  delete triggers keep raw and exact-fresh totals consistent, and schema version
+  12 seeds the rollup from existing history. The result remains cached against
+  the store's data revision plus the local day and filter set. Reads on a
+  caller-provided database transaction bypass that in-memory cache in both
+  directions, while the transactional rollup itself remains safe because it is
+  committed atomically with the source event mutation.
 - The distributed store-change notification carries the posting process id, and
   the posting process ignores its own echo: the in-process notification already
   handled that change, so reacting to the echo would run the same reads twice.
@@ -692,24 +693,27 @@ Usage limit snapshots:
 
 - `TokenUsageLimitSnapshotStore` persists the latest limit reading per
   `(ai_tool, limit_key)` in one local JSON file beside the token-metering
-  store, separate from the strict usage-event schema. Writers merge one limit
-  at a time by `limit_key`: a capture pass only sees the limits the tool
-  happened to write down, so whole-set replacement deleted whatever that pass
-  missed and made chips flicker between windows. Age-out runs on each limit's
-  own clock — two windows, floored at seven days — and reads resolve closed
-  windows to their post-reset value. An exact reading outranks an estimate,
-  and a still-fresh exact reading is not downgraded when a cache goes missing
-  for one pass. Corrupt or missing files render no gauges and never affect
-  metering.
+  store, separate from the strict usage-event schema. Partial writers merge
+  one limit at a time by `limit_key`. A writer with an explicitly complete
+  group may reconcile only that bounded key prefix: Codex replaces one
+  `limit_id:` group, so `secondary: null` removes that sibling but cannot erase
+  another named pool. The reconciliation loads and saves the existing array
+  once under the store lock and retains no new cache, timer, watcher, or
+  persisted scope field. Age-out runs on each limit's own clock — two windows,
+  floored at seven days — and reads resolve closed windows to their post-reset
+  value. An exact reading outranks an estimate, and a still-fresh exact reading
+  is not downgraded when a cache goes missing for one pass. Corrupt or missing
+  files render no gauges and never affect metering.
 - `TokenUsageCodexLimitCapture` tail-reads only the newest few Codex session
   files during the collector's paced pass (same pacing state as the active
-  importers) and stores one server-exact snapshot per named limit
-  (`limit_id` + window) plus credits when a balance exists. It reads only
-  numeric limit fields, safe identifiers, and timestamps. Each snapshot's
-  `capturedAt` is the session line's own timestamp — the moment the reading was
-  true — not the scan time, so a Codex gauge ages honestly once Codex stops
-  running. Claude does the same with the cache's `fetchedAtMs`; only estimates
-  are stamped now, because an estimate is computed now.
+  importers), selects the newest complete payload independently per `limit_id`,
+  and stores one server-exact snapshot per present window plus credits when a
+  balance exists. It reads only numeric limit fields, safe identifiers, and
+  timestamps. Each snapshot's `capturedAt` is the session line's own timestamp
+  — the moment the reading was true — not the scan time, so a Codex gauge ages
+  honestly once Codex stops running. Claude does the same with the cache's
+  `fetchedAtMs`; only estimates are stamped now, because an estimate is
+  computed now.
 - `TokenUsageClaudeLimitCapture` reads the cached utilization limits from
   Claude Code's state file — numeric percents, reset times, window kinds, safe
   scoped model display names — into `client_cache` snapshots stamped with the
@@ -750,7 +754,11 @@ Usage limit snapshots:
   honest about accounts that have no five-hour window at all (Codex sends
   `secondary: null` on those plans) and lets a new window render without a
   release. When several limits share a window the unscoped one represents the
-  slot, then the tightest; extras, unwindowed limits, and credits sit behind
+  slot, then the tightest. Codex derives that scope from its existing key: the
+  default `codex:` group is account-wide and other `limit_id:` groups are
+  named/model-specific, with no schema field added. A named-only slot includes
+  both pool identity and the compact window label instead of displaying an
+  ambiguous bare `Wk` or `5h`. Extras, unwindowed limits, and credits sit behind
   `+n` in the popover. Every source is passive — each gauge comes from a file
   the tool writes while it runs — so chips state their reading's age past 30
   minutes and dim once it outlives the window it describes. The strip consumes
