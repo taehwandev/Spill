@@ -13,6 +13,17 @@ final class LocalAIStatusProviderTests: XCTestCase {
         XCTAssertEqual(snapshot.executableToken, "/opt/homebrew/bin/codex")
     }
 
+    func testExecutableMatchingUsesPurePathComponents() {
+        XCTAssertTrue("codex".matchesExecutable(named: "Codex"))
+        XCTAssertTrue(" /opt/homebrew/bin/codex ".matchesExecutable(named: "codex"))
+        XCTAssertTrue("/opt/homebrew/bin/codex/".matchesExecutable(named: "codex"))
+        XCTAssertFalse("/opt/homebrew/bin/not-codex".matchesExecutable(named: "codex"))
+        XCTAssertEqual(
+            LocalAICommandLineParser.executableName(from: "/Applications/Antigravity IDE.app/Contents/MacOS/Antigravity IDE"),
+            "Antigravity IDE"
+        )
+    }
+
     func testProcessMetricDeltaCalculatesRecentCPUPercent() {
         let previous = LocalAIProcessMetricSample(
             processID: 123,
