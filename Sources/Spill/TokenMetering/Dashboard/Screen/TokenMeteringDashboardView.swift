@@ -183,6 +183,7 @@ extension TokenMeteringDashboardView {
                     LazyVStack(alignment: .leading, spacing: 16) {
                         TokenMeteringDashboardLimitsStrip(
                             snapshots: visibleLimitSnapshots,
+                            tools: visibleLimitTools,
                             language: currentLanguage
                         )
                         kpiStrip
@@ -335,10 +336,17 @@ extension TokenMeteringDashboardView {
     /// The limits strip honors the same tool-hiding setting as every other
     /// dashboard surface: hidden tools contribute no chips.
     private var visibleLimitSnapshots: [TokenUsageLimitSnapshot] {
-        let visibleTools = TokenUsageDashboardToolVisibility.visibleTools(
+        let visibleTools = visibleLimitTools
+        return limitSnapshots.filter { visibleTools.contains($0.aiTool) }
+    }
+
+    /// Every tool the user has not hidden, whether or not a reading exists for
+    /// it. The strip keeps a chip for each one so a tool never blinks out of
+    /// the row when its source goes quiet.
+    private var visibleLimitTools: Set<TokenUsageAITool> {
+        TokenUsageDashboardToolVisibility.visibleTools(
             hiddenTools: settings.hiddenTokenUsageAITools
         )
-        return limitSnapshots.filter { visibleTools.contains($0.aiTool) }
     }
 
     private func syncVisibleAITools() {

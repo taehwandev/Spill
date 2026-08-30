@@ -48,9 +48,6 @@ final class TokenUsageLimitSnapshotStore: @unchecked Sendable {
                 if let index = kept.firstIndex(where: {
                     $0.aiTool == tool && $0.limitKey == snapshot.limitKey
                 }) {
-                    guard Self.prefersIncoming(snapshot, over: kept[index], at: moment) else {
-                        continue
-                    }
                     kept[index] = snapshot
                 } else {
                     kept.append(snapshot)
@@ -113,6 +110,10 @@ final class TokenUsageLimitSnapshotStore: @unchecked Sendable {
     func allSnapshots() -> [TokenUsageLimitSnapshot] {
         let moment = now()
         return storedSnapshots()
+            // Estimated gauges are no longer produced. Filtering them on read
+            // retires the ones already written to disk without a migration,
+            // and keeps a downgraded reading from reappearing.
+            .filter { $0.source != .estimated }
             .filter { !Self.hasAgedOut($0, at: moment) }
             .map { $0.resolved(at: moment) }
     }
@@ -152,20 +153,6 @@ extension TokenUsageLimitSnapshotStore {
         snapshot.age(at: now) > retention(for: snapshot)
     }
 
-    /// Exact readings outrank estimates, and a fresh exact reading is not
-    /// downgraded to a guess merely because the tool's cache went missing for
-    /// one pass. Once the exact reading is older than its own window it can no
-    /// longer describe the current window, so the estimate takes over.
-    static func prefersIncoming(
-        _ incoming: TokenUsageLimitSnapshot,
-        over stored: TokenUsageLimitSnapshot,
-        at now: Date
-    ) -> Bool {
-        if incoming.source != .estimated || stored.source == .estimated {
-            return true
-        }
-        return stored.age(at: now) > (stored.windowDuration ?? minimumRetention)
-    }
 }
 
 private extension TokenUsageLimitSnapshotStore {
