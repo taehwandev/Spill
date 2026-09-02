@@ -59,12 +59,13 @@ extension TokenMeteringDashboardLimitsStrip {
         let snapshots: [TokenUsageLimitSnapshot]
         let gauges: [TokenUsageLimitSnapshot]
         let extraCount: Int
-        /// Age of the least recently refreshed gauge in the chip: the honest
-        /// "as of" for everything the chip shows.
+        /// Age of the least recently refreshed reading behind the chip: the
+        /// honest "as of" for everything the chip stands for, including the
+        /// limits that fell behind `+n` or lost their value entirely.
         let age: TimeInterval
-        /// True when even the shortest window on the chip is longer ago than
-        /// the reading itself covers, so the number cannot describe the
-        /// current window any more.
+        /// True when any of the tool's readings is older than the window it
+        /// measured, so at least one number here cannot describe the window
+        /// the user is in now.
         let outlivesItsWindow: Bool
     }
 
@@ -89,17 +90,23 @@ extension TokenMeteringDashboardLimitsStrip {
                    ?? TokenUsageLimitSnapshotStore.mostConstrained(in: toolSnapshots) {
                 gauges = [fallback]
             }
-            let age = gauges.map { $0.age(at: now) }.max() ?? 0
-            let shortestWindow = gauges.compactMap(\.windowDuration).min()
             return ToolGroup(
                 tool: tool,
                 snapshots: toolSnapshots,
                 gauges: gauges,
                 extraCount: max(0, toolSnapshots.count - gauges.count),
-                age: age,
-                outlivesItsWindow: gauges.isEmpty
-                    ? false
-                    : (shortestWindow.map { age > $0 } ?? false)
+                age: toolSnapshots.map { $0.age(at: now) }.max() ?? 0,
+                // Each reading is measured against its own window rather than
+                // against the shortest one on the chip, so a limit that lost
+                // its value — and therefore its slot — still marks the chip as
+                // no longer current instead of quietly ceding that judgement
+                // to whichever gauge remains.
+                outlivesItsWindow: toolSnapshots.contains { snapshot in
+                    guard let window = snapshot.windowDuration else {
+                        return false
+                    }
+                    return snapshot.age(at: now) > window
+                }
             )
         }
     }
@@ -397,6 +404,9 @@ private extension TokenMeteringDashboardLimitsStrip {
         if snapshot.locallyReset {
             parts.append(TokenMeteringL10n.text(.limitsWindowReset, language: language))
         }
+        if snapshot.isExpiredReading {
+            parts.append(TokenMeteringL10n.text(.limitsWindowClosedUnread, language: language))
+        }
         parts.append(
             TokenMeteringL10n.text(
                 snapshot.source == .estimated ? .limitsSourceEstimated : .limitsSourceExact,
@@ -425,14 +435,20 @@ struct TokenUsageLimitRing: View {
 
     var body: some View {
         let remaining = snapshot.remainingPercent
+        // A credit balance has no percentage to encode and fills the ring; a
+        // reading whose window closed unread has nothing to encode either, and
+        // must not borrow that full ring — an empty track is the only shape
+        // that reads as "unknown" rather than as "untouched".
         let fraction = (remaining ?? 100) / 100
         ZStack {
             Circle()
                 .stroke(Color.primary.opacity(0.12), lineWidth: 2)
-            Circle()
-                .trim(from: 0, to: max(0.02, fraction))
-                .stroke(ringColor(remaining: remaining), style: StrokeStyle(lineWidth: 2, lineCap: .round))
-                .rotationEffect(.degrees(-90))
+            if !snapshot.isExpiredReading {
+                Circle()
+                    .trim(from: 0, to: max(0.02, fraction))
+                    .stroke(ringColor(remaining: remaining), style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+            }
         }
         .frame(width: diameter, height: diameter)
         .accessibilityHidden(true)
