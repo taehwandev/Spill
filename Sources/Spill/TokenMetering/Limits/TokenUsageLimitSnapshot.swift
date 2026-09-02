@@ -11,6 +11,17 @@ struct TokenUsageLimitSnapshot: Codable, Equatable {
         case serverExact = "server_exact"
         case clientCache = "client_cache"
         case estimated
+
+        /// True when the tool rewrites its limit state as it runs, so the
+        /// absence of a newer reading is itself evidence the tool went
+        /// unused. Codex writes `rate_limits` into its session file on every
+        /// turn, which is what makes a locally derived post-reset value sound.
+        /// A client cache is refreshed only when the tool decides to — for
+        /// Claude Code, when the user runs `/usage` — so silence there says
+        /// nothing about whether the allowance was spent.
+        var refreshesWhileTheToolRuns: Bool {
+            self == .serverExact
+        }
     }
 
     let aiTool: TokenUsageAITool
@@ -79,6 +90,15 @@ struct TokenUsageLimitSnapshot: Codable, Equatable {
         usedPercent.map { max(0, min(100, 100 - $0)) }
     }
 
+    /// True for a limit whose window closed while its source stayed silent:
+    /// there is still a capture stamp saying when it was last read, but no
+    /// value that describes the window the user is in now. The UI draws these
+    /// as "unknown" rather than as a gauge, because the alternative is to
+    /// state a percentage nobody measured.
+    var isExpiredReading: Bool {
+        usedPercent == nil && remainingCredits == nil
+    }
+
     var windowDuration: TimeInterval? {
         windowMinutes.map { TimeInterval($0) * 60 }
     }
@@ -107,16 +127,30 @@ extension TokenUsageLimitSnapshot {
     ///
     /// A stored snapshot keeps aging after capture, and once its window's
     /// reset moment passes the recorded percentage describes a window that no
-    /// longer exists. That is derivable locally and exactly — the allowance
-    /// was full again at `resetsAt` — so the window is reset instead of being
-    /// dropped, which is what used to make chips disappear whenever a tool sat
-    /// unused. The next reset moment is *not* derivable (session windows open
-    /// on first use, not on a fixed clock), so it is cleared rather than
-    /// guessed, and `capturedAt` moves to the reset moment because that is
-    /// when the new value is known to have been true.
+    /// longer exists. What replaces it depends on whether the source would
+    /// have told us about use in the meantime.
+    ///
+    /// For a source that writes while the tool runs, the post-reset value is
+    /// derivable locally and exactly — the allowance was full again at
+    /// `resetsAt`, and any spending since would have left a newer reading —
+    /// so the window is reset instead of being dropped, which is what used to
+    /// make chips disappear whenever a tool sat unused. The next reset moment
+    /// is *not* derivable (session windows open on first use, not on a fixed
+    /// clock), so it is cleared rather than guessed, and `capturedAt` moves to
+    /// the reset moment because that is when the new value is known to have
+    /// been true.
+    ///
+    /// For a cache the tool refreshes on demand, none of that holds: the user
+    /// can spend a whole window without a single new reading being written.
+    /// Deriving "full again" there reports an unused allowance to someone who
+    /// may have just exhausted it, which is worse than reporting nothing, so
+    /// the reading becomes unknown and keeps its original capture stamp.
     func resolved(at now: Date) -> TokenUsageLimitSnapshot {
         guard let resetsAt, resetsAt <= now, usedPercent != nil else {
             return self
+        }
+        guard source.refreshesWhileTheToolRuns else {
+            return expiredWithoutReread()
         }
         return TokenUsageLimitSnapshot(
             aiTool: aiTool,
@@ -129,6 +163,25 @@ extension TokenUsageLimitSnapshot {
             capturedAt: resetsAt,
             source: source,
             locallyReset: true
+        )
+    }
+
+    /// The same reading with its percentage withdrawn: the window it measured
+    /// is gone and no replacement was read. `capturedAt` stays where it was,
+    /// because that is still the last moment anything was known, and the next
+    /// reset is cleared for the same reason a reset window clears it.
+    private func expiredWithoutReread() -> TokenUsageLimitSnapshot {
+        TokenUsageLimitSnapshot(
+            aiTool: aiTool,
+            limitKey: limitKey,
+            label: label,
+            usedPercent: nil,
+            remainingCredits: remainingCredits,
+            windowMinutes: windowMinutes,
+            resetsAt: nil,
+            capturedAt: capturedAt,
+            source: source,
+            locallyReset: false
         )
     }
 }

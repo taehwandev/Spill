@@ -77,17 +77,19 @@ final class TokenUsageLimitTests: XCTestCase {
         var clockValue = capturedAt
         let store = TokenUsageLimitSnapshotStore(fileURL: fileURL, now: { clockValue })
 
-        store.mergeSnapshots(for: .claude, with: [
+        // Codex writes its rate limits on every turn, so a window that closed
+        // with no newer reading is a window that genuinely went unspent.
+        store.mergeSnapshots(for: .codex, with: [
             TokenUsageLimitSnapshot(
-                aiTool: .claude, limitKey: "session_5h", label: "5-hour",
+                aiTool: .codex, limitKey: "codex:secondary", label: "5-hour",
                 usedPercent: 93, remainingCredits: nil, windowMinutes: 300,
-                resetsAt: resetsAt, capturedAt: capturedAt, source: .clientCache
+                resetsAt: resetsAt, capturedAt: capturedAt, source: .serverExact
             )
         ])
 
         // Inside the window the stored reading stands unchanged.
         clockValue = capturedAt.addingTimeInterval(3_600)
-        let open = try XCTUnwrap(store.snapshots(for: .claude).first)
+        let open = try XCTUnwrap(store.snapshots(for: .codex).first)
         XCTAssertEqual(open.usedPercent, 93)
         XCTAssertFalse(open.locallyReset)
 
@@ -96,14 +98,86 @@ final class TokenUsageLimitTests: XCTestCase {
         // moment rather than at capture time, and claims no next reset because
         // a session window opens on first use, not on a clock.
         clockValue = resetsAt.addingTimeInterval(600)
-        let reset = try XCTUnwrap(store.snapshots(for: .claude).first)
+        let reset = try XCTUnwrap(store.snapshots(for: .codex).first)
         XCTAssertEqual(reset.usedPercent, 0)
         XCTAssertEqual(reset.remainingPercent, 100)
         XCTAssertTrue(reset.locallyReset)
         XCTAssertNil(reset.resetsAt)
         XCTAssertEqual(reset.capturedAt, resetsAt)
+        XCTAssertFalse(reset.isExpiredReading)
         // The file itself keeps the raw reading; only the read is resolved.
         XCTAssertEqual(store.storedSnapshots().first?.usedPercent, 93)
+    }
+
+    func testClosedWindowFromAnOnDemandCacheReportsUnknownRatherThanFull() throws {
+        let fileURL = temporaryDirectory().appendingPathComponent("limit-snapshots.json")
+        let capturedAt = Date(timeIntervalSince1970: 1_000_000)
+        let resetsAt = capturedAt.addingTimeInterval(2 * 3_600)
+        var clockValue = capturedAt
+        let store = TokenUsageLimitSnapshotStore(fileURL: fileURL, now: { clockValue })
+
+        // Claude Code refreshes this cache only when the user runs `/usage`,
+        // so a whole window can be spent without a single new reading landing.
+        store.mergeSnapshots(for: .claude, with: [
+            TokenUsageLimitSnapshot(
+                aiTool: .claude, limitKey: "session_5h", label: "5-hour",
+                usedPercent: 93, remainingCredits: nil, windowMinutes: 300,
+                resetsAt: resetsAt, capturedAt: capturedAt, source: .clientCache
+            )
+        ])
+
+        // Inside the window the reading still describes the window it measured.
+        clockValue = capturedAt.addingTimeInterval(3_600)
+        XCTAssertEqual(store.snapshots(for: .claude).first?.usedPercent, 93)
+
+        // Past the reset it does not, and nothing was read to replace it. The
+        // limit keeps its place and its capture stamp but withdraws its value,
+        // because "full again" here would be told to a user who may have just
+        // exhausted the window.
+        clockValue = resetsAt.addingTimeInterval(600)
+        let expired = try XCTUnwrap(store.snapshots(for: .claude).first)
+        XCTAssertNil(expired.usedPercent)
+        XCTAssertNil(expired.remainingPercent)
+        XCTAssertTrue(expired.isExpiredReading)
+        XCTAssertFalse(expired.locallyReset)
+        XCTAssertNil(expired.resetsAt)
+        XCTAssertEqual(expired.capturedAt, capturedAt)
+        // The raw reading survives on disk, so a later fix or a fresh capture
+        // is never working from a value this resolution threw away.
+        XCTAssertEqual(store.storedSnapshots().first?.usedPercent, 93)
+    }
+
+    func testAnExpiredClaudeReadingLosesItsSlotButStillMarksTheChipStale() {
+        let capturedAt = Date().addingTimeInterval(-21 * 3_600)
+        let strip = TokenMeteringDashboardLimitsStrip(
+            snapshots: [
+                TokenUsageLimitSnapshot(
+                    aiTool: .claude, limitKey: "session_5h", label: "5-hour",
+                    usedPercent: 44, remainingCredits: nil, windowMinutes: 300,
+                    resetsAt: capturedAt.addingTimeInterval(3_600),
+                    capturedAt: capturedAt, source: .clientCache
+                ).resolved(at: Date()),
+                TokenUsageLimitSnapshot(
+                    aiTool: .claude, limitKey: "week_all", label: "Weekly",
+                    usedPercent: 36, remainingCredits: nil, windowMinutes: 10_080,
+                    resetsAt: Date().addingTimeInterval(2 * 24 * 3_600),
+                    capturedAt: capturedAt, source: .clientCache
+                ),
+            ],
+            tools: [.claude],
+            language: .english
+        )
+
+        let group = strip.toolGroups.first { $0.tool == .claude }
+        // The five-hour reading has no value left, so it cannot hold a slot —
+        // only the weekly is drawn, and the five-hour falls behind `+1`.
+        XCTAssertEqual(group?.gauges.map(\.limitKey), ["week_all"])
+        XCTAssertEqual(group?.extraCount, 1)
+        // The weekly is well inside its own window, so the chip's staleness
+        // has to come from the reading that lost its slot rather than from
+        // whichever gauge happens to remain.
+        XCTAssertTrue(group?.outlivesItsWindow ?? false)
+        XCTAssertGreaterThan(group?.age ?? 0, TokenMeteringDashboardLimitsStrip.staleThreshold)
     }
 
     func testSnapshotFilesWrittenBeforeTheResetFlagStillDecode() throws {
@@ -225,6 +299,42 @@ final class TokenUsageLimitTests: XCTestCase {
         XCTAssertEqual(store.storedSnapshots().count, 1)
         XCTAssertTrue(store.allSnapshots().isEmpty)
         XCTAssertTrue(store.snapshots(for: .claude).isEmpty)
+    }
+
+    func testABlankChipSaysWhetherAReadingWentStaleOrNeverArrived() {
+        let capturedAt = Date(timeIntervalSince1970: 1_000_000)
+        func group(_ snapshots: [TokenUsageLimitSnapshot]) -> TokenMeteringDashboardLimitsStrip.ToolGroup {
+            let strip = TokenMeteringDashboardLimitsStrip(
+                snapshots: snapshots,
+                tools: [.codex, .claude],
+                language: .english
+            )
+            return strip.toolGroups.first { $0.tool == .claude }!
+        }
+
+        // Nothing was ever read for this tool: the value has not arrived yet.
+        XCTAssertEqual(
+            TokenMeteringDashboardLimitsStrip.emptyReason(for: group([])),
+            .limitsNoReading
+        )
+
+        // A reading did arrive, and its window closed before anything replaced
+        // it. That is a different sentence: the number went out of date rather
+        // than never existing, and only the second wording is true here.
+        let closedUnread = TokenUsageLimitSnapshot(
+            aiTool: .claude, limitKey: "session_5h", label: "5-hour",
+            usedPercent: 93, remainingCredits: nil, windowMinutes: 300,
+            resetsAt: capturedAt.addingTimeInterval(3_600),
+            capturedAt: capturedAt, source: .clientCache
+        ).resolved(at: capturedAt.addingTimeInterval(20 * 3_600))
+        XCTAssertTrue(closedUnread.isExpiredReading)
+
+        let expiredGroup = group([closedUnread])
+        XCTAssertTrue(expiredGroup.gauges.isEmpty)
+        XCTAssertEqual(
+            TokenMeteringDashboardLimitsStrip.emptyReason(for: expiredGroup),
+            .limitsWindowClosedUnread
+        )
     }
 
     func testMostConstrainedPicksTheLowestRemainingPercentage() {
@@ -465,6 +575,10 @@ final class TokenUsageLimitTests: XCTestCase {
         XCTAssertFalse(strip.contains("weeklyWindowMinutes"))
         XCTAssertTrue(strip.contains("Dictionary(grouping: windowed) { $0.windowMinutes ?? 0 }"))
         XCTAssertTrue(strip.contains(#"Text("+\(group.extraCount)")"#))
+        // A count of limits is only meaningful beside a value. With no gauges
+        // the dash already stands for every one of them, so "— +3" would read
+        // as a contradiction rather than as a hint.
+        XCTAssertTrue(strip.contains("group.extraCount > 0, !group.gauges.isEmpty"))
         // Every chip can state how old its reading is, because no source here
         // refreshes on its own.
         XCTAssertTrue(strip.contains("limitsAge("))
@@ -746,12 +860,22 @@ final class TokenUsageLimitTests: XCTestCase {
 
         // A locally reset window reads as replenished and claims no reset stamp.
         let reset = TokenUsageLimitSnapshot(
+            aiTool: .codex, limitKey: "codex:secondary", label: "5-hour",
+            usedPercent: 93, remainingCredits: nil, windowMinutes: 300,
+            resetsAt: resetsAt, capturedAt: resetsAt.addingTimeInterval(-3_600),
+            source: .serverExact
+        ).resolved(at: resetsAt.addingTimeInterval(600))
+        XCTAssertEqual(strip.gaugeText(for: reset), "5h 100%")
+
+        // The same window read from an on-demand cache states nothing instead:
+        // no percentage was measured for the window the user is now in.
+        let expired = TokenUsageLimitSnapshot(
             aiTool: .claude, limitKey: "session_5h", label: "5-hour",
             usedPercent: 93, remainingCredits: nil, windowMinutes: 300,
             resetsAt: resetsAt, capturedAt: resetsAt.addingTimeInterval(-3_600),
             source: .clientCache
         ).resolved(at: resetsAt.addingTimeInterval(600))
-        XCTAssertEqual(strip.gaugeText(for: reset), "5h 100%")
+        XCTAssertEqual(strip.gaugeText(for: expired), "5h —")
 
         // A limit with no window length falls back to its own label.
         let unwindowed = TokenUsageLimitSnapshot(

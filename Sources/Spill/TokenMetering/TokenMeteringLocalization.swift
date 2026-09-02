@@ -38,6 +38,7 @@ enum TokenMeteringTextKey: String {
     case refresh
     case limitsTitle
     case limitsWindowReset
+    case limitsWindowClosedUnread
     case limitsNoReading
     case limitsSourceEstimated
     case limitsSourceExact
