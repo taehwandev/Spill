@@ -105,7 +105,15 @@ extension TokenMeteringDashboardLimitsStrip {
                 snapshots: toolSnapshots,
                 gauges: gauges,
                 extraCount: max(0, toolSnapshots.count - gauges.count),
-                age: toolSnapshots.map { $0.age(at: now) }.max() ?? 0,
+                // Measured over the gauges the chip actually shows. A limit
+                // behind `+n` can be much older without making the displayed
+                // numbers wrong — a model-scoped weekly only ever arrives with
+                // the on-demand cache, so it lags by however long ago usage was
+                // last fetched, and letting it set the stamp reported readings
+                // taken seconds ago as days old. Each row's own capture time is
+                // still on it in the popover.
+                age: gauges.map { $0.age(at: now) }.max()
+                    ?? toolSnapshots.map { $0.age(at: now) }.max() ?? 0,
                 // Each reading is measured against its own window rather than
                 // against the shortest one on the chip, so a limit that lost
                 // its value — and therefore its slot — still marks the chip as
