@@ -16,12 +16,17 @@ const apply = args.apply === true;
 const force = args.force === true;
 const json = args.json === true;
 const meteringOnly = args.meteringOnly === true;
-const installRoot = expandHome(args.installDir ?? join(homedir(), "Library/Application Support/Spill/adapters"));
+// Every runtime file this script reads or writes hangs off one home. It is
+// named so a test run can point the whole installer at a scratch directory:
+// `--install-dir` alone redirects only the copied adapter scripts, while the
+// configure step would still rewrite the real `~/.claude/settings.json`.
+const targetHome = resolveTargetHome(args.home);
+const installRoot = expandHome(args.installDir ?? join(targetHome, "Library/Application Support/Spill/adapters"));
 const setupHelperPath = join(installRoot, "setup", "spill-token-metering-setup.mjs");
 const statsHelperPath = join(installRoot, "setup", "spill-token-metering-stats.mjs");
 const installedRuntimeInstructionPath = join(installRoot, "setup", "runtime-instruction.md");
 const sharedRuntimeInstructionPath = expandHome(
-  args.sharedInstruction ?? join(homedir(), ".spill", "runtime-instruction.md")
+  args.sharedInstruction ?? join(targetHome, ".spill", "runtime-instruction.md")
 );
 const defaultAdapters = "codex,claude,antigravity";
 const managedRuntimeRulesBegin = "# spill-token-metering:begin";
@@ -59,7 +64,7 @@ const adapters = {
     source: join("codex", "spill-importer.mjs"),
     destination: join(installRoot, "codex", "spill-importer.mjs"),
     executable: true,
-    detect: async () => await exists(join(homedir(), ".codex")) || await commandExists("codex"),
+    detect: async () => await exists(join(targetHome, ".codex")) || await commandExists("codex"),
     configure: configureCodex,
   },
   claude: {
@@ -75,7 +80,7 @@ const adapters = {
       },
     ],
     executable: true,
-    detect: async () => await exists(join(homedir(), ".claude")) || await commandExists("claude"),
+    detect: async () => await exists(join(targetHome, ".claude")) || await commandExists("claude"),
     configure: configureClaude,
   },
   antigravity: {
@@ -84,7 +89,7 @@ const adapters = {
     source: null,
     destination: null,
     executable: false,
-    detect: async () => await exists(join(homedir(), ".gemini")) || await commandExists("gemini"),
+    detect: async () => await exists(join(targetHome, ".gemini")) || await commandExists("gemini"),
     configure: configureAntigravity,
   },
   openai: {
@@ -223,7 +228,7 @@ async function installAdapter(adapter) {
 }
 
 async function configureCodex(scriptPath) {
-  const target = join(homedir(), ".codex", "hooks.json");
+  const target = join(targetHome, ".codex", "hooks.json");
   const command = `node ${shellQuote(scriptPath)} --since-hours 6`;
   await mergeStopHookFile(target, command, 30, "codex", /spill-(codex-session-importer|importer)\.mjs/);
   await seedCodexImportOffsets(scriptPath);
@@ -259,7 +264,7 @@ async function seedCodexImportOffsets(scriptPath) {
 }
 
 async function configureClaude(scriptPath) {
-  const target = join(homedir(), ".claude", "settings.json");
+  const target = join(targetHome, ".claude", "settings.json");
   const stopCommand = `SPILL_AI_TOOL=claude python3 ${shellQuote(scriptPath)}`;
   await mergeStopHookFile(target, stopCommand, 5, "claude", /Spill\/adapters\/claude-code\/spill-hook\.py|claude-code\/spill-hook\.py/);
   await mergeClaudeStatusLine(target);
@@ -304,19 +309,19 @@ async function mergeClaudeStatusLine(target) {
 
 async function configureAntigravity(scriptPath) {
   const targets = [
-    join(homedir(), ".gemini", "config", "hooks.json"),
-    join(homedir(), ".gemini", "hooks.json"),
-    join(homedir(), ".gemini", "antigravity-cli", "hooks.json")
+    join(targetHome, ".gemini", "config", "hooks.json"),
+    join(targetHome, ".gemini", "hooks.json"),
+    join(targetHome, ".gemini", "antigravity-cli", "hooks.json")
   ];
   for (const target of targets) {
     await removeAgyHookFile(target, "antigravity");
   }
 
   if (apply) {
-    await removeFileIfExists(join(homedir(), ".gemini", "spill-hook.py"), "antigravity");
-    await removeFileIfExists(join(homedir(), ".gemini", "spill-hook-wrapper.py"), "antigravity");
+    await removeFileIfExists(join(targetHome, ".gemini", "spill-hook.py"), "antigravity");
+    await removeFileIfExists(join(targetHome, ".gemini", "spill-hook-wrapper.py"), "antigravity");
   } else {
-    results.push({ tool: "antigravity", action: "would_remove_legacy_hook_files", path: join(homedir(), ".gemini") });
+    results.push({ tool: "antigravity", action: "would_remove_legacy_hook_files", path: join(targetHome, ".gemini") });
   }
 }
 
@@ -424,7 +429,7 @@ async function removeFileIfExists(path, tool) {
 }
 
 async function removeLegacyClaudeScannerLaunchAgent() {
-  const plist = join(homedir(), "Library", "LaunchAgents", "net.thdev.spill.claude-scanner.plist");
+  const plist = join(targetHome, "Library", "LaunchAgents", "net.thdev.spill.claude-scanner.plist");
   if (!apply) {
     results.push({ tool: "claude", action: "would_remove_legacy_scanner_launchagent", path: plist });
     return;
@@ -470,14 +475,14 @@ async function configureRuntimeLabelDefaults({ installsInstructionBridges }) {
   if (include.has("claude")) {
     await configureAgentRuntimeSettings({
       tool: "claude",
-      target: join(homedir(), ".claude", "settings.json"),
+      target: join(targetHome, ".claude", "settings.json"),
       permissionPrefix: "Bash",
     });
   }
   if (include.has("antigravity")) {
     await configureAgentRuntimeSettings({
       tool: "antigravity",
-      target: join(homedir(), ".gemini", "antigravity-cli", "settings.json"),
+      target: join(targetHome, ".gemini", "antigravity-cli", "settings.json"),
       permissionPrefix: "command",
     });
   }
@@ -494,21 +499,21 @@ async function configureRuntimeLabelDefaults({ installsInstructionBridges }) {
   if (include.has("claude")) {
     await configureRuntimeInstructionBridge({
       tool: "claude",
-      target: join(homedir(), ".claude", "CLAUDE.md"),
+      target: join(targetHome, ".claude", "CLAUDE.md"),
       block: importedRuntimeInstructionBlock(),
     });
   }
   if (include.has("antigravity")) {
     await configureRuntimeInstructionBridge({
       tool: "antigravity",
-      target: join(homedir(), ".antigravity", "AGENTS.md"),
+      target: join(targetHome, ".antigravity", "AGENTS.md"),
       block: pointerRuntimeInstructionBlock("Antigravity/AGY"),
     });
   }
 
   async function codexRuntimeInstructionTarget() {
-    const override = join(homedir(), ".codex", "AGENTS.override.md");
-    return await exists(override) ? override : join(homedir(), ".codex", "AGENTS.md");
+    const override = join(targetHome, ".codex", "AGENTS.override.md");
+    return await exists(override) ? override : join(targetHome, ".codex", "AGENTS.md");
   }
 
   async function configureRuntimeInstructionBridge({ tool, target, block }) {
@@ -546,7 +551,7 @@ async function configureRuntimeLabelDefaults({ installsInstructionBridges }) {
 }
 
 async function configureCodexRuntimeRules() {
-  const target = join(homedir(), ".codex", "rules", "default.rules");
+  const target = join(targetHome, ".codex", "rules", "default.rules");
   const block = codexRuntimeRulesBlock();
   if (!apply) {
     results.push({ tool: "codex", action: "would_configure_agent_runtime", path: target });
@@ -762,7 +767,7 @@ async function writeRuntimeLabel({ tool, taskType, stage, labelFile, ttlMinutes,
   const now = new Date();
   const expiresAt = new Date(now.getTime() + ttl * 60 * 1000);
   const target = expandHome(labelFile ?? join(
-    homedir(),
+    targetHome,
     "Library/Application Support/Spill/token-metering/label-context",
     `${safeTool}.json`,
   ));
@@ -894,7 +899,7 @@ function normalizeProjectIdentityRoot(root) {
 
 async function readOrCreateProjectIDSalt() {
   const saltFile = join(
-    homedir(),
+    targetHome,
     "Library/Application Support/Spill/token-metering/project-identity-salt",
   );
   try {
@@ -1014,6 +1019,9 @@ function parseArgs(values) {
     case "--install-dir":
       parsed.installDir = requiredValue(values, ++index, value);
       break;
+    case "--home":
+      parsed.home = requiredValue(values, ++index, value);
+      break;
     case "--source-root":
       parsed.sourceRoot = requiredValue(values, ++index, value);
       break;
@@ -1102,20 +1110,30 @@ files, environment values, or secrets.
 }
 
 function expandHome(path) {
-  if (path === "~") return homedir();
-  if (path.startsWith("~/")) return join(homedir(), path.slice(2));
+  if (path === "~") return targetHome;
+  if (path.startsWith("~/")) return join(targetHome, path.slice(2));
   return path;
 }
 
+// `~` in an argument still means the real account home; only the home the
+// installer writes into is overridable, and it must be resolved before
+// anything else derives a path from it.
+function resolveTargetHome(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw || raw === "~") return homedir();
+  if (raw.startsWith("~/")) return join(homedir(), raw.slice(2));
+  return resolve(raw);
+}
+
 function homeRelativePath(path) {
-  const home = homedir();
+  const home = targetHome;
   if (path === home) return "~";
   if (path.startsWith(`${home}/`)) return `~/${path.slice(home.length + 1)}`;
   return path;
 }
 
 function homeEnvironmentPathVariants(path) {
-  const home = homedir();
+  const home = targetHome;
   if (!path.startsWith(`${home}/`)) return [];
   const suffix = path.slice(home.length + 1);
   return [`$HOME/${suffix}`, `\${HOME}/${suffix}`];
