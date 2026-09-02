@@ -58,7 +58,7 @@ final class TokenUsageCollectorCoordinator: TokenUsageExternalCollecting, @unche
         antigravityImportRunner: AntigravityImportRunner? = nil,
         antigravityLookbackInterval: TimeInterval = 24 * 60 * 60,
         claudeCodeImportRunner: ClaudeCodeImportRunner? = nil,
-        activeImporterMinimumInterval: TimeInterval = 30,
+        activeImporterMinimumInterval: TimeInterval = TokenMeteringRefreshPolicy.activeImporterMinimumInterval,
         now: @escaping () -> Date = Date.init,
         finalizationBoundaryHook: FinalizationBoundaryHook? = nil,
         codexLimitCaptureRunner: CodexLimitCaptureRunner? = nil
@@ -78,9 +78,16 @@ final class TokenUsageCollectorCoordinator: TokenUsageExternalCollecting, @unche
             let snapshotStore = TokenUsageLimitSnapshotStore()
             let codexCapture = TokenUsageCodexLimitCapture()
             let claudeCapture = TokenUsageClaudeLimitCapture()
+            let claudeStatuslineCapture = TokenUsageClaudeStatuslineCapture()
             self.codexLimitCaptureRunner = {
                 codexCapture.captureLatestSnapshots(into: snapshotStore)
                 claudeCapture.captureLatestSnapshots(into: snapshotStore)
+                // Runs last and merges only when it is fresher. Claude's two
+                // sources describe the same limits: the cached utilization is
+                // rewritten only when usage is fetched, while the status line
+                // adapter writes on every render, so on a machine with the
+                // adapter installed this is normally the newer of the two.
+                claudeStatuslineCapture.captureLatestSnapshots(into: snapshotStore)
             }
         }
         self.store = store

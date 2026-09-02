@@ -727,6 +727,17 @@ Usage limit snapshots:
   the popover rather than claiming a slot. Expired entries are kept, because
   the store resolves a closed window to its post-reset value. When at least one
   snapshot is stored the estimated Claude gauges are skipped for that pass.
+- `TokenUsageClaudeStatuslineCapture` reads the file written by the installed
+  status line adapter (`adapters/claude-code/spill-claude-statusline.mjs`).
+  Claude Code hands a status line script `rate_limits` on every render, which
+  is Claude's only source that refreshes while the tool runs; the adapter
+  extracts numeric limit fields, window identifiers and reset timestamps only,
+  and chains the previously configured status line so wrapping it changes what
+  Spill knows and nothing about what the user sees. The capture merges only
+  when its reading is newer than the stored one, and mints the same limit keys
+  as the cached-utilization capture so the two update one limit. Readings are
+  tagged `server_exact` because that tag records whether the source keeps
+  writing, which is the property the post-reset derivation depends on.
 - `TokenUsageLimitCaptureDiagnostics` writes one content-free record per Claude
   capture pass to `token-metering/diagnostics/claude-limit-capture-last.json`:
   fixed booleans and counts only (state file found/parsed, utilization found,
