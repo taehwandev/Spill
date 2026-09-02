@@ -140,6 +140,11 @@
   SwiftUI appearance must not start a second copy of the same initial refresh
   or timer loop. A deferred collection request may ask the main app for newer
   local data, but it must not duplicate the initial local-store refresh.
+- While the window remains visible, one shared automatic fallback task refreshes
+  local AI process status and requests token collection every 30 minutes. It is
+  not a live-data polling contract: opening the dashboard and explicit refresh
+  remain immediate, while inbox and store-change notifications remain the
+  primary path for newly recorded usage.
 - Dashboard launch and refresh must not synchronously enumerate running
   applications or rebuild localization bundles on the main actor.
 - Periodic refreshes publish dashboard snapshots and AI status arrays only when
@@ -166,6 +171,8 @@
   reopen the main app's compact panel.
 - Leaving the dashboard open through identical refresh intervals does not
   republish unchanged dashboard snapshots or AI status presentation state.
+- Leaving the dashboard open retains only one 30-minute automatic fallback
+  task for AI status and token collection, and closing it cancels that task.
 - Expanded Agent Status details remain responsive during refresh and do not
   install a move-based layout transition.
 - The compact panel headline follows the persisted usage-input scope immediately,

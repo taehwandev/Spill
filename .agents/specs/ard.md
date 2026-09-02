@@ -296,11 +296,15 @@ Rules:
   later sample exists. Dashboard and panel refresh loops should provide a
   moderate visible-surface refresh cadence instead of high-frequency polling.
 - The separate token dashboard helper refreshes AI process status immediately
-  when shown, then no more often than every 30 seconds while its window remains
-  visible. Closing the window cancels that loop.
+  when shown. While its window remains visible, one shared fallback task
+  refreshes AI process status and requests token collection no more often than
+  every 30 minutes. Closing the window cancels that task. SwiftUI user refresh
+  actions remain immediate and do not wait for the fallback tick.
 - Within each process, `AIStatusStore` coalesces in-flight refreshes and enforces
-  a 15-second minimum between background process scans. The first request still
-  runs immediately, and unchanged results do not publish new status state.
+  a 15-second defensive minimum between background process scans. This is a
+  coalescing floor, not a periodic timer; the visible dashboard's automatic
+  fallback cadence is 30 minutes. The first request still runs immediately,
+  and unchanged results do not publish new status state.
 - The main status refresh loop keeps its 3-second cadence only while the Spill
   panel is visible. In the background it follows the user's refresh-interval
   preference, re-reading the delay on every tick so visibility and preference
@@ -644,16 +648,20 @@ Rules:
 - The visible dashboard helper's periodic loop requests collection but does not
   race that asynchronous request with an immediate pre-collection snapshot.
   Initial display and explicit manual refresh may still read the store directly.
+- Dashboard and menu-bar automatic collection requests use one shared
+  30-minute recovery cadence. Atomic inbox events and store-change
+  notifications remain the immediate freshness path, so the longer fallback
+  does not delay newly delivered token events.
 - Timer-driven collection requests (`dashboard_refresh`, `menu_bar_status`) are
-  paced: each active importer runs at most once per its minimum interval, and
-  requests arriving mid-collection merge into one follow-up pass instead of
-  queueing one full re-run each. The inbox drain stays unthrottled so
-  hook-written events import immediately. Explicit user actions (`app_launch`,
-  `panel_open`, `manual_refresh`, `private_usage_upload`) always run every
-  importer. The dashboard helper distinguishes the two flows: its periodic loop
-  requests `dashboard_refresh`, while the user's refresh button and the
-  deferred open-time refresh request `manual_refresh` so a tap or a fresh open
-  never waits out the pacing floor.
+  paced: each active importer and passive limit capture runs at most once every
+  20 minutes for non-user requests, and requests arriving mid-collection merge
+  into one follow-up pass instead of queueing one full re-run each. The inbox
+  drain stays unthrottled so hook-written events import immediately. Explicit
+  user actions (`app_launch`, `panel_open`, `manual_refresh`,
+  `private_usage_upload`) always run every importer. The dashboard helper
+  distinguishes the two flows: its periodic loop requests `dashboard_refresh`,
+  while the user's refresh button and the deferred open-time refresh request
+  `manual_refresh` so a tap or a fresh open never waits out the pacing floor.
 - Until a dashboard surface requests its first full snapshot load, store-change
   notifications refresh only the panel and Glance summaries. The main process
   holds a dashboard store solely for those summaries, so it must not pay for

@@ -115,6 +115,22 @@ does not own dashboard layout or Private Usage Upload behavior.
   size, peak event size, model/task/stage breakdowns, token detail categories,
   and recent activity in addition to input/output totals.
 
+## Resource And Freshness Requirements
+
+- Atomic inbox files and store-change notifications are the primary live
+  freshness path. Spill imports completed inbox events immediately without
+  waiting for a dashboard or menu-bar timer.
+- Automatic dashboard and menu-bar collection requests are recovery fallbacks
+  and run no more often than every 30 minutes. Independent periodic callers
+  share one policy instead of creating competing short polling loops.
+- Non-user periodic requests run active importers and passive limit capture no
+  more often than every 20 minutes, preventing nearby dashboard and menu-bar
+  requests from repeating the same filesystem work. Inbox draining remains
+  unthrottled.
+- App launch, panel or dashboard open, explicit manual refresh, and Private
+  Usage Upload freshness requests bypass the importer pacing floor. Lowering
+  background work must not make a user action wait for the next fallback tick.
+
 ## Token Count Accuracy And Duplicate Prevention
 
 - Token counts shown in the dashboard and sync must reflect exactly one event
@@ -157,6 +173,9 @@ does not own dashboard layout or Private Usage Upload behavior.
   and distinct turns are preserved.
 - Runtime mechanics remain in ARD and adapter documentation; this PRD owns the
   product accuracy and privacy guarantees.
+- A continuously open dashboard or enabled menu-bar AI glance does not run
+  automatic token collection more often than the 30-minute fallback policy,
+  while newly queued events and explicit user refreshes still appear promptly.
 
 ## Verification
 

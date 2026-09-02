@@ -58,7 +58,7 @@ final class TokenUsageCollectorCoordinator: TokenUsageExternalCollecting, @unche
         antigravityImportRunner: AntigravityImportRunner? = nil,
         antigravityLookbackInterval: TimeInterval = 24 * 60 * 60,
         claudeCodeImportRunner: ClaudeCodeImportRunner? = nil,
-        activeImporterMinimumInterval: TimeInterval = 30,
+        activeImporterMinimumInterval: TimeInterval = TokenMeteringRefreshPolicy.activeImporterMinimumInterval,
         now: @escaping () -> Date = Date.init,
         finalizationBoundaryHook: FinalizationBoundaryHook? = nil,
         codexLimitCaptureRunner: CodexLimitCaptureRunner? = nil

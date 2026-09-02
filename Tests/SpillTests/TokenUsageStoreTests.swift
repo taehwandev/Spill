@@ -1534,10 +1534,10 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(dashboardWindowController.contains("store.refreshAsyncIfIdle()"))
         XCTAssertFalse(dashboardWindowController.contains("store.refreshAsync()"))
         XCTAssertTrue(dashboardWindowController.contains("deferredRefreshDelayNanoseconds"))
-        XCTAssertTrue(dashboardWindowController.contains("aiStatusRefreshIntervalNanoseconds: UInt64 = 30_000_000_000"))
-        XCTAssertTrue(dashboardWindowController.contains("tokenDataRefreshIntervalNanoseconds: UInt64 = 15_000_000_000"))
-        XCTAssertTrue(dashboardWindowController.contains("startAIStatusRefreshLoop()"))
-        XCTAssertTrue(dashboardWindowController.contains("startTokenDataRefreshLoop()"))
+        XCTAssertTrue(dashboardWindowController.contains("TokenMeteringRefreshPolicy.periodicFallbackIntervalNanoseconds"))
+        XCTAssertTrue(dashboardWindowController.contains("startPeriodicRefreshLoop()"))
+        XCTAssertFalse(dashboardWindowController.contains("startAIStatusRefreshLoop()"))
+        XCTAssertFalse(dashboardWindowController.contains("startTokenDataRefreshLoop()"))
         XCTAssertTrue(dashboardWindowController.contains("requestTokenDataRefresh()"))
         XCTAssertTrue(dashboardWindowController.contains("self.window?.isVisible == true"))
         XCTAssertTrue(dashboardWindowController.contains("!store.isDashboardRefreshInProgress"))
@@ -1923,6 +1923,19 @@ final class TokenUsageStoreTests: XCTestCase {
         await collector.requestCollectionAndWait(reason: "dashboard_refresh")
         XCTAssertEqual(lock.withLock { antigravityRuns }, 3)
         XCTAssertEqual(lock.withLock { claudeRuns }, 3)
+    }
+
+    func testTokenMeteringRefreshPolicyUsesLowFrequencyFallbacks() throws {
+        XCTAssertEqual(TokenMeteringRefreshPolicy.periodicFallbackInterval, 30 * 60)
+        XCTAssertEqual(
+            TokenMeteringRefreshPolicy.periodicFallbackIntervalNanoseconds,
+            1_800_000_000_000
+        )
+        XCTAssertEqual(TokenMeteringRefreshPolicy.activeImporterMinimumInterval, 20 * 60)
+        XCTAssertTrue(
+            try Self.source(named: "TokenUsageCollectorCoordinator.swift")
+                .contains("activeImporterMinimumInterval: TimeInterval = TokenMeteringRefreshPolicy.activeImporterMinimumInterval")
+        )
     }
 
     func testAllPeriodInputScopeTotalsCachesUntilTheStoreChanges() throws {
@@ -2508,7 +2521,7 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(tokenMeteringCoordinator.contains("settings.$tokenUsageInputScope"))
         XCTAssertTrue(tokenMeteringCoordinator.contains("guard let totals"))
         XCTAssertTrue(tokenMeteringCoordinator.contains("startingAt: dayStart"))
-        XCTAssertTrue(tokenMeteringCoordinator.contains("menuBarTokenCollectionInterval"))
+        XCTAssertTrue(tokenMeteringCoordinator.contains("TokenMeteringRefreshPolicy.periodicFallbackInterval"))
         XCTAssertTrue(appDelegate.contains("requestMenuBarTokenUsageCollectionIfNeeded()"))
         XCTAssertTrue(tokenMeteringCoordinator.contains("requestCollection(reason: \"menu_bar_status\")"))
         XCTAssertTrue(tokenMeteringCoordinator.contains("guard force || shouldRefreshMenuBarTokenTotal else"))
@@ -2654,10 +2667,12 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(windowController.contains("refreshAction: manualRefreshAction"))
         XCTAssertTrue(windowController.contains("refreshAction()"))
         XCTAssertTrue(windowController.contains("deferredRefreshDelayNanoseconds: UInt64 = 1_500_000_000"))
-        XCTAssertTrue(windowController.contains("tokenDataRefreshIntervalNanoseconds: UInt64 = 15_000_000_000"))
+        XCTAssertTrue(windowController.contains("TokenMeteringRefreshPolicy.periodicFallbackIntervalNanoseconds"))
         XCTAssertTrue(windowController.contains("Task.sleep(nanoseconds: delay)"))
-        XCTAssertTrue(windowController.contains("startTokenDataRefreshLoop()"))
-        XCTAssertTrue(windowController.contains("tokenDataRefreshTask?.cancel()"))
+        XCTAssertTrue(windowController.contains("startPeriodicRefreshLoop()"))
+        XCTAssertTrue(windowController.contains("periodicRefreshTask?.cancel()"))
+        XCTAssertFalse(windowController.contains("tokenDataRefreshTask"))
+        XCTAssertFalse(windowController.contains("aiStatusRefreshTask"))
         XCTAssertTrue(windowController.contains("requestTokenDataRefresh()"))
         XCTAssertFalse(windowController.contains("store.refreshAsync()"))
         XCTAssertTrue(windowController.contains("!store.isDashboardRefreshInProgress"))

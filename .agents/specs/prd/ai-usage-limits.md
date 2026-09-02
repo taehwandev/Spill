@@ -51,6 +51,10 @@ as a separate, explicitly opt-in PRD.
    - Snapshot refresh piggybacks on existing collection cycles (Codex importer
      pass, AGY importer pass, panel-summary refresh). No new timers, pollers,
      or file watchers.
+   - Automatic collection is only a 30-minute recovery fallback, and passive
+     limit capture shares the 20-minute active-importer pacing floor. App open
+     and explicit user refreshes bypass that floor, while the source timestamp
+     remains the gauge's freshness authority.
    - Partial writers merge **one limit at a time**, keyed by `limit_key`, so a
      payload that genuinely reports only one window does not erase another.
      Codex is the bounded exception: its newest `rate_limits` line is complete
@@ -242,6 +246,8 @@ as a separate, explicitly opt-in PRD.
   never breaks metering; limits are additive and fail silent.
 - All gauges re-render countdowns through existing dashboard and compact-panel
   update paths; Instruments shows no new timer sources.
+- A continuously open dashboard owns one 30-minute fallback task rather than
+  separate AI-status and token-data timers.
 
 ## Open decisions
 
