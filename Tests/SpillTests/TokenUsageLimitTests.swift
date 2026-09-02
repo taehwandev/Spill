@@ -337,6 +337,82 @@ final class TokenUsageLimitTests: XCTestCase {
         )
     }
 
+    func testStatuslineReadingIsExactAndSurvivesAClosedWindow() throws {
+        let root = temporaryDirectory()
+        let readingURL = root.appendingPathComponent("claude-statusline.json")
+        let capturedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        let reading: [String: Any] = [
+            "schema_version": 1,
+            "ai_tool": "claude",
+            "captured_at": ISO8601DateFormatter.tokenUsage.string(from: capturedAt),
+            "windows": [
+                ["key": "five_hour", "window_minutes": 300, "used_percent": 31,
+                 "resets_at": ISO8601DateFormatter.tokenUsage.string(
+                     from: capturedAt.addingTimeInterval(3_600)
+                 )],
+                ["key": "seven_day", "window_minutes": 10_080, "used_percent": 13],
+            ] as [[String: Any]],
+        ]
+        try JSONSerialization.data(withJSONObject: reading).write(to: readingURL)
+
+        let snapshots = TokenUsageClaudeStatuslineCapture(
+            readingURL: readingURL,
+            now: { capturedAt }
+        ).latestSnapshots().sorted { ($0.windowMinutes ?? 0) < ($1.windowMinutes ?? 0) }
+
+        // The keys match the cached-utilization capture's, so a reading from
+        // either source updates the same limit instead of adding a chip.
+        XCTAssertEqual(snapshots.map(\.limitKey), ["session_5h", "week_all"])
+        XCTAssertEqual(snapshots.first?.usedPercent, 31)
+        XCTAssertEqual(snapshots.last?.usedPercent, 13)
+
+        // Tagged as a source that writes while the tool runs, which is what
+        // lets a closed window resolve to its post-reset value again instead
+        // of withdrawing its number the way an on-demand cache must.
+        XCTAssertTrue(snapshots.allSatisfy { $0.source == .serverExact })
+        let reset = try XCTUnwrap(snapshots.first)
+            .resolved(at: capturedAt.addingTimeInterval(7_200))
+        XCTAssertTrue(reset.locallyReset)
+        XCTAssertFalse(reset.isExpiredReading)
+        XCTAssertEqual(reset.usedPercent, 0)
+    }
+
+    func testStatuslineReadingOnlyReplacesAnOlderClaudeReading() throws {
+        let root = temporaryDirectory()
+        let readingURL = root.appendingPathComponent("claude-statusline.json")
+        let store = TokenUsageLimitSnapshotStore(
+            fileURL: root.appendingPathComponent("limit-snapshots.json"),
+            now: { Date(timeIntervalSince1970: 1_800_000_000) }
+        )
+        let statuslineAt = Date(timeIntervalSince1970: 1_799_990_000)
+        try JSONSerialization.data(withJSONObject: [
+            "captured_at": ISO8601DateFormatter.tokenUsage.string(from: statuslineAt),
+            "windows": [["window_minutes": 300, "used_percent": 31]] as [[String: Any]],
+        ]).write(to: readingURL)
+
+        let capture = TokenUsageClaudeStatuslineCapture(
+            readingURL: readingURL,
+            now: { statuslineAt }
+        )
+
+        // Nothing stored yet: the harvested reading lands.
+        XCTAssertTrue(capture.captureLatestSnapshots(into: store))
+        XCTAssertEqual(store.snapshots(for: .claude).first?.usedPercent, 31)
+
+        // A newer cache reading must not be overwritten by the same harvested
+        // file on the next pass; the fresher source wins, not the later caller.
+        store.mergeSnapshots(for: .claude, with: [
+            TokenUsageLimitSnapshot(
+                aiTool: .claude, limitKey: "session_5h", label: "5-hour",
+                usedPercent: 62, remainingCredits: nil, windowMinutes: 300,
+                resetsAt: nil, capturedAt: statuslineAt.addingTimeInterval(600),
+                source: .clientCache
+            )
+        ])
+        XCTAssertFalse(capture.captureLatestSnapshots(into: store))
+        XCTAssertEqual(store.snapshots(for: .claude).first?.usedPercent, 62)
+    }
+
     func testMostConstrainedPicksTheLowestRemainingPercentage() {
         let snapshots = [
             snapshot(tool: .codex, key: "a", label: "Weekly", usedPercent: 60, capturedAt: Date()),

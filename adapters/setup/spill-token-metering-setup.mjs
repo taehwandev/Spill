@@ -67,6 +67,13 @@ const adapters = {
     title: "Claude Code",
     source: join("claude-code", "spill-hook.py"),
     destination: join(installRoot, "claude-code", "spill-hook.py"),
+    extraSources: [
+      {
+        source: join("claude-code", "spill-claude-statusline.mjs"),
+        destination: join(installRoot, "claude-code", "spill-claude-statusline.mjs"),
+        executable: true,
+      },
+    ],
     executable: true,
     detect: async () => await exists(join(homedir(), ".claude")) || await commandExists("claude"),
     configure: configureClaude,
@@ -197,6 +204,22 @@ async function installAdapter(adapter) {
     await chmod(adapter.destination, 0o755);
   }
   results.push({ tool: adapter.id, action: "installed", path: adapter.destination });
+
+  for (const extra of adapter.extraSources ?? []) {
+    const extraSource = join(sourceRoot, extra.source);
+    if (!await exists(extraSource)) {
+      results.push({ tool: adapter.id, action: "skip", reason: `missing_source:${extraSource}` });
+      continue;
+    }
+    await mkdir(dirname(extra.destination), { recursive: true });
+    if (resolve(extraSource) !== resolve(extra.destination)) {
+      await copyFile(extraSource, extra.destination);
+    }
+    if (extra.executable) {
+      await chmod(extra.destination, 0o755);
+    }
+    results.push({ tool: adapter.id, action: "installed", path: extra.destination });
+  }
 }
 
 async function configureCodex(scriptPath) {
@@ -239,7 +262,44 @@ async function configureClaude(scriptPath) {
   const target = join(homedir(), ".claude", "settings.json");
   const stopCommand = `SPILL_AI_TOOL=claude python3 ${shellQuote(scriptPath)}`;
   await mergeStopHookFile(target, stopCommand, 5, "claude", /Spill\/adapters\/claude-code\/spill-hook\.py|claude-code\/spill-hook\.py/);
+  await mergeClaudeStatusLine(target);
   await removeLegacyClaudeScannerLaunchAgent();
+}
+
+// Claude Code hands a status line script its `rate_limits` on every render,
+// which is the only Claude source that refreshes while the tool runs. Only one
+// status line command exists, and the machine may already use it, so Spill's
+// harvester wraps whatever was there and forwards the payload to it unchanged.
+async function mergeClaudeStatusLine(target) {
+  const harvester = join(installRoot, "claude-code", "spill-claude-statusline.mjs");
+  if (!apply) {
+    results.push({ tool: "claude", action: "would_configure_status_line", path: target });
+    return;
+  }
+
+  const settings = await readJSONObject(target);
+  const existing = plainObject(settings.statusLine) && typeof settings.statusLine.command === "string"
+    ? settings.statusLine.command
+    : "";
+  if (existing.includes("spill-claude-statusline.mjs")) {
+    results.push({ tool: "claude", action: "status_line_already_configured", path: target });
+    return;
+  }
+
+  const command = existing.trim()
+    ? `node ${shellQuote(harvester)} --chain ${shellQuote(existing)}`
+    : `node ${shellQuote(harvester)}`;
+  settings.statusLine = {
+    ...(plainObject(settings.statusLine) ? settings.statusLine : {}),
+    type: "command",
+    command,
+  };
+  await writeJSONObject(target, settings);
+  results.push({
+    tool: "claude",
+    action: existing.trim() ? "status_line_chained" : "status_line_configured",
+    path: target,
+  });
 }
 
 async function configureAntigravity(scriptPath) {
