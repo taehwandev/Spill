@@ -37,6 +37,12 @@
 ## Behavior Requirements
 
 - No external API calls in MVP unless explicitly configured.
+- Local AI process status refreshes immediately when its dashboard opens and
+  when the user explicitly refreshes it. While the token dashboard remains
+  visible, one shared fallback task refreshes local AI process status and asks
+  for token collection no more often than every 30 minutes; closing the window
+  cancels that task. This cadence is a recovery path, not the primary token
+  ingestion mechanism.
 - The existing official AI service-status check remains user-triggered. Opening
   its detail popover may refresh stale status, and its refresh button may force
   a refresh, but neither surface may add a background polling loop.
@@ -83,6 +89,9 @@
   local cache notification path.
 - Official service-status checks create no server record, cloud sync payload,
   background poller, paid model/API call, or token usage event.
+- Keeping the local token dashboard open creates one 30-minute fallback task,
+  not separate AI-status and token-data timers; open and manual refreshes remain
+  immediate.
 - The shared service-status popover explains the useful next action for
   healthy, incident, loading/not-fetched, and incomplete states.
 

@@ -12,8 +12,6 @@ final class TokenMeteringDashboardWindowController: NSObject, NSWindowDelegate {
     private let aiStatusStore: AIStatusStore
     private let settings: SpillSettings
     private let deferredRefreshDelayNanoseconds: UInt64 = 1_500_000_000
-    private let aiStatusRefreshIntervalNanoseconds: UInt64 = 30_000_000_000
-    private let tokenDataRefreshIntervalNanoseconds: UInt64 = 15_000_000_000
     private let refreshAction: () -> Void
     private let manualRefreshAction: () -> Void
     private let settingsAction: () -> Void
@@ -22,8 +20,7 @@ final class TokenMeteringDashboardWindowController: NSObject, NSWindowDelegate {
     private let syncsVisibleAIToolsInView: Bool
     private var window: NSWindow?
     private var deferredRefreshTask: Task<Void, Never>?
-    private var aiStatusRefreshTask: Task<Void, Never>?
-    private var tokenDataRefreshTask: Task<Void, Never>?
+    private var periodicRefreshTask: Task<Void, Never>?
     private var isPreparingForTermination = false
 
     init(
@@ -65,8 +62,7 @@ final class TokenMeteringDashboardWindowController: NSObject, NSWindowDelegate {
         window.makeKey()
         aiStatusStore.refreshInBackground()
         store.refreshAsyncIfIdle()
-        startAIStatusRefreshLoop()
-        startTokenDataRefreshLoop()
+        startPeriodicRefreshLoop()
         scheduleDeferredCollectionRequest()
     }
 }
@@ -91,13 +87,13 @@ extension TokenMeteringDashboardWindowController {
         }
     }
 
-    private func startAIStatusRefreshLoop() {
-        aiStatusRefreshTask?.cancel()
-        aiStatusRefreshTask = Task { @MainActor [weak self] in
+    private func startPeriodicRefreshLoop() {
+        periodicRefreshTask?.cancel()
+        periodicRefreshTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {
                 do {
                     try await Task.sleep(
-                        nanoseconds: self?.aiStatusRefreshIntervalNanoseconds ?? 30_000_000_000
+                        nanoseconds: TokenMeteringRefreshPolicy.periodicFallbackIntervalNanoseconds
                     )
                 } catch {
                     return
@@ -108,26 +104,6 @@ extension TokenMeteringDashboardWindowController {
                 }
 
                 self.aiStatusStore.refreshInBackground()
-            }
-        }
-    }
-
-    private func startTokenDataRefreshLoop() {
-        tokenDataRefreshTask?.cancel()
-        tokenDataRefreshTask = Task { @MainActor [weak self] in
-            while !Task.isCancelled {
-                do {
-                    try await Task.sleep(
-                        nanoseconds: self?.tokenDataRefreshIntervalNanoseconds ?? 15_000_000_000
-                    )
-                } catch {
-                    return
-                }
-
-                guard let self, self.window?.isVisible == true else {
-                    return
-                }
-
                 self.requestTokenDataRefresh()
             }
         }
@@ -209,10 +185,8 @@ extension TokenMeteringDashboardWindowController {
     }
 
     private func cancelRefreshTasks() {
-        aiStatusRefreshTask?.cancel()
-        aiStatusRefreshTask = nil
-        tokenDataRefreshTask?.cancel()
-        tokenDataRefreshTask = nil
+        periodicRefreshTask?.cancel()
+        periodicRefreshTask = nil
         deferredRefreshTask?.cancel()
         deferredRefreshTask = nil
     }

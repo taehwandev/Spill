@@ -4,8 +4,6 @@ import Combine
 
 @MainActor
 final class TokenMeteringCoordinator: NSObject {
-    private static let menuBarTokenCollectionInterval: TimeInterval = 60
-
     let usageStore: TokenUsageStore
 
     private let settings: SpillSettings
@@ -211,7 +209,8 @@ extension TokenMeteringCoordinator {
         }
 
         if let lastMenuBarTokenCollectionAt,
-           now.timeIntervalSince(lastMenuBarTokenCollectionAt) < Self.menuBarTokenCollectionInterval {
+           now.timeIntervalSince(lastMenuBarTokenCollectionAt)
+            < TokenMeteringRefreshPolicy.periodicFallbackInterval {
             return
         }
 
