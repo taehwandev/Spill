@@ -264,6 +264,51 @@ extension TokenUsageStoreTests {
         XCTAssertEqual(included, TokenUsageMenuBarTotals(dailyTokens: 202, allTimeTokens: 307))
         XCTAssertEqual(fresh, TokenUsageMenuBarTotals(dailyTokens: 37, allTimeTokens: 102))
     }
+
+    func testMenuBarAllTimeTotalsReadTheDailyRollup() throws {
+        let store = TokenUsageStore(fileURL: temporaryEventsURL())
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        let end = start.addingTimeInterval(60)
+        try store.replaceEvents([
+            Self.safeEvent(
+                aiTool: .codex,
+                spanID: "span_menu_rollup",
+                inputTokens: 80,
+                outputTokens: 20,
+                createdAt: ISO8601DateFormatter.tokenUsage.string(from: start.addingTimeInterval(10))
+            )
+        ])
+
+        let database = try store.openDatabase()
+        defer { sqlite3_close(database) }
+        try store.execute(
+            """
+            UPDATE token_usage_dashboard_daily_totals
+            SET total_tokens = 1234,
+                fresh_tokens = 567
+            WHERE ai_tool = 'codex'
+            """,
+            database: database
+        )
+
+        let included = try XCTUnwrap(
+            store.menuBarTokenTotals(
+                startingAt: start,
+                endingBefore: end,
+                inputScope: .includeCache
+            )
+        )
+        let fresh = try XCTUnwrap(
+            store.menuBarTokenTotals(
+                startingAt: start,
+                endingBefore: end,
+                inputScope: .freshOnly
+            )
+        )
+
+        XCTAssertEqual(included, TokenUsageMenuBarTotals(dailyTokens: 100, allTimeTokens: 1_234))
+        XCTAssertEqual(fresh, TokenUsageMenuBarTotals(dailyTokens: 20, allTimeTokens: 567))
+    }
 }
 
 extension TokenUsageStoreTests {
