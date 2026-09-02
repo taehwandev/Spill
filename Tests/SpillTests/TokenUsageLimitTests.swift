@@ -413,6 +413,76 @@ final class TokenUsageLimitTests: XCTestCase {
         XCTAssertEqual(store.snapshots(for: .claude).first?.usedPercent, 62)
     }
 
+    func testChipAgeIgnoresReadingsThatNoLongerCarryAValue() {
+        // The strip reads the wall clock, so the fixture hangs off it too.
+        let now = Date()
+        // A live weekly reading beside a five-hour one whose window closed
+        // unread three days ago: exactly what a machine looks like once the
+        // status line supersedes the on-demand cache for some windows.
+        let liveWeekly = TokenUsageLimitSnapshot(
+            aiTool: .claude, limitKey: "week_all", label: "Weekly",
+            usedPercent: 7, remainingCredits: nil, windowMinutes: 10_080,
+            resetsAt: nil, capturedAt: now.addingTimeInterval(-2 * 3_600),
+            source: .serverExact
+        )
+        let closedUnread = TokenUsageLimitSnapshot(
+            aiTool: .claude, limitKey: "session_5h", label: "5-hour",
+            usedPercent: 31, remainingCredits: nil, windowMinutes: 300,
+            resetsAt: now.addingTimeInterval(-70 * 3_600),
+            capturedAt: now.addingTimeInterval(-72 * 3_600), source: .clientCache
+        ).resolved(at: now)
+        XCTAssertTrue(closedUnread.isExpiredReading)
+
+        let group = TokenMeteringDashboardLimitsStrip(
+            snapshots: [liveWeekly, closedUnread],
+            tools: [.claude],
+            language: .english
+        ).toolGroups.first { $0.tool == .claude }
+
+        // The chip reports the age of what it actually shows. Letting a
+        // reading it does not display set the stamp made a two-hour-old number
+        // read as three days old.
+        let age = try? XCTUnwrap(group?.age)
+        XCTAssertEqual(age ?? 0, 2 * 3_600, accuracy: 1)
+        // The stale limit still marks the chip as no longer current; that
+        // signal belongs to outlivesItsWindow, not to the as-of stamp.
+        XCTAssertTrue(group?.outlivesItsWindow ?? false)
+    }
+
+    func testALimitBehindTheOverflowIndicatorDoesNotAgeTheChip() {
+        let now = Date()
+        func claude(_ key: String, _ label: String, _ used: Double, _ minutes: Int, ageHours: Double)
+            -> TokenUsageLimitSnapshot {
+            TokenUsageLimitSnapshot(
+                aiTool: .claude, limitKey: key, label: label, usedPercent: used,
+                remainingCredits: nil, windowMinutes: minutes,
+                resetsAt: now.addingTimeInterval(2 * 24 * 3_600),
+                capturedAt: now.addingTimeInterval(-ageHours * 3_600),
+                source: key.hasPrefix("weekly_scoped") ? .clientCache : .serverExact
+            )
+        }
+
+        // The model-scoped weekly only ever arrives with the on-demand cache,
+        // so it lags by however long ago usage was last fetched. It sits behind
+        // `+1` and must not make the two live gauges look three days old.
+        let group = TokenMeteringDashboardLimitsStrip(
+            snapshots: [
+                claude("session_5h", "5-hour", 8, 300, ageHours: 0),
+                claude("week_all", "Weekly", 8, 10_080, ageHours: 0),
+                claude("weekly_scoped_fable", "Fable", 4, 10_080, ageHours: 72),
+            ],
+            tools: [.claude],
+            language: .english
+        ).toolGroups.first { $0.tool == .claude }
+
+        XCTAssertEqual(group?.gauges.map(\.limitKey), ["session_5h", "week_all"])
+        XCTAssertEqual(group?.extraCount, 1)
+        XCTAssertLessThan(group?.age ?? .infinity, TokenMeteringDashboardLimitsStrip.staleThreshold)
+        // Nor is it stale: three days is well inside a seven-day window, so the
+        // reading is merely older, not describing a window that has closed.
+        XCTAssertFalse(group?.outlivesItsWindow ?? true)
+    }
+
     func testMostConstrainedPicksTheLowestRemainingPercentage() {
         let snapshots = [
             snapshot(tool: .codex, key: "a", label: "Weekly", usedPercent: 60, capturedAt: Date()),
