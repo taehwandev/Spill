@@ -26,7 +26,7 @@ instead of pretending all three are equal.
 | Tool | Signal | Local source | Quality |
 | --- | --- | --- | --- |
 | Codex | Named limit windows (`limit_id`, `limit_name`, `used_percent`, `window_minutes`, `resets_at`) plus credits `balance`. Accounts carry a variable set — the observed reference account shows a general weekly limit and a separate model-specific weekly limit — so the set of gauges is data-driven, never hardcoded to five-hour/weekly | `~/.codex/sessions/**/*.jsonl` `rate_limits` snapshots inside `token_count` events, written on every turn; the incremental Codex importer already reads these files | Exact, server-authoritative |
-| Claude Code | Server-computed used percent and reset time per window (session, weekly all-model, weekly model-scoped), cached by the client only when something fetches usage — it does not refresh on its own while the tool is simply in use, so a reading ages until the next fetch | `~/.claude.json`, read-only. The payload is located by shape rather than by key name — `cachedUsageUtilization` is tried first, then top-level values are scanned for an object holding limit entries — because the client has already renamed this state once. Only `kind`, `percent`, `resets_at`, and the safe scoped model display name are decoded | Exact as of `fetchedAtMs`; snapshots tagged `client_cache`. There is no fallback: when no exact payload can be located the chip stays but reports nothing, and a content-free diagnostic records which of the two happened |
+| Claude Code | Two sources. The status line payload carries `rate_limits` on every render while Claude Code runs, which is the live one and the reason no manual `/usage` is needed; an installed adapter harvests it and chains whatever status line was already configured. The cached utilization below remains as the fallback for a machine with no adapter. Server-computed used percent and reset time per window (session, weekly all-model, weekly model-scoped), cached by the client only when something fetches usage — it does not refresh on its own while the tool is simply in use, so a reading ages until the next fetch | `~/.claude.json`, read-only. The payload is located by shape rather than by key name — `cachedUsageUtilization` is tried first, then top-level values are scanned for an object holding limit entries — because the client has already renamed this state once. Only `kind`, `percent`, `resets_at`, and the safe scoped model display name are decoded | Exact as of `fetchedAtMs`; snapshots tagged `client_cache`. There is no fallback: when no exact payload can be located the chip stays but reports nothing, and a content-free diagnostic records which of the two happened |
 | Antigravity | Per-group window percentages are fetched live by `/usage` and are not cached locally, so no window gauge can be derived. The `modelCredits` state value is a sentinel (`availableCreditsSentinelKey`), not a user-facing balance — no credits gauge is derived from it | None found locally | No gauge; the chip renders blank |
 
 Explicitly out of scope for this PRD: calling any vendor endpoint with the
@@ -78,7 +78,16 @@ as a separate, explicitly opt-in PRD.
      from `resets_at` at render time. When `resets_at` has passed and no newer
      snapshot exists, the gauge renders as replenished (100%) with a
      "as of <captured_at>" hint rather than a stale countdown.
-3. **Claude gauges — exact only**
+3. **Claude gauges — exact only, from whichever source is fresher**
+   - The status line adapter writes the numbers it was handed to a small file;
+     `TokenUsageClaudeStatuslineCapture` reads it and merges only when its
+     reading is newer than what the cached-utilization capture stored, so the
+     fresher source wins rather than whichever capture ran last. Both mint the
+     same limit keys, so a tool has one chip either way.
+   - Status line readings are tagged `server_exact`, not `client_cache`. That
+     tag records whether a source keeps writing while the tool runs, not who
+     computed the number, and it is what allows a closed window to resolve to
+     its post-reset value instead of withdrawing its percentage.
    - Primary: `TokenUsageClaudeLimitCapture` reads the client-cached
      utilization limits (session, weekly all-model, weekly model-scoped) and
      stores them as `client_cache` snapshots whose `capturedAt` is the
