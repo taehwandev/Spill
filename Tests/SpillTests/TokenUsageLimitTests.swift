@@ -301,6 +301,42 @@ final class TokenUsageLimitTests: XCTestCase {
         XCTAssertTrue(store.snapshots(for: .claude).isEmpty)
     }
 
+    func testABlankChipSaysWhetherAReadingWentStaleOrNeverArrived() {
+        let capturedAt = Date(timeIntervalSince1970: 1_000_000)
+        func group(_ snapshots: [TokenUsageLimitSnapshot]) -> TokenMeteringDashboardLimitsStrip.ToolGroup {
+            let strip = TokenMeteringDashboardLimitsStrip(
+                snapshots: snapshots,
+                tools: [.codex, .claude],
+                language: .english
+            )
+            return strip.toolGroups.first { $0.tool == .claude }!
+        }
+
+        // Nothing was ever read for this tool: the value has not arrived yet.
+        XCTAssertEqual(
+            TokenMeteringDashboardLimitsStrip.emptyReason(for: group([])),
+            .limitsNoReading
+        )
+
+        // A reading did arrive, and its window closed before anything replaced
+        // it. That is a different sentence: the number went out of date rather
+        // than never existing, and only the second wording is true here.
+        let closedUnread = TokenUsageLimitSnapshot(
+            aiTool: .claude, limitKey: "session_5h", label: "5-hour",
+            usedPercent: 93, remainingCredits: nil, windowMinutes: 300,
+            resetsAt: capturedAt.addingTimeInterval(3_600),
+            capturedAt: capturedAt, source: .clientCache
+        ).resolved(at: capturedAt.addingTimeInterval(20 * 3_600))
+        XCTAssertTrue(closedUnread.isExpiredReading)
+
+        let expiredGroup = group([closedUnread])
+        XCTAssertTrue(expiredGroup.gauges.isEmpty)
+        XCTAssertEqual(
+            TokenMeteringDashboardLimitsStrip.emptyReason(for: expiredGroup),
+            .limitsWindowClosedUnread
+        )
+    }
+
     func testMostConstrainedPicksTheLowestRemainingPercentage() {
         let snapshots = [
             snapshot(tool: .codex, key: "a", label: "Weekly", usedPercent: 60, capturedAt: Date()),
@@ -539,6 +575,10 @@ final class TokenUsageLimitTests: XCTestCase {
         XCTAssertFalse(strip.contains("weeklyWindowMinutes"))
         XCTAssertTrue(strip.contains("Dictionary(grouping: windowed) { $0.windowMinutes ?? 0 }"))
         XCTAssertTrue(strip.contains(#"Text("+\(group.extraCount)")"#))
+        // A count of limits is only meaningful beside a value. With no gauges
+        // the dash already stands for every one of them, so "— +3" would read
+        // as a contradiction rather than as a hint.
+        XCTAssertTrue(strip.contains("group.extraCount > 0, !group.gauges.isEmpty"))
         // Every chip can state how old its reading is, because no source here
         // refreshes on its own.
         XCTAssertTrue(strip.contains("limitsAge("))

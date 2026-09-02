@@ -69,6 +69,16 @@ extension TokenMeteringDashboardLimitsStrip {
         let outlivesItsWindow: Bool
     }
 
+    /// Why a chip has no value to show. A limit that was read once and whose
+    /// window has since closed unread is a different state from one that was
+    /// never read at all, and the difference is what the reader needs: the
+    /// first says the number went out of date, the second that none arrived.
+    static func emptyReason(for group: ToolGroup) -> TokenMeteringTextKey {
+        group.snapshots.contains { $0.isExpiredReading }
+            ? .limitsWindowClosedUnread
+            : .limitsNoReading
+    }
+
     /// How many gauges fit in one chip before the rest fall behind `+n`.
     static let slotCount = 2
     /// Below this, "as of" is noise; above it, the reading's age is part of
@@ -126,13 +136,13 @@ private extension TokenMeteringDashboardLimitsStrip {
                     .foregroundStyle(.primary.opacity(0.8))
 
                 if group.gauges.isEmpty {
-                    // No exact reading. The chip stays so the row keeps its
+                    // No value to show. The chip stays so the row keeps its
                     // shape, but it states nothing rather than inventing a
                     // percentage the tool never reported.
                     Text("—")
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(.secondary)
-                        .help(TokenMeteringL10n.text(.limitsNoReading, language: language))
+                        .help(TokenMeteringL10n.text(Self.emptyReason(for: group), language: language))
                 }
 
                 ForEach(group.gauges, id: \.limitKey) { gauge in
@@ -147,7 +157,7 @@ private extension TokenMeteringDashboardLimitsStrip {
                     .help(chipTooltip(for: gauge))
                 }
 
-                if group.extraCount > 0 {
+                if group.extraCount > 0, !group.gauges.isEmpty {
                     Text("+\(group.extraCount)")
                         .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(.secondary)
@@ -186,7 +196,7 @@ private extension TokenMeteringDashboardLimitsStrip {
     func accessibilityText(for group: ToolGroup) -> String {
         guard !group.gauges.isEmpty else {
             return "\(group.tool.dashboardLabel(language: language)) "
-                + TokenMeteringL10n.text(.limitsNoReading, language: language)
+                + TokenMeteringL10n.text(Self.emptyReason(for: group), language: language)
         }
         let gauges = group.gauges
             .map { "\(slotLabel(for: $0)) \(headlineValue(for: $0))" }
