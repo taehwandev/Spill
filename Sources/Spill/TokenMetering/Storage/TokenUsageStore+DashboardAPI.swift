@@ -32,10 +32,11 @@ extension TokenUsageStore {
                     visibleTools: visibleTools,
                     database: database
                 ),
-                let allTimeTotals = loadDashboardCountAndTotalIfAvailable(
+                let allTimeTotals = loadDashboardDailyRollupTotals(
                     dashboardToolsOnly: dashboardToolsOnly,
                     visibleTools: visibleTools,
-                    database: database
+                    database: database,
+                    failureObserver: nil
                 )
             else {
                 return nil
@@ -43,10 +44,7 @@ extension TokenUsageStore {
 
             return TokenUsageMenuBarTotals(
                 dailyTokens: dailyTokens,
-                allTimeTokens: TokenUsageInputScopeTotals(
-                    includeCache: allTimeTotals.totalTokens,
-                    freshOnly: allTimeTotals.exactFreshTotalTokens
-                ).total(for: inputScope)
+                allTimeTokens: allTimeTotals.total(for: inputScope)
             )
         }
     }
