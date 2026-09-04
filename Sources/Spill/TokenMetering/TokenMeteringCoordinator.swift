@@ -15,6 +15,10 @@ final class TokenMeteringCoordinator: NSObject {
         port: bridgePort
     )
     private lazy var inboxMonitor = TokenUsageInboxMonitor(store: usageStore)
+    // Limit readings arrive far more often than the collector's periodic pass
+    // runs, and are a single small file, so they get their own event source
+    // rather than waiting on a clock meant for re-scanning session archives.
+    private lazy var limitInboxMonitor = TokenUsageLimitInboxMonitor()
     private lazy var collectorCoordinator = TokenUsageCollectorCoordinator(store: usageStore)
     private(set) lazy var historyImportCoordinator = TokenUsageHistoryImportCoordinator(store: usageStore)
     private lazy var dashboardLauncher = TokenMeteringDashboardLauncher()
@@ -79,6 +83,7 @@ extension TokenMeteringCoordinator {
         observeUsageEvents()
         observeAIToolVisibility()
         inboxMonitor.start()
+        limitInboxMonitor.start()
         requestCollection(reason: "app_launch")
         configureBridge()
         registerPrivateUsageConnectionURLHandler()
@@ -92,6 +97,7 @@ extension TokenMeteringCoordinator {
         }
         isStopped = true
         inboxMonitor.stop()
+        limitInboxMonitor.stop()
         collectorCoordinator.stop()
         bridgeServer.stop()
         historyImportCoordinator.cancelImport()
