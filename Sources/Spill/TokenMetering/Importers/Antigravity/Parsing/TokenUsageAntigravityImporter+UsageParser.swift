@@ -19,6 +19,23 @@ extension TokenUsageAntigravityImporter {
         return Date(timeIntervalSince1970: TimeInterval(seconds))
     }
 
+    static func stepCreatedAt(from data: Data) -> Date? {
+        let envelope = [UInt8](data)
+        // Check field 9 (usage) first: steps with usage have timestamp in field 1
+        guard let timestampContainer = firstLengthDelimitedField(1, in: envelope),
+              let seconds = firstVarintField(1, in: timestampContainer)
+        else {
+            return nil
+        }
+
+        let minimumSeconds: UInt64 = 946_684_800
+        let maximumSeconds: UInt64 = 4_102_444_800
+        guard seconds >= minimumSeconds, seconds < maximumSeconds else {
+            return nil
+        }
+        return Date(timeIntervalSince1970: TimeInterval(seconds))
+    }
+
     static func usageRecord(from data: Data) -> UsageRecord? {
         let envelope = [UInt8](data)
         guard let generation = firstLengthDelimitedField(1, in: envelope),

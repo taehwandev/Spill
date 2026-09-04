@@ -25,6 +25,27 @@ extension TokenUsageAntigravityImporter {
             }
         }
 
+        var stepTimestamps = [Date]()
+        let stepSql = "SELECT metadata FROM steps WHERE metadata IS NOT NULL ORDER BY idx"
+        var stepStatement: OpaquePointer?
+        if sqlite3_prepare_v2(database, stepSql, -1, &stepStatement, nil) == SQLITE_OK,
+           let stepStatement {
+            defer { sqlite3_finalize(stepStatement) }
+            while sqlite3_step(stepStatement) == SQLITE_ROW {
+                guard let blob = sqlite3_column_blob(stepStatement, 0) else { continue }
+                let byteCount = Int(sqlite3_column_bytes(stepStatement, 0))
+                let data = Data(bytes: blob, count: byteCount)
+                let envelope = [UInt8](data)
+                // Only step rows with usage field 9 correspond to generation records
+                guard Self.firstLengthDelimitedField(9, in: envelope) != nil,
+                      let stepDate = Self.stepCreatedAt(from: data)
+                else {
+                    continue
+                }
+                stepTimestamps.append(stepDate)
+            }
+        }
+
         let sql: String
         if previousMaxIndex != nil {
             sql = "SELECT idx, data FROM gen_metadata WHERE idx > ? ORDER BY idx"
@@ -59,8 +80,12 @@ extension TokenUsageAntigravityImporter {
             }
             let byteCount = Int(sqlite3_column_bytes(statement, 1))
             let data = Data(bytes: blob, count: byteCount)
+            let embeddedDate = Self.generationCreatedAt(from: data)
+            let fallbackDate = index >= 0 && index < stepTimestamps.count ? stepTimestamps[index] : nil
+            let createdAt = embeddedDate ?? fallbackDate
+
             if let usage = Self.usageRecord(from: data),
-               let createdAt = Self.generationCreatedAt(from: data) {
+               let createdAt {
                 records.append(GenerationRecord(index: index, usage: usage, createdAt: createdAt))
             } else {
                 unsupportedRecords += 1
