@@ -51,6 +51,15 @@ struct TokenMeteringDashboardView: View {
         // Limit snapshots refresh whenever the panel summary does — the same
         // cadence that already tracks collection cycles — so the strip needs
         // no timer of its own. The read is one tiny local JSON file.
+        .onReceive(
+            NotificationCenter.default.publisher(
+                for: TokenUsageLimitInboxMonitor.limitsDidChangeNotification
+            )
+        ) { _ in
+            // Limits change on their own cadence, so they cannot wait for the
+            // panel summary to publish for some unrelated reason.
+            limitSnapshots = limitSnapshotStore.allSnapshots()
+        }
         .onReceive(store.$panelSummary) { _ in
             limitSnapshots = limitSnapshotStore.allSnapshots()
         }

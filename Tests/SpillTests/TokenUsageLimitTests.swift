@@ -483,6 +483,63 @@ final class TokenUsageLimitTests: XCTestCase {
         XCTAssertFalse(group?.outlivesItsWindow ?? true)
     }
 
+    func testLimitInboxMonitorCapturesOnWriteAndAnnouncesOnlyRealChanges() throws {
+        let root = temporaryDirectory()
+        let inbox = root.appendingPathComponent("limit-inbox", isDirectory: true)
+        let store = TokenUsageLimitSnapshotStore(
+            fileURL: root.appendingPathComponent("limit-snapshots.json")
+        )
+        let center = NotificationCenter()
+        var captureResults = [true, false]
+        var captureCount = 0
+        let monitor = TokenUsageLimitInboxMonitor(
+            directoryURL: inbox,
+            snapshotStore: store,
+            notificationCenter: center,
+            capture: { _ in
+                captureCount += 1
+                return captureResults.isEmpty ? false : captureResults.removeFirst()
+            }
+        )
+
+        var announced = 0
+        let token = center.addObserver(
+            forName: TokenUsageLimitInboxMonitor.limitsDidChangeNotification,
+            object: nil,
+            queue: nil
+        ) { _ in announced += 1 }
+        defer { center.removeObserver(token) }
+
+        // Starting captures whatever is already waiting, because a reading can
+        // predate the process that watches for it.
+        monitor.start()
+        defer { monitor.stop() }
+
+        let started = Date()
+        while captureCount < 1, Date().timeIntervalSince(started) < 2 {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.02))
+        }
+        XCTAssertGreaterThanOrEqual(captureCount, 1)
+        XCTAssertEqual(announced, 1)
+
+        // A capture that stores nothing must stay silent, so a burst of status
+        // line writes carrying the same reading cannot churn the surfaces.
+        try "{}".write(
+            to: inbox.appendingPathComponent("claude-statusline.json"),
+            atomically: true,
+            encoding: .utf8
+        )
+        let secondStarted = Date()
+        while captureCount < 2, Date().timeIntervalSince(secondStarted) < 2 {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.02))
+        }
+        XCTAssertEqual(announced, 1)
+
+        // The directory is created rather than assumed, so a cold install can
+        // watch it before the adapter has ever run.
+        XCTAssertTrue(FileManager.default.fileExists(atPath: inbox.path))
+    }
+
     func testMostConstrainedPicksTheLowestRemainingPercentage() {
         let snapshots = [
             snapshot(tool: .codex, key: "a", label: "Weekly", usedPercent: 60, capturedAt: Date()),
