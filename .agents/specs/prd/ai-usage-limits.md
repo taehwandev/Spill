@@ -49,8 +49,17 @@ as a separate, explicitly opt-in PRD.
    - Snapshots are separate from the usage-event schema; the strict
      token-usage event payload does not change.
    - Snapshot refresh piggybacks on existing collection cycles (Codex importer
-     pass, AGY importer pass, panel-summary refresh). No new timers, pollers,
-     or file watchers.
+     pass, AGY importer pass, panel-summary refresh). No new timers or pollers.
+   - One exception, added deliberately: the limit inbox the status line adapter
+     writes into has its own file-system event source. That pass is paced for
+     re-scanning Codex session archives and Antigravity databases — rare work,
+     deliberately slowed to a 30-minute fallback with a 20-minute importer
+     floor — while the adapter writes a reading every render. Riding that clock
+     left a number harvested seconds ago reaching the chip up to half an hour
+     later, measured at 13 minutes on a real machine. The exception is narrow:
+     it is event-driven rather than a poller, costs nothing while nothing is
+     written, reads one small file when something is, and reuses the mechanism
+     that already carries queued usage events. It changes no pacing constant.
    - Automatic collection is only a 30-minute recovery fallback, and passive
      limit capture shares the 20-minute active-importer pacing floor. App open
      and explicit user refreshes bypass that floor, while the source timestamp
