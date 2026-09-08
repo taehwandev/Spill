@@ -222,6 +222,7 @@ jobs:
 
       - name: Notarize signed app bundle
         shell: bash
+        timeout-minutes: 70
         env:
           APPLE_NOTARYTOOL_API_KEY: ${{ secrets.APPLE_NOTARYTOOL_API_KEY }}
           APPLE_NOTARYTOOL_API_KEY_ID: ${{ secrets.APPLE_NOTARYTOOL_API_KEY_ID }}
@@ -250,6 +251,7 @@ jobs:
 
       - name: Notarize packaged artifacts
         shell: bash
+        timeout-minutes: 70
         env:
           APPLE_NOTARYTOOL_API_KEY: ${{ secrets.APPLE_NOTARYTOOL_API_KEY }}
           APPLE_NOTARYTOOL_API_KEY_ID: ${{ secrets.APPLE_NOTARYTOOL_API_KEY_ID }}
