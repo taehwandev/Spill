@@ -13,7 +13,61 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT_DIR/scripts/release-artifacts.sh"
 
 APPLE_NOTARYTOOL_TIMEOUT="${APPLE_NOTARYTOOL_TIMEOUT:-45m}"
+# notarytool's own --timeout governs how long it waits for a submission to be
+# judged. It does not cover a stalled transfer: a submit that never finishes
+# uploading sits there with that timer unstarted. One release hung this step for
+# nearly two hours and was still hanging when it was cancelled, burning a CI job
+# and blocking the release, with --timeout 45m in effect the whole time. This is
+# the backstop that does not depend on notarytool's internals, so it is
+# deliberately longer than the value above rather than a second copy of it.
+APPLE_NOTARYTOOL_HARD_TIMEOUT="${APPLE_NOTARYTOOL_HARD_TIMEOUT:-}"
 NOTARYTOOL_LOG_DIR="${NOTARYTOOL_LOG_DIR:-$ROOT_DIR/.build/release-artifacts/notarytool-logs}"
+
+# Accepts the forms notarytool itself takes -- 45m, 1h, 600s -- plus a bare
+# number of seconds, so the backstop is expressed in the same units as the
+# value it guards.
+parse_duration_seconds() {
+    local value="$1"
+    local number="${value%[smh]}"
+    if [[ ! "$number" =~ ^[0-9]+$ ]]; then
+        echo "Invalid duration: $value" >&2
+        return 1
+    fi
+    case "$value" in
+        *h) echo $((number * 3600)) ;;
+        *m) echo $((number * 60)) ;;
+        *s) echo "$number" ;;
+        *)  echo "$number" ;;
+    esac
+}
+
+# Runs a command under a wall-clock deadline, because what is being guarded is
+# a hang rather than a slow success. Terminates first and escalates only if that
+# is ignored, so notarytool still gets the chance to print a submission id.
+# Returns 124 on expiry, matching coreutils timeout, which a stock macOS runner
+# does not have.
+run_with_deadline() {
+    local deadline="$1"
+    shift
+    "$@" &
+    local pid=$!
+    local waited=0
+    # Polled in short steps so a submission that finishes normally is not held
+    # back by the granularity of the guard watching it.
+    local step=2
+    while kill -0 "$pid" 2>/dev/null; do
+        if (( waited >= deadline )); then
+            kill -TERM "$pid" 2>/dev/null || true
+            sleep 10
+            kill -KILL "$pid" 2>/dev/null || true
+            wait "$pid" 2>/dev/null || true
+            return 124
+        fi
+        sleep "$step"
+        waited=$((waited + step))
+    done
+    wait "$pid"
+}
 TEMP_KEY_DIR=""
 TEMP_SUBMISSION_DIR=""
 
@@ -39,6 +93,17 @@ USAGE
 }
 
 notarytool_auth_args=()
+
+# Resolved once: the backstop defaults to notarytool's own timeout plus ten
+# minutes, so raising APPLE_NOTARYTOOL_TIMEOUT moves the guard with it instead
+# of silently capping it.
+notarytool_hard_deadline="$(
+    if [[ -n "$APPLE_NOTARYTOOL_HARD_TIMEOUT" ]]; then
+        parse_duration_seconds "$APPLE_NOTARYTOOL_HARD_TIMEOUT"
+    else
+        echo $(( $(parse_duration_seconds "$APPLE_NOTARYTOOL_TIMEOUT") + 600 ))
+    fi
+)"
 
 build_notarytool_auth_args() {
     if [[ -n "${APPLE_NOTARYTOOL_PROFILE:-}" || -n "${APPLE_NOTARYTOOL_KEYCHAIN:-}" ]]; then
@@ -139,12 +204,28 @@ notarize_artifact() {
     submission_path="$(submission_path_for "$artifact")"
 
     echo "Submitting artifact for notarization: $artifact"
-    if ! xcrun notarytool submit \
+    local submit_status=0
+    run_with_deadline "$notarytool_hard_deadline" \
+        xcrun notarytool submit \
         "${notarytool_auth_args[@]}" \
         --wait \
         --timeout "$APPLE_NOTARYTOOL_TIMEOUT" \
         --output-format json \
-        "$submission_path" > "$submit_json"; then
+        "$submission_path" > "$submit_json" || submit_status=$?
+
+    if (( submit_status == 124 )); then
+        echo "notarytool submit exceeded the hard deadline of ${notarytool_hard_deadline}s for $artifact and was terminated." >&2
+        echo "notarytool's own --timeout of $APPLE_NOTARYTOOL_TIMEOUT did not fire, which is what this backstop exists for: a stalled upload never starts that timer." >&2
+        if submission_id="$(json_field "$submit_json" id 2>/dev/null)"; then
+            echo "Partial submission output names id: $submission_id" >&2
+            fetch_notarytool_log "$submission_id" "$rejection_log"
+        fi
+        echo "Saved submission output: $submit_json" >&2
+        echo "Re-running the release workflow is the normal remedy; the stall is on Apple's side and the tag needs no change." >&2
+        exit 1
+    fi
+
+    if (( submit_status != 0 )); then
         submission_id=""
         if submission_id="$(json_field "$submit_json" id 2>/dev/null)"; then
             echo "notarytool submit failed for $artifact (submission id: $submission_id)." >&2
