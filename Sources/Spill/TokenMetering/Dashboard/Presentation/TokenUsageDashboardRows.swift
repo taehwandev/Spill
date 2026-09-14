@@ -5,14 +5,16 @@ enum TokenUsageDashboardRowBuilder {
         tokenValues: [Key: Int],
         totalTokens: Int,
         id: (Key) -> String,
-        label: (Key) -> String
+        label: (Key) -> String,
+        toolTokens: ((Key) -> [TokenUsageAITool: Int])? = nil
     ) -> [TokenUsageDashboardBarRow] {
         rows(
             candidates: Array(tokenValues.keys),
             totalTokens: totalTokens,
             tokens: { tokenValues[$0, default: 0] },
             id: id,
-            label: label
+            label: label,
+            toolTokens: toolTokens
         )
     }
 
@@ -41,7 +43,8 @@ enum TokenUsageDashboardRowBuilder {
         tokens: (Candidate) -> Int,
         id: (Candidate) -> String,
         label: (Candidate) -> String,
-        sorted: Bool = true
+        sorted: Bool = true,
+        toolTokens: ((Candidate) -> [TokenUsageAITool: Int])? = nil
     ) -> [TokenUsageDashboardBarRow] {
         let rows = candidates.compactMap { candidate -> TokenUsageDashboardBarRow? in
             let tokenCount = tokens(candidate)
@@ -58,7 +61,10 @@ enum TokenUsageDashboardRowBuilder {
                 id: id(candidate),
                 title: label(candidate),
                 value: value,
-                ratio: ratio
+                ratio: ratio,
+                toolShares: toolTokens.map {
+                    TokenUsageDashboardToolShare.shares(from: $0(candidate), rowTokens: tokenCount)
+                } ?? []
             )
         }
 

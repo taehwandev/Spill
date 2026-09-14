@@ -5166,6 +5166,77 @@ final class TokenUsageStoreTests: XCTestCase {
         )
     }
 
+    func testBreakdownRowsSplitTokensByAIToolInSQLAndEventSnapshots() throws {
+        let store = TokenUsageStore(fileURL: temporaryEventsURL())
+        let calendar = Calendar.autoupdatingCurrent
+        let now = Date()
+        let today = ISO8601DateFormatter.tokenUsage.string(from: now)
+
+        try store.appendEvent(Self.safeEvent(
+            aiTool: .codex,
+            spanID: "span_split_codex",
+            inputTokens: 250,
+            outputTokens: 50,
+            tokenAccounting: TokenUsageAccounting(uncachedInputTokens: 200, cacheReadInputTokens: 50),
+            taskType: .debugging,
+            stage: .implement,
+            createdAt: today
+        ))
+        try store.appendEvent(Self.safeEvent(
+            aiTool: .claude,
+            spanID: "span_split_claude",
+            inputTokens: 80,
+            outputTokens: 20,
+            tokenAccounting: nil,
+            taskType: .debugging,
+            stage: .implement,
+            createdAt: today
+        ))
+
+        let sqlSnapshot = try XCTUnwrap(TokenUsageDashboardSnapshot.buildFromSQLAggregates(
+            usageStore: store,
+            selectedPeriod: .all,
+            language: .english,
+            now: now,
+            calendar: calendar
+        ))
+        let eventSnapshot = TokenUsageDashboardSnapshot.buildPair(
+            events: store.loadEvents(startingAt: nil, endingBefore: nil),
+            selectedTool: nil,
+            selectedPeriod: .all,
+            selectedCalendarDayID: nil,
+            selectedProjectID: nil,
+            selectedSessionID: nil,
+            language: .english,
+            localAliases: [:],
+            showAdvancedTools: false,
+            now: now,
+            proposedCalendarMonthStart: nil,
+            calendar: calendar,
+            inputScope: .includeCache,
+            locale: .autoupdatingCurrent,
+            timeZone: .autoupdatingCurrent
+        ).filtered
+
+        let taskRow = try XCTUnwrap(sqlSnapshot.taskRows.first { $0.id == TokenUsageTaskType.debugging.rawValue })
+        XCTAssertEqual(taskRow.toolShares.map(\.tool), [.codex, .claude])
+        XCTAssertEqual(taskRow.toolShares.map(\.tokens), [300, 100])
+        XCTAssertEqual(taskRow.toolShares.map(\.ratio), [0.75, 0.25])
+
+        let stageRow = try XCTUnwrap(sqlSnapshot.stageRows.first { $0.id == TokenUsageStage.implement.rawValue })
+        XCTAssertEqual(stageRow.toolShares.map(\.tokens), [300, 100])
+
+        let uncachedRow = try XCTUnwrap(sqlSnapshot.inputAccounting.rows.first { $0.id == TokenUsageInputAccountingCategory.uncachedInput.rawValue })
+        XCTAssertEqual(uncachedRow.toolShares.map(\.tool), [.codex])
+        let unclassifiedRow = try XCTUnwrap(sqlSnapshot.inputAccounting.rows.first { $0.id == TokenUsageInputAccountingCategory.unclassifiedInput.rawValue })
+        XCTAssertEqual(unclassifiedRow.toolShares.map(\.tool), [.claude])
+        XCTAssertEqual(unclassifiedRow.toolShares.map(\.tokens), [80])
+
+        XCTAssertEqual(sqlSnapshot.taskRows, eventSnapshot.taskRows)
+        XCTAssertEqual(sqlSnapshot.stageRows, eventSnapshot.stageRows)
+        XCTAssertEqual(sqlSnapshot.inputAccounting, eventSnapshot.inputAccounting)
+    }
+
     func testSQLOnlySnapshotFactoryMatchesExistingEventBasedSnapshot() throws {
         let store = TokenUsageStore(fileURL: temporaryEventsURL())
         let calendar = Calendar.autoupdatingCurrent

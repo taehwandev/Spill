@@ -224,20 +224,22 @@ struct TokenUsageDashboardSnapshot: Equatable {
             label: { Self.modelLabel($0, language: language) }
         )
 
-        let taskTokens = Self.tokenTotals(events: focusedEvents, inputScope: inputScope) { $0.event.taskType }
+        let taskToolTokens = Self.toolSplitTokenTotals(events: focusedEvents, inputScope: inputScope) { $0.event.taskType }
         taskRows = TokenUsageDashboardRowBuilder.rows(
-            tokenValues: taskTokens,
+            tokenValues: taskToolTokens.mapValues { $0.values.reduce(0, +) },
             totalTokens: capturedUsageTokens,
             id: { $0.rawValue },
-            label: { $0.dashboardLabel(language: language) }
+            label: { $0.dashboardLabel(language: language) },
+            toolTokens: { taskToolTokens[$0, default: [:]] }
         )
 
-        let stageTokens = Self.tokenTotals(events: focusedEvents, inputScope: inputScope) { $0.event.stage }
+        let stageToolTokens = Self.toolSplitTokenTotals(events: focusedEvents, inputScope: inputScope) { $0.event.stage }
         stageRows = TokenUsageDashboardRowBuilder.rows(
-            tokenValues: stageTokens,
+            tokenValues: stageToolTokens.mapValues { $0.values.reduce(0, +) },
             totalTokens: capturedUsageTokens,
             id: { $0.rawValue },
-            label: { $0.dashboardLabel(language: language) }
+            label: { $0.dashboardLabel(language: language) },
+            toolTokens: { stageToolTokens[$0, default: [:]] }
         )
 
         let sourceTokens = Self.sourceTotals(events: focusedEvents)

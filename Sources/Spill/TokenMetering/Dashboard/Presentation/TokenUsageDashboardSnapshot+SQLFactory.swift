@@ -177,7 +177,7 @@ extension TokenUsageDashboardSnapshot {
             language: language
         )
 
-        let inputAccountingSQL = usageStore.inputAccountingTotals(
+        let inputAccountingSQL = usageStore.inputAccountingTotalsByTool(
             startingAt: requestRange.start,
             endingBefore: requestRange.end,
             dashboardToolsOnly: dashboardToolsOnly,
@@ -186,16 +186,21 @@ extension TokenUsageDashboardSnapshot {
             failureObserver: failureObserver
         )
         var accountingTotals = [TokenUsageInputAccountingCategory: Int]()
-        for (key, value) in inputAccountingSQL {
-            guard let category = TokenUsageInputAccountingCategory(rawValue: key) else { continue }
-            accountingTotals[category] = value
+        var accountingToolTotals = [TokenUsageInputAccountingCategory: [TokenUsageAITool: Int]]()
+        for (tool, categories) in inputAccountingSQL {
+            for (key, value) in categories {
+                guard let category = TokenUsageInputAccountingCategory(rawValue: key) else { continue }
+                accountingTotals[category, default: 0] += value
+                accountingToolTotals[category, default: [:]][tool, default: 0] += value
+            }
         }
         let inputAccountingRows = TokenUsageDashboardRowBuilder.rows(
             candidates: TokenUsageInputAccountingCategory.allCases,
             totalTokens: inputTokens,
             tokens: { accountingTotals[$0, default: 0] },
             id: { $0.rawValue },
-            label: { $0.label(language: language) }
+            label: { $0.label(language: language) },
+            toolTokens: { accountingToolTotals[$0, default: [:]] }
         )
         let inputAccounting = TokenUsageDashboardInputAccounting(
             rows: inputAccountingRows,
@@ -236,7 +241,8 @@ extension TokenUsageDashboardSnapshot {
             label: { modelLabel($0, language: language) }
         )
 
-        let taskTotalsSQL = usageStore.groupedTaskTypeInputScopeTotals(
+        let taskTotalsSQL = usageStore.groupedInputScopeTotalsByTool(
+            column: "task_type",
             startingAt: requestRange.start,
             endingBefore: requestRange.end,
             dashboardToolsOnly: dashboardToolsOnly,
@@ -244,18 +250,19 @@ extension TokenUsageDashboardSnapshot {
             database: database,
             failureObserver: failureObserver
         )
-        var taskTotals = [TokenUsageTaskType: Int]()
-        for (key, value) in taskTotalsSQL {
-            taskTotals[TokenUsageTaskType(rawValue: key) ?? .uncategorized, default: 0] += value.total(for: inputScope)
+        let taskToolTotals = toolSplitTotals(taskTotalsSQL, inputScope: inputScope) {
+            TokenUsageTaskType(rawValue: $0) ?? .uncategorized
         }
         let taskRows = TokenUsageDashboardRowBuilder.rows(
-            tokenValues: taskTotals,
+            tokenValues: taskToolTotals.mapValues { $0.values.reduce(0, +) },
             totalTokens: usageTokensTotal,
             id: { $0.rawValue },
-            label: { $0.dashboardLabel(language: language) }
+            label: { $0.dashboardLabel(language: language) },
+            toolTokens: { taskToolTotals[$0, default: [:]] }
         )
 
-        let stageTotalsSQL = usageStore.groupedStageInputScopeTotals(
+        let stageTotalsSQL = usageStore.groupedInputScopeTotalsByTool(
+            column: "stage",
             startingAt: requestRange.start,
             endingBefore: requestRange.end,
             dashboardToolsOnly: dashboardToolsOnly,
@@ -263,15 +270,15 @@ extension TokenUsageDashboardSnapshot {
             database: database,
             failureObserver: failureObserver
         )
-        var stageTotals = [TokenUsageStage: Int]()
-        for (key, value) in stageTotalsSQL {
-            stageTotals[TokenUsageStage(rawValue: key) ?? .summarize, default: 0] += value.total(for: inputScope)
+        let stageToolTotals = toolSplitTotals(stageTotalsSQL, inputScope: inputScope) {
+            TokenUsageStage(rawValue: $0) ?? .summarize
         }
         let stageRows = TokenUsageDashboardRowBuilder.rows(
-            tokenValues: stageTotals,
+            tokenValues: stageToolTotals.mapValues { $0.values.reduce(0, +) },
             totalTokens: usageTokensTotal,
             id: { $0.rawValue },
-            label: { $0.dashboardLabel(language: language) }
+            label: { $0.dashboardLabel(language: language) },
+            toolTokens: { stageToolTotals[$0, default: [:]] }
         )
 
         let sourceTotalsSQL = usageStore.sourceTokenTotals(
@@ -605,5 +612,22 @@ private extension TokenUsageDashboardSnapshot {
         }
 
         return [allFilter] + projectRows
+    }
+
+    /// Folds SQL (label, ai_tool) totals into [key: [tool: tokens]] for the selected scope. Several
+    /// raw labels can collapse into one key (unrecognized labels fall back), so values accumulate.
+    static func toolSplitTotals<Key: Hashable>(
+        _ totals: [String: [TokenUsageAITool: TokenUsageInputScopeTotals]],
+        inputScope: TokenUsageInputScope,
+        key: (String) -> Key
+    ) -> [Key: [TokenUsageAITool: Int]] {
+        var result = [Key: [TokenUsageAITool: Int]]()
+        for (label, toolTotals) in totals {
+            let mappedKey = key(label)
+            for (tool, value) in toolTotals {
+                result[mappedKey, default: [:]][tool, default: 0] += value.total(for: inputScope)
+            }
+        }
+        return result
     }
 }

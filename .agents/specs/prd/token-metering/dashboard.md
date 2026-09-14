@@ -111,6 +111,13 @@
   The scope control belongs in Settings > Token Meter.
 - Top AI tool tabs may show each tool's share of the current All-tool scope, but
   share remains secondary to the tool name.
+- When the selected scope mixes more than one AI tool, every Work Type, Work
+  Step, and raw input accounting row splits its bar by AI tool tint and lists
+  each tool's share of that row, so the Claude/Codex/Antigravity mix is visible
+  without switching tool tabs. A single-tool scope keeps the plain row bar. The
+  split follows the same usage-input scope as the row total (raw accounting stays
+  cache-inclusive), and the SQL and event-based snapshot builds produce the same
+  per-tool shares.
 - The filter bar provides a Segmented Picker (`Tokens` versus `Share %`) for the
   dashboard token unit display mode.
 - In `Tokens` mode, the primary detail shows token count and the secondary label
