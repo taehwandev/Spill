@@ -304,6 +304,26 @@ extension TokenUsageStore {
         }
     }
 
+    func inputAccountingTotalsByTool(
+        startingAt startDate: Date? = nil,
+        endingBefore endDate: Date? = nil,
+        dashboardToolsOnly: Bool = true,
+        visibleTools: Set<TokenUsageAITool>? = nil,
+        database: OpaquePointer? = nil,
+        failureObserver: TokenUsageQueryFailureObserver? = nil
+    ) -> [TokenUsageAITool: [String: Int]] {
+        withDatabaseConnection(database, default: [:]) { database in
+            loadInputAccountingTotalsByTool(
+                startingAt: startDate,
+                endingBefore: endDate,
+                dashboardToolsOnly: dashboardToolsOnly,
+                visibleTools: visibleTools,
+                database: database,
+                failureObserver: failureObserver
+            )
+        }
+    }
+
     func dashboardFocusedTotals(
         startingAt startDate: Date? = nil,
         endingBefore endDate: Date? = nil,
@@ -396,7 +416,7 @@ extension TokenUsageStore {
         }
         var totals = [TokenUsageAITool: TokenUsageInputScopeTotals]()
         for (key, value) in raw {
-            let tool: TokenUsageAITool = key == "agy" ? .antigravity : (TokenUsageAITool(rawValue: key) ?? .unknown)
+            let tool = Self.dashboardTool(storedLabel: key)
             let existing = totals[tool] ?? .zero
             totals[tool] = TokenUsageInputScopeTotals(
                 includeCache: existing.includeCache + value.includeCache,
@@ -438,6 +458,29 @@ extension TokenUsageStore {
         withDatabaseConnection(database, default: [:]) { database in
             loadGroupedInputScopeTotals(
                 column: "stage",
+                startingAt: startDate,
+                endingBefore: endDate,
+                dashboardToolsOnly: dashboardToolsOnly,
+                visibleTools: visibleTools,
+                database: database,
+                failureObserver: failureObserver
+            )
+        }
+    }
+
+    /// task_type ("task_type") or stage ("stage") totals split by AI tool.
+    func groupedInputScopeTotalsByTool(
+        column: String,
+        startingAt startDate: Date? = nil,
+        endingBefore endDate: Date? = nil,
+        dashboardToolsOnly: Bool = true,
+        visibleTools: Set<TokenUsageAITool>? = nil,
+        database: OpaquePointer? = nil,
+        failureObserver: TokenUsageQueryFailureObserver? = nil
+    ) -> [String: [TokenUsageAITool: TokenUsageInputScopeTotals]] {
+        withDatabaseConnection(database, default: [:]) { database in
+            loadGroupedInputScopeTotalsByTool(
+                column: column,
                 startingAt: startDate,
                 endingBefore: endDate,
                 dashboardToolsOnly: dashboardToolsOnly,

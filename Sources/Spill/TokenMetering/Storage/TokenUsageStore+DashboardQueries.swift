@@ -461,6 +461,69 @@ extension TokenUsageStore {
         return totals
     }
 
+    /// loadGroupedInputScopeTotals(column:) additionally grouped by ai_tool, so taskRows and
+    /// stageRows get their per-tool split from the same single statement that yields their totals.
+    func loadGroupedInputScopeTotalsByTool(
+        column: String,
+        startingAt startDate: Date? = nil,
+        endingBefore endDate: Date? = nil,
+        dashboardToolsOnly: Bool,
+        visibleTools: Set<TokenUsageAITool>? = nil,
+        database: OpaquePointer,
+        failureObserver: TokenUsageQueryFailureObserver? = nil
+    ) -> [String: [TokenUsageAITool: TokenUsageInputScopeTotals]] {
+        let sql = """
+        SELECT \(column),
+               ai_tool,
+               COALESCE(SUM(total_tokens), 0),
+               COALESCE(SUM(\(Self.dashboardFreshTokenSQL)), 0)
+        FROM token_usage_events
+        \(Self.dashboardWhereClause(startingAt: startDate, endingBefore: endDate, dashboardToolsOnly: dashboardToolsOnly, visibleTools: visibleTools))
+        GROUP BY \(column), ai_tool
+        """
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
+              let statement
+        else {
+            failureObserver?.markFailure()
+            return [:]
+        }
+        defer { sqlite3_finalize(statement) }
+        Self.bindDashboardDateRange(startingAt: startDate, endingBefore: endDate, statement: statement)
+
+        var totals = [String: [TokenUsageAITool: TokenUsageInputScopeTotals]]()
+        var stepResult = sqlite3_step(statement)
+        while stepResult == SQLITE_ROW {
+            defer { stepResult = sqlite3_step(statement) }
+            guard let keyText = sqlite3_column_text(statement, 0) else {
+                continue
+            }
+            let key = String(cString: keyText)
+            guard !key.isEmpty else {
+                continue
+            }
+            let tool = Self.dashboardTool(storedLabel: sqlite3_column_text(statement, 1).map { String(cString: $0) })
+            let existing = totals[key]?[tool] ?? .zero
+            totals[key, default: [:]][tool] = TokenUsageInputScopeTotals(
+                includeCache: existing.includeCache + Int(sqlite3_column_int64(statement, 2)),
+                freshOnly: existing.freshOnly + Int(sqlite3_column_int64(statement, 3))
+            )
+        }
+        if stepResult != SQLITE_DONE {
+            failureObserver?.markFailure()
+        }
+        return totals
+    }
+
+    /// Maps a stored ai_tool label to the tool the dashboard shows it under, matching
+    /// TokenUsageAITool's decoder: "agy" is Antigravity, anything unrecognized is unknown.
+    static func dashboardTool(storedLabel: String?) -> TokenUsageAITool {
+        guard let storedLabel else {
+            return .unknown
+        }
+        return storedLabel == "agy" ? .antigravity : (TokenUsageAITool(rawValue: storedLabel) ?? .unknown)
+    }
+
     /// Fresh-scope-aware sibling of loadGroupedModelTotals; see that function's doc comment for
     /// the modelKey-normalization and TRIM-character-set caveats, both identical here.
     func loadGroupedModelInputScopeTotals(
@@ -629,6 +692,32 @@ extension TokenUsageStore {
         database: OpaquePointer,
         failureObserver: TokenUsageQueryFailureObserver? = nil
     ) -> [String: Int] {
+        let byTool = loadInputAccountingTotalsByTool(
+            startingAt: startDate,
+            endingBefore: endDate,
+            dashboardToolsOnly: dashboardToolsOnly,
+            visibleTools: visibleTools,
+            database: database,
+            failureObserver: failureObserver
+        )
+        var totals = Self.inputAccountingKeys.reduce(into: [String: Int]()) { $0[$1] = 0 }
+        for categories in byTool.values {
+            totals.merge(categories, uniquingKeysWith: +)
+        }
+        return totals
+    }
+
+    private static let inputAccountingKeys = ["uncached_input", "cache_creation_input", "cache_read_input", "unclassified_input"]
+
+    /// loadInputAccountingTotals split by AI tool: [tool: [accounting key: tokens]].
+    func loadInputAccountingTotalsByTool(
+        startingAt startDate: Date? = nil,
+        endingBefore endDate: Date? = nil,
+        dashboardToolsOnly: Bool,
+        visibleTools: Set<TokenUsageAITool>? = nil,
+        database: OpaquePointer,
+        failureObserver: TokenUsageQueryFailureObserver? = nil
+    ) -> [TokenUsageAITool: [String: Int]] {
         let hasAccounting = """
         accounting_uncached_input_tokens IS NOT NULL \
         AND accounting_cache_creation_input_tokens IS NOT NULL \
@@ -646,6 +735,7 @@ extension TokenUsageStore {
             : "\(baseWhere) AND input_tokens > 0"
         let sql = """
         SELECT
+            ai_tool,
             COALESCE(SUM(CASE WHEN \(hasAccounting) THEN accounting_uncached_input_tokens ELSE 0 END), 0),
             COALESCE(SUM(CASE WHEN \(hasAccounting) THEN accounting_cache_creation_input_tokens ELSE 0 END), 0),
             COALESCE(SUM(CASE WHEN \(hasAccounting) THEN accounting_cache_read_input_tokens ELSE 0 END), 0),
@@ -661,6 +751,7 @@ extension TokenUsageStore {
             ), 0)
         FROM token_usage_events
         \(whereClause)
+        GROUP BY ai_tool
         """
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
@@ -672,17 +763,23 @@ extension TokenUsageStore {
         defer { sqlite3_finalize(statement) }
         Self.bindDashboardDateRange(startingAt: startDate, endingBefore: endDate, statement: statement)
 
-        guard sqlite3_step(statement) == SQLITE_ROW else {
-            failureObserver?.markFailure()
-            return [:]
+        var totals = [TokenUsageAITool: [String: Int]]()
+        var stepResult = sqlite3_step(statement)
+        while stepResult == SQLITE_ROW {
+            defer { stepResult = sqlite3_step(statement) }
+            let tool = Self.dashboardTool(storedLabel: sqlite3_column_text(statement, 0).map { String(cString: $0) })
+            let row = [
+                "uncached_input": Int(sqlite3_column_int64(statement, 1)),
+                "cache_creation_input": Int(sqlite3_column_int64(statement, 2)),
+                "cache_read_input": Int(sqlite3_column_int64(statement, 3)),
+                "unclassified_input": Int(sqlite3_column_int64(statement, 4))
+            ]
+            totals[tool, default: [:]].merge(row, uniquingKeysWith: +)
         }
-
-        return [
-            "uncached_input": Int(sqlite3_column_int64(statement, 0)),
-            "cache_creation_input": Int(sqlite3_column_int64(statement, 1)),
-            "cache_read_input": Int(sqlite3_column_int64(statement, 2)),
-            "unclassified_input": Int(sqlite3_column_int64(statement, 3))
-        ]
+        if stepResult != SQLITE_DONE {
+            failureObserver?.markFailure()
+        }
+        return totals
     }
 
 }

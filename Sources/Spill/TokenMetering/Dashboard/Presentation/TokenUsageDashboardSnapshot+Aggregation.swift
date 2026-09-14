@@ -58,6 +58,20 @@ extension TokenUsageDashboardSnapshot {
         return totals
     }
 
+    /// Same grouping as tokenTotals(events:inputScope:by:), additionally split by AI tool so
+    /// Work Type and Work Step rows can show which tool each row's tokens came from.
+    static func toolSplitTokenTotals<Key: Hashable>(
+        events: [TokenUsageDashboardParsedEvent],
+        inputScope: TokenUsageInputScope = .includeCache,
+        by key: (TokenUsageDashboardParsedEvent) -> Key
+    ) -> [Key: [TokenUsageAITool: Int]] {
+        var totals: [Key: [TokenUsageAITool: Int]] = [:]
+        for event in events {
+            totals[key(event), default: [:]][event.event.aiTool, default: 0] += usageTokens(for: event.event, inputScope: inputScope)
+        }
+        return totals
+    }
+
     static func toolTotals(
         events: [TokenUsageDashboardParsedEvent],
         inputScope: TokenUsageInputScope = .includeCache
@@ -229,6 +243,11 @@ extension TokenUsageDashboardSnapshot {
         language: TokenMeteringLanguage
     ) -> TokenUsageDashboardInputAccounting {
         var totals: [TokenUsageInputAccountingCategory: Int] = [:]
+        var toolTotals: [TokenUsageInputAccountingCategory: [TokenUsageAITool: Int]] = [:]
+        func add(_ tokens: Int, to category: TokenUsageInputAccountingCategory, tool: TokenUsageAITool) {
+            totals[category, default: 0] += tokens
+            toolTotals[category, default: [:]][tool, default: 0] += tokens
+        }
         for parsedEvent in events {
             let event = parsedEvent.event
             guard event.inputTokens > 0 else {
@@ -236,15 +255,14 @@ extension TokenUsageDashboardSnapshot {
             }
 
             guard let accounting = event.tokenAccounting else {
-                totals[.unclassifiedInput, default: 0] += event.inputTokens
+                add(event.inputTokens, to: .unclassifiedInput, tool: event.aiTool)
                 continue
             }
 
-            totals[.uncachedInput, default: 0] += accounting.uncachedInputTokens
-            totals[.cacheCreationInput, default: 0] += accounting.cacheCreationInputTokens
-            totals[.cacheReadInput, default: 0] += accounting.cacheReadInputTokens
-            let unclassifiedInput = max(0, event.inputTokens - accounting.measuredInputTokens)
-            totals[.unclassifiedInput, default: 0] += unclassifiedInput
+            add(accounting.uncachedInputTokens, to: .uncachedInput, tool: event.aiTool)
+            add(accounting.cacheCreationInputTokens, to: .cacheCreationInput, tool: event.aiTool)
+            add(accounting.cacheReadInputTokens, to: .cacheReadInput, tool: event.aiTool)
+            add(max(0, event.inputTokens - accounting.measuredInputTokens), to: .unclassifiedInput, tool: event.aiTool)
         }
 
         let rows = TokenUsageDashboardRowBuilder.rows(
@@ -252,7 +270,8 @@ extension TokenUsageDashboardSnapshot {
             totalTokens: inputTokens,
             tokens: { totals[$0, default: 0] },
             id: { $0.rawValue },
-            label: { $0.label(language: language) }
+            label: { $0.label(language: language) },
+            toolTokens: { toolTotals[$0, default: [:]] }
         )
         return TokenUsageDashboardInputAccounting(
             rows: rows,

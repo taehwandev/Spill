@@ -211,6 +211,9 @@ extension TokenMeteringDashboardAnalyticsGrid {
         rowTint: ((TokenUsageDashboardBarRow) -> Color)?
     ) -> some View {
         let visibleRows = rows.filter { $0.ratio > 0 }
+        // Split by tool only when the panel actually mixes tools; a single-tool scope keeps the
+        // panel's own tint so the tool tab selection doesn't recolor every row.
+        let showsToolSplit = Set(visibleRows.flatMap { $0.toolShares.map(\.tool) }).count > 1
 
         return VStack(alignment: .leading, spacing: 6) {
             ForEach(visibleRows) { row in
@@ -231,21 +234,30 @@ extension TokenMeteringDashboardAnalyticsGrid {
                     }
 
                     GeometryReader { geometry in
+                        let barWidth = Swift.max(CGFloat(6), geometry.size.width * CGFloat(row.ratio))
                         ZStack(alignment: .leading) {
                             RoundedRectangle(cornerRadius: 4, style: .continuous)
                                 .fill(Color.primary.opacity(0.075))
-                            RoundedRectangle(cornerRadius: 4, style: .continuous)
-                                .fill(
-                                    LinearGradient(
-                                        colors: isHovered ? [effectiveTint, effectiveTint.opacity(0.75)] : [effectiveTint.opacity(0.9), effectiveTint.opacity(0.65)],
-                                        startPoint: .leading,
-                                        endPoint: .trailing
+                            if showsToolSplit && !row.toolShares.isEmpty {
+                                toolSplitBar(row.toolShares, width: barWidth, isHovered: isHovered)
+                            } else {
+                                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                    .fill(
+                                        LinearGradient(
+                                            colors: isHovered ? [effectiveTint, effectiveTint.opacity(0.75)] : [effectiveTint.opacity(0.9), effectiveTint.opacity(0.65)],
+                                            startPoint: .leading,
+                                            endPoint: .trailing
+                                        )
                                     )
-                                )
-                                .frame(width: Swift.max(CGFloat(6), geometry.size.width * CGFloat(row.ratio)))
+                                    .frame(width: barWidth)
+                            }
                         }
                     }
                     .frame(height: 8)
+
+                    if showsToolSplit && !row.toolShares.isEmpty {
+                        toolShareCaption(row.toolShares, isHovered: isHovered)
+                    }
                 }
                 .padding(.horizontal, 6)
                 .padding(.vertical, 5)
@@ -264,6 +276,45 @@ extension TokenMeteringDashboardAnalyticsGrid {
 }
 
 extension TokenMeteringDashboardAnalyticsGrid {
+    private func toolSplitBar(
+        _ shares: [TokenUsageDashboardToolShare],
+        width: CGFloat,
+        isHovered: Bool
+    ) -> some View {
+        HStack(spacing: 0) {
+            ForEach(shares) { share in
+                Rectangle()
+                    .fill(share.tool.dashboardTint.opacity(isHovered ? 1.0 : 0.85))
+                    .frame(width: width * CGFloat(share.ratio))
+            }
+        }
+        .frame(width: width, alignment: .leading)
+        .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+    }
+
+    private func toolShareCaption(_ shares: [TokenUsageDashboardToolShare], isHovered: Bool) -> some View {
+        HStack(spacing: 10) {
+            ForEach(shares) { share in
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(share.tool.dashboardTint)
+                        .frame(width: 6, height: 6)
+                    Text(share.tool.dashboardLabel(language: language))
+                        .font(.system(size: 9.5, weight: .semibold))
+                        .foregroundStyle(isHovered ? .primary : .secondary)
+                    Text(TokenUsageDashboardSnapshot.formatPercentage(share.ratio * 100.0))
+                        .font(.system(size: 9.5, weight: .bold, design: .monospaced))
+                        .foregroundStyle(share.tool.dashboardTint)
+                        .contentTransition(.numericText())
+                }
+                .lineLimit(1)
+                .help("\(share.tool.dashboardLabel(language: language)) \(TokenUsageDashboardSnapshot.formatTokens(share.tokens))")
+            }
+            Spacer(minLength: 0)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
     private func metricValue(_ value: String, tint: Color, isHovered: Bool) -> some View {
         let parts = metricValueParts(from: value)
         return HStack(spacing: 5) {
