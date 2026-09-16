@@ -118,18 +118,9 @@ extension StatusItemController {
             return
         }
 
-        let clickedSegment = clickedSegmentKind(
-            sender: sender,
-            event: event,
-            segments: currentMainSegments
+        perform(
+            clickedSegmentKind(sender: sender, event: event, contentView: mainStatusContentView)
         )
-        if clickedSegment == .caffeine {
-            toggleCaffeineFromStatusItem()
-        } else if clickedSegment == .ai {
-            tokenDashboardAction()
-        } else {
-            toggleAction()
-        }
     }
 
     @objc func systemStatusButtonClicked(_ sender: NSStatusBarButton) {
@@ -138,7 +129,22 @@ extension StatusItemController {
 
         if shouldShowMenu {
             showMenu(for: sender, event: event)
-        } else {
+            return
+        }
+
+        perform(
+            clickedSegmentKind(sender: sender, event: event, contentView: systemStatusContentView)
+        )
+    }
+
+    /// Chips that carry their own action run it; everything else falls back to the panel toggle.
+    func perform(_ clickedSegment: MenuBarStatusSegment.Kind?) {
+        switch clickedSegment {
+        case .caffeine:
+            toggleCaffeineFromStatusItem()
+        case .ai:
+            tokenDashboardAction()
+        default:
             toggleAction()
         }
     }
@@ -154,24 +160,60 @@ extension StatusItemController {
         }
     }
 
+    /// Which chip the click landed on, resolved against the chips' real laid-out frames.
+    ///
+    /// The point comes from the global cursor position rather than the click event: the event's
+    /// `locationInWindow` is relative to whichever window delivered it, and depending on that is
+    /// what made every chip click collapse into one action when the menu bar changed. The event is
+    /// only a fallback for clicks that arrive without a usable cursor position.
     func clickedSegmentKind(
         sender: NSStatusBarButton,
         event: NSEvent?,
-        segments: [MenuBarStatusSegment]
+        contentView: MenuBarStatusContentView?
     ) -> MenuBarStatusSegment.Kind? {
-        guard let event else {
+        guard let contentView else {
             return nil
         }
 
-        let point = sender.convert(event.locationInWindow, from: nil)
-        return MenuBarStatusContentView.segmentKind(
-            at: point,
-            in: segments,
-            layoutStyle: currentLayoutStyle,
-            textFontSize: currentMenuBarStatusFontSize,
-            textIsBold: currentMenuBarStatusTextBold,
-            groupsMainCaffeine: currentMainGroupsMainCaffeine
+        guard let point = clickPoint(in: contentView, sender: sender, event: event) else {
+            return nil
+        }
+
+        return contentView.segmentKind(atContentPoint: point)
+    }
+
+    private func clickPoint(
+        in contentView: MenuBarStatusContentView,
+        sender: NSStatusBarButton,
+        event: NSEvent?
+    ) -> NSPoint? {
+        let windowPoint = Self.clickPointInWindow(
+            mouseLocation: mouseLocationProvider(),
+            statusWindowFrame: sender.window?.frame,
+            eventLocationInWindow: event?.window == nil ? nil : event?.locationInWindow
         )
+        return windowPoint.map { contentView.convert($0, from: nil) }
+    }
+
+    /// The click in the status item window's coordinates.
+    ///
+    /// The cursor position wins because it is independent of which window delivered the event, and
+    /// it is only trusted while the cursor is still over the status item. Without either input
+    /// there is no click position, and the caller must fall back to the item-wide action rather
+    /// than guess a chip.
+    static func clickPointInWindow(
+        mouseLocation: NSPoint,
+        statusWindowFrame: NSRect?,
+        eventLocationInWindow: NSPoint?
+    ) -> NSPoint? {
+        if let statusWindowFrame, statusWindowFrame.contains(mouseLocation) {
+            return NSPoint(
+                x: mouseLocation.x - statusWindowFrame.minX,
+                y: mouseLocation.y - statusWindowFrame.minY
+            )
+        }
+
+        return eventLocationInWindow
     }
 
     func toggleCaffeineFromStatusItem() {

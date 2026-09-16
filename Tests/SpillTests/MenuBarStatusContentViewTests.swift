@@ -56,112 +56,39 @@ final class MenuBarStatusContentViewTests: XCTestCase {
     }
 
     func testSegmentHitTestingFindsInactiveCaffeineInsideMainChip() {
-        let trigger = MenuBarStatusSegment(
-            kind: .trigger,
-            title: "Spill",
-            shortTitle: "Spill",
-            value: "",
-            displayText: "",
-            usageRatio: 0,
-            state: .normal,
-            symbolName: "drop.fill"
-        )
-        let caffeine = MenuBarStatusSegment(
-            kind: .caffeine,
-            title: "Caffeine",
-            shortTitle: "CAF",
-            value: "",
-            displayText: "",
-            usageRatio: 0,
-            state: .unavailable,
-            symbolName: "cup.and.saucer"
-        )
-        let cpu = MenuBarStatusSegment(
-            kind: .cpu,
-            title: "CPU",
-            shortTitle: "CPU",
-            value: "20.0%",
-            displayText: "CPU 20.0%",
-            usageRatio: 0.2,
-            state: .normal,
-            symbolName: "cpu"
-        )
+        let trigger = makeTriggerSegment()
+        let caffeine = makeCaffeineSegment()
+        let cpu = makeStatusSegment(kind: .cpu, value: "20.0%")
+        let view = makeLaidOutView(segments: [caffeine, trigger, cpu], groupsMainCaffeine: true)
+        let mainChip = try? XCTUnwrap(view.subviews.first)
+        let mainWidth = mainChip?.frame.maxX ?? 0
 
-        let segments = [caffeine, trigger, cpu]
-        let mainWidth = MenuBarStatusContentView.preferredWidth(
-            for: [caffeine, trigger],
-            groupsMainCaffeine: true
-        )
+        XCTAssertEqual(view.segmentKind(atContentPoint: NSPoint(x: 4, y: 10)), .trigger)
+        XCTAssertEqual(view.segmentKind(atContentPoint: NSPoint(x: mainWidth - 6, y: 10)), .caffeine)
+        XCTAssertEqual(view.segmentKind(atContentPoint: NSPoint(x: mainWidth + 4, y: 10)), .cpu)
+    }
 
-        XCTAssertEqual(
-            MenuBarStatusContentView.segmentKind(
-                at: NSPoint(x: 4, y: 10),
-                in: segments,
-                groupsMainCaffeine: true
-            ),
-            .trigger
-        )
-        XCTAssertEqual(
-            MenuBarStatusContentView.segmentKind(
-                at: NSPoint(x: mainWidth - 6, y: 10),
-                in: segments,
-                groupsMainCaffeine: true
-            ),
-            .caffeine
-        )
-        XCTAssertEqual(
-            MenuBarStatusContentView.segmentKind(
-                at: NSPoint(x: mainWidth + 4, y: 10),
-                in: segments,
-                groupsMainCaffeine: true
-            ),
-            .cpu
-        )
-        XCTAssertNil(
-            MenuBarStatusContentView.segmentKind(at: NSPoint(x: 9_999, y: 10), in: segments)
-        )
+    /// A click past the last chip belongs to that chip: the system pads the item, and the old
+    /// behaviour of returning nothing is what silently turned every chip into the panel toggle.
+    func testSegmentHitTestingSnapsOutsideClicksToTheNearestChip() {
+        let trigger = makeTriggerSegment()
+        let caffeine = makeCaffeineSegment()
+        let cpu = makeStatusSegment(kind: .cpu, value: "20.0%")
+        let view = makeLaidOutView(segments: [caffeine, trigger, cpu], groupsMainCaffeine: true)
+
+        XCTAssertEqual(view.segmentKind(atContentPoint: NSPoint(x: 9_999, y: 10)), .cpu)
+        XCTAssertEqual(view.segmentKind(atContentPoint: NSPoint(x: -20, y: 10)), .trigger)
+        XCTAssertEqual(view.segmentKind(atContentPoint: NSPoint(x: 4, y: 999)), .trigger)
     }
 
     func testSegmentHitTestingFindsActiveCaffeineBadgeInsideMainChip() {
-        let trigger = MenuBarStatusSegment(
-            kind: .trigger,
-            title: "Spill",
-            shortTitle: "Spill",
-            value: "",
-            displayText: "",
-            usageRatio: 0,
-            state: .normal,
-            symbolName: "drop.fill"
-        )
-        let caffeine = MenuBarStatusSegment(
-            kind: .caffeine,
-            title: "Caffeine",
-            shortTitle: "CAF",
-            value: "15m",
-            displayText: "15m",
-            usageRatio: 0,
-            state: .active,
-            symbolName: "cup.and.saucer.fill"
-        )
-        let segments = [caffeine, trigger]
-        let width = MenuBarStatusContentView.preferredWidth(for: segments, groupsMainCaffeine: true)
+        let trigger = makeTriggerSegment()
+        let caffeine = makeCaffeineSegment(value: "15m", active: true)
+        let view = makeLaidOutView(segments: [caffeine, trigger], groupsMainCaffeine: true)
+        let width = view.frame.width
 
-        XCTAssertEqual(
-            MenuBarStatusContentView.segmentKind(
-                at: NSPoint(x: width - 3, y: 18),
-                in: segments,
-                groupsMainCaffeine: true
-            ),
-            .caffeine
-        )
-        XCTAssertEqual(
-            MenuBarStatusContentView.segmentKind(
-                at: NSPoint(x: 4, y: 10),
-                in: segments,
-                groupsMainCaffeine: true
-            ),
-            .trigger
-        )
+        XCTAssertEqual(view.segmentKind(atContentPoint: NSPoint(x: width - 3, y: 18)), .caffeine)
+        XCTAssertEqual(view.segmentKind(atContentPoint: NSPoint(x: 4, y: 10)), .trigger)
     }
 
     func testMainChipShowsCaffeineIconEvenWhenInactive() throws {
@@ -234,13 +161,10 @@ final class MenuBarStatusContentViewTests: XCTestCase {
     func testDefaultLayoutKeepsCaffeineAndTriggerSeparate() throws {
         let trigger = makeTriggerSegment()
         let caffeine = makeCaffeineSegment()
-        let view = MenuBarStatusContentView(segments: [caffeine, trigger])
+        let view = makeLaidOutView(segments: [caffeine, trigger])
 
         XCTAssertEqual(view.subviews.count, 2)
-        XCTAssertEqual(
-            MenuBarStatusContentView.segmentKind(at: NSPoint(x: 4, y: 10), in: [caffeine, trigger]),
-            .caffeine
-        )
+        XCTAssertEqual(view.segmentKind(atContentPoint: NSPoint(x: 4, y: 10)), .caffeine)
     }
 
     func testTriggerUsesLargerIconOnlyFootprintThanCaffeine() {
@@ -493,17 +417,11 @@ final class MenuBarStatusContentViewTests: XCTestCase {
     func testCompactCpuMemoryStackHitTestingSplitsRows() {
         let cpu = makeStatusSegment(kind: .cpu, value: "90.0%").valueOnlyMenuBarSegment()
         let memory = makeStatusSegment(kind: .memory, value: "90.0%").valueOnlyMenuBarSegment()
-        let segments = [cpu, memory]
-        let chipCenterX = MenuBarStatusContentView.preferredWidth(for: segments) / 2
+        let view = makeLaidOutView(segments: [cpu, memory])
+        let chipCenterX = view.frame.width / 2
 
-        XCTAssertEqual(
-            MenuBarStatusContentView.segmentKind(at: NSPoint(x: chipCenterX, y: 17), in: segments),
-            .cpu
-        )
-        XCTAssertEqual(
-            MenuBarStatusContentView.segmentKind(at: NSPoint(x: chipCenterX, y: 5), in: segments),
-            .memory
-        )
+        XCTAssertEqual(view.segmentKind(atContentPoint: NSPoint(x: chipCenterX, y: 17)), .cpu)
+        XCTAssertEqual(view.segmentKind(atContentPoint: NSPoint(x: chipCenterX, y: 5)), .memory)
     }
 
     func testCompactCpuMemoryStackKeepsMetricIconsVisible() throws {
@@ -627,33 +545,12 @@ final class MenuBarStatusContentViewTests: XCTestCase {
     func testStackedLayoutUsesSeparateMetricHitTargets() {
         let cpu = makeStatusSegment(kind: .cpu, value: "90.0%")
         let memory = makeStatusSegment(kind: .memory, value: "90.0%")
-        let segments = [cpu, memory]
+        let view = makeLaidOutView(segments: [cpu, memory], layoutStyle: .stacked)
         let cpuOnlyWidth = MenuBarStatusContentView.preferredWidth(for: [cpu], layoutStyle: .stacked)
 
-        XCTAssertEqual(
-            MenuBarStatusContentView.segmentKind(
-                at: NSPoint(x: 4, y: 17),
-                in: segments,
-                layoutStyle: .stacked
-            ),
-            .cpu
-        )
-        XCTAssertEqual(
-            MenuBarStatusContentView.segmentKind(
-                at: NSPoint(x: 4, y: 5),
-                in: segments,
-                layoutStyle: .stacked
-            ),
-            .cpu
-        )
-        XCTAssertEqual(
-            MenuBarStatusContentView.segmentKind(
-                at: NSPoint(x: cpuOnlyWidth + 4, y: 10),
-                in: segments,
-                layoutStyle: .stacked
-            ),
-            .memory
-        )
+        XCTAssertEqual(view.segmentKind(atContentPoint: NSPoint(x: 4, y: 17)), .cpu)
+        XCTAssertEqual(view.segmentKind(atContentPoint: NSPoint(x: 4, y: 5)), .cpu)
+        XCTAssertEqual(view.segmentKind(atContentPoint: NSPoint(x: cpuOnlyWidth + 4, y: 10)), .memory)
     }
 
     func testStackedLayoutIsNarrowerThanInlineMetrics() {
@@ -860,6 +757,21 @@ final class MenuBarStatusContentViewTests: XCTestCase {
 
         XCTAssertNotNil(image)
         XCTAssertEqual(image?.size, NSSize(width: 18, height: 18))
+    }
+
+    private func makeLaidOutView(
+        segments: [MenuBarStatusSegment],
+        layoutStyle: MenuBarStatusLayoutStyle = .inline,
+        groupsMainCaffeine: Bool = false
+    ) -> MenuBarStatusContentView {
+        let view = MenuBarStatusContentView(
+            segments: segments,
+            layoutStyle: layoutStyle,
+            groupsMainCaffeine: groupsMainCaffeine
+        )
+        view.frame = NSRect(origin: .zero, size: view.intrinsicContentSize)
+        view.layoutSubtreeIfNeeded()
+        return view
     }
 
     private func makeTriggerSegment() -> MenuBarStatusSegment {

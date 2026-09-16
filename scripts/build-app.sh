@@ -253,14 +253,21 @@ rm -rf "$APP_DIR"
 mkdir -p "$MACOS_DIR" "$RESOURCES_DIR" "$FRAMEWORKS_DIR"
 cp "$ROOT_DIR/.build/release/Spill" "$MACOS_DIR/Spill"
 
-RESOURCE_BUNDLE="$(find "$ROOT_DIR/.build" -path "*/release/Spill_Spill.bundle" -type d -print -quit)"
+# Swift 6.4 builds into .build/out/Products/Release and leaves .build/release as a symlink to it,
+# which `find` does not descend into, so match the release directory case-insensitively.
+RESOURCE_BUNDLE="$(find "$ROOT_DIR/.build" -ipath "*/release/Spill_Spill.bundle" -type d -print -quit)"
 if [[ -z "$RESOURCE_BUNDLE" ]]; then
     echo "Spill SwiftPM resource bundle was not found after swift build." >&2
     exit 2
 fi
 ditto "$RESOURCE_BUNDLE" "$RESOURCES_DIR/Spill_Spill.bundle"
 
+# Swift 6.4 emits a structured resource bundle (Contents/Resources/...); older toolchains emit a
+# flat one. Accept either so the same script works across toolchains.
 ADAPTER_RESOURCES="$RESOURCES_DIR/Spill_Spill.bundle/adapters"
+if [[ ! -d "$ADAPTER_RESOURCES" ]]; then
+    ADAPTER_RESOURCES="$RESOURCES_DIR/Spill_Spill.bundle/Contents/Resources/adapters"
+fi
 if [[ ! -d "$ADAPTER_RESOURCES" ]]; then
     echo "Spill adapter resources were not found in the SwiftPM resource bundle." >&2
     exit 2

@@ -108,36 +108,36 @@ extension MenuBarStatusContentView {
         return sidePadding + chipTotal + gapTotal + sidePadding
     }
 
-    static func segmentKind(
-        at point: NSPoint,
-        in segments: [MenuBarStatusSegment],
-        layoutStyle: MenuBarStatusLayoutStyle = .inline,
-        textFontSize: CGFloat = MenuBarStatusContentView.defaultTextFontSize,
-        textIsBold: Bool = false,
-        groupsMainCaffeine: Bool = false
-    ) -> MenuBarStatusSegment.Kind? {
-        let normalizedFontSize = Self.normalizedTextFontSize(textFontSize)
-        var currentX = sidePadding
-
-        for descriptor in chipDescriptors(
-            for: segments,
-            layoutStyle: layoutStyle,
-            groupsMainCaffeine: groupsMainCaffeine
-        ) {
-            let width = chipWidth(
-                for: descriptor,
-                textFontSize: normalizedFontSize,
-                textIsBold: textIsBold
-            )
-            let frame = NSRect(x: currentX, y: 0, width: width, height: height)
-            if frame.contains(point) {
-                return segmentKind(at: point, in: frame, descriptor: descriptor)
-            }
-
-            currentX += width + gap
+    /// Resolves which chip a click landed on from the chips' real laid-out frames.
+    ///
+    /// A click is matched to the chip that contains it, and otherwise to the nearest chip
+    /// horizontally: the menu bar is a single row, so the vertical position carries no meaning, and
+    /// the gaps plus whatever padding the system puts around the item should still act on the chip
+    /// the user aimed at. Nothing here assumes a menu bar height or a chip origin.
+    func segmentKind(atContentPoint point: NSPoint) -> MenuBarStatusSegment.Kind? {
+        layoutSubtreeIfNeeded()
+        let chips = subviews.compactMap { $0 as? any MenuBarStatusChipView }
+        guard !chips.isEmpty else {
+            return nil
         }
 
-        return nil
+        let chip = chips.first { $0.frame.contains(point) }
+            ?? chips.min { horizontalDistance(from: point, to: $0) < horizontalDistance(from: point, to: $1) }
+        guard let chip else {
+            return nil
+        }
+
+        return chip.chipSegmentKind(at: chip.convert(point, from: self))
+    }
+
+    private func horizontalDistance(from point: NSPoint, to chip: NSView) -> CGFloat {
+        if point.x < chip.frame.minX {
+            return chip.frame.minX - point.x
+        }
+        if point.x > chip.frame.maxX {
+            return point.x - chip.frame.maxX
+        }
+        return 0
     }
 }
 
@@ -228,33 +228,6 @@ extension MenuBarStatusContentView {
 }
 
 extension MenuBarStatusContentView {
-    private static func segmentKind(
-        at point: NSPoint,
-        in frame: NSRect,
-        descriptor: ChipDescriptor
-    ) -> MenuBarStatusSegment.Kind? {
-        switch descriptor {
-        case let .main(_, caffeine):
-            if caffeine != nil, point.x >= frame.midX {
-                return .caffeine
-            }
-            return .trigger
-        case let .single(segment):
-            return segment.kind
-        case let .vertical(segment):
-            return segment.kind
-        case let .compactStack(segments):
-            guard !segments.isEmpty else {
-                return nil
-            }
-
-            let rowHeight = frame.height / CGFloat(segments.count)
-            let rowFromBottom = min(max(Int((point.y - frame.minY) / rowHeight), 0), segments.count - 1)
-            let index = segments.count - 1 - rowFromBottom
-            return segments[index].kind
-        }
-    }
-
     static func normalizedTextFontSize(_ textFontSize: CGFloat) -> CGFloat {
         guard textFontSize.isFinite else {
             return defaultTextFontSize
@@ -510,6 +483,48 @@ extension MenuBarStatusContentView {
     }
 }
 
+extension MenuBarMainTriggerChipView: MenuBarStatusChipView {
+    /// The trigger and the caffeine icon share this chip, so pick whichever icon the click is
+    /// closer to. Both frames come from Auto Layout, so this follows the icons if they move.
+    func chipSegmentKind(at point: NSPoint) -> MenuBarStatusSegment.Kind? {
+        guard hasCaffeine else {
+            return .trigger
+        }
+
+        let caffeineTarget = caffeineIconFrame.union(caffeineBadgeFrame ?? caffeineIconFrame)
+        if caffeineTarget.contains(point) {
+            return .caffeine
+        }
+        if triggerIconFrame.contains(point) {
+            return .trigger
+        }
+
+        return abs(point.x - caffeineTarget.midX) < abs(point.x - triggerIconFrame.midX)
+            ? .caffeine
+            : .trigger
+    }
+}
+
+extension MenuBarCompactStackMetricChipView: MenuBarStatusChipView {
+    /// Two metrics stack as rows in this chip, so pick the row whose label the click is nearest to.
+    func chipSegmentKind(at point: NSPoint) -> MenuBarStatusSegment.Kind? {
+        let rows = labelledSegments
+        guard !rows.isEmpty else {
+            return nil
+        }
+
+        let row = rows.first { $0.label.frame.insetBy(dx: 0, dy: -2).contains(point) }
+            ?? rows.min { abs(point.y - $0.label.frame.midY) < abs(point.y - $1.label.frame.midY) }
+        return row?.segment.kind
+    }
+}
+
+extension MenuBarVerticalMetricChipView: MenuBarStatusChipView {
+    func chipSegmentKind(at point: NSPoint) -> MenuBarStatusSegment.Kind? {
+        chipSegment.kind
+    }
+}
+
 @MainActor
 private final class MenuBarMainTriggerChipView: NSView {
     private let trigger: MenuBarStatusSegment
@@ -540,6 +555,22 @@ private final class MenuBarMainTriggerChipView: NSView {
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         refreshColors()
+    }
+
+    var hasCaffeine: Bool {
+        caffeine != nil
+    }
+
+    var triggerIconFrame: NSRect {
+        triggerIconView.frame
+    }
+
+    var caffeineIconFrame: NSRect {
+        caffeineIconView.frame
+    }
+
+    var caffeineBadgeFrame: NSRect? {
+        badgeLabel.superview == nil ? nil : badgeLabel.frame
     }
 
 }
@@ -712,6 +743,10 @@ private final class MenuBarCompactStackMetricChipView: NSView {
     private let textIsBold: Bool
     private var segmentLabels: [(segment: MenuBarStatusSegment, label: NSTextField)] = []
 
+    var labelledSegments: [(segment: MenuBarStatusSegment, label: NSTextField)] {
+        segmentLabels
+    }
+
     init(segments: [MenuBarStatusSegment], textFontSize: CGFloat, textIsBold: Bool) {
         self.segments = segments
         self.textFontSize = textFontSize
@@ -852,6 +887,10 @@ private final class MenuBarVerticalMetricChipView: NSView {
     private let textIsBold: Bool
     private let titleLabel = NSTextField(labelWithString: "")
     private let valueLabel = NSTextField(labelWithString: "")
+
+    var chipSegment: MenuBarStatusSegment {
+        segment
+    }
 
     init(segment: MenuBarStatusSegment, textFontSize: CGFloat, textIsBold: Bool) {
         self.segment = segment

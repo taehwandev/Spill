@@ -45,6 +45,47 @@ final class StatusItemClickInteractionTests: XCTestCase {
             )
         )
     }
+
+    /// The chip under the click is resolved from the cursor position, not from the event's own
+    /// coordinates. When that stopped being reliable, every chip fell back to the panel toggle.
+    func testClickPointComesFromTheCursorWhileItIsOverTheStatusItem() {
+        XCTAssertEqual(
+            StatusItemController.clickPointInWindow(
+                mouseLocation: NSPoint(x: 1_260, y: 992),
+                statusWindowFrame: statusWindowFrame,
+                eventLocationInWindow: NSPoint(x: 0, y: 0)
+            ),
+            NSPoint(x: 60, y: 12)
+        )
+    }
+
+    func testClickPointFallsBackToTheEventWhenTheCursorIsElsewhere() {
+        XCTAssertEqual(
+            StatusItemController.clickPointInWindow(
+                mouseLocation: NSPoint(x: 400, y: 400),
+                statusWindowFrame: statusWindowFrame,
+                eventLocationInWindow: NSPoint(x: 42, y: 11)
+            ),
+            NSPoint(x: 42, y: 11)
+        )
+    }
+
+    func testClickPointIsUnknownWithoutACursorOrAnEvent() {
+        XCTAssertNil(
+            StatusItemController.clickPointInWindow(
+                mouseLocation: NSPoint(x: 400, y: 400),
+                statusWindowFrame: statusWindowFrame,
+                eventLocationInWindow: nil
+            )
+        )
+        XCTAssertNil(
+            StatusItemController.clickPointInWindow(
+                mouseLocation: NSPoint(x: 1_260, y: 992),
+                statusWindowFrame: nil,
+                eventLocationInWindow: nil
+            )
+        )
+    }
 }
 
 @MainActor
