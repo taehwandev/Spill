@@ -1,5 +1,11 @@
 import AppKit
 
+extension MenuBarMetricChipView: MenuBarStatusChipView {
+    func chipSegmentKind(at point: NSPoint) -> MenuBarStatusSegment.Kind? {
+        segment.kind
+    }
+}
+
 @MainActor
 final class MenuBarMetricChipView: NSView {
     let segment: MenuBarStatusSegment
