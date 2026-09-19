@@ -374,8 +374,12 @@ extension TokenUsageDashboardStore {
                     return
                 }
 
-                self.panelSummary = panelSummary
-                self.lastError = nil
+                if self.panelSummary != panelSummary {
+                    self.panelSummary = panelSummary
+                }
+                if self.lastError != nil {
+                    self.lastError = nil
+                }
             }
         }
     }

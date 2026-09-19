@@ -20,8 +20,8 @@ struct TokenMeteringDashboardView: View {
     @State private var hoveredKPI: String? = nil
     @State private var aiToolVisibilityObserver: NSObjectProtocol?
     @State private var visibleAIToolsSyncTask: Task<Void, Never>?
-    @State private var limitSnapshots: [TokenUsageLimitSnapshot] = []
-    private let limitSnapshotStore = TokenUsageLimitSnapshotStore()
+    @StateObject private var limitStore = TokenUsageDashboardLimitStore()
+    private var limitSnapshots: [TokenUsageLimitSnapshot] { limitStore.snapshots }
     private let refreshAction: () -> Void
     private let settingsAction: () -> Void
     private let developerOptionsAction: () -> Void
@@ -50,7 +50,7 @@ struct TokenMeteringDashboardView: View {
         .focusEffectDisabled()
         // Limit snapshots refresh whenever the panel summary does — the same
         // cadence that already tracks collection cycles — so the strip needs
-        // no timer of its own. The read is one tiny local JSON file.
+        // no timer of its own. File reads run off the main thread and coalesce.
         .onReceive(
             NotificationCenter.default.publisher(
                 for: TokenUsageLimitInboxMonitor.limitsDidChangeNotification
@@ -58,13 +58,13 @@ struct TokenMeteringDashboardView: View {
         ) { _ in
             // Limits change on their own cadence, so they cannot wait for the
             // panel summary to publish for some unrelated reason.
-            limitSnapshots = limitSnapshotStore.allSnapshots()
+            limitStore.refresh()
         }
         .onReceive(store.$panelSummary) { _ in
-            limitSnapshots = limitSnapshotStore.allSnapshots()
+            limitStore.refresh()
         }
         .onAppear {
-            limitSnapshots = limitSnapshotStore.allSnapshots()
+            limitStore.refresh()
             let language = TokenMeteringLanguage.current(appLanguage: settings.appLanguage)
             resolvedLanguage = language
             titleDidChange()

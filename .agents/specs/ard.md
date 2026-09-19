@@ -706,6 +706,12 @@ Store open cost:
 
 Usage limit snapshots:
 
+- `TokenUsageDashboardLimitStore` reads limit JSON on a serial utility queue,
+  retaining at most one follow-up for a notification burst and publishing only
+  changed values. SwiftUI callbacks never read the file synchronously.
+  Panel-summary-only refreshes suppress unchanged summary and error publications,
+  matching full dashboard refresh behavior.
+
 - `TokenUsageLimitSnapshotStore` persists the latest limit reading per
   `(ai_tool, limit_key)` in one local JSON file beside the token-metering
   store, separate from the strict usage-event schema. Partial writers merge

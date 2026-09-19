@@ -4,6 +4,27 @@ import XCTest
 
 @MainActor
 final class TokenUsageDashboardStoreTests: XCTestCase {
+    func testRepeatedPanelSummaryRefreshDoesNotRepublishUnchangedState() async throws {
+        let eventsURL = temporaryEventsURL()
+        defer { try? FileManager.default.removeItem(at: eventsURL.deletingLastPathComponent()) }
+        let store = TokenUsageDashboardStore(
+            usageStore: TokenUsageStore(fileURL: eventsURL), loadsInitialPanelSummary: false
+        )
+        store.refreshAsync(trackLiveUpdates: false)
+        try await waitForRefresh(store)
+        var summaries = 0
+        var errors = 0
+        let summarySubscription = store.$panelSummary.dropFirst().sink { _ in summaries += 1 }
+        let errorSubscription = store.$lastError.dropFirst().sink { _ in errors += 1 }
+        store.refreshPanelSummary()
+        // The same serial queue drains the summary read before this build.
+        store.refreshAsync(trackLiveUpdates: false, refreshesPanelSummary: false)
+        try await waitForRefresh(store)
+        XCTAssertEqual(summaries, 0)
+        XCTAssertEqual(errors, 0)
+        withExtendedLifetime((summarySubscription, errorSubscription)) {}
+    }
+
     func testRepeatedIdenticalRefreshDoesNotRepublishSnapshotState() async throws {
         let eventsURL = temporaryEventsURL()
         defer {
