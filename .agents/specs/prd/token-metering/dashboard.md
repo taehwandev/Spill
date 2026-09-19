@@ -201,3 +201,9 @@
   `python3 .agents/scripts/workflow.py token-dashboard-render-smoke`. The smoke
   must show the real window, force its first layout/display, confirm content is
   at least `1060×640`, and stay below the local regression budget of `1500 ms`.
+
+## Maturity And Update Continuity
+
+- AI dashboard is Beta; Limits remains separately experimental with last-capture guidance.
+- An update restart restores an open dashboard and local filters. View metadata never enters usage events or sync.
+- Token Preferences prioritizes display options, with setup/history and privacy in accessible disclosure sections.

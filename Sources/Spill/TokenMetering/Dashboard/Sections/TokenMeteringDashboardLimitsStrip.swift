@@ -40,6 +40,7 @@ struct TokenMeteringDashboardLimitsStrip: View {
                 Text(TokenMeteringL10n.text(.limitsTitle, language: language))
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.secondary)
+                    .help(TokenMeteringL10n.text(.limitsExperimentalDetail, language: language))
 
                 ForEach(groups, id: \.tool) { group in
                     limitChip(for: group)

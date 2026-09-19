@@ -267,7 +267,7 @@ extension TokenMeteringDashboardView {
             )
 
             HStack(spacing: 8) {
-                alphaBadge
+                betaBadge
                 syncStateBadge
 
                 Text("•")
@@ -718,7 +718,7 @@ extension TokenMeteringDashboardView {
         pendingClearRequest = TokenUsageClearRequest(scope: scope, preview: preview)
     }
 
-    private var alphaBadge: some View {
+    private var betaBadge: some View {
         Text(t(.previewBadge).uppercased())
             .font(.system(size: 8, weight: .bold))
             .tracking(0.8)

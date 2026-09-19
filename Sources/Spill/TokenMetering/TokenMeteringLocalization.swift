@@ -37,6 +37,7 @@ enum TokenMeteringTextKey: String {
     case dashboardSubtitle
     case refresh
     case limitsTitle
+    case limitsExperimentalDetail
     case limitsWindowReset
     case limitsWindowClosedUnread
     case limitsNoReading
