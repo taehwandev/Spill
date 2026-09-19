@@ -312,6 +312,13 @@ Rules:
   menu-bar item scan and does not gate this loop: the flag has no current
   Preferences surface, and freezing the live system chips for users whose
   stored legacy value is false would be a regression.
+- `SystemStatusRefreshCoordinator` owns that single loop. Manual and scheduled
+  system reads share an in-flight refresh, including when settings or panel
+  visibility replace the loop. A cancelled loop cannot schedule another tick,
+  and a sleeping loop does not retain its owner. App termination stops the loop
+  after hiding the panel, since hiding it can invoke the visibility callback.
+  This cadence is independent of Sentry's 2-second App Hang detection threshold;
+  the threshold is not a request timeout or a periodic logging interval.
 - First-class AI tool colors are a token metering dashboard presentation
   contract. Codex, Claude Code, and Antigravity/AGY must resolve through one
   shared color mapping used by top tool tabs, AI Tool Distribution rows, and

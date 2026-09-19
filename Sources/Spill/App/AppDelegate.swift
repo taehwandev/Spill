@@ -4,8 +4,6 @@ import Combine
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private static let statusRefreshDelayNanoseconds: UInt64 = 3_000_000_000
-
     private let settings = SpillSettings.shared
     private let scanner = AXMenuBarItemScanner()
     private let sleepGuard = SleepGuardController()
@@ -75,7 +73,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     )
     private var statusItemController: StatusItemController?
-    private var statusRefreshTask: Task<Void, Never>?
+    private lazy var statusRefreshCoordinator = SystemStatusRefreshCoordinator(
+        interval: { [weak self] in
+            guard let self else { return nil }
+            return SystemStatusRefreshCoordinator.interval(
+                isPanelVisible: isSpillPanelVisible,
+                hasMenuBarItems: !settings.enabledMenuBarStatusItems.isEmpty,
+                usesPerformanceEffect: settings.menuBarTriggerIconStyle.usesPerformanceEffect,
+                preferredInterval: settings.refreshInterval
+            )
+        },
+        refresh: { [weak self] in await self?.refreshMenuBarStatusData() }
+    )
     private var isSpillPanelVisible = false
     private var cancellables = Set<AnyCancellable>()
 
@@ -354,9 +363,9 @@ extension AppDelegate {
             name: TokenMeteringDashboardProcess.cloudServiceStatusRefreshRequestNotification,
             object: nil
         )
-        statusRefreshTask?.cancel()
         sleepGuard.stop()
         spillPanelController.hide(animated: false)
+        statusRefreshCoordinator.stop()
     }
 
     private func toggleSpillBar() {
@@ -819,53 +828,12 @@ extension AppDelegate {
 
 extension AppDelegate {
     private func configureStatusRefreshLoop(startsImmediately: Bool = true) {
-        statusRefreshTask?.cancel()
-
-        guard isSpillPanelVisible
-            || !settings.enabledMenuBarStatusItems.isEmpty
-            || settings.menuBarTriggerIconStyle.usesPerformanceEffect
-        else {
-            statusItemController?.refresh()
-            return
-        }
-
         // Note: `autoRefreshEnabled` deliberately does not gate this loop. That
         // flag governs the AX menu-bar item scan (MenuBarScanCoordinator) and
         // has no current Preferences surface; freezing the live system chips
         // for users whose stored legacy value is false would be a regression.
-        statusRefreshTask = Task { @MainActor [weak self] in
-            if !startsImmediately {
-                guard let self, await self.sleepForStatusRefreshTick() else {
-                    return
-                }
-            }
-
-            while !Task.isCancelled {
-                guard let self else { return }
-                await refreshMenuBarStatusData()
-
-                guard await sleepForStatusRefreshTick() else {
-                    return
-                }
-            }
-        }
-    }
-
-    /// The visible Spill panel keeps the live 3-second cadence; the background
-    /// menu bar loop follows the user's refresh-interval preference (15s by
-    /// default) instead of a hard-coded 3 seconds. Reads the delay each tick so
-    /// a mid-loop visibility or preference change takes effect at the next
-    /// sleep even before the loop is reconfigured.
-    private func sleepForStatusRefreshTick() async -> Bool {
-        let delayNanoseconds = isSpillPanelVisible
-            ? Self.statusRefreshDelayNanoseconds
-            : UInt64(max(settings.refreshInterval, 3) * 1_000_000_000)
-        do {
-            try await Task.sleep(nanoseconds: delayNanoseconds)
-            return true
-        } catch {
-            return false
-        }
+        statusRefreshCoordinator.restart(startsImmediately: startsImmediately)
+        statusItemController?.refresh()
     }
 
     private func refreshMenuBarStatusData() async {
@@ -888,13 +856,7 @@ extension AppDelegate {
             aiStatusStore.refreshInBackground()
         }
 
-        await statusStore.refresh(
-            enabledModules: isSpillPanelVisible ? settings.statusModulesRequiredForRefresh : menuBarStatusModules,
-            readsPower: isSpillPanelVisible
-        )
-        tokenMeteringCoordinator.requestMenuBarTokenUsageCollectionIfNeeded()
-        tokenMeteringCoordinator.refreshMenuBarTokenTotal()
-        statusItemController?.refresh()
+        await statusRefreshCoordinator.refreshNow()
     }
 
     private var menuBarStatusModules: Set<SpillStatusModule> {
