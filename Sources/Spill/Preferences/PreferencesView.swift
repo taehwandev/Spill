@@ -23,11 +23,7 @@ struct PreferencesView: View {
             PreferencesSidebarView(
                 language: settings.appLanguage,
                 currentVersion: updateStore.currentVersion,
-                isCheckingForUpdates: updateStore.isChecking,
-                navigationState: navigationState,
-                checkForUpdatesAction: {
-                    updateStore.checkForUpdates(source: "preferences_sidebar")
-                }
+                navigationState: navigationState
             )
 
             Divider()

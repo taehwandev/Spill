@@ -60,28 +60,28 @@ struct TokenMeteringPreferencesSection: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            TokenMeteringSetupSection(
-                setupActionStore: setupActionStore,
-                installedTools: installedTokenTools,
-                language: currentLanguage,
-                copiedTarget: copiedTarget,
-                adapterStatuses: adapterStatuses,
-                copyToClipboardAction: copyToClipboard
-            )
-
-            // Step 2: Local history import (Optional)
-            historyImportSection
-
-            // Local sync status & display settings
             localSyncAndDisplaySettingsSection
-
             aiToolVisibilitySection
+
+            DisclosureGroup(t(.step1Title)) {
+                TokenMeteringSetupSection(
+                    setupActionStore: setupActionStore,
+                    installedTools: installedTokenTools,
+                    language: currentLanguage,
+                    copiedTarget: copiedTarget,
+                    adapterStatuses: adapterStatuses,
+                    copyToClipboardAction: copyToClipboard
+                )
+                historyImportSection
+            }
 
             if PrivateUsageUploadFeatureAvailability.isEnabledInCurrentBuild {
                 privateUsageUploadSection
             }
 
-            privacyBoundarySection
+            DisclosureGroup(t(.privacyBoundary)) {
+                privacyBoundarySection
+            }
         }
         .onAppear {
             aiStatusStore.refreshInBackground()

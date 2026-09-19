@@ -3,9 +3,7 @@ import SwiftUI
 struct PreferencesSidebarView: View {
     let language: SpillAppLanguage
     let currentVersion: String
-    let isCheckingForUpdates: Bool
     @ObservedObject var navigationState: PreferencesNavigationState
-    let checkForUpdatesAction: () -> Void
     @State private var hoveredTab: String?
 
     var body: some View {
@@ -13,7 +11,6 @@ struct PreferencesSidebarView: View {
             brandHeader
             navigationList
             Spacer()
-            updateButton
         }
         .frame(width: 170)
         .background(
@@ -58,36 +55,6 @@ struct PreferencesSidebarView: View {
             }
         }
         .padding(.horizontal, 8)
-    }
-
-    private var updateButton: some View {
-        VStack(spacing: 8) {
-            Divider()
-                .background(Color.primary.opacity(0.06))
-                .padding(.horizontal, 12)
-
-            Button(action: checkForUpdatesAction) {
-                HStack(spacing: 6) {
-                    if isCheckingForUpdates {
-                        ProgressView()
-                            .controlSize(.small)
-                            .scaleEffect(0.7)
-                            .frame(width: 12, height: 12)
-                    } else {
-                        Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 12, weight: .semibold))
-                    }
-                    Text(isCheckingForUpdates ? t(.checkingForUpdates) : t(.checkForUpdates))
-                        .font(.system(size: 12, weight: .semibold))
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 6)
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.regular)
-            .padding(.horizontal, 12)
-            .padding(.bottom, 16)
-        }
     }
 
     private func sidebarItem(title: String, imageName: String, tag: String) -> some View {

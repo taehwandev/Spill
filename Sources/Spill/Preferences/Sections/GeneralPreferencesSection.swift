@@ -12,9 +12,15 @@ struct GeneralPreferencesSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            launchSettingsCard
-            languageSettingsCard
-            appearanceSettingsCard
+            PreferenceCard(title: t(.general), symbolName: "gearshape", iconColor: .blue) {
+                VStack(alignment: .leading, spacing: 14) {
+                    launchSettingsCard
+                    Divider()
+                    languageSettingsCard
+                    Divider()
+                    appearanceSettingsCard
+                }
+            }
             permissionsCard
             updatesCard
             legalAndPrivacyCard
@@ -29,7 +35,7 @@ struct GeneralPreferencesSection: View {
 
 private extension GeneralPreferencesSection {
     private var launchSettingsCard: some View {
-        PreferenceCard(title: t(.launchSettings), symbolName: "play.circle.fill", iconColor: .blue) {
+        Group {
             VStack(alignment: .leading, spacing: 10) {
                 Toggle(t(.launchAtLogin), isOn: launchAtLoginBinding)
                     .disabled(!LoginItemController.isAvailable)
@@ -51,7 +57,7 @@ private extension GeneralPreferencesSection {
     }
 
     private var languageSettingsCard: some View {
-        PreferenceCard(title: t(.languageSettings), symbolName: "globe", iconColor: .purple) {
+        Group {
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
                     Text(t(.appLanguage))
@@ -76,7 +82,7 @@ private extension GeneralPreferencesSection {
     }
 
     private var appearanceSettingsCard: some View {
-        PreferenceCard(title: t(.appearanceSettings), symbolName: "circle.lefthalf.filled", iconColor: .indigo) {
+        Group {
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
                     Text(t(.appearanceTheme))
