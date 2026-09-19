@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 
 @MainActor
@@ -22,6 +23,9 @@ final class TokenMeteringDashboardWindowController: NSObject, NSWindowDelegate {
     private var deferredRefreshTask: Task<Void, Never>?
     private var periodicRefreshTask: Task<Void, Never>?
     private var isPreparingForTermination = false
+    private var filterObservation: AnyCancellable?
+    private let restoration = DashboardUpdateRestoration()
+    var isVisible: Bool { window?.isVisible == true }
 
     init(
         store: TokenUsageDashboardStore,
@@ -50,6 +54,15 @@ final class TokenMeteringDashboardWindowController: NSObject, NSWindowDelegate {
         self.closeAction = closeAction
         self.syncsVisibleAIToolsInView = syncsVisibleAIToolsInView
         super.init()
+        if let filters = restoration.consumeFilters() {
+            store.restoreFilters(filters)
+        }
+        filterObservation = store.objectWillChange.sink { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.restoration.save(self.store.restorationFilters)
+            }
+        }
     }
 
     func show() {
@@ -166,6 +179,7 @@ extension TokenMeteringDashboardWindowController {
     }
 
     func prepareForTermination() {
+        restoration.save(store.restorationFilters)
         isPreparingForTermination = true
         cancelRefreshTasks()
         aiStatusStore.cancelRefresh()

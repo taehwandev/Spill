@@ -23,6 +23,11 @@ struct UpdatePreferencesSection: View {
 
             updateStatus
 
+            if let updater = store.automaticUpdater, updater.isAvailable {
+                Divider()
+                AutomaticUpdatePreferencesView(updater: updater)
+            }
+
             if showsManualFallbackActions {
                 installCommandView
             }

@@ -6,6 +6,7 @@ final class UpdateCheckStore: ObservableObject {
     static let defaultInstallCommand = "curl -L -O https://github.com/taehwandev/Spill/releases/latest/download/Spill-macos.dmg && open Spill-macos.dmg"
 
     @Published private(set) var state: UpdateCheckState
+    let automaticUpdater: SparkleUpdateController?
 
     private static let automaticDashboardCheckKey = "dev.spill.update.lastDashboardCheckAt"
     private static let dashboardManifestCacheKey = "dev.spill.update.lastDashboardManifest"
@@ -23,6 +24,7 @@ final class UpdateCheckStore: ObservableObject {
 
     init(
         checker: UpdateChecker = UpdateChecker(),
+        automaticUpdater: SparkleUpdateController? = nil,
         openURL: @escaping (URL) -> Void = { NSWorkspace.shared.open($0) },
         copyText: @escaping @MainActor (String) -> Void = UpdateCheckStore.copyToPasteboard(_:),
         isInAppUpdaterAvailable: @escaping @MainActor () -> Bool = { false },
@@ -32,6 +34,7 @@ final class UpdateCheckStore: ObservableObject {
         automaticDashboardCheckInterval: TimeInterval = UpdateCheckStore.automaticDashboardCheckInterval
     ) {
         self.checker = checker
+        self.automaticUpdater = automaticUpdater
         self.openURL = openURL
         self.copyText = copyText
         self.isInAppUpdaterAvailable = isInAppUpdaterAvailable

@@ -2,6 +2,9 @@ import Foundation
 
 extension PreferencesL10n {
     static let preferencesKoreanTextPart1: [PreferencesTextKey: String] = [
+            .automaticUpdateChecks: "업데이트 자동 확인",
+            .automaticUpdateInstall: "업데이트 자동 다운로드 및 설치",
+            .automaticUpdateDetail: "백그라운드에서 다운로드하고 앱 종료 시 또는 선택한 재시작 시 설치합니다. 업데이트로 재시작하면 열려 있던 AI 대시보드가 복원됩니다.",
             .preferencesWindowTitle: "Spill 설정",
             .general: "일반",
             .menuBar: "메뉴 막대",

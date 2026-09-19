@@ -152,6 +152,22 @@ final class TokenUsageDashboardStore: ObservableObject {
 }
 
 extension TokenUsageDashboardStore {
+    var restorationFilters: DashboardRestoredFilters {
+        DashboardRestoredFilters(tool: selectedTool?.rawValue, period: selectedPeriod.rawValue,
+            offset: periodOffset, day: selectedCalendarDayID, project: selectedProjectID,
+            session: selectedSessionID, month: calendarMonthStart)
+    }
+
+    func restoreFilters(_ filters: DashboardRestoredFilters) {
+        selectedTool = filters.tool.flatMap(TokenUsageAITool.init(rawValue:))
+        selectedPeriod = TokenUsageDashboardPeriod(rawValue: filters.period) ?? .today
+        periodOffset = min(0, max(-1200, filters.offset))
+        selectedCalendarDayID = filters.day
+        selectedProjectID = filters.project
+        selectedSessionID = filters.session
+        calendarMonthStart = filters.month
+    }
+
     func refresh(trackLiveUpdates: Bool = true, refreshesPanelSummary: Bool = true) {
         hasRequestedFullSnapshot = true
         scheduledRefreshTask?.cancel()

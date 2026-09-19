@@ -2,6 +2,9 @@ import Foundation
 
 extension PreferencesL10n {
     static let preferencesEnglishTextPart1: [PreferencesTextKey: String] = [
+            .automaticUpdateChecks: "Automatically check for updates",
+            .automaticUpdateInstall: "Download and install updates automatically",
+            .automaticUpdateDetail: "Updates download in the background and install when you quit, or when you choose to restart. An open AI dashboard returns after an update restart.",
             .preferencesWindowTitle: "Spill Preferences",
             .general: "General",
             .menuBar: "Menu Bar",

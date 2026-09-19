@@ -104,6 +104,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let sparkleUpdateController = SparkleUpdateController()
         self.sparkleUpdateController = sparkleUpdateController
         updateCheckStore = UpdateCheckStore(
+            automaticUpdater: sparkleUpdateController,
             isInAppUpdaterAvailable: {
                 sparkleUpdateController.isAvailable
             },
@@ -112,6 +113,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         )
         super.init()
+        sparkleUpdateController.prepareForUpdateRelaunch = { [weak self] in
+            let identifier = TokenMeteringDashboardLifecycle.dashboardBundleIdentifier(
+                forMainBundleIdentifier: Bundle.main.bundleIdentifier
+            )
+            let isOpen = NSWorkspace.shared.runningApplications.contains {
+                $0.bundleIdentifier == identifier
+                    && $0.bundleURL?.standardizedFileURL == TokenMeteringDashboardProcess.helperAppURL()?.standardizedFileURL
+            }
+            DashboardUpdateRestoration().prepare(
+                isDashboardOpen: isOpen || self?.tokenMeteringCoordinator.isFallbackDashboardVisible == true
+            )
+        }
     }
 }
 
@@ -172,6 +185,9 @@ extension AppDelegate {
             scanCoordinator.start()
             configureHotKey()
             prewarmPanel()
+            if DashboardUpdateRestoration().consumeReopenRequest() {
+                openTokenDashboard(source: "update_restore")
+            }
         }
     }
 
@@ -203,6 +219,14 @@ extension AppDelegate {
 extension AppDelegate {
     private func startSmokeTestExitTimer() {
         print("SPILL_SMOKE_READY")
+        if let tab = ProcessInfo.processInfo.environment["SPILL_SMOKE_PREFERENCES_TAB"] {
+            showPreferences(source: "smoke", selectedTab: tab)
+            for window in NSApp.windows where window.isVisible {
+                window.contentView?.layoutSubtreeIfNeeded()
+                window.displayIfNeeded()
+            }
+            print("SPILL_PREFERENCES_RENDER_READY tab=\(tab)")
+        }
 
         if shouldStartSleepGuardInSmokeTest {
             startSleepGuardForSmokeTest()

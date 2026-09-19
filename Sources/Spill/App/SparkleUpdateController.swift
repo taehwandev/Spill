@@ -1,9 +1,15 @@
 import Foundation
+import Combine
 import Sparkle
 
 @MainActor
-final class SparkleUpdateController: NSObject, SPUUpdaterDelegate {
+final class SparkleUpdateController: NSObject, SPUUpdaterDelegate, ObservableObject {
     private var updaterController: SPUStandardUpdaterController?
+    private var observations: [NSKeyValueObservation] = []
+    @Published private(set) var automaticChecks = false
+    @Published private(set) var automaticDownloads = false
+    @Published private(set) var allowsAutomaticDownloads = false
+    var prepareForUpdateRelaunch: (() -> Void)?
 
     init(bundle: Bundle = .main) {
         super.init()
@@ -17,6 +23,42 @@ final class SparkleUpdateController: NSObject, SPUUpdaterDelegate {
             updaterDelegate: self,
             userDriverDelegate: nil
         )
+        if let updater = updaterController?.updater {
+            observations = [
+                updater.observe(\.automaticallyChecksForUpdates, options: [.initial, .new]) { [weak self] _, _ in
+                    Task { @MainActor in self?.refreshPreferences() }
+                },
+                updater.observe(\.automaticallyDownloadsUpdates, options: [.initial, .new]) { [weak self] _, _ in
+                    Task { @MainActor in self?.refreshPreferences() }
+                },
+                updater.observe(\.allowsAutomaticUpdates, options: [.initial, .new]) { [weak self] _, _ in
+                    Task { @MainActor in self?.refreshPreferences() }
+                }
+            ]
+            refreshPreferences()
+        }
+    }
+
+    func setAutomaticChecks(_ enabled: Bool) {
+        updaterController?.updater.automaticallyChecksForUpdates = enabled
+        refreshPreferences()
+    }
+
+    func setAutomaticDownloads(_ enabled: Bool) {
+        guard allowsAutomaticDownloads else { return }
+        updaterController?.updater.automaticallyDownloadsUpdates = enabled
+        refreshPreferences()
+    }
+
+    private func refreshPreferences() {
+        guard let updater = updaterController?.updater else { return }
+        automaticChecks = updater.automaticallyChecksForUpdates
+        automaticDownloads = updater.automaticallyDownloadsUpdates
+        allowsAutomaticDownloads = updater.allowsAutomaticUpdates
+    }
+
+    func updaterWillRelaunchApplication(_ updater: SPUUpdater) {
+        prepareForUpdateRelaunch?()
     }
 
     var isAvailable: Bool {

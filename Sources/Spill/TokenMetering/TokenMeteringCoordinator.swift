@@ -27,6 +27,7 @@ final class TokenMeteringCoordinator: NSObject {
         collectionCoordinator: collectorCoordinator
     )
     private var dashboardWindowController: TokenMeteringDashboardWindowController?
+    var isFallbackDashboardVisible: Bool { dashboardWindowController?.isVisible == true }
     private var privateUsageUploadTask: Task<Void, Never>?
     private var isDashboardLaunchInProgress = false
     private var isSmokeTest = false

@@ -2,6 +2,9 @@ import Foundation
 
 extension PreferencesL10n {
     static let preferencesJapaneseTextPart1: [PreferencesTextKey: String] = [
+            .automaticUpdateChecks: "アップデートを自動確認",
+            .automaticUpdateInstall: "アップデートを自動ダウンロード・インストール",
+            .automaticUpdateDetail: "バックグラウンドでダウンロードし、終了時または再起動を選択した際にインストールします。更新後は開いていた AI ダッシュボードを復元します。",
             .preferencesWindowTitle: "Spill 設定",
             .general: "一般",
             .menuBar: "メニューバー",

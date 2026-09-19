@@ -18,8 +18,9 @@ Requirements:
   update state.
 - Update states include not checked, checking, up to date, update available,
   download opened, failed, and unavailable.
-- Release notes and download/install actions must be explicit user actions.
-- Automatic installation is not required for MVP.
+- Manual release notes and download/install actions remain explicit user actions; automatic installation requires the user-enabled Sparkle option.
+- Preferences exposes automatic checks and download/install controls through Sparkle, preserving existing consent and manual fallback.
+- Update relaunch restores an open AI dashboard with its filters; closed dashboards and expired requests must not reopen.
 - Sparkle appcast support may be used only when signing, notarization, appcast,
   and key management are ready.
 

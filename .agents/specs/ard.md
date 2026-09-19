@@ -1636,3 +1636,25 @@ Use stored AX element when fresh. If stale:
 - Avoid overpromising in README and UI.
 - Write provider tests around model transformation where possible.
 - Prefer manual verification scripts for macOS integration behavior.
+
+## Update Preferences And Dashboard Continuity
+
+Sparkle 2.9.2 owns automatic-check/download persistence and consent. Preferences
+uses its main-thread properties and KVO, without duplicate SpillSettings keys or
+another timer. Defaults and prior opt-in survive unchanged. Changes affect
+Preferences and the main updater immediately; compact panel, clock glance, web,
+private uploads and agent summaries do not consume these settings. The helper
+does not run an updater.
+
+Update relaunch writes a timestamped one-shot request when a dashboard is open.
+Main launch consumes it, and the dashboard restores its persisted local filter
+state. Requests expire after ten minutes. Frame autosave remains AppKit-owned;
+normal app termination still closes the helper. Filter metadata stays local,
+uses the existing shared defaults suite, and never enters usage events or sync.
+
+Preferences retains the Stitch screen 1c917f2e89a2420994f59abf1134f340 sidebar
+and cards: Startup maps to grouped General controls; Updates maps to Sparkle
+controls. Token display options precede optional setup/history/privacy disclosure
+groups. Existing features and stored settings remain available. Dashboard Beta
+is independent of experimental Limits. Verify toggles, restoration expiry and
+filters with focused tests, then render the actual Preferences and dashboard.
