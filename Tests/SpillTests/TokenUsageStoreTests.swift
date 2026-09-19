@@ -2160,7 +2160,8 @@ final class TokenUsageStoreTests: XCTestCase {
         let importer = TokenUsageClaudeCodeImporter(
             projectsDirectory: projectsURL,
             labelTimelineURL: rootURL.appendingPathComponent("missing-labels.jsonl"),
-            stateURL: rootURL.appendingPathComponent("claude-active-state.json")
+            stateURL: rootURL.appendingPathComponent("claude-active-state.json"),
+            diagnosticsURL: nil
         )
 
         let summary = importer.importRecentSessions(into: store)
@@ -2194,6 +2195,51 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(store.loadEvents().count, 3)
     }
 
+    func testClaudeCodeActiveImporterDropsInvalidEventWithoutStallingTheBatch() throws {
+        let rootURL = temporaryDirectoryURL()
+        let projectsURL = rootURL.appendingPathComponent("projects", isDirectory: true)
+        let projectURL = projectsURL.appendingPathComponent("project-opaque", isDirectory: true)
+        try FileManager.default.createDirectory(at: projectURL, withIntermediateDirectories: true)
+
+        // A record-level sessionId that fails the store's opaque-id rule used to
+        // reject the entire batch, so the cursor never advanced and every later
+        // turn in every session stayed unimported.
+        let transcript = [
+            #"{"timestamp":"2026-06-26T00:00:01.000Z","sessionId":"bad","requestId":"req_bad","message":{"role":"assistant","model":"claude-sonnet-4","usage":{"input_tokens":10,"output_tokens":2}}}"#,
+            #"{"timestamp":"2026-06-26T00:00:02.000Z","requestId":"req_good","message":{"role":"assistant","model":"claude-sonnet-4","usage":{"input_tokens":20,"output_tokens":3}}}"#,
+        ].joined(separator: "\n")
+        try "\(transcript)\n".write(
+            to: projectURL.appendingPathComponent("22222222222222222222222222222222.jsonl"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let store = TokenUsageStore(fileURL: temporaryEventsURL())
+        let stateURL = rootURL.appendingPathComponent("claude-active-state.json")
+        let diagnosticsURL = rootURL.appendingPathComponent("claude-active-importer-last.json")
+        let importer = TokenUsageClaudeCodeImporter(
+            projectsDirectory: projectsURL,
+            labelTimelineURL: rootURL.appendingPathComponent("missing-labels.jsonl"),
+            stateURL: stateURL,
+            diagnosticsURL: diagnosticsURL
+        )
+
+        let summary = importer.importRecentSessions(into: store)
+        XCTAssertFalse(summary.failedToWriteEvents)
+        XCTAssertEqual(summary.invalidEvents, 1)
+        XCTAssertEqual(summary.importedEvents, 1)
+        XCTAssertEqual(summary.cursorAdvancedFiles, 1)
+        XCTAssertEqual(store.loadEvents().map(\.totalTokens), [23])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: stateURL.path))
+
+        let diagnostic = try decodedJSONObject(from: Data(contentsOf: diagnosticsURL))
+        XCTAssertEqual(diagnostic["ai_tool"] as? String, "claude")
+        XCTAssertEqual(diagnostic["projects_directory_found"] as? Bool, true)
+        XCTAssertEqual(diagnostic["imported_events"] as? Int, 1)
+        XCTAssertEqual(diagnostic["invalid_events"] as? Int, 1)
+        XCTAssertFalse(String(decoding: try Data(contentsOf: diagnosticsURL), as: UTF8.self).contains(projectsURL.path))
+    }
+
     func testClaudeCodeLabelTimelineReadsOnlyAppendedBytesAndResetsAfterTruncation() throws {
         let rootURL = temporaryDirectoryURL()
         try FileManager.default.createDirectory(at: rootURL, withIntermediateDirectories: true)
@@ -2205,7 +2251,8 @@ final class TokenUsageStoreTests: XCTestCase {
         let importer = TokenUsageClaudeCodeImporter(
             projectsDirectory: rootURL,
             labelTimelineURL: timelineURL,
-            stateURL: nil
+            stateURL: nil,
+            diagnosticsURL: nil
         )
         let firstTimestamp = try XCTUnwrap(
             ISO8601DateFormatter.parseTokenUsageDate(from: "2026-06-26T00:05:00.000Z")
@@ -2258,6 +2305,7 @@ final class TokenUsageStoreTests: XCTestCase {
             projectsDirectory: rootURL,
             labelTimelineURL: rootURL.appendingPathComponent("missing-labels.jsonl"),
             stateURL: nil,
+            diagnosticsURL: nil,
             sessionDiscoveryCacheLifetime: 60,
             now: { currentDate }
         )
@@ -2294,7 +2342,8 @@ final class TokenUsageStoreTests: XCTestCase {
         let importer = TokenUsageClaudeCodeImporter(
             projectsDirectory: projectsURL,
             labelTimelineURL: rootURL.appendingPathComponent("missing-labels.jsonl"),
-            stateURL: stateURL
+            stateURL: stateURL,
+            diagnosticsURL: nil
         )
 
         // Batch 1: first occurrence of req_bug2 at T=0s.
@@ -2344,7 +2393,8 @@ final class TokenUsageStoreTests: XCTestCase {
         let importer = TokenUsageClaudeCodeImporter(
             projectsDirectory: projectsURL,
             labelTimelineURL: rootURL.appendingPathComponent("missing-labels.jsonl"),
-            stateURL: rootURL.appendingPathComponent("claude-active-state.json")
+            stateURL: rootURL.appendingPathComponent("claude-active-state.json"),
+            diagnosticsURL: nil
         )
 
         let summary = importer.importRecentSessions(into: store)

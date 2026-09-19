@@ -22,6 +22,13 @@ extension TokenUsageClaudeCodeImporter {
             .appendingPathComponent("claude-active-importer-state.json")
     }
 
+    static func defaultDiagnosticsURL() -> URL {
+        AppDirectories.spillApplicationSupportDirectory()
+            .appendingPathComponent("token-metering", isDirectory: true)
+            .appendingPathComponent("diagnostics", isDirectory: true)
+            .appendingPathComponent("claude-active-importer-last.json")
+    }
+
     static func sourceStateKey(for sessionID: String) -> String {
         opaqueHash(sessionID)
     }

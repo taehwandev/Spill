@@ -12,6 +12,7 @@ extension TokenUsageClaudeCodeImporter {
 
         var scannedFiles = 0
         var parsedTurns = 0
+        var invalidEvents = 0
         var candidateEvents = [TokenUsageEvent]()
         var updatedCursorKeys = Set<String>()
 
@@ -41,7 +42,14 @@ extension TokenUsageClaudeCodeImporter {
                     continue
                 }
                 guard let event = event(from: turn, labelTimeline: labelTimeline) else { continue }
-                candidateEvents.append(event)
+                // The store validates the whole batch up front and rejects all of
+                // it on the first bad event, which would also skip the state write
+                // and re-fail forever. Drop invalid events here, one at a time.
+                if (try? event.validate()) == nil {
+                    invalidEvents += 1
+                } else {
+                    candidateEvents.append(event)
+                }
                 if !turn.requestId.isEmpty {
                     importState.emittedRequestIDsBySource[stateKey, default: []].insert(turn.requestId)
                 }
@@ -77,13 +85,16 @@ extension TokenUsageClaudeCodeImporter {
 
         let skippedDuplicates = failedToWriteEvents ? 0 : candidateEvents.count - importedEvents
         let cursorAdvancedFiles = failedToWriteEvents ? 0 : updatedCursorKeys.count
-        return TokenUsageClaudeCodeImportSummary(
+        let summary = TokenUsageClaudeCodeImportSummary(
             scannedFiles: scannedFiles,
             parsedTurns: parsedTurns,
             importedEvents: importedEvents,
             skippedDuplicateEvents: skippedDuplicates,
             cursorAdvancedFiles: cursorAdvancedFiles,
-            failedToWriteEvents: failedToWriteEvents
+            failedToWriteEvents: failedToWriteEvents,
+            invalidEvents: invalidEvents
         )
+        writeDiagnostic(summary)
+        return summary
     }
 }

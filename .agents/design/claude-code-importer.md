@@ -4,7 +4,7 @@ audience: Codex, Claude Code, Antigravity/AGY
 purpose: Architecture rules and invariants for TokenUsageClaudeCodeImporter
 status: stable
 source_of_truth: Sources/Spill/TokenMetering/Importers/ClaudeCode/
-last_verified: 2026-06-26
+last_verified: 2026-09-19
 related: .agents/build-and-run.md, AGENTS.md
 ---
 
@@ -153,6 +153,24 @@ importer as part of the standard collection cycle (same cycle as AGY). The
 coordinator calls `requestCollection(reason:)` on app events such as token
 dashboard open and periodic background ticks.
 
+## Batch validity and diagnostics
+
+`store.appendEventsWithoutLoading(events)` validates the whole batch up front
+and throws on the first invalid event. When it throws, the importer does not
+write its state, so the same batch fails again on every pass and no Claude
+usage is ever imported. This showed up on a fresh install, where the first pass
+covers all history at once. The importer must therefore run `event.validate()`
+on each candidate and drop the ones that fail, one at a time. It counts them as
+`invalidEvents` and still marks their `requestId` as emitted, so a bad record is
+skipped once and never retried.
+
+Every pass writes a content-free diagnostic to
+`~/Library/Application Support/Spill/token-metering/diagnostics/claude-active-importer-last.json`.
+It holds `projects_directory_found`, `scanned_session_files`, `parsed_turns`,
+`imported_events`, `skipped_duplicate_events`, `invalid_events`,
+`cursor_advanced_files`, `failed_to_write_events` and `created_at`. It never
+holds paths or payload values. Tests pass `diagnosticsURL: nil` or a temp URL.
+
 ## Dedup
 
 `store.appendEventsWithoutLoading(events)` deduplicates by `span_id`. Events
@@ -179,5 +197,6 @@ already in the store are skipped. This means:
 | `TokenUsageClaudeCodeImporter+State.swift` | Load/save `ImportState`, legacy migration guard |
 | `TokenUsageClaudeCodeImporter+LabelTimeline.swift` | Read `claude-timeline.jsonl`, match labels by timestamp |
 | `TokenUsageClaudeCodeImporter+EventFactory.swift` | Build `TokenUsageEvent` with Python-matching span_id |
-| `TokenUsageClaudeCodeImporter+ImportRecentSessions.swift` | Main loop: discover → parse → events → store → save state |
+| `TokenUsageClaudeCodeImporter+ImportRecentSessions.swift` | Main loop: discover → parse → events → per-event validate → store → save state |
+| `TokenUsageClaudeCodeImporter+Diagnostics.swift` | Write the content-free `claude-active-importer-last.json` pass diagnostic |
 | `TokenUsageClaudeCodeImportSummary.swift` | Result struct |
