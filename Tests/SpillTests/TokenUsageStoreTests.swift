@@ -1697,7 +1697,6 @@ final class TokenUsageStoreTests: XCTestCase {
         let spillBarAISection = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Panel/SpillBarAISection.swift"))
         let spillBarAITokenSummary = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Panel/SpillBarAITokenSummary.swift"))
         let panelSizer = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Panel/SpillPanelContentSizer.swift"))
-        let appDelegate = try String(contentsOf: root.appendingPathComponent("Sources/Spill/App/AppDelegate.swift"))
         let cloudStatusView = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Panel/CloudServiceStatusDashboardView.swift"))
 
         XCTAssertTrue(dashboardView.contains("private func refreshLocalTokenData()"))

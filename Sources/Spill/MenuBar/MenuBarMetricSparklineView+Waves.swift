@@ -5,7 +5,6 @@ extension MenuBarMetricSparklineView {
         guard let renderedSeries = series.first, !renderedSeries.values.isEmpty else { return }
 
         let drawableRect = bounds.insetBy(dx: 2.5, dy: 1.0)
-        let scale = scaleFactor
         let pts = points(for: renderedSeries.values, in: drawableRect)
         guard let firstPoint = pts.first, let lastPoint = pts.last else { return }
 

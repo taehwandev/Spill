@@ -22,7 +22,7 @@ final class AIStatusStore: ObservableObject {
     init(
         statuses: [LocalAIToolStatus] = LocalAIStatusProvider.statuses(environment: [:], processNames: []),
         reader: @escaping Reader = { LocalAIStatusProvider.statuses() },
-        backgroundReader: @escaping @Sendable BackgroundReader = { shouldCancel in
+        backgroundReader: @escaping BackgroundReader = { shouldCancel in
             LocalAIStatusProvider.statuses(shouldCancel: shouldCancel)
         }
     ) {

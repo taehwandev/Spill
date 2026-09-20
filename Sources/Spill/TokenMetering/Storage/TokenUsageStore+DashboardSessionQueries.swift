@@ -40,7 +40,7 @@ extension TokenUsageStore {
         if startDate != nil, endDate != nil {
             conditions.append("created_at >= ? AND created_at < ?")
         }
-        if let selectedTool {
+        if selectedTool != nil {
             conditions.append("ai_tool = ?")
         } else if let toolCondition = Self.dashboardToolCondition(
             dashboardToolsOnly: dashboardToolsOnly,

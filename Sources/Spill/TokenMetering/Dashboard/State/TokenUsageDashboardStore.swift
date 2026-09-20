@@ -228,7 +228,7 @@ extension TokenUsageDashboardStore {
         }
         isRefreshing = true
 
-        snapshotBuildQueue.async {
+        snapshotBuildQueue.async { [weak self] in
             guard snapshotBuildGate.isCurrent(generation) else {
                 return
             }
@@ -378,7 +378,7 @@ extension TokenUsageDashboardStore {
         let request = snapshotBuildRequest()
         let usageStore = usageStore
 
-        snapshotBuildQueue.async {
+        snapshotBuildQueue.async { [weak self] in
             let panelSummary = Self.loadPanelSummaryIfAvailable(from: usageStore, for: request)
 
             DispatchQueue.main.async { [weak self] in
@@ -503,7 +503,7 @@ extension TokenUsageDashboardStore {
 
         isRefreshing = true
 
-        snapshotBuildQueue.async {
+        snapshotBuildQueue.async { [weak self] in
             guard snapshotBuildGate.isCurrent(generation) else {
                 return
             }
@@ -1427,7 +1427,7 @@ extension TokenUsageDashboardStore {
 
         isRefreshing = true
 
-        snapshotBuildQueue.async {
+        snapshotBuildQueue.async { [weak self] in
             // canBuildSnapshotFromSQL depends only on project/session/day, so gating on the raw
             // request is equivalent to gating on the bounds-filled buildRequest. The SQL path reads
             // its own dateBounds on the shared transaction and adds no period-total or panel-summary
