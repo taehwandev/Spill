@@ -147,7 +147,7 @@ final class TokenUsageLimitTests: XCTestCase {
         XCTAssertEqual(store.storedSnapshots().first?.usedPercent, 93)
     }
 
-    func testAnExpiredClaudeReadingLosesItsSlotButStillMarksTheChipStale() {
+    func testAnExpiredClaudeReadingLosesItsSlotWithoutDimmingWeeklyGauge() throws {
         let capturedAt = Date().addingTimeInterval(-21 * 3_600)
         let strip = TokenMeteringDashboardLimitsStrip(
             snapshots: [
@@ -168,16 +168,19 @@ final class TokenUsageLimitTests: XCTestCase {
             language: .english
         )
 
-        let group = strip.toolGroups.first { $0.tool == .claude }
+        let group = try XCTUnwrap(strip.toolGroups.first { $0.tool == .claude })
         // The five-hour reading has no value left, so it cannot hold a slot —
         // only the weekly is drawn, and the five-hour falls behind `+1`.
-        XCTAssertEqual(group?.gauges.map(\.limitKey), ["week_all"])
-        XCTAssertEqual(group?.extraCount, 1)
-        // The weekly is well inside its own window, so the chip's staleness
-        // has to come from the reading that lost its slot rather than from
-        // whichever gauge happens to remain.
-        XCTAssertTrue(group?.outlivesItsWindow ?? false)
-        XCTAssertGreaterThan(group?.age ?? 0, TokenMeteringDashboardLimitsStrip.staleThreshold)
+        XCTAssertEqual(group.gauges.map(\.limitKey), ["week_all"])
+        XCTAssertEqual(group.extraCount, 1)
+        // The hidden, expired five-hour value cannot dim the valid weekly
+        // reading. Its age remains available in the detail popover.
+        XCTAssertFalse(TokenMeteringDashboardLimitsStrip.outlivesWindow(
+            group.gauges[0], at: Date()
+        ))
+        XCTAssertNotNil(TokenMeteringDashboardLimitsStrip.ageLabel(
+            for: group.gauges[0], at: Date(), language: .english
+        ))
     }
 
     func testSnapshotFilesWrittenBeforeTheResetFlagStillDecode() throws {
@@ -271,8 +274,8 @@ final class TokenUsageLimitTests: XCTestCase {
             withAntigravity.toolGroups.first { $0.tool == .antigravity }?.gauges.count,
             1
         )
-        // An empty group must not claim its reading outlived a window it never had.
-        XCTAssertFalse(groups.first { $0.tool == .claude }?.outlivesItsWindow ?? true)
+        // An empty group has no gauge whose freshness could be shown.
+        XCTAssertTrue(groups.first { $0.tool == .claude }?.gauges.isEmpty ?? false)
         XCTAssertEqual(groups.first { $0.tool == .claude }?.extraCount, 0)
     }
 
@@ -413,7 +416,7 @@ final class TokenUsageLimitTests: XCTestCase {
         XCTAssertEqual(store.snapshots(for: .claude).first?.usedPercent, 62)
     }
 
-    func testChipAgeIgnoresReadingsThatNoLongerCarryAValue() {
+    func testGaugeAgeIgnoresReadingsThatNoLongerCarryAValue() {
         // The strip reads the wall clock, so the fixture hangs off it too.
         let now = Date()
         // A live weekly reading beside a five-hour one whose window closed
@@ -439,17 +442,17 @@ final class TokenUsageLimitTests: XCTestCase {
             language: .english
         ).toolGroups.first { $0.tool == .claude }
 
-        // The chip reports the age of what it actually shows. Letting a
-        // reading it does not display set the stamp made a two-hour-old number
-        // read as three days old.
-        let age = try? XCTUnwrap(group?.age)
-        XCTAssertEqual(age ?? 0, 2 * 3_600, accuracy: 1)
-        // The stale limit still marks the chip as no longer current; that
-        // signal belongs to outlivesItsWindow, not to the as-of stamp.
-        XCTAssertTrue(group?.outlivesItsWindow ?? false)
+        // Only the visible weekly reading contributes a chip age. The closed
+        // five-hour reading remains available in the detail popover.
+        XCTAssertEqual(group?.gauges.map(\.limitKey), ["week_all"])
+        XCTAssertEqual(
+            TokenMeteringDashboardLimitsStrip.ageLabel(for: liveWeekly, at: now, language: .english),
+            TokenMeteringL10n.limitsAge("2h", language: .english)
+        )
+        XCTAssertTrue(TokenMeteringDashboardLimitsStrip.outlivesWindow(closedUnread, at: now))
     }
 
-    func testALimitBehindTheOverflowIndicatorDoesNotAgeTheChip() {
+    func testOverflowLimitDoesNotAgeVisibleGauges() throws {
         let now = Date()
         func claude(_ key: String, _ label: String, _ used: Double, _ minutes: Int, ageHours: Double)
             -> TokenUsageLimitSnapshot {
@@ -465,7 +468,7 @@ final class TokenUsageLimitTests: XCTestCase {
         // The model-scoped weekly only ever arrives with the on-demand cache,
         // so it lags by however long ago usage was last fetched. It sits behind
         // `+1` and must not make the two live gauges look three days old.
-        let group = TokenMeteringDashboardLimitsStrip(
+        let group = try XCTUnwrap(TokenMeteringDashboardLimitsStrip(
             snapshots: [
                 claude("session_5h", "5-hour", 8, 300, ageHours: 0),
                 claude("week_all", "Weekly", 8, 10_080, ageHours: 0),
@@ -473,14 +476,49 @@ final class TokenUsageLimitTests: XCTestCase {
             ],
             tools: [.claude],
             language: .english
-        ).toolGroups.first { $0.tool == .claude }
+        ).toolGroups.first { $0.tool == .claude })
 
-        XCTAssertEqual(group?.gauges.map(\.limitKey), ["session_5h", "week_all"])
-        XCTAssertEqual(group?.extraCount, 1)
-        XCTAssertLessThan(group?.age ?? .infinity, TokenMeteringDashboardLimitsStrip.staleThreshold)
-        // Nor is it stale: three days is well inside a seven-day window, so the
-        // reading is merely older, not describing a window that has closed.
-        XCTAssertFalse(group?.outlivesItsWindow ?? true)
+        XCTAssertEqual(group.gauges.map(\.limitKey), ["session_5h", "week_all"])
+        XCTAssertEqual(group.extraCount, 1)
+        for gauge in group.gauges {
+            XCTAssertNil(TokenMeteringDashboardLimitsStrip.ageLabel(for: gauge, at: now, language: .english))
+            XCTAssertFalse(TokenMeteringDashboardLimitsStrip.outlivesWindow(gauge, at: now))
+        }
+        // The older model-scoped weekly stays behind +1 and cannot affect
+        // the displayed gauges' age or tint.
+        let overflow = try XCTUnwrap(group.snapshots.first { $0.limitKey == "weekly_scoped_fable" })
+        XCTAssertNotNil(TokenMeteringDashboardLimitsStrip.ageLabel(
+            for: overflow, at: now, language: .english
+        ))
+    }
+
+    func testOldCodexModelPoolDoesNotAgeOrDimFreshOverallWeeklyGauge() throws {
+        let now = Date()
+        let oldSpark = TokenUsageLimitSnapshot(
+            aiTool: .codex, limitKey: "codex_bengalfox:primary", label: "GPT-5.3-Codex-Spark",
+            usedPercent: 0, remainingCredits: nil, windowMinutes: 300,
+            resetsAt: nil, capturedAt: now.addingTimeInterval(-5 * 86_400 - 3_600),
+            source: .serverExact, locallyReset: true
+        )
+        let freshWeekly = TokenUsageLimitSnapshot(
+            aiTool: .codex, limitKey: "codex:primary", label: "Weekly",
+            usedPercent: 43, remainingCredits: nil, windowMinutes: 10_080,
+            resetsAt: now.addingTimeInterval(6 * 86_400),
+            capturedAt: now.addingTimeInterval(-120), source: .serverExact
+        )
+        let group = try XCTUnwrap(TokenMeteringDashboardLimitsStrip(
+            snapshots: [oldSpark, freshWeekly], tools: [.codex], language: .english
+        ).toolGroups.first)
+
+        XCTAssertEqual(group.gauges.map(\.limitKey), ["codex_bengalfox:primary", "codex:primary"])
+        XCTAssertEqual(freshWeekly.remainingPercent, 57)
+        XCTAssertEqual(
+            TokenMeteringDashboardLimitsStrip.ageLabel(for: oldSpark, at: now, language: .english),
+            TokenMeteringL10n.limitsAge("5d", language: .english)
+        )
+        XCTAssertTrue(TokenMeteringDashboardLimitsStrip.outlivesWindow(oldSpark, at: now))
+        XCTAssertNil(TokenMeteringDashboardLimitsStrip.ageLabel(for: freshWeekly, at: now, language: .english))
+        XCTAssertFalse(TokenMeteringDashboardLimitsStrip.outlivesWindow(freshWeekly, at: now))
     }
 
     func testLimitInboxMonitorCapturesOnWriteAndAnnouncesOnlyRealChanges() throws {
@@ -782,10 +820,6 @@ final class TokenUsageLimitTests: XCTestCase {
         // the dash already stands for every one of them, so "— +3" would read
         // as a contradiction rather than as a hint.
         XCTAssertTrue(strip.contains("group.extraCount > 0, !group.gauges.isEmpty"))
-        // Every chip can state how old its reading is, because no source here
-        // refreshes on its own.
-        XCTAssertTrue(strip.contains("limitsAge("))
-        XCTAssertTrue(strip.contains("group.age > Self.staleThreshold"))
     }
 
     func testClaudeCaptureReadsExactCachedUtilization() {

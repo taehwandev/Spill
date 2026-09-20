@@ -191,9 +191,10 @@ as a separate, explicitly opt-in PRD.
      endpoint with the user's credentials, which the local read-only privacy
      contract does not permit. The answer is an honest **as-of** display, not
      a fabricated current one.
-   - A gauge is therefore always a reading "as of" a moment. Chips state that
-     age once it exceeds 30 minutes, and dim once the reading is older than
-     the window it describes and so can no longer describe the current one.
+   - A gauge is therefore always a reading "as of" a moment. Each visible
+     gauge states its own age once it exceeds 30 minutes and dims when its
+     reading is older than the window it describes. A stale named/model pool
+     must not make a fresh account-wide gauge or the whole tool chip look old.
    - `captured_at` is the moment the reading was **true**, never the moment
      Spill scanned for it: Claude's cache fetch time (`fetchedAtMs`) and the
      Codex session line's own timestamp. Stamping the scan time would make

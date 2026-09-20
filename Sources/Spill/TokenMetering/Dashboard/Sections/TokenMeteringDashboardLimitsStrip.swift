@@ -12,7 +12,8 @@ import SwiftUI
 /// Nothing here refreshes on a clock, because none of the sources do: every
 /// gauge comes from a file the tool itself writes while it runs. A chip is
 /// therefore always an "as of" reading, and says so once it stops being
-/// recent, rather than presenting a stale number as the current one.
+/// recent. Age and dimming apply to each gauge independently so an old model
+/// pool cannot make a fresh account-wide limit look stale.
 struct TokenMeteringDashboardLimitsStrip: View {
     let snapshots: [TokenUsageLimitSnapshot]
     /// Every tool the user has not hidden. A chip is drawn for each one even
@@ -60,14 +61,6 @@ extension TokenMeteringDashboardLimitsStrip {
         let snapshots: [TokenUsageLimitSnapshot]
         let gauges: [TokenUsageLimitSnapshot]
         let extraCount: Int
-        /// Age of the least recently refreshed reading behind the chip: the
-        /// honest "as of" for everything the chip stands for, including the
-        /// limits that fell behind `+n` or lost their value entirely.
-        let age: TimeInterval
-        /// True when any of the tool's readings is older than the window it
-        /// measured, so at least one number here cannot describe the window
-        /// the user is in now.
-        let outlivesItsWindow: Bool
     }
 
     /// Why a chip has no value to show. A limit that was read once and whose
@@ -86,8 +79,24 @@ extension TokenMeteringDashboardLimitsStrip {
     /// what the number means.
     static let staleThreshold: TimeInterval = 30 * 60
 
+    /// Age and visual freshness belong to a limit, not its whole tool chip:
+    /// Codex can have a current account-wide week beside an old model pool.
+    static func ageLabel(
+        for gauge: TokenUsageLimitSnapshot,
+        at now: Date,
+        language: TokenMeteringLanguage
+    ) -> String? {
+        let age = gauge.age(at: now)
+        guard age > staleThreshold else { return nil }
+        return TokenMeteringL10n.limitsAge(compactDuration(age), language: language)
+    }
+
+    static func outlivesWindow(_ gauge: TokenUsageLimitSnapshot, at now: Date) -> Bool {
+        guard let window = gauge.windowDuration else { return false }
+        return gauge.age(at: now) > window
+    }
+
     var toolGroups: [ToolGroup] {
-        let now = Date()
         // Tools that get a blank placeholder, plus every tool that actually
         // has a reading. The second half is what lets a tool with no
         // placeholder still appear once its data exists.
@@ -105,27 +114,7 @@ extension TokenMeteringDashboardLimitsStrip {
                 tool: tool,
                 snapshots: toolSnapshots,
                 gauges: gauges,
-                extraCount: max(0, toolSnapshots.count - gauges.count),
-                // Measured over the gauges the chip actually shows. A limit
-                // behind `+n` can be much older without making the displayed
-                // numbers wrong — a model-scoped weekly only ever arrives with
-                // the on-demand cache, so it lags by however long ago usage was
-                // last fetched, and letting it set the stamp reported readings
-                // taken seconds ago as days old. Each row's own capture time is
-                // still on it in the popover.
-                age: gauges.map { $0.age(at: now) }.max()
-                    ?? toolSnapshots.map { $0.age(at: now) }.max() ?? 0,
-                // Each reading is measured against its own window rather than
-                // against the shortest one on the chip, so a limit that lost
-                // its value — and therefore its slot — still marks the chip as
-                // no longer current instead of quietly ceding that judgement
-                // to whichever gauge remains.
-                outlivesItsWindow: toolSnapshots.contains { snapshot in
-                    guard let window = snapshot.windowDuration else {
-                        return false
-                    }
-                    return snapshot.age(at: now) > window
-                }
+                extraCount: max(0, toolSnapshots.count - gauges.count)
             )
         }
     }
@@ -136,7 +125,8 @@ extension TokenMeteringDashboardLimitsStrip {
 
 private extension TokenMeteringDashboardLimitsStrip {
     func limitChip(for group: ToolGroup) -> some View {
-        Button {
+        let now = Date()
+        return Button {
             popoverTool = group.tool
         } label: {
             HStack(spacing: 6) {
@@ -162,20 +152,20 @@ private extension TokenMeteringDashboardLimitsStrip {
                             .monospacedDigit()
                             .foregroundStyle(.primary.opacity(0.8))
                             .lineLimit(1)
+                        if let age = Self.ageLabel(for: gauge, at: now, language: language) {
+                            Text(age)
+                                .font(.system(size: 10))
+                                .monospacedDigit()
+                                .foregroundStyle(.secondary)
+                        }
                     }
                     .help(chipTooltip(for: gauge))
+                    .opacity(Self.outlivesWindow(gauge, at: now) ? 0.6 : 1)
                 }
 
                 if group.extraCount > 0, !group.gauges.isEmpty {
                     Text("+\(group.extraCount)")
                         .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(.secondary)
-                }
-
-                if group.age > Self.staleThreshold {
-                    Text(TokenMeteringL10n.limitsAge(Self.compactDuration(group.age), language: language))
-                        .font(.system(size: 10))
-                        .monospacedDigit()
                         .foregroundStyle(.secondary)
                 }
             }
@@ -185,10 +175,6 @@ private extension TokenMeteringDashboardLimitsStrip {
                 Capsule(style: .continuous)
                     .fill(Color.primary.opacity(0.05))
             )
-            // A reading older than its own window can no longer describe the
-            // current one. It stays visible — it is still the last thing the
-            // tool said — but it stops looking current.
-            .opacity(group.outlivesItsWindow ? 0.6 : 1)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(Text(accessibilityText(for: group)))
@@ -207,17 +193,17 @@ private extension TokenMeteringDashboardLimitsStrip {
             return "\(group.tool.dashboardLabel(language: language)) "
                 + TokenMeteringL10n.text(Self.emptyReason(for: group), language: language)
         }
+        let now = Date()
         let gauges = group.gauges
-            .map { "\(slotLabel(for: $0)) \(headlineValue(for: $0))" }
+            .map { gauge in
+                let value = "\(slotLabel(for: gauge)) \(headlineValue(for: gauge))"
+                guard let age = Self.ageLabel(for: gauge, at: now, language: language) else {
+                    return value
+                }
+                return "\(value) \(age)"
+            }
             .joined(separator: ", ")
-        var text = "\(group.tool.dashboardLabel(language: language)) \(gauges)"
-        if group.age > Self.staleThreshold {
-            text += ", " + TokenMeteringL10n.limitsAge(
-                Self.compactDuration(group.age),
-                language: language
-            )
-        }
-        return text
+        return "\(group.tool.dashboardLabel(language: language)) \(gauges)"
     }
 }
 
