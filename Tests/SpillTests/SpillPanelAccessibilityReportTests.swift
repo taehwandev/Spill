@@ -2,18 +2,27 @@ import XCTest
 @testable import Spill
 
 final class SpillPanelAccessibilityReportTests: XCTestCase {
-    func testDefaultReportDoesNotRequireHiddenAISection() {
+    func testDefaultReportRequiresVisibleAISection() {
         let report = SpillPanelAccessibilityReport(
             discoveredLabels: [
                 "Spill",
                 "WINDOWS",
-                "MENU BAR",
+                "AI",
                 "Caffeine Off"
             ]
         )
 
         XCTAssertTrue(report.isValid)
         XCTAssertEqual(report.missingLabels, [])
+    }
+
+    func testDefaultReportRejectsMissingAISection() {
+        let report = SpillPanelAccessibilityReport(
+            discoveredLabels: ["Spill", "WINDOWS", "Caffeine Off"]
+        )
+
+        XCTAssertFalse(report.isValid)
+        XCTAssertEqual(report.missingLabels, ["AI"])
     }
 
     func testValidReportAcceptsRequiredLabels() {

@@ -1,7 +1,6 @@
 import SwiftUI
 
 struct SpillBarAISection: View {
-    @ObservedObject var panelStore: PanelStore
     @ObservedObject var settings: SpillSettings
     @ObservedObject var aiStatusStore: AIStatusStore
     @ObservedObject var cloudServiceStatusStore: CloudServiceStatusStore
@@ -23,13 +22,6 @@ struct SpillBarAISection: View {
 }
 
 private extension SpillBarAISection {
-    private var aiToolColumns: [GridItem] {
-        [
-            GridItem(.flexible(minimum: 0), spacing: 7),
-            GridItem(.flexible(minimum: 0), spacing: 7)
-        ]
-    }
-
     private var aiSectionHeader: some View {
         HStack(spacing: 8) {
             Text("AI")
@@ -101,92 +93,5 @@ private extension SpillBarAISection {
             status.kind.isTokenDashboardAgentTool
                 && settings.isLocalAIToolVisible(status.kind)
         }
-    }
-}
-
-private extension SpillBarAISection {
-    private func serviceStatus(for kind: LocalAIToolKind) -> CloudServiceStatusItem? {
-        CloudServiceStatusPresentation.serviceStatus(
-            for: kind,
-            in: cloudServiceStatusStore.snapshot
-        )
-    }
-
-    private func toolTokenUsage(for kind: LocalAIToolKind) -> SpillBarAIToolCard.TokenUsage? {
-        let snapshot = tokenUsageDashboardStore.panelSummary
-        let rawValue = tokenUsageRawValue(for: kind)
-
-        if let row = snapshot.toolRows.first(where: { $0.id == rawValue }) {
-            return SpillBarAIToolCard.TokenUsage(value: row.value, ratio: row.ratio)
-        }
-        return nil
-    }
-
-    private func tokenUsageRawValue(for kind: LocalAIToolKind) -> String {
-        switch kind {
-        case .codex:
-            return TokenUsageAITool.codex.rawValue
-        case .claude:
-            return TokenUsageAITool.claude.rawValue
-        case .antigravity:
-            return TokenUsageAITool.antigravity.rawValue
-        case .openAI:
-            return TokenUsageAITool.openAI.rawValue
-        case .ollama:
-            return "ollama"
-        }
-    }
-
-    private func detailBinding(for target: SpillStatusDetailTarget) -> Binding<Bool> {
-        Binding {
-            panelStore.state.statusDetailTarget == target
-        } set: { isPresented in
-            if isPresented {
-                panelStore.send(.setStatusDetailTarget(target))
-            } else if panelStore.state.statusDetailTarget == target {
-                panelStore.send(.setStatusDetailTarget(nil))
-            }
-        }
-    }
-}
-
-private extension SpillBarAISection {
-    private func aiStatusDetailPopover(for status: LocalAIToolStatus) -> some View {
-        SpillStatusDetailPopover(
-            title: status.title,
-            symbolName: status.symbolName,
-            tint: aiStatusDetailTint(for: status),
-            rows: SpillStatusDetailRows.rows(for: status),
-            showsInMenuBar: nil
-        )
-    }
-
-    private func aiStatusDetailTint(for status: LocalAIToolStatus) -> Color {
-        switch status.state {
-        case .warning, .unavailable:
-            return status.state.panelTint
-        case .active, .normal, .refreshing:
-            return status.kind.dashboardTint
-        }
-    }
-
-    private func statusHelpText(title: String, value: String, subtitle: String?) -> String {
-        var parts = [title, value]
-
-        if let subtitle, !subtitle.isEmpty {
-            parts.append(subtitle)
-        }
-
-        return parts.joined(separator: " - ")
-    }
-
-    private func aiToolHelpText(_ status: LocalAIToolStatus, serviceStatus: CloudServiceStatusItem?) -> String {
-        var text = statusHelpText(title: status.title, value: status.value, subtitle: status.subtitle)
-
-        if let serviceStatus {
-            text += " - \(AppL10n.text(.server, appLanguage: settings.appLanguage)) \(serviceStatus.health.serverStatusHeaderTitle)"
-        }
-
-        return text
     }
 }

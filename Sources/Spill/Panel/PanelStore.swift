@@ -63,8 +63,6 @@ final class PanelStore: ObservableObject {
         switch target {
         case let .system(module):
             return ["target": "system", "module": module.rawValue]
-        case .ai:
-            return ["target": "ai"]
         }
     }
 

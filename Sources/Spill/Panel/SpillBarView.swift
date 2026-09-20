@@ -384,7 +384,6 @@ extension SpillBarView {
 extension SpillBarView {
     private var aiSection: some View {
         SpillBarAISection(
-            panelStore: panelStore,
             settings: settings,
             aiStatusStore: aiStatusStore,
             cloudServiceStatusStore: cloudServiceStatusStore,
@@ -608,7 +607,6 @@ extension SpillBarView {
         module == .network ? SpillStatusState.warning.panelTint : .secondary
     }
 
-    @ViewBuilder
     private func statusDetailPopover(for target: SpillStatusDetailTarget) -> some View {
         switch target {
         case let .system(module):
@@ -618,15 +616,6 @@ extension SpillBarView {
                 tint: statusStore.state(for: module).panelTint,
                 rows: statusStore.detailRows(for: module),
                 showsInMenuBar: menuBarStatusBinding(for: module)
-            )
-        case let .ai(kind):
-            let status = aiStatus(for: kind)
-            SpillStatusDetailPopover(
-                title: status.title,
-                symbolName: status.symbolName,
-                tint: status.state.panelTint,
-                rows: SpillStatusDetailRows.rows(for: status),
-                showsInMenuBar: nil
             )
         }
     }
@@ -670,15 +659,6 @@ extension SpillBarView {
         case .network:
             return nil
         }
-    }
-
-    private func aiStatus(for kind: LocalAIToolKind) -> LocalAIToolStatus {
-        aiStatusStore.statuses.first { $0.kind == kind } ?? LocalAIToolStatus(
-            kind: kind,
-            value: "N/A",
-            subtitle: nil,
-            state: .unavailable
-        )
     }
 
     private func subtitleText(_ subtitle: String?) -> String {
@@ -996,16 +976,6 @@ extension SpillBarView {
         }
 
         return parts.joined(separator: " - ")
-    }
-
-    private func aiToolHelpText(_ status: LocalAIToolStatus, serviceStatus: CloudServiceStatusItem?) -> String {
-        var text = statusHelpText(title: status.title, value: status.value, subtitle: status.subtitle)
-
-        if let serviceStatus {
-            text += " - \(AppL10n.text(.server, appLanguage: settings.appLanguage)) \(serviceStatus.health.serverStatusHeaderTitle)"
-        }
-
-        return text
     }
 
 }

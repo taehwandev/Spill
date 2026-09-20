@@ -5,7 +5,6 @@ struct SpillPanelContentReport: Equatable {
     let statusModuleIDs: [String]
     let statusDetailRowCount: Int
     let aiStatusCount: Int
-    let aiDetailRowCount: Int
     let windowActionCount: Int
     let footerItemCount: Int
     let showsPowerFooter: Bool
@@ -23,7 +22,6 @@ struct SpillPanelContentReport: Equatable {
             "statusModules=\(formattedStatusModules)",
             "statusRows=\(statusDetailRowCount)",
             "aiStatuses=\(aiStatusCount)",
-            "aiRows=\(aiDetailRowCount)",
             "windowActions=\(windowActionCount)",
             "footerItems=\(footerItemCount)",
             "powerFooter=\(showsPowerFooter)",
@@ -39,7 +37,6 @@ struct SpillPanelContentReport: Equatable {
 
     private var hasConsistentAIContent: Bool {
         (0 ... LocalAIToolKind.allCases.count).contains(aiStatusCount)
-            && aiDetailRowCount >= aiStatusCount
     }
 
     private var hasFooterContent: Bool {

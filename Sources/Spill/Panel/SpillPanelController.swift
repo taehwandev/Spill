@@ -99,9 +99,6 @@ extension SpillPanelController {
         let statusDetailRowCount = statusModules.reduce(0) { count, module in
             count + statusStore.detailRows(for: module).count
         }
-        let aiDetailRowCount = aiStatusStore.statuses.reduce(0) { count, status in
-            count + SpillStatusDetailRows.rows(for: status).count
-        }
         let footerItemCount = 5
 
         return SpillPanelContentReport(
@@ -109,7 +106,6 @@ extension SpillPanelController {
             statusModuleIDs: statusModules.map(\.rawValue),
             statusDetailRowCount: statusDetailRowCount,
             aiStatusCount: aiStatusStore.statuses.count,
-            aiDetailRowCount: aiDetailRowCount,
             windowActionCount: windowActionStore.actions.count,
             footerItemCount: footerItemCount,
             showsPowerFooter: true

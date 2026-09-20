@@ -8,7 +8,6 @@ final class SpillPanelContentReportTests: XCTestCase {
             statusModuleIDs: ["cpu", "memory"],
             statusDetailRowCount: 10,
             aiStatusCount: 0,
-            aiDetailRowCount: 0,
             windowActionCount: 0,
             footerItemCount: 5,
             showsPowerFooter: true
@@ -24,7 +23,6 @@ final class SpillPanelContentReportTests: XCTestCase {
             statusModuleIDs: [],
             statusDetailRowCount: 0,
             aiStatusCount: 0,
-            aiDetailRowCount: 0,
             windowActionCount: 0,
             footerItemCount: 5,
             showsPowerFooter: true
@@ -39,7 +37,6 @@ final class SpillPanelContentReportTests: XCTestCase {
             statusModuleIDs: ["cpu"],
             statusDetailRowCount: 8,
             aiStatusCount: 1,
-            aiDetailRowCount: 2,
             windowActionCount: 0,
             footerItemCount: 5,
             showsPowerFooter: true
@@ -55,7 +52,6 @@ final class SpillPanelContentReportTests: XCTestCase {
             statusModuleIDs: ["cpu"],
             statusDetailRowCount: 8,
             aiStatusCount: LocalAIToolKind.allCases.count + 1,
-            aiDetailRowCount: 4,
             windowActionCount: 0,
             footerItemCount: 5,
             showsPowerFooter: true

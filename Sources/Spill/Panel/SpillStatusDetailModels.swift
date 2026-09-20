@@ -2,7 +2,6 @@ import Foundation
 
 enum SpillStatusDetailTarget: Equatable {
     case system(SpillStatusModule)
-    case ai(LocalAIToolKind)
 }
 
 struct SpillStatusDetailRow: Identifiable, Equatable {
@@ -106,71 +105,7 @@ extension SpillStatusDetailRows {
     }
 }
 
-extension SpillStatusDetailRows {
-    static func rows(for status: LocalAIToolStatus) -> [SpillStatusDetailRow] {
-        var rows = [
-            SpillStatusDetailRow(label: AppL10n.text(.status), value: status.value),
-            SpillStatusDetailRow(label: AppL10n.text(.detail), value: status.subtitle ?? "N/A")
-        ]
-
-        rows.append(contentsOf: processRows(for: status.processSummary))
-
-        if let recommendation = status.actionRecommendation {
-            rows.append(SpillStatusDetailRow(label: AppL10n.text(.next), value: recommendation.title))
-        }
-
-        if let model = status.metadata.model, !model.isEmpty {
-            rows.append(SpillStatusDetailRow(label: AppL10n.text(.model), value: model))
-        }
-
-        if let version = status.metadata.version, !version.isEmpty {
-            rows.append(SpillStatusDetailRow(label: AppL10n.text(.version), value: version))
-        }
-
-        if let source = status.metadata.source, !source.isEmpty {
-            rows.append(SpillStatusDetailRow(label: AppL10n.text(.source), value: source))
-        }
-
-        return rows
-    }
-
-    private static func processRows(for summary: LocalAIProcessSummary) -> [SpillStatusDetailRow] {
-        var rows = [
-            SpillStatusDetailRow(label: AppL10n.text(.processes), value: "\(summary.processCount)")
-        ]
-
-        guard summary.isRunning else {
-            return rows
-        }
-
-        rows.append(contentsOf: [
-            SpillStatusDetailRow(label: AppL10n.text(.cpu), value: summary.cpuPercentText),
-            SpillStatusDetailRow(label: AppL10n.text(.memory), value: summary.memoryText)
-        ])
-
-        rows.append(contentsOf: summary.processes.prefix(4).map { process in
-            let cpuText = LocalAIProcessSummary.formatCPUPercent(process.cpuPercent, isAvailable: process.metricsAvailable)
-            let memoryText = process.metricsAvailable
-                ? SystemMemoryProvider.formatBytes(process.memoryBytes)
-                : LocalAIProcessSummary.unavailableMetricText
-
-            return SpillStatusDetailRow(
-                label: "\(AppL10n.text(.process)) \(process.processID)",
-                value: [
-                    process.executableName,
-                    "CPU \(cpuText)",
-                    memoryText
-                ].joined(separator: " / ")
-            )
-        })
-
-        return rows
-    }
-
-    private static func boolText(_ value: Bool) -> String {
-        value ? AppL10n.text(.yes) : AppL10n.text(.no)
-    }
-
+private extension SpillStatusDetailRows {
     private static func percentText(_ ratio: Double) -> String {
         SystemCPUProvider.percentText(ratio)
     }

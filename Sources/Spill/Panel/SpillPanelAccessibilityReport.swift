@@ -6,7 +6,7 @@ struct SpillPanelAccessibilityReport: Equatable {
     static let defaultRequiredLabels = [
         "Spill",
         "WINDOWS",
-        "MENU BAR",
+        "AI",
         "Caffeine Off"
     ]
 
