@@ -45,12 +45,20 @@ struct TokenMeteringDashboardPanel<Content: View>: View {
         .frame(maxWidth: .infinity, minHeight: minimumHeight, alignment: .topLeading)
         .padding(16)
         .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color(NSColor.controlBackgroundColor).opacity(0.55))
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color(NSColor.controlBackgroundColor).opacity(0.65))
         )
         .overlay {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(Color.primary.opacity(0.08), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(
+                    LinearGradient(
+                        colors: [Color.primary.opacity(0.09), Color.primary.opacity(0.03)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 0.5
+                )
         }
+        .shadow(color: Color.black.opacity(0.03), radius: 8, x: 0, y: 2)
     }
 }

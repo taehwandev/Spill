@@ -257,13 +257,14 @@ extension TokenMeteringDashboardView {
             SpillBrandLockupView(
                 subtitle: nil,
                 markStyle: nil,
-                iconSize: 36,
+                showsAIMark: true,
+                iconSize: 28,
                 titleFontSize: 18,
                 titleWeight: .bold,
                 subtitleFontSize: 11,
                 subtitleWeight: .semibold,
                 subtitleColor: .secondary,
-                spacing: 14
+                spacing: 12
             )
 
             HStack(spacing: 8) {
@@ -320,7 +321,8 @@ extension TokenMeteringDashboardView {
                 )
             }
         }
-        .padding(.horizontal, 18)
+        .padding(.leading, 78)
+        .padding(.trailing, 18)
         .padding(.vertical, 14)
     }
 
@@ -412,6 +414,7 @@ extension TokenMeteringDashboardView {
         TokenMeteringDashboardFilterBar(
             store: store,
             cloudServiceStatusStore: cloudServiceStatusStore,
+            aiStatusStore: aiStatusStore,
             isCalendarPickerPresented: $isCalendarPickerPresented,
             language: currentLanguage,
             appLanguage: settings.appLanguage,
@@ -476,9 +479,13 @@ extension TokenMeteringDashboardView {
 
                 VStack(alignment: .leading, spacing: 7) {
                     HStack(spacing: 6) {
+                        Image(systemName: kpiIcon(for: kpi.id))
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(kpiColor(for: kpi.id))
+
                         Text(kpi.title.uppercased())
                             .font(.system(size: 9.5, weight: .black))
-                            .tracking(1.2)
+                            .tracking(1.0)
                             .foregroundStyle(.secondary.opacity(0.85))
                             .lineLimit(1)
                         TokenMeteringLiveUpdateDot(isActive: isLiveUpdated, marker: store.liveUpdateMarker)
@@ -525,24 +532,24 @@ extension TokenMeteringDashboardView {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(14)
                 .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
                         .fill(
                             isHovered
-                                ? (kpi.id == "total" ? selectedControlAccent.opacity(0.09) : Color.primary.opacity(0.055))
-                                : Color(NSColor.controlBackgroundColor).opacity(0.55)
+                                ? (kpi.id == "total" ? selectedControlAccent.opacity(0.08) : Color.primary.opacity(0.05))
+                                : Color(NSColor.controlBackgroundColor).opacity(0.65)
                         )
                 )
                 .overlay {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
                         .stroke(
                             LinearGradient(
                                 colors: isHovered
-                                    ? (kpi.id == "total" ? [selectedControlAccent.opacity(0.36), selectedControlAccent.opacity(0.16)] : [Color.primary.opacity(0.14), Color.primary.opacity(0.05)])
-                                    : [Color.primary.opacity(0.08), Color.primary.opacity(0.04)],
+                                    ? (kpi.id == "total" ? [selectedControlAccent.opacity(0.35), selectedControlAccent.opacity(0.12)] : [Color.primary.opacity(0.12), Color.primary.opacity(0.04)])
+                                    : [Color.primary.opacity(0.09), Color.primary.opacity(0.03)],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             ),
-                            lineWidth: 0.6
+                            lineWidth: 0.5
                         )
                 }
                 .onHover { hovering in
@@ -552,6 +559,24 @@ extension TokenMeteringDashboardView {
             }
         }
         .redacted(reason: showsDashboardPlaceholder ? .placeholder : [])
+    }
+
+    private func kpiIcon(for id: String) -> String {
+        switch id {
+        case "total": return "sparkles"
+        case "input": return "arrow.down.right.circle.fill"
+        case "output": return "arrow.up.right.circle.fill"
+        default: return "chart.bar.fill"
+        }
+    }
+
+    private func kpiColor(for id: String) -> Color {
+        switch id {
+        case "total": return selectedControlAccent
+        case "input": return Color.blue
+        case "output": return Color.purple
+        default: return .primary
+        }
     }
 
     private var hasAnyDashboardEvents: Bool {

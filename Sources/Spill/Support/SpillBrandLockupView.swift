@@ -4,6 +4,7 @@ import SwiftUI
 struct SpillBrandLockupView: View {
     let subtitle: String?
     var markStyle: MenuBarTriggerIconStyle?
+    var showsAIMark: Bool = false
     var iconSize: CGFloat = 34
     var titleFontSize: CGFloat = 13
     var titleWeight: Font.Weight = .semibold
@@ -21,7 +22,10 @@ struct SpillBrandLockupView: View {
         let wordmarkHeight = titleFontSize * wordmarkHeightMultiplier
 
         HStack(spacing: spacing) {
-            if let markStyle {
+            if showsAIMark {
+                SpillBrandAIIconView()
+                    .frame(width: iconSize, height: iconSize)
+            } else if let markStyle {
                 brandMark(markStyle)
                     .frame(width: iconSize, height: iconSize)
             }

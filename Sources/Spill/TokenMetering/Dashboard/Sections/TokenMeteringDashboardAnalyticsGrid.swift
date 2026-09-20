@@ -23,32 +23,34 @@ extension TokenMeteringDashboardAnalyticsGrid {
                     trendChart
                 }
 
-                distributionPanel(
-                    rows: store.snapshot.toolRows,
-                    title: t(.aiToolDistribution),
-                    subtitle: t(.aiToolDistributionSubtitle),
-                    infoTitle: t(.aiToolInfoTitle),
-                    infoDetail: t(.aiToolInfoDetail),
-                    emptyTitle: t(.noAIToolData),
-                    idPrefix: "tool_chart",
-                    tint: .teal,
-                    rowTint: aiToolTint,
-                    panelMinimumHeight: 180,
-                    rowsMinimumHeight: 118
-                )
+                HStack(alignment: .top, spacing: 14) {
+                    distributionPanel(
+                        rows: store.snapshot.toolRows,
+                        title: t(.aiToolDistribution),
+                        subtitle: t(.aiToolDistributionSubtitle),
+                        infoTitle: t(.aiToolInfoTitle),
+                        infoDetail: t(.aiToolInfoDetail),
+                        emptyTitle: t(.noAIToolData),
+                        idPrefix: "tool_chart",
+                        tint: .teal,
+                        rowTint: aiToolTint,
+                        panelMinimumHeight: 180,
+                        rowsMinimumHeight: 118
+                    )
 
-                distributionPanel(
-                    rows: store.snapshot.inputAccounting.rows,
-                    title: t(.inputAccounting),
-                    subtitle: t(.inputAccountingSubtitle),
-                    infoTitle: t(.inputAccountingInfoTitle),
-                    infoDetail: t(.inputAccountingInfoDetail),
-                    emptyTitle: t(.noInputAccountingData),
-                    idPrefix: "input_accounting",
-                    tint: .indigo,
-                    panelMinimumHeight: 180,
-                    rowsMinimumHeight: 118
-                )
+                    distributionPanel(
+                        rows: store.snapshot.inputAccounting.rows,
+                        title: t(.inputAccounting),
+                        subtitle: t(.inputAccountingSubtitle),
+                        infoTitle: t(.inputAccountingInfoTitle),
+                        infoDetail: t(.inputAccountingInfoDetail),
+                        emptyTitle: t(.noInputAccountingData),
+                        idPrefix: "input_accounting",
+                        tint: .indigo,
+                        panelMinimumHeight: 180,
+                        rowsMinimumHeight: 118
+                    )
+                }
 
                 HStack(alignment: .top, spacing: 14) {
                     distributionPanel(

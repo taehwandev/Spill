@@ -151,13 +151,14 @@ extension TokenMeteringDashboardWindowController {
         )
         let window = NSWindow(
             contentRect: defaultWindowFrame,
-            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
 
         updateWindowTitle(window)
         window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
         window.isReleasedWhenClosed = false
         window.isRestorable = false
         window.contentMinSize = minimumSize

@@ -22,33 +22,6 @@ struct SpillBarAISection: View {
                 tokenMeteringSettingsAction: tokenMeteringSettingsAction,
                 tokenMeteringDetailAction: tokenMeteringDetailAction
             )
-
-            if !visibleStatuses.isEmpty {
-                LazyVGrid(columns: aiToolColumns, alignment: .leading, spacing: 7) {
-                    ForEach(visibleStatuses) { status in
-                        let serviceStatus = serviceStatus(for: status.kind)
-                        let helpText = aiToolHelpText(status, serviceStatus: serviceStatus)
-
-                        Button {
-                            panelStore.send(.setStatusDetailTarget(.ai(status.kind)))
-                        } label: {
-                            SpillBarAIToolCard(
-                                status: status,
-                                serviceStatus: serviceStatus,
-                                tokenUsage: toolTokenUsage(for: status.kind),
-                                appLanguage: settings.appLanguage,
-                                isServerStatusLoading: cloudServiceStatusStore.isLoading
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .popover(isPresented: detailBinding(for: .ai(status.kind)), arrowEdge: .top) {
-                            aiStatusDetailPopover(for: status)
-                        }
-                        .help(helpText)
-                        .accessibilityLabel(helpText)
-                    }
-                }
-            }
         }
     }
 }

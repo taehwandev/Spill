@@ -300,7 +300,7 @@ extension SpillPanelController {
 
         return SpillPanelContentSizer.preferredSize(
             statusModuleCount: state.visibleStatusModules.count,
-            aiStatusCount: aiStatusStore.statuses.count,
+            aiStatusCount: 0,
             showsTokenMetering: true,
             windowActionCount: windowActionStore.actions.count,
             menuBarActionCount: menuBarActionCount,

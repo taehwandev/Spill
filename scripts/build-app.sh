@@ -355,7 +355,14 @@ cp "$MACOS_DIR/Spill" "$HELPER_MACOS_DIR/Spill"
 ditto "$RESOURCES_DIR/Spill_Spill.bundle" "$HELPER_RESOURCES_DIR/Spill_Spill.bundle"
 ditto "$RESOURCES_DIR/adapters" "$HELPER_RESOURCES_DIR/adapters"
 ditto "$FRAMEWORKS_DIR/Sparkle.framework" "$HELPER_FRAMEWORKS_DIR/Sparkle.framework"
-ditto "$RESOURCES_DIR/AppIcon.icns" "$HELPER_RESOURCES_DIR/AppIcon.icns"
+if [[ -f "$ROOT_DIR/docs/assets/spill-ai-icon.png" ]]; then
+    HELPER_ICONSET_DIR="$HELPER_CONTENTS_DIR/AppIcon.iconset"
+    swift "$ROOT_DIR/scripts/generate-app-icon.swift" "$HELPER_ICONSET_DIR" "$ROOT_DIR/docs/assets/spill-ai-icon.png"
+    iconutil -c icns "$HELPER_ICONSET_DIR" -o "$HELPER_RESOURCES_DIR/AppIcon.icns"
+    rm -rf "$HELPER_ICONSET_DIR"
+else
+    ditto "$RESOURCES_DIR/AppIcon.icns" "$HELPER_RESOURCES_DIR/AppIcon.icns"
+fi
 
 cat > "$HELPER_CONTENTS_DIR/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>

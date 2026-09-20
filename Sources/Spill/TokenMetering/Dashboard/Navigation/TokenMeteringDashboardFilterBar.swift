@@ -3,6 +3,7 @@ import SwiftUI
 struct TokenMeteringDashboardFilterBar: View {
     @ObservedObject var store: TokenUsageDashboardStore
     @ObservedObject var cloudServiceStatusStore: CloudServiceStatusStore
+    @ObservedObject var aiStatusStore: AIStatusStore
     @Binding var isCalendarPickerPresented: Bool
     let language: TokenMeteringLanguage
     let appLanguage: SpillAppLanguage
@@ -26,11 +27,14 @@ extension TokenMeteringDashboardFilterBar {
                         filter: filter,
                         store: store,
                         cloudServiceStatusStore: cloudServiceStatusStore,
+                        aiStatusStore: aiStatusStore,
                         appLanguage: appLanguage,
                         selectedControlAccent: selectedControlAccent,
                         selectedControlAccentHighlight: selectedControlAccentHighlight
                     )
                 }
+
+                Spacer(minLength: 0)
             }
 
             HStack(spacing: 8) {
@@ -165,16 +169,16 @@ extension TokenMeteringDashboardFilterBar {
             .frame(height: 30)
             .background(
                 isSelected
-                    ? selectedControlAccent.opacity(0.14)
-                    : Color.primary.opacity(isHovered ? 0.075 : 0.045),
+                    ? selectedControlAccent.opacity(0.12)
+                    : Color.primary.opacity(isHovered ? 0.06 : 0.03),
                 in: RoundedRectangle(cornerRadius: 8, style: .continuous)
             )
             .overlay {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .stroke(
                         isSelected
-                            ? selectedControlAccent.opacity(0.28)
-                            : Color.primary.opacity(isHovered ? 0.12 : 0.06),
+                            ? selectedControlAccent.opacity(0.26)
+                            : Color.primary.opacity(isHovered ? 0.10 : 0.05),
                         lineWidth: 0.5
                     )
             }

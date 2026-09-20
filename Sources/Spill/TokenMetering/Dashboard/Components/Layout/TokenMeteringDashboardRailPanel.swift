@@ -37,11 +37,19 @@ struct TokenMeteringDashboardRailPanel<Content: View>: View {
         .padding(14)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.primary.opacity(0.025))
+                .fill(Color(NSColor.controlBackgroundColor).opacity(0.45))
         )
         .overlay {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(Color.primary.opacity(0.07), lineWidth: 0.5)
+                .stroke(
+                    LinearGradient(
+                        colors: [Color.primary.opacity(0.08), Color.primary.opacity(0.03)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 0.5
+                )
         }
+        .shadow(color: Color.black.opacity(0.025), radius: 6, x: 0, y: 1.5)
     }
 }

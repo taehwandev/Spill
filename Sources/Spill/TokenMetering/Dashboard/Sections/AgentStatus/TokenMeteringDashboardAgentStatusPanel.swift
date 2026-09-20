@@ -5,12 +5,6 @@ struct TokenMeteringDashboardAgentStatusPanel: View {
     @ObservedObject var settings: SpillSettings
     let language: TokenMeteringLanguage
     let appLanguage: SpillAppLanguage
-    @State private var showsDetails = false
-
-    private static let summaryColumns = [
-        GridItem(.flexible(minimum: 88), spacing: 6),
-        GridItem(.flexible(minimum: 88), spacing: 6)
-    ]
 
     var body: some View {
         let summary = TokenMeteringDashboardAgentStatusSummary.make(statuses: visibleStatuses)
@@ -47,83 +41,10 @@ struct TokenMeteringDashboardAgentStatusPanel: View {
 
 private extension TokenMeteringDashboardAgentStatusPanel {
     private func compactAgentStatus(_ summary: TokenMeteringDashboardAgentStatusSummary) -> some View {
-        VStack(alignment: .leading, spacing: 9) {
-            summaryGrid(summary)
-            compactAgentStrip(summary)
-            detailsButton
-                .frame(maxWidth: .infinity, alignment: .trailing)
-
-            if showsDetails {
-                VStack(alignment: .leading, spacing: 10) {
-                    Divider()
-                        .opacity(0.45)
-                    agentDetailsList(summary)
-                }
+        VStack(alignment: .leading, spacing: 10) {
+            agentDetailsList(summary)
                 .transition(.opacity)
-            }
         }
-    }
-
-    private func summaryGrid(_ summary: TokenMeteringDashboardAgentStatusSummary) -> some View {
-        LazyVGrid(columns: Self.summaryColumns, alignment: .leading, spacing: 6) {
-            summaryPill(
-                title: t(.agentStatusDetected),
-                value: TokenUsageDashboardSnapshot.formatCount(summary.detectedToolCount),
-                systemImage: "sparkles",
-                tint: .teal
-            )
-            summaryPill(
-                title: AppL10n.text(.processes, appLanguage: appLanguage),
-                value: TokenUsageDashboardSnapshot.formatCount(summary.processCount),
-                systemImage: "cpu",
-                tint: .blue
-            )
-            summaryPill(
-                title: AppL10n.text(.cpu, appLanguage: appLanguage),
-                value: summary.cpuText,
-                systemImage: "speedometer",
-                tint: .purple
-            )
-            summaryPill(
-                title: AppL10n.text(.memory, appLanguage: appLanguage),
-                value: summary.memoryText,
-                systemImage: "memorychip",
-                tint: .green
-            )
-        }
-    }
-
-    private func compactAgentStrip(_ summary: TokenMeteringDashboardAgentStatusSummary) -> some View {
-        VStack(spacing: 6) {
-            ForEach(summary.rows) { row in
-                compactAgentChip(row)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var detailsButton: some View {
-        Button {
-            withAnimation(.snappy(duration: 0.22)) {
-                showsDetails.toggle()
-            }
-        } label: {
-            HStack(spacing: 5) {
-                Text(AppL10n.text(.details, appLanguage: appLanguage))
-                    .font(.system(size: 9, weight: .bold))
-                Image(systemName: showsDetails ? "chevron.up" : "chevron.down")
-                    .font(.system(size: 8, weight: .bold))
-            }
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 8)
-            .frame(height: 24)
-            .background(Color.primary.opacity(showsDetails ? 0.07 : 0.04), in: Capsule(style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .focusable(false)
-        .focusEffectDisabled()
-        .accessibilityLabel(AppL10n.text(.details, appLanguage: appLanguage))
-        .help(t(.agentStatusInfoDetail))
     }
 }
 
@@ -135,65 +56,6 @@ private extension TokenMeteringDashboardAgentStatusPanel {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func summaryPill(title: String, value: String, systemImage: String, tint: Color) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: systemImage)
-                .font(.system(size: 10, weight: .bold))
-                .foregroundStyle(tint)
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title.uppercased())
-                    .font(.system(size: 7.5, weight: .black))
-                    .tracking(0.7)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                Text(value)
-                    .font(.system(size: 11, weight: .bold, design: .rounded))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.72)
-            }
-        }
-        .padding(.horizontal, 8)
-        .frame(height: 32)
-        .background(tint.opacity(0.075), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .stroke(tint.opacity(0.09), lineWidth: 0.5)
-        }
-    }
-
-    private func compactAgentChip(_ row: TokenMeteringDashboardAgentStatusRow) -> some View {
-        let tint = row.kind.dashboardTint
-
-        return HStack(spacing: 6) {
-            Circle()
-                .fill(tint)
-                .frame(width: 5, height: 5)
-
-            Image(systemName: row.symbolName)
-                .font(.system(size: 9, weight: .bold))
-                .foregroundStyle(tint)
-
-            Text(row.title)
-                .font(.system(size: 9.5, weight: .bold))
-                .lineLimit(1)
-                .minimumScaleFactor(0.78)
-
-            Text(row.statusValue)
-                .font(.system(size: 8.5, weight: .bold, design: .rounded))
-                .foregroundStyle(tint)
-                .lineLimit(1)
-        }
-        .padding(.horizontal, 8)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .frame(height: 25)
-        .background(tint.opacity(row.isRunning ? 0.08 : 0.045), in: Capsule(style: .continuous))
-        .overlay {
-            Capsule(style: .continuous)
-                .stroke(tint.opacity(row.isRunning ? 0.12 : 0.06), lineWidth: 0.5)
-        }
     }
 }
 

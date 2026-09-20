@@ -4,6 +4,7 @@ struct TokenMeteringDashboardToolTab: View {
     let filter: TokenUsageDashboardToolFilter
     @ObservedObject var store: TokenUsageDashboardStore
     @ObservedObject var cloudServiceStatusStore: CloudServiceStatusStore
+    @ObservedObject var aiStatusStore: AIStatusStore
     let appLanguage: SpillAppLanguage
     let selectedControlAccent: Color
     let selectedControlAccentHighlight: Color
@@ -25,10 +26,8 @@ extension TokenMeteringDashboardToolTab {
         return Button {
             store.setSelectedTool(filter.tool)
         } label: {
-            HStack(spacing: 9) {
-                Circle()
-                    .fill(tabAccent)
-                    .frame(width: 7, height: 7)
+            HStack(spacing: 8) {
+                leadingStatusIndicator(tabAccent: tabAccent)
 
                 tabLabel(
                     detail: filter.detail,
@@ -39,25 +38,24 @@ extension TokenMeteringDashboardToolTab {
                     isSelected: isSelected,
                     tint: tabAccent
                 )
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(.horizontal, 11)
-            .frame(maxWidth: .infinity, minHeight: 46, alignment: .leading)
+            .frame(minWidth: filter.tool == nil ? 88 : 124, minHeight: 46, alignment: .leading)
             .foregroundStyle(isSelected ? tabAccent : .primary)
             .background {
                 if isSelected {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .fill(tabAccent.opacity(0.14))
                 } else {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(hasServerIssue ? tabAccent.opacity(0.12) : Color.primary.opacity(isHovered ? 0.075 : 0.035))
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(hasServerIssue ? tabAccent.opacity(0.10) : Color.primary.opacity(isHovered ? 0.06 : 0.03))
                 }
             }
             .overlay {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .stroke(
-                        isSelected ? tabAccent.opacity(0.28) : (hasServerIssue ? tabAccent.opacity(0.36) : Color.primary.opacity(isHovered ? 0.12 : 0.055)),
-                        lineWidth: isSelected ? 0.8 : (hasServerIssue ? 0.8 : 0.5)
+                        isSelected ? tabAccent.opacity(0.28) : (hasServerIssue ? tabAccent.opacity(0.30) : Color.primary.opacity(isHovered ? 0.10 : 0.045)),
+                        lineWidth: isSelected ? 0.75 : 0.5
                     )
             }
             .onHover { hovering in
@@ -71,6 +69,48 @@ extension TokenMeteringDashboardToolTab {
 }
 
 extension TokenMeteringDashboardToolTab {
+    @ViewBuilder
+    private func leadingStatusIndicator(tabAccent: Color) -> some View {
+        let dropHeight: CGFloat = 13
+        let dropWidth: CGFloat = dropHeight * WaterDropletOutline.aspectRatio
+
+        ZStack(alignment: .bottomTrailing) {
+            WaterDropletShape()
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            tabAccent.opacity(0.85),
+                            tabAccent
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .frame(width: dropWidth, height: dropHeight)
+
+            if filter.tool != nil {
+                // AI tool tab: sparkle accessory
+                Image(systemName: "sparkle")
+                    .font(.system(size: 6.5, weight: .bold))
+                    .foregroundStyle(
+                        isToolRunning
+                            ? Color.green
+                            : Color(red: 0.35, green: 0.85, blue: 0.95)
+                    )
+                    .shadow(color: Color.black.opacity(0.25), radius: 1, x: 0, y: 0.5)
+                    .offset(x: 3.5, y: 2.5)
+            } else if isToolRunning {
+                // All tab running status dot
+                Circle()
+                    .fill(Color.green)
+                    .frame(width: 4.5, height: 4.5)
+                    .shadow(color: Color.green.opacity(0.4), radius: 1)
+                    .offset(x: 2, y: 2)
+            }
+        }
+        .frame(width: 16, height: 16)
+    }
+
     private func tabLabel(
         detail: String,
         shareLabel: String?,
@@ -80,19 +120,19 @@ extension TokenMeteringDashboardToolTab {
         isSelected: Bool,
         tint: Color
     ) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 6) {
+        VStack(alignment: .leading, spacing: 2.5) {
+            HStack(spacing: 5) {
                 Text(filter.title)
                     .font(.system(size: 11, weight: isSelected ? .bold : .semibold))
                     .lineLimit(1)
                     .layoutPriority(1)
                     .minimumScaleFactor(0.78)
 
+                toolAgentStatusBadge(localStatus: localStatus)
+
                 if hasServiceStatusAccessory(serviceStatus: serviceStatus, tool: filter.tool) {
                     toolServiceStatusAccessory(serviceStatus: serviceStatus, tool: filter.tool)
                 }
-
-                Spacer(minLength: 0)
             }
 
             HStack(spacing: 5) {
@@ -119,8 +159,6 @@ extension TokenMeteringDashboardToolTab {
                     marker: store.liveUpdateMarker,
                     tint: tint
                 )
-
-                Spacer(minLength: 0)
             }
         }
     }
@@ -209,5 +247,73 @@ extension TokenMeteringDashboardToolTab {
         .foregroundStyle(tint)
         .background(tint.opacity(0.10), in: Capsule())
         .help(AppL10n.text(.serverStatusPendingHelp, appLanguage: appLanguage))
+    }
+}
+
+extension TokenMeteringDashboardToolTab {
+    private var localStatus: LocalAIToolStatus? {
+        guard let kind = filter.tool?.localAIToolKind else { return nil }
+        return aiStatusStore.statuses.first(where: { $0.kind == kind })
+    }
+
+    private var isToolRunning: Bool {
+        localStatus?.hasRunningProcesses ?? false
+    }
+
+    private var runningToolCount: Int {
+        visibleStatuses.filter(\.hasRunningProcesses).count
+    }
+
+    private var visibleStatuses: [LocalAIToolStatus] {
+        let visibleKinds = Set(store.snapshot.toolFilters.compactMap { $0.tool?.localAIToolKind })
+        return aiStatusStore.statuses.filter { visibleKinds.contains($0.kind) }
+    }
+
+    @ViewBuilder
+    private func toolAgentStatusBadge(localStatus: LocalAIToolStatus?) -> some View {
+        if let localStatus {
+            let isRunning = localStatus.hasRunningProcesses
+            let procCount = localStatus.processSummary.processCount
+            let badgeText: String = {
+                if isRunning {
+                    return procCount > 1 ? "\(procCount) proc" : localStatus.value
+                } else {
+                    return localStatus.value.isEmpty ? AppL10n.text(.idle, appLanguage: appLanguage) : localStatus.value
+                }
+            }()
+            agentStatusBadge(text: badgeText, isRunning: isRunning)
+        } else if filter.tool == nil {
+            let runningCount = runningToolCount
+            if runningCount > 0 {
+                agentStatusBadge(text: String(runningCount), isRunning: true)
+                    .accessibilityLabel(AppL10n.aiProcessSummary(
+                        runningToolCount: runningCount,
+                        processCount: visibleStatuses.reduce(0) { $0 + $1.processSummary.processCount },
+                        appLanguage: appLanguage
+                    ))
+            }
+        }
+    }
+
+    private func agentStatusBadge(text: String, isRunning: Bool) -> some View {
+        HStack(spacing: 3) {
+            Circle()
+                .fill(isRunning ? Color.green : Color.secondary.opacity(0.5))
+                .frame(width: isRunning ? 4.5 : 3.5, height: isRunning ? 4.5 : 3.5)
+            Text(text)
+                .font(.system(size: 8, weight: isRunning ? .bold : .medium, design: .rounded))
+                .lineLimit(1)
+        }
+        .foregroundStyle(isRunning ? Color.green : Color.secondary.opacity(0.8))
+        .padding(.horizontal, 4.5)
+        .frame(height: 15)
+        .background(
+            Capsule(style: .continuous)
+                .fill(isRunning ? Color.green.opacity(0.12) : Color.primary.opacity(0.04))
+        )
+        .overlay {
+            Capsule(style: .continuous)
+                .stroke(isRunning ? Color.green.opacity(0.24) : Color.primary.opacity(0.06), lineWidth: 0.5)
+        }
     }
 }

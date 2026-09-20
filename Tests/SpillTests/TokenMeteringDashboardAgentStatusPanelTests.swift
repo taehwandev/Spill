@@ -2,10 +2,9 @@ import XCTest
 @testable import Spill
 
 final class TokenMeteringDashboardAgentStatusPanelTests: XCTestCase {
-    func testAgentStatusPanelKeepsSummaryAndGridWorkLocalToOneRenderPass() throws {
+    func testAgentStatusPanelKeepsSummaryWorkLocalToOneRenderPass() throws {
         let source = try Self.source(named: "TokenMeteringDashboardAgentStatusPanel.swift")
 
-        XCTAssertTrue(source.contains("private static let summaryColumns"))
         XCTAssertTrue(source.contains("let summary = TokenMeteringDashboardAgentStatusSummary.make(statuses: visibleStatuses)"))
         XCTAssertTrue(source.contains("private var visibleStatuses: [LocalAIToolStatus]"))
         XCTAssertTrue(source.contains("aiStatusStore.statuses"))
