@@ -1,6 +1,6 @@
 # Spill
 
-Spill is an open-source compact control tray for macOS. It keeps one visible menu bar trigger and opens a small native panel for useful system state, AI tool state, pinned actions, and focused window controls.
+Spill is an open-source compact control tray for macOS. It keeps one visible menu bar trigger and opens a small native panel for useful system state, AI tool state, Caffeine, and focused window controls.
 
 ## Current status
 
@@ -16,23 +16,18 @@ This repository currently contains an MVP shell:
 - right-click menu with preferences and app quit actions
 - visible panel Close control that hides the panel without quitting Spill
 - SwiftUI preferences window
-- Accessibility permission status and diagnostics
+- opt-in Accessibility permission guidance for window controls
 - Launch at Login wiring for packaged `.app` builds
-- Accessibility-based menu bar extra scanner using `AXExtrasMenuBar`
-- best-effort `AXPress` action for detected items
 - focused-window quick actions for halves, corners, center, maximize, display left/right, and restore
-- automatic rescanning when apps, Spaces, or displays change
 - optional `Control + Option + Space` global shortcut, with window action shortcuts grouped under `Control + Option` and display moves under `Control + Option + Command`
-- notch-candidate menu bar actions with advanced detection diagnostics
-- selectable detected items with persisted Spill Bar pinning and removal
-- app-icon based labels for detected menu bar items
 - fixed CPU, memory, and storage panel status rows
 - click-to-open status detail popovers with CPU, memory, and Caffeine menu bar visibility toggles
 - local AI status strip for Codex, Ollama, and OpenAI configuration
-- pinned menu bar actions with pin/unpin controls, execution feedback, and app activation fallback
 - Caffeine with configurable default duration and an opt-in never-ending duration
 
-The current Spill Bar can detect some visible menu bar extras when Accessibility permission is granted. This is best-effort behavior. Spill does not promise to recover every item hidden behind the notch or forcibly rearrange other apps' menu bar items.
+Spill does not scan, invoke, or pin other apps’ menu bar icons. This applies on
+all supported macOS versions. Accessibility is needed only for optional window
+controls; the panel, AI usage, system metrics, and Caffeine work without it.
 
 ## Hosted web portal
 
@@ -43,19 +38,12 @@ requirements. Browser-delivered web code is not a security boundary; hosted
 account reads, device actions, and admin actions must still be enforced by the
 server-side Supabase/RLS relay boundary.
 
-## Important macOS constraint
+## macOS permissions
 
-macOS does not provide a public API that reliably enumerates, hides, resizes, reorders, clones, or reparents every third-party menu bar extra. `NSStatusBar` works for Spill's own item. Other apps' items live in their own processes, and deep control usually requires Accessibility observation, user-approved automation, or private implementation details.
-
-For an open-source app, the practical direction is:
-
-1. Use public AppKit/SwiftUI for the Spill UI.
-2. Ask for Accessibility permission only when needed.
-3. Detect visible menu bar items conservatively.
-4. Build first-party compact controls instead of relying on fragile spacer behavior.
-5. Avoid private APIs until there is a clearly documented reason and risk.
-
-The current scanner is intentionally conservative. It prefers `AXExtrasMenuBar` and only falls back to `AXMenuBar` for Apple system menu-bar hosts, because scanning every app's normal menu bar would incorrectly collect File/Edit/View menu items.
+Spill uses public AppKit and SwiftUI APIs for its own status items and panel.
+Window controls use Accessibility only after you choose to use them. Spill does
+not request Screen Recording permission or scan other apps' menu bar items.
+Existing macOS permission grants are left unchanged when upgrading.
 
 ## Requirements
 
@@ -393,10 +381,10 @@ input from an app that may be blocked by Screen Time.
 | Phase | Goal | Scope |
 | --- | --- | --- |
 | 1 | Product reset | Single visible trigger, no spacer dependency, compact tray direction |
-| 2 | Panel shell | System, AI, pinned action, and window action sections |
+| 2 | Panel shell | System, AI, Caffeine, and window action sections |
 | 3 | Provider models | Plain model types and provider boundaries |
 | 4 | System and AI status | Lightweight local status providers with conservative refresh |
-| 5 | Actions | Pinned actions and focused-window quick actions |
+| 5 | Actions | Caffeine and focused-window quick actions |
 | 6 | Preferences | Strip toggles, permission diagnostics, launch at login, optional hotkey |
 | 7 | Distribution | Signed app bundle, notarization path, releases, contribution guide |
 

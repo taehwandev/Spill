@@ -79,7 +79,6 @@ extension StatusItemController {
         triggerItem.button?.state = self.isSpillBarVisible ? .on : .off
         triggerItem.button?.toolTip = tooltip(
             statusTooltip: statusTooltip,
-            hiddenCount: state.hiddenCount,
             isSpillBarVisible: self.isSpillBarVisible
         )
         systemItem.button?.toolTip = segmentTooltip(for: state.systemSegments)

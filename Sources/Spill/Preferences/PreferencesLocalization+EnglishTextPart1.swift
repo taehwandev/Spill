@@ -20,8 +20,6 @@ extension PreferencesL10n {
             .launchSettings: "Launch Settings",
             .launchAtLogin: "Launch at Login",
             .launchAtLoginUnavailable: "Launch at Login is available after packaging Spill as a .app bundle.",
-            .dashboardOnboardingPreview: "Dashboard onboarding preview",
-            .dashboardOnboardingPreviewDetail: "Shows the panel as a first-run preview without changing local actions or token usage data.",
             .aiDashboardOnboardingPreview: "Spill - AI Token Metering onboarding preview",
             .aiDashboardOnboardingPreviewDetail: "Shows Spill - AI Token Metering and the panel token card in setup preview without deleting token records.",
             .languageSettings: "Language Settings",

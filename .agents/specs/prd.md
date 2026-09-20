@@ -10,13 +10,8 @@
 
 ## Summary
 
-Spill is a compact macOS control tray for people whose menu bar is crowded,
-especially on notched MacBooks.
-
-It does not try to force macOS to reveal or rearrange every hidden menu bar
-icon. Instead, Spill provides a small, fast panel that combines:
-
-- pinned menu bar and app actions;
+Spill is a compact macOS control tray for system state, AI usage, and focused
+window controls. A small, fast panel combines:
 - system status;
 - AI/tooling status, including local token usage;
 - quick window actions;
@@ -27,11 +22,6 @@ Detailed views are allowed, but they remain secondary entry points from the
 compact tray, Preferences, or web portal.
 
 ## Problem
-
-macOS menu bar space is limited. On notched MacBooks, menu bar extras can
-disappear behind the notch or be hidden by the system. Apple does not provide a
-public API to enumerate, clone, reorder, resize, or reveal every third-party
-menu bar extra.
 
 AI-heavy users also run multiple local agents and API tools. They need a local,
 privacy-preserving way to understand usage without sending prompts, commands,
@@ -47,7 +37,6 @@ or separate apps for each small utility.
 Spill is:
 
 - a small Mac control tray;
-- a menu bar action shelf;
 - a glanceable system and AI status strip;
 - a light window-action launcher;
 - a local-first AI token usage meter;
@@ -58,7 +47,7 @@ Spill is not:
 - a full iStat Menus clone;
 - a full Rectangle clone;
 - a full Raycast clone;
-- a guaranteed menu bar icon restoration tool;
+- a third-party menu bar icon manager;
 - a private API menu bar hack;
 - a cloud-first analytics SDK;
 - a prompt, command, repository, transcript, or source-code collector.
@@ -85,8 +74,9 @@ Spill is not:
 3. **Actionable by default**
    Items should be clickable, not decorative.
 
-4. **Best-effort is honest**
-   If a third-party menu bar action cannot be pressed, show a fallback.
+4. **Permissions follow actions**
+   Request Accessibility only for opt-in window controls; opening the panel,
+   AI usage, system metrics, and Caffeine requires no such permission.
 
 5. **Local first**
    Core token metering and tray behavior work without login, cloud upload,
@@ -115,7 +105,7 @@ Spill is not:
 | Compact panel | [Compact Panel](prd/compact-panel.md) | Panel composition, size, placement, and panel-level UX |
 | System status | [System Status](prd/system-status.md) | CPU, memory, battery, network, storage decisions, and resource constraints |
 | AI status | [AI Status](prd/ai-status.md) | Local AI process/config state and official service status |
-| Actions | [Quick Actions And Window Management](prd/quick-actions-and-window-management.md) | Pinned/detected actions, window movement, and action permissions |
+| Actions | [Quick Actions And Window Management](prd/quick-actions-and-window-management.md) | Window movement, Caffeine, and action permissions |
 | Local token collection | [Local Token Collection](prd/token-metering/local-collection.md) | Safe event collection, setup, normalization, and accuracy |
 | Local token dashboard | [Token Metering Dashboard](prd/token-metering/dashboard.md) | Dashboard UX, Work Items, filters, cost display, and input scope |
 | Token history | [Token History Import](prd/token-metering/history-import.md) | Explicit historical reconciliation, cursors, and event identity |
@@ -141,7 +131,7 @@ Spill is not:
 
 ## Non-Goals
 
-- Recover every hidden menu bar extra.
+- Discover, invoke, pin, or restore third-party menu bar extras on any macOS version.
 - Copy every third-party badge/count from the menu bar.
 - Read private state from other apps.
 - Use private frameworks.
@@ -161,7 +151,6 @@ Spill is not:
   - Gmail unread count
 - Custom user scripts.
 - Homebrew Cask.
-- Optional ScreenCaptureKit experiments for user-approved visual previews.
 - Paid multi-device or higher-frequency encrypted aggregate upload.
 - Account key recovery for private usage upload.
 - Signed Sparkle appcast updates after Developer ID release infrastructure is ready.

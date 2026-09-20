@@ -8,7 +8,6 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
     private let dismissController = SpillPanelDismissController()
     private let layout = SpillPanelLayout()
     private let settings: SpillSettings
-    private let scanner: AXMenuBarItemScanner
     private let panelStore: PanelStore
     private let sleepGuard: SleepGuardController
     private let statusStore: SystemStatusStore
@@ -19,7 +18,6 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
     private let updateStore: UpdateCheckStore
     private let visibilityChanged: (Bool) -> Void
     private let settingsAction: () -> Void
-    private let tokenMeteringSettingsAction: () -> Void
     private let tokenMeteringDetailAction: () -> Void
     var dismissExcludedWindowsProvider: @MainActor () -> [NSWindow] = { [] }
     private var panel: NSPanel?
@@ -28,14 +26,15 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
     private var isPresented = false
     private var panelRefreshTask: Task<Void, Never>?
     private var cancellables = Set<AnyCancellable>()
+    private var presentationGeneration = 0
+    private var layoutResizeScheduled = false
 
     override init() {
-        fatalError("Use init(settings:scanner:panelStore:sleepGuard:).")
+        fatalError("Use init(settings:panelStore:sleepGuard:).")
     }
 
     init(
         settings: SpillSettings,
-        scanner: AXMenuBarItemScanner,
         panelStore: PanelStore,
         statusStore: SystemStatusStore = SystemStatusStore(), aiStatusStore: AIStatusStore = AIStatusStore(),
         cloudServiceStatusStore: CloudServiceStatusStore = CloudServiceStatusStore(),
@@ -44,11 +43,9 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
         sleepGuard: SleepGuardController,
         visibilityChanged: @escaping (Bool) -> Void = { _ in },
         settingsAction: @escaping () -> Void = {},
-        tokenMeteringSettingsAction: @escaping () -> Void = {},
         tokenMeteringDetailAction: @escaping () -> Void = {}
     ) {
         self.settings = settings
-        self.scanner = scanner
         self.panelStore = panelStore
         self.statusStore = statusStore
         self.aiStatusStore = aiStatusStore
@@ -59,7 +56,6 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
         self.sleepGuard = sleepGuard
         self.visibilityChanged = visibilityChanged
         self.settingsAction = settingsAction
-        self.tokenMeteringSettingsAction = tokenMeteringSettingsAction
         self.tokenMeteringDetailAction = tokenMeteringDetailAction
         super.init()
         observeLayoutChanges()
@@ -110,16 +106,13 @@ extension SpillPanelController {
 
         return SpillPanelContentReport(
             isVisible: isPresented && panel?.isVisible == true,
-            panelState: state.readiness,
             statusModuleIDs: statusModules.map(\.rawValue),
             statusDetailRowCount: statusDetailRowCount,
             aiStatusCount: aiStatusStore.statuses.count,
             aiDetailRowCount: aiDetailRowCount,
             windowActionCount: windowActionStore.actions.count,
-            menuBarActionCount: state.displayItems.count,
             footerItemCount: footerItemCount,
-            showsPowerFooter: true,
-            showsCountBadge: true
+            showsPowerFooter: true
         )
     }
 
@@ -153,6 +146,8 @@ extension SpillPanelController {
         let finalFrame = panelFrame()
         let startFrame = finalFrame.offsetBy(dx: 0, dy: 8)
 
+        presentationGeneration += 1
+        let generation = presentationGeneration
         isPresented = true
         visibilityChanged(true)
         panel.setFrame(settings.useSpillAnimation ? startFrame : finalFrame, display: false)
@@ -162,6 +157,9 @@ extension SpillPanelController {
         if dismissOnOutsideInteraction {
             dismissController.start(
                 panel: panel,
+                excludedScreenFrames: { [weak self] in
+                    self?.dismissExcludedWindowsProvider().map(\.frame) ?? []
+                },
                 isExcludedWindow: { [weak self] window in
                     self?.dismissExcludedWindowsProvider().contains { $0 === window } == true
                 }
@@ -176,19 +174,20 @@ extension SpillPanelController {
             panel.animator().alphaValue = 1
             panel.animator().setFrame(finalFrame, display: true)
         } completion: { [weak self] in
-            self?.resizePanelIfVisible()
+            guard let self, presentationGeneration == generation, isPresented else { return }
+            resizePanelIfVisible()
         }
     }
 
     func hide(animated: Bool) {
         guard let panel else {
-            panelStore.send(.dismissRequestHandled)
             return
         }
 
+        presentationGeneration += 1
+        let generation = presentationGeneration
         isPresented = false
         visibilityChanged(false)
-        panelStore.send(.dismissRequestHandled)
         panelRefreshTask?.cancel()
         dismissController.stop()
 
@@ -199,8 +198,8 @@ extension SpillPanelController {
             panel.animator().alphaValue = 0
             panel.animator().setFrame(finalFrame, display: true)
         }, completion: { [weak self] in
+            guard let self, presentationGeneration == generation, !isPresented else { return }
             panel.orderOut(nil)
-            self?.resizePanelIfVisible()
         })
     }
 }
@@ -254,11 +253,7 @@ extension SpillPanelController {
                 sleepGuard: sleepGuard,
                 updateStore: updateStore
             ) { [weak self] in
-                self?.hide(animated: true)
-            } settingsAction: { [weak self] in
                 self?.settingsAction()
-            } tokenMeteringSettingsAction: { [weak self] in
-                self?.tokenMeteringSettingsAction()
             } tokenMeteringDetailAction: { [weak self] in
                 self?.tokenMeteringDetailAction()
             }
@@ -296,18 +291,13 @@ extension SpillPanelController {
 
     private func preferredPanelSize(in visibleFrame: NSRect) -> NSSize {
         let state = currentPanelState()
-        let menuBarActionCount = state.actionItems.count
 
         return SpillPanelContentSizer.preferredSize(
             statusModuleCount: state.visibleStatusModules.count,
-            aiStatusCount: 0,
             showsTokenMetering: true,
             windowActionCount: windowActionStore.actions.count,
-            menuBarActionCount: menuBarActionCount,
-            iconSpacing: CGFloat(settings.iconSpacing),
             visibleFrame: visibleFrame,
-            showsUpdateBanner: updateStore.showsDashboardUpdateStatus,
-            showsOnboardingPreview: state.onboardingPreviewEnabled
+            showsUpdateBanner: updateStore.showsDashboardUpdateStatus
         )
     }
 
@@ -346,88 +336,32 @@ extension SpillPanelController {
 
 extension SpillPanelController {
     private func observeLayoutChanges() {
-        scanner.$items
-            .dropFirst()
-            .sink { [weak self] _ in
-                self?.resizePanelIfVisible()
-            }
+        let changes: [AnyPublisher<Void, Never>] = [
+            panelStore.$state.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            settings.$hiddenLocalAIToolKinds.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            aiStatusStore.statusCountDidChange.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            cloudServiceStatusStore.objectWillChange.eraseToAnyPublisher(),
+            windowActionStore.objectWillChange.eraseToAnyPublisher(),
+            updateStore.objectWillChange.eraseToAnyPublisher()
+        ]
+        Publishers.MergeMany(changes)
+            .sink { [weak self] _ in self?.schedulePanelResize() }
             .store(in: &cancellables)
-
-        panelStore.$state
-            .dropFirst()
-            .sink { [weak self] _ in
-                self?.resizePanelIfVisible()
-            }
-            .store(in: &cancellables)
-
-        settings.$iconSpacing
-            .dropFirst()
-            .sink { [weak self] _ in
-                self?.resizePanelIfVisible()
-            }
-            .store(in: &cancellables)
-
-        settings.$displayMode
-            .dropFirst()
-            .sink { [weak self] _ in
-                self?.resizePanelIfVisible()
-            }
-            .store(in: &cancellables)
-
-        settings.$appearanceTheme
-            .dropFirst()
+        settings.$appearanceTheme.dropFirst()
             .sink { [weak self] theme in
                 self?.panel?.appearance = theme.nsAppearance
                 self?.applyPanelBorderColor()
             }
             .store(in: &cancellables)
+    }
 
-        settings.$selectedItemKeys
-            .dropFirst()
-            .sink { [weak self] _ in
-                self?.resizePanelIfVisible()
-            }
-            .store(in: &cancellables)
-
-        settings.$hiddenItemKeys
-            .dropFirst()
-            .sink { [weak self] _ in
-                self?.resizePanelIfVisible()
-            }
-            .store(in: &cancellables)
-
-        aiStatusStore.statusCountDidChange
-            .dropFirst()
-            .sink { [weak self] _ in
-                DispatchQueue.main.async {
-                    self?.resizePanelIfVisible()
-                }
-            }
-            .store(in: &cancellables)
-
-        cloudServiceStatusStore.objectWillChange
-            .sink { [weak self] _ in
-                DispatchQueue.main.async {
-                    self?.resizePanelIfVisible()
-                }
-            }
-            .store(in: &cancellables)
-
-        windowActionStore.objectWillChange
-            .sink { [weak self] _ in
-                DispatchQueue.main.async {
-                    self?.resizePanelIfVisible()
-                }
-            }
-            .store(in: &cancellables)
-
-        updateStore.objectWillChange
-            .sink { [weak self] _ in
-                DispatchQueue.main.async {
-                    self?.resizePanelIfVisible()
-                }
-            }
-            .store(in: &cancellables)
+    private func schedulePanelResize() {
+        guard !layoutResizeScheduled else { return }
+        layoutResizeScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            self?.layoutResizeScheduled = false
+            self?.resizePanelIfVisible()
+        }
     }
 }
 
@@ -449,7 +383,7 @@ extension SpillPanelController {
         panelRefreshTask?.cancel()
         panelRefreshTask = Task { @MainActor [weak self] in
             await Task.yield()
-            guard let self, isPresented else {
+            guard !Task.isCancelled, let self, isPresented else {
                 return
             }
 
@@ -460,6 +394,8 @@ extension SpillPanelController {
 
 extension SpillPanelController {
     func windowWillClose(_ notification: Notification) {
+        presentationGeneration += 1
+        panelRefreshTask?.cancel()
         dismissController.stop()
         isPresented = false
         visibilityChanged(false)

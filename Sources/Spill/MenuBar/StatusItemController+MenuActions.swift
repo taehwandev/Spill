@@ -3,7 +3,6 @@ import AppKit
 extension StatusItemController {
     func tooltip(
         statusTooltip: String,
-        hiddenCount: Int,
         isSpillBarVisible: Bool
     ) -> String {
         var parts: [String] = []
@@ -16,10 +15,6 @@ extension StatusItemController {
             ? AppL10n.text(.hideSpillPanel, appLanguage: settings.appLanguage)
             : AppL10n.text(.showSpillPanel, appLanguage: settings.appLanguage)
         )
-
-        if hiddenCount > 0 {
-            parts.append(AppL10n.itemCount(hiddenCount, appLanguage: settings.appLanguage))
-        }
 
         return parts.joined(separator: "\n")
     }

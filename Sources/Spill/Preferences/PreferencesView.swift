@@ -2,13 +2,11 @@ import SwiftUI
 
 struct PreferencesView: View {
     @ObservedObject var settings: SpillSettings
-    @ObservedObject var scanner: AXMenuBarItemScanner
     @ObservedObject var updateStore: UpdateCheckStore
     @ObservedObject var navigationState: PreferencesNavigationState
     let tokenUsageStore: TokenUsageStore
     @ObservedObject var tokenHistoryImportCoordinator: TokenUsageHistoryImportCoordinator
     @ObservedObject var aiStatusStore: AIStatusStore
-    let showPanelAction: () -> Void
     let openTokenDashboardAction: () -> Void
     let preparePrivateUsageUploadAction: @MainActor () async -> Void
     @State private var accessibilityTrusted = AccessibilityPermission.isTrusted
@@ -85,11 +83,8 @@ private extension PreferencesView {
         case "general":
             GeneralPreferencesSection(
                 settings: settings,
-                scanner: scanner,
                 updateStore: updateStore,
-                accessibilityTrusted: $accessibilityTrusted,
                 loginItemError: $loginItemError,
-                showPanelAction: showPanelAction,
                 language: settings.appLanguage
             )
         case "menubar":
@@ -111,6 +106,7 @@ private extension PreferencesView {
         case "windows":
             WindowManagementPreferencesSection(
                 settings: settings,
+                accessibilityTrusted: $accessibilityTrusted,
                 language: settings.appLanguage
             )
         case "status_caffeine":

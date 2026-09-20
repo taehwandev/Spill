@@ -2,10 +2,15 @@ import SwiftUI
 
 struct WindowManagementPreferencesSection: View {
     @ObservedObject var settings: SpillSettings
+    @Binding var accessibilityTrusted: Bool
     let language: SpillAppLanguage
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
+            PreferenceCard(title: t(.permissionsAndDiagnostics), symbolName: "lock.shield.fill", iconColor: .green) {
+                AccessibilityPreferencesSection(accessibilityTrusted: $accessibilityTrusted)
+            }
+
             PreferenceCard(title: t(.globalShortcut), symbolName: "keyboard", iconColor: .indigo) {
                 VStack(alignment: .leading, spacing: 8) {
                     Toggle(t(.keyboardShortcut), isOn: $settings.hotKeyEnabled)

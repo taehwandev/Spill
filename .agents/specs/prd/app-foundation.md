@@ -27,9 +27,12 @@ Requirements:
   data source, not a destructive reset, not a real token event write, and not a
   forced empty rendering of the production store.
 - Users can continue without account creation.
-- Accessibility permission is requested only when the user enables or invokes a
-  feature that needs it, such as window actions or best-effort menu bar item
-  scanning.
+- Accessibility permission is requested only when the user invokes window
+  controls or explicitly opens their permission setup. First launch, opening the
+  panel, AI usage, system metrics, and Caffeine must not prompt for it.
+- Onboarding and Preferences contain no third-party icon scanning, pinning,
+  permission guidance, or Screen Recording setup. Window-control Accessibility
+  guidance remains available with a purpose-specific explanation.
 - Token metering setup is offered as an optional setup card in Preferences and
   the local token dashboard. It should explain what is counted, what never
   leaves the device, and why exact runtime usage metadata is required.

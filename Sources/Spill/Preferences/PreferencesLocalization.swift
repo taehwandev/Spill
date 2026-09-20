@@ -46,22 +46,6 @@ extension PreferencesL10n {
         }
     }
 
-    static func itemCount(
-        _ count: Int,
-        appLanguage: SpillAppLanguage = .persisted(),
-        preferredLanguages: [String] = Locale.preferredLanguages
-    ) -> String {
-        let language = resolvedLanguage(appLanguage: appLanguage, preferredLanguages: preferredLanguages)
-        switch language {
-        case .english:
-            return "\(count) items"
-        case .korean:
-            return "\(count)개 항목"
-        case .japanese:
-            return "\(count)件"
-        }
-    }
-
     static func upToDate(
         version: String,
         appLanguage: SpillAppLanguage = .persisted(),

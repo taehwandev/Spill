@@ -47,7 +47,7 @@ The app should:
 
 - keep one small, visible menu bar trigger;
 - show a compact panel under the notch or trigger;
-- provide useful system, AI, window, and pinned-action controls;
+- provide useful system, AI, window, and Caffeine controls;
 - use public APIs plus Accessibility where needed;
 - remain distributable as an open-source notarized macOS app.
 

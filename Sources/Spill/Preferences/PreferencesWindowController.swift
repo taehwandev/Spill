@@ -9,12 +9,10 @@ final class PreferencesWindowController: NSObject, NSWindowDelegate {
     private let minimumSize = NSSize(width: 640, height: 480)
     private let screenPadding: CGFloat = 32
     private let settings: SpillSettings
-    private let scanner: AXMenuBarItemScanner
     private let updateStore: UpdateCheckStore
     private let tokenUsageStore: TokenUsageStore
     private let tokenHistoryImportCoordinator: TokenUsageHistoryImportCoordinator
     private let aiStatusStore: AIStatusStore
-    private let showPanelAction: () -> Void
     private let openTokenDashboardAction: () -> Void
     private let preparePrivateUsageUploadAction: @MainActor () async -> Void
     private let navigationState = PreferencesNavigationState()
@@ -24,22 +22,18 @@ final class PreferencesWindowController: NSObject, NSWindowDelegate {
 
     init(
         settings: SpillSettings,
-        scanner: AXMenuBarItemScanner,
         updateStore: UpdateCheckStore,
         tokenUsageStore: TokenUsageStore,
         tokenHistoryImportCoordinator: TokenUsageHistoryImportCoordinator,
         aiStatusStore: AIStatusStore,
-        showPanelAction: @escaping () -> Void,
         openTokenDashboardAction: @escaping () -> Void,
         preparePrivateUsageUploadAction: @escaping @MainActor () async -> Void = {}
     ) {
         self.settings = settings
-        self.scanner = scanner
         self.updateStore = updateStore
         self.tokenUsageStore = tokenUsageStore
         self.tokenHistoryImportCoordinator = tokenHistoryImportCoordinator
         self.aiStatusStore = aiStatusStore
-        self.showPanelAction = showPanelAction
         self.openTokenDashboardAction = openTokenDashboardAction
         self.preparePrivateUsageUploadAction = preparePrivateUsageUploadAction
         super.init()
@@ -68,13 +62,11 @@ extension PreferencesWindowController {
 
         let contentView = PreferencesView(
             settings: settings,
-            scanner: scanner,
             updateStore: updateStore,
             navigationState: navigationState,
             tokenUsageStore: tokenUsageStore,
             tokenHistoryImportCoordinator: tokenHistoryImportCoordinator,
             aiStatusStore: aiStatusStore,
-            showPanelAction: showPanelAction,
             openTokenDashboardAction: openTokenDashboardAction,
             preparePrivateUsageUploadAction: preparePrivateUsageUploadAction
         )

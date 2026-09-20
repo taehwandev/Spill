@@ -54,6 +54,12 @@ if ! grep -q "SPILL_STATUS_CLICK_SMOKE_VISIBLE" "$LOG_FILE"; then
     exit 1
 fi
 
+if ! grep -q "SPILL_STATUS_TOGGLE_SMOKE_OK" "$LOG_FILE"; then
+    echo "FAIL: Spill status item did not toggle open, closed, and open."
+    cat "$LOG_FILE"
+    exit 1
+fi
+
 if ! grep -q "SPILL_SMOKE_EXIT" "$LOG_FILE"; then
     echo "FAIL: Spill did not report smoke shutdown."
     cat "$LOG_FILE"

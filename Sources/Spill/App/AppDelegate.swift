@@ -5,7 +5,6 @@ import Combine
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let settings = SpillSettings.shared
-    private let scanner = AXMenuBarItemScanner()
     private let sleepGuard = SleepGuardController()
     private let statusStore = SystemStatusStore(cpuInitialSampleIntervalNanoseconds: 250_000_000)
     private let aiStatusStore = AIStatusStore()
@@ -16,18 +15,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let updateCheckStore: UpdateCheckStore
     private lazy var panelStore = PanelStore(
         settings: settings,
-        scanner: scanner,
         windowActionPerformer: { [unowned self] action in
             self.windowActionStore.perform(action)
         }
     )
-    private lazy var scanCoordinator = MenuBarScanCoordinator(scanner: scanner, settings: settings)
     private lazy var hotKeyController = HotKeyController(
         registrations: makeHotKeyRegistrations()
     )
     private lazy var spillPanelController = SpillPanelController(
         settings: settings,
-        scanner: scanner,
         panelStore: panelStore,
         statusStore: statusStore,
         aiStatusStore: aiStatusStore,
@@ -45,23 +41,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settingsAction: { [weak self] in
             self?.showPreferencesFromPanel()
         },
-        tokenMeteringSettingsAction: { [weak self] in
-            self?.showTokenMeteringPreferencesFromPanel()
-        },
         tokenMeteringDetailAction: { [weak self] in
             self?.openTokenDashboard(source: "panel_ai_section")
         }
     )
     private lazy var preferencesWindowController = PreferencesWindowController(
         settings: settings,
-        scanner: scanner,
         updateStore: updateCheckStore,
         tokenUsageStore: tokenMeteringCoordinator.usageStore,
         tokenHistoryImportCoordinator: tokenMeteringCoordinator.historyImportCoordinator,
         aiStatusStore: aiStatusStore,
-        showPanelAction: { [weak self] in
-            self?.showSpillBar(source: "preferences")
-        },
         openTokenDashboardAction: { [weak self] in
             self?.openTokenDashboard(source: "preferences")
         },
@@ -138,10 +127,6 @@ extension AppDelegate {
             settings: settings,
             statusStore: statusStore,
             sleepGuard: sleepGuard,
-            hiddenItemCountProvider: { [weak scanner] in
-                guard let scanner else { return 0 }
-                return SpillDisplayMode.notchCandidateItems(from: scanner, settings: SpillSettings.shared).count
-            },
             aiTokenCountProvider: { [weak self] in
                 guard let coordinator = self?.tokenMeteringCoordinator else { return (0, 0) }
                 return (coordinator.menuBarTokenTotal, coordinator.menuBarAllTimeTokenTotal)
@@ -153,7 +138,7 @@ extension AppDelegate {
                 self?.toggleSpillBar()
             },
             refreshAction: { [weak self] in
-                self?.refreshMenuBarItems(source: "status_menu")
+                self?.refreshDashboardData(source: "status_menu")
             },
             preferencesAction: { [weak self] in
                 self?.showPreferences(source: "status_menu")
@@ -182,7 +167,6 @@ extension AppDelegate {
         if isSmokeTest {
             startSmokeTestExitTimer()
         } else {
-            scanCoordinator.start()
             configureHotKey()
             prewarmPanel()
             if DashboardUpdateRestoration().consumeReopenRequest() {
@@ -298,6 +282,12 @@ extension AppDelegate {
         } else {
             print("SPILL_STATUS_CLICK_SMOKE_NOT_VISIBLE")
         }
+        statusItemController?.performPrimaryClickForSmokeTest()
+        let didClose = !spillPanelController.isVisible
+        statusItemController?.performPrimaryClickForSmokeTest()
+        print(didClose && spillPanelController.isVisible
+            ? "SPILL_STATUS_TOGGLE_SMOKE_OK"
+            : "SPILL_STATUS_TOGGLE_SMOKE_FAIL")
     }
 }
 
@@ -367,7 +357,6 @@ extension AppDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         SpillCrashReporter.markCleanShutdown(processRole: "main_app")
         hotKeyController.stop()
-        scanCoordinator.stop()
         aiStatusStore.cancelRefresh()
         cloudServiceStatusStore.cancelRefresh()
         preferencesWindowController.prepareForTermination()
@@ -414,24 +403,13 @@ extension AppDelegate {
             SpillTelemetry.shared.track("panel_opened", props: ["source": source])
             updateCheckStore.checkForUpdatesIfNeeded(source: "panel_open")
         }
-
-        if !AccessibilityPermission.isTrusted {
-            SpillTelemetry.shared.track("accessibility_prompt_shown", props: ["source": "panel_open"])
-            DispatchQueue.main.async {
-                _ = AccessibilityPermission.request()
-            }
-            return
-        }
-
-        scheduleDeferredScanIfNeeded()
     }
 }
 
 extension AppDelegate {
-    private func refreshMenuBarItems(source: String = "status_menu") {
-        SpillTelemetry.shared.track("menu_bar_scan_requested", props: ["source": source])
+    private func refreshDashboardData(source: String = "status_menu") {
+        SpillTelemetry.shared.track("dashboard_refresh_requested", props: ["source": source])
         tokenMeteringCoordinator.requestCollection(reason: "manual_refresh")
-        scanCoordinator.refreshNow()
         statusItemController?.refresh()
         Task { @MainActor [weak self] in
             await self?.refreshStatusData()
@@ -470,15 +448,6 @@ extension AppDelegate {
         showPreferences(source: "panel")
     }
 
-    private func showTokenMeteringPreferencesFromPanel() {
-        if spillPanelController.isVisible {
-            spillPanelController.hide(animated: true)
-            SpillTelemetry.shared.track("panel_closed", props: ["source": "token_metering_settings_from_panel"])
-        }
-
-        showPreferences(source: "panel_token_metering", selectedTab: TokenMeteringDashboardProcess.tokenMeteringPreferencesTab)
-    }
-
     private func checkForUpdates(source: String = "unknown") {
         if updateCheckStore.usesInAppUpdater {
             updateCheckStore.checkForUpdates(source: source)
@@ -494,24 +463,6 @@ extension AppDelegate {
     private func prewarmPanel() {
         DispatchQueue.main.async { [weak self] in
             self?.spillPanelController.prepare()
-        }
-    }
-
-    private func scheduleDeferredScanIfNeeded() {
-        guard !scanner.isScanning else {
-            return
-        }
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
-            guard let self,
-                  isSpillPanelVisible,
-                  AccessibilityPermission.isTrusted,
-                  !scanner.isScanning
-            else {
-                return
-            }
-
-            scanner.refreshIfStale(reason: .panelOpen)
         }
     }
 
@@ -570,14 +521,6 @@ extension AppDelegate {
     }
 
     private func observeControllerInputs() {
-        scanner.$items
-            .sink { [weak self] _ in
-                Task { @MainActor in
-                    self?.statusItemController?.refresh()
-                }
-            }
-            .store(in: &cancellables)
-
         statusStore.objectWillChange
             .debounce(for: .milliseconds(80), scheduler: RunLoop.main)
             .sink { [weak self] _ in
@@ -623,30 +566,6 @@ extension AppDelegate {
 
 extension AppDelegate {
     private func observeMenuBarItemSettings() {
-        settings.$displayMode
-            .dropFirst()
-            .sink { [weak self] _ in
-                SpillTelemetry.shared.track("preference_changed", props: ["name": "display_mode"])
-                self?.statusItemController?.refresh()
-            }
-            .store(in: &cancellables)
-
-        settings.$selectedItemKeys
-            .dropFirst()
-            .sink { [weak self] _ in
-                SpillTelemetry.shared.track("preference_changed", props: ["name": "selected_items"])
-                self?.statusItemController?.refresh()
-            }
-            .store(in: &cancellables)
-
-        settings.$hiddenItemKeys
-            .dropFirst()
-            .sink { [weak self] _ in
-                SpillTelemetry.shared.track("preference_changed", props: ["name": "hidden_items"])
-                self?.statusItemController?.refresh()
-            }
-            .store(in: &cancellables)
-
         settings.$enabledMenuBarStatusItems
             .dropFirst()
             .sink { [weak self] _ in
@@ -852,10 +771,6 @@ extension AppDelegate {
 
 extension AppDelegate {
     private func configureStatusRefreshLoop(startsImmediately: Bool = true) {
-        // Note: `autoRefreshEnabled` deliberately does not gate this loop. That
-        // flag governs the AX menu-bar item scan (MenuBarScanCoordinator) and
-        // has no current Preferences surface; freezing the live system chips
-        // for users whose stored legacy value is false would be a regression.
         statusRefreshCoordinator.restart(startsImmediately: startsImmediately)
         statusItemController?.refresh()
     }
@@ -919,7 +834,7 @@ extension AppDelegate {
     }
 
     @objc private func refreshMenuBarItemsFromMainMenu() {
-        refreshMenuBarItems(source: "main_menu")
+        refreshDashboardData(source: "main_menu")
     }
 
     @objc private func showPreferencesFromMainMenu() {

@@ -10,7 +10,6 @@ final class StatusItemController: NSObject {
     let settings: SpillSettings
     let statusStore: SystemStatusStore
     let sleepGuard: SleepGuardController
-    let hiddenItemCountProvider: () -> Int
     let aiTokenCountProvider: () -> (daily: Int, total: Int)
     let aiServerHealthProvider: () -> CloudServiceHealth?
     let toggleAction: () -> Void
@@ -43,7 +42,6 @@ final class StatusItemController: NSObject {
         settings: SpillSettings,
         statusStore: SystemStatusStore,
         sleepGuard: SleepGuardController,
-        hiddenItemCountProvider: @escaping () -> Int,
         aiTokenCountProvider: @escaping () -> (daily: Int, total: Int),
         aiServerHealthProvider: @escaping () -> CloudServiceHealth? = { nil },
         toggleAction: @escaping () -> Void,
@@ -56,7 +54,6 @@ final class StatusItemController: NSObject {
         self.settings = settings
         self.statusStore = statusStore
         self.sleepGuard = sleepGuard
-        self.hiddenItemCountProvider = hiddenItemCountProvider
         self.aiTokenCountProvider = aiTokenCountProvider
         self.aiServerHealthProvider = aiServerHealthProvider
         self.toggleAction = toggleAction

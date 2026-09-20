@@ -3,17 +3,11 @@ import SwiftUI
 struct SpillBarAITokenSummary: View {
     @ObservedObject var settings: SpillSettings
     @ObservedObject var tokenUsageDashboardStore: TokenUsageDashboardStore
-    let onboardingPreviewEnabled: Bool
-    let tokenMeteringSettingsAction: () -> Void
     let tokenMeteringDetailAction: () -> Void
     @State private var isHovered = false
 
     var body: some View {
-        if onboardingPreviewEnabled {
-            setupPreview
-        } else {
-            tokenSummary
-        }
+        tokenSummary
     }
 }
 
@@ -88,62 +82,6 @@ private extension SpillBarAITokenSummary {
                 appLanguage: settings.appLanguage
             )
         )
-    }
-}
-
-private extension SpillBarAITokenSummary {
-    private var setupPreview: some View {
-        Button {
-            tokenMeteringSettingsAction()
-        } label: {
-            HStack(spacing: 10) {
-                statusIconBadge(symbolName: "wand.and.stars", tint: .orange)
-
-                VStack(alignment: .leading, spacing: 5) {
-                    HStack(spacing: 6) {
-                        Text(AppL10n.text(.tokenMeteringSetupTitle, appLanguage: settings.appLanguage))
-                            .font(.system(size: 11.5, weight: .semibold))
-                            .lineLimit(1)
-
-                        Text(AppL10n.text(.need, appLanguage: settings.appLanguage))
-                            .font(.system(size: 8.5, weight: .bold))
-                            .padding(.horizontal, 5)
-                            .frame(height: 17)
-                            .foregroundStyle(.orange)
-                            .background(.orange.opacity(0.12), in: Capsule())
-                    }
-
-                    Text(AppL10n.text(.tokenMeteringSetupDetail, appLanguage: settings.appLanguage))
-                        .font(.system(size: 10, weight: .medium, design: .rounded))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                Spacer(minLength: 8)
-
-                Label(AppL10n.text(.tokenMeteringSettings, appLanguage: settings.appLanguage), systemImage: "gearshape.fill")
-                    .font(.system(size: 10, weight: .bold))
-                    .labelStyle(.titleAndIcon)
-                    .lineLimit(1)
-                    .padding(.horizontal, 8)
-                    .frame(height: 24)
-                    .foregroundStyle(.orange)
-                    .background(.orange.opacity(0.12), in: Capsule())
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .frame(minHeight: 74)
-            .frame(maxWidth: .infinity)
-            .background(.orange.opacity(0.07), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(.orange.opacity(0.14), lineWidth: 0.6)
-            }
-        }
-        .buttonStyle(.plain)
-        .help(AppL10n.text(.tokenMeteringSettings, appLanguage: settings.appLanguage))
-        .accessibilityLabel(AppL10n.text(.tokenMeteringSetupTitle, appLanguage: settings.appLanguage))
     }
 }
 

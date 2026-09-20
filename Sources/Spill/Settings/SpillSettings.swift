@@ -20,20 +20,6 @@ final class SpillSettings: ObservableObject {
         }
     }
 
-    @Published var iconSpacing: Double {
-        didSet {
-            let normalizedValue = Self.normalizedIconSpacing(iconSpacing)
-            if iconSpacing != normalizedValue {
-                iconSpacing = normalizedValue
-            }
-            defaults.set(normalizedValue, forKey: Keys.iconSpacing)
-        }
-    }
-
-    @Published var showCountBadge: Bool {
-        didSet { defaults.set(showCountBadge, forKey: Keys.showCountBadge) }
-    }
-
     @Published var showPowerFooter: Bool {
         didSet { defaults.set(showPowerFooter, forKey: Keys.showPowerFooter) }
     }
@@ -65,10 +51,6 @@ final class SpillSettings: ObservableObject {
         didSet { defaults.set(useSpillAnimation, forKey: Keys.useSpillAnimation) }
     }
 
-    @Published var autoRefreshEnabled: Bool {
-        didSet { defaults.set(autoRefreshEnabled, forKey: Keys.autoRefreshEnabled) }
-    }
-
     @Published var refreshInterval: Double {
         didSet {
             let normalizedValue = Self.normalizedRefreshInterval(refreshInterval)
@@ -77,14 +59,6 @@ final class SpillSettings: ObservableObject {
             }
             defaults.set(normalizedValue, forKey: Keys.refreshInterval)
         }
-    }
-
-    @Published var displayMode: SpillDisplayMode {
-        didSet { defaults.set(displayMode.rawValue, forKey: Keys.displayMode) }
-    }
-
-    @Published var panelOnboardingPreviewEnabled: Bool {
-        didSet { defaults.set(panelOnboardingPreviewEnabled, forKey: Keys.panelOnboardingPreviewEnabled) }
     }
 
     @Published var tokenUsageDashboardOnboardingPreviewEnabled: Bool {
@@ -161,14 +135,6 @@ final class SpillSettings: ObservableObject {
 
     @Published var menuBarTriggerIconStyle: MenuBarTriggerIconStyle {
         didSet { defaults.set(menuBarTriggerIconStyle.rawValue, forKey: Keys.menuBarTriggerIconStyle) }
-    }
-
-    @Published var selectedItemKeys: Set<String> {
-        didSet { defaults.set(Array(selectedItemKeys).sorted(), forKey: Keys.selectedItemKeys) }
-    }
-
-    @Published private(set) var hiddenItemKeys: Set<String> {
-        didSet { defaults.set(Array(hiddenItemKeys).sorted(), forKey: Keys.hiddenItemKeys) }
     }
 
     @Published var hotKeyEnabled: Bool {
@@ -274,8 +240,6 @@ final class SpillSettings: ObservableObject {
         self.defaults = defaults
         appLanguage = SpillAppLanguage.normalized(rawValue: defaults.string(forKey: Keys.appLanguage))
         appearanceTheme = SpillAppearanceTheme.normalized(rawValue: defaults.string(forKey: Keys.appearanceTheme))
-        iconSpacing = Self.normalizedIconSpacing(defaults.object(forKey: Keys.iconSpacing) as? Double)
-        showCountBadge = defaults.object(forKey: Keys.showCountBadge) as? Bool ?? true
         showPowerFooter = defaults.object(forKey: Keys.showPowerFooter) as? Bool ?? true
         let persistedSleepGuardKeepsDisplayAwake = defaults.object(forKey: Keys.sleepGuardKeepsDisplayAwake) as? Bool
         let migratedSleepGuardDisplayAwakeDefault = defaults.object(
@@ -303,10 +267,7 @@ final class SpillSettings: ObservableObject {
             : persistedSleepGuardDuration
         sleepGuardAllowsIndefinite = persistedAllowsIndefinite
         useSpillAnimation = defaults.object(forKey: Keys.useSpillAnimation) as? Bool ?? true
-        autoRefreshEnabled = defaults.object(forKey: Keys.autoRefreshEnabled) as? Bool ?? true
         refreshInterval = Self.normalizedRefreshInterval(defaults.object(forKey: Keys.refreshInterval) as? Double)
-        let modeRawValue = defaults.string(forKey: Keys.displayMode) ?? SpillDisplayMode.notchCandidates.rawValue
-        displayMode = SpillDisplayMode(rawValue: modeRawValue) ?? .notchCandidates
         statusModuleOrder = SpillStatusModule.normalizedOrder(
             from: defaults.stringArray(forKey: Keys.statusModuleOrder)
         )
@@ -329,7 +290,6 @@ final class SpillSettings: ObservableObject {
         enabledMenuBarStatusItems = SpillMenuBarStatusItem.normalizedEnabled(
             from: defaults.stringArray(forKey: Keys.enabledMenuBarStatusItems)
         )
-        panelOnboardingPreviewEnabled = defaults.object(forKey: Keys.panelOnboardingPreviewEnabled) as? Bool ?? false
         tokenUsageDashboardOnboardingPreviewEnabled =
             defaults.object(forKey: Keys.tokenUsageDashboardOnboardingPreviewEnabled) as? Bool ?? false
         let presentationRawValue = defaults.string(forKey: Keys.menuBarStatusPresentationStyle)
@@ -364,8 +324,6 @@ final class SpillSettings: ObservableObject {
         menuBarTriggerIconStyle = MenuBarTriggerIconStyle.normalized(
             rawValue: defaults.string(forKey: Keys.menuBarTriggerIconStyle)
         )
-        selectedItemKeys = Set(defaults.stringArray(forKey: Keys.selectedItemKeys) ?? [])
-        hiddenItemKeys = Set(defaults.stringArray(forKey: Keys.hiddenItemKeys) ?? [])
         hotKeyEnabled = defaults.object(forKey: Keys.hotKeyEnabled) as? Bool ?? true
         windowActionShortcutKeys = Self.normalizedWindowActionShortcutKeys(
             from: defaults.stringArray(forKey: Keys.windowActionShortcutKeys)
@@ -497,38 +455,6 @@ extension SpillSettings {
         tokenUsageInputScope = persistedScope
     }
 
-}
-
-extension SpillSettings {
-    func selectionState(for item: MenuBarItemSnapshot) -> MenuBarItemSelectionState {
-        selectedItemKeys.contains(item.stableKey) ? .selected : .unselected
-    }
-
-    func isItemHidden(_ item: MenuBarItemSnapshot) -> Bool {
-        hiddenItemKeys.contains(item.stableKey)
-    }
-
-    func setItem(_ item: MenuBarItemSnapshot, selected: Bool) {
-        if selected {
-            hiddenItemKeys.remove(item.stableKey)
-            selectedItemKeys.insert(item.stableKey)
-        } else {
-            selectedItemKeys.remove(item.stableKey)
-        }
-    }
-
-    func hideItem(_ item: MenuBarItemSnapshot) {
-        selectedItemKeys.remove(item.stableKey)
-        hiddenItemKeys.insert(item.stableKey)
-    }
-
-    func showItem(_ item: MenuBarItemSnapshot) {
-        hiddenItemKeys.remove(item.stableKey)
-    }
-
-    func clearSelectedItems() {
-        selectedItemKeys = []
-    }
 }
 
 extension SpillSettings {
@@ -896,14 +822,6 @@ extension SpillSettings {
         SleepGuardDuration.availableDurations(allowsIndefinite: sleepGuardAllowsIndefinite)
     }
 
-    private static func normalizedIconSpacing(_ value: Double?) -> Double {
-        guard let value, value.isFinite else {
-            return 8
-        }
-
-        return value.clamped(to: 2...16)
-    }
-
     private static func normalizedRefreshInterval(_ value: Double?) -> Double {
         guard let value, value.isFinite else {
             return 15
@@ -952,8 +870,6 @@ private struct WindowActionShortcutRegistrationKey: Hashable {
 private enum Keys {
     static let appLanguage = SpillAppLanguage.defaultsKey
     static let appearanceTheme = SpillAppearanceTheme.defaultsKey
-    static let iconSpacing = "iconSpacing"
-    static let showCountBadge = "showCountBadge"
     static let showPowerFooter = "showPowerFooter"
     static let sleepGuardKeepsDisplayAwake = "sleepGuardKeepsDisplayAwake"
     static let sleepGuardDisplayAwakeDefaultMigrated = "sleepGuardDisplayAwakeDefaultMigrated"
@@ -961,14 +877,11 @@ private enum Keys {
     static let sleepGuardAllowsIndefinite = "sleepGuardAllowsIndefinite"
     static let sleepGuardDefaultDuration = "sleepGuardDefaultDuration"
     static let useSpillAnimation = "useSpillAnimation"
-    static let autoRefreshEnabled = "autoRefreshEnabled"
     static let refreshInterval = "refreshInterval"
-    static let displayMode = "displayMode"
     static let statusModuleOrder = "statusModuleOrder"
     static let enabledStatusModules = "enabledStatusModules"
     static let statusModuleNetworkDefaultEnabledMigrated = "statusModuleNetworkDefaultEnabledMigrated"
     static let enabledMenuBarStatusItems = "enabledMenuBarStatusItems"
-    static let panelOnboardingPreviewEnabled = "panelOnboardingPreviewEnabled"
     static let tokenUsageDashboardOnboardingPreviewEnabled = "tokenUsageDashboardOnboardingPreviewEnabled"
     static let menuBarStatusPresentationStyle = "menuBarStatusPresentationStyle"
     static let menuBarMetricPresentationStyles = "menuBarMetricPresentationStyles"
@@ -980,8 +893,6 @@ private enum Keys {
     static let menuBarStatusFontSize = "menuBarStatusFontSize"
     static let menuBarStatusTextBold = "menuBarStatusTextBold"
     static let menuBarTriggerIconStyle = "menuBarTriggerIconStyle"
-    static let selectedItemKeys = "selectedItemKeys"
-    static let hiddenItemKeys = "hiddenItemKeys"
     static let hotKeyEnabled = "hotKeyEnabled"
     static let windowActionShortcutKeys = "windowActionShortcutKeys"
     static let launchAtLogin = "launchAtLogin"

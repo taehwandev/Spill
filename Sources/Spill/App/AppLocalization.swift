@@ -73,18 +73,6 @@ extension AppL10n {
         }
     }
 
-    static func itemCount(_ count: Int, appLanguage: SpillAppLanguage = .persisted()) -> String {
-        String(format: text(.menuBarItemCount, appLanguage: appLanguage), count)
-    }
-
-    static func pinnedCount(_ count: Int, appLanguage: SpillAppLanguage = .persisted()) -> String {
-        String(format: text(.pinned, appLanguage: appLanguage), count)
-    }
-
-    static func actionsReady(_ count: Int, appLanguage: SpillAppLanguage = .persisted()) -> String {
-        String(format: text(.actionsReady, appLanguage: appLanguage), count)
-    }
-
     static func servicesFromOfficialSources(_ count: Int, appLanguage: SpillAppLanguage = .persisted()) -> String {
         String(format: text(.servicesFromOfficialSources, appLanguage: appLanguage), count)
     }
@@ -231,65 +219,6 @@ extension AppL10n {
         String(format: text(.unsupportedFormat, appLanguage: appLanguage), title)
     }
 
-    static func pressFailed(result: Int, appLanguage: SpillAppLanguage = .persisted()) -> String {
-        String(format: text(.pressFailedFormat, appLanguage: appLanguage), result)
-    }
-
-    static func noMenuBarItemsFound(
-        candidateCount: Int,
-        menuBarRootCount: Int,
-        extrasRootCount: Int,
-        fallbackRootCount: Int,
-        representableElementCount: Int,
-        suffix: String,
-        appLanguage: SpillAppLanguage = .persisted()
-    ) -> String {
-        String(
-            format: text(.noMenuBarItemsFoundFormat, appLanguage: appLanguage),
-            candidateCount,
-            menuBarRootCount,
-            extrasRootCount,
-            fallbackRootCount,
-            representableElementCount,
-            suffix
-        )
-    }
-
-    static func detectedNoNotch(
-        itemCount: Int,
-        menuBarRootCount: Int,
-        suffix: String,
-        appLanguage: SpillAppLanguage = .persisted()
-    ) -> String {
-        String(
-            format: text(.detectedNoNotchFormat, appLanguage: appLanguage),
-            itemCount,
-            menuBarRootCount,
-            suffix
-        )
-    }
-
-    static func detectedNearNotch(
-        itemCount: Int,
-        notchCount: Int,
-        suffix: String,
-        appLanguage: SpillAppLanguage = .persisted()
-    ) -> String {
-        String(
-            format: text(.detectedNearNotchFormat, appLanguage: appLanguage),
-            itemCount,
-            notchCount,
-            suffix
-        )
-    }
-
-    static func pinned(_ title: String, appLanguage: SpillAppLanguage = .persisted()) -> String {
-        String(format: text(.pinnedFormat, appLanguage: appLanguage), title)
-    }
-
-    static func unpinned(_ title: String, appLanguage: SpillAppLanguage = .persisted()) -> String {
-        String(format: text(.unpinnedFormat, appLanguage: appLanguage), title)
-    }
 }
 
 extension AppL10n {

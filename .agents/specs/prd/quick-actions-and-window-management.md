@@ -4,51 +4,22 @@
 
 - Status: active
 - Audience: product, design, engineering, and QA
-- Purpose: define pinned, detected, and window action behavior
-- Source of truth: this document owns third-party menu bar actions and window controls
+- Purpose: define window action and Caffeine behavior
+- Source of truth: this document owns window controls and the removal boundary for third-party menu bar actions
 - Related: [Spill PRD index](../prd.md), [Spill ARD](../ard.md),
   [Menu Bar Surface](menu-bar-surface.md)
 
-## Pinned Actions And Pin Management
+## Removed Menu Bar Actions
 
-Requirements:
+Third-party menu bar icon discovery, scanning, invocation, app activation
+fallback, pinning, and detected-icon management are removed on every supported
+macOS version. No version check, replacement scanner, background observer, or
+permission/setup route remains for this feature. Spill's own status trigger,
+status values, panel toggle, and native status menu remain supported.
 
-- Users can pin detected menu bar items or apps.
-- Pinned actions show app icon and short label.
-- MVP compact panel shows up to 8 pinned actions.
-- Pin/unpin is available directly from visible detected action tiles.
-- Preferences should not expose a separate detected-icon management surface
-  unless it becomes a clear user-facing workflow. Pin/unpin should remain
-  available directly from visible detected action tiles.
-- Click order:
-  1. Try stored Accessibility action if available.
-  2. Try app activation/open fallback.
-  3. Show failure state with retry/refresh affordance.
-
-Acceptance:
-
-- Clicking an action never silently fails.
-- Users can remove pinned actions.
-- Users can remove pinned actions from the direct action surface.
-- If more than 8 actions are pinned, the compact panel shows the first 8 and
-  keeps overflow behavior predictable without requiring a separate Settings
-  workflow.
-
-## Detected Menu Bar Items
-
-Requirements:
-
-- Keep Accessibility scanner best-effort.
-- Scan asynchronously.
-- Do not promise complete coverage.
-- Display detected items as candidates for pinning.
-- Explain that some third-party menu bar items cannot be detected or invoked
-  through public APIs.
-
-Acceptance:
-
-- Scanner does not freeze UI.
-- Scanner message explains limitations.
+Legacy scanner and pinned-item preferences are ignored; removal must not reset
+unrelated preferences, token data, or window shortcuts. Existing macOS permission
+grants are not revoked programmatically.
 
 ## Window Quick Actions
 
@@ -64,7 +35,9 @@ Initial actions:
 Requirements:
 
 - Use Accessibility APIs for active window movement.
-- Show permission state clearly.
+- Show permission state clearly and request Accessibility only when a user
+  invokes window movement or explicitly opens its permission setup.
+- Opening the panel or refreshing system/AI values must not request permission.
 - Keep UI to one compact row.
 
 Acceptance:
@@ -84,6 +57,9 @@ by the former root PRD. Product review must accept, revise, defer, or remove:
 ## Verification
 
 - Verify success, unavailable, permission-required, unsupported, and failure results.
-- Verify scanner work remains asynchronous and best-effort.
+- Verify no scanner, detected/pinned menu action, or related permission prompt
+  is reachable on any supported macOS version.
+- Verify fresh and legacy settings preserve AI, system metrics, Caffeine, and
+  window shortcuts; no Screen Recording request remains.
 - Verify every accepted window action through its direct control and shortcut,
   when a shortcut exists.

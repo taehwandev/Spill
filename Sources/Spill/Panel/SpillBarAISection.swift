@@ -6,8 +6,6 @@ struct SpillBarAISection: View {
     @ObservedObject var aiStatusStore: AIStatusStore
     @ObservedObject var cloudServiceStatusStore: CloudServiceStatusStore
     @ObservedObject var tokenUsageDashboardStore: TokenUsageDashboardStore
-    let onboardingPreviewEnabled: Bool
-    let tokenMeteringSettingsAction: () -> Void
     let tokenMeteringDetailAction: () -> Void
     @State private var showsServiceStatusDashboard = false
 
@@ -18,8 +16,6 @@ struct SpillBarAISection: View {
             SpillBarAITokenSummary(
                 settings: settings,
                 tokenUsageDashboardStore: tokenUsageDashboardStore,
-                onboardingPreviewEnabled: onboardingPreviewEnabled,
-                tokenMeteringSettingsAction: tokenMeteringSettingsAction,
                 tokenMeteringDetailAction: tokenMeteringDetailAction
             )
         }

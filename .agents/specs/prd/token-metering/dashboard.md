@@ -16,7 +16,7 @@
   local runtime installation, Spill setup files, adapter hooks, importers, or a
   prior Spill installation.
 - The visibility toggle is the shared display preference for AI dashboard
-  usage, dashboard agent-status cards, compact-panel AI cards, and menu-bar
+  usage, dashboard agent-status cards, compact-panel token summaries, and menu-bar
   token totals. It does not affect saved records or local collection.
 - Runtime installation and adapter connection state remain available through
   Setup and history-import UI.

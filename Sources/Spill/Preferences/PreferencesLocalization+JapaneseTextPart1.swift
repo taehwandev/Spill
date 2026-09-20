@@ -20,8 +20,6 @@ extension PreferencesL10n {
             .launchSettings: "起動設定",
             .launchAtLogin: "ログイン時に起動",
             .launchAtLoginUnavailable: "Spill を .app バンドルとしてパッケージ化すると、ログイン時起動を使用できます。",
-            .dashboardOnboardingPreview: "ダッシュボードの初回表示プレビュー",
-            .dashboardOnboardingPreviewDetail: "ローカルのアクションとトークン使用量データを変えずに、パネルを初回状態で表示します。",
             .aiDashboardOnboardingPreview: "Spill - AI Token Metering の初回表示プレビュー",
             .aiDashboardOnboardingPreviewDetail: "トークン記録を削除せず、Spill - AI Token Metering とパネルのトークンカードを設定プレビュー状態で表示します。",
             .languageSettings: "言語設定",

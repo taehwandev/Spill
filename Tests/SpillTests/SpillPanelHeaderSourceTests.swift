@@ -10,7 +10,8 @@ final class SpillPanelHeaderSourceTests: XCTestCase {
         XCTAssertTrue(headerSource.contains("action: settingsAction"))
         XCTAssertFalse(headerSource.contains("AppL10n.text(.close"))
         XCTAssertFalse(headerSource.contains("action: dismissAction"))
-        XCTAssertTrue(panelSource.contains("dismissAction()"))
+        let controllerSource = try source(at: "Sources/Spill/Panel/SpillPanelController.swift")
+        XCTAssertTrue(controllerSource.contains("dismissController.start"))
         XCTAssertTrue(contextMenuSource.contains("#selector(quitFromMenu)"))
         XCTAssertTrue(contextMenuSource.contains("AppL10n.text(.quitSpill"))
     }

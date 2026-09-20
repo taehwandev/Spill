@@ -35,7 +35,7 @@ final class SpillProviderModelsTests: XCTestCase {
         let action = SpillAction(
             id: "open",
             title: "Open",
-            kind: .app(bundleIdentifier: "com.example.App")
+            kind: .window(.center)
         )
         let item = SpillStatusItem(
             id: "example",

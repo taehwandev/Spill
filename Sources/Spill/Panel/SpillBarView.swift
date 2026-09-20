@@ -11,11 +11,8 @@ struct SpillBarView: View {
     @ObservedObject var windowActionStore: WindowActionStore
     @ObservedObject var sleepGuard: SleepGuardController
     @ObservedObject var updateStore: UpdateCheckStore
-    let dismissAction: () -> Void
     let settingsAction: () -> Void
-    let tokenMeteringSettingsAction: () -> Void
     let tokenMeteringDetailAction: () -> Void
-    @State private var pendingDismissWorkItem: DispatchWorkItem?
     @State private var hoveredStatusModule: SpillStatusModule? = nil
     @State private var didCopyUpdateInstallCommand = false
 
@@ -44,7 +41,7 @@ struct SpillBarView: View {
 
                 Divider()
                     .background(Color.primary.opacity(0.04))
-                actionSections
+                windowActionsSection
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
@@ -60,39 +57,12 @@ struct SpillBarView: View {
                 }
             })
         )
-        .onChange(of: panelState.pendingDismiss) { _, pendingDismiss in
-            updatePendingDismiss(pendingDismiss)
-        }
-        .onDisappear {
-            pendingDismissWorkItem?.cancel()
-            pendingDismissWorkItem = nil
-            panelStore.send(.dismissRequestHandled)
-        }
+
     }
 
 }
 
 extension SpillBarView {
-    private func updatePendingDismiss(_ pendingDismiss: Bool) {
-        pendingDismissWorkItem?.cancel()
-        pendingDismissWorkItem = nil
-
-        guard pendingDismiss else {
-            return
-        }
-
-        let workItem = DispatchWorkItem {
-            guard panelStore.state.pendingDismiss else {
-                return
-            }
-
-            panelStore.send(.dismissRequestHandled)
-            dismissAction()
-        }
-        pendingDismissWorkItem = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: workItem)
-    }
-
     private var updateBanner: some View {
         HStack(spacing: 8) {
             ZStack {
@@ -262,20 +232,19 @@ extension SpillBarView {
         HStack(spacing: 12) {
             SpillBrandLockupView(
                 subtitle: headerSubtitle,
-                markStyle: nil,
-                iconSize: 34,
+                markStyle: .spill,
+                iconSize: 22,
                 titleFontSize: 13,
                 titleWeight: .semibold,
                 subtitleFontSize: 10,
                 subtitleWeight: .medium,
                 subtitleColor: panelState.actionFeedback?.tint ?? .secondary,
-                spacing: 12
+                spacing: 8
             )
 
             Spacer(minLength: 8)
 
             sleepGuardHeaderControl
-            statusDot
             headerCommand(symbolName: "gearshape.fill", title: AppL10n.text(.settings, appLanguage: settings.appLanguage), action: settingsAction)
         }
         .accessibilityElement(children: .contain)
@@ -296,32 +265,8 @@ extension SpillBarView {
         .help(title)
     }
 
-    private var statusDot: some View {
-        Circle()
-            .fill(panelState.readiness.tint)
-            .frame(width: 8, height: 8)
-            .shadow(color: panelState.readiness.tint.opacity(0.4), radius: 2, y: 1)
-            .overlay {
-                Circle()
-                    .stroke(panelState.readiness.tint.opacity(0.22), lineWidth: 5)
-            }
-            .accessibilityLabel(panelState.readiness.accessibilityLabel)
-    }
-
     private var headerSubtitle: String? {
-        if let actionFeedback = panelState.actionFeedback {
-            return actionFeedback.message
-        }
-
-        if panelState.onboardingPreviewEnabled {
-            return AppL10n.text(.onboardingPreviewTitle, appLanguage: settings.appLanguage)
-        }
-
-        if panelState.readiness == .ready {
-            return nil
-        }
-
-        return panelState.readiness.subtitle(appLanguage: settings.appLanguage)
+        panelState.actionFeedback?.message
     }
 
     private var statusSection: some View {
@@ -444,8 +389,6 @@ extension SpillBarView {
             aiStatusStore: aiStatusStore,
             cloudServiceStatusStore: cloudServiceStatusStore,
             tokenUsageDashboardStore: tokenUsageDashboardStore,
-            onboardingPreviewEnabled: panelState.onboardingPreviewEnabled,
-            tokenMeteringSettingsAction: tokenMeteringSettingsAction,
             tokenMeteringDetailAction: tokenMeteringDetailAction
         )
     }
@@ -767,17 +710,6 @@ extension SpillBarView {
         return parts.joined(separator: " - ")
     }
 
-    private var emptyStateTitle: String {
-        AppL10n.text(.noNotchCandidates, appLanguage: settings.appLanguage)
-    }
-
-    private var actionSections: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            windowActionsSection
-            menuBarActionsSection
-        }
-    }
-
     private var windowActionsSection: some View {
         VStack(alignment: .leading, spacing: 5) {
             sectionHeader(AppL10n.text(.windows, appLanguage: settings.appLanguage), symbolName: "macwindow")
@@ -787,27 +719,6 @@ extension SpillBarView {
                     .frame(height: 50)
             } else {
                 windowActionGrid
-            }
-        }
-    }
-
-    private var menuBarActionsSection: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            sectionHeader(AppL10n.text(.menuBar, appLanguage: settings.appLanguage), symbolName: "menubar.rectangle")
-
-            Group {
-                if panelState.readiness == .permissionRequired {
-                    inlineState(symbolName: "lock.fill", title: AppL10n.text(.accessibilityRequired, appLanguage: settings.appLanguage))
-                        .frame(height: 48)
-                } else if panelState.readiness == .scanning && panelState.displayItems.isEmpty {
-                    scanningState
-                        .frame(height: 48)
-                } else if panelState.actionItems.isEmpty {
-                    inlineState(symbolName: "magnifyingglass", title: emptyStateTitle)
-                        .frame(height: 48)
-                } else {
-                    menuBarActionGrid
-                }
             }
         }
     }
@@ -900,56 +811,12 @@ extension SpillBarView {
 }
 
 extension SpillBarView {
-    private var menuBarActionGrid: some View {
-        LazyVGrid(columns: menuBarActionGridColumns, alignment: .leading, spacing: 6) {
-            ForEach(panelState.actionItems) { item in
-                SpillActionButton(
-                    action: item.action,
-                    isPinned: item.isPinned,
-                    appLanguage: settings.appLanguage,
-                    togglePinned: { panelStore.send(.togglePinned(item.sourceItem)) },
-                    perform: { perform(item) }
-                )
-                .help(helpText(for: item))
-                .accessibilityLabel(item.action.title)
-            }
-        }
-        .padding(.horizontal, 1)
-    }
-
-    private var menuBarActionGridColumns: [GridItem] {
-        [
-            GridItem(
-                .adaptive(minimum: 48, maximum: 48),
-                spacing: max(CGFloat(settings.iconSpacing), 7),
-                alignment: .center
-            )
-        ]
-    }
-
     private func shortcutKey(for action: SpillAction) -> WindowActionShortcutKey {
         guard case let .window(kind) = action.kind else {
             return .off
         }
 
         return settings.shortcutKey(for: kind)
-    }
-
-    private func perform(_ item: SpillDisplayedActionItem) {
-        panelStore.send(.performMenuBarAction(item))
-    }
-
-    private var scanningState: some View {
-        HStack(spacing: 8) {
-            ProgressView()
-                .controlSize(.small)
-                .scaleEffect(0.68)
-
-            Text(AppL10n.text(.scanning, appLanguage: settings.appLanguage))
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-        }
     }
 
     private func inlineState(symbolName: String, title: String) -> some View {
@@ -1144,24 +1011,6 @@ extension SpillBarView {
 }
 
 extension SpillBarView {
-    private func helpText(for item: SpillDisplayedActionItem) -> String {
-        var parts = [item.action.title]
-
-        if let subtitle = item.action.subtitle, !subtitle.isEmpty {
-            parts.append(subtitle)
-        }
-
-        if item.sourceItem.isNotchCandidate {
-            parts.append(AppL10n.text(.nearNotchEstimate, appLanguage: settings.appLanguage))
-        }
-
-        if let disabledReason = item.action.state.disabledReason {
-            parts.append(disabledReason)
-        }
-
-        return parts.joined(separator: " - ")
-    }
-
 private struct MetricSparklineSeries {
     let values: [Double]
     let tint: Color

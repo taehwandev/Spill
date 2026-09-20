@@ -11,8 +11,9 @@
 
 ## Boundary
 
-This document owns Spill's trigger and status values. Detection and invocation
-of third-party menu bar items belong to the quick-actions PRD.
+This document owns Spill's trigger and status values. Spill does not discover,
+invoke, or pin third-party menu bar icons on any supported macOS version.
+The quick-actions PRD owns that removal boundary and retained window controls.
 
 ## Requirements
 

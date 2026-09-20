@@ -1,9 +1,7 @@
 import SwiftUI
 
 struct AccessibilityPreferencesSection: View {
-    @ObservedObject var scanner: AXMenuBarItemScanner
     @Binding var accessibilityTrusted: Bool
-    let showPanelAction: () -> Void
 
     private func t(_ key: PreferencesTextKey) -> String {
         PreferencesL10n.text(key)
@@ -26,34 +24,14 @@ struct AccessibilityPreferencesSection: View {
                     tint: accessibilityTrusted ? .green : .orange
                 )
 
-                statePill(
-                    title: PreferencesL10n.itemCount(scanner.items.count),
-                    tint: .secondary
-                )
             }
 
-            if accessibilityTrusted {
-                HStack(spacing: 8) {
-                    Button {
-                        showPanelAction()
-                    } label: {
-                        Label(t(.openPanel), systemImage: "rectangle.on.rectangle")
-                    }
-                    .buttonStyle(.borderedProminent)
+            Text(t(.accessibilityPermissionDetail))
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
 
-                    Button {
-                        refreshScanner()
-                    } label: {
-                        Label(scanner.isScanning ? t(.scanning) : t(.refreshScanner), systemImage: "arrow.clockwise")
-                    }
-                    .disabled(scanner.isScanning)
-                }
-            } else {
-                Text(t(.accessibilityPermissionDetail))
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-
+            if !accessibilityTrusted {
                 Text(t(.accessibilityPermissionRelaunch))
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -127,9 +105,6 @@ private extension AccessibilityPreferencesSection {
                 "result": accessibilityTrusted ? "trusted" : "not_trusted"
             ]
         )
-        if accessibilityTrusted {
-            scanner.refresh()
-        }
     }
 
     private func requestPermission() {
@@ -145,23 +120,13 @@ private extension AccessibilityPreferencesSection {
                 "result": accessibilityTrusted ? "trusted" : "not_trusted"
             ]
         )
-        if accessibilityTrusted {
-            scanner.refresh()
-        } else {
+        if !accessibilityTrusted {
             SpillTelemetry.shared.track(
                 "accessibility_system_settings_opened",
                 props: ["source": "request_access"]
             )
             AccessibilityPermission.openSystemSettings()
         }
-    }
-
-    private func refreshScanner() {
-        SpillTelemetry.shared.track(
-            "menu_bar_scan_requested",
-            props: ["source": "accessibility_preferences"]
-        )
-        scanner.refresh()
     }
 
     private func statePill(title: String, tint: Color) -> some View {

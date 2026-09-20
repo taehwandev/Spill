@@ -3,11 +3,8 @@ import SwiftUI
 
 struct GeneralPreferencesSection: View {
     @ObservedObject var settings: SpillSettings
-    @ObservedObject var scanner: AXMenuBarItemScanner
     @ObservedObject var updateStore: UpdateCheckStore
-    @Binding var accessibilityTrusted: Bool
     @Binding var loginItemError: String?
-    let showPanelAction: () -> Void
     let language: SpillAppLanguage
 
     var body: some View {
@@ -21,7 +18,6 @@ struct GeneralPreferencesSection: View {
                     appearanceSettingsCard
                 }
             }
-            permissionsCard
             updatesCard
             legalAndPrivacyCard
 
@@ -103,16 +99,6 @@ private extension GeneralPreferencesSection {
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
             }
-        }
-    }
-
-    private var permissionsCard: some View {
-        PreferenceCard(title: t(.permissionsAndDiagnostics), symbolName: "lock.shield.fill", iconColor: .green) {
-            AccessibilityPreferencesSection(
-                scanner: scanner,
-                accessibilityTrusted: $accessibilityTrusted,
-                showPanelAction: showPanelAction
-            )
         }
     }
 

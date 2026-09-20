@@ -109,9 +109,7 @@ Private APIs create maintenance risk, notarization risk, and trust issues for an
 
 Allowed:
 
-- Accessibility API for reading/pressing UI elements.
 - Accessibility API for moving active windows.
-- ScreenCaptureKit only for explicit future experiments requiring user permission.
 
 Disallowed in MVP:
 
@@ -145,30 +143,46 @@ Initial providers:
 
 - `SystemStatusProvider`
 - `AIStatusProvider`
-- `MenuBarActionProvider`
 - `WindowActionProvider`
 
 Rationale:
 
 This keeps the panel extensible without turning every feature into a special case.
 
-### ARD-004: Best-Effort Menu Bar Scanner
+### ARD-004: Third-Party Menu Bar Actions Removed
 
 Decision:
 
-The AX menu bar scanner remains best-effort and asynchronous.
+Remove third-party menu bar discovery, scanning, cached AX item references,
+invocation, pinning, app activation fallback, and all associated UI on every
+supported macOS version. No version-gated compatibility path remains.
 
-Rationale:
+The app shell must not create a scanner/coordinator, subscribe to app/Space
+changes for scans, rescan on panel open, or request Accessibility to open the
+panel. Panel state and sizing depend only on retained first-party sections.
+The MenuBar module owns only Spill's own status items and display geometry.
 
-AX exposes some menu bar extras but not every hidden item. UI must not freeze or make completeness claims.
+Settings impact:
 
-Scanner rules:
+- Persistence owner: `SpillSettings` removes scanner cadence, icon selection,
+  pinning, and display-mode properties. The shared refresh interval remains
+  because it controls system status cadence. Old defaults may remain inert; do not
+  reset unrelated settings or attempt to revoke macOS permission grants.
+- Reading processes: the main app no longer consumes those keys; the token
+  dashboard helper has no scanner or pinning dependency.
+- Propagation: no replacement IPC, distributed notification, polling, timer,
+  collector, or network path is added for removed settings.
+- Refresh and latency: removed controls disappear in the new app build at launch.
+  Existing system/AI refresh and cross-process settings bridges remain unchanged.
+- Affected surfaces: Preferences, onboarding, compact panel, and app-shell scan
+  lifecycle. Spill's own clock-adjacent AI/System status and panel toggle remain.
+- Not applicable: token dashboard contents, web dashboard, Private Usage Upload,
+  sync payloads, and agent summaries; no token data or token visibility setting
+  changes are involved.
 
-- Run off the main path.
-- Cache icons.
-- Time out AX calls.
-- Track failure messages.
-- Present detected items as candidates, not guaranteed inventory.
+Verification must cover launching/opening/refreshing without permission,
+absence of scanner code and menu action UI, inert legacy defaults, retained
+window-action permission handling, and unchanged AI/system/Caffeine surfaces.
 
 ### ARD-005: Compact Panel Composition
 
@@ -180,9 +194,8 @@ Panel sections:
 
 1. Status Strip
 2. AI Strip
-3. Pinned Actions
-4. Window Actions
-5. Detected Items, optionally collapsed
+3. Window Actions
+4. Caffeine controls
 
 Constraints:
 
@@ -195,6 +208,26 @@ Constraints:
   the border/compositing contract, while the effect mask clips
   `behindWindow` material itself so rectangular translucency cannot survive in
   the outer corners. The mask is regenerated when the content bounds change.
+
+Compact panel layout and interaction ownership:
+
+- The compact AI section renders its header and token summary only.
+  Per-tool agent cards remain in the separate AI dashboard; panel sizing must
+  not reserve absent card rows.
+- `PanelStore` owns derived status-module and preview inputs. The panel
+  controller observes that state once and coalesces resize requests on the
+  next main-queue turn so published values have settled before measurement.
+- Both local and global outside-click monitors exclude the current status-item
+  screen frames. Mouse-down must not dismiss before the same button toggles on
+  mouse-up; queued dismissals are invalidated when monitoring restarts.
+- Each show/hide transition invalidates older animation completions. A pending
+  hide must never order out a subsequently reopened panel. Cancelled refresh
+  tasks must not restart collection after a newer transition.
+- These changes affect only the main-process compact panel. Preferences remains
+  the visibility-setting writer; the existing dashboard helper, menu-bar glance,
+  shared settings notification bridge, uploads and token event schema are unchanged.
+- Verification: panel layout tests, reopen regression, and bundled panel/status
+  click smoke checks. Programmatic click smoke does not prove physical mouse timing.
 
 ### ARD-0050: Onboarding Preview Uses Fixture Data Sources
 
@@ -308,10 +341,8 @@ Rules:
 - The main status refresh loop keeps its 3-second cadence only while the Spill
   panel is visible. In the background it follows the user's refresh-interval
   preference, re-reading the delay on every tick so visibility and preference
-  changes apply at the next sleep. `autoRefreshEnabled` stays scoped to the AX
-  menu-bar item scan and does not gate this loop: the flag has no current
-  Preferences surface, and freezing the live system chips for users whose
-  stored legacy value is false would be a regression.
+  changes apply at the next sleep. Removed legacy scanner preferences do not
+  gate this loop; old scanner values must not freeze live system chips.
 - `SystemStatusRefreshCoordinator` owns that single loop. Manual and scheduled
   system reads share an in-flight refresh, including when settings or panel
   visibility replace the loop. A cancelled loop cannot schedule another tick,
@@ -432,7 +463,7 @@ Rules:
   dashboard mode.
 - The helper delegate owns only token metering dashboard state, local store
   reads, and dashboard refresh/collector requests. It must not create a status
-  item, global hotkey, menu bar scanner, sleep guard, update UI, token bridge
+  item, global hotkey, sleep guard, update UI, token bridge
   server, or compact panel.
 - Main app entry points for the dashboard, including panel, status menu,
   Preferences, and main menu actions, route through one launcher command.
@@ -630,8 +661,8 @@ Rules:
   must not read or depend on runtime discovery, adapter connection diagnostics,
   shared setup-script roots, hook files, importer state, or
   `TokenMeteringSetupActionStore`.
-- Dashboard agent-status cards and compact-panel AI cards use the supported
-  tools minus `hiddenTools`. Menu-bar server health and history-import targets
+- Dashboard agent-status cards and compact-panel token summaries use the
+  supported tools minus `hiddenTools`. Menu-bar server health and history-import targets
   continue to use `installedTools` alone, so only real local runtime targets
   are inspected, reported, or repaired from those surfaces.
 - Advanced dashboard mode may add stored OpenAI SDK and `unknown` history to
@@ -1184,22 +1215,18 @@ Permission-dependent features must degrade cleanly.
 
 Permissions:
 
-- Accessibility:
-  - AX menu bar scanning
-  - AXPress
-  - active window movement
-- Screen Recording:
-  - not required for MVP
-  - only if future visual preview/capture features are added
+- Accessibility: active window movement only.
+- Screen Recording: unused; no request API, diagnostic, or setup route.
 
 Rules:
 
-- Never request permissions before the user reaches a feature that needs them unless first-run onboarding explicitly explains why.
-- Preferences must show permission diagnostics.
-- Preferences should not expose menu bar scanning as a primary settings surface
-  unless it becomes a clear user-facing workflow. Scanner cadence, icon scope,
-  and detected-item diagnostics remain internal or contextual controls.
-- UI should show disabled/fallback states, not crashes.
+- Request Accessibility only from a window action or explicit window-control
+  permission setup. Opening the panel, refreshing data, onboarding, AI usage,
+  system status, and Caffeine do not require permission.
+- Preferences explains the window-control purpose and shows its permission state.
+- Permission-denied window actions return an explicit result without disrupting
+  other panel sections.
+- Do not revoke existing macOS grants or wipe unrelated settings during removal.
 
 ### ARD-006A: Web Portal Roles And Admin Authorization
 
@@ -1355,7 +1382,7 @@ SwiftUI View
 Rationale:
 
 Spill has several external event sources: the menu bar trigger, global
-shortcuts, Accessibility permission state, AX scanning, status polling, window
+shortcuts, Accessibility permission state, status polling, window
 movement, power assertions, and app/window lifecycle notifications. Plain MVVM
 would likely push too much system coordination into view models. A full Redux,
 TCA, or global reducer architecture would add more ceremony than the app needs.
@@ -1394,7 +1421,7 @@ Implementation rules:
 - `AppDelegate` should become the composition root and lifecycle entry point,
   not the owner of feature orchestration.
 - SwiftUI views should avoid deriving feature state directly from multiple
-  stores, scanners, settings, or providers. That derivation belongs in a
+  stores, settings, or providers. That derivation belongs in a
   feature store or presentation model.
 - Stores may depend on providers and adapters, but providers must not depend on
   SwiftUI or AppKit view types.
@@ -1454,7 +1481,7 @@ Owns:
 Must not own:
 
 - provider business logic
-- AX scanning details
+- Accessibility window implementation details
 - system metric collection details
 
 ### Menu Bar
@@ -1462,8 +1489,6 @@ Must not own:
 Owns:
 
 - status item trigger
-- best-effort menu bar scanner
-- menu bar item snapshots
 - notch geometry
 
 Must not own:
@@ -1502,8 +1527,6 @@ Provider output should be plain models that SwiftUI can render.
 
 Owns:
 
-- AXPress
-- app activation/open fallback
 - window action execution
 
 Must return explicit results:
@@ -1542,10 +1565,7 @@ struct SpillAction: Identifiable, Hashable {
 }
 
 enum SpillActionKind: Hashable {
-    case menuBarItem(stableKey: String)
-    case app(bundleIdentifier: String)
     case window(WindowActionKind)
-    case command(String)
 }
 ```
 
@@ -1592,8 +1612,9 @@ MVP detection:
   - optional default model from explicit OpenAI model environment keys
   - never display secret values
 
-The compact panel and dashboard render the supported agent cards in canonical
-Codex, Claude Code, and Antigravity/AGY order, minus the user's hidden tools.
+The dashboard renders supported agent cards in canonical Codex, Claude Code,
+and Antigravity/AGY order, minus the user's hidden tools. The compact panel
+keeps only the AI header and token summary, without a per-tool card row.
 The sparse provider result remains the source for actual installation and
 process detection, while `AIStatusStore` projects that state onto the stable
 presentation list. A missing runtime therefore keeps a neutral display card but
@@ -1611,19 +1632,8 @@ Use Accessibility to get focused app/window and set `AXPosition`/`AXSize`.
 
 Store previous frame per window identifier when possible. If a stable ID is unavailable, store the most recent active-window frame as best-effort.
 
-### Menu Bar Actions
-
-Use stored AX element when fresh. If stale:
-
-1. rescan;
-2. find stable key;
-3. retry press;
-4. fallback to activating owner app.
-
 ## Key Risks
 
-- AX visibility is incomplete.
-- Some menu bar extras do not support `AXPress`.
 - Window movement can fail for special windows.
 - AI tool state may be hard to infer consistently.
 - Direct distribution needs signing/notarization setup.

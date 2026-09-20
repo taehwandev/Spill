@@ -4,23 +4,30 @@ import AppKit
 final class SpillPanelDismissController {
     private var globalMonitor: Any?
     private var localMonitor: Any?
+    private var generation = 0
 
     func start(
         panel: NSPanel,
+        excludedScreenFrames: @escaping @MainActor () -> [NSRect] = { [] },
         isExcludedWindow: @escaping @MainActor (NSWindow) -> Bool = { _ in false },
         onDismiss: @escaping @MainActor () -> Void
     ) {
         stop()
+        let activeGeneration = generation
 
-        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { _ in
+        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak self] _ in
+            let location = NSEvent.mouseLocation
             Task { @MainActor in
+                guard let self, self.generation == activeGeneration,
+                      Self.shouldDismiss(at: location, excludedScreenFrames: excludedScreenFrames()) else { return }
                 onDismiss()
             }
         }
 
-        localMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown, .keyDown]) { event in
+        localMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown, .keyDown]) { [weak self] event in
             if event.type == .keyDown, event.keyCode == KeyCode.escape {
                 Task { @MainActor in
+                    guard let self, self.generation == activeGeneration else { return }
                     onDismiss()
                 }
                 return nil
@@ -31,7 +38,8 @@ final class SpillPanelDismissController {
             }
 
             let shouldDismiss = MainActor.assumeIsolated {
-                Self.shouldDismiss(
+                Self.shouldDismiss(at: NSEvent.mouseLocation, excludedScreenFrames: excludedScreenFrames())
+                    && Self.shouldDismiss(
                     forEventWindow: eventWindow,
                     panel: panel,
                     isExcludedWindow: isExcludedWindow
@@ -39,6 +47,7 @@ final class SpillPanelDismissController {
             }
             if shouldDismiss {
                 Task { @MainActor in
+                    guard let self, self.generation == activeGeneration else { return }
                     onDismiss()
                 }
             }
@@ -63,7 +72,12 @@ final class SpillPanelDismissController {
         return !isEventWindowInsidePanelSurface(eventWindow, panel: panel)
     }
 
+    static func shouldDismiss(at location: NSPoint, excludedScreenFrames: [NSRect]) -> Bool {
+        !excludedScreenFrames.contains { $0.contains(location) }
+    }
+
     func stop() {
+        generation += 1
         if let globalMonitor {
             NSEvent.removeMonitor(globalMonitor)
             self.globalMonitor = nil

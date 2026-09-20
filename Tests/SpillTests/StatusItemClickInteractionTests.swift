@@ -90,6 +90,14 @@ final class StatusItemClickInteractionTests: XCTestCase {
 
 @MainActor
 final class SpillPanelDismissDecisionTests: XCTestCase {
+    func testStatusScreenPointDoesNotDismissBeforeMouseUp() {
+        let frame = NSRect(x: 1200, y: 980, width: 90, height: 24)
+        XCTAssertFalse(SpillPanelDismissController.shouldDismiss(
+            at: NSPoint(x: 1240, y: 991), excludedScreenFrames: [frame]))
+        XCTAssertTrue(SpillPanelDismissController.shouldDismiss(
+            at: NSPoint(x: 1100, y: 991), excludedScreenFrames: [frame]))
+    }
+
     private func makePanel() -> NSPanel {
         NSPanel(
             contentRect: NSRect(x: 0, y: 0, width: 300, height: 200),

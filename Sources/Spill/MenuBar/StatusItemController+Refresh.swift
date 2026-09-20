@@ -2,7 +2,6 @@ import AppKit
 
 extension StatusItemController {
     struct RefreshState {
-        let hiddenCount: Int
         let summary: MenuBarStatusSummary
         let performanceEffect: MenuBarPerformanceEffect
         let sleepGuardSegment: MenuBarStatusSegment?
@@ -108,7 +107,6 @@ extension StatusItemController {
 
 extension StatusItemController {
     func makeRefreshState() -> RefreshState {
-        let hiddenCount = hiddenItemCountProvider()
         let tokenCounts = aiTokenCountProvider()
         let summary = MenuBarStatusSummary.make(
             enabledItems: settings.enabledMenuBarStatusItems,
@@ -158,7 +156,6 @@ extension StatusItemController {
         )
 
         return RefreshState(
-            hiddenCount: hiddenCount,
             summary: summary,
             performanceEffect: performanceEffect,
             sleepGuardSegment: sleepGuardSegment,

@@ -22,27 +22,21 @@
 - Sections:
   - Status Strip
   - AI Strip
-  - Pinned Actions
   - Window Actions
-  - Detected Items, optionally collapsed
-- The AI Strip includes the token metering summary as one compact AI usage
-  affordance, not a separate dashboard embedded in the panel.
+  - Caffeine controls
+- The AI Strip contains an AI header and token metering summary only.
+  Per-tool process cards remain in the separate AI dashboard; no empty card
+  row is reserved in the panel.
 - AI process state distinguishes tool availability from process activity:
   installed tools with no matching process are `Ready`, tools with one or more
   matching local processes are `Running`, and CPU/memory/process counts explain
   current activity without a separate threshold-based `Active` judgment.
-- AI process cards aggregate all matching processes for the tool. Detail
-  popovers should show the aggregate process count, CPU percentage, memory, and
-  a short per-process list because Codex, Claude Code, Antigravity/AGY, and
-  Ollama can each involve multiple local processes.
-- AI process CPU should represent recent activity rather than process-lifetime
-  average CPU. Memory should align with the user-facing Activity Monitor
-  memory footprint concept when the platform exposes it, while still degrading
-  safely when a process disappears or cannot be sampled.
-
 ## Acceptance
 
-- Panel opens within 1 second.
+- Panel opens within 1 second without Accessibility or Screen Recording prompts.
+- Repeated clicks on Spill's status trigger alternate open and closed reliably,
+  including a click while a previous transition is still completing.
+- No detected-icon list, pinned menu actions, scan state, or scanner setup card is rendered.
 - Text and icons do not overlap.
 - Panel does not feel like a full dashboard.
 - The token summary can open the local token dashboard helper.

@@ -20,8 +20,6 @@ extension PreferencesL10n {
             .launchSettings: "실행 설정",
             .launchAtLogin: "로그인 시 실행",
             .launchAtLoginUnavailable: "Spill이 .app 번들로 패키징된 뒤 로그인 시 실행을 사용할 수 있습니다.",
-            .dashboardOnboardingPreview: "대시보드 첫 실행 미리보기",
-            .dashboardOnboardingPreviewDetail: "로컬 액션과 토큰 사용량 데이터는 유지한 채 패널을 첫 실행 상태로 보여줍니다.",
             .aiDashboardOnboardingPreview: "Spill - AI Token Metering 첫 실행 미리보기",
             .aiDashboardOnboardingPreviewDetail: "토큰 기록은 삭제하지 않고 Spill - AI Token Metering과 패널 토큰 카드를 설정 미리보기 상태로 보여줍니다.",
             .languageSettings: "언어 설정",

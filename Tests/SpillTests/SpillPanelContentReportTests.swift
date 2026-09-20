@@ -2,58 +2,47 @@ import XCTest
 @testable import Spill
 
 final class SpillPanelContentReportTests: XCTestCase {
-    func testValidContentReportAcceptsPanelWithInlineActionState() {
+    func testValidContentReportAcceptsPanelWithoutFocusedWindow() {
         let report = SpillPanelContentReport(
             isVisible: true,
-            panelState: .permissionRequired,
             statusModuleIDs: ["cpu", "memory"],
             statusDetailRowCount: 10,
             aiStatusCount: 0,
             aiDetailRowCount: 0,
             windowActionCount: 0,
-            menuBarActionCount: 0,
             footerItemCount: 5,
-            showsPowerFooter: true,
-            showsCountBadge: true
+            showsPowerFooter: true
         )
 
         XCTAssertTrue(report.isValid)
-        XCTAssertTrue(report.logLine.contains("state=permissionRequired"))
         XCTAssertTrue(report.logLine.contains("statusModules=cpu,memory"))
     }
 
-    func testReadyPanelRequiresAnActionSurface() {
+    func testPanelDoesNotRequireWindowActionsOrAccessibility() {
         let report = SpillPanelContentReport(
             isVisible: true,
-            panelState: .ready,
             statusModuleIDs: [],
             statusDetailRowCount: 0,
             aiStatusCount: 0,
             aiDetailRowCount: 0,
             windowActionCount: 0,
-            menuBarActionCount: 0,
             footerItemCount: 5,
-            showsPowerFooter: true,
-            showsCountBadge: true
+            showsPowerFooter: true
         )
 
-        XCTAssertFalse(report.isValid)
-        XCTAssertTrue(report.logLine.contains("actionSurface=false"))
+        XCTAssertTrue(report.isValid)
     }
 
     func testContentReportAllowsSubsetAIStatuses() {
         let report = SpillPanelContentReport(
             isVisible: true,
-            panelState: .empty,
             statusModuleIDs: ["cpu"],
             statusDetailRowCount: 8,
             aiStatusCount: 1,
             aiDetailRowCount: 2,
             windowActionCount: 0,
-            menuBarActionCount: 0,
             footerItemCount: 5,
-            showsPowerFooter: true,
-            showsCountBadge: true
+            showsPowerFooter: true
         )
 
         XCTAssertTrue(report.isValid)
@@ -63,16 +52,13 @@ final class SpillPanelContentReportTests: XCTestCase {
     func testContentReportRejectsImpossibleAIStatusCount() {
         let report = SpillPanelContentReport(
             isVisible: true,
-            panelState: .empty,
             statusModuleIDs: ["cpu"],
             statusDetailRowCount: 8,
             aiStatusCount: LocalAIToolKind.allCases.count + 1,
             aiDetailRowCount: 4,
             windowActionCount: 0,
-            menuBarActionCount: 0,
             footerItemCount: 5,
-            showsPowerFooter: true,
-            showsCountBadge: true
+            showsPowerFooter: true
         )
 
         XCTAssertFalse(report.isValid)

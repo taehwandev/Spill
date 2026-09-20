@@ -12,7 +12,6 @@ final class SpillSettingsTests: XCTestCase {
         XCTAssertEqual(settings.statusModuleOrder, [.cpu, .memory, .storage, .network])
         XCTAssertEqual(settings.enabledStatusModules, [.cpu, .memory, .storage, .network])
         XCTAssertEqual(settings.enabledMenuBarStatusItems, [.cpu, .memory])
-        XCTAssertFalse(settings.panelOnboardingPreviewEnabled)
         XCTAssertFalse(settings.tokenUsageDashboardOnboardingPreviewEnabled)
         XCTAssertEqual(settings.tokenUsageInputScope, .includeCache)
         XCTAssertEqual(settings.menuBarMetricPresentationMode(for: .cpu), .text)
@@ -178,27 +177,22 @@ final class SpillSettingsTests: XCTestCase {
         XCTAssertFalse(settings.sleepGuardKeepsDisplayAwake)
     }
 
-    func testNumericLayoutSettingsNormalizeNonFiniteDefaults() {
+    func testRefreshIntervalNormalizeNonFiniteDefaults() {
         let defaults = makeDefaults()
-        defaults.set(Double.nan, forKey: "iconSpacing")
         defaults.set(Double.infinity, forKey: "refreshInterval")
 
         let settings = SpillSettings(defaults: defaults)
 
-        XCTAssertEqual(settings.iconSpacing, 8)
         XCTAssertEqual(settings.refreshInterval, 15)
     }
 
-    func testNumericLayoutSettingsClampAssignedValues() {
+    func testRefreshIntervalClampAssignedValues() {
         let defaults = makeDefaults()
         let settings = SpillSettings(defaults: defaults)
 
-        settings.iconSpacing = .nan
         settings.refreshInterval = -1
 
-        XCTAssertEqual(settings.iconSpacing, 8)
         XCTAssertEqual(settings.refreshInterval, 5)
-        XCTAssertEqual(defaults.double(forKey: "iconSpacing"), 8)
         XCTAssertEqual(defaults.double(forKey: "refreshInterval"), 5)
     }
 
@@ -349,26 +343,25 @@ final class SpillSettingsTests: XCTestCase {
         XCTAssertFalse(settings.isStatusModuleEnabled(.gpu))
     }
 
-    func testHiddenItemsPersistAndAreRestoredWhenSelectedAgain() {
+    func testRetiredMenuItemPreferencesDoNotAlterRetainedSettings() {
         let defaults = makeDefaults()
+        defaults.set("selectedOnly", forKey: "displayMode")
+        defaults.set(["legacy-item"], forKey: "selectedItemKeys")
+        defaults.set(["legacy-hidden"], forKey: "hiddenItemKeys")
+        defaults.set(false, forKey: "autoRefreshEnabled")
+        defaults.set(30.0, forKey: "refreshInterval")
+        defaults.set(["storage"], forKey: "enabledStatusModules")
+        defaults.set(true, forKey: "statusModuleNetworkDefaultEnabledMigrated")
+        defaults.set(false, forKey: "hotKeyEnabled")
+
         let settings = SpillSettings(defaults: defaults)
-        let item = makeSnapshot(stableKey: "com.example.status")
 
-        settings.setItem(item, selected: true)
-        settings.hideItem(item)
-
-        XCTAssertFalse(settings.selectedItemKeys.contains(item.stableKey))
-        XCTAssertTrue(settings.isItemHidden(item))
-        XCTAssertEqual(defaults.stringArray(forKey: "hiddenItemKeys"), [item.stableKey])
-
-        settings.setItem(item, selected: true)
-
-        XCTAssertTrue(settings.selectedItemKeys.contains(item.stableKey))
-        XCTAssertFalse(settings.isItemHidden(item))
-
-        let reloadedSettings = SpillSettings(defaults: defaults)
-        XCTAssertEqual(reloadedSettings.selectedItemKeys, [item.stableKey])
-        XCTAssertFalse(reloadedSettings.isItemHidden(item))
+        XCTAssertEqual(settings.refreshInterval, 30)
+        XCTAssertEqual(settings.enabledStatusModules, [.storage])
+        XCTAssertFalse(settings.hotKeyEnabled)
+        XCTAssertEqual(defaults.stringArray(forKey: "selectedItemKeys"), ["legacy-item"])
+        XCTAssertEqual(defaults.stringArray(forKey: "hiddenItemKeys"), ["legacy-hidden"])
+        XCTAssertEqual(defaults.string(forKey: "displayMode"), "selectedOnly")
     }
 
     func testMenuBarStatusItemsNormalizeUnknownValues() {
@@ -378,16 +371,6 @@ final class SpillSettingsTests: XCTestCase {
         let settings = SpillSettings(defaults: defaults)
 
         XCTAssertEqual(settings.enabledMenuBarStatusItems, [.cpu, .caffeine, .ai])
-    }
-
-    func testDisplayModePersists() {
-        let defaults = makeDefaults()
-        let settings = SpillSettings(defaults: defaults)
-
-        settings.displayMode = .selectedItems
-
-        XCTAssertEqual(defaults.string(forKey: "displayMode"), "selectedItems")
-        XCTAssertEqual(SpillSettings(defaults: defaults).displayMode, .selectedItems)
     }
 
     func testAppearanceThemeDefaultsToSystemAndPersists() {
@@ -526,10 +509,6 @@ final class SpillSettingsTests: XCTestCase {
             "macOS 언어를 따릅니다"
         )
         XCTAssertEqual(
-            PreferencesL10n.itemCount(3, appLanguage: .japanese),
-            "3件"
-        )
-        XCTAssertEqual(
             PreferencesL10n.upToDate(version: "1.2.3", appLanguage: .korean),
             "Spill은 최신 상태입니다 (1.2.3)."
         )
@@ -559,23 +538,18 @@ final class SpillSettingsTests: XCTestCase {
             AppL10n.eventsSummary(eventCount: 115_328, task: "분석 10K", source: "응답 1K", appLanguage: .korean),
             "기록 115,328개 / 분석 10K / 응답 1K"
         )
-        XCTAssertEqual(AppL10n.text(.scanningMenuBarItems, appLanguage: .korean), "메뉴 막대 항목 스캔 중...")
         XCTAssertEqual(AppL10n.windowActionTitle(.restore, appLanguage: .japanese), "復元")
-        XCTAssertEqual(AppL10n.pinned("Raycast", appLanguage: .korean), "Raycast 고정됨")
     }
 
-    func testPanelOnboardingPreviewSettingPersists() {
+    func testTokenDashboardOnboardingPreviewSettingPersists() {
         let defaults = makeDefaults()
         let settings = SpillSettings(defaults: defaults)
 
-        settings.panelOnboardingPreviewEnabled = true
         settings.tokenUsageDashboardOnboardingPreviewEnabled = true
 
-        XCTAssertTrue(defaults.bool(forKey: "panelOnboardingPreviewEnabled"))
         XCTAssertTrue(defaults.bool(forKey: "tokenUsageDashboardOnboardingPreviewEnabled"))
 
         let reloadedSettings = SpillSettings(defaults: defaults)
-        XCTAssertTrue(reloadedSettings.panelOnboardingPreviewEnabled)
         XCTAssertTrue(reloadedSettings.tokenUsageDashboardOnboardingPreviewEnabled)
     }
 
@@ -823,20 +797,4 @@ final class SpillSettingsTests: XCTestCase {
         return defaults
     }
 
-    private func makeSnapshot(stableKey: String) -> MenuBarItemSnapshot {
-        MenuBarItemSnapshot(
-            id: stableKey,
-            stableKey: stableKey,
-            ownerName: "Example",
-            bundleIdentifier: "com.example",
-            processIdentifier: 100,
-            title: "Example",
-            role: "AXMenuBarItem",
-            subrole: nil,
-            frame: .zero,
-            imageData: nil,
-            isNotchCandidate: true,
-            canPress: true
-        )
-    }
 }

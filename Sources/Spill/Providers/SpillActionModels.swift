@@ -5,7 +5,6 @@ struct SpillAction: Identifiable, Hashable, Sendable {
     let title: String
     let subtitle: String?
     let symbolName: String?
-    let iconData: Data?
     let kind: SpillActionKind
     let role: SpillActionRole
     let state: SpillActionState
@@ -15,7 +14,6 @@ struct SpillAction: Identifiable, Hashable, Sendable {
         title: String,
         subtitle: String? = nil,
         symbolName: String? = nil,
-        iconData: Data? = nil,
         kind: SpillActionKind,
         role: SpillActionRole = .primary,
         state: SpillActionState = .enabled
@@ -24,7 +22,6 @@ struct SpillAction: Identifiable, Hashable, Sendable {
         self.title = title
         self.subtitle = subtitle
         self.symbolName = symbolName
-        self.iconData = iconData
         self.kind = kind
         self.role = role
         self.state = state
@@ -32,10 +29,7 @@ struct SpillAction: Identifiable, Hashable, Sendable {
 }
 
 enum SpillActionKind: Hashable, Sendable {
-    case menuBarItem(stableKey: String, bundleIdentifier: String?)
-    case app(bundleIdentifier: String)
     case window(WindowActionKind)
-    case command(String)
 }
 
 enum SpillActionState: Hashable, Sendable {

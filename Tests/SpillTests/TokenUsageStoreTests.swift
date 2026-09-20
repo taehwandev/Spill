@@ -460,7 +460,7 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(TokenMeteringL10n.text(.clearAlias, language: .korean), "삭제")
         XCTAssertEqual(TokenMeteringL10n.text(.relativePreviousWeek, language: .english), "prev week")
         XCTAssertEqual(TokenMeteringL10n.text(.runs, language: .korean), "작업 항목")
-        XCTAssertEqual(TokenMeteringL10n.text(.previewBadge, language: .english), "ALPHA")
+        XCTAssertEqual(TokenMeteringL10n.text(.previewBadge, language: .english), "BETA")
         XCTAssertEqual(TokenMeteringL10n.text(.webSyncEnabled, language: .korean), "웹 동기화 켜짐")
         XCTAssertEqual(TokenMeteringL10n.text(.privateUsageUploadTitle, language: .korean), "비공개 사용량 업로드")
         XCTAssertEqual(
@@ -515,12 +515,12 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertFalse(brandLockupView.contains("Bundle.module.image(forResource: \"spill-logo-wordmark\")"))
         XCTAssertTrue(brandLockupView.contains("Image(nsImage: image)"))
         XCTAssertTrue(spillBarView.contains("SpillBrandLockupView("))
-        XCTAssertTrue(spillBarView.contains("markStyle: nil"))
+        XCTAssertTrue(spillBarView.contains("markStyle: .spill"))
         XCTAssertTrue(spillBarView.contains("private var headerSubtitle: String?"))
-        XCTAssertTrue(spillBarView.contains("if panelState.readiness == .ready"))
+        XCTAssertFalse(spillBarView.contains("panelState.readiness"))
         XCTAssertTrue(spillBarView.contains("return nil"))
         XCTAssertTrue(preferencesSidebarView.contains("SpillBrandLockupView("))
-        XCTAssertTrue(preferencesSidebarView.contains("markStyle: nil"))
+        XCTAssertTrue(preferencesSidebarView.contains("markStyle: .spill"))
         XCTAssertTrue(dashboardView.contains("SpillBrandLockupView("))
         XCTAssertTrue(dashboardView.contains("subtitle: nil"))
         XCTAssertTrue(dashboardView.contains("markStyle: nil"))
@@ -1582,7 +1582,6 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(preferencesView.contains("DeveloperOptionsPreferencesSection("))
         XCTAssertTrue(preferencesSidebar.contains("if SpillBuildOptions.developerOptionsEnabled"))
         XCTAssertTrue(preferencesSidebar.contains("sidebarItem(title: t(.developerOptions)"))
-        XCTAssertTrue(developerOptionsSection.contains("$settings.panelOnboardingPreviewEnabled"))
         XCTAssertTrue(developerOptionsSection.contains("$settings.tokenUsageDashboardOnboardingPreviewEnabled"))
         XCTAssertTrue(developerOptionsSection.contains("t(.aiDashboardOnboardingPreview)"))
         XCTAssertTrue(dashboardStore.contains("func refreshAsync("))
@@ -1710,10 +1709,8 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertFalse(panelController.contains("cloudServiceStatusStore.refreshIfNeeded()"))
         XCTAssertTrue(spillBarAISection.contains("cloudServiceStatusStore.refreshIfNeeded()"))
         XCTAssertTrue(cloudStatusView.contains("store.refreshIfNeeded(force: true)"))
-        XCTAssertTrue(spillBarView.contains("panelState.onboardingPreviewEnabled"))
         XCTAssertTrue(spillBarView.contains("SpillBarAISection("))
         XCTAssertTrue(spillBarAISection.contains("SpillBarAITokenSummary("))
-        XCTAssertTrue(spillBarAISection.contains("SpillBarAIToolCard("))
         XCTAssertTrue(spillBarAISection.contains("aiStatusDetailTint(for: status)"))
         XCTAssertTrue(spillBarAISection.contains("status.kind.dashboardTint"))
         XCTAssertTrue(spillBarAITokenSummary.contains("TokenUsageAITool(rawValue: toolID.lowercased())?.dashboardTint"))
@@ -1729,14 +1726,9 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(spillBarAITokenSummary.contains("if snapshot.totalTokens > 0, !visibleToolRows.isEmpty"))
         XCTAssertTrue(spillBarAIToolCard.contains("status.kind.dashboardTint"))
         XCTAssertFalse(spillBarAIToolCard.contains("status.hasRunningProcesses ? .teal"))
-        XCTAssertTrue(spillBarAITokenSummary.contains("setupPreview"))
-        XCTAssertTrue(spillBarAITokenSummary.contains("tokenMeteringSettingsAction()"))
         XCTAssertFalse(spillBarView.contains("onboardingPreviewBanner"))
         XCTAssertFalse(spillBarView.contains("private var aiProcessSummary"))
         XCTAssertTrue(spillBarAIToolCard.contains("aiProcessStateChip"))
-        XCTAssertTrue(panelController.contains("tokenMeteringSettingsAction"))
-        XCTAssertTrue(appDelegate.contains("showTokenMeteringPreferencesFromPanel()"))
-        XCTAssertTrue(appDelegate.contains("TokenMeteringDashboardProcess.tokenMeteringPreferencesTab"))
         XCTAssertFalse(panelSizer.contains("aiProcessSummaryHeight"))
         XCTAssertFalse(panelSizer.contains("onboardingPreviewHeight"))
     }
@@ -1744,7 +1736,6 @@ final class TokenUsageStoreTests: XCTestCase {
     func testLongRunningAppShutdownAndWakeContracts() throws {
         let root = Self.repositoryRootURL()
         let appDelegate = try String(contentsOf: root.appendingPathComponent("Sources/Spill/App/AppDelegate.swift"))
-        let menuBarScanCoordinator = try String(contentsOf: root.appendingPathComponent("Sources/Spill/MenuBar/MenuBarScanCoordinator.swift"))
         let panelController = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Panel/SpillPanelController.swift"))
         let preferencesWindowController = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Preferences/PreferencesWindowController.swift"))
         let aiStatusStore = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Providers/AIStatusStore.swift"))
@@ -1753,7 +1744,6 @@ final class TokenUsageStoreTests: XCTestCase {
 
         XCTAssertTrue(appDelegate.contains("SpillCrashReporter.markCleanShutdown(processRole: \"main_app\")"))
         XCTAssertTrue(appDelegate.contains("preferencesWindowController.prepareForTermination()"))
-        XCTAssertTrue(menuBarScanCoordinator.contains("NSWorkspace.didWakeNotification"))
         XCTAssertTrue(panelController.contains("panel.isRestorable = false"))
         XCTAssertTrue(preferencesWindowController.contains("window.isRestorable = false"))
         XCTAssertTrue(preferencesWindowController.contains("func prepareForTermination()"))
@@ -1783,16 +1773,6 @@ final class TokenUsageStoreTests: XCTestCase {
 
         try await waitForDashboardStoreRefreshToLoadEvents(dashboardStore, eventCount: 1)
         XCTAssertEqual(dashboardStore.snapshot.eventCount, 1)
-    }
-
-    func testMenuBarScannerPublishesItemsBeforeLoadingIcons() throws {
-        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let scanner = try String(contentsOf: root.appendingPathComponent("Sources/Spill/MenuBar/AXMenuBarItemScanner.swift"))
-
-        XCTAssertTrue(scanner.contains("refreshMissingIcons(for: enrichedItems, generation: iconGeneration)"))
-        XCTAssertTrue(scanner.contains("Task.detached(priority: .utility)"))
-        XCTAssertTrue(scanner.contains("cachedImageDataIfAvailable(for: snapshot)"))
-        XCTAssertFalse(scanner.contains("cachedImageData(for: snapshot)"))
     }
 
     func testTokenUsageCollectorDoesNotAutoRunHistoryImporters() throws {

@@ -23,15 +23,6 @@ struct DeveloperOptionsPreferencesSection: View {
                         .background(Color.primary.opacity(0.04))
 
                     developerToggle(
-                        title: t(.dashboardOnboardingPreview),
-                        detail: t(.dashboardOnboardingPreviewDetail),
-                        isOn: $settings.panelOnboardingPreviewEnabled
-                    )
-
-                    Divider()
-                        .background(Color.primary.opacity(0.04))
-
-                    developerToggle(
                         title: t(.aiDashboardOnboardingPreview),
                         detail: t(.aiDashboardOnboardingPreviewDetail),
                         isOn: $settings.tokenUsageDashboardOnboardingPreviewEnabled

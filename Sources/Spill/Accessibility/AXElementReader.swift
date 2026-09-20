@@ -34,45 +34,7 @@ extension AXElementReader {
         return value as? [AXUIElement] ?? []
     }
 
-    func children(of element: AXUIElement) -> [AXUIElement] {
-        prepare(element)
 
-        var value: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(element, AXAttributeName.children as CFString, &value) == .success,
-              let value
-        else {
-            return []
-        }
-
-        return value as? [AXUIElement] ?? []
-    }
-
-    func stringAttribute(_ element: AXUIElement, _ attribute: String) -> String? {
-        prepare(element)
-
-        var value: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success else {
-            return nil
-        }
-
-        return value as? String
-    }
-
-    func actionNames(for element: AXUIElement) -> [String] {
-        prepare(element)
-
-        var names: CFArray?
-        guard AXUIElementCopyActionNames(element, &names) == .success else {
-            return []
-        }
-
-        return names as? [String] ?? []
-    }
-
-    func performPress(on element: AXUIElement) -> AXError {
-        prepare(element)
-        return AXUIElementPerformAction(element, AXActionName.press as CFString)
-    }
 }
 
 extension AXElementReader {
