@@ -25,6 +25,41 @@ final class SystemGPUProviderTests: XCTestCase {
         XCTAssertEqual(status.devices.first?.memoryLabel, "12 GB")
     }
 
+    func testDriverReportedUtilizationAndCoreCountBecomeGPUStatus() {
+        let status = SystemGPUProvider.status(
+            from: [SystemGPUDeviceStatus(
+                name: "Apple GPU", isLowPower: true, isHeadless: false,
+                isRemovable: false, hasUnifiedMemory: true,
+                recommendedMaxWorkingSetBytes: gib(8)
+            )],
+            performance: SystemGPUPerformanceReader.Reading(utilizationRatio: 0.25, coreCount: 16)
+        )
+
+        XCTAssertEqual(status.value, "25.0%")
+        XCTAssertEqual(status.subtitle, "16 GPU cores")
+        XCTAssertEqual(status.utilizationRatio, 0.25)
+        XCTAssertEqual(status.coreCount, 16)
+        XCTAssertTrue(SpillStatusDetailRows.rows(for: status).contains {
+            $0.label == AppL10n.text(.cores) && $0.value == "16"
+        })
+    }
+
+    func testMalformedDriverMetricsFallBackToDeviceInformation() {
+        let status = SystemGPUProvider.status(
+            from: [SystemGPUDeviceStatus(
+                name: "Apple GPU", isLowPower: true, isHeadless: false,
+                isRemovable: false, hasUnifiedMemory: true,
+                recommendedMaxWorkingSetBytes: gib(8)
+            )],
+            performance: SystemGPUPerformanceReader.Reading(utilizationRatio: .nan, coreCount: -1)
+        )
+
+        XCTAssertEqual(status.value, "1/1")
+        XCTAssertEqual(status.subtitle, "8.0 GB recommended budget")
+        XCTAssertNil(status.utilizationRatio)
+        XCTAssertNil(status.coreCount)
+    }
+
     func testGPUStatusMappingWithHeadlessOnlyDeviceWarns() {
         let status = SystemGPUProvider.status(
             from: [

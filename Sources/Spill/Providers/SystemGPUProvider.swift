@@ -21,6 +21,8 @@ struct SystemGPUDeviceStatus: Hashable, Sendable {
 struct SystemGPUStatus: Hashable, Sendable {
     let value: String
     let subtitle: String?
+    let utilizationRatio: Double?
+    let coreCount: Int?
     let devices: [SystemGPUDeviceStatus]
     let availableDeviceCount: Int
     let totalDeviceCount: Int
@@ -51,11 +53,20 @@ struct SystemGPUProvider: SpillStatusProvider {
         [Self.status().statusItem]
     }
 
+    // The devices are stable on Apple Silicon; their recommended memory budget can change.
+    private static let devices = MTLCopyAllDevices()
+
     static func status() -> SystemGPUStatus {
-        status(from: MTLCopyAllDevices().map(deviceStatus))
+        status(
+            from: devices.map(deviceStatus),
+            performance: SystemGPUPerformanceReader.current()
+        )
     }
 
-    static func status(from devices: [SystemGPUDeviceStatus]?) -> SystemGPUStatus {
+    static func status(
+        from devices: [SystemGPUDeviceStatus]?,
+        performance: SystemGPUPerformanceReader.Reading? = nil
+    ) -> SystemGPUStatus {
         guard let devices, !devices.isEmpty else {
             return unavailableStatus()
         }
@@ -68,9 +79,16 @@ struct SystemGPUProvider: SpillStatusProvider {
             ? "\(SystemMemoryProvider.formatBytes(workingSetBytes)) recommended budget"
             : "\(usableDevices.count) usable device\(usableDevices.count == 1 ? "" : "s")"
 
+        let utilizationRatio = performance?.utilizationRatio.flatMap { ratio in
+            ratio.isFinite && (0...1).contains(ratio) ? ratio : nil
+        }
+        let coreCount = performance?.coreCount.flatMap { $0 > 0 ? $0 : nil }
+
         return SystemGPUStatus(
-            value: "\(usableDevices.count)/\(devices.count)",
-            subtitle: memorySubtitle,
+            value: utilizationRatio.map(SystemCPUProvider.percentText) ?? "\(usableDevices.count)/\(devices.count)",
+            subtitle: coreCount.map { String(format: AppL10n.text(.gpuCoreCount), $0) } ?? memorySubtitle,
+            utilizationRatio: utilizationRatio,
+            coreCount: coreCount,
             devices: devices,
             availableDeviceCount: usableDevices.count,
             totalDeviceCount: devices.count,
@@ -87,6 +105,8 @@ struct SystemGPUProvider: SpillStatusProvider {
         SystemGPUStatus(
             value: "N/A",
             subtitle: nil,
+            utilizationRatio: nil,
+            coreCount: nil,
             devices: [],
             availableDeviceCount: 0,
             totalDeviceCount: 0,

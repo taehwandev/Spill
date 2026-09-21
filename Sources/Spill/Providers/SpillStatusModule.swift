@@ -63,13 +63,13 @@ enum SpillStatusModule: String, CaseIterable, Identifiable, Sendable {
         case .storage:
             return "Used and available primary storage"
         case .gpu:
-            return "Metal device availability"
+            return "GPU usage and core count when supported"
         case .network:
             return "Receive and upload activity"
         }
     }
 
-    static let defaultOrder: [SpillStatusModule] = [.cpu, .memory, .storage, .network]
+    static let defaultOrder: [SpillStatusModule] = [.cpu, .memory, .storage, .network, .gpu]
     static let primaryPanelModules: [SpillStatusModule] = defaultOrder
     static let defaultEnabled: Set<SpillStatusModule> = Set(primaryPanelModules)
 

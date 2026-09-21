@@ -293,7 +293,10 @@ extension SpillBarView {
             panelStore.send(.setStatusDetailTarget(.system(module)))
         } label: {
             HStack(spacing: 10) {
-                statusIconBadge(symbolName: module.symbolName, tint: status.state.panelTint)
+                statusIconBadge(
+                    symbolName: module == .network ? statusStore.network.symbolName : module.symbolName,
+                    tint: status.state.panelTint
+                )
 
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {

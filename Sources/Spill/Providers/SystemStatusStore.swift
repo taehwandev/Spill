@@ -74,6 +74,7 @@ final class SystemStatusStore: ObservableObject {
                 .cpu: Self.initialHistory(for: cpu.usageRatio, state: cpu.state),
                 .memory: Self.initialHistory(for: memory.usageRatio, state: memory.state),
                 .storage: Self.initialHistory(for: storage.usageRatio, state: storage.state),
+                .gpu: gpu.utilizationRatio.map { Self.initialHistory(for: $0, state: gpu.state) } ?? [],
                 .network: Self.initialHistory(for: network.activityRatio, state: network.state)
             ],
             networkTrafficHistory: SystemNetworkTrafficHistory(
@@ -148,6 +149,9 @@ extension SystemStatusStore {
 
         if enabledModules.contains(.gpu) {
             nextSnapshot.gpu = gpuReader()
+            if let utilizationRatio = nextSnapshot.gpu.utilizationRatio {
+                appendHistory(utilizationRatio, for: .gpu, state: nextSnapshot.gpu.state, to: &nextSnapshot)
+            }
         } else {
             nextSnapshot.gpu = SystemGPUProvider.status(from: nil)
         }

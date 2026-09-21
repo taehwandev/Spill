@@ -9,8 +9,8 @@ final class SpillSettingsTests: XCTestCase {
         let settings = SpillSettings(defaults: defaults)
 
         XCTAssertEqual(settings.appLanguage, .automatic)
-        XCTAssertEqual(settings.statusModuleOrder, [.cpu, .memory, .storage, .network])
-        XCTAssertEqual(settings.enabledStatusModules, [.cpu, .memory, .storage, .network])
+        XCTAssertEqual(settings.statusModuleOrder, [.cpu, .memory, .storage, .network, .gpu])
+        XCTAssertEqual(settings.enabledStatusModules, [.cpu, .memory, .storage, .network, .gpu])
         XCTAssertEqual(settings.enabledMenuBarStatusItems, [.cpu, .memory])
         XCTAssertFalse(settings.tokenUsageDashboardOnboardingPreviewEnabled)
         XCTAssertEqual(settings.tokenUsageInputScope, .includeCache)
@@ -257,7 +257,7 @@ final class SpillSettingsTests: XCTestCase {
 
         let settings = SpillSettings(defaults: defaults)
 
-        XCTAssertEqual(settings.statusModuleOrder, [.memory, .cpu, .storage, .network])
+        XCTAssertEqual(settings.statusModuleOrder, [.memory, .cpu, .storage, .network, .gpu])
     }
 
     func testStatusModuleEnabledStatePersists() {
@@ -266,6 +266,7 @@ final class SpillSettingsTests: XCTestCase {
 
         settings.setStatusModule(.cpu, enabled: false)
         settings.setStatusModule(.network, enabled: false)
+        settings.setStatusModule(.gpu, enabled: false)
 
         XCTAssertFalse(settings.isStatusModuleEnabled(.cpu))
         XCTAssertTrue(settings.isStatusModuleEnabled(.memory))
@@ -276,6 +277,7 @@ final class SpillSettingsTests: XCTestCase {
 
         let reloadedSettings = SpillSettings(defaults: defaults)
         XCTAssertFalse(reloadedSettings.isStatusModuleEnabled(.network))
+        XCTAssertFalse(reloadedSettings.isStatusModuleEnabled(.gpu))
     }
 
     func testLegacyEnabledStatusModulesMigrateNetworkDefaultOnce() {
@@ -285,13 +287,27 @@ final class SpillSettingsTests: XCTestCase {
         let settings = SpillSettings(defaults: defaults)
 
         XCTAssertTrue(settings.isStatusModuleEnabled(.network))
-        XCTAssertEqual(defaults.stringArray(forKey: "enabledStatusModules"), ["cpu", "memory", "storage", "network"])
+        XCTAssertEqual(defaults.stringArray(forKey: "enabledStatusModules"), ["cpu", "memory", "storage", "network", "gpu"])
 
         settings.setStatusModule(.network, enabled: false)
 
         let reloadedSettings = SpillSettings(defaults: defaults)
         XCTAssertFalse(reloadedSettings.isStatusModuleEnabled(.network))
-        XCTAssertEqual(defaults.stringArray(forKey: "enabledStatusModules"), ["cpu", "memory", "storage"])
+        XCTAssertEqual(defaults.stringArray(forKey: "enabledStatusModules"), ["cpu", "memory", "storage", "gpu"])
+    }
+
+    func testGPUDefaultMigrationPreservesLaterOptOut() {
+        let defaults = makeDefaults()
+        defaults.set(["cpu", "memory", "storage", "network"], forKey: "enabledStatusModules")
+        defaults.set(true, forKey: "statusModuleNetworkDefaultEnabledMigrated")
+
+        let settings = SpillSettings(defaults: defaults)
+        XCTAssertTrue(settings.isStatusModuleEnabled(.gpu))
+        XCTAssertTrue(defaults.bool(forKey: "statusModuleGPUDefaultEnabledMigrated"))
+
+        settings.setStatusModule(.gpu, enabled: false)
+        XCTAssertFalse(SpillSettings(defaults: defaults).isStatusModuleEnabled(.gpu))
+        XCTAssertEqual(defaults.stringArray(forKey: "enabledStatusModules"), ["cpu", "memory", "storage", "network"])
     }
 
     func testMenuBarStatusItemsPersistAndDriveRefreshRequirements() {
@@ -312,12 +328,12 @@ final class SpillSettingsTests: XCTestCase {
         XCTAssertTrue(settings.isMenuBarStatusItemEnabled(.network))
         XCTAssertTrue(settings.isMenuBarStatusItemEnabled(.ai))
         XCTAssertEqual(defaults.stringArray(forKey: "enabledMenuBarStatusItems"), ["cpu", "caffeine", "network", "ai"])
-        XCTAssertEqual(settings.visiblePanelStatusModules, [.cpu, .storage])
-        XCTAssertEqual(settings.statusModulesRequiredForRefresh, [.cpu, .storage, .network])
+        XCTAssertEqual(settings.visiblePanelStatusModules, [.cpu, .storage, .gpu])
+        XCTAssertEqual(settings.statusModulesRequiredForRefresh, [.cpu, .storage, .network, .gpu])
 
         settings.menuBarTriggerIconStyle = .spill
 
-        XCTAssertEqual(settings.statusModulesRequiredForRefresh, [.cpu, .storage, .network])
+        XCTAssertEqual(settings.statusModulesRequiredForRefresh, [.cpu, .storage, .network, .gpu])
     }
 
     func testMenuBarStatusKeepsDisabledPanelModuleRefreshingWhenShownInMenuBar() {
@@ -327,20 +343,20 @@ final class SpillSettingsTests: XCTestCase {
         settings.setStatusModule(.memory, enabled: false)
 
         XCTAssertTrue(settings.isMenuBarStatusItemEnabled(.memory))
-        XCTAssertEqual(settings.visiblePanelStatusModules, [.cpu, .storage, .network])
-        XCTAssertEqual(settings.statusModulesRequiredForRefresh, [.cpu, .memory, .storage, .network])
+        XCTAssertEqual(settings.visiblePanelStatusModules, [.cpu, .storage, .network, .gpu])
+        XCTAssertEqual(settings.statusModulesRequiredForRefresh, [.cpu, .memory, .storage, .network, .gpu])
     }
 
-    func testLegacyGPUStatusModuleSettingsNormalizeToStorage() {
+    func testLegacyGPUStatusModuleSettingsPreserveGPUAndStorage() {
         let defaults = makeDefaults()
         defaults.set(["gpu", "memory"], forKey: "statusModuleOrder")
         defaults.set(["gpu", "cpu"], forKey: "enabledStatusModules")
 
         let settings = SpillSettings(defaults: defaults)
 
-        XCTAssertEqual(settings.statusModuleOrder, [.memory, .cpu, .storage, .network])
-        XCTAssertEqual(settings.enabledStatusModules, [.cpu, .storage, .network])
-        XCTAssertFalse(settings.isStatusModuleEnabled(.gpu))
+        XCTAssertEqual(settings.statusModuleOrder, [.gpu, .memory, .cpu, .storage, .network])
+        XCTAssertEqual(settings.enabledStatusModules, [.gpu, .cpu, .storage, .network])
+        XCTAssertTrue(settings.isStatusModuleEnabled(.gpu))
     }
 
     func testRetiredMenuItemPreferencesDoNotAlterRetainedSettings() {
@@ -352,6 +368,7 @@ final class SpillSettingsTests: XCTestCase {
         defaults.set(30.0, forKey: "refreshInterval")
         defaults.set(["storage"], forKey: "enabledStatusModules")
         defaults.set(true, forKey: "statusModuleNetworkDefaultEnabledMigrated")
+        defaults.set(true, forKey: "statusModuleGPUDefaultEnabledMigrated")
         defaults.set(false, forKey: "hotKeyEnabled")
 
         let settings = SpillSettings(defaults: defaults)
@@ -605,7 +622,7 @@ final class SpillSettingsTests: XCTestCase {
         XCTAssertEqual(settings.menuBarMetricPresentationMode(for: .cpu), .chart)
         XCTAssertEqual(settings.menuBarMetricPresentationMode(for: .memory), .off)
         XCTAssertEqual(settings.menuBarMetricPresentationMode(for: .network), .text)
-        XCTAssertEqual(settings.statusModulesRequiredForRefresh, [.cpu, .memory, .storage, .network])
+        XCTAssertEqual(settings.statusModulesRequiredForRefresh, [.cpu, .memory, .storage, .network, .gpu])
 
         settings.setMenuBarMetricPresentationMode(.off, for: .cpu)
         settings.setMenuBarStatusItem(.cpu, enabled: true)
@@ -786,8 +803,8 @@ final class SpillSettingsTests: XCTestCase {
 
         settings.moveStatusModule(.memory, direction: -1)
 
-        XCTAssertEqual(settings.statusModuleOrder, [.memory, .cpu, .storage, .network])
-        XCTAssertEqual(defaults.stringArray(forKey: "statusModuleOrder"), ["memory", "cpu", "storage", "network"])
+        XCTAssertEqual(settings.statusModuleOrder, [.memory, .cpu, .storage, .network, .gpu])
+        XCTAssertEqual(defaults.stringArray(forKey: "statusModuleOrder"), ["memory", "cpu", "storage", "network", "gpu"])
     }
 
     private func makeDefaults() -> UserDefaults {

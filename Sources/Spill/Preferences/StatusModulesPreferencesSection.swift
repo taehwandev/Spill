@@ -16,6 +16,12 @@ struct PanelStatusPreferencesSection: View {
 
             panelStatusPreview
 
+            Toggle("GPU", isOn: Binding(
+                get: { settings.isStatusModuleEnabled(.gpu) },
+                set: { settings.setStatusModule(.gpu, enabled: $0) }
+            ))
+            .toggleStyle(.switch)
+
             // Status value bold
             HStack {
                 Label(t(.statusValueBold), systemImage: "bold")

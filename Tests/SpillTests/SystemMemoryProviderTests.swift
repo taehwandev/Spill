@@ -41,6 +41,27 @@ final class SystemMemoryProviderTests: XCTestCase {
         XCTAssertEqual(status.usageRatio, 0.75, accuracy: 0.0001)
     }
 
+    func testPressureStateOverridesMisleadingHighUsageWarning() {
+        let reading = makeReading(
+            totalBytes: gib(16),
+            activeBytes: gib(8),
+            wiredBytes: gib(4),
+            compressedBytes: gib(3)
+        )
+
+        let normal = SystemMemoryProvider.status(from: reading, pressure: .normal)
+        XCTAssertEqual(normal.value, "93.8%")
+        XCTAssertEqual(normal.state, .normal)
+        XCTAssertEqual(normal.pressure, .normal)
+        XCTAssertTrue(normal.subtitle?.contains("Normal pressure") == true)
+
+        let critical = SystemMemoryProvider.status(from: reading, pressure: .critical)
+        XCTAssertEqual(critical.state, .warning)
+        XCTAssertTrue(SpillStatusDetailRows.rows(for: critical).contains {
+            $0.label == AppL10n.text(.pressure)
+        })
+    }
+
     func testHighMemoryStatusMapping() {
         let reading = makeReading(
             totalBytes: gib(16),

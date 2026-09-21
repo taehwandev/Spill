@@ -22,6 +22,29 @@ final class SystemCPUProviderTests: XCTestCase {
         XCTAssertEqual(status.state, .normal)
     }
 
+    func testLoadUptimeVersionAndThermalDetailUseExactSystemReading() {
+        let previous = SystemCPUReading(
+            userTicks: 100, systemTicks: 0, idleTicks: 300, niceTicks: 0,
+            coreReadings: [makeCoreReading(active: 10, idle: 90), makeCoreReading(active: 20, idle: 80)]
+        )
+        let current = SystemCPUReading(
+            userTicks: 125, systemTicks: 0, idleTicks: 375, niceTicks: 0,
+            coreReadings: [makeCoreReading(active: 20, idle: 130), makeCoreReading(active: 30, idle: 120)],
+            loadAverage: 5.6,
+            uptimeSeconds: 20 * 86_400 + 20 * 3_600,
+            operatingSystemVersion: "27.0",
+            thermalCondition: .fair
+        )
+
+        let status = SystemCPUProvider.status(previous: previous, current: current)
+        XCTAssertEqual(status.subtitle, "Load 5.6 / 2 cores")
+        XCTAssertEqual(status.loadAverage, 5.6)
+        let rows = SpillStatusDetailRows.rows(for: status)
+        XCTAssertTrue(rows.contains { $0.label == AppL10n.text(.uptime) && $0.value == "20d 20h" })
+        XCTAssertTrue(rows.contains { $0.label == AppL10n.text(.version) && $0.value == "macOS 27.0" })
+        XCTAssertTrue(rows.contains { $0.label == AppL10n.text(.thermal) })
+    }
+
     func testActiveCPUStatusMapping() {
         let status = SystemCPUProvider.status(
             previous: makeReading(active: 100, idle: 300),

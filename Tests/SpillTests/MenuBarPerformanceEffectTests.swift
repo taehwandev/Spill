@@ -63,6 +63,10 @@ final class MenuBarPerformanceEffectTests: XCTestCase {
             coreUsageRatios: [],
             peakCoreUsageRatio: ratio,
             coreCount: 0,
+            loadAverage: nil,
+            uptimeSeconds: nil,
+            operatingSystemVersion: nil,
+            thermalCondition: nil,
             state: state
         )
     }
@@ -80,6 +84,7 @@ final class MenuBarPerformanceEffectTests: XCTestCase {
             wiredBytes: 0,
             compressedBytes: 0,
             totalBytes: 0,
+            pressure: nil,
             state: state
         )
     }
@@ -98,6 +103,7 @@ final class MenuBarPerformanceEffectTests: XCTestCase {
             totalSentBytes: 0,
             activeInterfaceCount: 0,
             sampleInterval: 0,
+            interfaceKind: nil,
             state: state,
             symbolName: "network"
         )

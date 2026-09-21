@@ -52,6 +52,24 @@ final class SystemNetworkProviderTests: XCTestCase {
         XCTAssertEqual(status.state, .active)
     }
 
+    func testPathInterfaceKindAppearsInStatusAndDetail() {
+        let status = SystemNetworkProvider.status(
+            previous: SystemNetworkReading(
+                receivedBytes: 0, sentBytes: 0, timestamp: 10, activeInterfaceCount: 1
+            ),
+            current: SystemNetworkReading(
+                receivedBytes: 1_000, sentBytes: 500, timestamp: 11,
+                activeInterfaceCount: 1, interfaceKind: .wifi
+            )
+        )
+
+        XCTAssertEqual(status.subtitle, "Wi-Fi · ↑ 500 B/s")
+        XCTAssertEqual(status.statusItem.symbolName, "wifi")
+        XCTAssertTrue(SpillStatusDetailRows.rows(for: status).contains {
+            $0.label == AppL10n.text(.connection) && $0.value == "Wi-Fi"
+        })
+    }
+
     func testIdleStatusMapping() {
         let status = SystemNetworkProvider.status(
             previous: SystemNetworkReading(

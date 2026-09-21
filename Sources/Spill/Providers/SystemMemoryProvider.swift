@@ -30,6 +30,7 @@ struct SystemMemoryStatus: Hashable, Sendable {
     let wiredBytes: UInt64
     let compressedBytes: UInt64
     let totalBytes: UInt64
+    let pressure: SystemMemoryPressure?
     let state: SpillStatusState
 
     var statusItem: SpillStatusItem {
@@ -57,10 +58,13 @@ struct SystemMemoryProvider: SpillStatusProvider {
     }
 
     static func status() -> SystemMemoryStatus {
-        status(from: SystemMemoryReader.current())
+        status(from: SystemMemoryReader.current(), pressure: SystemMemoryPressure.current())
     }
 
-    static func status(from reading: SystemMemoryReading?) -> SystemMemoryStatus {
+    static func status(
+        from reading: SystemMemoryReading?,
+        pressure: SystemMemoryPressure? = nil
+    ) -> SystemMemoryStatus {
         guard let reading, reading.totalBytes > 0 else {
             return unavailableStatus()
         }
@@ -69,7 +73,8 @@ struct SystemMemoryProvider: SpillStatusProvider {
         let availableBytes = min(reading.availableBytes, reading.totalBytes)
         let ratio = (Double(usedBytes) / Double(reading.totalBytes)).clamped(to: 0...1)
         let value = SystemCPUProvider.percentText(ratio)
-        let subtitle = "\(formatBytes(usedBytes)) used / \(formatBytes(availableBytes)) available"
+        let subtitle = pressure.map { String(format: AppL10n.text(.memoryPressureAvailable), AppL10n.text($0.localizationKey), formatBytes(availableBytes)) }
+            ?? "\(formatBytes(usedBytes)) used / \(formatBytes(availableBytes)) available"
 
         return SystemMemoryStatus(
             value: value,
@@ -83,11 +88,19 @@ struct SystemMemoryProvider: SpillStatusProvider {
             wiredBytes: reading.wiredBytes,
             compressedBytes: reading.compressedBytes,
             totalBytes: reading.totalBytes,
-            state: state(for: ratio)
+            pressure: pressure,
+            state: state(for: ratio, pressure: pressure)
         )
     }
 
-    private static func state(for usageRatio: Double) -> SpillStatusState {
+    private static func state(for usageRatio: Double, pressure: SystemMemoryPressure?) -> SpillStatusState {
+        switch pressure {
+        case .normal: return .normal
+        case .elevated: return .active
+        case .critical: return .warning
+        case nil: break
+        }
+
         if usageRatio >= 0.9 {
             return .warning
         }
@@ -122,6 +135,7 @@ struct SystemMemoryProvider: SpillStatusProvider {
             wiredBytes: 0,
             compressedBytes: 0,
             totalBytes: 0,
+            pressure: nil,
             state: .unavailable
         )
     }

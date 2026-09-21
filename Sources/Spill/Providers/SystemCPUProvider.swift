@@ -22,19 +22,31 @@ struct SystemCPUReading: Hashable, Sendable {
     let idleTicks: UInt64
     let niceTicks: UInt64
     let coreReadings: [SystemCPUCoreReading]
+    let loadAverage: Double?
+    let uptimeSeconds: TimeInterval?
+    let operatingSystemVersion: String?
+    let thermalCondition: SystemThermalCondition?
 
     init(
         userTicks: UInt64,
         systemTicks: UInt64,
         idleTicks: UInt64,
         niceTicks: UInt64,
-        coreReadings: [SystemCPUCoreReading] = []
+        coreReadings: [SystemCPUCoreReading] = [],
+        loadAverage: Double? = nil,
+        uptimeSeconds: TimeInterval? = nil,
+        operatingSystemVersion: String? = nil,
+        thermalCondition: SystemThermalCondition? = nil
     ) {
         self.userTicks = userTicks
         self.systemTicks = systemTicks
         self.idleTicks = idleTicks
         self.niceTicks = niceTicks
         self.coreReadings = coreReadings
+        self.loadAverage = loadAverage
+        self.uptimeSeconds = uptimeSeconds
+        self.operatingSystemVersion = operatingSystemVersion
+        self.thermalCondition = thermalCondition
     }
 
     var activeTicks: UInt64 {
@@ -60,6 +72,10 @@ struct SystemCPUStatus: Hashable, Sendable {
     let coreUsageRatios: [Double]
     let peakCoreUsageRatio: Double
     let coreCount: Int
+    let loadAverage: Double?
+    let uptimeSeconds: TimeInterval?
+    let operatingSystemVersion: String?
+    let thermalCondition: SystemThermalCondition?
     let state: SpillStatusState
 
     var statusItem: SpillStatusItem {
@@ -139,9 +155,16 @@ extension SystemCPUProvider {
         let coreUsageRatios = coreUsageRatios(previous: previous.coreReadings, current: current.coreReadings)
         let peakCoreUsageRatio = coreUsageRatios.max() ?? 0
 
+        let loadAverage = current.loadAverage.flatMap { $0.isFinite && $0 >= 0 ? $0 : nil }
+        let uptimeSeconds = current.uptimeSeconds.flatMap { $0.isFinite && $0 >= 0 ? $0 : nil }
+        let coreCount = current.coreReadings.count
+        let loadSubtitle = coreCount > 0
+            ? loadAverage.map { String(format: AppL10n.text(.cpuLoadCores), $0, coreCount) }
+            : nil
+
         return SystemCPUStatus(
             value: percentText(ratio),
-            subtitle: "\(percentText(ratio)) active / \(percentText(idleRatio)) idle",
+            subtitle: loadSubtitle ?? "\(percentText(ratio)) active / \(percentText(idleRatio)) idle",
             usageRatio: ratio,
             availableRatio: idleRatio,
             userRatio: (Double(userDelta) / Double(totalDelta)).clamped(to: 0...1),
@@ -152,7 +175,11 @@ extension SystemCPUProvider {
             totalTicks: totalDelta,
             coreUsageRatios: coreUsageRatios,
             peakCoreUsageRatio: peakCoreUsageRatio,
-            coreCount: current.coreReadings.count,
+            coreCount: coreCount,
+            loadAverage: loadAverage,
+            uptimeSeconds: uptimeSeconds,
+            operatingSystemVersion: current.operatingSystemVersion,
+            thermalCondition: current.thermalCondition,
             state: state(for: ratio)
         )
     }
@@ -200,6 +227,10 @@ extension SystemCPUProvider {
             coreUsageRatios: [],
             peakCoreUsageRatio: 0,
             coreCount: 0,
+            loadAverage: nil,
+            uptimeSeconds: nil,
+            operatingSystemVersion: nil,
+            thermalCondition: nil,
             state: .unavailable
         )
     }
@@ -221,6 +252,10 @@ private extension SystemCPUProvider {
             coreUsageRatios: [],
             peakCoreUsageRatio: 0,
             coreCount: 0,
+            loadAverage: nil,
+            uptimeSeconds: nil,
+            operatingSystemVersion: nil,
+            thermalCondition: nil,
             state: .refreshing
         )
     }
@@ -240,6 +275,10 @@ private extension SystemCPUProvider {
             coreUsageRatios: [],
             peakCoreUsageRatio: 0,
             coreCount: 0,
+            loadAverage: nil,
+            uptimeSeconds: nil,
+            operatingSystemVersion: nil,
+            thermalCondition: nil,
             state: .normal
         )
     }
@@ -284,8 +323,25 @@ private enum SystemCPUReader {
             systemTicks: aggregateReading.systemTicks,
             idleTicks: aggregateReading.idleTicks,
             niceTicks: aggregateReading.niceTicks,
-            coreReadings: coreReadings() ?? []
+            coreReadings: coreReadings() ?? [],
+            loadAverage: loadAverage(),
+            uptimeSeconds: ProcessInfo.processInfo.systemUptime,
+            operatingSystemVersion: operatingSystemVersion(),
+            thermalCondition: SystemThermalCondition(ProcessInfo.processInfo.thermalState)
         )
+    }
+
+    private static func operatingSystemVersion() -> String {
+        let version = ProcessInfo.processInfo.operatingSystemVersion
+        return "\(version.majorVersion).\(version.minorVersion)"
+    }
+
+    private static func loadAverage() -> Double? {
+        var value = 0.0
+        guard getloadavg(&value, 1) == 1, value.isFinite, value >= 0 else {
+            return nil
+        }
+        return value
     }
 
     private static func aggregateReading() -> SystemCPUCoreReading? {

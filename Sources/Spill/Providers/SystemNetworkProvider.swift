@@ -6,6 +6,21 @@ struct SystemNetworkReading: Hashable, Sendable {
     let sentBytes: UInt64
     let timestamp: TimeInterval
     let activeInterfaceCount: Int
+    let interfaceKind: SystemNetworkInterfaceKind?
+
+    init(
+        receivedBytes: UInt64,
+        sentBytes: UInt64,
+        timestamp: TimeInterval,
+        activeInterfaceCount: Int,
+        interfaceKind: SystemNetworkInterfaceKind? = nil
+    ) {
+        self.receivedBytes = receivedBytes
+        self.sentBytes = sentBytes
+        self.timestamp = timestamp
+        self.activeInterfaceCount = activeInterfaceCount
+        self.interfaceKind = interfaceKind
+    }
 }
 
 struct SystemNetworkStatus: Hashable, Sendable {
@@ -21,6 +36,7 @@ struct SystemNetworkStatus: Hashable, Sendable {
     let totalSentBytes: UInt64
     let activeInterfaceCount: Int
     let sampleInterval: TimeInterval
+    let interfaceKind: SystemNetworkInterfaceKind?
     let state: SpillStatusState
     let symbolName: String
 
@@ -84,7 +100,8 @@ extension SystemNetworkProvider {
 
         return SystemNetworkStatus(
             value: "↓ \(formatRate(receivedBytesPerSecond))",
-            subtitle: "↑ \(formatRate(sentBytesPerSecond))",
+            subtitle: current.interfaceKind.map { "\($0.label) · ↑ \(formatRate(sentBytesPerSecond))" }
+                ?? "↑ \(formatRate(sentBytesPerSecond))",
             activityRatio: activityRatio(for: totalBytesPerSecond),
             receivedActivityRatio: activityRatio(for: receivedBytesPerSecond),
             sentActivityRatio: activityRatio(for: sentBytesPerSecond),
@@ -95,8 +112,9 @@ extension SystemNetworkProvider {
             totalSentBytes: current.sentBytes,
             activeInterfaceCount: current.activeInterfaceCount,
             sampleInterval: sampleInterval,
+            interfaceKind: current.interfaceKind,
             state: state(for: totalBytesPerSecond),
-            symbolName: "network"
+            symbolName: current.interfaceKind?.symbolName ?? "network"
         )
     }
 
@@ -156,8 +174,9 @@ private extension SystemNetworkProvider {
             totalSentBytes: current.sentBytes,
             activeInterfaceCount: current.activeInterfaceCount,
             sampleInterval: 0,
+            interfaceKind: current.interfaceKind,
             state: .refreshing,
-            symbolName: "network"
+            symbolName: current.interfaceKind?.symbolName ?? "network"
         )
     }
 
@@ -175,6 +194,7 @@ private extension SystemNetworkProvider {
             totalSentBytes: 0,
             activeInterfaceCount: 0,
             sampleInterval: 0,
+            interfaceKind: nil,
             state: .unavailable,
             symbolName: "network"
         )
@@ -264,7 +284,8 @@ private enum SystemNetworkReader {
             receivedBytes: receivedBytes,
             sentBytes: sentBytes,
             timestamp: ProcessInfo.processInfo.systemUptime,
-            activeInterfaceCount: activeInterfaceCount
+            activeInterfaceCount: activeInterfaceCount,
+            interfaceKind: SystemNetworkInterfaceKind.current()
         )
     }
 }

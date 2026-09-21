@@ -350,6 +350,30 @@ Rules:
   after hiding the panel, since hiding it can invoke the visibility callback.
   This cadence is independent of Sentry's 2-second App Hang detection threshold;
   the threshold is not a request timeout or a periodic logging interval.
+- Additional Apple Silicon status fields remain in the existing CPU, memory,
+  network, and GPU providers and the atomic `SystemStatusStore` snapshot. CPU
+  load and uptime use system APIs; thermal state is qualitative. Memory pressure
+  is mapped from the system pressure level, with unknown levels omitted. An
+  event-driven network path observer supplies the preferred interface type
+  without a second polling timer. GPU utilization and core count come through
+  public IOKit registry APIs from optional driver properties, validated before
+  display. These property names are best-effort data, not a promised cross-chip
+  API; missing properties preserve the Metal device-information fallback.
+  Sensor-key decoding, fan control, privileged helpers, and numeric temperature
+  or RPM values are outside this slice.
+- Settings impact map for the GPU panel module: `SpillSettings` owns
+  `statusModuleOrder` and `enabledStatusModules` in UserDefaults. A one-time
+  migration enables GPU on existing installations; later Preferences opt-out
+  persists. The main-process `PanelStore` reads these published settings to
+  compose the compact panel, while `SystemStatusStore` reads the enabled set on
+  its existing refresh. `@Published`/Combine propagates the change, panel-state
+  change triggers a resize, and the next existing status tick supplies the
+  value (within three seconds while visible). Preferences is the writer and
+  the compact panel is the reader. Menu-bar CPU/memory/network glances, the
+  separate AI token dashboard helper, web dashboard, private upload, sync
+  payloads, and agent-facing usage summaries are unaffected because they do
+  not read GPU module visibility or system sensor values. No cross-process
+  notification or extra collector is introduced.
 - First-class AI tool colors are a token metering dashboard presentation
   contract. Codex, Claude Code, and Antigravity/AGY must resolve through one
   shared color mapping used by top tool tabs, AI Tool Distribution rows, and

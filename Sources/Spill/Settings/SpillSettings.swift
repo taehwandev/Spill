@@ -280,10 +280,23 @@ final class SpillSettings: ObservableObject {
         if shouldMigrateNetworkStatusModule {
             initialEnabledStatusModules.insert(.network)
         }
+        let shouldMigrateGPUStatusModule = Self.shouldMigrateGPUStatusModuleDefault(
+            rawValues: rawEnabledStatusModules,
+            defaults: defaults
+        )
+        if shouldMigrateGPUStatusModule {
+            initialEnabledStatusModules.insert(.gpu)
+        }
         enabledStatusModules = initialEnabledStatusModules
         if defaults.object(forKey: Keys.statusModuleNetworkDefaultEnabledMigrated) as? Bool != true {
             defaults.set(true, forKey: Keys.statusModuleNetworkDefaultEnabledMigrated)
             if shouldMigrateNetworkStatusModule {
+                Self.persistEnabledStatusModules(initialEnabledStatusModules, to: defaults)
+            }
+        }
+        if defaults.object(forKey: Keys.statusModuleGPUDefaultEnabledMigrated) as? Bool != true {
+            defaults.set(true, forKey: Keys.statusModuleGPUDefaultEnabledMigrated)
+            if shouldMigrateGPUStatusModule {
                 Self.persistEnabledStatusModules(initialEnabledStatusModules, to: defaults)
             }
         }
@@ -588,6 +601,18 @@ extension SpillSettings {
         return !rawValues.contains(SpillStatusModule.network.rawValue)
     }
 
+    private static func shouldMigrateGPUStatusModuleDefault(
+        rawValues: [String]?,
+        defaults: UserDefaults
+    ) -> Bool {
+        guard defaults.object(forKey: Keys.statusModuleGPUDefaultEnabledMigrated) as? Bool != true,
+              let rawValues else {
+            return false
+        }
+
+        return !rawValues.contains(SpillStatusModule.gpu.rawValue)
+    }
+
     private static func persistEnabledStatusModules(
         _ modules: Set<SpillStatusModule>,
         to defaults: UserDefaults
@@ -880,6 +905,7 @@ private enum Keys {
     static let refreshInterval = "refreshInterval"
     static let statusModuleOrder = "statusModuleOrder"
     static let enabledStatusModules = "enabledStatusModules"
+    static let statusModuleGPUDefaultEnabledMigrated = "statusModuleGPUDefaultEnabledMigrated"
     static let statusModuleNetworkDefaultEnabledMigrated = "statusModuleNetworkDefaultEnabledMigrated"
     static let enabledMenuBarStatusItems = "enabledMenuBarStatusItems"
     static let tokenUsageDashboardOnboardingPreviewEnabled = "tokenUsageDashboardOnboardingPreviewEnabled"

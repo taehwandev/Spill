@@ -74,7 +74,8 @@ final class SystemStatusStoreTests: XCTestCase {
                     hasUnifiedMemory: true,
                     recommendedMaxWorkingSetBytes: gib(8)
                 )
-            ]
+            ],
+            performance: SystemGPUPerformanceReader.Reading(utilizationRatio: 0.25, coreCount: 16)
         )
         let store = SystemStatusStore(
             previousCPUReading: previousCPUReading,
@@ -95,8 +96,9 @@ final class SystemStatusStoreTests: XCTestCase {
         XCTAssertEqual(store.memory.state, .normal)
         XCTAssertEqual(store.storage.value, "50.0%")
         XCTAssertEqual(store.storage.state, .normal)
-        XCTAssertEqual(store.gpu.value, "1/1")
+        XCTAssertEqual(store.gpu.value, "25.0%")
         XCTAssertEqual(store.gpu.state, .normal)
+        XCTAssertEqual(store.history(for: .gpu), [0.25])
         XCTAssertEqual(store.network.value, "Sampling")
         XCTAssertEqual(store.network.state, .refreshing)
         XCTAssertEqual(store.power.value, "80%")
