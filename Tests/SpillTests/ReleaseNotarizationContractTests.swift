@@ -286,6 +286,41 @@ final class ReleaseNotarizationContractTests: XCTestCase {
         XCTAssertFalse(script.contains("--keychain-profile"))
     }
 
+    func testAppOnlyNotarizationHandlesEmptyArtifactDirectoryList() throws {
+        let temporaryDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let binDirectory = temporaryDirectory.appendingPathComponent("bin", isDirectory: true)
+        let app = temporaryDirectory.appendingPathComponent("Spill.app", isDirectory: true)
+        let fakeXcrun = binDirectory.appendingPathComponent("xcrun")
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+
+        try FileManager.default.createDirectory(at: binDirectory, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: app, withIntermediateDirectories: true)
+        try "#!/bin/sh\nexit 0\n".write(to: fakeXcrun, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fakeXcrun.path)
+
+        let result = try runProcess(
+            executable: "/bin/bash",
+            arguments: [
+                root.appendingPathComponent("scripts/notarize-release-artifacts.sh").path,
+                "--app",
+                app.path,
+            ],
+            environment: [
+                "PATH": "\(binDirectory.path):/usr/bin:/bin:/usr/sbin:/sbin",
+                "APPLE_NOTARYTOOL_API_KEY": "placeholder-private-key-content",
+                "APPLE_NOTARYTOOL_API_KEY_ID": "KEYID12345",
+                "APPLE_NOTARYTOOL_API_ISSUER": "00000000-0000-0000-0000-000000000000",
+                "NOTARYTOOL_LOG_DIR": temporaryDirectory.appendingPathComponent("logs").path,
+            ]
+        )
+
+        XCTAssertEqual(result.status, 0, result.stderr)
+        XCTAssertTrue(result.stdout.contains("Artifact already has a stapled notarization ticket"))
+        XCTAssertTrue(result.stdout.contains("Release artifacts are notarized and stapled"))
+        XCTAssertFalse(result.stderr.contains("unbound variable"))
+    }
+
     func testReleaseArtifactHelpersDeduplicateAndHashDiagnosticLabels() throws {
         let helper = try read("scripts/release-artifacts.sh")
 
@@ -356,9 +391,21 @@ final class ReleaseNotarizationContractTests: XCTestCase {
     }
 
     private func runVerifier(environment: [String: String]) throws -> (status: Int32, stdout: String, stderr: String) {
+        try runProcess(
+            executable: "/usr/bin/env",
+            arguments: ["node", root.appendingPathComponent("scripts/verify-release-env.mjs").path],
+            environment: environment
+        )
+    }
+
+    private func runProcess(
+        executable: String,
+        arguments: [String],
+        environment: [String: String]
+    ) throws -> (status: Int32, stdout: String, stderr: String) {
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["node", root.appendingPathComponent("scripts/verify-release-env.mjs").path]
+        process.executableURL = URL(fileURLWithPath: executable)
+        process.arguments = arguments
         process.environment = environment
 
         let stdout = Pipe()

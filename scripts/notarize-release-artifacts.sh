@@ -296,7 +296,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 shopt -s nullglob
-for dir in "${artifact_dirs[@]}"; do
+for ((index = 0; index < ${#artifact_dirs[@]}; index++)); do
+    dir="${artifact_dirs[$index]}"
     artifact_args+=("$dir"/Spill-*-macos.dmg)
 done
 
