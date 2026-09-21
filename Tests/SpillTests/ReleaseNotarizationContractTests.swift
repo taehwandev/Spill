@@ -59,7 +59,9 @@ final class ReleaseNotarizationContractTests: XCTestCase {
         let envExample = try read(".env.example")
         let uploadModels = try privateUsageUploadModelSources()
 
-        XCTAssertTrue(buildScript.contains("swift build -c release --package-path \"$ROOT_DIR\""))
+        XCTAssertTrue(buildScript.contains(
+            "swift build -c release --package-path \"$ROOT_DIR\" -Xswiftc -disable-cmo"
+        ))
         XCTAssertTrue(buildScript.contains("<key>CFBundleURLSchemes</key>"))
         XCTAssertTrue(buildScript.contains("<string>spill</string>"))
         XCTAssertTrue(buildScript.contains("SPILL_BUILD_PRIVATE_USAGE_ENVIRONMENT"))
