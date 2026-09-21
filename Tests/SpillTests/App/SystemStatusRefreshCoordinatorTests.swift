@@ -59,6 +59,32 @@ final class SystemStatusRefreshCoordinatorTests: XCTestCase {
         XCTAssertEqual(reads, 1)
     }
 
+    func testOpeningPanelStartsReadWithoutWaitingForHiddenCadence() async {
+        let hiddenSleep = Suspension()
+        var sleeps = 0
+        var reads = 0
+        let coordinator = SystemStatusRefreshCoordinator(
+            interval: { 3 }, refresh: { reads += 1 },
+            sleep: { _ in
+                sleeps += 1
+                if sleeps == 1 {
+                    await hiddenSleep.wait()
+                    try Task.checkCancellation()
+                }
+                throw CancellationError()
+            }
+        )
+        coordinator.restart(startsImmediately: false)
+        await eventually { hiddenSleep.isWaiting }
+        XCTAssertEqual(reads, 0)
+
+        coordinator.restart(startsImmediately: true)
+        await eventually { reads == 1 && sleeps == 2 }
+        hiddenSleep.resume()
+        await drainTasks()
+        XCTAssertEqual(reads, 1)
+    }
+
     func testStopWhileSleepingPreventsAnotherRead() async {
         let sleeper = Suspension()
         var reads = 0

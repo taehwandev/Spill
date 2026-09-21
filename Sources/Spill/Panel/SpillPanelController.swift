@@ -362,17 +362,12 @@ extension SpillPanelController {
 }
 
 extension SpillPanelController {
-    private func refreshStatusStore(refreshTokenUsage: Bool = true) {
-        let enabledModules = settings.statusModulesRequiredForRefresh
-        let readsPower = true
+    private func refreshPanelData(refreshTokenUsage: Bool = true) {
         aiStatusStore.refreshInBackground()
         if refreshTokenUsage {
             tokenUsageDashboardStore.refreshPanelSummary()
         }
         windowActionStore.refresh()
-        Task { @MainActor [statusStore] in
-            await statusStore.refresh(enabledModules: enabledModules, readsPower: readsPower)
-        }
     }
 
     private func schedulePanelDataRefresh(refreshTokenUsage: Bool = true) {
@@ -383,7 +378,7 @@ extension SpillPanelController {
                 return
             }
 
-            refreshStatusStore(refreshTokenUsage: refreshTokenUsage)
+            refreshPanelData(refreshTokenUsage: refreshTokenUsage)
         }
     }
 }

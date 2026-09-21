@@ -36,7 +36,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.isSpillPanelVisible = isVisible
             self?.tokenMeteringCoordinator.setSpillPanelVisible(isVisible)
             self?.statusItemController?.refresh(isSpillBarVisible: isVisible)
-            self?.configureStatusRefreshLoop(startsImmediately: false)
+            self?.configureStatusRefreshLoop(startsImmediately: isVisible)
         },
         settingsAction: { [weak self] in
             self?.showPreferencesFromPanel()
@@ -785,6 +785,13 @@ extension AppDelegate {
             enabledModules: enabledModules,
             readsPower: readsPower
         )
+        if !readsPower && isSpillPanelVisible {
+            // The panel may have opened while a menu-bar-only read was in flight.
+            await statusStore.refresh(
+                enabledModules: settings.statusModulesRequiredForRefresh,
+                readsPower: true
+            )
+        }
         tokenMeteringCoordinator.requestMenuBarTokenUsageCollectionIfNeeded()
         tokenMeteringCoordinator.refreshMenuBarTokenTotal()
         statusItemController?.refresh()
