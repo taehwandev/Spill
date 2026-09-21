@@ -6,6 +6,17 @@ final class ReleaseNotarizationContractTests: XCTestCase {
         URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
     }
 
+    func testReleaseWorkflowPinsKnownGoodMacOSToolchain() throws {
+        let workflow = try read(".github/workflows/release.yml")
+
+        XCTAssertTrue(workflow.contains("runs-on: macos-26"))
+        XCTAssertTrue(workflow.contains(
+            "DEVELOPER_DIR: /Applications/Xcode_26.5.app/Contents/Developer"
+        ))
+        XCTAssertTrue(workflow.contains("[[ \"$(xcodebuild -version | sed -n '1p')\" == \"Xcode 26.5\" ]]"))
+        XCTAssertFalse(workflow.contains("runs-on: macos-latest"))
+    }
+
     func testReleaseWorkflowUsesApiKeyNotarizationWithoutLegacyAppleCredentials() throws {
         let workflow = try read(".github/workflows/release.yml")
 
