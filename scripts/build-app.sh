@@ -247,10 +247,7 @@ else
     rm -f "$ENTITLEMENTS_PATH"
 fi
 
-# Swift 6.3.x can crash in IRGen while applying SwiftPM's default cross-module
-# optimization to this executable. Keep release optimization enabled while
-# disabling only that cross-module pass.
-swift build -c release --package-path "$ROOT_DIR" -Xswiftc -disable-cmo
+swift build -c release --package-path "$ROOT_DIR"
 
 rm -rf "$APP_DIR"
 mkdir -p "$MACOS_DIR" "$RESOURCES_DIR" "$FRAMEWORKS_DIR"

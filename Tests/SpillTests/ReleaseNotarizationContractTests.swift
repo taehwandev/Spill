@@ -11,9 +11,9 @@ final class ReleaseNotarizationContractTests: XCTestCase {
 
         XCTAssertTrue(workflow.contains("runs-on: macos-26"))
         XCTAssertTrue(workflow.contains(
-            "DEVELOPER_DIR: /Applications/Xcode_26.5.app/Contents/Developer"
+            "DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer"
         ))
-        XCTAssertTrue(workflow.contains("[[ \"$(xcodebuild -version | sed -n '1p')\" == \"Xcode 26.5\" ]]"))
+        XCTAssertTrue(workflow.contains("[[ \"$(xcodebuild -version | sed -n '1p')\" == \"Xcode 26.2\" ]]"))
         XCTAssertFalse(workflow.contains("runs-on: macos-latest"))
     }
 
@@ -59,9 +59,9 @@ final class ReleaseNotarizationContractTests: XCTestCase {
         let envExample = try read(".env.example")
         let uploadModels = try privateUsageUploadModelSources()
 
-        XCTAssertTrue(buildScript.contains(
-            "swift build -c release --package-path \"$ROOT_DIR\" -Xswiftc -disable-cmo"
-        ))
+        XCTAssertTrue(buildScript.contains("swift build -c release --package-path \"$ROOT_DIR\""))
+        XCTAssertFalse(buildScript.contains("-disable-cmo"))
+        XCTAssertFalse(buildScript.contains("-no-whole-module-optimization"))
         XCTAssertTrue(buildScript.contains("<key>CFBundleURLSchemes</key>"))
         XCTAssertTrue(buildScript.contains("<string>spill</string>"))
         XCTAssertTrue(buildScript.contains("SPILL_BUILD_PRIVATE_USAGE_ENVIRONMENT"))

@@ -30,8 +30,8 @@ jobs:
     runs-on: macos-26
 
     env:
-      # Swift 6.3.3 in Xcode 26.6 crashes during optimized IR generation for this package.
-      DEVELOPER_DIR: /Applications/Xcode_26.5.app/Contents/Developer
+      # Swift 6.3.x in Xcode 26.5/26.6 crashes during optimized IR generation for this package.
+      DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
       SPILL_BUNDLE_ID: dev.spill.Spill
       MANUAL_RELEASE_COUNT: ${{ github.event.inputs.release_count }}
       PUBLISH_DRAFT: ${{ github.event.inputs.draft }}
@@ -46,7 +46,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          [[ "$(xcodebuild -version | sed -n '1p')" == "Xcode 26.5" ]]
+          [[ "$(xcodebuild -version | sed -n '1p')" == "Xcode 26.2" ]]
           swift --version
 
       - name: Resolve release version
