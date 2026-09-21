@@ -96,6 +96,21 @@ final class ReleaseNotarizationContractTests: XCTestCase {
         XCTAssertFalse(uploadModels.contains("functions/v1/private-usage-relay"))
     }
 
+    func testAutomaticUpdateBindingsAvoidReleaseCompilerActorThunkCrash() throws {
+        let automaticUpdateView = try read(
+            "Sources/Spill/Preferences/AutomaticUpdatePreferencesView.swift"
+        )
+
+        XCTAssertTrue(automaticUpdateView.contains(
+            "set: { isEnabled in updater.setAutomaticChecks(isEnabled) }"
+        ))
+        XCTAssertTrue(automaticUpdateView.contains(
+            "set: { isEnabled in updater.setAutomaticDownloads(isEnabled) }"
+        ))
+        XCTAssertFalse(automaticUpdateView.contains("set: updater.setAutomaticChecks"))
+        XCTAssertFalse(automaticUpdateView.contains("set: updater.setAutomaticDownloads"))
+    }
+
     func testReleaseBuildCanInjectOptionalSentryDiagnosticsConfiguration() throws {
         let package = try read("Package.swift")
         let buildScript = try read("scripts/build-app.sh")

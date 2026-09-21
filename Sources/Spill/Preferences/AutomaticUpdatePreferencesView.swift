@@ -5,11 +5,14 @@ struct AutomaticUpdatePreferencesView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
+            // Swift 6.2/6.3 release IRGen crashes on the actor-isolated method references here.
             Toggle(PreferencesL10n.text(.automaticUpdateChecks), isOn: Binding(
-                get: { updater.automaticChecks }, set: updater.setAutomaticChecks
+                get: { updater.automaticChecks },
+                set: { isEnabled in updater.setAutomaticChecks(isEnabled) }
             ))
             Toggle(PreferencesL10n.text(.automaticUpdateInstall), isOn: Binding(
-                get: { updater.automaticDownloads }, set: updater.setAutomaticDownloads
+                get: { updater.automaticDownloads },
+                set: { isEnabled in updater.setAutomaticDownloads(isEnabled) }
             ))
             .disabled(!updater.allowsAutomaticDownloads)
             Text(PreferencesL10n.text(.automaticUpdateDetail))
