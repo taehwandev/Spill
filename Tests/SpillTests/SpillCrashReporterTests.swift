@@ -78,6 +78,23 @@ final class SpillCrashReporterTests: XCTestCase {
         XCTAssertEqual(state.launchID, "new-launch")
     }
 
+    func testAutomaticUploadTransportFailuresAreNotReported() {
+        let transportFailure = PrivateUsageUploadError.relayTransportFailed
+
+        XCTAssertFalse(
+            SpillCrashReporter.shouldCapturePrivateUsageUploadFailure(transportFailure, operation: .automaticUpload)
+        )
+        XCTAssertTrue(
+            SpillCrashReporter.shouldCapturePrivateUsageUploadFailure(transportFailure, operation: .manualSync)
+        )
+        XCTAssertTrue(
+            SpillCrashReporter.shouldCapturePrivateUsageUploadFailure(
+                PrivateUsageUploadError.relay(status: 500, reason: nil),
+                operation: .automaticUpload
+            )
+        )
+    }
+
     private func temporaryMarkerURL() -> URL {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("SpillCrashReporterTests-\(UUID().uuidString)", isDirectory: true)

@@ -323,7 +323,7 @@ extension TokenUsageStoreTests {
             }
         )
 
-        store.refresh(installedTools: [.codex])
+        await store.refresh(installedTools: [.codex])?.value
         XCTAssertTrue(store.isInstalled)
 
         store.installOrRepair(installedTools: [.codex])
@@ -334,7 +334,7 @@ extension TokenUsageStoreTests {
         XCTAssertEqual(store.operationState, .succeeded)
         XCTAssertTrue(store.isInstalled)
 
-        store.refresh(installedTools: [.claude])
+        await store.refresh(installedTools: [.claude])?.value
         XCTAssertEqual(store.operationState, .idle)
         XCTAssertFalse(store.isInstalled)
 
@@ -342,6 +342,27 @@ extension TokenUsageStoreTests {
         XCTAssertEqual(store.operationState, .idle)
         XCTAssertFalse(store.isInstalled)
         XCTAssertFalse(TokenMeteringSetupInstallationDiagnostics.isInstalled(for: []))
+    }
+
+    @MainActor
+    func testSetupActionStoreRefreshReadsOffMainAndDropsStaleResults() async {
+        let store = TokenMeteringSetupActionStore(
+            installationReader: { tools in
+                XCTAssertFalse(Thread.isMainThread)
+                if tools == [.codex] {
+                    Thread.sleep(forTimeInterval: 0.05)
+                }
+                return tools == [.codex]
+            },
+            setupRunner: { _ in .succeeded }
+        )
+
+        let staleRefresh = store.refresh(installedTools: [.codex])
+        let latestRefresh = store.refresh(installedTools: [.claude])
+        await staleRefresh?.value
+        await latestRefresh?.value
+
+        XCTAssertFalse(store.isInstalled)
     }
 }
 

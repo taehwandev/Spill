@@ -26,6 +26,7 @@ final class TokenMeteringSetupActionStore: ObservableObject {
     private let installationReader: InstallationReader
     private let setupRunner: SetupRunner
     private var installedTools = Set<TokenUsageAITool>()
+    private var refreshGeneration = 0
 
     init(
         installationReader: @escaping InstallationReader = {
@@ -41,18 +42,31 @@ final class TokenMeteringSetupActionStore: ObservableObject {
         operationState == .running
     }
 
-    func refresh(installedTools: Set<TokenUsageAITool>) {
+    /// Reads adapter config files off the main thread; the returned task lets callers await the result.
+    @discardableResult
+    func refresh(installedTools: Set<TokenUsageAITool>) -> Task<Void, Never>? {
         guard !isRunning else {
-            return
+            return nil
         }
         self.installedTools = installedTools
+        refreshGeneration += 1
+        operationState = .idle
         if installedTools.isEmpty {
             isInstalled = false
-            operationState = .idle
-            return
+            return nil
         }
-        isInstalled = installationReader(installedTools)
-        operationState = .idle
+
+        let generation = refreshGeneration
+        let installationReader = installationReader
+        return Task { [weak self] in
+            let installed = await Task.detached(priority: .utility) {
+                installationReader(installedTools)
+            }.value
+            guard let self, self.refreshGeneration == generation, !self.isRunning else {
+                return
+            }
+            self.isInstalled = installed
+        }
     }
 
     func installOrRepair(installedTools: Set<TokenUsageAITool>) {
@@ -63,16 +77,18 @@ final class TokenMeteringSetupActionStore: ObservableObject {
         self.installedTools = installedTools
         operationState = .running
         let setupRunner = setupRunner
+        let installationReader = installationReader
         let targetTools = installedTools
         Task { [weak self] in
-            let result = await Task.detached(priority: .userInitiated) {
-                setupRunner(targetTools)
+            let (result, installed) = await Task.detached(priority: .userInitiated) {
+                (setupRunner(targetTools), installationReader(targetTools))
             }.value
             guard let self else {
                 return
             }
 
-            self.isInstalled = self.installationReader(self.installedTools)
+            self.refreshGeneration += 1
+            self.isInstalled = installed
             self.operationState = result == .succeeded && self.isInstalled
                 ? .succeeded
                 : .failed

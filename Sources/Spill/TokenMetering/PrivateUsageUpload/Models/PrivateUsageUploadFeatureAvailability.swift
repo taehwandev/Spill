@@ -4,9 +4,8 @@ enum PrivateUsageUploadFeatureAvailability {
     static let featureEnabledEnvironmentKey = "SPILL_PRIVATE_USAGE_FEATURE_ENABLED"
     static let featureEnabledInfoDictionaryKey = "SPILLPrivateUsageFeatureEnabled"
 
-    static var isEnabledInCurrentBuild: Bool {
-        isEnabled()
-    }
+    /// Resolved once: SwiftUI bodies read this often, and copying the process environment each time can stall the main thread.
+    static let isEnabledInCurrentBuild: Bool = isEnabled()
 
     static func isEnabled(
         processEnvironment: [String: String] = ProcessInfo.processInfo.environment,

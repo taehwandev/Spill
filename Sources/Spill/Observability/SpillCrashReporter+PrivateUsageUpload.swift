@@ -15,7 +15,7 @@ extension SpillCrashReporter {
         error: Error
     ) {
         guard isReportingEnabled,
-              shouldCapturePrivateUsageUploadFailure(error)
+              shouldCapturePrivateUsageUploadFailure(error, operation: operation)
         else {
             return
         }
@@ -37,22 +37,21 @@ extension SpillCrashReporter {
             scope.setTag(value: descriptor.revokedConnection ? "true" : "false", key: "private_usage_revoked")
         }
     }
-}
 
-private extension SpillCrashReporter {
-    struct PrivateUsageUploadErrorDescriptor {
-        let kind: String
-        let relayStatus: String
-        let relayReason: String
-        let revokedConnection: Bool
-    }
-
-    static func shouldCapturePrivateUsageUploadFailure(_ error: Error) -> Bool {
+    static func shouldCapturePrivateUsageUploadFailure(
+        _ error: Error,
+        operation: PrivateUsageUploadOperation
+    ) -> Bool {
         guard let uploadError = error as? PrivateUsageUploadError else {
             return true
         }
 
         if uploadError.isRevokedConnection {
+            return false
+        }
+
+        // Background uploads retry on the next tick; offline or sleeping Macs are not app failures.
+        if operation == .automaticUpload, case .relayTransportFailed = uploadError {
             return false
         }
 
@@ -75,6 +74,15 @@ private extension SpillCrashReporter {
              .keyWrappingFailed:
             return true
         }
+    }
+}
+
+private extension SpillCrashReporter {
+    struct PrivateUsageUploadErrorDescriptor {
+        let kind: String
+        let relayStatus: String
+        let relayReason: String
+        let revokedConnection: Bool
     }
 
     static func privateUsageUploadErrorDescriptor(_ error: Error) -> PrivateUsageUploadErrorDescriptor {
