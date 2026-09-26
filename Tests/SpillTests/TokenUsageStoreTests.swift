@@ -518,6 +518,14 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(TokenMeteringL10n.taskLabel("ux_copy_review", language: .english), "Ux Copy Review")
     }
 
+    @MainActor
+    func testBrandWordmarkDecodesDownsampled() throws {
+        let image = try XCTUnwrap(SpillBrandWordmarkImage.shared)
+        let cgImage = try XCTUnwrap(image.cgImage(forProposedRect: nil, context: nil, hints: nil))
+        XCTAssertEqual(max(cgImage.width, cgImage.height), SpillBrandWordmarkImage.maximumPixelSize)
+        XCTAssertEqual(Double(cgImage.width) / Double(cgImage.height), 3212.0 / 1588.0, accuracy: 0.02)
+    }
+
     func testBrandLockupIsSharedAcrossAppSurfaces() throws {
         let root = Self.repositoryRootURL()
         let package = try String(contentsOf: root.appendingPathComponent("Package.swift"))
@@ -532,7 +540,10 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(brandLockupView.contains("struct SpillBrandLockupView"))
         XCTAssertTrue(brandLockupView.contains("var markStyle: MenuBarTriggerIconStyle?"))
         XCTAssertTrue(brandLockupView.contains("if let markStyle"))
-        XCTAssertTrue(brandLockupView.contains("SpillResourceBundle.image(named: \"spill-logo-wordmark\")"))
+        let wordmarkImage = try Self.source(named: "SpillBrandWordmarkImage.swift")
+        XCTAssertTrue(brandLockupView.contains("SpillBrandWordmarkImage.shared"))
+        XCTAssertTrue(wordmarkImage.contains("SpillResourceBundle.resourceBundle()?.url(forResource: \"spill-logo-wordmark\""))
+        XCTAssertTrue(wordmarkImage.contains("kCGImageSourceThumbnailMaxPixelSize: maximumPixelSize"))
         XCTAssertFalse(brandLockupView.contains("Bundle.module.image(forResource: \"spill-logo-wordmark\")"))
         XCTAssertTrue(brandLockupView.contains("Image(nsImage: image)"))
         XCTAssertTrue(spillBarView.contains("SpillBrandLockupView("))
