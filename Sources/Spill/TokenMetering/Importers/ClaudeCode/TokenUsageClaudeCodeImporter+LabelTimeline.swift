@@ -11,16 +11,43 @@ extension TokenUsageClaudeCodeImporter {
         }
 
         let entries: [Entry]
+        /// Longest `expiresAt - updatedAt` span; bounds how far back a lookup must look.
+        private let maximumSpan: TimeInterval
 
-        init(entries: [Entry]) {
-            self.entries = entries.sorted { lhs, rhs in
+        init(entries: [Entry], isSorted: Bool = false) {
+            self.entries = isSorted ? entries : Self.sorted(entries)
+            maximumSpan = entries.reduce(0) { max($0, $1.expiresAt.timeIntervalSince($1.updatedAt)) }
+        }
+
+        static func sorted(_ entries: [Entry]) -> [Entry] {
+            entries.sorted { lhs, rhs in
                 lhs.updatedAt < rhs.updatedAt
             }
         }
 
+        /// The latest-updated entry whose window covers `timestamp`. A history can hold
+        /// hundreds of thousands of entries, so this binary-searches the last entry updated at
+        /// or before `timestamp` and walks back only while an earlier window could still cover it.
         func label(for timestamp: Date) -> EventLabel {
-            let match = entries.last {
-                $0.updatedAt <= timestamp && timestamp <= $0.expiresAt
+            var low = 0
+            var high = entries.count
+            while low < high {
+                let middle = (low + high) / 2
+                if entries[middle].updatedAt <= timestamp {
+                    low = middle + 1
+                } else {
+                    high = middle
+                }
+            }
+            let earliestCoveringUpdate = timestamp.addingTimeInterval(-maximumSpan)
+            var match: Entry?
+            var index = low - 1
+            while index >= 0, entries[index].updatedAt >= earliestCoveringUpdate {
+                if timestamp <= entries[index].expiresAt {
+                    match = entries[index]
+                    break
+                }
+                index -= 1
             }
             return EventLabel(
                 taskType: match?.taskType ?? .uncategorized,
@@ -33,8 +60,21 @@ extension TokenUsageClaudeCodeImporter {
     struct LabelTimelineCache {
         var fileID: UInt64?
         var byteOffset: UInt64 = 0
+        /// Kept sorted by `updatedAt` so each import does not re-sort the whole history.
         var completedEntries: [LabelTimeline.Entry] = []
         var pendingLineData = Data()
+
+        mutating func appendEntries(_ newEntries: [LabelTimeline.Entry]) {
+            guard !newEntries.isEmpty else {
+                return
+            }
+            let sortedNewEntries = LabelTimeline.sorted(newEntries)
+            if let last = completedEntries.last, let first = sortedNewEntries.first, first.updatedAt < last.updatedAt {
+                completedEntries = LabelTimeline.sorted(completedEntries + sortedNewEntries)
+            } else {
+                completedEntries.append(contentsOf: sortedNewEntries)
+            }
+        }
     }
 
     struct EventLabel {
@@ -75,8 +115,16 @@ extension TokenUsageClaudeCodeImporter {
         labelTimelineCache.byteOffset += UInt64(appendedData.count)
         labelTimelineBytesRead += appendedData.count
 
-        var combinedData = labelTimelineCache.pendingLineData
-        combinedData.append(appendedData)
+        // Prepend a carried partial line only when there is one; otherwise this would copy the
+        // whole appended read (tens of MB on a first launch) just to concatenate nothing.
+        let combinedData: Data
+        if labelTimelineCache.pendingLineData.isEmpty {
+            combinedData = appendedData
+        } else {
+            var joined = labelTimelineCache.pendingLineData
+            joined.append(appendedData)
+            combinedData = joined
+        }
         var lineSegments = combinedData.split(
             separator: UInt8(ascii: "\n"),
             omittingEmptySubsequences: false
@@ -89,17 +137,32 @@ extension TokenUsageClaudeCodeImporter {
             labelTimelineCache.pendingLineData = Data(lineSegments.popLast() ?? Data.SubSequence())
         }
 
-        labelTimelineCache.completedEntries.append(contentsOf: lineSegments.compactMap {
-            parseLabelTimelineEntry(from: Data($0))
-        })
+        // Parse in bounded batches so the Foundation objects JSONSerialization autoreleases
+        // for a large first read are freed as we go instead of piling up until the task ends.
+        var parsedEntries = [LabelTimeline.Entry]()
+        var batchStart = lineSegments.startIndex
+        while batchStart < lineSegments.endIndex {
+            let batchEnd = lineSegments.index(batchStart, offsetBy: 1_000, limitedBy: lineSegments.endIndex)
+                ?? lineSegments.endIndex
+            autoreleasepool {
+                for segment in lineSegments[batchStart..<batchEnd] {
+                    if let entry = parseLabelTimelineEntry(from: Data(segment)) {
+                        parsedEntries.append(entry)
+                    }
+                }
+            }
+            batchStart = batchEnd
+        }
+        labelTimelineCache.appendEntries(parsedEntries)
         return cachedLabelTimeline()
     }
 
     private func cachedLabelTimeline() -> LabelTimeline {
-        var entries = labelTimelineCache.completedEntries
-        if let pendingEntry = parseLabelTimelineEntry(from: labelTimelineCache.pendingLineData) {
-            entries.append(pendingEntry)
+        guard let pendingEntry = parseLabelTimelineEntry(from: labelTimelineCache.pendingLineData) else {
+            return LabelTimeline(entries: labelTimelineCache.completedEntries, isSorted: true)
         }
+        var entries = labelTimelineCache.completedEntries
+        entries.append(pendingEntry)
         return LabelTimeline(entries: entries)
     }
 

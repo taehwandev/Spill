@@ -2404,6 +2404,34 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(store.loadEvents().count, 2, "store must contain two distinct events")
     }
 
+    /// The indexed label lookup must pick exactly what the original rule picked: the
+    /// latest-updated entry whose window covers the timestamp, across overlaps and gaps.
+    func testClaudeLabelTimelineLookupMatchesLinearScan() {
+        typealias Entry = TokenUsageClaudeCodeImporter.LabelTimeline.Entry
+        var generator = SystemRandomNumberGenerator()
+        let base = Date(timeIntervalSince1970: 1_780_000_000)
+        let taskTypes: [TokenUsageTaskType] = [.debugging, .codeReview, .analysis, .testing]
+        let entries = (0..<400).map { index -> Entry in
+            let updatedAt = base.addingTimeInterval(Double(Int.random(in: 0..<20_000, using: &generator)))
+            return Entry(
+                taskType: taskTypes[index % taskTypes.count],
+                stage: .implement,
+                projectID: "project_\(index)",
+                updatedAt: updatedAt,
+                expiresAt: updatedAt.addingTimeInterval(Double(Int.random(in: 0..<1_800, using: &generator)))
+            )
+        }
+        let timeline = TokenUsageClaudeCodeImporter.LabelTimeline(entries: entries)
+
+        for offset in stride(from: -100, to: 22_000, by: 37) {
+            let timestamp = base.addingTimeInterval(Double(offset))
+            let expected = timeline.entries.last { $0.updatedAt <= timestamp && timestamp <= $0.expiresAt }
+            let label = timeline.label(for: timestamp)
+            XCTAssertEqual(label.projectID, expected?.projectID ?? "project_global", "timestamp offset \(offset)")
+            XCTAssertEqual(label.taskType, expected?.taskType ?? .uncategorized, "timestamp offset \(offset)")
+        }
+    }
+
     /// A fully read transcript is not reopened, an unchanged scan does not rewrite the state
     /// file, and a transcript idle for over a day drops its requestId set but keeps its cursor.
     func testClaudeCodeImporterSkipsUnchangedStateAndPrunesIdleRequestIDs() throws {
