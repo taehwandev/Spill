@@ -800,6 +800,20 @@ final class MenuBarStatusContentViewTests: XCTestCase {
         )
     }
 
+    func testCachedTextWidthMatchesDirectMeasurementAndIntrinsicWidth() {
+        let font = NSFont.monospacedDigitSystemFont(ofSize: 13.5, weight: .regular)
+        for text in ["12.3%", "4.5 GB", "12.3%"] {
+            XCTAssertEqual(
+                MenuBarStatusContentView.measuredTextWidth(text, font: font),
+                (text as NSString).size(withAttributes: [.font: font]).width
+            )
+        }
+
+        let segments = [makeStatusSegment(kind: .cpu, value: "12.3%"), makeStatusSegment(kind: .memory, value: "4.5 GB")]
+        let view = MenuBarStatusContentView(segments: segments)
+        XCTAssertEqual(view.intrinsicContentSize.width, MenuBarStatusContentView.preferredWidth(for: segments))
+    }
+
     private func makeStatusSegment(
         kind: MenuBarStatusSegment.Kind,
         value: String

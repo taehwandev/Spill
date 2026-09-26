@@ -60,17 +60,17 @@ final class MenuBarStatusContentView: NSView {
         fatalError("init(coder:) has not been implemented")
     }
 
+    /// Every input is immutable, so Auto Layout passes reuse one measurement.
+    private lazy var cachedPreferredWidth = Self.preferredWidth(
+        for: segments,
+        layoutStyle: layoutStyle,
+        textFontSize: textFontSize,
+        textIsBold: textIsBold,
+        groupsMainCaffeine: groupsMainCaffeine
+    )
+
     override var intrinsicContentSize: NSSize {
-        NSSize(
-            width: Self.preferredWidth(
-                for: segments,
-                layoutStyle: layoutStyle,
-                textFontSize: textFontSize,
-                textIsBold: textIsBold,
-                groupsMainCaffeine: groupsMainCaffeine
-            ),
-            height: Self.height
-        )
+        NSSize(width: cachedPreferredWidth, height: Self.height)
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
@@ -298,6 +298,35 @@ extension MenuBarStatusContentView {
 }
 
 extension MenuBarStatusContentView {
+    private struct TextWidthKey: Hashable {
+        let text: String
+        let fontName: String
+        let pointSize: CGFloat
+    }
+
+    private static let textWidthCacheLock = NSLock()
+    private nonisolated(unsafe) static var textWidthCache: [TextWidthKey: CGFloat] = [:]
+    private static let textWidthCacheLimit = 512
+
+    /// Menu bar values repeat constantly (monospaced digits, fixed labels), and fitting
+    /// measures the same strings several times per refresh, so widths are memoized.
+    static func measuredTextWidth(_ text: String, font: NSFont) -> CGFloat {
+        let key = TextWidthKey(text: text, fontName: font.fontName, pointSize: font.pointSize)
+        if let width = textWidthCacheLock.withLock({ textWidthCache[key] }) {
+            return width
+        }
+        let width = (text as NSString).size(withAttributes: [.font: font]).width
+        textWidthCacheLock.withLock {
+            if textWidthCache.count >= textWidthCacheLimit {
+                textWidthCache.removeAll(keepingCapacity: true)
+            }
+            textWidthCache[key] = width
+        }
+        return width
+    }
+}
+
+extension MenuBarStatusContentView {
     private static func compactStackChipWidth(
         for segments: [MenuBarStatusSegment],
         textFontSize: CGFloat,
@@ -305,7 +334,7 @@ extension MenuBarStatusContentView {
     ) -> CGFloat {
         let font = compactStackTextFont(textFontSize: textFontSize, textIsBold: textIsBold)
         let maxTextWidth = segments.reduce(CGFloat.zero) { partial, segment in
-            let textWidth = (segment.value as NSString).size(withAttributes: [.font: font]).width
+            let textWidth = Self.measuredTextWidth(segment.value, font: font)
             return max(partial, ceil(textWidth))
         }
 
@@ -317,14 +346,13 @@ extension MenuBarStatusContentView {
         textFontSize: CGFloat,
         textIsBold: Bool
     ) -> CGFloat {
-        let titleWidth = (verticalTitle(for: segment) as NSString).size(
-            withAttributes: [.font: verticalTitleFont(textFontSize: textFontSize)]
-        ).width
+        let titleWidth = Self.measuredTextWidth(
+            verticalTitle(for: segment),
+            font: verticalTitleFont(textFontSize: textFontSize)
+        )
         let valueWidth = segment.usesChartPresentation
             ? sparklineWidth
-            : (segment.value as NSString).size(
-                withAttributes: [.font: verticalValueFont(textFontSize: textFontSize, textIsBold: textIsBold)]
-            ).width
+            : Self.measuredTextWidth(segment.value, font: verticalValueFont(textFontSize: textFontSize, textIsBold: textIsBold))
         return max(verticalChipMinWidth, ceil(max(titleWidth, valueWidth)) + verticalHorizontalPadding)
     }
 
@@ -402,15 +430,11 @@ extension MenuBarStatusContentView {
         }
 
         if segment.isValueOnly {
-            let textWidth = (segment.value as NSString).size(
-                withAttributes: [.font: compactIconValueFont(textFontSize: textFontSize, textIsBold: textIsBold)]
-            ).width
+            let textWidth = Self.measuredTextWidth(segment.value, font: compactIconValueFont(textFontSize: textFontSize, textIsBold: textIsBold))
             return max(compactIconValueMinWidth, ceil(textWidth) + compactIconValueHorizontalPadding)
         }
 
-        let textWidth = (segment.value as NSString).size(
-            withAttributes: [.font: textFont(textFontSize: textFontSize, textIsBold: textIsBold)]
-        ).width
+        let textWidth = Self.measuredTextWidth(segment.value, font: textFont(textFontSize: textFontSize, textIsBold: textIsBold))
         return ceil(textWidth) + 29
     }
 
