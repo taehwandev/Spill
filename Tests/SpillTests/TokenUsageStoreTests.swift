@@ -2404,6 +2404,50 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(store.loadEvents().count, 2, "store must contain two distinct events")
     }
 
+    /// A fully read transcript is not reopened, an unchanged scan does not rewrite the state
+    /// file, and a transcript idle for over a day drops its requestId set but keeps its cursor.
+    func testClaudeCodeImporterSkipsUnchangedStateAndPrunesIdleRequestIDs() throws {
+        let rootURL = temporaryDirectoryURL()
+        let projectsURL = rootURL.appendingPathComponent("projects", isDirectory: true)
+        let projectURL = projectsURL.appendingPathComponent("project-opaque", isDirectory: true)
+        try FileManager.default.createDirectory(at: projectURL, withIntermediateDirectories: true)
+        let transcriptURL = projectURL.appendingPathComponent("11111111111111111111111111111111.jsonl")
+        let stateURL = rootURL.appendingPathComponent("claude-active-state.json")
+        try (#"{"timestamp":"2026-06-26T00:00:00.000Z","requestId":"req_idle","message":{"role":"assistant","model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":10},"content":[]}}"# + "\n")
+            .write(to: transcriptURL, atomically: true, encoding: .utf8)
+        let store = TokenUsageStore(fileURL: temporaryEventsURL())
+        var currentDate = Date()
+        let importer = TokenUsageClaudeCodeImporter(
+            projectsDirectory: projectsURL,
+            labelTimelineURL: rootURL.appendingPathComponent("missing-labels.jsonl"),
+            stateURL: stateURL,
+            diagnosticsURL: nil,
+            sessionDiscoveryCacheLifetime: 0,
+            now: { currentDate }
+        )
+        func stateFileNumber() throws -> Int? {
+            try FileManager.default.attributesOfItem(atPath: stateURL.path)[.systemFileNumber] as? Int
+        }
+
+        XCTAssertEqual(importer.importRecentSessions(into: store).importedEvents, 1)
+        let firstState = try decodedJSONObject(from: Data(contentsOf: stateURL))
+        XCTAssertNotNil((firstState["emitted_request_ids_by_source"] as? [String: Any])?.values.first)
+        let firstFileNumber = try stateFileNumber()
+
+        XCTAssertEqual(importer.importRecentSessions(into: store).importedEvents, 0)
+        XCTAssertEqual(try stateFileNumber(), firstFileNumber, "an unchanged scan must not rewrite state")
+
+        currentDate = currentDate.addingTimeInterval(TokenUsageClaudeCodeImporter.emittedRequestIDRetention + 60)
+        XCTAssertEqual(importer.importRecentSessions(into: store).importedEvents, 0)
+        let prunedState = try decodedJSONObject(from: Data(contentsOf: stateURL))
+        XCTAssertEqual((prunedState["emitted_request_ids_by_source"] as? [String: Any])?.count, 0)
+        XCTAssertEqual(
+            (prunedState["byte_offset_by_source"] as? [String: Any])?.count,
+            (firstState["byte_offset_by_source"] as? [String: Any])?.count
+        )
+        XCTAssertEqual(store.loadEvents().count, 1)
+    }
+
     func testClaudeCodeActiveImporterLeavesSubagentTranscriptFilesForStopHook() throws {
         let rootURL = temporaryDirectoryURL()
         let projectsURL = rootURL.appendingPathComponent("projects", isDirectory: true)

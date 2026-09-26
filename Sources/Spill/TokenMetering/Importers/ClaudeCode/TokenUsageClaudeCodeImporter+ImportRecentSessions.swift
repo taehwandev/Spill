@@ -15,6 +15,8 @@ extension TokenUsageClaudeCodeImporter {
         var invalidEvents = 0
         var candidateEvents = [TokenUsageEvent]()
         var updatedCursorKeys = Set<String>()
+        var prunedRequestIDs = false
+        let currentDate = now()
 
         for sessionFile in sessionFiles {
             guard !shouldCancel() else { break }
@@ -22,6 +24,23 @@ extension TokenUsageClaudeCodeImporter {
             let stateKey = Self.sourceStateKey(for: sessionFile.sessionID)
             let priorOffset = importState.byteOffsetBySource[stateKey] ?? 0
             let startingTurnIndex = importState.nextTurnIndexBySource[stateKey] ?? 0
+
+            // A transcript already read to its end needs only a stat, not an open and read. Once
+            // it has been idle for a day no duplicate requestId can straddle a batch boundary, so
+            // its dedup set is dropped while the byte cursor and turn index are kept.
+            // FileManager attributes, not URL resource values: discovery reuses URL instances for
+            // up to a minute and URLs cache resource values, which would report a stale size.
+            let attributes = try? fileManager.attributesOfItem(atPath: sessionFile.url.path)
+            let fileSize = (attributes?[.size] as? NSNumber)?.intValue
+            if priorOffset > 0, fileSize == priorOffset {
+                scannedFiles += 1
+                if let modifiedAt = attributes?[.modificationDate] as? Date,
+                   currentDate.timeIntervalSince(modifiedAt) > Self.emittedRequestIDRetention,
+                   importState.emittedRequestIDsBySource.removeValue(forKey: stateKey) != nil {
+                    prunedRequestIDs = true
+                }
+                continue
+            }
 
             let (turns, newOffset, nextTurnIndex) = parseTurns(
                 from: sessionFile.url,
@@ -77,7 +96,9 @@ extension TokenUsageClaudeCodeImporter {
         var failedToWriteEvents = false
         do {
             importedEvents = try store.appendEventsWithoutLoading(candidateEvents)
-            writeImportState(importState)
+            if !updatedCursorKeys.isEmpty || prunedRequestIDs {
+                writeImportState(importState)
+            }
         } catch {
             importedEvents = 0
             failedToWriteEvents = true
@@ -97,4 +118,6 @@ extension TokenUsageClaudeCodeImporter {
         writeDiagnostic(summary)
         return summary
     }
+
+    static let emittedRequestIDRetention: TimeInterval = 24 * 60 * 60
 }
