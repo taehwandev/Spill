@@ -465,6 +465,7 @@ extension TokenMeteringCoordinator {
         guard PrivateUsageUploadFeatureAvailability.isEnabledInCurrentBuild else {
             privateUsageUploadTask?.cancel()
             privateUsageUploadTask = nil
+            prunePrivateUsageEventChangesWhileUploadUnavailable()
             return
         }
 
@@ -500,6 +501,22 @@ extension TokenMeteringCoordinator {
             _ = await coordinator.runAutomaticUploadIfNeeded(
                 isEnabled: settings.privateUsageUploadEnabled,
                 now: uploadNow
+            )
+        }
+    }
+}
+
+extension TokenMeteringCoordinator {
+    /// SQLite triggers record a private-usage change row for every event write even in builds
+    /// without upload, where nothing ever consumes them. A later connection starts with a full
+    /// resync, so only cursors of a connection saved by an earlier build need their rows kept,
+    /// and minimumPrunableChangeID already honors those.
+    private func prunePrivateUsageEventChangesWhileUploadUnavailable() {
+        let usageStore = usageStore
+        let stateStore = PrivateUsageUploadStateStore(environment: settings.privateUsageUploadEnvironment)
+        Task.detached(priority: .utility) {
+            usageStore.prunePrivateUsageEventChanges(
+                throughChangeID: stateStore.minimumPrunableChangeID(including: .max)
             )
         }
     }

@@ -2129,6 +2129,42 @@ final class PrivateUsageUploadTests: XCTestCase {
         )
     }
 
+    /// Builds without upload prune the whole change journal unless a connection saved by an
+    /// earlier build still holds a cursor, in which case rows after that cursor survive.
+    func testUnavailableUploadPrunesChangeJournalBeyondSavedCursors() throws {
+        let usageStore = makeUsageStore()
+        for index in 0..<3 {
+            try usageStore.appendEvent(makeEvent(
+                spanID: "span_unavailable_\(index)",
+                runID: "run_unavailable_\(index)",
+                aiTool: .codex,
+                taskType: "code_generation",
+                stage: "implement",
+                model: "gpt-5",
+                input: 11,
+                output: 13,
+                createdAt: Date(timeIntervalSince1970: 1_780_000_000 + Double(index))
+            ))
+        }
+        let changes = usageStore.loadPrivateUsageEventChanges(afterChangeID: 0).changes
+        XCTAssertEqual(changes.count, 3)
+
+        let defaults = makeDefaults()
+        let stateStore = PrivateUsageUploadStateStore(defaults: defaults, environment: .production)
+        var savedState = PrivateUsageUploadPersistence.empty
+        savedState.hasSavedConnection = true
+        savedState.lastProcessedEventChangeID = changes[0].changeID
+        stateStore.save(savedState)
+
+        usageStore.prunePrivateUsageEventChanges(throughChangeID: stateStore.minimumPrunableChangeID(including: .max))
+        XCTAssertEqual(usageStore.loadPrivateUsageEventChanges(afterChangeID: 0).changes.count, 2)
+
+        savedState.hasSavedConnection = false
+        stateStore.save(savedState)
+        usageStore.prunePrivateUsageEventChanges(throughChangeID: stateStore.minimumPrunableChangeID(including: .max))
+        XCTAssertTrue(usageStore.loadPrivateUsageEventChanges(afterChangeID: 0).changes.isEmpty)
+    }
+
     func testGrantExchangeResetsAcknowledgementsForChangedSyncTarget() async throws {
         let timeZone = try XCTUnwrap(TimeZone(identifier: "UTC"))
         let calendar = fixedCalendar(timeZone: timeZone)
