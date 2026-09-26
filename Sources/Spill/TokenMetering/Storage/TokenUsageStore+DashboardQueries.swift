@@ -74,6 +74,17 @@ extension TokenUsageStore {
         if !conditions.isEmpty {
             sql += "\nWHERE \(conditions.joined(separator: " AND "))"
         }
+        // MIN/MAX over `ai_tool IN (...)` cannot use the min/max optimization and scans the
+        // whole (ai_tool, created_at) index; one indexed lookup per tool is O(log N) each.
+        if selectedTool == nil,
+           let tools = Self.dashboardToolList(dashboardToolsOnly: dashboardToolsOnly, visibleTools: visibleTools),
+           !tools.isEmpty {
+            let perTool = tools.map { tool in
+                let predicate = "FROM token_usage_events WHERE ai_tool = '\(tool.rawValue)'"
+                return "SELECT (SELECT MIN(created_at) \(predicate)) AS earliest, (SELECT MAX(created_at) \(predicate)) AS latest"
+            }
+            sql = "SELECT MIN(earliest), MAX(latest) FROM (\(perTool.joined(separator: " UNION ALL ")))"
+        }
 
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
@@ -239,12 +250,22 @@ extension TokenUsageStore {
         database: OpaquePointer,
         failureObserver: TokenUsageQueryFailureObserver? = nil
     ) -> [TokenUsageAITool: Date] {
-        let sql = """
+        var sql = """
         SELECT ai_tool, MAX(created_at)
         FROM token_usage_events
         \(Self.dashboardWhereClause(startingAt: startDate, endingBefore: endDate, dashboardToolsOnly: dashboardToolsOnly, visibleTools: visibleTools))
         GROUP BY ai_tool
         """
+        // GROUP BY ai_tool walks every matching index entry; a per-tool MAX is one index seek.
+        // ?1/?2 are reused by every subquery, so the shared date-range binding still applies.
+        if let tools = Self.dashboardToolList(dashboardToolsOnly: dashboardToolsOnly, visibleTools: visibleTools),
+           !tools.isEmpty {
+            let dateCondition = startDate != nil && endDate != nil ? " AND created_at >= ?1 AND created_at < ?2" : ""
+            sql = tools.map { tool in
+                "SELECT '\(tool.rawValue)', (SELECT MAX(created_at) FROM token_usage_events WHERE ai_tool = '\(tool.rawValue)'\(dateCondition))"
+            }
+            .joined(separator: " UNION ALL ")
+        }
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
               let statement

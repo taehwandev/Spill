@@ -4511,7 +4511,8 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(indexNames.contains("idx_token_usage_events_task_type_created_at"))
         XCTAssertTrue(indexNames.contains("idx_token_usage_events_stage_created_at"))
         XCTAssertTrue(indexNames.contains("idx_token_usage_events_model_created_at"))
-        XCTAssertTrue(indexNames.contains("idx_token_usage_events_run_id"))
+        XCTAssertFalse(indexNames.contains("idx_token_usage_events_run_id"))
+        XCTAssertTrue(indexNames.contains("idx_token_usage_events_dedup_lookup"))
         XCTAssertTrue(indexNames.contains("idx_token_usage_events_project_created_at"))
     }
 
@@ -5188,6 +5189,43 @@ final class TokenUsageStoreTests: XCTestCase {
         )
         XCTAssertTrue(monthlyBuckets.count >= 2)
         XCTAssertEqual(monthlyBuckets.reduce(0) { $0 + $1.eventCount }, 4)
+    }
+
+    /// Date bounds and last-updated dates run as one indexed lookup per scoped tool; they must
+    /// still ignore tools outside the scope and tools that have no events.
+    func testPerToolDateBoundsAndLastUpdatedIgnoreUnscopedTools() throws {
+        let store = TokenUsageStore(fileURL: temporaryEventsURL())
+        let rows: [(TokenUsageAITool, String)] = [
+            (.codex, "2026-07-02T10:00:00.000Z"),
+            (.codex, "2026-07-09T10:00:00.000Z"),
+            (.claude, "2026-07-05T10:00:00.000Z"),
+            (.unknown, "2026-06-01T10:00:00.000Z"),
+            (.unknown, "2026-08-01T10:00:00.000Z")
+        ]
+        for (index, row) in rows.enumerated() {
+            try store.appendEvent(Self.safeEvent(aiTool: row.0, spanID: "span_bounds_\(index)", createdAt: row.1))
+        }
+
+        let bounds = store.dashboardDateBounds()
+        XCTAssertEqual(bounds.earliest, try Self.date("2026-07-02T10:00:00.000Z"))
+        XCTAssertEqual(bounds.latest, try Self.date("2026-07-09T10:00:00.000Z"))
+
+        let claudeOnly = store.dashboardDateBounds(visibleTools: [.claude])
+        XCTAssertEqual(claudeOnly.earliest, try Self.date("2026-07-05T10:00:00.000Z"))
+        XCTAssertEqual(claudeOnly.latest, try Self.date("2026-07-05T10:00:00.000Z"))
+
+        let lastUpdated = store.withDatabaseConnection(nil, default: [:]) { database in
+            store.loadLastUpdatedByTool(
+                startingAt: try? Self.date("2026-07-01T00:00:00.000Z"),
+                endingBefore: try? Self.date("2026-07-08T00:00:00.000Z"),
+                dashboardToolsOnly: true,
+                database: database
+            )
+        }
+        XCTAssertEqual(lastUpdated, [
+            .codex: try Self.date("2026-07-02T10:00:00.000Z"),
+            .claude: try Self.date("2026-07-05T10:00:00.000Z")
+        ])
     }
 
     /// SQL pre-aggregates dashboard source rows per quarter-hour UTC slice. Kathmandu (+05:45)

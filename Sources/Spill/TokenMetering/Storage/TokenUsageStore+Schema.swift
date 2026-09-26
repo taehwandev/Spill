@@ -42,9 +42,8 @@ extension TokenUsageStore {
         // (run_id, input_tokens, output_tokens). Without this index in place first, every one of
         // those passes falls back to a full table scan per candidate row on a table that can hold
         // hundreds of thousands of events — this was the root cause of a confirmed production
-        // main-thread hang at app launch (see refreshMenuBarTokenTotalAsync). idx_token_usage_events_run_id
-        // below becomes a redundant no-op once this broader index exists, but is left in place
-        // since other queries reference it by name.
+        // main-thread hang at app launch (see refreshMenuBarTokenTotalAsync). Its run_id prefix also
+        // serves every run_id lookup, so the older single-column run_id index is dropped below.
         try execute(
             """
             CREATE INDEX IF NOT EXISTS idx_token_usage_events_dedup_lookup
@@ -87,8 +86,7 @@ extension TokenUsageStore {
         )
         try execute(
             """
-            CREATE INDEX IF NOT EXISTS idx_token_usage_events_run_id
-            ON token_usage_events(run_id)
+            DROP INDEX IF EXISTS idx_token_usage_events_run_id
             """,
             database: database
         )

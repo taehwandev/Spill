@@ -239,22 +239,24 @@ extension TokenUsageStore {
         return "WHERE \(conditions.joined(separator: " AND "))"
     }
 
+    /// The tools a dashboard query is scoped to, or nil when it is not scoped by tool.
+    static func dashboardToolList(
+        dashboardToolsOnly: Bool,
+        visibleTools: Set<TokenUsageAITool>? = nil
+    ) -> [TokenUsageAITool]? {
+        if let visibleTools {
+            return visibleTools
+                .filter { !dashboardToolsOnly || $0.isDashboardTool }
+                .sorted { $0.rawValue < $1.rawValue }
+        }
+        return dashboardToolsOnly ? TokenUsageAITool.dashboardTools : nil
+    }
+
     static func dashboardToolCondition(
         dashboardToolsOnly: Bool,
         visibleTools: Set<TokenUsageAITool>? = nil
     ) -> String? {
-        let tools: [TokenUsageAITool]?
-        if let visibleTools {
-            tools = visibleTools
-                .filter { !dashboardToolsOnly || $0.isDashboardTool }
-                .sorted { $0.rawValue < $1.rawValue }
-        } else if dashboardToolsOnly {
-            tools = TokenUsageAITool.dashboardTools
-        } else {
-            tools = nil
-        }
-
-        guard let tools else {
+        guard let tools = dashboardToolList(dashboardToolsOnly: dashboardToolsOnly, visibleTools: visibleTools) else {
             return nil
         }
         guard !tools.isEmpty else {
