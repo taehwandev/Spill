@@ -57,51 +57,14 @@ handoff, or proof that the current turn was recorded. Do not inspect prompts,
 responses, commands, file paths, logs, diffs, source content, environment
 values, transcripts, shell history, or secrets to explain the output.
 
-## Mandatory: Route Before Every Task
+## Routing And Workflow Labels
 
-**Every task — including direct questions, single-step edits, and reviews —
-requires an Tao Agent OS start hook before starting work.** This is not
-optional. The hook runs the workflow route/preflight path and writes the Spill
-label context so token usage is correctly tagged by the Stop hook.
+Follow the active Tao routing block in AGENTS.md for stateless answers,
+tracked work, continuation, and delegated-worker classification. Do not add a
+separate start requirement for direct questions or follow-ups.
 
-The UserPromptSubmit hook writes a baseline `triage/classify` label automatically,
-but that label is overwritten only when you run the explicit route below.
-If you skip the route, the Stop hook records every event as `analysis/classify`.
-
-### Start hook command shape
-
-```bash
-TAO_ROOT="${TAO_HOME:-$HOME/git/tao-agent-os}"
-SPILL_AI_TOOL=claude python3 "${TAO_ROOT}/scripts/agent-hook.py" start --project "$(pwd)" --rules "${TAO_ROOT}" --command <command> --request "<USER_REQUEST>"
-```
-
-For already-classified requests (second pass, follow-up, or any turn where the
-intent is unambiguous without further clarification):
-
-```bash
-TAO_ROOT="${TAO_HOME:-$HOME/git/tao-agent-os}"
-SPILL_AI_TOOL=claude python3 "${TAO_ROOT}/scripts/agent-hook.py" start --project "$(pwd)" --rules "${TAO_ROOT}" --command <command> --request-classified --classification-evidence "<evidence>"
-```
-
-### Command mapping
-
-| User intent | command |
-|---|---|
-| Question / investigation / analysis | `triage` |
-| Bug diagnosis or fix | `bugfix` |
-| New feature or code addition | `feature` |
-| Refactor or cleanup | `refactor` |
-| Code review | `review` |
-| Planning or task breakdown | `task` |
-| PRD or spec | `prd` |
-| Runtime setup, local prompt, hooks, metering install | `workflow-setup` |
-| Release or publish | `release` |
-| Docs update | `docs` |
-| Ambiguous — needs clarification | `ambiguity` |
-
-### When the start hook is missing
-
-Do not proceed with editing, reviewing, committing, or running tests until the
-start hook has been executed and the gate ledger from the route output is visible.
-If the route produces a `clarify_first` response, ask the user the blocker
-question before continuing.
+Preserve the existing Spill workflow labels and per-turn fallback. Use the
+current Claude runtime label for both; workflow-provided labels take precedence.
+Label handoff is separate from lifecycle admission and does not authorize work.
+When invoking workflows that provide labels, preserve SPILL_AI_TOOL=claude and
+SPILL_TOKEN_USAGE_AI_TOOL=claude; keep the per-turn fallback with --if-absent.
