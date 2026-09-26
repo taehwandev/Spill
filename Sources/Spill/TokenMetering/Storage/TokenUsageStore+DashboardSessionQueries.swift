@@ -1,30 +1,29 @@
 import Foundation
 import SQLite3
 
-/// A narrow per-row projection for session/work-item aggregation: only the columns
-/// TokenUsageDashboardSnapshot.sessionRows actually groups or sums by, instead of the full
-/// TokenUsageEvent (token breakdown, accounting, span/device/artifact IDs, model). Streaming
-/// this instead of full events is what lets the "all time" work-item view avoid holding the
-/// wide struct for every one of a large event history.
+/// Session/work-item source rows pre-aggregated in SQL per (project, task, stage, run, 15-minute
+/// UTC slice) instead of one row per event. Every real time zone offset and DST transition falls on
+/// a quarter hour, so all events in one slice share a local day and the Swift-side day bucketing
+/// against the app's Calendar stays exact while an "all time" history collapses to a few rows.
 struct TokenUsageDashboardSessionSourceRow {
     let projectID: String
     let taskType: TokenUsageTaskType
     let stage: TokenUsageStage
     let runID: String
+    /// Latest created_at in the slice.
     let rawCreatedAt: String
     let createdAt: Date?
     let dayBucket: String
+    let eventCount: Int
     let totalTokens: Int
     let freshTokens: Int
     let latencyMS: Int
 }
 
 extension TokenUsageStore {
-    /// Deliberately does not attempt day-bucket grouping in SQL: created_at's day boundary
-    /// must match the app's real Calendar (locale/timezone/DST), the same reasoning that keeps
-    /// loadDashboardDayTokenTotals streaming narrow rows and bucketing them in Swift rather than
-    /// doing it with a SQL date function. Grouping by (project_id, task_type, stage, day bucket)
-    /// happens in TokenUsageDashboardSnapshot, not here.
+    /// Local day boundaries still come from the app's real Calendar in Swift; SQL only sums
+    /// within quarter-hour UTC slices, which never straddle a local midnight. Grouping by
+    /// (project_id, task_type, stage, day bucket) happens in TokenUsageDashboardSnapshot.
     func loadSessionSourceRows(
         startingAt startDate: Date? = nil,
         endingBefore endDate: Date? = nil,
@@ -54,10 +53,11 @@ extension TokenUsageStore {
         let whereClause = conditions.isEmpty ? "" : "WHERE \(conditions.joined(separator: " AND "))"
 
         let sql = """
-        SELECT project_id, task_type, stage, run_id, created_at,
-               total_tokens, \(Self.dashboardFreshTokenSQL), latency_ms
+        SELECT project_id, task_type, stage, run_id, MAX(created_at),
+               SUM(total_tokens), SUM(\(Self.dashboardFreshTokenSQL)), SUM(latency_ms), COUNT(*)
         FROM token_usage_events
         \(whereClause)
+        GROUP BY project_id, task_type, stage, run_id, \(Self.dashboardQuarterHourSliceSQL)
         """
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
@@ -112,6 +112,7 @@ extension TokenUsageStore {
                 rawCreatedAt: createdAtText,
                 createdAt: parsedDate,
                 dayBucket: dayBucket,
+                eventCount: Int(sqlite3_column_int64(statement, 8)),
                 totalTokens: Int(sqlite3_column_int64(statement, 5)),
                 freshTokens: Int(sqlite3_column_int64(statement, 6)),
                 latencyMS: Int(sqlite3_column_int64(statement, 7))
@@ -122,6 +123,14 @@ extension TokenUsageStore {
         }
         return rows
     }
+
+    /// Groups normalized `YYYY-MM-DDTHH:MM:SS.sssZ` timestamps by quarter hour; any other
+    /// stored form stays its own group so its date is parsed exactly as before.
+    static let dashboardQuarterHourSliceSQL = """
+    CASE WHEN created_at GLOB '????-??-??T??:??:??.???Z'
+         THEN substr(created_at, 1, 14) || ((CAST(substr(created_at, 15, 2) AS INTEGER) / 15) * 15)
+         ELSE created_at END
+    """
 
     func sessionSourceRows(
         startingAt startDate: Date? = nil,

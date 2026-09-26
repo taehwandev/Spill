@@ -30,6 +30,7 @@ extension TokenUsageDashboardSnapshot {
                     $0 + (inputScope == .includeCache ? $1.totalTokens : $1.freshTokens)
                 }
                 let latency = groupedRows.reduce(0) { $0 + $1.latencyMS }
+                let spanCount = groupedRows.reduce(0) { $0 + $1.eventCount }
                 let latestDate = groupedRows.compactMap(\.createdAt).max()
                 let latestRaw = latestDate.map { ISO8601DateFormatter.tokenUsage.string(from: $0) }
                     ?? groupedRows.map(\.rawCreatedAt).max()
@@ -48,16 +49,16 @@ extension TokenUsageDashboardSnapshot {
                         title: localAliases[key.id] ?? Self.workItemTitle(key: key, language: language),
                         value: Self.formatTokens(totalT),
                         detail: TokenMeteringL10n.spansDetail(
-                            spanCount: groupedRows.count,
+                            spanCount: spanCount,
                             latencyMS: latency > 0 ? latency : nil,
                             latest: latestDisplay,
                             language: language
                         ),
-                        eventCount: groupedRows.count
+                        eventCount: spanCount
                     ),
                     latest: latestRaw,
                     totalTokens: totalT,
-                    spanCount: groupedRows.count,
+                    spanCount: spanCount,
                     runCount: runIDs.count
                 )
             }

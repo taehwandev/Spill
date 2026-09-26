@@ -4833,7 +4833,7 @@ final class TokenUsageStoreTests: XCTestCase {
 
         XCTAssertEqual(parsedEvents.count, 4)
         let sourceRows = store.sessionSourceRows(calendar: calendar)
-        XCTAssertEqual(sourceRows.count, 4)
+        XCTAssertEqual(sourceRows.reduce(0) { $0 + $1.eventCount }, 4)
 
         let rows = TokenUsageDashboardSnapshot.sessionRows(
             sourceRows: sourceRows,
@@ -4856,9 +4856,9 @@ final class TokenUsageStoreTests: XCTestCase {
         // Project/tool filters passed to the SQL layer must narrow results the same way the
         // in-memory events array would if it had already been filtered by them.
         let alphaOnly = store.sessionSourceRows(projectID: "project_alpha", calendar: calendar)
-        XCTAssertEqual(alphaOnly.count, 3)
+        XCTAssertEqual(alphaOnly.reduce(0) { $0 + $1.eventCount }, 3)
         let codexOnly = store.sessionSourceRows(selectedTool: .codex, calendar: calendar)
-        XCTAssertEqual(codexOnly.count, 3)
+        XCTAssertEqual(codexOnly.reduce(0) { $0 + $1.eventCount }, 3)
     }
 
     func testComparisonTokenTotalReturnsNilForEmptyRangeNotZero() throws {
@@ -5099,7 +5099,7 @@ final class TokenUsageStoreTests: XCTestCase {
         let events = store.loadEvents(startingAt: nil, endingBefore: nil)
         let parsedEvents = events.map { TokenUsageDashboardParsedEvent(event: $0, calendar: calendar) }
         let sourceRows = store.trendSourceRows(calendar: calendar)
-        XCTAssertEqual(sourceRows.count, parsedEvents.count)
+        XCTAssertEqual(sourceRows.reduce(0) { $0 + $1.eventCount }, parsedEvents.count)
 
         for period: TokenUsageDashboardPeriod in [.sevenDays, .thirtyDays, .all] {
             for inputScope: TokenUsageInputScope in [.includeCache, .freshOnly] {
@@ -5153,6 +5153,90 @@ final class TokenUsageStoreTests: XCTestCase {
         )
         XCTAssertTrue(monthlyBuckets.count >= 2)
         XCTAssertEqual(monthlyBuckets.reduce(0) { $0 + $1.eventCount }, 4)
+    }
+
+    /// SQL pre-aggregates dashboard source rows per quarter-hour UTC slice. Kathmandu (+05:45)
+    /// puts local midnight at 18:15 UTC, so events one minute on either side must still land
+    /// on different local days, and several events in one slice must sum like per-event rows.
+    func testQuarterHourSourceRowsKeepLocalDayBoundariesInOffsetTimeZone() throws {
+        let store = TokenUsageStore(fileURL: temporaryEventsURL())
+        let timeZone = try XCTUnwrap(TimeZone(identifier: "Asia/Kathmandu"))
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let createdAts = [
+            "2026-07-10T18:05:00.000Z",
+            "2026-07-10T18:14:00.000Z",
+            "2026-07-10T18:16:00.000Z",
+            "2026-07-10T18:29:00.000Z",
+            "2026-07-31T18:14:00.000Z",
+            "2026-07-31T18:16:00.000Z"
+        ]
+        for (index, createdAt) in createdAts.enumerated() {
+            try store.appendEvent(Self.safeEvent(
+                aiTool: index == createdAts.count - 1 ? .claude : .codex,
+                runID: "run_offset_\(index / 2)",
+                spanID: "span_offset_\(index)",
+                inputTokens: 100 + index,
+                outputTokens: 10,
+                projectID: "project_offset",
+                taskType: .debugging,
+                stage: .implement,
+                latencyMS: 5,
+                createdAt: createdAt
+            ))
+        }
+        let now = try XCTUnwrap(ISO8601DateFormatter.tokenUsage.date(from: "2026-08-02T00:00:00.000Z"))
+        let parsedEvents = store.loadEvents(startingAt: nil, endingBefore: nil)
+            .map { TokenUsageDashboardParsedEvent(event: $0, calendar: calendar) }
+        let sessionSource = store.sessionSourceRows(calendar: calendar)
+        let trendSource = store.trendSourceRows(calendar: calendar)
+        XCTAssertLessThan(trendSource.count, createdAts.count)
+
+        XCTAssertEqual(
+            TokenUsageDashboardSnapshot.sessionRows(
+                sourceRows: sessionSource,
+                inputScope: .includeCache,
+                language: .english,
+                localAliases: [:],
+                calendar: calendar,
+                now: now,
+                locale: Locale(identifier: "en_US_POSIX"),
+                timeZone: timeZone
+            ),
+            TokenUsageDashboardSnapshot.sessionRows(
+                events: parsedEvents,
+                inputScope: .includeCache,
+                language: .english,
+                localAliases: [:],
+                calendar: calendar,
+                now: now,
+                locale: Locale(identifier: "en_US_POSIX"),
+                timeZone: timeZone
+            )
+        )
+        for period: TokenUsageDashboardPeriod in [.sevenDays, .thirtyDays, .all] {
+            XCTAssertEqual(
+                TokenUsageDashboardTrendBucketBuilder.buckets(
+                    sourceRows: trendSource,
+                    selectedPeriod: period,
+                    language: .english,
+                    now: now,
+                    calendar: calendar,
+                    locale: Locale(identifier: "en_US_POSIX"),
+                    timeZone: timeZone
+                ),
+                TokenUsageDashboardTrendBucketBuilder.buckets(
+                    events: parsedEvents,
+                    selectedPeriod: period,
+                    language: .english,
+                    now: now,
+                    calendar: calendar,
+                    locale: Locale(identifier: "en_US_POSIX"),
+                    timeZone: timeZone
+                ),
+                "mismatch for period \(period)"
+            )
+        }
     }
 
     func testDashboardFocusedTotalsAndLastUpdatedByToolMatchPerEventSwiftAggregation() throws {

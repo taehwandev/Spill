@@ -1,24 +1,25 @@
 import Foundation
 import SQLite3
 
-/// A narrow per-row projection for trend-bucket aggregation: only what
-/// TokenUsageDashboardTrendBucketBuilder groups or sums by. ai_tool never fails to parse (the
-/// column always resolves to some TokenUsageAITool, defaulting to .unknown), so unlike the
-/// session source rows there is no skip-on-unparseable case here.
+/// Trend source rows pre-aggregated in SQL per (ai_tool, 15-minute UTC slice); see
+/// TokenUsageDashboardSessionSourceRow for why quarter-hour slices keep local day and month
+/// buckets exact. ai_tool never fails to parse (the column always resolves to some
+/// TokenUsageAITool, defaulting to .unknown), so there is no skip-on-unparseable case here.
 struct TokenUsageDashboardTrendSourceRow {
     let aiTool: TokenUsageAITool
+    /// Earliest created_at in the slice.
     let rawCreatedAt: String
     let createdAt: Date?
     let dayBucket: String
     let monthBucket: String
+    let eventCount: Int
     let totalTokens: Int
     let freshTokens: Int
 }
 
 extension TokenUsageStore {
-    /// Day/month bucket boundaries are computed in Swift against the app's real Calendar, not in
-    /// SQL -- the same timezone-safety reasoning as loadDashboardDayTokenTotals and
-    /// loadSessionSourceRows.
+    /// Day/month bucket boundaries are computed in Swift against the app's real Calendar; SQL only
+    /// sums within quarter-hour UTC slices, as in loadSessionSourceRows.
     func loadTrendSourceRows(
         startingAt startDate: Date? = nil,
         endingBefore endDate: Date? = nil,
@@ -35,9 +36,10 @@ extension TokenUsageStore {
             visibleTools: visibleTools
         )
         let sql = """
-        SELECT ai_tool, created_at, total_tokens, \(Self.dashboardFreshTokenSQL)
+        SELECT ai_tool, MIN(created_at), SUM(total_tokens), SUM(\(Self.dashboardFreshTokenSQL)), COUNT(*)
         FROM token_usage_events
         \(whereClause)
+        GROUP BY ai_tool, \(Self.dashboardQuarterHourSliceSQL)
         """
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
@@ -87,6 +89,7 @@ extension TokenUsageStore {
                 createdAt: parsedDate,
                 dayBucket: dayBucket,
                 monthBucket: monthBucket,
+                eventCount: Int(sqlite3_column_int64(statement, 4)),
                 totalTokens: Int(sqlite3_column_int64(statement, 2)),
                 freshTokens: Int(sqlite3_column_int64(statement, 3))
             ))

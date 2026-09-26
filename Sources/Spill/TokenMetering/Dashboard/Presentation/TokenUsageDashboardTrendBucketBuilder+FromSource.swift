@@ -236,7 +236,7 @@ private extension TokenUsageDashboardTrendBucketBuilder {
             inputScope: TokenUsageInputScope
         ) {
             let tokens = inputScope == .includeCache ? row.totalTokens : row.freshTokens
-            eventCount += 1
+            eventCount += row.eventCount
             totalTokens += tokens
             toolTotals[row.aiTool, default: 0] += tokens
         }
