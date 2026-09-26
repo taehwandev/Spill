@@ -668,7 +668,7 @@ extension MenuBarMainTriggerChipView {
 extension MenuBarMainTriggerChipView {
     private func refreshColors() {
         if triggerUsesCustomIcon {
-            configureIcon()
+            // Trigger icons use fixed colors, so an appearance change needs no CoreGraphics re-render.
             triggerIconView.contentTintColor = nil
         } else {
             triggerIconView.contentTintColor = triggerColor

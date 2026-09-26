@@ -145,17 +145,12 @@ extension CloudServiceStatusPresentation {
     }
 
     private static func fullServiceCheckTime(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = .current
-        formatter.timeZone = .current
-
-        if Calendar.current.isDateInToday(date) {
-            formatter.setLocalizedDateFormatFromTemplate("jm")
-        } else {
-            formatter.setLocalizedDateFormatFromTemplate("MMM d, jm")
-        }
-
-        return formatter.string(from: date)
+        let template = Calendar.current.isDateInToday(date) ? "jm" : "MMM d, jm"
+        return TokenUsageDashboardSnapshot.cachedLocalizedDateFormatter(
+            template: template,
+            locale: .current,
+            timeZone: .current
+        ).string(from: date)
     }
 
     private static func relativeServiceAge(

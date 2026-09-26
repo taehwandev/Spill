@@ -230,17 +230,12 @@ private extension CloudServiceStatusDashboardView {
     }
 
     private func formattedCheckTime(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = .current
-        formatter.timeZone = .current
-
-        if Calendar.current.isDateInToday(date) {
-            formatter.setLocalizedDateFormatFromTemplate("jm")
-        } else {
-            formatter.setLocalizedDateFormatFromTemplate("MMM d, jm")
-        }
-
-        return formatter.string(from: date)
+        let template = Calendar.current.isDateInToday(date) ? "jm" : "MMM d, jm"
+        return TokenUsageDashboardSnapshot.cachedLocalizedDateFormatter(
+            template: template,
+            locale: .current,
+            timeZone: .current
+        ).string(from: date)
     }
 
     private func relativeAge(from date: Date) -> String {

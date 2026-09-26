@@ -528,11 +528,13 @@ extension AppDelegate {
             }
             .store(in: &cancellables)
 
+        // The countdown ticks every second, but the menu bar only shows minutes until the last minute.
         sleepGuard.objectWillChange
+            .receive(on: DispatchQueue.main)
+            .compactMap { [weak sleepGuard] _ in sleepGuard.map(SleepGuardMenuBarState.init) }
+            .removeDuplicates()
             .sink { [weak self] _ in
-                Task { @MainActor in
-                    self?.statusItemController?.refresh()
-                }
+                self?.statusItemController?.refresh()
             }
             .store(in: &cancellables)
 

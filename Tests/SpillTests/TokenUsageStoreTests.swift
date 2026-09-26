@@ -5662,6 +5662,28 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(store.loadState, .loaded)
     }
 
+    /// A hidden dashboard window must not rebuild the full snapshot on every
+    /// usage event; the deferred change is applied once the window shows again.
+    @MainActor
+    func testHiddenDashboardDefersSnapshotRebuildUntilVisible() async throws {
+        let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
+        let store = TokenUsageDashboardStore(usageStore: usageStore, loadsInitialPanelSummary: false)
+        store.refreshAsync()
+        for _ in 0..<60 where store.isDashboardRefreshInProgress {
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        XCTAssertEqual(store.snapshot.eventCount, 0)
+
+        store.setSnapshotSurfaceVisible(false)
+        try usageStore.appendEvent(Self.safeEvent(spanID: "span_while_dashboard_hidden"))
+        try await Task.sleep(nanoseconds: 600_000_000)
+        XCTAssertEqual(store.snapshot.eventCount, 0)
+
+        store.setSnapshotSurfaceVisible(true)
+        try await waitForDashboardStoreRefreshToLoadEvents(store, eventCount: 1)
+        XCTAssertEqual(store.snapshot.eventCount, 1)
+    }
+
     func testPanelSummaryProjectsFreshOnlyHeadlineWithoutChangingWorkflowRows() throws {
         let store = TokenUsageStore(fileURL: temporaryEventsURL())
         try store.replaceEvents([

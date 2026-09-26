@@ -315,7 +315,13 @@ extension SpillPanelController {
             return
         }
 
-        panel.setFrame(panelFrame(), display: true, animate: settings.useSpillAnimation)
+        // Store publications fire often; an animated setFrame to the same frame still runs SwiftUI layout passes.
+        let nextFrame = panelFrame()
+        guard nextFrame != panel.frame else {
+            return
+        }
+
+        panel.setFrame(nextFrame, display: true, animate: settings.useSpillAnimation)
         panel.invalidateShadow()
     }
 

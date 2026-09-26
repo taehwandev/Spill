@@ -227,13 +227,13 @@ final class LocalAIStatusProviderTests: XCTestCase {
 
         let cachedFailure = LocalAICommandMetadataReader.metadata(
             for: ["codex": executableURL.path],
-            now: Date(timeIntervalSince1970: 110)
+            now: Date(timeIntervalSince1970: 210)
         )
         XCTAssertNil(cachedFailure[.codex])
 
         let recovered = LocalAICommandMetadataReader.metadata(
             for: ["codex": executableURL.path],
-            now: Date(timeIntervalSince1970: 116)
+            now: Date(timeIntervalSince1970: 221)
         )
         XCTAssertEqual(recovered[.codex]?.version, "9.8.8")
     }

@@ -22,22 +22,21 @@ extension PrivateUsageDailyBucketBuilder {
         return DateInterval(start: start, end: end)
     }
 
+    // Full resyncs call these once per stored event, so formatters come from the per-thread cache.
     static func localDayID(for date: Date, timeZone: TimeZone = .autoupdatingCurrent) -> String {
-        let formatter = DateFormatter()
-        formatter.calendar = Calendar(identifier: .gregorian)
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = timeZone
-        formatter.dateFormat = "yyyy-MM-dd"
-        return formatter.string(from: date)
+        TokenUsageDashboardSnapshot.cachedFixedDateFormatter(
+            dateFormat: "yyyy-MM-dd",
+            locale: Locale(identifier: "en_US_POSIX"),
+            timeZone: timeZone
+        ).string(from: date)
     }
 
     static func localTimestamp(for date: Date, timeZone: TimeZone = .autoupdatingCurrent) -> String {
-        let formatter = DateFormatter()
-        formatter.calendar = Calendar(identifier: .gregorian)
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = timeZone
-        formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSXXXXX"
-        return formatter.string(from: date)
+        TokenUsageDashboardSnapshot.cachedFixedDateFormatter(
+            dateFormat: "yyyy-MM-dd'T'HH:mm:ss.SSSXXXXX",
+            locale: Locale(identifier: "en_US_POSIX"),
+            timeZone: timeZone
+        ).string(from: date)
     }
 
     static func sha256Hex(_ data: Data) -> String {

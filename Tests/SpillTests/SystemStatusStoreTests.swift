@@ -301,7 +301,8 @@ final class SystemStatusStoreTests: XCTestCase {
                     )
                 )
             },
-            networkInitialSampleIntervalNanoseconds: 0
+            networkInitialSampleIntervalNanoseconds: 0,
+            storageMinimumRefreshInterval: 0
         )
 
         await store.refresh(enabledModules: [.cpu, .memory, .storage, .gpu, .network])
@@ -456,6 +457,40 @@ final class SystemStatusStoreTests: XCTestCase {
 
         XCTAssertEqual(powerReadCount, 0)
         XCTAssertEqual(store.power.state, .unavailable)
+    }
+
+    func testStorageReadsAreRateLimited() async {
+        var storageReadCount = 0
+        var currentDate = Date(timeIntervalSince1970: 1_000)
+        let store = SystemStatusStore(
+            cpuReader: { nil },
+            memoryReader: { .unavailableTestValue },
+            storageReader: {
+                storageReadCount += 1
+                return SystemStorageProvider.status(
+                    from: SystemStorageReading(totalBytes: self.gib(10), availableBytes: self.gib(4))
+                )
+            },
+            gpuReader: { .unavailableTestValue },
+            networkReader: { nil },
+            powerReader: { .unavailableTestValue },
+            networkInitialSampleIntervalNanoseconds: 0,
+            storageMinimumRefreshInterval: 60,
+            now: { currentDate }
+        )
+
+        await store.refresh(enabledModules: [.storage])
+        currentDate.addTimeInterval(30)
+        await store.refresh(enabledModules: [.storage])
+
+        XCTAssertEqual(storageReadCount, 1)
+        XCTAssertEqual(store.storage.value, "60.0%")
+        XCTAssertEqual(store.history(for: .storage).count, 2)
+
+        currentDate.addTimeInterval(30)
+        await store.refresh(enabledModules: [.storage])
+
+        XCTAssertEqual(storageReadCount, 2)
     }
 
     private func gib(_ value: UInt64) -> UInt64 {

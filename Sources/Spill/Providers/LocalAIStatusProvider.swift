@@ -248,6 +248,8 @@ extension LocalAIStatusProvider {
         }
         let processCommands = processSnapshots.map(\.commandLine)
         let processNames = Set(processSnapshots.map(\.executableName))
+        // `ollama ps` can only answer through a running server; skip the subprocess otherwise.
+        let ollamaServerIsRunning = processNames.contains { $0.lowercased().hasPrefix("ollama") }
 
         return statuses(
             environment: environment,
@@ -257,10 +259,12 @@ extension LocalAIStatusProvider {
             installedExecutableNames: Set(executablePaths.keys),
             installedApplicationNames: installedApplicationNames,
             commandMetadata: LocalAICommandMetadataReader.metadata(for: executablePaths, shouldCancel: shouldCancel),
-            ollamaRuntime: LocalOllamaRuntimeReader.runtimeSummary(
-                executablePath: executablePaths[LocalAIToolKind.ollama.executableName ?? ""],
-                shouldCancel: shouldCancel
-            )
+            ollamaRuntime: ollamaServerIsRunning
+                ? LocalOllamaRuntimeReader.runtimeSummary(
+                    executablePath: executablePaths[LocalAIToolKind.ollama.executableName ?? ""],
+                    shouldCancel: shouldCancel
+                )
+                : nil
         )
     }
 

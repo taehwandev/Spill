@@ -116,7 +116,7 @@ extension MenuBarMetricChipView {
         let color = statusColor
         valueLabel.textColor = segment.state == .unavailable ? .secondaryLabelColor : .labelColor
         if hasCustomTriggerIcon {
-            configureIcon()
+            // Trigger icons use fixed colors, so an appearance change needs no CoreGraphics re-render.
             iconView.contentTintColor = nil
         } else {
             iconView.contentTintColor = color.withAlphaComponent(segment.state == .unavailable ? 0.5 : 1.0)

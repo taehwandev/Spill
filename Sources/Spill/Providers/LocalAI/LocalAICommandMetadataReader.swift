@@ -5,7 +5,8 @@ enum LocalAICommandMetadataReader {
     private nonisolated(unsafe) static var cachedVersionsByExecutablePath: [String: CachedVersion] = [:]
     private nonisolated(unsafe) static var inFlightExecutablePaths = Set<String>()
     private static let versionCacheTTL: TimeInterval = 300
-    private static let failedVersionCacheTTL: TimeInterval = 15
+    // Node-based CLIs can miss the 1s timeout on a cold start; retrying on every scan respawns them.
+    private static let failedVersionCacheTTL: TimeInterval = 120
 
     static func metadata(
         for executablePaths: [String: String],

@@ -56,6 +56,10 @@ final class TokenUsageDashboardStore: ObservableObject {
     /// out there — change notifications must keep retrying the full snapshot
     /// for it rather than silently downgrading to panel-summary-only forever.
     private var hasRequestedFullSnapshot = false
+    /// False while the dashboard window is closed, minimized, or fully covered;
+    /// change notifications then defer the full SQL snapshot until it shows again.
+    private var isSnapshotSurfaceVisible = true
+    private var hasDeferredSnapshotRefresh = false
     private var clearLiveUpdateTask: Task<Void, Never>?
     private var scheduledRefreshTask: Task<Void, Never>?
     private let snapshotBuildQueue = DispatchQueue(label: "app.spill.token-dashboard.snapshot-build", qos: .userInitiated)
@@ -421,7 +425,23 @@ extension TokenUsageDashboardStore {
                 self.refreshPanelSummary()
                 return
             }
+            guard self.isSnapshotSurfaceVisible else {
+                self.hasDeferredSnapshotRefresh = true
+                self.refreshPanelSummary()
+                return
+            }
             self.refreshAsync(trackLiveUpdates: trackLiveUpdates)
+        }
+    }
+
+    func setSnapshotSurfaceVisible(_ isVisible: Bool) {
+        guard isVisible != isSnapshotSurfaceVisible else {
+            return
+        }
+        isSnapshotSurfaceVisible = isVisible
+        if isVisible, hasDeferredSnapshotRefresh {
+            hasDeferredSnapshotRefresh = false
+            scheduleRefresh(trackLiveUpdates: false)
         }
     }
 

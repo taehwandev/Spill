@@ -73,6 +73,7 @@ final class TokenMeteringDashboardWindowController: NSObject, NSWindowDelegate {
         window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless()
         window.makeKey()
+        store.setSnapshotSurfaceVisible(true)
         aiStatusStore.refreshInBackground()
         store.refreshAsyncIfIdle()
         startPeriodicRefreshLoop()
@@ -113,6 +114,7 @@ extension TokenMeteringDashboardWindowController {
                 }
 
                 guard let self, self.window?.isVisible == true else {
+                    self?.periodicRefreshTask = nil
                     return
                 }
 
@@ -170,7 +172,20 @@ extension TokenMeteringDashboardWindowController {
         return window
     }
 
+    func windowDidChangeOcclusionState(_ notification: Notification) {
+        guard let window, !isPreparingForTermination else {
+            return
+        }
+        let isOnScreen = window.isVisible && window.occlusionState.contains(.visible)
+        store.setSnapshotSurfaceVisible(isOnScreen)
+        // The periodic loop exits once the window is hidden; resume it when the window returns.
+        if isOnScreen, periodicRefreshTask == nil {
+            startPeriodicRefreshLoop()
+        }
+    }
+
     func windowWillClose(_ notification: Notification) {
+        store.setSnapshotSurfaceVisible(false)
         cancelRefreshTasks()
         aiStatusStore.cancelRefresh()
         guard !isPreparingForTermination else {

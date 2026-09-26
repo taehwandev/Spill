@@ -44,6 +44,10 @@ final class SystemStatusStore: ObservableObject {
     private let networkInitialSampleIntervalNanoseconds: UInt64
     private var previousCPUReading: SystemCPUReading?
     private var previousNetworkReading: SystemNetworkReading?
+    /// Volume capacity queries ask the system to size purgeable space, so they are rate limited.
+    private let storageMinimumRefreshInterval: TimeInterval
+    private let now: () -> Date
+    private var lastStorageReadAt: Date?
 
     init(
         cpu: SystemCPUStatus = SystemCPUProvider.status(previous: nil, current: nil),
@@ -60,7 +64,9 @@ final class SystemStatusStore: ObservableObject {
         networkReader: @escaping NetworkReader = { SystemNetworkProvider.currentReading() },
         powerReader: @escaping PowerReader = { SystemPowerProvider.status() },
         cpuInitialSampleIntervalNanoseconds: UInt64 = 0,
-        networkInitialSampleIntervalNanoseconds: UInt64 = 250_000_000
+        networkInitialSampleIntervalNanoseconds: UInt64 = 250_000_000,
+        storageMinimumRefreshInterval: TimeInterval = 60,
+        now: @escaping () -> Date = Date.init
     ) {
         self.previousCPUReading = previousCPUReading
         snapshot = SystemStatusSnapshot(
@@ -91,6 +97,8 @@ final class SystemStatusStore: ObservableObject {
         self.powerReader = powerReader
         self.cpuInitialSampleIntervalNanoseconds = cpuInitialSampleIntervalNanoseconds
         self.networkInitialSampleIntervalNanoseconds = networkInitialSampleIntervalNanoseconds
+        self.storageMinimumRefreshInterval = storageMinimumRefreshInterval
+        self.now = now
     }
 }
 
@@ -114,7 +122,10 @@ extension SystemStatusStore {
         }
 
         if enabledModules.contains(.storage) {
-            nextSnapshot.storage = storageReader()
+            if storageReadIsDue() {
+                nextSnapshot.storage = storageReader()
+                lastStorageReadAt = now()
+            }
             appendHistory(
                 nextSnapshot.storage.usageRatio,
                 for: .storage,
@@ -123,6 +134,7 @@ extension SystemStatusStore {
             )
         } else {
             nextSnapshot.storage = SystemStorageProvider.status(from: nil)
+            lastStorageReadAt = nil
         }
 
         if enabledModules.contains(.network) {
@@ -204,6 +216,13 @@ extension SystemStatusStore {
 
         try? await Task.sleep(nanoseconds: cpuInitialSampleIntervalNanoseconds)
         return initialReading
+    }
+
+    private func storageReadIsDue() -> Bool {
+        guard let lastStorageReadAt else {
+            return true
+        }
+        return now().timeIntervalSince(lastStorageReadAt) >= storageMinimumRefreshInterval
     }
 
     func history(for module: SpillStatusModule) -> [Double] {
