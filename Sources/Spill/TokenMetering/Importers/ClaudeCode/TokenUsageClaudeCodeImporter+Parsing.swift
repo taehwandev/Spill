@@ -57,31 +57,51 @@ extension TokenUsageClaudeCodeImporter {
             }
         }
 
-        guard let data = try? handle.readToEnd(), !data.isEmpty else {
-            return ([], byteOffset, startingTurnIndex)
-        }
-
-        let newByteOffset = byteOffset + data.count
-        let lines = data.split(separator: UInt8(ascii: "\n"), omittingEmptySubsequences: true)
+        // Read in bounded chunks so a first scan of a large transcript never holds the whole
+        // file, and only advance the cursor past complete lines: a line Claude Code is still
+        // writing must be re-read on the next pass rather than skipped for good.
+        let newline = UInt8(ascii: "\n")
+        var newByteOffset = byteOffset
+        var pending = Data()
         var parsedTurns = [AssistantTurn]()
 
-        for lineData in lines {
-            guard let object = try? JSONSerialization.jsonObject(with: lineData) as? [String: Any],
-                  let parsedRecord = assistantTurn(
-                    from: object,
-                    sourceSessionID: sourceSessionID,
-                    turnIndex: 0
-                  )
-            else { continue }
-
-            if let parsedTurn = parsedRecord.turn {
+        func parse(_ lineData: Data.SubSequence) -> Bool {
+            guard let object = try? JSONSerialization.jsonObject(with: lineData) as? [String: Any] else {
+                return false
+            }
+            if let parsedTurn = assistantTurn(
+                from: object,
+                sourceSessionID: sourceSessionID,
+                turnIndex: 0
+            )?.turn {
                 parsedTurns.append(parsedTurn)
             }
+            return true
+        }
+
+        while let chunk = try? handle.read(upToCount: Self.transcriptReadChunkSize), !chunk.isEmpty {
+            pending.append(chunk)
+            guard let lastNewline = pending.lastIndex(of: newline) else {
+                continue
+            }
+            for lineData in pending[..<lastNewline].split(separator: newline, omittingEmptySubsequences: true) {
+                _ = parse(lineData)
+            }
+            let consumedEnd = pending.index(after: lastNewline)
+            newByteOffset += pending.distance(from: pending.startIndex, to: consumedEnd)
+            pending = Data(pending[consumedEnd...])
+        }
+
+        // A final line without a trailing newline is consumed only once it parses completely.
+        if !pending.isEmpty, parse(pending[...]) {
+            newByteOffset += pending.count
         }
 
         let turns = deduplicateAssistantTurns(parsedTurns, startingTurnIndex: startingTurnIndex)
         return (turns, newByteOffset, startingTurnIndex + turns.count)
     }
+
+    static let transcriptReadChunkSize = 1 << 20
 
     private func assistantTurn(
         from object: [String: Any],

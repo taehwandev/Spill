@@ -27,7 +27,7 @@ extension TokenUsageInboxReader {
             let temporaryURL = deferredFile.finalURL
                 .deletingLastPathComponent()
                 .appendingPathComponent(".\(deferredFile.finalURL.lastPathComponent).\(UUID().uuidString).tmp")
-            try deferredFile.contents.write(to: temporaryURL, atomically: true, encoding: .utf8)
+            try deferredFile.contents.write(to: temporaryURL, options: .atomic)
             return (temporaryURL: temporaryURL, finalURL: deferredFile.finalURL)
         }
         let rewrittenURLs = Set(deferredWrites.map(\.finalURL))

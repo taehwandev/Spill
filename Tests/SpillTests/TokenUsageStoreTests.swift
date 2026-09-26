@@ -2189,6 +2189,41 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(store.loadEvents().count, 3)
     }
 
+    /// A transcript line Claude Code is still writing must not advance the byte cursor, and
+    /// lines that straddle the importer's read chunk boundary must still parse.
+    func testClaudeCodeTranscriptParsingKeepsPartialTailAndCrossesChunkBoundaries() throws {
+        let rootURL = temporaryDirectoryURL()
+        try FileManager.default.createDirectory(at: rootURL, withIntermediateDirectories: true)
+        let transcriptURL = rootURL.appendingPathComponent("transcript.jsonl")
+        let importer = TokenUsageClaudeCodeImporter(
+            projectsDirectory: rootURL,
+            labelTimelineURL: rootURL.appendingPathComponent("missing-labels.jsonl"),
+            stateURL: rootURL.appendingPathComponent("claude-active-state.json"),
+            diagnosticsURL: nil
+        )
+        func assistantLine(_ id: String) -> String {
+            #"{"timestamp":"2026-06-26T00:00:01.000Z","requestId":"req_\#(id)","message":{"id":"msg_\#(id)","role":"assistant","model":"claude-sonnet-4","usage":{"input_tokens":20,"output_tokens":7},"content":[]}}"#
+        }
+        let padding = #"{"message":{"role":"user","content":""# + String(repeating: "x", count: TokenUsageClaudeCodeImporter.transcriptReadChunkSize + 17) + #""}}"#
+        let complete = [assistantLine("a"), padding, assistantLine("b")].joined(separator: "\n") + "\n"
+        let partialTail = String(assistantLine("c").prefix(40))
+        try (complete + partialTail).write(to: transcriptURL, atomically: true, encoding: .utf8)
+
+        let first = importer.parseTurns(from: transcriptURL, after: 0, sourceSessionID: "session", startingTurnIndex: 0)
+        XCTAssertEqual(first.turns.count, 2)
+        XCTAssertEqual(first.newByteOffset, complete.utf8.count)
+
+        try (complete + assistantLine("c") + "\n").write(to: transcriptURL, atomically: true, encoding: .utf8)
+        let second = importer.parseTurns(
+            from: transcriptURL,
+            after: first.newByteOffset,
+            sourceSessionID: "session",
+            startingTurnIndex: first.nextTurnIndex
+        )
+        XCTAssertEqual(second.turns.count, 1)
+        XCTAssertEqual(second.newByteOffset, (complete + assistantLine("c") + "\n").utf8.count)
+    }
+
     func testClaudeCodeActiveImporterDropsInvalidEventWithoutStallingTheBatch() throws {
         let rootURL = temporaryDirectoryURL()
         let projectsURL = rootURL.appendingPathComponent("projects", isDirectory: true)

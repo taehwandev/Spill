@@ -112,42 +112,52 @@ private extension TokenUsageInboxReader {
         return event
     }
 
+    /// Walks the file's bytes line by line and decodes each line in place; once the event
+    /// budget is spent, the unread tail is carried over as one byte slice instead of being
+    /// re-split into strings and joined again.
     private func loadJSONLInboxEvents(
         from url: URL,
         maximumEventCount: Int? = nil
     ) -> JSONLReadResult? {
-        guard let data = try? Data(contentsOf: url),
-              let contents = String(data: data, encoding: .utf8)
-        else {
+        guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else {
             return nil
         }
 
         var events = [TokenUsageEvent]()
-        var remainingLines = [String]()
         let maximumEventCount = maximumEventCount.map { max(0, $0) }
+        var lineStart = data.startIndex
 
-        for line in contents.split(whereSeparator: \.isNewline) {
+        while lineStart < data.endIndex {
+            let lineEnd = data[lineStart...].firstIndex(of: Self.newline) ?? data.endIndex
             if let maximumEventCount, events.count >= maximumEventCount {
-                remainingLines.append(String(line))
-                continue
+                let remainingContents = Data(data[lineStart...])
+                return JSONLReadResult(
+                    events: events,
+                    remainingContents: remainingContents.contains { !Self.isLineWhitespace($0) }
+                        ? remainingContents
+                        : nil
+                )
             }
 
-            let event = String(line).data(using: .utf8).flatMap { data -> TokenUsageEvent? in
-                try? TokenUsageSanitizer.sanitizeEventJSONData(data)
+            var line = data[lineStart..<lineEnd]
+            if line.last == Self.carriageReturn {
+                line = line.dropLast()
             }
-            if let event {
+            if !line.isEmpty,
+               let event = try? TokenUsageSanitizer.sanitizeEventJSONData(Data(line)) {
                 events.append(event)
             }
+            lineStart = lineEnd < data.endIndex ? data.index(after: lineEnd) : data.endIndex
         }
 
-        let remainingContents: String?
-        if remainingLines.isEmpty {
-            remainingContents = nil
-        } else {
-            remainingContents = remainingLines.joined(separator: "\n") + "\n"
-        }
+        return JSONLReadResult(events: events, remainingContents: nil)
+    }
 
-        return JSONLReadResult(events: events, remainingContents: remainingContents)
+    private static let newline = UInt8(ascii: "\n")
+    private static let carriageReturn = UInt8(ascii: "\r")
+
+    private static func isLineWhitespace(_ byte: UInt8) -> Bool {
+        byte == newline || byte == carriageReturn || byte == UInt8(ascii: " ") || byte == UInt8(ascii: "\t")
     }
 
     private func deferredJSONLInboxURL(for consumedURL: URL) -> URL {
@@ -212,14 +222,14 @@ extension TokenUsageInboxReader {
 
     struct DeferredJSONLFile {
         let finalURL: URL
-        let contents: String
+        let contents: Data
     }
 }
 
 private extension TokenUsageInboxReader {
     struct JSONLReadResult {
         let events: [TokenUsageEvent]
-        let remainingContents: String?
+        let remainingContents: Data?
     }
 
     struct AccountingRecord: Codable {
