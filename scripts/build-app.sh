@@ -198,15 +198,40 @@ if [[ -n "$SENTRY_DSN" ]]; then
     fi
 fi
 
+# Sparkle reads these Info.plist keys as the defaults until the user changes them in
+# Preferences. Release builds check for and install updates automatically; ad-hoc signed
+# development builds keep both off so a published release never replaces a local build.
+AUTOMATIC_UPDATES_DEFAULT="${SPILL_AUTOMATIC_UPDATES_DEFAULT:-}"
+if [[ -z "$AUTOMATIC_UPDATES_DEFAULT" ]]; then
+    if [[ "$SIGN_IDENTITY" == "-" ]]; then
+        AUTOMATIC_UPDATES_DEFAULT=false
+    else
+        AUTOMATIC_UPDATES_DEFAULT=true
+    fi
+fi
+
+case "$AUTOMATIC_UPDATES_DEFAULT" in
+    1|true|TRUE|True|yes|YES|Yes|on|ON|On)
+        AUTOMATIC_UPDATES_DEFAULT=true
+        ;;
+    0|false|FALSE|False|no|NO|No|off|OFF|Off)
+        AUTOMATIC_UPDATES_DEFAULT=false
+        ;;
+    *)
+        echo "SPILL_AUTOMATIC_UPDATES_DEFAULT must be 1/0, true/false, yes/no, or on/off." >&2
+        exit 2
+        ;;
+esac
+
 if [[ -n "$SPARKLE_PUBLIC_ED_KEY" ]]; then
     SPARKLE_INFO_PLIST_ENTRY="    <key>SUFeedURL</key>
     <string>$SPARKLE_FEED_URL</string>
     <key>SUPublicEDKey</key>
     <string>$SPARKLE_PUBLIC_ED_KEY</string>
     <key>SUEnableAutomaticChecks</key>
-    <false/>
+    <$AUTOMATIC_UPDATES_DEFAULT/>
     <key>SUAutomaticallyUpdate</key>
-    <false/>"
+    <$AUTOMATIC_UPDATES_DEFAULT/>"
 fi
 
 validate_private_usage_url "SPILL_BUILD_PRIVATE_USAGE_WEB_URL" "$PRIVATE_USAGE_WEB_URL" "$PRIVATE_USAGE_REQUIRES_CONFIGURATION"

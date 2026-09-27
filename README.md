@@ -269,6 +269,13 @@ configured in the app bundle, Check for Updates uses Sparkle's in-app updater
 first. Older non-Sparkle builds still fall back to the public `update.json`
 manifest and open the DMG externally.
 
+Automatic update checks and installs default to on for release builds and off
+for ad-hoc signed development builds, so a published release never replaces a
+local build. `scripts/build-app.sh` writes these defaults as Sparkle's
+`SUEnableAutomaticChecks` and `SUAutomaticallyUpdate`; set
+`SPILL_AUTOMATIC_UPDATES_DEFAULT=1` or `0` to override the default for a bundle.
+A user's own choice in Preferences always takes precedence over the default.
+
 Optional telemetry secrets:
 
 - `SPILL_APTABASE_APP_KEY`: optional app analytics key embedded in release app

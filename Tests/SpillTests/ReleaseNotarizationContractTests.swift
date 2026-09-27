@@ -54,6 +54,29 @@ final class ReleaseNotarizationContractTests: XCTestCase {
         XCTAssertFalse(packageScript.contains("--keychain-profile"))
     }
 
+    func testAutomaticUpdatesDefaultOnForReleaseAndOffForDevelopmentBuilds() throws {
+        let buildScript = try read("scripts/build-app.sh")
+
+        XCTAssertTrue(buildScript.contains("AUTOMATIC_UPDATES_DEFAULT=\"${SPILL_AUTOMATIC_UPDATES_DEFAULT:-}\""))
+        XCTAssertTrue(buildScript.contains("""
+            if [[ "$SIGN_IDENTITY" == "-" ]]; then
+                    AUTOMATIC_UPDATES_DEFAULT=false
+                else
+                    AUTOMATIC_UPDATES_DEFAULT=true
+                fi
+            """))
+        XCTAssertTrue(buildScript.contains("""
+                <key>SUEnableAutomaticChecks</key>
+                <$AUTOMATIC_UPDATES_DEFAULT/>
+                <key>SUAutomaticallyUpdate</key>
+                <$AUTOMATIC_UPDATES_DEFAULT/>
+            """))
+        XCTAssertFalse(buildScript.contains("""
+            <key>SUEnableAutomaticChecks</key>
+                <false/>
+            """))
+    }
+
     func testReleaseBuildUsesProductionWebConnectionAndRegistersURLScheme() throws {
         let buildScript = try read("scripts/build-app.sh")
         let envExample = try read(".env.example")
