@@ -7,6 +7,10 @@ struct TokenUsageMenuBarTotals: Equatable, Sendable {
 }
 
 extension TokenUsageStore {
+    var dashboardDataRevision: UInt64 {
+        aggregateCacheLock.withLock { dataRevisionStorage }
+    }
+
     func menuBarTokenTotals(
         startingAt startDate: Date,
         endingBefore endDate: Date,

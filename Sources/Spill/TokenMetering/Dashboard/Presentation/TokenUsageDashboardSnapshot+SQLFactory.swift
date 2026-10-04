@@ -1,14 +1,14 @@
 import Foundation
 
 /// Builds the full TokenUsageDashboardSnapshot from SQL aggregate queries instead of a raw
-/// events array, for the common case: no project/session/calendar-day drill-down selected. Both
+/// events array, for the common case: no project/session drill-down selected. Both
 /// .includeCache and .freshOnly inputScope are SQL-eligible. This is what lets the "All time"
 /// dashboard view avoid loading and holding every stored event in memory just to answer
 /// aggregate totals.
 ///
 /// Every field here mirrors TokenMeteringPresentationModel's private init exactly for this same
 /// unfiltered case; TokenUsageDashboardStore is responsible for falling back to the existing
-/// events-based init(context:...) whenever a project/session/day is selected.
+/// events-based init(context:...) whenever a project/session is selected.
 ///
 /// A nil return always means "could not read right now" -- the shared connection failed to open,
 /// or any one statement in the batch failed to prepare or step (see TokenUsageQueryFailureObserver).
@@ -20,6 +20,7 @@ extension TokenUsageDashboardSnapshot {
         usageStore: TokenUsageStore,
         selectedTool: TokenUsageAITool? = nil,
         selectedPeriod: TokenUsageDashboardPeriod = .all,
+        selectedCalendarDayID: String? = nil,
         inputScope: TokenUsageInputScope = .includeCache,
         language: TokenMeteringLanguage = .current(),
         localAliases: [String: String] = [:],
@@ -42,7 +43,15 @@ extension TokenUsageDashboardSnapshot {
         // way the events-based path's toolFilterEvents/toolVisibleEvents narrowing does.
         let effectiveVisibleTools = selectedDashboardTool.map { Set([$0]) } ?? visibleTools
 
-        let requestRange = cutoffDateRange(for: selectedPeriod, periodOffset: periodOffset, now: now, calendar: calendar)
+        let selectedDay = selectedCalendarDayID.flatMap { date(forDayID: $0, calendar: calendar) }
+        let selectedDayID = selectedDay.map { dayID(for: $0, calendar: calendar) }
+        let requestRange: DateRange
+        if let selectedDay {
+            let start = calendar.startOfDay(for: selectedDay)
+            requestRange = DateRange(start: start, end: calendar.date(byAdding: .day, value: 1, to: start))
+        } else {
+            requestRange = cutoffDateRange(for: selectedPeriod, periodOffset: periodOffset, now: now, calendar: calendar)
+        }
 
         // Every aggregate read below shares this one connection instead of each of the ~19
         // calls independently opening/closing its own: that used to mean one refresh could see
@@ -128,7 +137,7 @@ extension TokenUsageDashboardSnapshot {
                 period: period,
                 title: period.title(language: language),
                 detail: formatTokens(capturedPeriodTotal),
-                isSelected: selectedPeriod == period
+                isSelected: selectedDayID == nil && selectedPeriod == period
             )
         }
 
@@ -145,7 +154,7 @@ extension TokenUsageDashboardSnapshot {
         // not the one currently selected, matching how the original init's toolFilterEvents
         // (used for both allToolTotals and totalEvents here) is built from periodEvents without
         // any selectedTool filter applied.
-        let toolFilterScopeEventCount = usageStore.dashboardFocusedTotals(
+        let toolFilterScopeEventCount = selectedDashboardTool == nil ? eventCount : usageStore.dashboardFocusedTotals(
             startingAt: requestRange.start,
             endingBefore: requestRange.end,
             dashboardToolsOnly: dashboardToolsOnly,
@@ -211,7 +220,7 @@ extension TokenUsageDashboardSnapshot {
         // Unlike toolFilters' totals (deliberately unfiltered by selectedTool), toolRows must
         // reflect the fully-focused scope -- selectedTool narrowing included -- matching the
         // original init's visibleCapturedToolTokens, which is built from focusedEvents.
-        let toolRowTotals = usageStore.groupedInputScopeTotalsByTool(
+        let toolRowTotals = effectiveVisibleTools == visibleTools ? toolTotals : usageStore.groupedInputScopeTotalsByTool(
             startingAt: requestRange.start,
             endingBefore: requestRange.end,
             dashboardToolsOnly: dashboardToolsOnly,
@@ -372,7 +381,7 @@ extension TokenUsageDashboardSnapshot {
         )
 
         let comparisonTotalTokens: Int?
-        if periodOffset != 0 {
+        if selectedDayID != nil || periodOffset != 0 {
             comparisonTotalTokens = nil
         } else {
             comparisonTotalTokens = Self.comparisonTotal(
@@ -389,10 +398,10 @@ extension TokenUsageDashboardSnapshot {
         }
 
         let todayCalendarDayID = dayID(for: now, calendar: calendar)
-        let calendarMonth = calendarMonthStart ?? normalizedCalendarMonthStart(
+        let calendarMonth = normalizedCalendarMonthStart(
             availableDateBounds: dateBounds,
             now: now,
-            proposedMonthStart: calendarMonthStart,
+            proposedMonthStart: calendarMonthStart ?? selectedDay.map { monthStart(for: $0, calendar: calendar) },
             calendar: calendar
         )
         let firstDataMonth = dateBounds.earliest.map { monthStart(for: $0, calendar: calendar) } ?? monthStart(for: now, calendar: calendar)
@@ -404,7 +413,7 @@ extension TokenUsageDashboardSnapshot {
         // Like periodFilters, the calendar heatmap totals are deliberately unfiltered by the
         // single selectedTool -- only by the broader visibleTools set -- matching how the
         // buildPair caller computes calendarDayTotals independent of selectedTool.
-        let calendarDayTotals = usageStore.dashboardDayInputScopeTotals(
+        let calendarDayInputScopeTotals = usageStore.dashboardDayInputScopeTotals(
             startingAt: calendarMonth,
             endingBefore: calendar.date(byAdding: .month, value: 1, to: calendarMonth) ?? calendarMonth,
             calendar: calendar,
@@ -412,20 +421,22 @@ extension TokenUsageDashboardSnapshot {
             visibleTools: visibleTools,
             database: database,
             failureObserver: failureObserver
-        ).mapValues { $0.total(for: inputScope) }
+        )
         let calendarDays = Self.calendarDays(
             events: [],
             monthStart: calendarMonth,
-            selectedCalendarDayID: nil,
+            selectedCalendarDayID: selectedDayID,
             todayCalendarDayID: todayCalendarDayID,
             calendar: calendar,
             locale: locale,
             timeZone: timeZone,
-            dayTokenTotals: calendarDayTotals,
-            rawDayTokenTotals: calendarDayTotals
+            dayTokenTotals: calendarDayInputScopeTotals.mapValues { $0.total(for: inputScope) },
+            rawDayTokenTotals: calendarDayInputScopeTotals.mapValues(\.includeCache)
         )
 
         let lastUpdated = usageStore.lastUpdatedByTool(
+            startingAt: selectedDayID == nil ? nil : requestRange.start,
+            endingBefore: selectedDayID == nil ? nil : requestRange.end,
             dashboardToolsOnly: dashboardToolsOnly,
             visibleTools: visibleTools,
             database: database,
@@ -435,7 +446,10 @@ extension TokenUsageDashboardSnapshot {
 
         let canNavigatePreviousPeriod: Bool
         let canNavigateNextPeriod: Bool
-        if let earliestDate = dateBounds.earliest {
+        if selectedDayID != nil {
+            canNavigatePreviousPeriod = false
+            canNavigateNextPeriod = false
+        } else if let earliestDate = dateBounds.earliest {
             if let currentStart = requestRange.start {
                 canNavigatePreviousPeriod = earliestDate < currentStart
             } else {
@@ -488,8 +502,10 @@ extension TokenUsageDashboardSnapshot {
             calendarDays: calendarDays,
             calendarMonthTitle: calendarMonthTitle,
             calendarWeekdayTitles: calendarWeekdayTitles,
-            selectedCalendarDayID: nil,
-            selectedCalendarDayTitle: nil,
+            selectedCalendarDayID: selectedDayID,
+            selectedCalendarDayTitle: selectedDayID.flatMap {
+                formatCalendarDayID($0, calendar: calendar, locale: locale, timeZone: timeZone)
+            },
             todayCalendarDayID: todayCalendarDayID,
             todayCalendarDayTitle: formatCalendarDayTitle(now, locale: locale, timeZone: timeZone),
             canNavigatePreviousCalendarMonth: canNavigatePreviousCalendarMonth,

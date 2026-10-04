@@ -333,9 +333,15 @@ extension TokenUsageDashboardSnapshot {
         calendar: Calendar
     ) -> Date {
         let currentMonth = monthStart(for: now, calendar: calendar)
-        let firstDataMonth = availableDateBounds?.earliest
-            .map { monthStart(for: $0, calendar: calendar) }
-            ?? firstDataMonthStart(events: events, now: now, calendar: calendar)
+        // Supplied bounds are authoritative for eligible history, including an
+        // empty tool set. Hidden rows in an event cache cannot reopen an old month.
+        let firstDataMonth: Date
+        if let availableDateBounds {
+            firstDataMonth = availableDateBounds.earliest
+                .map { monthStart(for: $0, calendar: calendar) } ?? currentMonth
+        } else {
+            firstDataMonth = firstDataMonthStart(events: events, now: now, calendar: calendar)
+        }
         let proposed = proposedMonthStart.map { monthStart(for: $0, calendar: calendar) } ?? currentMonth
         if calendar.compare(proposed, to: firstDataMonth, toGranularity: .month) == .orderedAscending {
             return firstDataMonth

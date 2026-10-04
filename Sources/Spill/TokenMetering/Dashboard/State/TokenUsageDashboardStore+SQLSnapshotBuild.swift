@@ -1,14 +1,12 @@
 import Foundation
 
 extension TokenUsageDashboardStore {
-    /// No project/session/day drill-down: every dashboard output can be answered from SQL
+    /// No project/session drill-down: every dashboard output can be answered from SQL
     /// aggregate queries alone (see TokenUsageDashboardSnapshot+SQLFactory.swift), for either
     /// inputScope, so this skips loadEvents entirely rather than loading and holding the full
     /// raw row array just to recompute totals the store already has SQL paths for.
     nonisolated static func canBuildSnapshotFromSQL(for request: TokenUsageDashboardBuildRequest) -> Bool {
-        request.selectedProjectID == nil
-            && request.selectedSessionID == nil
-            && request.selectedCalendarDayID == nil
+        request.selectedProjectID == nil && request.selectedSessionID == nil
     }
 
     /// Builds the full SQL-path refresh payload on ONE connection and ONE read transaction: the
@@ -21,7 +19,7 @@ extension TokenUsageDashboardStore {
     ///
     /// `request` is the raw (bounds-less) request; buildRequest is derived here from the freshly read
     /// dateBounds so the availableDateBounds feeding calendar-month resolution matches everything else
-    /// read in this transaction. `canBuildSnapshotFromSQL` inspects only project/session/day, none of
+    /// read in this transaction. `canBuildSnapshotFromSQL` inspects only project/session, neither of
     /// which replacingAvailableDateBounds touches, so callers may gate on the raw request before the
     /// bounds are known.
     ///
@@ -29,7 +27,7 @@ extension TokenUsageDashboardStore {
     /// `loadsPeriodFilterTotals` controls whether the shared period map is returned to the caller;
     /// `cachedPeriodFilterTotals` mirrors refreshAsync's reuse semantics and avoids the query when a
     /// valid copy was handed in. Snapshot construction always needs that map for its period chips,
-    /// so rebuild/calendar paths may load it inside the snapshot query set without publishing it.
+    /// so rebuild paths may load it inside the snapshot query set without publishing it.
     /// `loadsPanelSummary` mirrors `refreshesPanelSummary`.
     ///
     /// Returns nil (fail closed) on any open/statement failure. The shared period map and snapshot
@@ -47,7 +45,6 @@ extension TokenUsageDashboardStore {
     ) -> TokenUsageDashboardSQLBuildResult? {
         usageStore.withDatabaseConnection(nil, default: nil) { database -> TokenUsageDashboardSQLBuildResult? in
             let dateBounds = usageStore.dashboardDateBounds(
-                selectedTool: request.selectedTool,
                 dashboardToolsOnly: !request.showAdvancedTools,
                 visibleTools: request.visibleAITools,
                 database: database
@@ -122,6 +119,7 @@ extension TokenUsageDashboardStore {
             usageStore: usageStore,
             selectedTool: request.selectedTool,
             selectedPeriod: request.selectedPeriod,
+            selectedCalendarDayID: request.selectedCalendarDayID,
             inputScope: request.inputScope,
             language: request.language,
             localAliases: request.localAliases,
@@ -144,6 +142,7 @@ extension TokenUsageDashboardStore {
                 usageStore: usageStore,
                 selectedTool: nil,
                 selectedPeriod: request.selectedPeriod,
+                selectedCalendarDayID: request.selectedCalendarDayID,
                 inputScope: request.inputScope,
                 language: request.language,
                 localAliases: request.localAliases,

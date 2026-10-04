@@ -51,13 +51,16 @@ extension TokenUsageStore {
             conditions.append("project_id = ?")
         }
         let whereClause = conditions.isEmpty ? "" : "WHERE \(conditions.joined(separator: " AND "))"
+        let sliceGrouping = Self.isSingleDashboardCalendarDay(
+            startingAt: startDate, endingBefore: endDate, calendar: calendar
+        ) ? "" : ", \(Self.dashboardQuarterHourSliceSQL)"
 
         let sql = """
         SELECT project_id, task_type, stage, run_id, MAX(created_at),
                SUM(total_tokens), SUM(\(Self.dashboardFreshTokenSQL)), SUM(latency_ms), COUNT(*)
         FROM token_usage_events
         \(whereClause)
-        GROUP BY project_id, task_type, stage, run_id, \(Self.dashboardQuarterHourSliceSQL)
+        GROUP BY project_id, task_type, stage, run_id\(sliceGrouping)
         """
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,

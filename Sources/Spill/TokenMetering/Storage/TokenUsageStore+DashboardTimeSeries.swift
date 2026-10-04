@@ -154,10 +154,10 @@ extension TokenUsageStore {
         database: OpaquePointer,
         failureObserver: TokenUsageQueryFailureObserver? = nil
     ) -> [String: TokenUsageInputScopeTotals] {
+        guard startDate < endDate else { return [:] }
         var sql = """
-        SELECT created_at,
-               total_tokens,
-               \(Self.dashboardFreshTokenSQL)
+        SELECT COUNT(*), COALESCE(SUM(total_tokens), 0),
+               COALESCE(SUM(\(Self.dashboardFreshTokenSQL)), 0)
         FROM token_usage_events
         WHERE created_at >= ? AND created_at < ?
         """
@@ -177,29 +177,45 @@ extension TokenUsageStore {
         }
         defer { sqlite3_finalize(statement) }
 
-        let startValue = ISO8601DateFormatter.tokenUsage.string(from: startDate)
-        let endValue = ISO8601DateFormatter.tokenUsage.string(from: endDate)
-        sqlite3_bind_text(statement, 1, startValue, -1, SQLITE_TRANSIENT)
-        sqlite3_bind_text(statement, 2, endValue, -1, SQLITE_TRANSIENT)
-
         var totals = [String: TokenUsageInputScopeTotals]()
-        var stepResult = sqlite3_step(statement)
-        while stepResult == SQLITE_ROW {
-            defer { stepResult = sqlite3_step(statement) }
-            guard let createdAt = Self.columnString(statement, 0),
-                  let date = ISO8601DateFormatter.parseTokenUsageDate(from: createdAt)
-            else {
-                continue
+        var dayStart = calendar.startOfDay(for: startDate)
+        while dayStart < endDate {
+            // Calendar boundaries preserve short/long DST days and historical
+            // offsets. Clamp the first and last days to the caller's exact range.
+            guard let followingDay = calendar.date(byAdding: .day, value: 1, to: dayStart) else {
+                failureObserver?.markFailure()
+                return [:]
             }
-            let dayID = TokenUsageDashboardSnapshot.dayID(for: date, calendar: calendar)
-            let current = totals[dayID, default: .zero]
-            totals[dayID] = TokenUsageInputScopeTotals(
-                includeCache: current.includeCache + Int(sqlite3_column_int64(statement, 1)),
-                freshOnly: current.freshOnly + Int(sqlite3_column_int64(statement, 2))
-            )
-        }
-        if stepResult != SQLITE_DONE {
-            failureObserver?.markFailure()
+            let nextDayStart = calendar.startOfDay(for: followingDay)
+            guard nextDayStart > dayStart else {
+                failureObserver?.markFailure()
+                return [:]
+            }
+            let lowerBound = max(dayStart, startDate)
+            let upperBound = min(nextDayStart, endDate)
+            let startValue = ISO8601DateFormatter.tokenUsage.string(from: lowerBound)
+            let endValue = ISO8601DateFormatter.tokenUsage.string(from: upperBound)
+            guard sqlite3_bind_text(statement, 1, startValue, -1, SQLITE_TRANSIENT) == SQLITE_OK,
+                  sqlite3_bind_text(statement, 2, endValue, -1, SQLITE_TRANSIENT) == SQLITE_OK,
+                  sqlite3_step(statement) == SQLITE_ROW
+            else {
+                failureObserver?.markFailure()
+                return [:]
+            }
+            if sqlite3_column_int64(statement, 0) > 0 {
+                let dayID = TokenUsageDashboardSnapshot.dayID(for: dayStart, calendar: calendar)
+                totals[dayID] = TokenUsageInputScopeTotals(
+                    includeCache: Int(sqlite3_column_int64(statement, 1)),
+                    freshOnly: Int(sqlite3_column_int64(statement, 2))
+                )
+            }
+            guard sqlite3_step(statement) == SQLITE_DONE,
+                  sqlite3_reset(statement) == SQLITE_OK
+            else {
+                failureObserver?.markFailure()
+                return [:]
+            }
+            dayStart = nextDayStart
         }
         return totals
     }

@@ -50,6 +50,8 @@ final class TokenUsageDashboardStore: ObservableObject {
     private var distributedEventsDidChangeObserver: NSObjectProtocol?
     private var calendarInvalidationObservers: [NSObjectProtocol] = []
     private var hasRebuiltSnapshot = false
+    private var isRefreshingCalendarOnly = false
+    private var appliedSnapshotDataRevision: UInt64?
     /// Latches on the first external full-refresh request and never resets. A
     /// transient first SQL failure restores `loadState` to `.idle` so the
     /// refresh button can retry, but the dashboard surface that asked is still
@@ -173,6 +175,7 @@ extension TokenUsageDashboardStore {
     }
 
     func refresh(trackLiveUpdates: Bool = true, refreshesPanelSummary: Bool = true) {
+        isRefreshingCalendarOnly = false
         hasRequestedFullSnapshot = true
         scheduledRefreshTask?.cancel()
         scheduledRefreshTask = nil
@@ -185,6 +188,7 @@ extension TokenUsageDashboardStore {
             hasRebuiltSnapshot || (previousEvents.isEmpty && panelSummary.eventCount == 0)
         )
         let request = snapshotBuildRequest()
+        let requestDataRevision = usageStore.dashboardDataRevision
         let loadedEventScope = loadEvents(for: request)
         events = loadedEventScope.events
         loadedEventsDateRange = loadedEventScope.cacheCoverageDateRange
@@ -194,7 +198,8 @@ extension TokenUsageDashboardStore {
             trackLiveUpdates: shouldTrackLiveUpdates,
             previousEvents: previousEvents,
             periodFilterTotals: nextPeriodFilterTotals,
-            panelSummary: panelSummary
+            panelSummary: panelSummary,
+            dataRevision: requestDataRevision
         )
     }
 }
@@ -206,6 +211,7 @@ extension TokenUsageDashboardStore {
         reusesLoadedEvents: Bool = false,
         reusesPeriodFilterTotals: Bool = false
     ) {
+        isRefreshingCalendarOnly = false
         hasRequestedFullSnapshot = true
         scheduledRefreshTask?.cancel()
         scheduledRefreshTask = nil
@@ -223,6 +229,7 @@ extension TokenUsageDashboardStore {
             hasRebuiltSnapshot || (previousEvents.isEmpty && panelSummary.eventCount == 0)
         )
         let request = snapshotBuildRequest()
+        let requestDataRevision = reusesLoadedEvents ? nil : usageStore.dashboardDataRevision
         let usesPreviewDataSource = isOnboardingPreviewEnabled
         let usageStore = usageStore
         let snapshotBuildGate = snapshotBuildGate
@@ -244,7 +251,7 @@ extension TokenUsageDashboardStore {
             let panelSummary: TokenUsagePanelSummarySnapshot?
             let dateBounds: TokenUsageDashboardDateBounds
             let inputScope: TokenUsageInputScope
-            // canBuildSnapshotFromSQL inspects only project/session/day selection, so it is safe to
+            // canBuildSnapshotFromSQL inspects only project/session selection, so it is safe to
             // gate on the raw request here before availableDateBounds are known: the SQL build derives
             // its own bounds-filled buildRequest internally. Taking the SQL path means dateBounds, the
             // period chips, the panel summary, and both snapshot halves are all read on one shared
@@ -343,7 +350,8 @@ extension TokenUsageDashboardStore {
                     panelSummary: appliedPanelSummary,
                     availableDateBounds: dateBounds,
                     snapshotContext: snapshotOutput.context,
-                    snapshotContextKey: snapshotOutput.contextKey
+                    snapshotContextKey: snapshotOutput.contextKey,
+                    dataRevision: requestDataRevision
                 )
             }
         }
@@ -372,6 +380,7 @@ extension TokenUsageDashboardStore {
             return
         }
         isRefreshing = false
+        isRefreshingCalendarOnly = false
         if resetLoadState, loadState == .loading {
             loadState = hasRebuiltSnapshot ? .loaded : .idle
         }
@@ -460,7 +469,8 @@ extension TokenUsageDashboardStore {
         trackLiveUpdates: Bool = false,
         previousEvents: [TokenUsageEvent]? = nil,
         periodFilterTotals nextPeriodFilterTotals: [TokenUsageDashboardPeriod: TokenUsageInputScopeTotals]? = nil,
-        panelSummary: TokenUsagePanelSummarySnapshot? = nil
+        panelSummary: TokenUsagePanelSummarySnapshot? = nil,
+        dataRevision: UInt64? = nil
     ) {
         snapshotBuildGate.next()
         if let nextPeriodFilterTotals {
@@ -471,7 +481,6 @@ extension TokenUsageDashboardStore {
         let displayEvents = displayEvents(for: events)
         let initialRequest = snapshotBuildRequest()
         let nextDateBounds = usageStore.dashboardDateBounds(
-            selectedTool: selectedTool,
             dashboardToolsOnly: !initialRequest.showAdvancedTools,
             visibleTools: initialRequest.visibleAITools
         )
@@ -498,7 +507,8 @@ extension TokenUsageDashboardStore {
             panelSummary: panelSummary,
             availableDateBounds: nextDateBounds,
             snapshotContext: snapshotOutput.context,
-            snapshotContextKey: snapshotOutput.contextKey
+            snapshotContextKey: snapshotOutput.contextKey,
+            dataRevision: dataRevision
         )
     }
 }
@@ -508,6 +518,7 @@ extension TokenUsageDashboardStore {
         trackLiveUpdates: Bool = false,
         previousEvents: [TokenUsageEvent]? = nil
     ) {
+        isRefreshingCalendarOnly = false
         let generation = snapshotBuildGate.next()
         let currentEvents = events
         let currentEventsDateRange = loadedEventsDateRange
@@ -531,7 +542,7 @@ extension TokenUsageDashboardStore {
             // currentEvents can be empty here even when real data exists: the previous refresh
             // may have taken the SQL-only path (canBuildSnapshotFromSQL), which never populates
             // `events` at all. Route the same way rather than "rebuilding" from an array that was
-            // never loaded. canBuildSnapshotFromSQL depends only on project/session/day, so gating
+            // never loaded. canBuildSnapshotFromSQL depends only on project/session, so gating
             // on the raw request is equivalent to gating on the bounds-filled buildRequest.
             let snapshotOutput: TokenUsageDashboardSnapshotBuildOutput
             let appliedLoadedEvents: [TokenUsageEvent]
@@ -639,9 +650,11 @@ extension TokenUsageDashboardStore {
         panelSummary: TokenUsagePanelSummarySnapshot?,
         availableDateBounds nextAvailableDateBounds: TokenUsageDashboardDateBounds? = nil,
         snapshotContext nextSnapshotContext: TokenUsageDashboardSnapshotBuildContext? = nil,
-        snapshotContextKey nextSnapshotContextKey: TokenUsageDashboardContextCacheKey? = nil
+        snapshotContextKey nextSnapshotContextKey: TokenUsageDashboardContextCacheKey? = nil,
+        dataRevision: UInt64? = nil
     ) {
         events = loadedEvents
+        if let dataRevision { appliedSnapshotDataRevision = dataRevision }
         if let nextLoadedEventsDateRange {
             loadedEventsDateRange = nextLoadedEventsDateRange
         }
@@ -700,6 +713,7 @@ extension TokenUsageDashboardStore {
             )
         }
         hasRebuiltSnapshot = true
+        isRefreshingCalendarOnly = false
     }
 }
 
@@ -884,7 +898,6 @@ extension TokenUsageDashboardStore {
         for request: TokenUsageDashboardBuildRequest
     ) -> TokenUsageDashboardDateBounds {
         usageStore.dashboardDateBounds(
-            selectedTool: request.selectedTool,
             dashboardToolsOnly: !request.showAdvancedTools,
             visibleTools: request.visibleAITools
         )
@@ -1434,92 +1447,75 @@ extension TokenUsageDashboardStore {
         let proposedMonth = calendar.date(byAdding: .month, value: value, to: currentMonth)
             ?? currentMonth
         calendarMonthStart = proposedMonth
+        let dataRevision = usageStore.dashboardDataRevision
+        // A pending filter/data refresh owns the analytics scope. Rebuild that latest
+        // request rather than projecting the previously published scope over it.
+        guard hasRebuiltSnapshot, !isOnboardingPreviewEnabled,
+              !isRefreshing || isRefreshingCalendarOnly,
+              scheduledRefreshTask == nil, !hasDeferredSnapshotRefresh,
+              appliedSnapshotDataRevision == dataRevision else {
+            refreshAsync(trackLiveUpdates: false, refreshesPanelSummary: false)
+            return
+        }
         let request = snapshotBuildRequest()
         let generation = snapshotBuildGate.next()
+        let snapshotBuildGate = snapshotBuildGate
         let previousSnapshot = snapshot
         let previousUnfilteredSnapshot = unfilteredSnapshot
         let usageStore = usageStore
         let currentEvents = events
         let currentLoadedEventsDateRange = loadedEventsDateRange
-        let cachedContext = cachedSnapshotContext
-        let cachedContextKey = cachedSnapshotContextKey
-        let currentPeriodFilterTotals = periodFilterTotals
-
+        isRefreshingCalendarOnly = true
         isRefreshing = true
 
         snapshotBuildQueue.async { [weak self] in
-            // canBuildSnapshotFromSQL depends only on project/session/day, so gating on the raw
-            // request is equivalent to gating on the bounds-filled buildRequest. The SQL path reads
-            // its own dateBounds on the shared transaction and adds no period-total or panel-summary
-            // query (it publishes periodFilterTotals: nil / panelSummary: nil below, as before).
-            let snapshotOutput: TokenUsageDashboardSnapshotBuildOutput
-            let appliedLoadedEvents: [TokenUsageEvent]
-            let appliedLoadedEventsDateRange: TokenUsageDashboardSnapshot.DateRange?
-            let dateBounds: TokenUsageDashboardDateBounds
-            let inputScope: TokenUsageInputScope
-            if Self.canBuildSnapshotFromSQL(for: request) {
-                guard let sqlResult = Self.buildSnapshotOutputFromSQL(
-                    usageStore: usageStore,
-                    request: request,
-                    loadsPeriodFilterTotals: false,
-                    cachedPeriodFilterTotals: [:],
-                    loadsPanelSummary: false
-                ) else {
-                    // This path set only isRefreshing (never loadState), so restore only that.
-                    DispatchQueue.main.async { [weak self] in
-                        self?.restoreStateAfterFailedSQLBuild(generation: generation, resetLoadState: false)
-                    }
-                    return
-                }
-                snapshotOutput = sqlResult.output
-                appliedLoadedEvents = []
-                appliedLoadedEventsDateRange = nil
-                dateBounds = sqlResult.dateBounds
-                inputScope = request.inputScope
-            } else {
-                let loadedDateBounds = Self.loadDateBounds(from: usageStore, for: request)
-                let buildRequest = request.replacingAvailableDateBounds(loadedDateBounds)
-                let loadedEventScope = Self.loadEvents(
-                    from: usageStore,
-                    for: request,
-                    cachedEvents: currentEvents,
-                    cachedDateRange: currentLoadedEventsDateRange
+            // Superseded rapid clicks do no SQL work, and cannot publish later.
+            guard snapshotBuildGate.isCurrent(generation) else { return }
+            let month = Self.calendarMonthStart(for: request)
+            let totals = usageStore.withDatabaseConnection(nil, default: nil) { database -> [String: TokenUsageInputScopeTotals]? in
+                let failures = TokenUsageQueryFailureObserver()
+                let totals = usageStore.dashboardDayInputScopeTotals(
+                    startingAt: month,
+                    endingBefore: request.calendar.date(byAdding: .month, value: 1, to: month) ?? month,
+                    calendar: request.calendar,
+                    dashboardToolsOnly: !request.showAdvancedTools,
+                    visibleTools: request.visibleAITools,
+                    database: database,
+                    failureObserver: failures
                 )
-                let loadedEvents = loadedEventScope.events
-                let calendarMonthSummary = Self.loadCalendarMonthSummary(from: usageStore, for: buildRequest)
-                snapshotOutput = Self.buildSnapshotOutput(
-                    events: loadedEvents,
-                    request: buildRequest,
-                    periodFilterTotals: currentPeriodFilterTotals,
-                    calendarDayTotals: calendarMonthSummary.dayTokenTotals,
-                    cachedContext: cachedContext,
-                    cachedContextKey: cachedContextKey
-                )
-                appliedLoadedEvents = loadedEvents
-                appliedLoadedEventsDateRange = loadedEventScope.cacheCoverageDateRange
-                dateBounds = loadedDateBounds
-                inputScope = buildRequest.inputScope
+                return failures.didFail ? nil : totals
             }
+            guard let totals else {
+                DispatchQueue.main.async { [weak self] in
+                    self?.restoreStateAfterFailedSQLBuild(generation: generation, resetLoadState: false)
+                }
+                return
+            }
+            let pair = TokenUsageDashboardSnapshotPair(
+                filtered: previousSnapshot.replacingCalendarMonth(month, dayTotals: totals, request: request),
+                unfiltered: previousUnfilteredSnapshot.replacingCalendarMonth(month, dayTotals: totals, request: request),
+                calendarMonthStart: month
+            )
 
             DispatchQueue.main.async { [weak self] in
                 guard let self, self.snapshotBuildGate.isCurrent(generation) else {
                     return
                 }
-
+                guard usageStore.dashboardDataRevision == dataRevision else {
+                    self.refreshAsync(trackLiveUpdates: false, refreshesPanelSummary: false)
+                    return
+                }
                 self.applySnapshotPair(
-                    snapshotOutput.snapshotPair,
-                    loadedEvents: appliedLoadedEvents,
-                    inputScope: inputScope,
+                    pair,
+                    loadedEvents: currentEvents,
+                    inputScope: request.inputScope,
                     trackLiveUpdates: false,
                     previousEvents: nil,
                     previousSnapshot: previousSnapshot,
                     previousUnfilteredSnapshot: previousUnfilteredSnapshot,
-                    loadedEventsDateRange: appliedLoadedEventsDateRange,
+                    loadedEventsDateRange: currentLoadedEventsDateRange,
                     periodFilterTotals: nil,
-                    panelSummary: nil,
-                    availableDateBounds: dateBounds,
-                    snapshotContext: snapshotOutput.context,
-                    snapshotContextKey: snapshotOutput.contextKey
+                    panelSummary: nil
                 )
             }
         }

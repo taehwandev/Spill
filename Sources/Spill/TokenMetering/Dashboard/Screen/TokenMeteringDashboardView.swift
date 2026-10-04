@@ -491,10 +491,9 @@ extension TokenMeteringDashboardView {
                         TokenMeteringLiveUpdateDot(isActive: isLiveUpdated, marker: store.liveUpdateMarker)
                         Spacer(minLength: 0)
                         if kpi.id == "total",
-                           let comparison = store.snapshot.comparisonTotalTokens,
-                           comparison > 0 {
-                            let delta = store.snapshot.totalTokens - comparison
-                            let pct = Double(delta) / Double(comparison) * 100
+                           let comparison = store.snapshot.usageComparison(for: store.snapshotInputScope) {
+                            let delta = comparison.delta
+                            let pct = comparison.percentage
                             HStack(spacing: 2) {
                                 Image(systemName: delta >= 0 ? "arrow.up.right" : "arrow.down.right")
                                     .font(.system(size: 7, weight: .black))

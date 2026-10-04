@@ -35,11 +35,14 @@ extension TokenUsageStore {
             dashboardToolsOnly: dashboardToolsOnly,
             visibleTools: visibleTools
         )
+        let sliceGrouping = Self.isSingleDashboardCalendarDay(
+            startingAt: startDate, endingBefore: endDate, calendar: calendar
+        ) ? "" : ", \(Self.dashboardQuarterHourSliceSQL)"
         let sql = """
         SELECT ai_tool, MIN(created_at), SUM(total_tokens), SUM(\(Self.dashboardFreshTokenSQL)), COUNT(*)
         FROM token_usage_events
         \(whereClause)
-        GROUP BY ai_tool, \(Self.dashboardQuarterHourSliceSQL)
+        GROUP BY ai_tool\(sliceGrouping)
         """
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
