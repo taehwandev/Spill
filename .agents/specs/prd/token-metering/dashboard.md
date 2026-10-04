@@ -80,6 +80,9 @@
   clock-area AI token value to exact uncached input plus unchanged output.
 - Daily and all-time menu bar modes use the same scope. Input without an exact
   accounting split is not guessed and is not counted as fresh.
+- A period comparison uses the same applied input scope as its KPI headline.
+  During an asynchronous scope rebuild, both continue to use the previous
+  snapshot's applied scope until the replacement arrives.
 - The setting includes an accessible information button that explains the exact
   data boundary.
 - Changing the scope updates the running main menu bar process, compact panel,
@@ -157,6 +160,21 @@
 - Periodic refreshes publish dashboard snapshots and AI status arrays only when
   their presentation values change. An identical refresh must not invalidate
   the text-heavy dashboard tree.
+- Calendar month navigation updates the heatmap without rebuilding unchanged
+  KPI, model, task, stage, trend, or Work Item analytics. A pending scope refresh
+  or changed store revision must refresh the latest scope instead of restoring
+  older analytics. Superseded month clicks must be discarded before SQL work
+  and before publication.
+- Selecting a calendar day without a folder or Work Item selection uses SQL
+  aggregates for that exact local day, avoiding raw event hydration even when
+  one day contains most of the history. Day selection retains the existing
+  period, tool eligibility, input-scope, comparison, and navigation semantics.
+- Calendar heatmaps retain raw-positive days in Fresh-only mode even when the
+  exact fresh total is zero. Local day boundaries include DST transitions and
+  partial query ranges; hidden tools cannot extend calendar history.
+- Interaction regressions use synthetic large histories and report completed
+  month/day/tool refresh times separately from fixture creation. Existing exact
+  totals and filter results must agree with the bounded event-based reference.
 - Expanding Agent Status details must not use a move-based layout transition.
   Opacity-only presentation keeps repeated refreshes from remeasuring the
   expanded text hierarchy through `MoveTransition`.

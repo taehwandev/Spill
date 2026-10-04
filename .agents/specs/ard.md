@@ -596,6 +596,10 @@ Rules:
   or `output_tokens + accounting_uncached_input_tokens` for Fresh only) instead
   of a separate raw `total_tokens` sum. Workflow coverage, source-detail, and
   raw input accounting projections continue to use raw totals.
+- KPI comparison projects the current total from the applied snapshot's own
+  input scope. Its previous-period comparison total is already projected by
+  snapshot construction and must not be projected a second time. Pending
+  setting changes do not change either side before the new snapshot is applied.
 - The compact panel summary query returns both the complete raw total and the
   exact fresh total in the same store read. `TokenUsagePanelSummarySnapshot`
   projects only its headline total from `SpillSettings.tokenUsageInputScope`;
@@ -630,12 +634,26 @@ Rules:
   may write a same-basename `.accounting` sidecar beside the `.json`/`.jsonl`
   inbox event file; the sidecar may contain only span id, safe tool label, and
   numeric accounting buckets.
+- The SQLite span primary key is the persisted event identity. Schema upgrades
+  advance legacy versions without deleting rows based on matching usage,
+  timestamps, or time windows. Aggregate upload likewise preserves distinct
+  spans; safe numeric fields are not an alternative identity.
+- Same-span raw-total repair replaces complete incoming accounting as one unit.
+  Missing incoming accounting retains prior detail only when both raw input and
+  output are unchanged; changed totals clear all four accounting columns in the
+  same UPSERT. This preserves raw usage without presenting stale attribution or
+  producing rows that event decoding rejects.
 - Event identity is separate from display totals. When changing a runtime
   measurement baseline, importers should preserve stable event identity where
   possible and repair numeric totals in place instead of duplicating historical
   rows. Claude Code uses `input_tokens + cache_creation_input_tokens` as its
   `span_id` input component while storing cache-read-inclusive raw
   `input_tokens`.
+
+The [October 2026 architecture review](../design/architecture-review-2026-10.md)
+records the bounded integrity corrections and remaining runtime-identity,
+connection-generation, and importer privacy design work. Deferred proposals are
+not implemented architecture decisions.
 
 ### ARD-005B2: Token Usage Separates Runtime Diagnostics and User Visibility
 
@@ -746,6 +764,36 @@ Rules:
 - The distributed store-change notification carries the posting process id, and
   the posting process ignores its own echo: the in-process notification already
   handled that change, so reacting to the echo would run the same reads twice.
+
+Dashboard calendar interaction:
+
+- `TokenUsageDashboardSnapshot+CalendarProjection` replaces only calendar fields
+  on the existing immutable snapshots. Month movement reads one shared heatmap
+  aggregate for the filtered and unfiltered halves; it does not rebuild analytics
+  or hydrate events. The store reuses this projection only after a completed
+  snapshot, with no pending data/scope refresh and the same store data revision.
+  It checks generation before SQL and publication, checks revision again before
+  publication, and falls back to the current full request when reuse is unsafe.
+- `loadDashboardDayTokenTotals` prepares one indexed range-SUM statement and
+  reuses it for each exact local day. Calendar boundaries and first/last clamps
+  preserve short/long DST days, midnight transitions, fractional offsets, and
+  half-open ranges. It materializes at most one result per populated day instead
+  of parsing every event timestamp; failed statements discard partial results.
+- SQL snapshot eligibility includes calendar-day selection when project and
+  Work Item selections are absent. Every focused aggregate uses the selected
+  local day range; the period chips and heatmap keep their broader eligible-tool
+  scope. Day selection disables period navigation/comparison, preserves its
+  localized title/selection, and scopes freshness timestamps to the day.
+- Session and trend source queries omit UTC quarter-hour slicing only when their
+  exact query range is contained within one local calendar day. Wider ranges
+  retain the existing slice grouping. This removes redundant string bucketing
+  without merging events across local days.
+- The synthetic 100K fixture and benchmark live in
+  `TokenUsageDashboardLargeFixture` and
+  `TokenUsageDashboardCalendarPerformanceTests`; boundary/filter parity is checked
+  by `TokenUsageCalendarDayAggregationTests` and `TokenUsageDashboardDaySQLTests`.
+  See `.agents/design/architecture-review-2026-10.md` for observed before/after
+  timings and their measurement limits. No schema, polling, or sync path changes.
 
 Store open cost:
 
@@ -1042,6 +1090,21 @@ Rules:
   values, transcripts, shell history, or secrets.
 - A stats helper run is not evidence that the current turn was recorded. It is
   only a read-only report over events that already exist in the local store.
+- The helper's sibling accounting module queries existing local accounting
+  columns only when the schema supports them. Null, invalid, or missing fields
+  leave input unclassified; any unaccounted remainder also stays unclassified.
+  Old stores do not require migration.
+  Raw totals remain unchanged. Fresh plus output and the reference-weighted
+  index are separate subtotals, with input coverage and excluded input shown.
+  Weights are fresh 1, cache creation 1.25, cache read 0.1, output 1; they are
+  a declared comparison convention, not provider rates or invoice estimates.
+- Context-size statistics use average/maximum raw input per stored event.
+  Session ranking groups by `(ai_tool, run_id)`, filters invalid opaque ids,
+  and returns the top N per tool with raw token share. Work Item grouping and
+  local aliases are not used for this runtime-session view. The helper and its
+  accounting and presentation modules install together; no settings, timers,
+  collectors, sync payloads,
+  event-schema keys, or stored usage rows change.
 - Custom workflow labels must not encode task text, feature names, project
   names, file names, branch names, ticket ids, user names, or private content.
 - The `ai_tool` label is additive and content-free. Missing labels from older
@@ -1089,6 +1152,24 @@ Rules:
   go to `claude-last-empty.json`; invalid payloads, missing transcripts, or read
   failures go to `claude-last-mismatch.json`; successful enqueue goes to
   `claude-last-success.json`.
+- The Python Claude adapter shares one lazy, in-memory safe-label timeline
+  snapshot across the events and subagent files of a single invocation. It
+  streams and validates the timeline once, sorts by update time, and preserves
+  inclusive validity windows and the first active row for equal update times.
+  A later invocation reloads the timeline; no persistent cache or polling path
+  is added. Missing/invalid labels leave exact usage collectible with fallback
+  classification.
+- Python transcript cursors stop before an unterminated record whose JSON or
+  UTF-8 is incomplete. Complete JSON without a final newline remains supported;
+  malformed terminated rows may advance the cursor. A size check skips opening
+  an unchanged transcript. Persistent turn indices, span identity, raw totals,
+  and accounting sidecars remain unchanged.
+- Every Python Stop invocation checks child usage independently of the main
+  transcript result. Discovery supports both the session-stem `subagents/`
+  directory and the legacy sibling layout, without a date lookback; opaque
+  child-session cursors prevent repeated enqueue. Parent no-delta diagnostics
+  describe the main transcript specifically, rather than implying that the
+  entire invocation lacked child usage.
 - The collection coordinator retains one native Claude importer for its
   lifetime and invokes it on the existing serial collection queue. This lets
   content-free in-memory discovery and append-cursor caches survive collection
@@ -1134,6 +1215,18 @@ Rules:
   to the canonical file from `~/.antigravity/AGENTS.md`.
 - Instruction bridge writes must be idempotent, preserve unrelated user text,
   keep one managed Spill block per target, and back up a changed existing file.
+  Reinstall consolidates all complete managed blocks, retaining intervening
+  personal rules. Unmatched or nested markers fail without rewriting that file.
+  Unmarked inline instruction copies are removed only when the normalized body
+  exactly matches the canonical source or a recognized shipped legacy digest;
+  custom bodies and the separate local display-name preference remain intact.
+  The short pointer permits session guidance reuse while preserving the per-turn
+  fallback label handoff. Metering-only setup never compacts instruction files.
+- Normal app startup refreshes already-installed adapter/helper resources and
+  the existing shared instruction from the current bundle. It does not install
+  missing hooks or migrate runtime bridges; those require explicit setup.
+  Smoke-test startup skips this refresh so fixture verification cannot replace
+  the user's installed adapters or shared instruction.
 - Setup helper output, setup UI, and copied agent-facing install prompts must
   disclose that known local JSONL, transcript, or metadata stores can be read
   locally only for exact token metadata, and must repeat that content-like

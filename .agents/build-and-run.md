@@ -3,8 +3,8 @@ title: Spill App Build And Run Guide
 audience: Claude Code, Codex, Antigravity/AGY, and local contributors
 purpose: Explain exactly how to build, bundle, restart, package, and verify the Spill macOS app without confusing compiled binaries, app bundles, bundled resources, and installed token-metering hooks.
 status: stable
-source_of_truth: Package.swift, scripts/build-app.sh, scripts/package-release.sh, scripts/prepare-docs.sh, README.md
-last_verified: 2026-06-17
+source_of_truth: Package.swift, scripts/build-app.sh, scripts/package-release.sh, scripts/prepare-docs.sh, Sources/Spill/TokenMetering/TokenMeteringCoordinator.swift, Sources/Spill/TokenMetering/TokenMeteringAdapterKit.swift, README.md
+last_verified: 2026-10-04
 applies_to: repo, macOS app, token metering adapters, release packaging
 related: AGENTS.md, .agents/README.md, .agents/specs/prd.md, .agents/specs/ard.md, README.md
 ---
@@ -52,8 +52,8 @@ that helper, not turn the main menu bar app into a regular foreground app.
 | --- | --- | --- |
 | `swift run Spill` | Runs the executable target directly from SwiftPM. | Does not create or run `.build/Spill.app`; not the normal bundled menu bar app path. |
 | `swift build` | Compiles the Swift package executable and resources. | Does not create the macOS `.app` bundle, Info.plist, icon, embedded Sparkle framework, or final codesigned app. |
-| `./scripts/build-app.sh` | Builds and signs the local `.build/Spill.app` bundle. | Does not update already installed user-level token-metering hook scripts under `~/Library/Application Support/Spill/adapters`. |
-| `open .build/Spill.app` | Launches the local bundled app. | Does not terminate an older running copy. If an old process is still running, UI changes may appear missing. |
+| `./scripts/build-app.sh` | Builds and signs the local `.build/Spill.app` bundle. | Does not launch it, replace `/Applications/Spill.app`, or apply installed adapter or instruction changes. |
+| `open .build/Spill.app` | Launches the local bundled app; normal startup refreshes already installed app-owned metering resources. | Does not terminate an older running copy, install new connections, or migrate runtime instruction bridges. |
 | `./scripts/package-release.sh` | Builds release ZIP/DMG artifacts from the app bundle. | Requires signing/notarization env only for official Developer ID releases. |
 
 `./scripts/build-app.sh` is the local app bundle source of truth. It runs
@@ -61,6 +61,15 @@ that helper, not turn the main menu bar app into a regular foreground app.
 copies adapter resources into the app bundle, embeds Sparkle, writes
 `Info.plist`, generates the icon, creates the nested `Spill Token Dashboard.app`
 helper, and signs the helper before signing the main app.
+
+Resource selection must use `.build/release/Spill_Spill.bundle`, beside the
+executable from the same build. `.build/release` may be a symlink; resolving a
+child through that path works with both flat and structured SwiftPM bundles.
+Do not recursively select the first matching bundle under `.build`: older
+scratch or toolchain builds can coexist there and silently supply stale
+adapters. The token-metering smoke check compares all adapter files in the main
+app and nested helper, including their SwiftPM bundle copies, with the resource
+source tree before running collection checks.
 
 ## Menu Bar App Behavior
 
@@ -114,14 +123,23 @@ being tested separate from the copy being edited.
 | `~/.spill/runtime-instruction.md` | Installed owner-only shared instruction read through the runtime discovery bridges. |
 | `~/Library/Application Support/Spill/adapters/<tool>/...` | Installed user-level runtime hook or importer used by Codex, Claude Code, and AGY after setup. |
 
-Rebuilding the app updates the `.build/Spill.app` resource copy. It does not
-automatically overwrite the installed user-level hook files in Application
-Support. If a hook script changed and the user wants the runtime to use it now,
-run the setup helper or installer again after approval.
+Rebuilding updates the `.build/Spill.app` resource copy. Normal app startup then
+refreshes already installed hooks, setup/stats helpers, and the shared runtime
+instruction from that app's bundled resources. It does not create new runtime
+connections, update permissions, or migrate discovery bridges. Verify the
+running app copy and installed file bytes before deciding a reinstall is needed;
+an older installed app also carries its own resource versions.
+
+Smoke-test startup must skip this refresh and leave real installed adapters and
+instructions unchanged. Isolated smoke data is not permission to refresh global
+runtime files.
 
 The Preferences and token-dashboard direct setup buttons are explicit user
 approval to refresh the bundled helper resources and run that installed helper
-with `--apply`. Merely opening either view, refreshing installation status, or
+with `--apply --metering-only`. This basic mode preserves existing workflow
+integration and instruction bridges and does not create or update the shared
+instruction or discovery bridges. Merely opening either view, refreshing
+installation status, or
 copying setup instructions must not execute the helper. The button should show
 `Install` when the setup helper/shared instruction are absent and
 `Reinstall`/`Repair` when app-owned setup is already present.
@@ -158,12 +176,21 @@ diff -q docs/token-metering/runtime-instruction.md adapters/setup/runtime-instru
 diff -q docs/token-metering/runtime-instruction.md Sources/Spill/Resources/adapters/setup/runtime-instruction.md
 ```
 
-The setup helper installs one canonical instruction at
-`~/.spill/runtime-instruction.md`. It merges only a managed bridge into the
+Full setup installs one canonical instruction at
+`~/.spill/runtime-instruction.md`. It merges one managed bridge into the
 active Codex user instruction file, `~/.claude/CLAUDE.md`, and
-`~/.antigravity/AGENTS.md`; those runtime files are not independent copies of
-the full Spill prompt. Existing unrelated content must remain intact, and
-running agent sessions may need a restart before they reload the bridge.
+`~/.antigravity/AGENTS.md`. Repeated setup consolidates duplicate managed Spill
+blocks. It replaces an unmanaged legacy Spill instruction only when it matches
+a recognized unmodified version; unknown or customized text remains intact.
+Malformed markers must fail safely instead of replacing uncertain user text.
+Changed existing files are backed up. Personal language preferences and other
+unrelated rules must remain intact.
+
+The bridge reads the canonical instruction once and reuses it until it is known
+to have changed. Safe per-turn fallback labels still run with `--if-absent` and
+explicit workflow labels retain precedence. Running agent sessions may need a
+restart before they reload a changed bridge. Use full setup for bridge repair;
+app startup refresh and basic-metering setup do not perform this migration.
 
 ## Token Metering Runtime Facts
 
@@ -314,6 +341,7 @@ Use the narrowest command that proves the changed surface.
 | Runtime app launch smoke | `python3 .agents/scripts/workflow.py runtime-smoke` |
 | Visible token dashboard release render | `python3 .agents/scripts/workflow.py token-dashboard-render-smoke` |
 | Token metering queue/adapters | `python3 .agents/scripts/workflow.py token-metering-smoke` |
+| Setup and instruction bridge repair | `node --test scripts/verify-token-metering-setup.mjs` |
 | Status item click path | `python3 .agents/scripts/workflow.py status-click-smoke` |
 | Hosted web portal | Private `taehwandev/Spill-web` repo: `cd web && npm test && npm run build` |
 
@@ -354,9 +382,9 @@ layout hangs.
   `~/Library/Application Support/Spill/adapters/...` script was not refreshed.
 - `events-inbox/` is empty: that may be normal after the app imports queued
   events. Check SQLite and diagnostics before assuming no hook ran.
-- AGY shows `empty_stdin`: that can be a normal no-event lifecycle or tool step.
-  Do not treat it as missing token usage unless there is also no later success
-  diagnostic or no stored usage event for real model calls.
+- AGY produces a label permission prompt or hook log without a usage event:
+  that is setup evidence only. Check the active importer's exact-usage diagnostic
+  or stored event after a real runtime turn; do not add lifecycle hooks.
 - A run id looks meaningless: that is expected. Run ids are opaque grouping keys,
   not conversation titles or task names.
 

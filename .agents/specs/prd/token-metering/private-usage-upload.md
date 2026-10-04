@@ -54,6 +54,9 @@ downloads cloud usage data.
 - Encrypted daily buckets include token accounting totals used for local cost
   estimates, grouped by tool, model, task, stage, workflow coverage, and Work
   Item. Only aggregate counts and safe labels are uploaded.
+- Aggregation preserves distinct local span identities, including events with
+  identical timestamps and numeric usage. Re-delivery of an identical span may
+  be collapsed locally; span identifiers remain excluded from upload payloads.
 - Plaintext shared summaries are a member-readable aggregate contract for
   dashboards that cannot decrypt sealed buckets. They preserve the same safe
   Work Item list: id, AI tool, task type, stage, model, totals, first event time,

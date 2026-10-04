@@ -52,6 +52,15 @@ does not own dashboard layout or Private Usage Upload behavior.
 - After a basic-metering install or repair, setup status and copied instructions
   must tell users that an AI tool session already in progress needs a restart or
   a new session before it can load the updated connection files.
+- Basic-metering installation preserves existing workflow and instruction
+  integration without creating or updating the shared agent instruction or its
+  runtime discovery bridges. Full workflow-aware setup uses one canonical
+  instruction and one managed bridge per runtime instruction file.
+- Repeated full setup consolidates managed Spill bridges and replaces only
+  recognized unmodified legacy Spill instructions. It preserves personal and
+  customized rules and backs up changed existing files. Agents may reuse the
+  canonical instruction until it is known to have changed, while refreshing safe
+  fallback labels for every user-visible task.
 - Setup UI and the copied agent install prompt must explicitly explain that
   supported local JSONL, transcript, or metadata stores may be read locally only
   for exact token metadata, and that prompts, responses, commands, file paths,
@@ -114,9 +123,23 @@ does not own dashboard layout or Private Usage Upload behavior.
   placeholder. The helper must expose event count, total tokens, average event
   size, peak event size, model/task/stage breakdowns, token detail categories,
   and recent activity in addition to input/output totals.
+- The stats helper also exposes recorded fresh/cache-write/cache-read input,
+  unclassified input and accounting coverage, cache-read share, fresh plus
+  output and a separately labeled reference-weighted comparison subtotal.
+  Reference weights are fresh 1, cache write 1.25, cache read 0.1, and output 1;
+  this index is not model pricing or billed cost. Unknown input is excluded
+  from comparison subtotals and must remain visible with coverage.
+- Context-size reporting means average and maximum raw input per recorded
+  event, a proxy rather than an exact runtime context-window measurement.
+  Top sessions group only by safe opaque run id and tool, include raw totals,
+  input/output, event count and share, and never infer session titles.
 
 ## Resource And Freshness Requirements
 
+- Normal app startup may refresh already installed app-owned adapter and shared
+  instruction files. Creating new runtime connections or migrating instruction
+  bridges remains an explicit setup action. Smoke-test startup must leave real
+  installed adapters and instructions unchanged.
 - Atomic inbox files and store-change notifications are the primary live
   freshness path. Spill imports completed inbox events immediately without
   waiting for a dashboard or menu-bar timer.
@@ -137,24 +160,26 @@ does not own dashboard layout or Private Usage Upload behavior.
   per AI turn. Runtime behavior that writes the same turn 2-3 times, such as
   Claude Code writing the same request ID with slightly different timestamps,
   must not produce multiple counted events.
-- Dedup must not merge distinct turns. Two real turns that happen to share the
-  same input and output token counts must each count as separate events. The
-  dedup policy must use only safe, non-content signals such as timestamps, run
-  IDs, and exact request IDs, and never inspect prompt or response content.
+- Dedup must not merge distinct turns. Matching token counts, timestamps, run
+  IDs, models, or workflow labels do not prove that two events are duplicates.
+  Duplicate prevention requires a trusted opaque span/request identity and
+  never inspects prompt or response content.
 - Duplicate prevention uses a layered strategy whose specifics live in ARD and
   adapter docs. At the product level:
-  - A runtime re-write of the same turn within a short window is counted once.
-  - Exact-content duplicates with the same timestamp, tokens, tool, model, and
-    workflow labels are collapsed in both the local store and sync.
+  - Re-delivery of the same trusted span is counted once.
+  - Distinct spans with identical timestamps, tokens, tool, model, and workflow
+    labels remain separate in both the local store and sync.
   - Distinct turns from different tools or workflow stages are never merged,
     even when their token counts match.
-- The local DB schema carries a monotonically increasing `user_version` to track
-  which dedup migrations have run. One-time DB migrations apply dedup rules
-  retroactively so historical over-counts can be corrected without requiring a
-  full re-import.
-- Private Usage Upload sync applies the same exact-content dedup policy before
-  uploading aggregates. Sync must not apply a weaker or stricter policy than the
-  local store or re-merge events that local dedup separated as distinct turns.
+- The local DB schema carries a monotonically increasing `user_version`.
+  Upgrades preserve distinct spans; legacy similarity-based deletion must not
+  run on an older database. This does not reconstruct records removed by an
+  earlier version.
+- When a same-span update changes raw input or output without new exact
+  accounting, prior accounting becomes unavailable. Unchanged raw totals may
+  retain prior exact accounting; new exact accounting replaces it atomically.
+- Private Usage Upload preserves the local store's span identities when
+  aggregating. It must not re-merge distinct turns using counts or time windows.
 - Because local token metering has not shipped as a compatibility-boundary
   feature, existing experimental local usage rows, diagnostics, importer cursors,
   and adapter cache data do not require migration or backward compatibility.
