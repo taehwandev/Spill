@@ -129,7 +129,7 @@ extension PrivateUsageDailyBucketBuilder {
     ) -> [PrivateUsageDailyAggregate] {
         let todayStart = calendar.startOfDay(for: now)
         let earliestDayStart = earliestBucketStart.map { calendar.startOfDay(for: $0) }
-        let deduplicatedEvents = Self.deduplicateByContent(events)
+        let deduplicatedEvents = Self.deduplicateBySpanID(events)
         let groupedEvents = Dictionary(grouping: deduplicatedEvents.compactMap { event -> (Date, TokenUsageEvent)? in
             guard let date = ISO8601DateFormatter.parseTokenUsageDate(from: event.createdAt),
                   date < todayStart || (includeCurrentDay && date <= now)

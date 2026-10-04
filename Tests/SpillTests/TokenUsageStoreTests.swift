@@ -6256,16 +6256,10 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(rows, [["span_null_tokens_a"], ["span_null_tokens_b"]])
     }
 
-    func testTimeWindowDuplicateBackfillRemovesSameFormatDuplicatesWithinThirtySeconds() throws {
-        // Bug #2: Claude Code writes the same requestId 2-3x to the transcript with
-        // slightly different timestamps. All resulting events use span- format.
-        // The migration should collapse them into one, keeping the earliest.
-        // The widest migration window in the chain (user_version 10) is 300 s (widened
-        // from 30 s across several migrations to catch real Bug #2 gaps up to ~90 s
-        // observed across the Stop hook / active importer paths), so this fixture places
-        // the genuinely distinct turn at 400 s to stay unambiguously outside every window
-        // this store reopen will run (this test starts from user_version 4, so every
-        // migration from 5 through 10 executes).
+    func testTimeWindowMigrationPreservesUnprovenDuplicateSpans() throws {
+        // Equal counts and nearby timestamps do not prove that different spans are
+        // the same runtime request. Preserve every identity while advancing the old
+        // schema; only exact span dedup or an authoritative scan can prove duplicates.
         let eventsURL = temporaryEventsURL()
         let store = TokenUsageStore(fileURL: eventsURL)
         let databaseURL = store.eventsDatabaseURL
@@ -6286,7 +6280,7 @@ final class TokenUsageStoreTests: XCTestCase {
             inputTokens: 50000,
             outputTokens: 500,
             model: "claude-sonnet-4",
-            createdAt: "2026-06-05T00:00:05.000Z"   // 5 s later — Bug #2 duplicate
+            createdAt: "2026-06-05T00:00:05.000Z"
         )
         let distinctLaterTurn = Self.safeEvent(
             aiTool: .claude,
@@ -6295,7 +6289,7 @@ final class TokenUsageStoreTests: XCTestCase {
             inputTokens: 50000,
             outputTokens: 500,
             model: "claude-sonnet-4",
-            createdAt: "2026-06-05T00:06:40.000Z"   // 400 s later — genuinely different turn
+            createdAt: "2026-06-05T00:01:00.000Z"
         )
 
         try store.replaceEvents([firstWrite, secondWrite, distinctLaterTurn])
@@ -6306,7 +6300,7 @@ final class TokenUsageStoreTests: XCTestCase {
         let migratedStore = TokenUsageStore(fileURL: eventsURL)
         XCTAssertEqual(
             migratedStore.loadEvents().map(\.spanID).sorted(),
-            ["span-distinct-later", "span-first-write"]
+            ["span-distinct-later", "span-first-write", "span-second-write"]
         )
     }
 

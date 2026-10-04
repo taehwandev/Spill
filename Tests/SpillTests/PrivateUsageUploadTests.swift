@@ -409,7 +409,82 @@ final class PrivateUsageUploadTests: XCTestCase {
         XCTAssertEqual(aggregate.totals.totalTokens, 24)
     }
 
-    func testDailyBucketBuilderDropsExactContentDuplicate() throws {
+    func testDailyBucketBuilderKeepsDistinctSpansWithIdenticalUsageAndTimestamp() throws {
+        let timeZone = try XCTUnwrap(TimeZone(identifier: "UTC"))
+        let calendar = fixedCalendar(timeZone: timeZone)
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 9, hour: 9)))
+        let yesterday = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 8, hour: 12)))
+        let sealer = RecordingPrivateUsageSealer()
+        let builder = PrivateUsageDailyBucketBuilder(calendar: calendar, timeZone: timeZone, sealer: sealer)
+        let events = ["span-distinct-one", "span-distinct-two"].map { spanID in
+            makeEvent(
+                spanID: spanID,
+                runID: "run_identical_usage",
+                aiTool: .claude,
+                taskType: "analysis",
+                stage: "plan",
+                model: "claude-sonnet-4",
+                input: 10,
+                output: 2,
+                createdAt: yesterday
+            )
+        }
+
+        _ = try builder.makeDirtyDailyBuckets(events: events, acknowledgedHashesByBucketKey: [:], now: now)
+        let plaintext = try XCTUnwrap(sealer.plaintexts.first)
+        let aggregate = try JSONDecoder().decode(PrivateUsageDailyAggregate.self, from: plaintext)
+        let summary = try XCTUnwrap(builder.makeDirtySharedSummaries(
+            events: events,
+            acknowledgedHashesByBucketKey: [:],
+            now: now
+        ).first)
+
+        XCTAssertEqual(aggregate.totals.eventCount, 2)
+        XCTAssertEqual(aggregate.totals.inputTokens, 20)
+        XCTAssertEqual(aggregate.totals.outputTokens, 4)
+        XCTAssertEqual(aggregate.totals.totalTokens, 24)
+        XCTAssertEqual(summary.totals, aggregate.totals)
+    }
+
+    func testDailyBucketBuilderKeepsDistinctToolAndStageEventsAtSameTimestamp() throws {
+        let timeZone = try XCTUnwrap(TimeZone(identifier: "UTC"))
+        let calendar = fixedCalendar(timeZone: timeZone)
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 9, hour: 9)))
+        let yesterday = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 8, hour: 12)))
+        let sealer = RecordingPrivateUsageSealer()
+        let builder = PrivateUsageDailyBucketBuilder(calendar: calendar, timeZone: timeZone, sealer: sealer)
+        let labels: [(String, TokenUsageAITool, TokenUsageStage)] = [
+            ("span-codex-implement", .codex, "implement"),
+            ("span-claude-implement", .claude, "implement"),
+            ("span-codex-verify", .codex, "verify")
+        ]
+        let events = labels.map { spanID, tool, stage in
+            makeEvent(
+                spanID: spanID,
+                runID: "run_same_timestamp",
+                aiTool: tool,
+                taskType: "analysis",
+                stage: stage,
+                model: "model-v1",
+                input: 10,
+                output: 2,
+                createdAt: yesterday
+            )
+        }
+
+        _ = try builder.makeDirtyDailyBuckets(events: events, acknowledgedHashesByBucketKey: [:], now: now)
+        let plaintext = try XCTUnwrap(sealer.plaintexts.first)
+        let aggregate = try JSONDecoder().decode(PrivateUsageDailyAggregate.self, from: plaintext)
+
+        XCTAssertEqual(aggregate.totals.eventCount, 3)
+        XCTAssertEqual(aggregate.totals.totalTokens, 36)
+        XCTAssertEqual(aggregate.toolTotals["codex"]?.totalTokens, 24)
+        XCTAssertEqual(aggregate.toolTotals["claude"]?.totalTokens, 12)
+        XCTAssertEqual(aggregate.stageTotals["implement"]?.totalTokens, 24)
+        XCTAssertEqual(aggregate.stageTotals["verify"]?.totalTokens, 12)
+    }
+
+    func testDailyBucketBuilderDropsRepeatedSameSpanEvent() throws {
         let timeZone = try XCTUnwrap(TimeZone(identifier: "UTC"))
         let calendar = fixedCalendar(timeZone: timeZone)
         let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 9, hour: 9)))
@@ -424,7 +499,7 @@ final class PrivateUsageUploadTests: XCTestCase {
         _ = try builder.makeDirtyDailyBuckets(
             events: [
                 makeEvent(
-                    spanID: "span-original",
+                    spanID: "span-repeated",
                     runID: "run_duplicate",
                     aiTool: .claude,
                     taskType: "analysis",
@@ -435,7 +510,7 @@ final class PrivateUsageUploadTests: XCTestCase {
                     createdAt: yesterday
                 ),
                 makeEvent(
-                    spanID: "span-exact-copy",
+                    spanID: "span-repeated",
                     runID: "run_duplicate",
                     aiTool: .claude,
                     taskType: "analysis",
@@ -443,7 +518,7 @@ final class PrivateUsageUploadTests: XCTestCase {
                     model: "claude-sonnet-4",
                     input: 10,
                     output: 2,
-                    createdAt: yesterday   // same timestamp = exact content duplicate
+                    createdAt: yesterday
                 )
             ],
             acknowledgedHashesByBucketKey: [:],
@@ -453,7 +528,7 @@ final class PrivateUsageUploadTests: XCTestCase {
         let plaintext = try XCTUnwrap(sealer.plaintexts.first)
         let aggregate = try JSONDecoder().decode(PrivateUsageDailyAggregate.self, from: plaintext)
 
-        // Same (run_id, ai_tool, task_type, stage, created_at, input, output) → exact duplicate, one dropped.
+        // Repeated delivery of the same exact span is one usage event.
         XCTAssertEqual(aggregate.totals.eventCount, 1)
         XCTAssertEqual(aggregate.totals.totalTokens, 12)
     }

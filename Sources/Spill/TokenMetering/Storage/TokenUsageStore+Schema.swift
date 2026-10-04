@@ -36,14 +36,8 @@ extension TokenUsageStore {
             """,
             database: database
         )
-        // Created before the user_version migration block below: removeTimeWindowDuplicateEvents
-        // runs up to five times across versions 5-10 on a database that jumps straight from an
-        // old version to the current one, and its correlated EXISTS subquery matches on exactly
-        // (run_id, input_tokens, output_tokens). Without this index in place first, every one of
-        // those passes falls back to a full table scan per candidate row on a table that can hold
-        // hundreds of thousands of events — this was the root cause of a confirmed production
-        // main-thread hang at app launch (see refreshMenuBarTokenTotalAsync). Its run_id prefix also
-        // serves every run_id lookup, so the older single-column run_id index is dropped below.
+        // Preserve the existing run lookup index used by session queries and
+        // authoritative reconciliation. Similarity-based event deletion is retired.
         try execute(
             """
             CREATE INDEX IF NOT EXISTS idx_token_usage_events_dedup_lookup
@@ -116,64 +110,12 @@ extension TokenUsageStore {
             try execute("DROP INDEX IF EXISTS idx_token_usage_events_project_created_at", database: database)
             try execute("PRAGMA user_version = 2", database: database)
         }
-        if userVersion < 3 {
-            try removeContentDuplicateEvents(database: database)
-            try execute("PRAGMA user_version = 3", database: database)
-        }
-        if userVersion < 5 {
-            try removeTimeWindowDuplicateEvents(database: database)
-            try execute("PRAGMA user_version = 5", database: database)
-        }
-        // user_version 6: re-run time-window dedup to catch Bug #2 duplicates that
-        // accumulated after user_version 5 ran. The Swift active importer now tracks
-        // emitted requestIds across batches (emitted_request_ids_by_source in state),
-        // so this one-time pass cleans the residual same-day duplicates.
-        if userVersion < 6 {
-            try removeTimeWindowDuplicateEvents(database: database)
-            try execute("PRAGMA user_version = 6", database: database)
-        }
-        // user_version 7: re-run time-window dedup to clean duplicates from the Python
-        // Stop hook turn_index bug. The hook used relative turn_index (0 per batch) while
-        // the Swift importer used cumulative absolute indices — same turn produced different
-        // span_ids across the two paths. Draining 280 pending inbox files created ~694
-        // extra events. The Python hook now persists next_turn_index so future span_ids
-        // stay in sync with the Swift importer.
-        if userVersion < 7 {
-            try removeTimeWindowDuplicateEvents(database: database)
-            try execute("PRAGMA user_version = 7", database: database)
-        }
-        // user_version 8: wider 120-second window dedup to catch cross-path duplicates
-        // that fall outside the 30 s window. The Python history import ("Import All Once")
-        // re-imported Claude sessions with correct absolute turn_index, creating events
-        // that pair with the earlier wrong-turn_index Stop hook events at timestamp
-        // differences up to ~90 s. Exact match on (run_id, input_tokens, output_tokens)
-        // within 120 s is extremely unlikely to be two distinct legitimate turns.
-        if userVersion < 8 {
-            try removeTimeWindowDuplicateEvents(database: database, windowSeconds: 120)
-            try execute("PRAGMA user_version = 8", database: database)
-        }
-        // user_version 9: fix "keep last vs keep first" span_id mismatch. Both
-        // deduplicateAssistantTurns (Swift) and _deduplicate_transcript_turns (Python)
-        // previously kept the LATER Bug #2 occurrence within a single batch, but the
-        // cross-batch emittedRequestIDsBySource rule kept the FIRST. When two Bug #2
-        // occurrences spanned different batches, the two paths chose different occurrences
-        // → different turn_index AND timestamp → different span_id → both survived the DB
-        // PRIMARY KEY check → duplicates. Both dedup functions now always keep the FIRST
-        // occurrence, ensuring within-batch and cross-batch paths agree on the canonical
-        // turn. Re-run wider dedup to clean residual duplicates from the old mismatch.
-        if userVersion < 9 {
-            try removeTimeWindowDuplicateEvents(database: database, windowSeconds: 120)
-            try execute("PRAGMA user_version = 9", database: database)
-        }
-        // user_version 10: final cleanup after the requestId-stable span_id formula lands.
-        // The new formula drops turnIndex and timestamp from the hash when requestId is
-        // present — all Bug #2 occurrences now hash to the same span_id, so the DB PRIMARY
-        // KEY blocks them at insert time going forward. Historical events in the DB still
-        // carry the old timestamp-based span_ids (T1 and T2 for the same turn) with gaps
-        // up to ~300 s. Use a 300 s window to eliminate the residual old pairs.
-        if userVersion < 10 {
-            try removeTimeWindowDuplicateEvents(database: database, windowSeconds: 300)
-            try execute("PRAGMA user_version = 10", database: database)
+        // These versions formerly deleted rows by equal metadata or nearby token
+        // totals, neither of which proves shared runtime identity. Keep their version
+        // advancement without destructive guesses; exact spans and authoritative
+        // source reconciliation remain the duplicate-prevention paths.
+        for retiredVersion in [3, 5, 6, 7, 8, 9, 10] where userVersion < retiredVersion {
+            try execute("PRAGMA user_version = \(retiredVersion)", database: database)
         }
         if userVersion < 11 {
             try execute(

@@ -72,22 +72,34 @@ extension TokenUsageStore {
             source_tool_output = excluded.source_tool_output,
             source_generated_output = excluded.source_generated_output,
             source_unknown = excluded.source_unknown,
-            accounting_uncached_input_tokens = COALESCE(
-                excluded.accounting_uncached_input_tokens,
-                token_usage_events.accounting_uncached_input_tokens
-            ),
-            accounting_cache_creation_input_tokens = COALESCE(
-                excluded.accounting_cache_creation_input_tokens,
-                token_usage_events.accounting_cache_creation_input_tokens
-            ),
-            accounting_cache_read_input_tokens = COALESCE(
-                excluded.accounting_cache_read_input_tokens,
-                token_usage_events.accounting_cache_read_input_tokens
-            ),
-            accounting_reasoning_output_tokens = COALESCE(
-                excluded.accounting_reasoning_output_tokens,
-                token_usage_events.accounting_reasoning_output_tokens
-            ),
+            accounting_uncached_input_tokens = CASE
+                WHEN excluded.accounting_uncached_input_tokens IS NOT NULL
+                    THEN excluded.accounting_uncached_input_tokens
+                WHEN \(retainedAccountingPredicate)
+                    THEN token_usage_events.accounting_uncached_input_tokens
+                ELSE NULL
+            END,
+            accounting_cache_creation_input_tokens = CASE
+                WHEN excluded.accounting_uncached_input_tokens IS NOT NULL
+                    THEN excluded.accounting_cache_creation_input_tokens
+                WHEN \(retainedAccountingPredicate)
+                    THEN token_usage_events.accounting_cache_creation_input_tokens
+                ELSE NULL
+            END,
+            accounting_cache_read_input_tokens = CASE
+                WHEN excluded.accounting_uncached_input_tokens IS NOT NULL
+                    THEN excluded.accounting_cache_read_input_tokens
+                WHEN \(retainedAccountingPredicate)
+                    THEN token_usage_events.accounting_cache_read_input_tokens
+                ELSE NULL
+            END,
+            accounting_reasoning_output_tokens = CASE
+                WHEN excluded.accounting_uncached_input_tokens IS NOT NULL
+                    THEN excluded.accounting_reasoning_output_tokens
+                WHEN \(retainedAccountingPredicate)
+                    THEN token_usage_events.accounting_reasoning_output_tokens
+                ELSE NULL
+            END,
             total_tokens = excluded.total_tokens,
             payload_json = json_set(
                 CAST(token_usage_events.payload_json AS TEXT),
@@ -134,6 +146,18 @@ extension TokenUsageStore {
                 )
                 OR token_usage_events.total_tokens != excluded.total_tokens
             )
+        """
+
+    // Incoming accounting is validated and bound as all four columns together.
+    // Retaining the old group is safe only for unchanged raw totals and a complete
+    // prior group; otherwise the whole detail record becomes unavailable.
+    private static let retainedAccountingPredicate = """
+        token_usage_events.input_tokens = excluded.input_tokens
+        AND token_usage_events.output_tokens = excluded.output_tokens
+        AND token_usage_events.accounting_uncached_input_tokens IS NOT NULL
+        AND token_usage_events.accounting_cache_creation_input_tokens IS NOT NULL
+        AND token_usage_events.accounting_cache_read_input_tokens IS NOT NULL
+        AND token_usage_events.accounting_reasoning_output_tokens IS NOT NULL
         """
 
     func insertEvent(_ event: TokenUsageEvent, database: OpaquePointer) throws -> Int {
