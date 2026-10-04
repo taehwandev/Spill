@@ -14,12 +14,13 @@ enum TokenUsageAITool: String, Codable, CaseIterable, Sendable {
     init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
         let value = try container.decode(String.self)
-        if value == "ollama" {
-            self = .unknown
-            return
-        }
         if value == "agy" {
             self = .antigravity
+            return
+        }
+        // Retired tools remain readable in historical token-only records.
+        if value == "ollama" {
+            self = .unknown
             return
         }
 

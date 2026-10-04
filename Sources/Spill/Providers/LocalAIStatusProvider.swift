@@ -4,7 +4,6 @@ enum LocalAIToolKind: String, CaseIterable, Identifiable, Sendable {
     case codex
     case claude
     case antigravity
-    case ollama
     case openAI
 
     var id: String {
@@ -19,8 +18,6 @@ enum LocalAIToolKind: String, CaseIterable, Identifiable, Sendable {
             return "Claude"
         case .antigravity:
             return "Antigravity"
-        case .ollama:
-            return "Ollama"
         case .openAI:
             return "OpenAI API"
         }
@@ -34,8 +31,6 @@ enum LocalAIToolKind: String, CaseIterable, Identifiable, Sendable {
             return "terminal.fill"
         case .antigravity:
             return "terminal.fill"
-        case .ollama:
-            return "cpu"
         case .openAI:
             return "key.fill"
         }
@@ -49,8 +44,6 @@ enum LocalAIToolKind: String, CaseIterable, Identifiable, Sendable {
             return ["claude"]
         case .antigravity:
             return ["agy", "antigravity", "antigravity-cli"]
-        case .ollama:
-            return ["ollama"]
         case .openAI:
             return []
         }
@@ -64,7 +57,7 @@ enum LocalAIToolKind: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .antigravity:
             return ["Antigravity", "Antigravity IDE"]
-        case .codex, .claude, .ollama, .openAI:
+        case .codex, .claude, .openAI:
             return []
         }
     }
@@ -107,18 +100,6 @@ struct LocalAIToolActionRecommendation: Hashable, Sendable {
                 status: status,
                 readyTitle: "Start from terminal",
                 activeTitle: "Continue in terminal"
-            )
-        case .ollama:
-            if status.hasRunningProcesses {
-                return LocalAIToolActionRecommendation(
-                    title: "Inspect local models",
-                    detail: "Ollama is running locally."
-                )
-            }
-
-            return LocalAIToolActionRecommendation(
-                title: "Start local server",
-                detail: "Run the local model server when you need it."
             )
         case .openAI:
             return LocalAIToolActionRecommendation(
@@ -207,10 +188,8 @@ struct LocalAIToolStatus: Identifiable, Hashable, Sendable {
             return 20
         case .antigravity:
             return 30
-        case .ollama:
-            return 40
         case .openAI:
-            return 50
+            return 40
         }
     }
 }
@@ -227,29 +206,42 @@ struct LocalAIStatusProvider: SpillStatusProvider {
 }
 
 extension LocalAIStatusProvider {
-    static func statuses(shouldCancel: @escaping () -> Bool = { false }) -> [LocalAIToolStatus] {
+    static func statuses(
+        enabledKinds: Set<LocalAIToolKind> = TokenMeteringToolAvailability.supportedLocalToolKindSet,
+        shouldCancel: @escaping () -> Bool = { false }
+    ) -> [LocalAIToolStatus] {
+        guard !enabledKinds.isEmpty, !shouldCancel() else {
+            return []
+        }
         let environment = ProcessInfo.processInfo.environment
+        let processKinds = LocalAIToolKind.allCases.filter {
+            enabledKinds.contains($0) && !$0.executableNames.isEmpty
+        }
+        guard !processKinds.isEmpty else {
+            return statuses(environment: environment, processNames: [], enabledKinds: enabledKinds)
+        }
         let executablePaths = LocalExecutableDetector.installedExecutablePaths(
-            for: [.codex, .claude, .antigravity, .ollama],
+            for: processKinds,
             environment: environment
         )
         guard !shouldCancel() else {
             return []
         }
         let installedApplicationNames = LocalApplicationDetector.installedApplicationNames(
-            for: [.antigravity]
+            for: processKinds
         )
         guard !shouldCancel() else {
             return []
         }
-        let processSnapshots = LocalAIProcessSnapshotReader.currentSnapshots(shouldCancel: shouldCancel)
+        let processSnapshots = LocalAIProcessSnapshotReader.currentSnapshots(
+            enabledKinds: enabledKinds,
+            shouldCancel: shouldCancel
+        )
         guard !shouldCancel() else {
             return []
         }
         let processCommands = processSnapshots.map(\.commandLine)
         let processNames = Set(processSnapshots.map(\.executableName))
-        // `ollama ps` can only answer through a running server; skip the subprocess otherwise.
-        let ollamaServerIsRunning = processNames.contains { $0.lowercased().hasPrefix("ollama") }
 
         return statuses(
             environment: environment,
@@ -259,18 +251,14 @@ extension LocalAIStatusProvider {
             installedExecutableNames: Set(executablePaths.keys),
             installedApplicationNames: installedApplicationNames,
             commandMetadata: LocalAICommandMetadataReader.metadata(for: executablePaths, shouldCancel: shouldCancel),
-            ollamaRuntime: ollamaServerIsRunning
-                ? LocalOllamaRuntimeReader.runtimeSummary(
-                    executablePath: executablePaths[LocalAIToolKind.ollama.executableName ?? ""],
-                    shouldCancel: shouldCancel
-                )
-                : nil
+            enabledKinds: enabledKinds
         )
     }
 
     static func statuses(
         environment: [String: String],
-        processNames: Set<String>
+        processNames: Set<String>,
+        enabledKinds: Set<LocalAIToolKind> = Set(LocalAIToolKind.allCases)
     ) -> [LocalAIToolStatus] {
         statuses(
             environment: environment,
@@ -278,7 +266,8 @@ extension LocalAIStatusProvider {
             processCommands: [],
             processSnapshots: [],
             installedExecutableNames: [],
-            installedApplicationNames: []
+            installedApplicationNames: [],
+            enabledKinds: enabledKinds
         )
     }
 }
@@ -307,52 +296,29 @@ extension LocalAIStatusProvider {
         installedExecutableNames: Set<String>,
         installedApplicationNames: Set<String> = [],
         commandMetadata: [LocalAIToolKind: LocalAIToolMetadata] = [:],
-        ollamaRuntime: LocalOllamaRuntimeSummary? = nil
+        enabledKinds: Set<LocalAIToolKind> = Set(LocalAIToolKind.allCases)
     ) -> [LocalAIToolStatus] {
         let normalizedProcessNames = Set(processNames.map { $0.lowercased() })
         let normalizedInstalledExecutableNames = Set(installedExecutableNames.map { $0.lowercased() })
         let normalizedInstalledApplicationNames = Set(installedApplicationNames.map { $0.lowercased() })
 
-        return [
-            commandStatus(
-                kind: .codex,
+        return LocalAIToolKind.allCases.compactMap { kind in
+            guard enabledKinds.contains(kind) else {
+                return nil
+            }
+            if kind == .openAI {
+                return openAIStatus(environment: environment)
+            }
+            return commandStatus(
+                kind: kind,
                 processNames: normalizedProcessNames,
                 processCommands: processCommands,
                 processSnapshots: processSnapshots,
                 installedExecutableNames: normalizedInstalledExecutableNames,
                 installedApplicationNames: normalizedInstalledApplicationNames,
-                metadata: commandMetadata[.codex]
-            ),
-            commandStatus(
-                kind: .claude,
-                processNames: normalizedProcessNames,
-                processCommands: processCommands,
-                processSnapshots: processSnapshots,
-                installedExecutableNames: normalizedInstalledExecutableNames,
-                installedApplicationNames: normalizedInstalledApplicationNames,
-                metadata: commandMetadata[.claude]
-            ),
-            commandStatus(
-                kind: .antigravity,
-                processNames: normalizedProcessNames,
-                processCommands: processCommands,
-                processSnapshots: processSnapshots,
-                installedExecutableNames: normalizedInstalledExecutableNames,
-                installedApplicationNames: normalizedInstalledApplicationNames,
-                metadata: commandMetadata[.antigravity]
-            ),
-            commandStatus(
-                kind: .ollama,
-                processNames: normalizedProcessNames,
-                processCommands: processCommands,
-                processSnapshots: processSnapshots,
-                installedExecutableNames: normalizedInstalledExecutableNames,
-                installedApplicationNames: normalizedInstalledApplicationNames,
-                metadata: commandMetadata[.ollama],
-                runtimeModel: ollamaRuntime?.activeModel
-            ),
-            openAIStatus(environment: environment)
-        ].compactMap { $0 }
+                metadata: commandMetadata[kind]
+            )
+        }
     }
 }
 
@@ -364,8 +330,7 @@ private extension LocalAIStatusProvider {
         processSnapshots: [LocalAIProcessSnapshot],
         installedExecutableNames: Set<String>,
         installedApplicationNames: Set<String>,
-        metadata commandMetadata: LocalAIToolMetadata?,
-        runtimeModel: String? = nil
+        metadata commandMetadata: LocalAIToolMetadata?
     ) -> LocalAIToolStatus? {
         let executableNames = kind.executableNames
         let applicationNames = kind.applicationNames
@@ -379,8 +344,7 @@ private extension LocalAIStatusProvider {
         )
         let metadata = combinedMetadata(
             commandMetadata: commandMetadata,
-            processMetadata: processMetadata,
-            runtimeModel: runtimeModel
+            processMetadata: processMetadata
         )
         let matchingProcesses = matchingProcessSnapshots(
             executableNames: executableNames,
@@ -479,15 +443,12 @@ private extension LocalAIStatusProvider {
 
     private static func combinedMetadata(
         commandMetadata: LocalAIToolMetadata?,
-        processMetadata: LocalAIToolMetadata?,
-        runtimeModel: String?
+        processMetadata: LocalAIToolMetadata?
     ) -> LocalAIToolMetadata {
-        let model = processMetadata?.model ?? runtimeModel ?? commandMetadata?.model
+        let model = processMetadata?.model ?? commandMetadata?.model
         let source: String?
         if processMetadata?.model != nil {
             source = processMetadata?.source
-        } else if runtimeModel != nil {
-            source = "Ollama Runtime"
         } else {
             source = commandMetadata?.source
         }

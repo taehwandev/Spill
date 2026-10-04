@@ -62,12 +62,6 @@ extension TokenUsageStoreTests {
                 value: "Running",
                 subtitle: nil,
                 state: .normal
-            ),
-            LocalAIToolStatus(
-                kind: .ollama,
-                value: "Ready",
-                subtitle: nil,
-                state: .normal
             )
         ]
 
@@ -4357,13 +4351,41 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertThrowsError(try TokenUsageSanitizer.sanitizeEventJSONData(try jsonData(object)))
     }
 
-    func testLegacyOllamaAIToolDecodesAsUnknown() throws {
+    func testRetiredLegacyAIToolRemainsReadableAsUnknown() throws {
         var object = try decodedJSONObject(from: TokenUsageSanitizer.eventData(Self.safeEvent()))
         object["ai_tool"] = "ollama"
 
         let event = try TokenUsageSanitizer.sanitizeEventJSONData(try jsonData(object))
-
         XCTAssertEqual(event.aiTool, .unknown)
+    }
+
+    func testRetiredToolHistoryAndRollupsSurviveStoreOpen() throws {
+        let eventsURL = temporaryEventsURL()
+        let initialStore = TokenUsageStore(fileURL: eventsURL)
+        XCTAssertEqual(initialStore.currentEventCount(), 0)
+        let databaseURL = initialStore.eventsDatabaseURL
+        let database = try openSQLiteDatabase(databaseURL)
+        try executeSQLite(
+            """
+            INSERT INTO token_usage_events (span_id, created_at, ai_tool, total_tokens, payload_json)
+            VALUES ('legacy-tool', '2026-09-01T00:00:00.000Z', 'ollama', 100, X'7B'),
+                   ('supported-tool', '2026-09-01T00:00:00.000Z', 'codex', 200, X'7B')
+            """,
+            database: database
+        )
+        try executeSQLite("PRAGMA user_version = 13", database: database)
+        sqlite3_close(database)
+
+        let reopenedStore = TokenUsageStore(fileURL: eventsURL)
+        XCTAssertEqual(reopenedStore.currentEventCount(), 2)
+        XCTAssertEqual(
+            try sqliteRows(databaseURL: databaseURL, sql: "SELECT ai_tool FROM token_usage_events ORDER BY ai_tool", columnCount: 1),
+            [["codex"], ["ollama"]]
+        )
+        XCTAssertEqual(
+            try sqliteRows(databaseURL: databaseURL, sql: "SELECT ai_tool FROM token_usage_dashboard_daily_totals ORDER BY ai_tool", columnCount: 1),
+            [["codex"], ["ollama"]]
+        )
     }
 
     func testAgyAIToolAliasDecodesAsAntigravity() throws {

@@ -291,8 +291,6 @@ extension TokenUsageStore {
             switch aiToolRaw {
             case "agy":
                 aiTool = .antigravity
-            case "ollama":
-                aiTool = .unknown
             default:
                 aiTool = TokenUsageAITool(rawValue: aiToolRaw) ?? .unknown
             }

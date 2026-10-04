@@ -2,9 +2,13 @@ import Foundation
 
 enum LocalAIProcessSnapshotReader {
     static func currentSnapshots(
+        enabledKinds: Set<LocalAIToolKind> = Set(LocalAIToolKind.allCases),
         now: Date = Date(),
         shouldCancel: @escaping () -> Bool = { false }
     ) -> [LocalAIProcessSnapshot] {
+        guard enabledKinds.contains(where: { !$0.executableNames.isEmpty }), !shouldCancel() else {
+            return []
+        }
         guard let output = LocalCommandRunner.output(
             executablePath: "/bin/ps",
             arguments: ["-axo", "pid=,command="],
@@ -21,7 +25,9 @@ enum LocalAIProcessSnapshotReader {
         let snapshots = output
             .split(whereSeparator: \.isNewline)
             .compactMap { parseLine(String($0)) }
-        let candidateSnapshots = snapshots.filter(isKnownAIToolProcess)
+        let candidateSnapshots = snapshots.filter {
+            isKnownAIToolProcess($0, enabledKinds: enabledKinds)
+        }
         guard !shouldCancel() else {
             return []
         }

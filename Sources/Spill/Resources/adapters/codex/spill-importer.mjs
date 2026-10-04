@@ -206,6 +206,9 @@ const maxScanBytes = resolveMaxScanBytes(
 const rescan = Boolean(options.rescan || options.reconcileExisting);
 
 async function importOnce() {
+  if (!unboundedScan && !rescan && !await isToolEnabled("codex")) {
+    return;
+  }
   const state = await codexStateLabelSupport.readState(statePath);
   const sources = await discoverCodexSessionFiles(codexHome, afterDate);
   const run = {
@@ -265,6 +268,16 @@ async function importOnce() {
       dry_run: dryRun,
       all: options.all,
     })}\n`);
+  }
+}
+
+async function isToolEnabled(tool) {
+  const policyPath = join(homedir(), "Library", "Application Support", "Spill", "token-metering", "enabled-tools.json");
+  try {
+    const policy = JSON.parse(await readFile(policyPath, "utf8"));
+    return policy.schema_version !== 1 || !Array.isArray(policy.enabled_tools) || policy.enabled_tools.includes(tool);
+  } catch {
+    return true;
   }
 }
 

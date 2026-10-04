@@ -57,8 +57,6 @@ extension LocalAIToolKind {
             return TokenUsageAITool.claude.dashboardTint
         case .antigravity:
             return TokenUsageAITool.antigravity.dashboardTint
-        case .ollama:
-            return .green
         case .openAI:
             return TokenUsageAITool.openAI.dashboardTint
         }

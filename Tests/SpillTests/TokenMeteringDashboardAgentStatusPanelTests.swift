@@ -66,13 +66,6 @@ final class TokenMeteringDashboardAgentStatusPanelTests: XCTestCase {
                         )
                     ]
                 )
-            ),
-            LocalAIToolStatus(
-                kind: .ollama,
-                value: "Running",
-                subtitle: "llama3.2",
-                state: .normal,
-                processSummary: LocalAIProcessSummary(processes: [], fallbackProcessCount: 1)
             )
         ]
         let summary = TokenMeteringDashboardAgentStatusSummary.make(statuses: statuses)
@@ -88,7 +81,6 @@ final class TokenMeteringDashboardAgentStatusPanelTests: XCTestCase {
         XCTAssertTrue(codex.processRows.allSatisfy { !$0.detail.contains("--model") })
         XCTAssertEqual(codex.metadataRows.map(\.value), ["gpt-5.2", "v1.2.3", "Process Args"])
 
-        XCTAssertNil(summary.rows.first { $0.kind == .ollama })
     }
 
     func testAgentStatusRowsShowUnavailableMetricsAsUnavailable() throws {

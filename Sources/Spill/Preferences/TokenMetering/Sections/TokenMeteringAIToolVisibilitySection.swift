@@ -13,7 +13,7 @@ struct TokenMeteringAIToolVisibilitySection: View {
             TokenMeteringOptionHeader(
                 title: t(.aiToolVisibilityTitle),
                 state: t(.aiToolVisibilityState),
-                systemImage: "eye",
+                systemImage: "power",
                 tint: .teal
             )
 

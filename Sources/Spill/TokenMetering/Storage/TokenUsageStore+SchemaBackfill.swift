@@ -3,9 +3,8 @@ import SQLite3
 
 extension TokenUsageStore {
     /// Schema version stamped once the one-time history maintenance below has run.
-    /// Must stay above every version written by `prepareDatabaseMigrations` and
-    /// `prepareDashboardDailyRollups`; bump it only when a new whole-history pass is
-    /// genuinely required.
+    /// Bump only when a new whole-history pass is genuinely required. Later
+    /// targeted migrations may use a higher version without rerunning these scans.
     static let historyMaintenanceUserVersion = 13
 
     /// Runs the whole-history backfill and created_at normalization exactly once per

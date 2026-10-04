@@ -3,8 +3,8 @@ import SwiftUI
 
 @MainActor
 final class AIStatusStore: ObservableObject {
-    typealias Reader = () -> [LocalAIToolStatus]
-    typealias BackgroundReader = @Sendable (@escaping @Sendable () -> Bool) -> [LocalAIToolStatus]
+    typealias Reader = (Set<LocalAIToolKind>) -> [LocalAIToolStatus]
+    typealias BackgroundReader = @Sendable (Set<LocalAIToolKind>, @escaping @Sendable () -> Bool) -> [LocalAIToolStatus]
 
     @Published private(set) var statuses: [LocalAIToolStatus]
     @Published private(set) var detectedStatuses: [LocalAIToolStatus]
@@ -16,14 +16,21 @@ final class AIStatusStore: ObservableObject {
     private var backgroundRefreshCancellation: LocalAIStatusRefreshCancellation?
     private var isBackgroundRefreshInFlight = false
     private var lastBackgroundRefreshStartedAt: Date?
+    private var enabledKinds = TokenMeteringToolAvailability.supportedLocalToolKindSet
 
     static let minimumBackgroundRefreshInterval: TimeInterval = 15.0
 
     init(
-        statuses: [LocalAIToolStatus] = LocalAIStatusProvider.statuses(environment: [:], processNames: []),
-        reader: @escaping Reader = { LocalAIStatusProvider.statuses() },
-        backgroundReader: @escaping BackgroundReader = { shouldCancel in
-            LocalAIStatusProvider.statuses(shouldCancel: shouldCancel)
+        statuses: [LocalAIToolStatus] = LocalAIStatusProvider.statuses(
+            environment: [:],
+            processNames: [],
+            enabledKinds: TokenMeteringToolAvailability.supportedLocalToolKindSet
+        ),
+        reader: @escaping Reader = { enabledKinds in
+            LocalAIStatusProvider.statuses(enabledKinds: enabledKinds)
+        },
+        backgroundReader: @escaping BackgroundReader = { enabledKinds, shouldCancel in
+            LocalAIStatusProvider.statuses(enabledKinds: enabledKinds, shouldCancel: shouldCancel)
         }
     ) {
         self.statuses = statuses
@@ -40,8 +47,19 @@ final class AIStatusStore: ObservableObject {
     }
 
     func refresh() {
-        let detectedStatuses = reader()
+        let detectedStatuses = enabledKinds.isEmpty ? [] : reader(enabledKinds)
         apply(detectedStatuses: detectedStatuses)
+    }
+
+    func setEnabledKinds(_ kinds: Set<LocalAIToolKind>) {
+        guard enabledKinds != kinds else {
+            return
+        }
+
+        cancelRefresh()
+        enabledKinds = kinds
+        lastBackgroundRefreshStartedAt = nil
+        apply(detectedStatuses: detectedStatuses.filter { kinds.contains($0.kind) })
     }
 
     func cancelRefresh() {
@@ -53,6 +71,10 @@ final class AIStatusStore: ObservableObject {
     }
 
     func refreshInBackground() {
+        guard !enabledKinds.isEmpty else {
+            apply(detectedStatuses: [])
+            return
+        }
         let now = Date()
         guard !isBackgroundRefreshInFlight else {
             return
@@ -67,9 +89,10 @@ final class AIStatusStore: ObservableObject {
         let cancellation = LocalAIStatusRefreshCancellation()
         backgroundRefreshCancellation = cancellation
         let backgroundReader = backgroundReader
+        let enabledKinds = enabledKinds
         backgroundRefreshTask = Task { @MainActor [weak self, cancellation] in
             let detectedStatuses = await Task.detached(priority: .utility) {
-                backgroundReader { cancellation.isCancelled() }
+                backgroundReader(enabledKinds) { cancellation.isCancelled() }
             }.value
 
             guard let self else {
@@ -79,6 +102,7 @@ final class AIStatusStore: ObservableObject {
                 return
             }
             self.backgroundRefreshCancellation = nil
+            self.backgroundRefreshTask = nil
             self.isBackgroundRefreshInFlight = false
 
             guard !Task.isCancelled, !cancellation.isCancelled() else {
@@ -90,9 +114,13 @@ final class AIStatusStore: ObservableObject {
     }
 
     private func apply(detectedStatuses nextDetectedStatuses: [LocalAIToolStatus]) {
-        let nextStatuses = Self.withOrderedDashboardAgentPlaceholders(nextDetectedStatuses)
-        if detectedStatuses != nextDetectedStatuses {
-            detectedStatuses = nextDetectedStatuses
+        let filteredDetectedStatuses = nextDetectedStatuses.filter { enabledKinds.contains($0.kind) }
+        let nextStatuses = Self.withOrderedDashboardAgentPlaceholders(
+            filteredDetectedStatuses,
+            enabledKinds: enabledKinds
+        )
+        if detectedStatuses != filteredDetectedStatuses {
+            detectedStatuses = filteredDetectedStatuses
         }
         if statuses != nextStatuses {
             statuses = nextStatuses
@@ -103,10 +131,11 @@ final class AIStatusStore: ObservableObject {
     }
 
     private static func withOrderedDashboardAgentPlaceholders(
-        _ detectedStatuses: [LocalAIToolStatus]
+        _ detectedStatuses: [LocalAIToolStatus],
+        enabledKinds: Set<LocalAIToolKind>
     ) -> [LocalAIToolStatus] {
         let dashboardStatuses = LocalAIToolKind.allCases
-            .filter(\.isTokenDashboardAgentTool)
+            .filter { $0.isTokenDashboardAgentTool && enabledKinds.contains($0) }
             .map { kind in
                 detectedStatuses.first { $0.kind == kind } ?? LocalAIToolStatus(
                     kind: kind,

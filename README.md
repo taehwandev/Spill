@@ -22,7 +22,7 @@ This repository currently contains an MVP shell:
 - optional `Control + Option + Space` global shortcut, with window action shortcuts grouped under `Control + Option` and display moves under `Control + Option + Command`
 - fixed CPU, memory, and storage panel status rows
 - click-to-open status detail popovers with CPU, memory, and Caffeine menu bar visibility toggles
-- local AI status strip for Codex, Ollama, and OpenAI configuration
+- local AI status strip for Codex, Claude Code, and Antigravity/AGY
 - Caffeine with configurable default duration and an opt-in never-ending duration
 
 Spill does not scan, invoke, or pin other apps’ menu bar icons. This applies on

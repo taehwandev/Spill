@@ -140,6 +140,19 @@ does not own dashboard layout or Private Usage Upload behavior.
   instruction files. Creating new runtime connections or migrating instruction
   bridges remains an explicit setup action. Smoke-test startup must leave real
   installed adapters and instructions unchanged.
+- A tool disabled through AI tool visibility must perform no Spill-owned active
+  import, runtime status probe, passive limit capture, or new hook usage parse
+  for that tool. The installed runtime integration remains intact so enabling
+  the tool resumes collection without a reinstall. Existing stored events and
+  importer cursors are retained. Queued events completed before disabling may
+  be imported when collection resumes; no usage is estimated or fabricated.
+- If Codex, Claude Code, and Antigravity/AGY are all disabled, local process
+  discovery must not launch
+  its process-list or version-check subprocesses. Disabling one tool must stop
+  that tool's version probe and process metrics even while other tools remain
+  enabled. Changing the toggle must take effect without restarting Spill or the
+  separate dashboard helper.
+
 - Atomic inbox files and store-change notifications are the primary live
   freshness path. Spill imports completed inbox events immediately without
   waiting for a dashboard or menu-bar timer.
@@ -188,6 +201,13 @@ does not own dashboard layout or Private Usage Upload behavior.
 
 ## Acceptance
 
+- Switching a tool off immediately removes its UI content and suppresses new
+  Spill-owned status, import, hook parsing, and limit-capture work for that tool.
+  Other enabled tools continue. Switching it on resumes without reinstalling
+  adapters or deleting prior usage.
+- With all three supported tools off, no AI process-list or version-check
+  subprocess is launched by Spill.
+  The user's running AI applications and sessions remain untouched.
 - Local token events appear without login when the local store receives a safe event.
 - Safe event validation rejects content-like fields.
 - Setup surfaces explain the Codex, Claude Code, Antigravity/AGY, and optional
@@ -204,6 +224,10 @@ does not own dashboard layout or Private Usage Upload behavior.
 
 ## Verification
 
+- Verify per-tool and all-tools-off paths across Preferences, panel, helper
+  dashboard, menu bar, active collectors, installed hook adapters, and limits.
+- Verify disabled-to-enabled transitions and in-flight collection cancellation
+  without duplicate workers, polling loops, or lost pre-existing history.
 - Validate the strict safe event schema and rejection of extra content-like keys.
 - Verify one real supported runtime turn produces one stored event.
 - Verify duplicate rewrites collapse and distinct same-sized turns remain separate.

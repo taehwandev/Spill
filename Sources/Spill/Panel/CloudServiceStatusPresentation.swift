@@ -81,8 +81,6 @@ extension CloudServiceStatusPresentation {
             return [.claudeCode]
         case .antigravity:
             return [.antigravity]
-        case .ollama:
-            return []
         case .openAI:
             return [.openAI]
         }

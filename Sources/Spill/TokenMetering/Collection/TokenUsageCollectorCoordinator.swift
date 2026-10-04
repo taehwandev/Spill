@@ -18,7 +18,7 @@ final class TokenUsageCollectorCoordinator: TokenUsageExternalCollecting, @unche
         @escaping () -> Bool
     ) -> TokenUsageClaudeCodeImportSummary
     typealias FinalizationBoundaryHook = @Sendable () -> Void
-    typealias CodexLimitCaptureRunner = () -> Void
+    typealias LimitCaptureRunner = () -> Void
 
     static let collectionDidFinishNotification = Notification.Name("app.spill.token-usage-collector.collection-did-finish")
 
@@ -46,10 +46,13 @@ final class TokenUsageCollectorCoordinator: TokenUsageExternalCollecting, @unche
     private var hasPendingRequest = false
     private var pendingRequestForcesImporters = false
     private var currentRequestForcesImporters = false
-    private let codexLimitCaptureRunner: CodexLimitCaptureRunner
+    private let codexLimitCaptureRunner: LimitCaptureRunner
+    private let claudeLimitCaptureRunner: LimitCaptureRunner
+    private var enabledTools: Set<TokenUsageAITool>
     private var lastAntigravityImportAt: Date?
     private var lastClaudeCodeImportAt: Date?
     private var lastCodexLimitCaptureAt: Date?
+    private var lastClaudeLimitCaptureAt: Date?
     private var isStopping = false
     private var collectionCompletionHandlers: [@Sendable () -> Void] = []
 
@@ -61,34 +64,25 @@ final class TokenUsageCollectorCoordinator: TokenUsageExternalCollecting, @unche
         activeImporterMinimumInterval: TimeInterval = TokenMeteringRefreshPolicy.activeImporterMinimumInterval,
         now: @escaping () -> Date = Date.init,
         finalizationBoundaryHook: FinalizationBoundaryHook? = nil,
-        codexLimitCaptureRunner: CodexLimitCaptureRunner? = nil
+        codexLimitCaptureRunner: LimitCaptureRunner? = nil,
+        claudeLimitCaptureRunner: LimitCaptureRunner? = nil,
+        enabledTools: Set<TokenUsageAITool> = TokenMeteringToolAvailability.supportedTools
     ) {
         self.activeImporterMinimumInterval = activeImporterMinimumInterval
         self.now = now
         self.finalizationBoundaryHook = finalizationBoundaryHook
-        if let codexLimitCaptureRunner {
-            self.codexLimitCaptureRunner = codexLimitCaptureRunner
-        } else {
-            // Both limit captures share one paced slot: exact Codex snapshots
-            // from session-file tails and exact Claude snapshots from its
-            // client cache. Nothing fills in for a tool that reported nothing:
-            // a gauge derived from Spill's own history could only express a
-            // fraction of the user's own past burn, which is not the quantity
-            // the chip's percentage claims to be.
-            let snapshotStore = TokenUsageLimitSnapshotStore()
-            let codexCapture = TokenUsageCodexLimitCapture()
-            let claudeCapture = TokenUsageClaudeLimitCapture()
-            let claudeStatuslineCapture = TokenUsageClaudeStatuslineCapture()
-            self.codexLimitCaptureRunner = {
-                codexCapture.captureLatestSnapshots(into: snapshotStore)
-                claudeCapture.captureLatestSnapshots(into: snapshotStore)
-                // Runs last and merges only when it is fresher. Claude's two
-                // sources describe the same limits: the cached utilization is
-                // rewritten only when usage is fetched, while the status line
-                // adapter writes on every render, so on a machine with the
-                // adapter installed this is normally the newer of the two.
-                claudeStatuslineCapture.captureLatestSnapshots(into: snapshotStore)
-            }
+        self.enabledTools = enabledTools
+        let snapshotStore = TokenUsageLimitSnapshotStore()
+        let codexCapture = TokenUsageCodexLimitCapture()
+        let claudeCapture = TokenUsageClaudeLimitCapture()
+        let claudeStatuslineCapture = TokenUsageClaudeStatuslineCapture()
+        self.codexLimitCaptureRunner = codexLimitCaptureRunner ?? {
+            codexCapture.captureLatestSnapshots(into: snapshotStore)
+        }
+        self.claudeLimitCaptureRunner = claudeLimitCaptureRunner ?? {
+            claudeCapture.captureLatestSnapshots(into: snapshotStore)
+            // The status-line source may be newer than Claude's client cache.
+            claudeStatuslineCapture.captureLatestSnapshots(into: snapshotStore)
         }
         self.store = store
         if let antigravityImportRunner {
@@ -172,6 +166,19 @@ extension TokenUsageCollectorCoordinator {
             hasPendingRequest = false
         }
     }
+
+    func setEnabledTools(_ tools: Set<TokenUsageAITool>) {
+        lock.withLock {
+            let newlyEnabled = tools.subtracting(enabledTools)
+            enabledTools = tools
+            if newlyEnabled.contains(.antigravity) { lastAntigravityImportAt = nil }
+            if newlyEnabled.contains(.claude) {
+                lastClaudeCodeImportAt = nil
+                lastClaudeLimitCaptureAt = nil
+            }
+            if newlyEnabled.contains(.codex) { lastCodexLimitCaptureAt = nil }
+        }
+    }
 }
 
 extension TokenUsageCollectorCoordinator {
@@ -207,6 +214,7 @@ extension TokenUsageCollectorCoordinator {
             }
 
             runCodexLimitCapture()
+            runClaudeLimitCapture()
 
             let postPassAction = lock.withLock {
                 if !isStopping, hasPendingRequest {
@@ -233,22 +241,26 @@ extension TokenUsageCollectorCoordinator {
 
 extension TokenUsageCollectorCoordinator {
     private func runAntigravityActiveImporter() {
+        guard isToolEnabled(.antigravity) else { return }
         guard shouldRunImporter(lastImportAt: \.lastAntigravityImportAt) else {
             return
         }
         let startDate = now().addingTimeInterval(-antigravityLookbackInterval)
         _ = antigravityImportRunner(store, startDate) { [weak self] in
-            self?.shouldStop ?? true
+            guard let self else { return true }
+            return self.shouldStop || !self.isToolEnabled(.antigravity)
         }
         lock.withLock { lastAntigravityImportAt = now() }
     }
 
     private func runClaudeCodeActiveImporter() {
+        guard isToolEnabled(.claude) else { return }
         guard shouldRunImporter(lastImportAt: \.lastClaudeCodeImportAt) else {
             return
         }
         _ = claudeCodeImportRunner(store) { [weak self] in
-            self?.shouldStop ?? true
+            guard let self else { return true }
+            return self.shouldStop || !self.isToolEnabled(.claude)
         }
         lock.withLock { lastClaudeCodeImportAt = now() }
     }
@@ -257,11 +269,23 @@ extension TokenUsageCollectorCoordinator {
     /// on the same pacing as the importers, so limit gauges refresh with the
     /// data they sit beside.
     private func runCodexLimitCapture() {
+        guard isToolEnabled(.codex) else { return }
         guard shouldRunImporter(lastImportAt: \.lastCodexLimitCaptureAt) else {
             return
         }
         codexLimitCaptureRunner()
         lock.withLock { lastCodexLimitCaptureAt = now() }
+    }
+
+    private func runClaudeLimitCapture() {
+        guard isToolEnabled(.claude) else { return }
+        guard shouldRunImporter(lastImportAt: \.lastClaudeLimitCaptureAt) else { return }
+        claudeLimitCaptureRunner()
+        lock.withLock { lastClaudeLimitCaptureAt = now() }
+    }
+
+    private func isToolEnabled(_ tool: TokenUsageAITool) -> Bool {
+        lock.withLock { enabledTools.contains(tool) }
     }
 
     /// Timer-paced requests run an importer only after its minimum interval has

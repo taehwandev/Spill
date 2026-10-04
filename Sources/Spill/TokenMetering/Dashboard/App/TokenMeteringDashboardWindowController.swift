@@ -74,6 +74,10 @@ final class TokenMeteringDashboardWindowController: NSObject, NSWindowDelegate {
         window.orderFrontRegardless()
         window.makeKey()
         store.setSnapshotSurfaceVisible(true)
+        aiStatusStore.setEnabledKinds(
+            TokenMeteringToolAvailability.supportedLocalToolKindSet
+                .subtracting(settings.hiddenLocalAIToolKinds)
+        )
         aiStatusStore.refreshInBackground()
         store.refreshAsyncIfIdle()
         startPeriodicRefreshLoop()

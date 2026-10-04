@@ -360,6 +360,11 @@ final class SpillSettings: ObservableObject {
         hiddenLocalAIToolKinds = persistedHiddenLocalAIToolKinds.union(
             persistedHiddenTokenUsageAITools.compactMap(\.localAIToolKind)
         )
+        let storedLocalKinds = defaults.stringArray(forKey: Keys.hiddenLocalAIToolKinds) ?? []
+        let supportedStoredLocalKinds = persistedHiddenLocalAIToolKinds.map(\.rawValue).sorted()
+        if storedLocalKinds.sorted() != supportedStoredLocalKinds {
+            defaults.set(supportedStoredLocalKinds, forKey: Keys.hiddenLocalAIToolKinds)
+        }
         let menuBarTokenDisplayModeRaw = defaults.string(forKey: Keys.menuBarTokenDisplayMode) ?? MenuBarTokenDisplayMode.daily.rawValue
         menuBarTokenDisplayMode = MenuBarTokenDisplayMode(rawValue: menuBarTokenDisplayModeRaw) ?? .daily
         let privateUsageEnvironment = PrivateUsageUploadEnvironment.resolvedFromConfiguration()

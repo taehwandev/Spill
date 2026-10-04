@@ -39,6 +39,8 @@ final class TokenMeteringCoordinator: NSObject {
     private var cancellables = Set<AnyCancellable>()
     private var visibleAIToolsSyncTask: Task<Void, Never>?
     private var visibleAITools: Set<TokenUsageAITool>?
+    private var enabledStatusKinds: Set<LocalAIToolKind>?
+    private var isClaudeLimitMonitorStarted = false
     private var hasStarted = false
     private var isStopped = false
 
@@ -81,12 +83,10 @@ extension TokenMeteringCoordinator {
         if !isSmokeTest {
             TokenMeteringSetupInstaller.refreshInstalledFilesIfPresent()
         }
-        aiStatusStore.refreshInBackground()
         syncVisibleAITools()
         observeUsageEvents()
         observeAIToolVisibility()
         inboxMonitor.start()
-        limitInboxMonitor.start()
         requestCollection(reason: "app_launch")
         configureBridge()
         registerPrivateUsageConnectionURLHandler()
@@ -100,7 +100,10 @@ extension TokenMeteringCoordinator {
         }
         isStopped = true
         inboxMonitor.stop()
-        limitInboxMonitor.stop()
+        if isClaudeLimitMonitorStarted {
+            limitInboxMonitor.stop()
+            isClaudeLimitMonitorStarted = false
+        }
         collectorCoordinator.stop()
         bridgeServer.stop()
         historyImportCoordinator.cancelImport()
@@ -391,14 +394,34 @@ extension TokenMeteringCoordinator {
         let visibleTools = TokenUsageDashboardToolVisibility.visibleTools(
             hiddenTools: settings.hiddenTokenUsageAITools
         )
+        let enabledKinds = TokenMeteringToolAvailability.supportedLocalToolKindSet
+            .subtracting(settings.hiddenLocalAIToolKinds)
+        if enabledStatusKinds != enabledKinds {
+            enabledStatusKinds = enabledKinds
+            aiStatusStore.setEnabledKinds(enabledKinds)
+            aiStatusStore.refreshInBackground()
+        }
         guard self.visibleAITools != visibleTools else {
             return
         }
+        let newlyEnabledTools = visibleTools.subtracting(self.visibleAITools ?? visibleTools)
         self.visibleAITools = visibleTools
+        collectorCoordinator.setEnabledTools(visibleTools)
+        try? TokenUsageToolActivityPolicy.write(enabledTools: visibleTools, isSmokeTest: isSmokeTest)
+        if visibleTools.contains(.claude), !isClaudeLimitMonitorStarted {
+            limitInboxMonitor.start()
+            isClaudeLimitMonitorStarted = true
+        } else if !visibleTools.contains(.claude), isClaudeLimitMonitorStarted {
+            limitInboxMonitor.stop()
+            isClaudeLimitMonitorStarted = false
+        }
         dashboardStore.setVisibleAITools(
             visibleTools
         )
         refreshMenuBarTokenTotal(force: true)
+        if !newlyEnabledTools.isEmpty {
+            requestCollection(reason: "manual_refresh")
+        }
     }
 }
 

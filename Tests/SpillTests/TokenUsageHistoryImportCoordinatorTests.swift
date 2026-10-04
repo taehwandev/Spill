@@ -3,6 +3,53 @@ import XCTest
 @testable import Spill
 
 final class TokenUsageHistoryImportCoordinatorTests: XCTestCase {
+    func testDisabledHookAdaptersReturnBeforeReadingLocalUsage() throws {
+        try XCTSkipUnless(Self.isNodeAvailable(), "node is unavailable")
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let home = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SpillDisabledAdapters-\(UUID().uuidString)", isDirectory: true)
+        let policyURL = home.appendingPathComponent("Library/Application Support/Spill/token-metering/enabled-tools.json")
+        try FileManager.default.createDirectory(
+            at: policyURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try #"{"schema_version":1,"enabled_tools":[]}"#.write(
+            to: policyURL, atomically: true, encoding: .utf8
+        )
+
+        let codexStateURL = home.appendingPathComponent("codex-state.json")
+        let codexOutput = try runProcess(
+            executable: "/usr/bin/env",
+            arguments: [
+                "node", root.appendingPathComponent("adapters/codex/spill-importer.mjs").path,
+                "--codex-home", home.appendingPathComponent("codex").path,
+                "--state", codexStateURL.path,
+                "--json",
+            ],
+            environment: ["HOME": home.path]
+        )
+        XCTAssertEqual(codexOutput.stdout, "")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: codexStateURL.path))
+
+        let diagnosticsURL = home.appendingPathComponent("diagnostics", isDirectory: true)
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = [
+            "python3", root.appendingPathComponent("adapters/claude-code/spill-hook.py").path,
+        ]
+        var environment = ProcessInfo.processInfo.environment
+        environment["HOME"] = home.path
+        environment["SPILL_TOKEN_USAGE_DIAGNOSTICS_DIR"] = diagnosticsURL.path
+        process.environment = environment
+        let input = Pipe()
+        process.standardInput = input
+        try process.run()
+        try input.fileHandleForWriting.close()
+        process.waitUntilExit()
+        XCTAssertEqual(process.terminationStatus, 0)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: diagnosticsURL.path))
+    }
+
     func testHistoryImportProcessRunnerUsesFiniteHardKillPath() throws {
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let source = try String(
@@ -524,10 +571,11 @@ final class TokenUsageHistoryImportCoordinatorTests: XCTestCase {
         XCTAssertFalse(codexImporter.contains("createReadStream"))
         // State is keyed by an opaque hash; source paths never reach it.
         XCTAssertTrue(codexImporter.contains("const key = opaqueHash(path)"))
-        XCTAssertTrue(claudeHook.contains("def scan_main(scan_dir: str, since_hours) -> dict:"))
+        XCTAssertTrue(claudeHook.contains("def scan_main("))
         XCTAssertTrue(claudeHook.contains("if \"--json\" in _args:"))
-        XCTAssertTrue(claudeHook.contains("transcript.parent / \"subagents\""))
-        XCTAssertFalse(claudeHook.contains("transcript.parent / transcript.stem / \"subagents\""))
+        // Both child layouts are verified with real CLI queue fixtures by the
+        // dedicated Claude adapter runner; optional scan parameters may grow.
+        XCTAssertTrue(claudeHook.contains("def _scan_session_subagents("))
     }
 
     func testCodexImporterAllHistoryEmitsSequentialDeltas() throws {

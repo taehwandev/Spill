@@ -99,7 +99,6 @@ final class CloudServiceStatusPresentationTests: XCTestCase {
         XCTAssertEqual(CloudServiceStatusPresentation.serviceKinds(for: LocalAIToolKind.claude), [.claudeCode])
         XCTAssertEqual(CloudServiceStatusPresentation.serviceKinds(for: LocalAIToolKind.antigravity), [.antigravity])
         XCTAssertEqual(CloudServiceStatusPresentation.serviceKinds(for: LocalAIToolKind.openAI), [.openAI])
-        XCTAssertEqual(CloudServiceStatusPresentation.serviceKinds(for: LocalAIToolKind.ollama), [])
     }
 
     func testTokenAIToolsMapToCloudServiceKinds() {
