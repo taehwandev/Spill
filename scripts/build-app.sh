@@ -278,10 +278,10 @@ rm -rf "$APP_DIR"
 mkdir -p "$MACOS_DIR" "$RESOURCES_DIR" "$FRAMEWORKS_DIR"
 cp "$ROOT_DIR/.build/release/Spill" "$MACOS_DIR/Spill"
 
-# Swift 6.4 builds into .build/out/Products/Release and leaves .build/release as a symlink to it,
-# which `find` does not descend into, so match the release directory case-insensitively.
-RESOURCE_BUNDLE="$(find "$ROOT_DIR/.build" -ipath "*/release/Spill_Spill.bundle" -type d -print -quit)"
-if [[ -z "$RESOURCE_BUNDLE" ]]; then
+# Use the resource bundle beside the executable just built. The release path may
+# be a symlink; recursive discovery can select an unrelated historical build.
+RESOURCE_BUNDLE="$ROOT_DIR/.build/release/Spill_Spill.bundle"
+if [[ ! -d "$RESOURCE_BUNDLE" ]]; then
     echo "Spill SwiftPM resource bundle was not found after swift build." >&2
     exit 2
 fi

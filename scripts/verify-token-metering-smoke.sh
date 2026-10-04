@@ -23,6 +23,20 @@ trap cleanup EXIT
 
 "$ROOT_DIR/scripts/build-app.sh"
 
+# Verify the delivered resources, including Bundle.module and setup-helper copies.
+for resource_root in \
+    "$ROOT_DIR/.build/Spill.app/Contents/Resources" \
+    "$ROOT_DIR/.build/Spill.app/Contents/Applications/Spill Token Dashboard.app/Contents/Resources"; do
+    diff -qr "$ROOT_DIR/Sources/Spill/Resources/adapters" "$resource_root/adapters"
+    bundle_adapters="$resource_root/Spill_Spill.bundle/adapters"
+    if [[ ! -d "$bundle_adapters" ]]; then
+        bundle_adapters="$resource_root/Spill_Spill.bundle/Contents/Resources/adapters"
+    fi
+    diff -qr "$ROOT_DIR/Sources/Spill/Resources/adapters" "$bundle_adapters"
+done
+
+node --test "$ROOT_DIR/scripts/verify-token-metering-setup.mjs"
+
 SETUP_HOME="$ADAPTER_TMP_DIR/setup-home"
 SETUP_INSTALL_ROOT="$ADAPTER_TMP_DIR/setup-install"
 mkdir -p "$SETUP_HOME/.codex" "$SETUP_HOME/.claude" "$SETUP_HOME/.antigravity"
@@ -567,6 +581,7 @@ NODE
 
 # Exercises the adapter that is actually bundled and installed, covering the
 # incremental byte-offset reader the Stop hook depends on.
+python3 -B "$ROOT_DIR/scripts/verify-claude-hook-incremental.py"
 node "$ROOT_DIR/scripts/verify-codex-importer-incremental-smoke.mjs"
 node "$ROOT_DIR/scripts/verify-codex-importer-contract-smoke.mjs"
 
