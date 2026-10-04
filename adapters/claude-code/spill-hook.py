@@ -180,55 +180,62 @@ def _parse_token_usage_datetime(value: str):
         return None
 
 
-def _label_timeline_for_timestamp(timestamp: str) -> dict:
-    event_time = _parse_token_usage_datetime(timestamp)
-    if event_time is None:
-        return {}
-
-    best = None
+def _load_label_timeline() -> list[dict]:
+    entries = []
     try:
-        lines = LABEL_TIMELINE_FILE.read_text().splitlines()
-    except Exception:
+        with LABEL_TIMELINE_FILE.open(encoding="utf-8") as timeline:
+            for line in timeline:
+                try:
+                    data = json.loads(line)
+                except (ValueError, TypeError):
+                    continue
+                if not isinstance(data, dict) or data.get("ai_tool", "") not in ("", "unknown", "claude"):
+                    continue
+                task_type = data.get("task_type", "")
+                stage = data.get("stage", "")
+                task_type = task_type if isinstance(task_type, str) and _SAFE_SLUG.match(task_type) else ""
+                stage = stage if isinstance(stage, str) and _SAFE_SLUG.match(stage) else ""
+                if not task_type and not stage:
+                    continue
+                updated_at = _parse_token_usage_datetime(data.get("updated_at", ""))
+                expires_at = _parse_token_usage_datetime(data.get("expires_at", ""))
+                if updated_at is None or expires_at is None or updated_at.tzinfo is None or expires_at.tzinfo is None:
+                    continue
+                project_id = data.get("project_id", "")
+                entries.append({
+                    "task_type": task_type,
+                    "stage": stage,
+                    "project_id": project_id if isinstance(project_id, str) and _OPAQUE_ID.match(project_id) else "",
+                    "updated_at": updated_at,
+                    "expires_at": expires_at,
+                })
+    except (OSError, UnicodeError):
+        return []
+    # Stable ordering preserves the first active row when update times tie.
+    entries.sort(key=lambda entry: entry["updated_at"], reverse=True)
+    return entries
+
+
+class _LabelTimeline:
+    """Lazy safe-label snapshot, shared only within one hook/import invocation."""
+
+    def __init__(self):
+        self.entries = None
+
+    def for_timestamp(self, timestamp: str) -> dict:
+        event_time = _parse_token_usage_datetime(timestamp)
+        if event_time is None or event_time.tzinfo is None:
+            return {}
+        if self.entries is None:
+            self.entries = _load_label_timeline()
+        for entry in self.entries:
+            if entry["updated_at"] <= event_time <= entry["expires_at"]:
+                return {key: entry[key] for key in ("task_type", "stage", "project_id")}
         return {}
 
-    for line in lines:
-        if not line.strip():
-            continue
-        try:
-            data = json.loads(line)
-        except Exception:
-            continue
-        if not isinstance(data, dict):
-            continue
-        tool = data.get("ai_tool", "")
-        if tool not in ("", "unknown", "claude"):
-            continue
-        task_type = data.get("task_type", "")
-        stage = data.get("stage", "")
-        if not _SAFE_SLUG.match(task_type) and not _SAFE_SLUG.match(stage):
-            continue
-        updated_at = _parse_token_usage_datetime(data.get("updated_at", ""))
-        expires_at = _parse_token_usage_datetime(data.get("expires_at", ""))
-        if updated_at is None or expires_at is None:
-            continue
-        if not (updated_at <= event_time <= expires_at):
-            continue
-        if best is None or updated_at > best["updated_at"]:
-            project_id = data.get("project_id", "")
-            best = {
-                "task_type": task_type if _SAFE_SLUG.match(task_type) else "",
-                "stage": stage if _SAFE_SLUG.match(stage) else "",
-                "project_id": project_id if _OPAQUE_ID.match(project_id) else "",
-                "updated_at": updated_at,
-            }
 
-    if best is None:
-        return {}
-    return {
-        "task_type": best["task_type"],
-        "stage": best["stage"],
-        "project_id": best["project_id"],
-    }
+def _label_timeline_for_timestamp(timestamp: str, timeline=None) -> dict:
+    return (timeline if timeline is not None else _LabelTimeline()).for_timestamp(timestamp)
 
 
 def _accounting_record_for_event(event: dict, accounting=None):
@@ -650,10 +657,12 @@ def _read_transcript_turns(transcript_path: str, byte_offset: int, starting_turn
     start_offset = max(0, byte_offset)
     try:
         file_size = pathlib.Path(transcript_path).stat().st_size
-    except Exception:
-        file_size = 0
-    if start_offset > file_size:
+    except OSError:
+        file_size = None
+    if file_size is not None and start_offset > file_size:
         start_offset = 0
+    if file_size is not None and start_offset == file_size:
+        return [], start_offset, start_offset, starting_turn_index
 
     all_turns: list[dict] = []
     current_group: list[dict] = []
@@ -668,9 +677,17 @@ def _read_transcript_turns(transcript_path: str, byte_offset: int, starting_turn
             raw = f.readline()
             if not raw:
                 break
-            end_offset = f.tell()
             try:
                 obj = json.loads(raw.decode("utf-8").strip())
+            except (ValueError, UnicodeError):
+                # An append in progress must be retried from the last complete
+                # record. A terminated malformed row can safely be skipped.
+                if not raw.endswith(b"\n"):
+                    break
+                end_offset = f.tell()
+                continue
+            end_offset = f.tell()
+            try:
                 msg = obj.get("message", {})
                 role = msg.get("role", "") if isinstance(msg, dict) else ""
                 if role in {"human", "user"}:
@@ -719,6 +736,7 @@ def _event_for_live_turn(
     payload: dict,
     allow_current_label: bool,
     allow_timestamp_fallback: bool,
+    label_timeline=None,
 ):
     turn_input, turn_span_input, turn_output = _usage_amounts(turn.get("usage", {}))
     total = turn_input + turn_output
@@ -735,7 +753,7 @@ def _event_for_live_turn(
     model = raw_model if _MODEL_ID.match(raw_model) else "claude-unknown"
     inferred_task_type = 'uncategorized'
     inferred_stage = 'summarize'
-    label = _label_timeline_for_timestamp(timestamp)
+    label = _label_timeline_for_timestamp(timestamp, label_timeline)
 
     task_type = label.get("task_type") if _SAFE_SLUG.match(label.get("task_type", "")) else ""
     stage = label.get("stage") if _SAFE_SLUG.match(label.get("stage", "")) else ""
@@ -833,7 +851,7 @@ def main() -> None:
     _run_for_payload(payload)
 
 
-def _run_history_payload(payload: dict, enqueue_event=_enqueue_event, flush_events=None) -> dict:
+def _run_history_payload(payload: dict, enqueue_event=_enqueue_event, flush_events=None, label_timeline=None) -> dict:
     transcript_path = payload.get("transcript_path", "")
     session_id = payload.get("session_id", "")
     run_id = _opaque(session_id, "run-" + uuid.uuid4().hex[:12])
@@ -867,6 +885,7 @@ def _run_history_payload(payload: dict, enqueue_event=_enqueue_event, flush_even
     session_output = 0
     emitted_any = False
     next_emitted_request_ids = set(emitted_request_ids)
+    label_timeline = label_timeline if label_timeline is not None else _LabelTimeline()
     for turn in all_turns:
         turn_input, turn_span_input, turn_output = _usage_amounts(turn.get("usage", {}))
         session_fresh += turn_input
@@ -887,7 +906,7 @@ def _run_history_payload(payload: dict, enqueue_event=_enqueue_event, flush_even
 
         raw_model = turn.get("model", "")
         model = raw_model if _MODEL_ID.match(raw_model) else "claude-unknown"
-        label = _label_timeline_for_timestamp(timestamp)
+        label = _label_timeline_for_timestamp(timestamp, label_timeline)
         task_type = label.get("task_type") if _SAFE_SLUG.match(label.get("task_type", "")) else "uncategorized"
         stage = label.get("stage") if _SAFE_SLUG.match(label.get("stage", "")) else "summarize"
         project_id = label.get("project_id") if _OPAQUE_ID.match(label.get("project_id", "")) else "project_global"
@@ -948,6 +967,17 @@ def _run_history_payload(payload: dict, enqueue_event=_enqueue_event, flush_even
 
 
 def _run_for_payload(payload: dict, scan_subagents: bool = True, allow_timestamp_fallback: bool = True) -> str:
+    timeline = _LabelTimeline()
+    try:
+        return _run_main_payload(payload, allow_timestamp_fallback, timeline)
+    finally:
+        # Child transcripts advance independently of the main transcript.
+        transcript_path = payload.get("transcript_path", "")
+        if scan_subagents and isinstance(transcript_path, str) and transcript_path:
+            _scan_session_subagents(transcript_path, timeline)
+
+
+def _run_main_payload(payload: dict, allow_timestamp_fallback: bool, label_timeline) -> str:
     transcript_path = payload.get("transcript_path", "")
     session_id = payload.get("session_id", "")
     run_id = _opaque(session_id, "run-" + uuid.uuid4().hex[:12])
@@ -980,7 +1010,7 @@ def _run_for_payload(payload: dict, scan_subagents: bool = True, allow_timestamp
             "no_usage_hook_call",
             reason,
             payload,
-            meaning="Claude Stop hook ran, but no new assistant usage records were available for this stop.",
+            meaning="Claude Stop hook ran, but the main transcript had no new assistant usage records; subagent transcripts are checked separately.",
         )
         return _SCAN_SKIPPED if reason == "no_new_token_delta" else _SCAN_UNSUPPORTED
 
@@ -1032,6 +1062,7 @@ def _run_for_payload(payload: dict, scan_subagents: bool = True, allow_timestamp
             payload,
             allow_current_label=allow_current_label,
             allow_timestamp_fallback=allow_timestamp_fallback,
+            label_timeline=label_timeline,
         )) is not None
     ]
 
@@ -1055,27 +1086,31 @@ def _run_for_payload(payload: dict, scan_subagents: bool = True, allow_timestamp
     _save_session_state(run_id, next_fresh, next_output, transcript_byte_offset, next_emitted_request_ids, next_turn_index)
     _write_success_diagnostic(events[-1][1])
     _consume_label_file()
-    if scan_subagents:
-        _scan_session_subagents(transcript_path)
     return _SCAN_IMPORTED
 
 
-def _scan_session_subagents(transcript_path: str) -> None:
+def _scan_session_subagents(transcript_path: str, label_timeline=None) -> None:
     """Scan likely subagents directories near the main transcript on Stop-hook invocation."""
     global _USED_LABEL_FILE
     transcript = pathlib.Path(transcript_path)
     saved = _USED_LABEL_FILE
     try:
-        subagents_dir = transcript.parent / "subagents"
-        if subagents_dir.is_dir():
-            scan_main(str(subagents_dir), since_hours=24 * 30)
+        if not transcript.is_file():
+            return
+        directories = (transcript.with_suffix("") / "subagents", transcript.parent / "subagents")
+        seen = set()
+        for directory in directories:
+            resolved = directory.resolve()
+            if resolved not in seen and directory.is_dir():
+                seen.add(resolved)
+                scan_main(str(directory), since_hours=None, label_timeline=label_timeline)
     except Exception:
         pass
     finally:
         _USED_LABEL_FILE = saved
 
 
-def scan_main(scan_dir: str, since_hours) -> dict:
+def scan_main(scan_dir: str, since_hours, label_timeline=None) -> dict:
     """Scan *.jsonl transcripts under scan_dir modified within since_hours and enqueue usage events."""
     import time
     global _USED_LABEL_FILE
@@ -1093,6 +1128,7 @@ def scan_main(scan_dir: str, since_hours) -> dict:
     skipped_seen = 0
     unsupported_records = 0
     pending_events: list[dict] = []
+    label_timeline = label_timeline if label_timeline is not None else _LabelTimeline()
 
     def enqueue_history_event(event: dict, accounting=None) -> None:
         pending_events.append(_event_record(event, accounting))
@@ -1119,6 +1155,7 @@ def scan_main(scan_dir: str, since_hours) -> dict:
                 },
                 enqueue_event=enqueue_history_event,
                 flush_events=flush_history_events,
+                label_timeline=label_timeline,
             )
             imported_events += result["imported_events"]
             skipped_seen += result["skipped_seen"]
