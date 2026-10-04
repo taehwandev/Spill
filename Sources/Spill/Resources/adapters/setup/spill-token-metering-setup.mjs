@@ -155,6 +155,10 @@ async function installSetupHelper(runtimeInstructionSource) {
   const statsSource = await resolveStatsHelperSource(source);
   await copyFile(statsSource, statsHelperPath);
   await chmod(statsHelperPath, 0o755);
+  for (const statsModuleName of ["spill-token-metering-stats-accounting.mjs", "spill-token-metering-stats-presentation.mjs"]) {
+    const statsModuleSource = await resolveStatsHelperSource(source, statsModuleName);
+    await installPrivateFile(statsModuleSource, join(dirname(statsHelperPath), statsModuleName));
+  }
   results.push({ tool: "stats", action: "installed", path: statsHelperPath });
 
   await installPrivateFile(runtimeInstructionSource, installedRuntimeInstructionPath);
@@ -936,15 +940,15 @@ async function resolveSourceRoot(option) {
   return resolve(candidates[0]);
 }
 
-async function resolveStatsHelperSource(setupSource) {
+async function resolveStatsHelperSource(setupSource, filename = "spill-token-metering-stats.mjs") {
   const candidates = [
-    join(dirname(setupSource), "spill-token-metering-stats.mjs"),
-    join(sourceRoot, "setup", "spill-token-metering-stats.mjs"),
+    join(dirname(setupSource), filename),
+    join(sourceRoot, "setup", filename),
   ];
   for (const candidate of candidates) {
     if (await exists(candidate)) return candidate;
   }
-  throw new Error("Missing Spill stats helper source: spill-token-metering-stats.mjs");
+  throw new Error(`Missing Spill stats helper source: ${filename}`);
 }
 
 async function resolveRuntimeInstructionSource(option) {

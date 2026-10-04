@@ -47,6 +47,12 @@ node ~/Library/Application\ Support/Spill/adapters/setup/spill-token-metering-st
   output tokens: total tokens, input tokens, output tokens, event count, average
   tokens per event, peak event size, workflow label coverage, model breakdown,
   task breakdown, stage breakdown, token detail categories, and recent activity.
+- Include recorded fresh/cache-write/cache-read input, unclassified input and
+  accounting coverage, cache-read share, fresh-plus-output and reference-weighted
+  subtotals, average/maximum input per event, and top opaque sessions when the
+  helper exposes them. The reference-weighted subtotal is a comparison index,
+  not model pricing or billed cost. Do not treat unclassified input as fresh;
+  report incomplete coverage alongside comparison subtotals.
 - Interpret that summary with input/output totals first. Token detail
   categories are optional measurement-quality data, not the primary explanation
   of usage. If `unknown` dominates, say that exact detail attribution was

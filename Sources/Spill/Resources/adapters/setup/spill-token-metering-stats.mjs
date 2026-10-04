@@ -4,6 +4,8 @@ import { execFileSync } from "node:child_process";
 import { existsSync, realpathSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { homedir } from "node:os";
+import { readComparisonReport } from "./spill-token-metering-stats-accounting.mjs";
+import { appendComparisonSections } from "./spill-token-metering-stats-presentation.mjs";
 
 const args = parseArgs(process.argv.slice(2));
 const json = args.json === true;
@@ -49,7 +51,8 @@ function buildReport({ databasePath, tool, range, limit }) {
   if (!databaseValidation.ok) {
     return emptyReport({ scope, rangeInfo, reason: databaseValidation.reason });
   }
-  if (!tableExists(databasePath)) {
+  const columns = tableColumns(databasePath);
+  if (columns.size === 0) {
     return emptyReport({ scope, rangeInfo, reason: "events_table_not_found" });
   }
 
@@ -60,6 +63,10 @@ function buildReport({ databasePath, tool, range, limit }) {
   const stages = sqliteJSON(databasePath, groupSQL(where, "stage", limit));
   const sources = sourceRows(summary);
   const activity = sqliteJSON(databasePath, activitySQL(where, range.activityLimit)).reverse();
+  const comparison = readComparisonReport({
+    query: (sql) => sqliteJSON(databasePath, sql), columns, where,
+    events: numeric(summary.events), limit,
+  });
 
   return {
     schema_version: 1,
@@ -67,6 +74,8 @@ function buildReport({ databasePath, tool, range, limit }) {
     scope,
     range: rangeInfo,
     summary: normalizeSummary(summary),
+    context_size: contextSize(summary),
+    ...comparison,
     models,
     tasks,
     stages,
@@ -83,6 +92,8 @@ function emptyReport({ scope, rangeInfo, reason }) {
     scope,
     range: rangeInfo,
     summary: normalizeSummary({}),
+    context_size: contextSize({}),
+    ...readComparisonReport({ query: () => [], columns: new Set(), where: "", events: 0, limit }),
     models: [],
     tasks: [],
     stages: [],
@@ -100,6 +111,8 @@ function summarySQL(where) {
       COALESCE(SUM(CAST(json_extract(CAST(payload_json AS TEXT), '$.output_tokens') AS INTEGER)), 0) AS output_tokens,
       COALESCE(ROUND(AVG(total_tokens)), 0) AS avg_tokens,
       COALESCE(MAX(total_tokens), 0) AS peak_event_tokens,
+      COALESCE(AVG(CAST(json_extract(CAST(payload_json AS TEXT), '$.input_tokens') AS INTEGER)), 0) AS avg_input_tokens,
+      COALESCE(MAX(CAST(json_extract(CAST(payload_json AS TEXT), '$.input_tokens') AS INTEGER)), 0) AS peak_input_tokens,
       COALESCE(SUM(source_system), 0) AS source_system,
       COALESCE(SUM(source_user), 0) AS source_user,
       COALESCE(SUM(source_history), 0) AS source_history,
@@ -155,14 +168,8 @@ function activitySQL(where, limit) {
   `;
 }
 
-function tableExists(databasePath) {
-  const rows = sqliteJSON(databasePath, `
-    SELECT name
-    FROM sqlite_master
-    WHERE type = 'table' AND name = 'token_usage_events'
-    LIMIT 1;
-  `);
-  return rows.length > 0;
+function tableColumns(databasePath) {
+  return new Set(sqliteJSON(databasePath, "PRAGMA table_info(token_usage_events);").map((row) => row.name));
 }
 
 function sqliteJSON(databasePath, sql) {
@@ -219,6 +226,14 @@ function normalizeSummary(summary) {
   };
 }
 
+function contextSize(summary) {
+  return {
+    avg_input_tokens_per_event: numeric(summary.avg_input_tokens),
+    max_input_tokens_per_event: numeric(summary.peak_input_tokens),
+    note: "Input per event is a context-size proxy, not an exact context window; an event may combine requests.",
+  };
+}
+
 function formatReport(report) {
   const lines = [];
   const titleRange = report.range.label;
@@ -240,6 +255,7 @@ function formatReport(report) {
   lines.push(
     `Label Coverage ${percent(summary.workflow_label_event_coverage)} records | ${percent(summary.workflow_label_token_coverage)} tokens`
   );
+  appendComparisonSections(lines, report, { compact, number, percent });
 
   appendSection(lines, "Models", report.models);
   appendSection(lines, "Tasks", report.tasks);
@@ -389,13 +405,16 @@ Options:
   --tool TOOL        Show a specific tool. Use all for every local tool.
   --all              Shortcut for --tool all.
   --since RANGE      today, 24h, 7d, 30d, or all. Default: today.
-  --limit N          Rows per breakdown section. Default: 5.
+  --limit N          Rows per breakdown and top sessions per tool. Default: 5.
   --database PATH    Override the local Spill events.sqlite3 path.
   --json             Print JSON instead of a compact text report.
 
 This command is read-only. It reads Spill's app-owned local usage store and
-prints aggregate token counts, model/task/stage breakdowns, workflow label coverage,
-token detail quality categories, and recent activity. It does not create usage events and does not read prompts,
+prints aggregate token counts, recorded fresh/cache input accounting, comparison
+subtotals with coverage, input-per-event context proxy, top opaque sessions,
+model/task/stage breakdowns, workflow label coverage, token detail quality,
+and recent activity. Reference comparison weights are not model pricing.
+It does not create usage events and does not read prompts,
 responses, commands, file paths, logs, diffs, code content, environment
 values, or secrets.
 `);

@@ -29,6 +29,8 @@ require_node
 
 download "adapters/setup/spill-token-metering-setup.mjs"
 download "adapters/setup/spill-token-metering-stats.mjs"
+download "adapters/setup/spill-token-metering-stats-accounting.mjs"
+download "adapters/setup/spill-token-metering-stats-presentation.mjs"
 download "runtime-instruction.md"
 download "adapters/codex/spill-importer.mjs"
 download "adapters/claude-code/spill-hook.py"
