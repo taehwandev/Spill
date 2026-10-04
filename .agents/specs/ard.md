@@ -639,6 +639,32 @@ Rules:
 
 ### ARD-005B2: Token Usage Separates Runtime Diagnostics and User Visibility
 
+The AI tool visibility setting now also governs Spill-owned work for that
+tool. The persistence owner remains `SpillSettings` and its existing hidden-tool
+sets; absent keys still mean all supported tools enabled, so no migration is
+needed. Preferences writes the setting and posts the existing distributed
+visibility notification. The main app applies its local setting to the
+collector and status provider immediately; the dashboard helper reloads shared
+defaults on the distributed notification. The collector checks the set before
+each active importer and limit capture, and cancellation checks stop an importer
+already in progress after a tool is disabled. The status provider filters
+installation, version, process, and metrics work by enabled tool. An empty
+enabled set skips the `ps` subprocess. Runtime adapters consult an atomic,
+app-owned enabled-tool snapshot before parsing usage; installed hook entries
+remain in place for reversible re-enablement and user-owned hook chains.
+Smoke startup leaves the installed enabled-tool snapshot unchanged. Retiring
+a tool removes live discovery and controls, while historical token-only rows
+and rollups remain stored; legacy Ollama payloads decode as unknown.
+
+Settings impact: Preferences, compact Spill Panel, separate AI dashboard, and
+menu-bar AI glance are affected. The local token store retains prior events and
+cursors. Private Usage Upload and agent-facing summaries read the retained
+store and are not rewritten by this setting; newly disabled tools add no new
+events. The web dashboard receives no new events from disabled tools after
+the setting takes effect. No additional timer, collector, network request, or
+sync path is created. Main-process setting application and the distributed
+reload should be visible on the next UI update, without restart or polling.
+
 Decision:
 
 Dashboard, panel, Preferences, and menu-bar token content use the supported
@@ -1624,18 +1650,18 @@ MVP detection:
   - process detection
   - version and model hints only when exposed by safe local command output or
     process arguments
-- Gemini:
+- Antigravity/AGY:
   - process detection
   - version and model hints only when exposed by safe local command output or
     process arguments
-- Ollama:
-  - process detection
-  - `ollama ps` for currently loaded model hints when local command probing is enabled
-  - optional `ollama list` only when user enables broader command probing
-- OpenAI:
-  - environment/config presence only
-  - optional default model from explicit OpenAI model environment keys
-  - never display secret values
+
+The production `AIStatusStore` selects only these three supported dashboard
+tools. Direct OpenAI API configuration is not displayed by this surface and
+does not trigger its discovery, process-list, version, or model probes. Stored
+events with a retired tool label and their rollups remain stored; legacy Ollama
+payloads decode as unknown. Other unsupported incoming labels are rejected.
+With all three supported tools disabled,
+the status provider receives an empty enabled set and does not launch `ps`.
 
 The dashboard renders supported agent cards in canonical Codex, Claude Code,
 and Antigravity/AGY order, minus the user's hidden tools. The compact panel

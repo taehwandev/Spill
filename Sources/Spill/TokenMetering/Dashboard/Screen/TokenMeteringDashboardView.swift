@@ -361,11 +361,20 @@ extension TokenMeteringDashboardView {
     }
 
     private func syncVisibleAITools() {
+        refreshLocalAIStatus()
         store.setVisibleAITools(
             TokenUsageDashboardToolVisibility.visibleTools(
                 hiddenTools: settings.hiddenTokenUsageAITools
             )
         )
+    }
+
+    private func refreshLocalAIStatus() {
+        aiStatusStore.setEnabledKinds(
+            TokenMeteringToolAvailability.supportedLocalToolKindSet
+                .subtracting(settings.hiddenLocalAIToolKinds)
+        )
+        aiStatusStore.refreshInBackground()
     }
 
     private func scheduleVisibleAIToolsSync() {
@@ -443,9 +452,10 @@ extension TokenMeteringDashboardView {
 extension TokenMeteringDashboardView {
     private func refreshLocalTokenData() {
         refreshAction()
-        aiStatusStore.refreshInBackground()
         if syncsVisibleAITools {
             syncVisibleAITools()
+        } else {
+            refreshLocalAIStatus()
         }
         store.refreshAsync()
     }

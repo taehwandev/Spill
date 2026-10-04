@@ -156,11 +156,6 @@ milestones:
         state: done
         acceptance:
           - Detects obvious local Codex process/session state when available.
-      - id: M4-T2
-        title: Ollama state
-        state: done
-        acceptance:
-          - Detects Ollama running/not running without network dependency.
       - id: M4-T3
         title: OpenAI config state
         state: done

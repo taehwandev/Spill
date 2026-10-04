@@ -13,13 +13,15 @@
 
 - Codex process/session state where locally detectable.
 - Claude process/session state where locally detectable.
-- Gemini process/session state where locally detectable.
-- Ollama running/not running.
-- Ollama model hint if cheaply detectable.
-- OpenAI API configuration present/missing, without revealing secrets.
+- Antigravity/AGY process/session state where locally detectable.
 - Local token metering summary.
 - Best-effort tool version and model hints when exposed by local commands or
   visible process arguments.
+- A hidden local AI tool is excluded from Spill's runtime discovery and
+  process-metric work. The active status set contains only Codex, Claude Code,
+  and Antigravity/AGY. Direct OpenAI API configuration is not checked for this
+  surface. Turning all three supported tools off skips the
+  process-list subprocess entirely; it does not terminate external AI sessions.
 
 ## Layout Requirements
 
@@ -70,13 +72,17 @@
   and configuration status. It must not inspect prompts, transcripts, commands,
   file paths, repository names, shell history, logs, diffs, source content, or
   secret-bearing config values.
-- Hide the AI strip only when no local AI tool, OpenAI configuration, or token
-  metering state exists.
+- Excluded runtimes do not keep the AI strip visible or trigger local discovery.
+  The strip follows supported visible agent status and token metering state.
 - Treat model and version labels as best-effort hints, not guaranteed session
   truth.
 
 ## Acceptance
 
+- A hidden tool triggers no process metrics or version probe. With Codex,
+  Claude Code, and Antigravity/AGY all hidden, no AI process-list subprocess
+  runs. Re-enabling refreshes visible status
+  without requiring an app restart.
 - AI strip shows useful local state.
 - AI status can be understood at a glance through both status pills and a small
   process-state chart/count summary.

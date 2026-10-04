@@ -3,6 +3,38 @@ import XCTest
 @testable import Spill
 
 final class TokenUsageCollectorCoordinatorTests: XCTestCase {
+    func testDisabledToolsSkipCollectionAndResumeWhenEnabled() async {
+        let state = CollectorRaceState()
+        let store = TokenUsageStore(fileURL: temporaryEventsURL())
+        let collector = TokenUsageCollectorCoordinator(
+            store: store,
+            antigravityImportRunner: { _, _, _ in
+                state.recordAntigravityRun()
+                return Self.emptyAntigravitySummary
+            },
+            claudeCodeImportRunner: { _, _ in
+                state.recordClaudeRun()
+                return Self.emptyClaudeSummary
+            },
+            codexLimitCaptureRunner: { state.recordCodexLimitCapture() },
+            claudeLimitCaptureRunner: { state.recordClaudeLimitCapture() },
+            enabledTools: []
+        )
+
+        await collector.requestCollectionAndWait(reason: "manual_refresh")
+        XCTAssertEqual(state.snapshot.antigravityRuns, 0)
+        XCTAssertEqual(state.snapshot.claudeRuns, 0)
+        XCTAssertEqual(state.snapshot.codexLimitCaptures, 0)
+        XCTAssertEqual(state.snapshot.claudeLimitCaptures, 0)
+
+        collector.setEnabledTools([.claude])
+        await collector.requestCollectionAndWait(reason: "manual_refresh")
+        XCTAssertEqual(state.snapshot.antigravityRuns, 0)
+        XCTAssertEqual(state.snapshot.claudeRuns, 1)
+        XCTAssertEqual(state.snapshot.codexLimitCaptures, 0)
+        XCTAssertEqual(state.snapshot.claudeLimitCaptures, 1)
+    }
+
     func testManualRefreshAcceptedAtFinalizationFinishesAfterItsForcedPass() async throws {
         let state = CollectorRaceState()
         let collectorBox = CollectorBox()
@@ -92,6 +124,8 @@ private final class CollectorRaceState: @unchecked Sendable {
         let manualCompleted: Bool
         let antigravityRuns: Int
         let claudeRuns: Int
+        let codexLimitCaptures: Int
+        let claudeLimitCaptures: Int
         let manualCompletionObservedDuringSecondClaudeRun: Bool
     }
 
@@ -100,6 +134,8 @@ private final class CollectorRaceState: @unchecked Sendable {
     private var manualCompleted = false
     private var antigravityRuns = 0
     private var claudeRuns = 0
+    private var codexLimitCaptures = 0
+    private var claudeLimitCaptures = 0
     private var manualCompletionObservedDuringSecondClaudeRun = false
 
     func claimManualRequest() -> Bool {
@@ -127,6 +163,14 @@ private final class CollectorRaceState: @unchecked Sendable {
         }
     }
 
+    func recordCodexLimitCapture() {
+        lock.withLock { codexLimitCaptures += 1 }
+    }
+
+    func recordClaudeLimitCapture() {
+        lock.withLock { claudeLimitCaptures += 1 }
+    }
+
     var snapshot: Snapshot {
         lock.withLock {
             Snapshot(
@@ -134,6 +178,8 @@ private final class CollectorRaceState: @unchecked Sendable {
                 manualCompleted: manualCompleted,
                 antigravityRuns: antigravityRuns,
                 claudeRuns: claudeRuns,
+                codexLimitCaptures: codexLimitCaptures,
+                claudeLimitCaptures: claudeLimitCaptures,
                 manualCompletionObservedDuringSecondClaudeRun: manualCompletionObservedDuringSecondClaudeRun
             )
         }

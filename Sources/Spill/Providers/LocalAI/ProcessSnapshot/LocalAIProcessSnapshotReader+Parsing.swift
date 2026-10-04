@@ -33,7 +33,12 @@ extension LocalAIProcessSnapshotReader {
         )
     }
 
-    static func isKnownAIToolProcess(_ snapshot: LocalAIProcessSnapshot) -> Bool {
+    static func isKnownAIToolProcess(
+        _ snapshot: LocalAIProcessSnapshot,
+        enabledKinds: Set<LocalAIToolKind> = Set(LocalAIToolKind.allCases)
+    ) -> Bool {
+        let processKinds = enabledKinds.filter { !$0.executableNames.isEmpty }
+        let candidateExecutableNames = processKinds.flatMap(\.executableNames)
         let matchesExecutable = candidateExecutableNames.contains { executableName in
             snapshot.executableName.matchesExecutable(named: executableName)
                 || snapshot.executableToken?.matchesExecutable(named: executableName) == true
@@ -44,23 +49,12 @@ extension LocalAIProcessSnapshotReader {
 
         let lowercasedCommandLine = snapshot.commandLine.lowercased()
         let lowercasedExecutableName = snapshot.executableName.lowercased()
+        let candidateApplicationNamesLowercased = processKinds.flatMap(\.applicationNames).map { $0.lowercased() }
         return candidateApplicationNamesLowercased.contains { lowercased in
             lowercasedCommandLine.contains("/\(lowercased).app/")
                 || lowercasedCommandLine.hasSuffix("/\(lowercased).app")
                 || lowercasedExecutableName == lowercased
         }
-    }
-
-    private static var candidateToolKinds: [LocalAIToolKind] {
-        [.codex, .claude, .antigravity, .ollama]
-    }
-
-    private static var candidateExecutableNames: [String] {
-        candidateToolKinds.flatMap(\.executableNames)
-    }
-
-    private static var candidateApplicationNamesLowercased: [String] {
-        candidateToolKinds.flatMap(\.applicationNames).map { $0.lowercased() }
     }
 
     private static func safeExecutableName(from executableToken: String?) -> String {

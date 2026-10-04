@@ -10,8 +10,10 @@ final class AIStatusStoreTests: XCTestCase {
 
     func testRefreshUsesInjectedReader() {
         var readCount = 0
-        let store = AIStatusStore(reader: {
+        var readKinds = [Set<LocalAIToolKind>]()
+        let store = AIStatusStore(reader: { enabledKinds in
             readCount += 1
+            readKinds.append(enabledKinds)
             return LocalAIStatusProvider.statuses(
                 environment: readCount == 1 ? [:] : ["OPENAI_BASE_URL": "http://localhost"],
                 processNames: readCount == 1 ? [] : ["codex"],
@@ -26,8 +28,12 @@ final class AIStatusStoreTests: XCTestCase {
 
         store.refresh()
         XCTAssertEqual(store.statuses.first { $0.kind == .codex }?.value, "Running")
-        XCTAssertEqual(store.statuses.first { $0.kind == .openAI }?.value, "Configured")
-        XCTAssertEqual(store.detectedStatuses.map(\.kind), [.codex, .openAI])
+        XCTAssertNil(store.statuses.first { $0.kind == .openAI })
+        XCTAssertEqual(store.detectedStatuses.map(\.kind), [.codex])
+        XCTAssertEqual(readKinds, [
+            [.codex, .claude, .antigravity],
+            [.codex, .claude, .antigravity],
+        ])
     }
 
     func testRefreshKeepsCanonicalAgentOrderAndPreservesDetectedState() {
@@ -52,7 +58,7 @@ final class AIStatusStoreTests: XCTestCase {
             subtitle: "Environment",
             state: .normal
         )
-        let store = AIStatusStore(reader: {
+        let store = AIStatusStore(reader: { _ in
             [claudeStatus, openAIStatus]
         })
 
@@ -60,10 +66,10 @@ final class AIStatusStoreTests: XCTestCase {
 
         XCTAssertEqual(
             store.statuses.map(\.kind),
-            [.codex, .claude, .antigravity, .openAI]
+            [.codex, .claude, .antigravity]
         )
         XCTAssertEqual(store.statuses[1], claudeStatus)
-        XCTAssertEqual(store.detectedStatuses, [claudeStatus, openAIStatus])
+        XCTAssertEqual(store.detectedStatuses, [claudeStatus])
         XCTAssertEqual(
             TokenMeteringToolAvailability.installedTools(from: store.detectedStatuses),
             [.claude]
@@ -76,7 +82,7 @@ final class AIStatusStoreTests: XCTestCase {
             processNames: ["codex"],
             installedExecutableNames: ["codex"]
         )
-        let store = AIStatusStore(reader: { detectedStatuses })
+        let store = AIStatusStore(reader: { _ in detectedStatuses })
 
         store.refresh()
 
@@ -96,8 +102,8 @@ final class AIStatusStoreTests: XCTestCase {
         let releaseReader = DispatchSemaphore(value: 0)
         let store = AIStatusStore(
             statuses: [],
-            reader: { [] },
-            backgroundReader: { shouldCancel in
+            reader: { _ in [] },
+            backgroundReader: { _, shouldCancel in
                 started.fulfill()
                 _ = releaseReader.wait(timeout: .now() + 1)
                 XCTAssertTrue(shouldCancel())
@@ -116,5 +122,77 @@ final class AIStatusStoreTests: XCTestCase {
         try? await Task.sleep(nanoseconds: 100_000_000)
         XCTAssertEqual(store.statuses, [])
         XCTAssertEqual(store.detectedStatuses, [])
+    }
+
+    func testDisablingKindsRemovesStatusesAndSkipsSynchronousReads() {
+        let codex = LocalAIToolStatus(kind: .codex, value: "Running", subtitle: nil, state: .normal)
+        let claude = LocalAIToolStatus(kind: .claude, value: "Running", subtitle: nil, state: .normal)
+        var readKinds = [Set<LocalAIToolKind>]()
+        let store = AIStatusStore(statuses: [codex, claude], reader: { enabledKinds in
+            readKinds.append(enabledKinds)
+            return [codex, claude]
+        })
+
+        store.setEnabledKinds([.claude])
+        XCTAssertEqual(store.statuses.map(\.kind), [.claude])
+        XCTAssertEqual(store.detectedStatuses.map(\.kind), [.claude])
+
+        store.refresh()
+        XCTAssertEqual(readKinds, [[.claude]])
+        XCTAssertEqual(store.statuses.map(\.kind), [.claude])
+
+        store.setEnabledKinds([])
+        store.refresh()
+        store.refreshInBackground()
+        XCTAssertEqual(readKinds.count, 1)
+        XCTAssertEqual(store.statuses, [])
+        XCTAssertEqual(store.detectedStatuses, [])
+    }
+
+    func testChangingEnabledKindsCancelsStaleBackgroundRefresh() async {
+        let started = expectation(description: "background reader started")
+        let releaseReader = DispatchSemaphore(value: 0)
+        let store = AIStatusStore(
+            statuses: [],
+            reader: { _ in [] },
+            backgroundReader: { _, shouldCancel in
+                started.fulfill()
+                _ = releaseReader.wait(timeout: .now() + 1)
+                XCTAssertTrue(shouldCancel())
+                return [LocalAIToolStatus(kind: .codex, value: "Running", subtitle: nil, state: .normal)]
+            }
+        )
+
+        store.refreshInBackground()
+        await fulfillment(of: [started], timeout: 1)
+        store.setEnabledKinds([.claude])
+        releaseReader.signal()
+
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertEqual(store.statuses.map(\.kind), [.claude])
+        XCTAssertEqual(store.detectedStatuses, [])
+    }
+
+    func testChangingEnabledKindsClearsBackgroundRefreshInterval() async {
+        let firstRefresh = expectation(description: "first background reader started")
+        let secondRefresh = expectation(description: "newly enabled reader started immediately")
+        let store = AIStatusStore(
+            statuses: [],
+            reader: { _ in [] },
+            backgroundReader: { kinds, _ in
+                if kinds.contains(.codex) {
+                    firstRefresh.fulfill()
+                } else {
+                    secondRefresh.fulfill()
+                }
+                return []
+            }
+        )
+
+        store.refreshInBackground()
+        await fulfillment(of: [firstRefresh], timeout: 1)
+        store.setEnabledKinds([.claude])
+        store.refreshInBackground()
+        await fulfillment(of: [secondRefresh], timeout: 1)
     }
 }

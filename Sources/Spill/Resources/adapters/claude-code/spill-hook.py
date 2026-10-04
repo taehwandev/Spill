@@ -57,6 +57,19 @@ EMPTY_DIAGNOSTIC_FILE_NAME = "claude-last-empty.json"
 MISMATCH_DIAGNOSTIC_FILE_NAME = "claude-last-mismatch.json"
 
 
+def _tool_enabled(tool: str) -> bool:
+    policy_path = pathlib.Path.home() / "Library/Application Support/Spill/token-metering/enabled-tools.json"
+    try:
+        policy = json.loads(policy_path.read_text(encoding="utf-8"))
+        return (
+            policy.get("schema_version") != 1
+            or not isinstance(policy.get("enabled_tools"), list)
+            or tool in policy["enabled_tools"]
+        )
+    except (OSError, ValueError, TypeError, AttributeError):
+        return True
+
+
 def _ensure_private_dir(path: pathlib.Path) -> None:
     """Create path (and parents) restricted to the owner and re-assert 0700 even if the
     directory already existed, so upgrades from an earlier version that created these
@@ -805,6 +818,8 @@ def _event_for_live_turn(
 
 
 def main() -> None:
+    if not _tool_enabled("claude"):
+        return
     try:
         raw_payload = sys.stdin.read()
     except Exception:

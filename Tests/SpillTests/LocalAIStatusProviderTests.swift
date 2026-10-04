@@ -145,7 +145,7 @@ final class LocalAIStatusProviderTests: XCTestCase {
         XCTAssertTrue(darwinSource.contains("proc_pid_rusage"))
         XCTAssertTrue(darwinSource.contains("ri_phys_footprint"))
         XCTAssertTrue(readerSource.contains("candidateSnapshots.map(\\.processID)"))
-        XCTAssertTrue(readerSource.contains("snapshots.filter(isKnownAIToolProcess)"))
+        XCTAssertTrue(readerSource.contains("isKnownAIToolProcess($0, enabledKinds: enabledKinds)"))
         XCTAssertTrue(readerSource.contains("executableToken: snapshot.executableToken"))
         XCTAssertTrue(metricsSource.contains("LocalAIRawProcessMetrics"))
         XCTAssertTrue(metricsSource.contains("UInt64(taskInfo.pti_total_user) &+ UInt64(taskInfo.pti_total_system)"))
@@ -318,17 +318,14 @@ final class LocalAIStatusProviderTests: XCTestCase {
     func testDetectedProcessAndOpenAIConfigMapping() {
         let statuses = LocalAIStatusProvider.statuses(
             environment: ["OPENAI_API_KEY": "set"],
-            processNames: ["codex", "/opt/homebrew/bin/ollama"],
-            installedExecutableNames: ["codex", "ollama"]
+            processNames: ["codex"],
+            installedExecutableNames: ["codex"]
         )
 
-        XCTAssertEqual(statuses.map(\.kind), [.codex, .ollama, .openAI])
+        XCTAssertEqual(statuses.map(\.kind), [.codex, .openAI])
         XCTAssertEqual(statuses.first { $0.kind == .codex }?.value, "Running")
         XCTAssertEqual(statuses.first { $0.kind == .codex }?.state, .normal)
         XCTAssertEqual(statuses.first { $0.kind == .codex }?.processSummary.processCount, 1)
-        XCTAssertEqual(statuses.first { $0.kind == .ollama }?.value, "Running")
-        XCTAssertEqual(statuses.first { $0.kind == .ollama }?.state, .normal)
-        XCTAssertEqual(statuses.first { $0.kind == .ollama }?.processSummary.processCount, 1)
         XCTAssertEqual(statuses.first { $0.kind == .openAI }?.value, "Configured")
         XCTAssertEqual(statuses.first { $0.kind == .openAI }?.state, .normal)
     }
@@ -369,7 +366,7 @@ final class LocalAIStatusProviderTests: XCTestCase {
         XCTAssertEqual(codex.processSummary.processes.map(\.processID), [100, 101])
     }
 
-    func testClaudeAntigravityOllamaAndOpenAIModelMetadataMapping() {
+    func testClaudeAntigravityAndOpenAIModelMetadataMapping() {
         let statuses = LocalAIStatusProvider.statuses(
             environment: [
                 "OPENAI_API_KEY": "secret",
@@ -381,23 +378,19 @@ final class LocalAIStatusProviderTests: XCTestCase {
                 "/opt/homebrew/bin/antigravity -m ag-pro",
                 "/Users/me/.pencil/mcp/antigravity/out/mcp-server-darwin-arm64 --app antigravity"
             ],
-            installedExecutableNames: ["claude", "antigravity", "ollama"],
+            installedExecutableNames: ["claude", "antigravity"],
             commandMetadata: [
                 .claude: LocalAIToolMetadata(model: nil, version: "2.1.0", source: "Command"),
-                .antigravity: LocalAIToolMetadata(model: nil, version: "0.6.1", source: "Command"),
-                .ollama: LocalAIToolMetadata(model: nil, version: "0.12.0", source: "Command")
-            ],
-            ollamaRuntime: LocalOllamaRuntimeSummary(activeModel: "llama3.2:latest")
+                .antigravity: LocalAIToolMetadata(model: nil, version: "0.6.1", source: "Command")
+            ]
         )
 
-        XCTAssertEqual(statuses.map(\.kind), [.claude, .antigravity, .ollama, .openAI])
+        XCTAssertEqual(statuses.map(\.kind), [.claude, .antigravity, .openAI])
         XCTAssertEqual(statuses.first { $0.kind == .claude }?.value, "Running")
         XCTAssertEqual(statuses.first { $0.kind == .claude }?.subtitle, "claude-sonnet-4-5")
         XCTAssertEqual(statuses.first { $0.kind == .claude }?.metadata.version, "2.1.0")
         XCTAssertEqual(statuses.first { $0.kind == .antigravity }?.subtitle, "ag-pro")
         XCTAssertEqual(statuses.first { $0.kind == .antigravity }?.metadata.model, "ag-pro")
-        XCTAssertEqual(statuses.first { $0.kind == .ollama }?.subtitle, "llama3.2:latest")
-        XCTAssertEqual(statuses.first { $0.kind == .ollama }?.metadata.version, "0.12.0")
         XCTAssertEqual(statuses.first { $0.kind == .openAI }?.title, "OpenAI API")
         XCTAssertEqual(statuses.first { $0.kind == .openAI }?.subtitle, "gpt-5.2")
     }
@@ -582,27 +575,8 @@ final class LocalAIStatusProviderTests: XCTestCase {
             subtitle: "Ready locally",
             state: .normal
         )
-        let ollama = LocalAIToolStatus(
-            kind: .ollama,
-            value: "Running",
-            subtitle: "Local process",
-            state: .normal,
-            processSummary: LocalAIProcessSummary(
-                processes: [
-                    LocalAIProcessSnapshot(
-                        processID: 123,
-                        executableName: "ollama",
-                        cpuPercent: 0.2,
-                        memoryBytes: 10 * 1024 * 1024
-                    )
-                ]
-            )
-        )
-
         XCTAssertEqual(codex.actionRecommendation?.title, "Start from terminal")
         XCTAssertEqual(codex.actionRecommendation?.detail, "Launch it from your terminal when you need a new session.")
-        XCTAssertEqual(ollama.actionRecommendation?.title, "Inspect local models")
-        XCTAssertEqual(ollama.actionRecommendation?.detail, "Ollama is running locally.")
     }
 
     func testOpenAIActionRecommendationDoesNotExposeSecretValues() {

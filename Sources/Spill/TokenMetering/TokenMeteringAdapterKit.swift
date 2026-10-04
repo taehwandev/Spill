@@ -243,6 +243,15 @@ enum TokenMeteringSetupInstaller {
     static func refreshInstalledFilesIfPresent() {
         TokenMeteringAdapterKit.refreshInstalledHookAdaptersIfPresent()
         _ = try? refreshInstalledHelperIfPresent(
+            sourceURL: Bundle.main.url(
+                forResource: "spill-claude-statusline",
+                withExtension: "mjs",
+                subdirectory: "adapters/claude-code"
+            ),
+            destination: AppDirectories.spillApplicationSupportDirectory()
+                .appendingPathComponent("adapters/claude-code/spill-claude-statusline.mjs")
+        )
+        _ = try? refreshInstalledHelperIfPresent(
             sourceURL: scriptURL,
             destination: defaultInstallURL()
         )

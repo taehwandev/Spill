@@ -58,7 +58,7 @@ Spill is not:
 - Developers and AI-heavy users.
 - Users with crowded menu bars.
 - Users who run tools like Rectangle, iStat Menus, Hidden Bar, Ice, Raycast,
-  Hammerspoon, Ollama, Codex, Claude Code, Antigravity/AGY, or local agents.
+  Hammerspoon, Codex, Claude Code, Antigravity/AGY, or local agents.
 - Users who prefer a small native utility over a large always-open dashboard.
 - Users who want optional web aggregate statistics without giving Spill access
   to private work content.

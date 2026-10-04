@@ -56,7 +56,7 @@ final class SpillPanelAccessibilityReportTests: XCTestCase {
     func testRequiredLabelMatchesTokenBoundaryInsideCombinedLabel() {
         let report = SpillPanelAccessibilityReport(
             requiredLabels: ["AI"],
-            discoveredLabels: ["AI Codex Running Claude Running Antigravity Ready Ollama Running OpenAI API Configured"]
+            discoveredLabels: ["AI Codex Running Claude Running Antigravity Ready"]
         )
 
         XCTAssertTrue(report.isValid)

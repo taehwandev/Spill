@@ -21,7 +21,7 @@
 // exits 0 after printing whatever the chained command produced.
 
 import { spawn } from "node:child_process";
-import { mkdir, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -38,8 +38,20 @@ if (chained) {
   process.stdout.write(chained);
 }
 
-await harvest(payloadText).catch(() => {});
+if (await isToolEnabled("claude")) {
+  await harvest(payloadText).catch(() => {});
+}
 process.exit(0);
+
+async function isToolEnabled(tool) {
+  const policyPath = join(homedir(), "Library", "Application Support", "Spill", "token-metering", "enabled-tools.json");
+  try {
+    const policy = JSON.parse(await readFile(policyPath, "utf8"));
+    return policy.schema_version !== 1 || !Array.isArray(policy.enabled_tools) || policy.enabled_tools.includes(tool);
+  } catch {
+    return true;
+  }
+}
 
 async function harvest(text) {
   if (!text.trim()) {

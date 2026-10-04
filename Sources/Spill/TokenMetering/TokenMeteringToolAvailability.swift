@@ -1,6 +1,7 @@
 enum TokenMeteringToolAvailability {
     static let supportedTools = Set(TokenUsageAITool.dashboardTools)
     static let supportedLocalToolKinds = TokenUsageAITool.dashboardTools.compactMap(\.localAIToolKind)
+    static let supportedLocalToolKindSet = Set(supportedLocalToolKinds)
 
     static func installedTools(from statuses: [LocalAIToolStatus]) -> Set<TokenUsageAITool> {
         Set(statuses.compactMap { status in

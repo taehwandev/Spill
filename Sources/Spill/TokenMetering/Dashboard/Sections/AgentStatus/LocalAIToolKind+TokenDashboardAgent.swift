@@ -9,7 +9,7 @@ extension LocalAIToolKind {
             return .claude
         case .antigravity:
             return .antigravity
-        case .ollama, .openAI:
+        case .openAI:
             return nil
         }
     }
@@ -18,7 +18,7 @@ extension LocalAIToolKind {
         switch self {
         case .codex, .claude, .antigravity:
             return true
-        case .ollama, .openAI:
+        case .openAI:
             return false
         }
     }

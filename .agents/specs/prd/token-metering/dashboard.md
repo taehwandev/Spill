@@ -15,9 +15,12 @@
   Code, and Antigravity/AGY show/hide toggles by default. It must not depend on
   local runtime installation, Spill setup files, adapter hooks, importers, or a
   prior Spill installation.
-- The visibility toggle is the shared display preference for AI dashboard
-  usage, dashboard agent-status cards, compact-panel token summaries, and menu-bar
-  token totals. It does not affect saved records or local collection.
+- The AI tool toggle controls both presentation and Spill-owned runtime activity
+  for that tool. Turning it off hides its dashboard and compact-panel content,
+  excludes it from menu-bar token totals, and stops new status probes, local
+  collection, and passive limit capture for that tool. Stored records remain
+  available when the tool is turned on again. The toggle never terminates the
+  AI tool's own process.
 - Runtime installation and adapter connection state remain available through
   Setup and history-import UI.
 - Visible agent-status cards keep the canonical order Codex, Claude Code, then
