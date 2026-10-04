@@ -2,7 +2,7 @@
 
 import { access, appendFile, chmod, copyFile, mkdir, readFile, rename, stat, writeFile, unlink } from "node:fs/promises";
 import { constants } from "node:fs";
-import { createHmac, randomBytes } from "node:crypto";
+import { createHash, createHmac, randomBytes } from "node:crypto";
 import { execFile } from "node:child_process";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -531,6 +531,7 @@ async function configureRuntimeLabelDefaults({ installsInstructionBridges }) {
       begin: managedRuntimeInstructionBegin,
       end: managedRuntimeInstructionEnd,
       block,
+      legacyInstruction: await readFile(runtimeInstructionSource, "utf8"),
     });
     results.push({ tool, action: "configured_instruction_bridge", path: target });
   }
@@ -539,7 +540,8 @@ async function configureRuntimeLabelDefaults({ installsInstructionBridges }) {
     return [
       managedRuntimeInstructionBegin,
       "## Spill Token Metering",
-      `Before each user-visible task, read and follow \`${sharedRuntimeInstructionPath}\` when it exists.`,
+      `Read and follow \`${sharedRuntimeInstructionPath}\` when it exists; reuse its guidance in this session unless it changes.`,
+      "Keep its per-turn fallback label handoff enabled; reusing guidance does not skip that handoff.",
       `This ${runtimeName} bridge only points to Spill's shared instruction; do not copy the full instruction into this file.`,
       managedRuntimeInstructionEnd,
     ].join("\n");
@@ -735,14 +737,20 @@ async function writeJSONObject(path, value) {
   await rename(temporary, path);
 }
 
-async function writeManagedTextBlock({ path, begin, end, block }) {
+async function writeManagedTextBlock({ path, begin, end, block, legacyInstruction }) {
   await mkdir(dirname(path), { recursive: true });
   const before = await exists(path) ? await readFile(path, "utf8") : "";
+  validateManagedTextMarkers(before, begin, end);
+  const compacted = legacyInstruction ? compactLegacyInstruction(before, legacyInstruction) : before;
   const pattern = managedTextBlockPattern(begin, end);
   const normalizedBlock = `${block}\n`;
-  const after = pattern.test(before)
-    ? before.replace(pattern, normalizedBlock)
-    : `${before}${before && !before.endsWith("\n") ? "\n" : ""}${normalizedBlock}`;
+  let replaced = false;
+  let after = compacted.replace(pattern, () => {
+    if (replaced) return "";
+    replaced = true;
+    return normalizedBlock;
+  });
+  if (!replaced) after += `${after && !after.endsWith("\n") ? "\n" : ""}${normalizedBlock}`;
   if (after === before) return;
   if (await exists(path)) {
     await copyFile(path, `${path}.spill-backup-${STAMP}`);
@@ -759,7 +767,34 @@ function managedTextBlockPattern(begin, end) {
     throw new Error("Invalid managed text block markers");
   }
 
-  return new RegExp(`${escapeRegExp(begin)}[\\s\\S]*?${escapeRegExp(end)}\\n?`, "m");
+  return new RegExp(`^[ \\t]*${escapeRegExp(begin)}[ \\t]*\\r?\\n[\\s\\S]*?^[ \\t]*${escapeRegExp(end)}[ \\t]*(?:\\r?\\n|$)`, "gm");
+}
+
+function validateManagedTextMarkers(text, begin, end) {
+  let open = false;
+  for (const line of text.split(/\r?\n/)) {
+    if (line.trim() === begin) {
+      if (open) throw new Error("Nested Spill managed text block; preserving the existing file");
+      open = true;
+    } else if (line.trim() === end) {
+      if (!open) throw new Error("Unmatched Spill managed text marker; preserving the existing file");
+      open = false;
+    }
+  }
+  if (open) throw new Error("Unclosed Spill managed text block; preserving the existing file");
+}
+
+function compactLegacyInstruction(text, canonicalInstruction) {
+  const normalize = (value) => value.replace(/\r\n/g, "\n").trim();
+  const canonical = normalize(canonicalInstruction);
+  // Exact shipped legacy body only. A customized section is user-owned and stays intact.
+  const legacyDigest = "c9e44ef6591bdc6a25e4f6666ec9b2a4ec3c52fe657983d939f5be0c4f862b9c";
+  const section = /^# Spill Token Metering Runtime Instruction\r?\n[\s\S]*?(?=^#{1,2} |^<!-- |$(?![\s\S]))/gm;
+  return text.replace(section, (body) => {
+    const normalized = normalize(body);
+    const digest = createHash("sha256").update(normalized).digest("hex");
+    return normalized === canonical || digest === legacyDigest ? "" : body;
+  });
 }
 
 async function writeRuntimeLabel({ tool, taskType, stage, labelFile, ttlMinutes, ifAbsent }) {

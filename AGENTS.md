@@ -188,23 +188,14 @@ Shared Tao Agent OS library:
 TAO_ROOT="${TAO_HOME:-$HOME/git/tao-agent-os}"
 ```
 
-- `${TAO_ROOT}/AGENTS.md`
-- `${TAO_ROOT}/index.md`
-- `${TAO_ROOT}/scripts/agent-hook.py`
-- `${TAO_ROOT}/scripts/workflow.py`
-- `${TAO_ROOT}/scripts/agent-preflight.py`
-- `${TAO_ROOT}/scripts/agent-finish-check.py`
-
-Use repo-local Spill instructions for product and command details. Use
-Tao Agent OS for common, workflow, platform, and review cards. Load the
-smallest relevant shared cards and link to them instead of copying shared
-workflow guidance into this repo.
+Use the managed routing block above for shared workflow selection and lifecycle
+commands. Repo-local docs own Spill product and command details.
 
 Runtime-specific routing labels:
 
-- This `AGENTS.md` is the single project-root instruction entry point for Codex,
-  Claude Code, and Antigravity/AGY. Do not add separate runtime-specific root
-  docs when the same guidance can live here or in `.agents/`.
+- This `AGENTS.md` is the project-root instruction owner for Codex, Claude Code,
+  and Antigravity/AGY. `CLAUDE.md` is a thin discovery pointer with only Claude
+  runtime notes; do not copy shared guidance into runtime-specific root docs.
 - When running Tao Agent OS workflow, preflight, or finish commands from
   Antigravity/AGY, use `SPILL_AI_TOOL=antigravity` or rely on the environment
   installed by Spill token metering setup. Use the current runtime tool label
@@ -213,9 +204,21 @@ Runtime-specific routing labels:
   input alias.
 - Antigravity/AGY context verification marker:
   `spill_antigravity_context_v1`.
-- For Antigravity/AGY, at the very beginning of every user turn (after request classification and before running any other tools, edits, or commands), the agent MUST run the Spill setup helper command to write or refresh the short-lived label context:
-  `node ~/Library/Application\ Support/Spill/adapters/setup/spill-token-metering-setup.mjs --label antigravity --task-type <task_type> --stage <stage> --if-absent`
-  Ensure `<task_type>` and `<stage>` are derived from the user request classification.
+
+Runtime metering instruction owner:
+
+- `docs/token-metering/runtime-instruction.md` owns the shared runtime safety,
+  label, and explicit local usage-status contracts. Full setup installs it as
+  `~/.spill/runtime-instruction.md`; runtime instruction files contain discovery
+  bridges rather than independent copies.
+- Read the canonical instruction when first needed and reuse it until it is
+  known to have changed. This does not change the per-turn requirement: after
+  classifying each user-visible task and before project tools, refresh the safe
+  label context with `--label <current-tool>` and `--if-absent` when the installed
+  setup helper exists. Preserve both workflow labels and the per-turn fallback.
+- For explicit Spill usage-status requests, follow that instruction's installed
+  read-only stats-helper command and full aggregate-summary requirements. Use
+  the current runtime tool; do not inspect private content to explain usage.
 
 Workflow and Spill artifact preservation:
 
@@ -238,25 +241,6 @@ Workflow and Spill artifact preservation:
   path, and verification that the replacement still preserves local metering and
   release/docs behavior.
 
-Explicit Spill local status commands:
-
-- Treat a user request such as `spill`, `Spill status`, token usage status, or
-  a local metering summary as an explicit request to run the read-only local
-  stats helper for the current runtime.
-- Codex command:
-  `node ~/Library/Application\ Support/Spill/adapters/setup/spill-token-metering-stats.mjs --tool codex`
-- Claude Code command:
-  `node ~/Library/Application\ Support/Spill/adapters/setup/spill-token-metering-stats.mjs --tool claude`
-- Antigravity/AGY command:
-  `node ~/Library/Application\ Support/Spill/adapters/setup/spill-token-metering-stats.mjs --tool antigravity`
-- Answer with the full aggregate summary: total, input, output, event count,
-  average event size, peak event size, workflow label coverage,
-  model/task/stage breakdowns, token detail categories, and recent activity.
-  Do not answer only with input/output totals. Treat `unknown` as unavailable
-  detail attribution, not as a guessed input category.
-- This helper is read-only and is not a usage event, hook, importer, label
-  handoff, or proof that the current turn was recorded.
-
 Runtime hook evidence and privacy:
 
 - A Spill label handoff permission prompt, such as a setup helper `--label
@@ -267,8 +251,8 @@ Runtime hook evidence and privacy:
   hook config shape, hook-load logs, hook command execution logs, label file
   writes, or permission prompts alone. Those are setup or adapter checks only.
 - AGY usage metering is proved only by a real AGY runtime turn followed by
-  concrete local side effects: `antigravity-last-success.json` for that real
-  payload, a queued/imported `events-inbox` usage file, or a new
+  concrete local side effects: `antigravity-active-importer-last.json` showing
+  imported exact usage, a queued/imported `events-inbox` usage file, or a new
   `token_usage_events` row with `ai_tool = antigravity`.
 - Do not force dummy tool calls, permission-list calls, or other hidden
   user-visible tool activity merely to make a runtime hook fire. Such calls are
@@ -277,9 +261,8 @@ Runtime hook evidence and privacy:
   from prompts, commands, tool names, file paths, diffs, logs, source content,
   shell history, transcripts, or arbitrary payload values. Use trusted safe
   labels or degrade to `uncategorized/summarize`.
-- Adding AGY Stop or lifecycle hooks is allowed only after the current AGY
-  runtime exposes that hook shape and exact token usage fields to the hook.
-  Registering another hook without exact usage payload evidence is not a fix.
+- AGY uses the local active importer. Do not install AGY Stop, PostInvocation,
+  or lifecycle hooks for Spill metering; setup removes managed legacy hooks.
 
 Routing and executable evidence:
 
@@ -341,7 +324,7 @@ Before PRD, ARD, task breakdown, or implementation work:
 2. Read `.agents/specs/prd.md`, every applicable canonical domain PRD linked
    from that index, and `.agents/specs/ard.md`.
 3. Follow the relevant Tao Agent OS workflow cards, starting from
-   `${TAO_ROOT}/workflows/agent-task-lifecycle.md`.
+   `${TAO_ROOT}/workflows/skills/agent-task-lifecycle/SKILL.md`.
 4. Apply the shared Tao Agent OS ambiguity gate before PRD, ARD, task
    breakdown, implementation planning, or code work when scope or intent is
    unclear.
@@ -349,7 +332,10 @@ Before PRD, ARD, task breakdown, or implementation work:
 
 VibeGuard gate:
 
-- Follow the active routing block for audit execution and reuse of observed hook results; preserve the managed VibeGuard safety rules below.
+- Follow the active routing block for audit execution. Successful start/review
+  audit results satisfy the corresponding pre/post-edit audits below; do not
+  repeat the same audit. Preserve the managed VibeGuard safety rules and use
+  audit-only behavior unless a managed-block refresh is explicitly selected.
 - Use `--fix` only for low-risk VibeGuard fixes, then inspect the diff.
 - Never print secret values. Ask before destructive data actions, production deploys, signing/notarization credential changes, paid-service/model usage increases, or recurring infrastructure.
 

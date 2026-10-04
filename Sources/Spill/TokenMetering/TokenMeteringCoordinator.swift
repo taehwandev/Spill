@@ -78,7 +78,9 @@ extension TokenMeteringCoordinator {
         isStopped = false
         self.isSmokeTest = isSmokeTest
         self.usageEventsDidChange = usageEventsDidChange
-        TokenMeteringSetupInstaller.refreshInstalledFilesIfPresent()
+        if !isSmokeTest {
+            TokenMeteringSetupInstaller.refreshInstalledFilesIfPresent()
+        }
         aiStatusStore.refreshInBackground()
         syncVisibleAITools()
         observeUsageEvents()
