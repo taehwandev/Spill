@@ -820,10 +820,6 @@ extension TokenMeteringDashboardView {
         .accessibilityHint(Text(helpText))
         .accessibilityAddTraits(isActive ? .isSelected : [])
     }
-
-    private var dashboardCardBackground: some ShapeStyle {
-        .regularMaterial
-    }
 }
 
 private struct HeaderActionButtonStyle: ButtonStyle {

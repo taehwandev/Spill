@@ -143,14 +143,6 @@ extension AppL10n {
         String(format: text(.tokenMeteringAccessibility, appLanguage: appLanguage), tokenCount)
     }
 
-    static func activeIdle(
-        active: String,
-        idle: String,
-        appLanguage: SpillAppLanguage = .persisted()
-    ) -> String {
-        String(format: text(.cpuActiveIdle, appLanguage: appLanguage), active, idle)
-    }
-
     static func availableOfTotal(
         available: String,
         total: String,

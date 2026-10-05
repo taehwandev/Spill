@@ -30,10 +30,6 @@ struct MenuBarNotchGeometry: Sendable {
         measuredNotchFrame ?? estimatedNotchFrame
     }
 
-    func expandedNotchFrame(horizontalClearance: CGFloat, verticalClearance: CGFloat) -> CGRect {
-        notchFrame.insetBy(dx: -horizontalClearance, dy: -verticalClearance)
-    }
-
     private var measuredNotchFrame: CGRect? {
         guard let left = auxiliaryTopLeftArea,
               let right = auxiliaryTopRightArea,

@@ -60,7 +60,6 @@ extension AppL10n {
             .normal: "정상",
             .warning: "경고",
             .unavailable: "사용 불가",
-            .cpuActiveIdle: "%@ 활성 / %@ 유휴",
             .waitingForSample: "샘플 대기 중",
             .availableOfTotal: "%@ 사용 가능 / 전체 %@",
             .externalPower: "외부 전원",

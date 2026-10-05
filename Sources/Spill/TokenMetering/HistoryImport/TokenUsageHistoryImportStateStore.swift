@@ -57,17 +57,6 @@ final class TokenUsageHistoryImportStateStore: @unchecked Sendable {
         }
     }
 
-    func resetAllImportState() {
-        resetImportState(for: TokenUsageHistoryImportTool.allCases)
-    }
-
-    func resetImportState(for tools: [TokenUsageHistoryImportTool]) {
-        for tool in tools {
-            defaults.removeObject(forKey: firstCompletedKey(for: tool))
-            defaults.removeObject(forKey: lastSuccessKey(for: tool))
-        }
-    }
-
     private func firstCompletedKey(for tool: TokenUsageHistoryImportTool) -> String {
         "\(keyPrefix).v\(TokenUsageHistoryImportCoordinator.importerVersion).\(tool.rawValue).first_import_completed_at"
     }

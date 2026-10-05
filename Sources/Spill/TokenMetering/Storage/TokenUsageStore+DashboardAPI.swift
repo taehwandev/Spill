@@ -76,22 +76,6 @@ extension TokenUsageStore {
         }
     }
 
-    func allTimeTotalTokens(dashboardToolsOnly: Bool = true) -> Int {
-        lock.withLock {
-            let database: OpaquePointer
-            do {
-                database = try openDatabase()
-            } catch {
-                return 0
-            }
-            defer { sqlite3_close(database) }
-
-            return loadDashboardCountAndTotal(
-                dashboardToolsOnly: dashboardToolsOnly,
-                database: database
-            ).totalTokens
-        }
-    }
 
     func allPeriodTotalTokens(
         now: Date,
@@ -298,26 +282,6 @@ extension TokenUsageStore {
     ) -> [String: Int] {
         withDatabaseConnection(database, default: [:]) { database in
             loadInputAccountingTotals(
-                startingAt: startDate,
-                endingBefore: endDate,
-                dashboardToolsOnly: dashboardToolsOnly,
-                visibleTools: visibleTools,
-                database: database,
-                failureObserver: failureObserver
-            )
-        }
-    }
-
-    func inputAccountingTotalsByTool(
-        startingAt startDate: Date? = nil,
-        endingBefore endDate: Date? = nil,
-        dashboardToolsOnly: Bool = true,
-        visibleTools: Set<TokenUsageAITool>? = nil,
-        database: OpaquePointer? = nil,
-        failureObserver: TokenUsageQueryFailureObserver? = nil
-    ) -> [TokenUsageAITool: [String: Int]] {
-        withDatabaseConnection(database, default: [:]) { database in
-            loadInputAccountingTotalsByTool(
                 startingAt: startDate,
                 endingBefore: endDate,
                 dashboardToolsOnly: dashboardToolsOnly,
@@ -571,26 +535,6 @@ extension TokenUsageStore {
         }
     }
 
-    func sourceTokenTotals(
-        startingAt startDate: Date? = nil,
-        endingBefore endDate: Date? = nil,
-        dashboardToolsOnly: Bool = true,
-        visibleTools: Set<TokenUsageAITool>? = nil,
-        database: OpaquePointer? = nil,
-        failureObserver: TokenUsageQueryFailureObserver? = nil
-    ) -> [String: Int] {
-        withDatabaseConnection(database, default: [:]) { database in
-            loadSourceTokenTotals(
-                startingAt: startDate,
-                endingBefore: endDate,
-                dashboardToolsOnly: dashboardToolsOnly,
-                visibleTools: visibleTools,
-                database: database,
-                failureObserver: failureObserver
-            )
-        }
-    }
-
     func groupedProjectTotals(
         startingAt startDate: Date? = nil,
         endingBefore endDate: Date? = nil,
@@ -629,22 +573,6 @@ extension TokenUsageStore {
         }
     }
 
-    func dashboardDayTokenTotals(
-        startingAt startDate: Date,
-        endingBefore endDate: Date,
-        calendar: Calendar,
-        dashboardToolsOnly: Bool = true,
-        visibleTools: Set<TokenUsageAITool>? = nil
-    ) -> [String: Int] {
-        dashboardDayInputScopeTotals(
-            startingAt: startDate,
-            endingBefore: endDate,
-            calendar: calendar,
-            dashboardToolsOnly: dashboardToolsOnly,
-            visibleTools: visibleTools
-        )
-        .mapValues(\.includeCache)
-    }
 
     func dashboardDayInputScopeTotals(
         startingAt startDate: Date,

@@ -284,10 +284,6 @@ enum TokenMeteringTextKey: String {
     case privateUsageUploadStateOptional
     case privateUsageUploadDetail
     case privateUsageUploadEnvironment
-    case privateUsageUploadEnvironmentDevelopment
-    case privateUsageUploadEnvironmentDevelopmentDetail
-    case privateUsageUploadEnvironmentProduction
-    case privateUsageUploadEnvironmentProductionDetail
     case privateUsageUploadOpenWeb
     case privateUsageUploadOpenWebDetail
     case privateUsageUploadOpenDashboard
@@ -439,24 +435,12 @@ extension TokenMeteringL10n {
         return localizedFormat("format.spans_detail", language: language, formattedCount(spanCount), latest)
     }
 
-    static func percentOfTotal(_ percent: Int, language: TokenMeteringLanguage = .current()) -> String {
-        localizedFormat("format.percent_of_total", language: language, Int64(percent))
-    }
-
     static func percentStringOfTotal(_ percent: String, language: TokenMeteringLanguage = .current()) -> String {
         localizedFormat("format.percent_string_of_total", language: language, percent)
     }
 
     static func folderTitle(_ shortID: String, language: TokenMeteringLanguage = .current()) -> String {
         localizedFormat("format.folder_title", language: language, shortID)
-    }
-
-    static func clearToolData(_ tool: String, language: TokenMeteringLanguage = .current()) -> String {
-        localizedFormat("format.clear_tool_data", language: language, tool)
-    }
-
-    static func clearPeriodData(_ period: String, language: TokenMeteringLanguage = .current()) -> String {
-        localizedFormat("format.clear_period_data", language: language, period)
     }
 
     static func deleteTokenDataMessage(
@@ -516,41 +500,10 @@ extension TokenMeteringL10n {
         localizedFallback("adapter.\(adapterID).title", fallback: fallback, language: language)
     }
 
-    static func adapterSubtitle(
-        _ adapterID: String,
-        fallback: String,
-        language: TokenMeteringLanguage = .current()
-    ) -> String {
-        localizedFallback("adapter.\(adapterID).subtitle", fallback: fallback, language: language)
-    }
-
     static func hookConfigTarget(_ target: String, language: TokenMeteringLanguage = .current()) -> String {
         localizedFormat("format.hook_config_target", language: language, text(.hookConfig, language: language), target)
     }
 
-    static func privateUsageEnvironmentTitle(
-        _ environment: PrivateUsageUploadEnvironment,
-        language: TokenMeteringLanguage = .current()
-    ) -> String {
-        switch environment {
-        case .development:
-            return text(.privateUsageUploadEnvironmentDevelopment, language: language)
-        case .production:
-            return text(.privateUsageUploadEnvironmentProduction, language: language)
-        }
-    }
-
-    static func privateUsageEnvironmentDetail(
-        _ environment: PrivateUsageUploadEnvironment,
-        language: TokenMeteringLanguage = .current()
-    ) -> String {
-        switch environment {
-        case .development:
-            return text(.privateUsageUploadEnvironmentDevelopmentDetail, language: language)
-        case .production:
-            return text(.privateUsageUploadEnvironmentProductionDetail, language: language)
-        }
-    }
 }
 
 private extension TokenMeteringL10n {

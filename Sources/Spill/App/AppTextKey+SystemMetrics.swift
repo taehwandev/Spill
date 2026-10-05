@@ -53,7 +53,6 @@ extension AppTextKey {
     static let normal = Self(rawValue: "normal")
     static let warning = Self(rawValue: "warning")
     static let unavailable = Self(rawValue: "unavailable")
-    static let cpuActiveIdle = Self(rawValue: "cpuActiveIdle")
     static let waitingForSample = Self(rawValue: "waitingForSample")
     static let availableOfTotal = Self(rawValue: "availableOfTotal")
     static let externalPower = Self(rawValue: "externalPower")

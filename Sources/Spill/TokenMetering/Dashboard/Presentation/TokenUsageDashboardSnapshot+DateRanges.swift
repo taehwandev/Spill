@@ -101,23 +101,6 @@ extension TokenUsageDashboardSnapshot {
         }
     }
 
-    static func cutoffDate(
-        for period: TokenUsageDashboardPeriod,
-        now: Date,
-        calendar: Calendar
-    ) -> Date? {
-        switch period {
-        case .today:
-            return calendar.startOfDay(for: now)
-        case .sevenDays:
-            return periodStartDate(dayCount: 7, now: now, calendar: calendar)
-        case .thirtyDays:
-            return periodStartDate(dayCount: 30, now: now, calendar: calendar)
-        case .all:
-            return nil
-        }
-    }
-
     static func periodStartDate(
         dayCount: Int,
         now: Date,

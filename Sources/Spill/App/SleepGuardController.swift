@@ -32,31 +32,6 @@ enum SleepGuardDuration: Int, CaseIterable, Identifiable, Sendable {
         self == .indefinitely
     }
 
-    var menuTitle: String {
-        switch self {
-        case .fiveMinutes:
-            return "5 Minutes"
-        case .tenMinutes:
-            return "10 Minutes"
-        case .fifteenMinutes:
-            return "15 Minutes"
-        case .thirtyMinutes:
-            return "30 Minutes"
-        case .fortyFiveMinutes:
-            return "45 Minutes"
-        case .oneHour:
-            return "1 Hour"
-        case .twoHours:
-            return "2 Hours"
-        case .fourHours:
-            return "4 Hours"
-        case .eightHours:
-            return "8 Hours"
-        case .indefinitely:
-            return "Never"
-        }
-    }
-
     static func availableDurations(allowsIndefinite: Bool) -> [SleepGuardDuration] {
         allCases.filter { allowsIndefinite || !$0.isIndefinite }
     }

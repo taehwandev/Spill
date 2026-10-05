@@ -26,19 +26,6 @@ enum SpillStatusModule: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
-    var meterTitle: String {
-        switch self {
-        case .storage:
-            return "STORAGE"
-        case .gpu:
-            return "GPU"
-        case .network:
-            return "NET"
-        case .cpu, .memory:
-            return title.uppercased()
-        }
-    }
-
     var symbolName: String {
         switch self {
         case .cpu:
@@ -51,21 +38,6 @@ enum SpillStatusModule: String, CaseIterable, Identifiable, Sendable {
             return "display"
         case .network:
             return "network"
-        }
-    }
-
-    var preferenceSubtitle: String {
-        switch self {
-        case .cpu:
-            return "Processor activity"
-        case .memory:
-            return "Used and available physical memory"
-        case .storage:
-            return "Used and available primary storage"
-        case .gpu:
-            return "GPU usage and core count when supported"
-        case .network:
-            return "Receive and upload activity"
         }
     }
 

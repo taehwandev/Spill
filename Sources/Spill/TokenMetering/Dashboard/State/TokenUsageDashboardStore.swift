@@ -813,21 +813,6 @@ extension TokenUsageDashboardStore {
         )
     }
 
-    nonisolated private static func buildSnapshotPair(
-        events: [TokenUsageEvent],
-        request: TokenUsageDashboardBuildRequest,
-        periodFilterTotals: [TokenUsageDashboardPeriod: TokenUsageInputScopeTotals]
-    ) -> TokenUsageDashboardSnapshotPair {
-        buildSnapshotOutput(
-            events: events,
-            request: request,
-            periodFilterTotals: periodFilterTotals,
-            calendarDayTotals: [:],
-            cachedContext: nil,
-            cachedContextKey: nil
-        )
-        .snapshotPair
-    }
 }
 
 extension TokenUsageDashboardStore {
@@ -1209,15 +1194,6 @@ extension TokenUsageDashboardStore {
         }
         SpillSettings.shared.tokenUsageLocalAliases = updated
         rebuildSnapshot()
-    }
-
-    func setAdvancedToolsEnabled(_ enabled: Bool) {
-        SpillSettings.shared.tokenUsageShowAdvancedTools = enabled
-        if hasRebuiltSnapshot {
-            refreshAsync(trackLiveUpdates: false, refreshesPanelSummary: false, reusesLoadedEvents: true)
-        } else {
-            refreshPanelSummary()
-        }
     }
 
     func snapshotForWorkItem(_ sessionID: String) -> TokenUsageDashboardSnapshot {

@@ -60,7 +60,6 @@ extension AppL10n {
             .normal: "Normal",
             .warning: "Warning",
             .unavailable: "Unavailable",
-            .cpuActiveIdle: "%@ active / %@ idle",
             .waitingForSample: "Waiting for sample",
             .availableOfTotal: "%@ available of %@",
             .externalPower: "External Power",

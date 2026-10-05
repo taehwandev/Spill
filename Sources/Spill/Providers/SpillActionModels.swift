@@ -75,17 +75,6 @@ enum WindowActionKind: String, Hashable, Sendable {
     case restore
 }
 
-protocol SpillActionProvider: Sendable {
-    var id: String { get }
-    var title: String { get }
-
-    func actions() async -> [SpillAction]
-}
-
-protocol SpillActionHandler: Sendable {
-    func perform(_ action: SpillAction) async -> SpillActionResult
-}
-
 enum SpillActionResult: Hashable, Sendable {
     case success
     case unavailable

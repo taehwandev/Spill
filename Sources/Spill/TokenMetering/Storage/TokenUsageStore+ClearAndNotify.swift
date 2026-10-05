@@ -81,11 +81,6 @@ extension TokenUsageStore {
     }
 
 
-    /// Identifies which process posted a distributed events-did-change
-    /// notification, so the posting process can skip its own echo: it already
-    /// handled the same change through the in-process notification.
-    static let distributedChangeSenderKey = "sender_pid"
-
     func notifyEventsDidChange() {
         postEventsDidChange()
     }
