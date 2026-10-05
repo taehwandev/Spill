@@ -280,7 +280,7 @@ final class MenuBarStatusContentViewTests: XCTestCase {
         let compactSegments = StatusItemController.orderedSegments(
             trigger: trigger,
             statusSegments: [cpu.valueOnlyMenuBarSegment(), memory.valueOnlyMenuBarSegment()],
-            caffeineSegment: caffeine.withoutMenuBarValue()
+            caffeineSegment: makeCaffeineSegment(value: "", active: true)
         )
         let compactWidth = MenuBarStatusContentView.preferredWidth(for: compactSegments)
 
@@ -580,7 +580,7 @@ final class MenuBarStatusContentViewTests: XCTestCase {
         let view = MenuBarStatusContentView(segments: [withHistory])
         let chip = try XCTUnwrap(view.subviews.first)
 
-        XCTAssertFalse(withHistory.showsHistoryGraph)
+        XCTAssertFalse(withHistory.usesChartPresentation)
         XCTAssertEqual(
             MenuBarStatusContentView.preferredWidth(for: [withHistory]),
             MenuBarStatusContentView.preferredWidth(for: [current])
@@ -605,7 +605,7 @@ final class MenuBarStatusContentViewTests: XCTestCase {
         let view = MenuBarStatusContentView(segments: [chart], layoutStyle: .inline)
         let chip = try XCTUnwrap(view.subviews.first)
 
-        XCTAssertTrue(chart.showsHistoryGraph)
+        XCTAssertTrue(chart.usesChartPresentation)
         XCTAssertEqual(chip.subviews.compactMap { $0 as? MenuBarMetricSparklineView }.count, 1)
         XCTAssertFalse(chip.subviews.compactMap { $0 as? NSTextField }.contains { $0.stringValue == "20.0%" })
     }
@@ -631,8 +631,8 @@ final class MenuBarStatusContentViewTests: XCTestCase {
         let view = MenuBarStatusContentView(segments: [chart])
         let chip = try XCTUnwrap(view.subviews.first)
 
-        XCTAssertFalse(network.showsHistoryGraph)
-        XCTAssertTrue(chart.showsHistoryGraph)
+        XCTAssertFalse(network.usesChartPresentation)
+        XCTAssertTrue(chart.usesChartPresentation)
         XCTAssertEqual(chip.subviews.compactMap { $0 as? MenuBarMetricSparklineView }.count, 1)
     }
 

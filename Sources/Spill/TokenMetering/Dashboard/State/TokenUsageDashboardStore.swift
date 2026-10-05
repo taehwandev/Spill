@@ -33,8 +33,6 @@ final class TokenUsageDashboardStore: ObservableObject {
     @Published private(set) var snapshotInputScope: TokenUsageInputScope = .includeCache
     @Published private(set) var language: TokenMeteringLanguage = .current()
     @Published private(set) var lastError: String?
-    @Published private(set) var isRunningSelfTest = false
-    @Published private(set) var selfTestMessage: TokenUsageSelfTestMessage?
     @Published private(set) var isRefreshing = false
 
     private let usageStore: TokenUsageStore
@@ -1195,46 +1193,6 @@ extension TokenUsageDashboardStore {
         SpillSettings.shared.tokenUsageLocalAliases = updated
         rebuildSnapshot()
     }
-
-    func snapshotForWorkItem(_ sessionID: String) -> TokenUsageDashboardSnapshot {
-        let now = Date()
-        var calendar = Calendar.autoupdatingCurrent
-        calendar.firstWeekday = 1
-        // `events` can be empty here even with real data loaded: selecting a work item is
-        // reached from the unfiltered view, which the SQL-only refresh path (see
-        // canBuildSnapshotFromSQL) never populates it for. Reuse the same cache-hit/miss check
-        // loadEvents already does elsewhere instead of trusting the property directly.
-        let request = snapshotBuildRequest()
-        let loadedEventScope = Self.loadEvents(
-            from: usageStore,
-            for: request,
-            cachedEvents: events,
-            cachedDateRange: loadedEventsDateRange
-        )
-        let resolvedEvents = loadedEventScope.events
-        let displayCalendarMonth = TokenUsageDashboardSnapshot.normalizedCalendarMonthStart(
-            events: resolvedEvents.filter { $0.aiTool.isDashboardTool },
-            now: now,
-            proposedMonthStart: calendarMonthStart,
-            calendar: calendar
-        )
-        return TokenUsageDashboardSnapshot(
-            events: resolvedEvents,
-            selectedTool: selectedTool,
-            selectedPeriod: selectedPeriod,
-            selectedCalendarDayID: selectedCalendarDayID,
-            selectedProjectID: selectedProjectID,
-            selectedSessionID: sessionID,
-            language: language,
-            localAliases: SpillSettings.shared.tokenUsageLocalAliases,
-            showAdvancedTools: SpillSettings.shared.tokenUsageShowAdvancedTools,
-            now: now,
-            calendarMonthStart: displayCalendarMonth,
-            periodOffset: periodOffset,
-            inputScope: usageInputScope,
-            calendar: calendar
-        )
-    }
 }
 
 extension TokenUsageDashboardStore {
@@ -1298,21 +1256,6 @@ extension TokenUsageDashboardStore {
 }
 
 extension TokenUsageDashboardStore {
-    func clearLocalEvents() {
-        guard SpillBuildOptions.developerOptionsEnabled else {
-            return
-        }
-        do {
-            try usageStore.clearEvents()
-            selfTestMessage = nil
-            liveUpdateMarker = .empty
-            isOnboardingPreviewEnabled = false
-            refresh(trackLiveUpdates: false)
-        } catch {
-            lastError = TokenMeteringL10n.text(.clearFailed, language: language)
-        }
-    }
-
     func clearPreview(for scope: TokenUsageClearScope) -> TokenUsageClearPreview {
         let matchingEvents = events(matching: scope)
         let totalTokens = matchingEvents.reduce(0) { $0 + $1.totalTokens }
@@ -1339,7 +1282,6 @@ extension TokenUsageDashboardStore {
                 let remainingEvents = allEvents.filter { !matchingSpanIDs.contains($0.spanID) }
                 try usageStore.replaceEvents(remainingEvents)
             }
-            selfTestMessage = nil
             liveUpdateMarker = .empty
             isOnboardingPreviewEnabled = false
             if selectedSessionID != nil,
@@ -1516,84 +1458,6 @@ extension TokenUsageDashboardStore {
 }
 
 extension TokenUsageDashboardStore {
-    func runLocalQueueSelfTest() async {
-        guard !isRunningSelfTest else {
-            return
-        }
-
-        isRunningSelfTest = true
-        lastError = nil
-        selfTestMessage = nil
-
-        do {
-            let event = Self.makeLocalSelfTestEvent(index: snapshot.eventCount)
-            try usageStore.enqueueInboxEvent(event)
-            _ = usageStore.importQueuedEvents()
-            refresh()
-            selfTestMessage = TokenUsageSelfTestMessage(
-                text: TokenMeteringL10n.text(.queueSelfTestSuccess, language: language),
-                isSuccess: true
-            )
-        } catch {
-            lastError = TokenMeteringL10n.text(.queueSelfTestFailed, language: language)
-            selfTestMessage = TokenUsageSelfTestMessage(
-                text: TokenMeteringL10n.text(.queueSelfTestWriteFailed, language: language),
-                isSuccess: false
-            )
-        }
-
-        isRunningSelfTest = false
-    }
-
-    private static func makeLocalSelfTestEvent(index: Int) -> TokenUsageEvent {
-        let date = Date()
-        let timestamp = ISO8601DateFormatter.tokenUsage.string(from: date)
-        let compactTimestamp = timestamp
-            .replacingOccurrences(of: "-", with: "")
-            .replacingOccurrences(of: ":", with: "")
-            .replacingOccurrences(of: ".", with: "")
-            .replacingOccurrences(of: "Z", with: "")
-
-        return TokenUsageEvent(
-            schemaVersion: 1,
-            deviceID: "device_local",
-            projectID: "project_global",
-            artifactID: "artifact_selftest",
-            runID: "run_selftest_\(compactTimestamp)",
-            spanID: "span_selftest_\(index + 1)_\(compactTimestamp)",
-            aiTool: .codex,
-            taskType: .debugging,
-            stage: .verify,
-            model: "spill-self-test",
-            inputTokens: 48,
-            outputTokens: 16,
-            totalTokens: 64,
-            tokenBreakdown: TokenUsageBreakdown(
-                system: 4,
-                user: 8,
-                history: 6,
-                repoContext: 18,
-                toolOutput: 12,
-                generatedOutput: 16,
-                unknown: 0
-            ),
-            latencyMS: 1,
-            createdAt: timestamp
-        )
-    }
-}
-
-extension TokenUsageDashboardStore {
-    func addLocalTestEvent() {
-        do {
-            try usageStore.appendEvent(Self.makeLocalTestEvent(index: snapshot.eventCount))
-            isOnboardingPreviewEnabled = false
-            refresh()
-        } catch {
-            lastError = TokenMeteringL10n.text(.saveTestFailed, language: language)
-        }
-    }
-
     func isLiveUpdated(_ id: String) -> Bool {
         liveUpdateMarker.contains(id)
     }
@@ -1838,55 +1702,5 @@ extension TokenUsageDashboardStore {
             return "model_unavailable"
         }
         return trimmed
-    }
-}
-
-extension TokenUsageDashboardStore {
-    private static func makeLocalTestEvent(index: Int) -> TokenUsageEvent {
-        let taskTypes: [TokenUsageTaskType] = [
-            .analysis,
-            .prdDrafting,
-            .codeGeneration,
-            .codeReview,
-            .testGeneration
-        ]
-        let tools = TokenUsageAITool.dashboardTools
-        let taskType = taskTypes[index % taskTypes.count]
-        let aiTool = tools[index % tools.count]
-        let inputTokens = 1_000 + index * 90
-        let outputTokens = 500 + index * 45
-        let totalTokens = inputTokens + outputTokens
-        let generatedOutput = outputTokens
-        let repoContext = max(0, inputTokens / 3)
-        let toolOutput = max(0, inputTokens / 6)
-        let history = max(0, inputTokens / 5)
-        let system = max(0, inputTokens / 10)
-        let user = totalTokens - generatedOutput - repoContext - toolOutput - history - system
-
-        return TokenUsageEvent(
-            schemaVersion: 1,
-            deviceID: "device_local",
-            projectID: "project_local",
-            artifactID: "artifact_demo",
-            runID: "run_local_\(index + 1)",
-            spanID: "span_local_\(index + 1)",
-            aiTool: aiTool,
-            taskType: taskType,
-            stage: .plan,
-            model: "local-demo",
-            inputTokens: inputTokens,
-            outputTokens: outputTokens,
-            totalTokens: totalTokens,
-            tokenBreakdown: TokenUsageBreakdown(
-                system: system,
-                user: user,
-                history: history,
-                repoContext: repoContext,
-                toolOutput: toolOutput,
-                generatedOutput: generatedOutput
-            ),
-            latencyMS: 320 + index * 20,
-            createdAt: ISO8601DateFormatter.tokenUsage.string(from: Date())
-        )
     }
 }

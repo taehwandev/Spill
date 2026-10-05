@@ -12,10 +12,6 @@ final class TokenUsageHistoryImportStateStore: @unchecked Sendable {
         self.keyPrefix = keyPrefix
     }
 
-    func hasCompletedFirstImport(for tool: TokenUsageHistoryImportTool) -> Bool {
-        defaults.object(forKey: firstCompletedKey(for: tool)) != nil
-    }
-
     func lastSuccessfulImportAt(for tool: TokenUsageHistoryImportTool) -> Date? {
         defaults.object(forKey: lastSuccessKey(for: tool)) as? Date
     }

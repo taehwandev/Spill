@@ -7,10 +7,6 @@ struct TokenMeteringDashboardAgentStatusSummary: Equatable {
     let cpuText: String
     let memoryText: String
 
-    var detectedToolCount: Int {
-        rows.count
-    }
-
     static func make(statuses: [LocalAIToolStatus]) -> TokenMeteringDashboardAgentStatusSummary {
         let dashboardStatuses = statuses.filter(\.kind.isTokenDashboardAgentTool)
         let rows = dashboardStatuses.map { status in

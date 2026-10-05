@@ -70,7 +70,6 @@ final class TokenMeteringDashboardAgentStatusPanelTests: XCTestCase {
         ]
         let summary = TokenMeteringDashboardAgentStatusSummary.make(statuses: statuses)
 
-        XCTAssertEqual(summary.detectedToolCount, 3)
         XCTAssertEqual(summary.runningToolCount, 2)
         XCTAssertEqual(summary.processCount, 3)
         XCTAssertEqual(summary.cpuText, "16%")

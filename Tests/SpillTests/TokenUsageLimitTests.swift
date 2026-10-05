@@ -42,9 +42,6 @@ final class TokenUsageLimitTests: XCTestCase {
         store.mergeSnapshots(for: .codex, with: [])
         XCTAssertEqual(reader.snapshots(for: .codex).count, 2)
 
-        // Explicit replacement is still available for a deliberate reset.
-        store.replaceSnapshots(for: .codex, with: [])
-        XCTAssertTrue(reader.snapshots(for: .codex).isEmpty)
         XCTAssertEqual(reader.snapshots(for: .claude).count, 1)
     }
 
@@ -288,7 +285,7 @@ final class TokenUsageLimitTests: XCTestCase {
         )
 
         // A file written before estimates were retired still holds them.
-        store.replaceSnapshots(for: .claude, with: [
+        store.mergeSnapshots(for: .claude, with: [
             TokenUsageLimitSnapshot(
                 aiTool: .claude, limitKey: "week_all", label: "Weekly",
                 usedPercent: 78, remainingCredits: nil, windowMinutes: 10_080,

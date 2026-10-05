@@ -90,17 +90,6 @@ final class TokenUsageLimitSnapshotStore: @unchecked Sendable {
         }
     }
 
-    /// Replaces every snapshot for `tool` with the given set. An empty set
-    /// clears the tool. Reads of other tools are unaffected. Captures use
-    /// merge or group replacement instead; this stays for deliberate resets.
-    func replaceSnapshots(for tool: TokenUsageAITool, with snapshots: [TokenUsageLimitSnapshot]) {
-        lock.withLock {
-            var all = loadLocked().filter { $0.aiTool != tool }
-            all.append(contentsOf: snapshots.filter { $0.aiTool == tool })
-            saveLocked(all)
-        }
-    }
-
     /// Display-ready snapshots: aged-out limits removed and closed windows
     /// resolved to their post-reset value.
     func snapshots(for tool: TokenUsageAITool) -> [TokenUsageLimitSnapshot] {

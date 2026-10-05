@@ -17,23 +17,6 @@ extension TokenUsageStore {
     }
 
     @discardableResult
-    func importQueuedEventsWithoutLoading(
-        maximumInboxEventCount: Int? = 500
-    ) -> Bool {
-        let inboxResult = TokenUsageInboxReader(inboxURL: inboxURL)
-            .load(maximumEventCount: maximumInboxEventCount)
-        let didImportQueuedEvents = lock.withLock {
-            importQueuedEventsWithoutLock(loadEvents: false, inboxResult: inboxResult).didImportQueuedEvents
-        }
-
-        if didImportQueuedEvents {
-            postEventsDidChange()
-        }
-
-        return didImportQueuedEvents
-    }
-
-    @discardableResult
     func drainQueuedEventsWithoutLoading(
         maximumInboxEventCount: Int? = TokenUsageStore.defaultInboxImportBatchLimit,
         maximumBatchCount: Int = TokenUsageStore.defaultInboxDrainBatchCount,

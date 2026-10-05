@@ -320,10 +320,6 @@ enum TokenMeteringTextKey: String {
     case privateUsageUploadKeyWrappingFailedMessage
 
     case clearFailed
-    case queueSelfTestSuccess
-    case queueSelfTestFailed
-    case queueSelfTestWriteFailed
-    case saveTestFailed
 }
 
 enum TokenMeteringL10n {

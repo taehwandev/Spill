@@ -3007,22 +3007,6 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(pyenvPython?.path, "\(home)/.pyenv/shims/python3")
     }
 
-    @MainActor
-    func testDashboardStoreAddsAndClearsLocalTestEvents() {
-        let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
-        let dashboardStore = dashboardStore(usageStore: usageStore)
-
-        XCTAssertEqual(dashboardStore.snapshot.eventCount, 0)
-
-        dashboardStore.addLocalTestEvent()
-        XCTAssertEqual(dashboardStore.snapshot.eventCount, 1)
-        XCTAssertEqual(usageStore.loadEvents().count, 1)
-
-        dashboardStore.clearLocalEvents()
-        XCTAssertEqual(dashboardStore.snapshot.eventCount, 0)
-        XCTAssertEqual(usageStore.loadEvents(), [])
-    }
-
     func testAppendEventsWithoutLoadingRepairsDuplicateSpanTokenCountsAndPreservesMetadata() throws {
         let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
         let existing = Self.safeEvent(
@@ -3439,7 +3423,7 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(dashboardStore.contains("@Published private(set) var snapshotInputScope"))
 
         let moveCalendarStart = try XCTUnwrap(dashboardStore.range(of: "private func moveCalendarMonth"))
-        let runSelfTestStart = try XCTUnwrap(dashboardStore.range(of: "func runLocalQueueSelfTest"))
+        let runSelfTestStart = try XCTUnwrap(dashboardStore.range(of: "func isLiveUpdated"))
         let moveCalendarSource = String(dashboardStore[moveCalendarStart.lowerBound..<runSelfTestStart.lowerBound])
         XCTAssertFalse(moveCalendarSource.contains("loadPanelSummary"))
         XCTAssertTrue(moveCalendarSource.contains("snapshotBuildQueue.async"))
@@ -3607,37 +3591,6 @@ final class TokenUsageStoreTests: XCTestCase {
     }
 
     @MainActor
-    func testDashboardStoreBuildsWorkItemSnapshotWithoutFocusingDashboard() throws {
-        let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
-        let dashboardStore = dashboardStore(usageStore: usageStore)
-        let first = Self.safeEvent(
-            spanID: "span_popover_first",
-            taskType: .analysis,
-            stage: .plan
-        )
-        let second = Self.safeEvent(
-            spanID: "span_popover_second",
-            inputTokens: 40,
-            outputTokens: 20,
-            taskType: .testing,
-            stage: .verify,
-            model: "popover-model"
-        )
-
-        try usageStore.replaceEvents([first, second])
-        dashboardStore.refresh()
-        let workItemID = try XCTUnwrap(dashboardStore.snapshot.sessions.first { $0.title == "Testing - Verify" }?.id)
-        let itemSnapshot = dashboardStore.snapshotForWorkItem(workItemID)
-
-        XCTAssertNil(dashboardStore.selectedSessionID)
-        XCTAssertNil(dashboardStore.snapshot.selectedSession)
-        XCTAssertEqual(dashboardStore.snapshot.eventCount, 2)
-        XCTAssertEqual(itemSnapshot.selectedSession?.id, workItemID)
-        XCTAssertEqual(itemSnapshot.eventCount, 1)
-        XCTAssertEqual(itemSnapshot.modelRows.map(\.title), ["popover-model"])
-    }
-
-    @MainActor
     func testDashboardStoreMarksLiveUpdatesOnlyWhenEventDataChanges() async throws {
         let usageStore = TokenUsageStore(fileURL: temporaryEventsURL())
         let dashboardStore = dashboardStore(usageStore: usageStore)
@@ -3734,33 +3687,6 @@ final class TokenUsageStoreTests: XCTestCase {
 
         XCTAssertEqual(dashboardStore.snapshot.eventCount, 0)
         XCTAssertEqual(dashboardStore.loadState, .idle)
-    }
-
-    @MainActor
-    func testDashboardStoreRunsLocalQueueSelfTest() async throws {
-        let usageStore = TokenUsageStore(fileURL: temporaryEventsURL(), inboxURL: temporaryInboxURL())
-        let dashboardStore = dashboardStore(usageStore: usageStore)
-
-        XCTAssertEqual(dashboardStore.snapshot.eventCount, 0)
-
-        await dashboardStore.runLocalQueueSelfTest()
-
-        XCTAssertEqual(dashboardStore.snapshot.eventCount, 1)
-        XCTAssertEqual(dashboardStore.snapshot.totalTokens, 64)
-        XCTAssertEqual(dashboardStore.selfTestMessage?.isSuccess, true)
-        XCTAssertNil(dashboardStore.lastError)
-
-        let event = try XCTUnwrap(usageStore.loadEvents().first)
-        XCTAssertEqual(event.projectID, "project_global")
-        XCTAssertEqual(event.artifactID, "artifact_selftest")
-        XCTAssertEqual(event.aiTool, .codex)
-        XCTAssertEqual(event.taskType, .debugging)
-        XCTAssertEqual(event.stage, .verify)
-        XCTAssertEqual(event.model, "spill-self-test")
-        XCTAssertEqual(event.tokenBreakdown.generatedOutput, 16)
-        XCTAssertEqual(event.tokenBreakdown.repoContext, 18)
-        XCTAssertEqual(event.tokenBreakdown.toolOutput, 12)
-        XCTAssertEqual(event.tokenBreakdown.unknown, 0)
     }
 
     @MainActor
@@ -4213,26 +4139,6 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(dashboardStore.panelSummary.eventCount, 2)
     }
 
-    @MainActor
-    func testDashboardStoreReportsLocalQueueSelfTestFailure() async {
-        let blockedInboxURL = temporaryInboxURL()
-            .deletingLastPathComponent()
-            .appendingPathComponent("not-a-directory")
-        try? FileManager.default.createDirectory(
-            at: blockedInboxURL.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-        try? Data("blocked".utf8).write(to: blockedInboxURL)
-        let usageStore = TokenUsageStore(fileURL: temporaryEventsURL(), inboxURL: blockedInboxURL)
-        let dashboardStore = dashboardStore(usageStore: usageStore)
-
-        await dashboardStore.runLocalQueueSelfTest()
-
-        XCTAssertEqual(dashboardStore.snapshot.eventCount, 0)
-        XCTAssertEqual(dashboardStore.selfTestMessage?.isSuccess, false)
-        XCTAssertEqual(dashboardStore.lastError, TokenMeteringL10n.text(.queueSelfTestFailed))
-    }
-
     func testSafeEventEncodesWithWebCompatibleKeys() throws {
         let event = Self.safeEvent()
         let data = try TokenUsageSanitizer.eventData(event)
@@ -4360,7 +4266,7 @@ final class TokenUsageStoreTests: XCTestCase {
     func testRetiredToolHistoryAndRollupsSurviveStoreOpen() throws {
         let eventsURL = temporaryEventsURL()
         let initialStore = TokenUsageStore(fileURL: eventsURL)
-        XCTAssertEqual(initialStore.currentEventCount(), 0)
+        XCTAssertEqual(initialStore.loadEvents().count, 0)
         let databaseURL = initialStore.eventsDatabaseURL
         let database = try openSQLiteDatabase(databaseURL)
         try executeSQLite(
@@ -4374,8 +4280,8 @@ final class TokenUsageStoreTests: XCTestCase {
         try executeSQLite("PRAGMA user_version = 13", database: database)
         sqlite3_close(database)
 
-        let reopenedStore = TokenUsageStore(fileURL: eventsURL)
-        XCTAssertEqual(reopenedStore.currentEventCount(), 2)
+        _ = TokenUsageStore(fileURL: eventsURL)
+        XCTAssertEqual(try sqliteRows(databaseURL: databaseURL, sql: "SELECT COUNT(*) FROM token_usage_events", columnCount: 1), [["2"]])
         XCTAssertEqual(
             try sqliteRows(databaseURL: databaseURL, sql: "SELECT ai_tool FROM token_usage_events ORDER BY ai_tool", columnCount: 1),
             [["codex"], ["ollama"]]
@@ -5763,9 +5669,9 @@ final class TokenUsageStoreTests: XCTestCase {
         ))
     }
 
-    /// Focused check of the observer wiring on one representative wrapper: a schema-less connection
+    /// Focused check of the observer wiring on the grouped dashboard scan: a schema-less connection
     /// marks the observer and yields the empty default; the store's own healthy connection does not.
-    func testGroupedInputScopeTotalsByToolMarksFailureObserver() throws {
+    func testGroupedAggregateMarksFailureObserver() throws {
         let store = TokenUsageStore(fileURL: temporaryEventsURL())
         try store.appendEvent(Self.safeEvent(aiTool: .codex, spanID: "span_observer_wiring_1"))
 
@@ -5781,20 +5687,24 @@ final class TokenUsageStoreTests: XCTestCase {
         defer { sqlite3_close(connection) }
 
         let failingObserver = TokenUsageQueryFailureObserver()
-        let failingResult = store.groupedInputScopeTotalsByTool(
+        let failingResult = store.loadDashboardGroupedAggregate(
+            dashboardToolsOnly: true,
             database: connection,
             failureObserver: failingObserver
         )
         XCTAssertTrue(failingObserver.didFail)
-        XCTAssertTrue(failingResult.isEmpty)
+        XCTAssertTrue(failingResult.rows.isEmpty)
 
         let healthyObserver = TokenUsageQueryFailureObserver()
-        let healthyResult = store.groupedInputScopeTotalsByTool(
-            database: nil,
-            failureObserver: healthyObserver
-        )
+        let healthyResult = store.withDatabaseConnection(nil, default: DashboardGroupedAggregate(rows: [])) { database in
+            store.loadDashboardGroupedAggregate(
+                dashboardToolsOnly: true,
+                database: database,
+                failureObserver: healthyObserver
+            )
+        }
         XCTAssertFalse(healthyObserver.didFail)
-        XCTAssertFalse(healthyResult.isEmpty)
+        XCTAssertFalse(healthyResult.rows.isEmpty)
     }
 
     /// Passing the store's own pre-opened connection+transaction must produce the same snapshot as
@@ -6631,7 +6541,7 @@ final class TokenUsageStoreTests: XCTestCase {
             ))
         }
 
-        XCTAssertTrue(store.importQueuedEventsWithoutLoading(maximumInboxEventCount: 2))
+        XCTAssertTrue(store.drainQueuedEventsWithoutLoading(maximumInboxEventCount: 2, maximumBatchCount: 1))
         XCTAssertEqual(store.loadEvents().count, 2)
         XCTAssertEqual(
             try FileManager.default.contentsOfDirectory(at: inboxURL, includingPropertiesForKeys: nil)
@@ -6640,7 +6550,7 @@ final class TokenUsageStoreTests: XCTestCase {
             1
         )
 
-        XCTAssertTrue(store.importQueuedEventsWithoutLoading(maximumInboxEventCount: 2))
+        XCTAssertTrue(store.drainQueuedEventsWithoutLoading(maximumInboxEventCount: 2, maximumBatchCount: 1))
         XCTAssertEqual(store.loadEvents().count, 3)
         XCTAssertEqual(
             try FileManager.default.contentsOfDirectory(at: inboxURL, includingPropertiesForKeys: nil)

@@ -70,10 +70,6 @@ struct MenuBarStatusSegment: Equatable {
 }
 
 extension MenuBarStatusSegment {
-    var showsHistoryGraph: Bool {
-        usesChartPresentation && !graphSeries.isEmpty
-    }
-
     var usesChartPresentation: Bool {
         if case .chart = visualStyle {
             return true
@@ -98,22 +94,6 @@ extension MenuBarStatusSegment {
             symbolName: symbolName,
             visualStyle: .chart,
             animates: false,
-            graphSeries: graphSeries
-        )
-    }
-
-    func withoutMenuBarValue() -> MenuBarStatusSegment {
-        MenuBarStatusSegment(
-            kind: kind,
-            title: title,
-            shortTitle: shortTitle,
-            value: "",
-            displayText: "",
-            usageRatio: usageRatio,
-            state: state,
-            symbolName: symbolName,
-            visualStyle: visualStyle,
-            animates: animates,
             graphSeries: graphSeries
         )
     }

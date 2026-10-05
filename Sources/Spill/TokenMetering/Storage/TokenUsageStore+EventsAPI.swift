@@ -100,31 +100,6 @@ extension TokenUsageStore {
         }
     }
 
-    func currentEventCount() -> Int {
-        lock.withLock {
-            let database: OpaquePointer
-            do {
-                database = try openDatabase()
-            } catch {
-                return 0
-            }
-            defer { sqlite3_close(database) }
-
-            var statement: OpaquePointer?
-            guard sqlite3_prepare_v2(database, "SELECT COUNT(*) FROM token_usage_events", -1, &statement, nil) == SQLITE_OK,
-                  let statement
-            else {
-                return 0
-            }
-            defer { sqlite3_finalize(statement) }
-            guard sqlite3_step(statement) == SQLITE_ROW else {
-                return 0
-            }
-            return Int(sqlite3_column_int64(statement, 0))
-        }
-    }
-
-
     func envelopeData() throws -> Data {
         try TokenUsageSanitizer.envelopeData(events: loadEvents())
     }

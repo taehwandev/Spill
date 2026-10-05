@@ -434,7 +434,6 @@ final class TokenUsageHistoryImportCoordinatorTests: XCTestCase {
         waitForHistoryImport(coordinator)
 
         XCTAssertEqual(coordinator.snapshot.tools.map(\.state), [.completed, .completed, .failed])
-        XCTAssertFalse(fixture.stateStore.hasCompletedFirstImport(for: .antigravity))
         XCTAssertNil(fixture.stateStore.lastSuccessfulImportAt(for: .antigravity))
         XCTAssertEqual(failureRecorder.reports.map(\.tool), [.antigravity])
         XCTAssertEqual(failureRecorder.reports.first?.result.failureStage, .write)

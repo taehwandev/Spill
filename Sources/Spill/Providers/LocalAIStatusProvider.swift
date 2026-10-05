@@ -81,48 +81,6 @@ struct LocalAIToolMetadata: Hashable, Sendable {
     }
 }
 
-struct LocalAIToolActionRecommendation: Hashable, Sendable {
-    let title: String
-    let detail: String
-
-    static func recommendation(for status: LocalAIToolStatus) -> LocalAIToolActionRecommendation? {
-        guard status.state != .unavailable else {
-            return nil
-        }
-
-        switch status.kind {
-        case .codex, .claude, .antigravity:
-            guard status.kind.executableName != nil else {
-                return nil
-            }
-
-            return commandLineRecommendation(
-                status: status,
-                readyTitle: "Start from terminal",
-                activeTitle: "Continue in terminal"
-            )
-        case .openAI:
-            return LocalAIToolActionRecommendation(
-                title: "Use configured API",
-                detail: "OpenAI configuration is available; secret values stay hidden."
-            )
-        }
-    }
-
-    private static func commandLineRecommendation(
-        status: LocalAIToolStatus,
-        readyTitle: String,
-        activeTitle: String
-    ) -> LocalAIToolActionRecommendation {
-        LocalAIToolActionRecommendation(
-            title: status.hasRunningProcesses ? activeTitle : readyTitle,
-            detail: status.hasRunningProcesses
-                ? "A local process is running. Open your terminal session to continue."
-                : "Launch it from your terminal when you need a new session."
-        )
-    }
-}
-
 struct LocalAIToolStatus: Identifiable, Hashable, Sendable {
     let kind: LocalAIToolKind
     let value: String
@@ -157,10 +115,6 @@ struct LocalAIToolStatus: Identifiable, Hashable, Sendable {
 
     var symbolName: String {
         kind.symbolName
-    }
-
-    var actionRecommendation: LocalAIToolActionRecommendation? {
-        LocalAIToolActionRecommendation.recommendation(for: self)
     }
 
     var hasRunningProcesses: Bool {

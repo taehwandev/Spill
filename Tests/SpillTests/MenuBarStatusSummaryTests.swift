@@ -133,8 +133,8 @@ final class MenuBarStatusSummaryTests: XCTestCase {
             MenuBarStatusSegment.GraphSeries(role: .sent, values: [0.05, 0.15])
         ])
         XCTAssertEqual(summary.segments[2].value, "↓ 2.0 MB/s ↑ 500 KB/s")
-        XCTAssertTrue(summary.segments.allSatisfy { !$0.showsHistoryGraph })
-        XCTAssertTrue(summary.segments.map { $0.chartMenuBarSegment() }.allSatisfy(\.showsHistoryGraph))
+        XCTAssertTrue(summary.segments.allSatisfy { !$0.usesChartPresentation })
+        XCTAssertTrue(summary.segments.map { $0.chartMenuBarSegment() }.allSatisfy(\.usesChartPresentation))
     }
 
     func testSummaryUsesPlaceholderWhileCPUIsSampling() {
