@@ -41,7 +41,8 @@ extension TokenUsageDashboardStore {
         request: TokenUsageDashboardBuildRequest,
         loadsPeriodFilterTotals: Bool,
         cachedPeriodFilterTotals: [TokenUsageDashboardPeriod: TokenUsageInputScopeTotals],
-        loadsPanelSummary: Bool
+        loadsPanelSummary: Bool,
+        reusableUnfiltered: TokenUsageDashboardSnapshot? = nil
     ) -> TokenUsageDashboardSQLBuildResult? {
         usageStore.withDatabaseConnection(nil, default: nil) { database -> TokenUsageDashboardSQLBuildResult? in
             let dateBounds = usageStore.dashboardDateBounds(
@@ -55,6 +56,7 @@ extension TokenUsageDashboardStore {
                 usageStore: usageStore,
                 request: buildRequest,
                 cachedPeriodFilterTotals: cachedPeriodFilterTotals,
+                reusableUnfiltered: reusableUnfiltered,
                 database: database
             ) else {
                 return nil
@@ -92,6 +94,7 @@ extension TokenUsageDashboardStore {
         usageStore: TokenUsageStore,
         request: TokenUsageDashboardBuildRequest,
         cachedPeriodFilterTotals: [TokenUsageDashboardPeriod: TokenUsageInputScopeTotals],
+        reusableUnfiltered: TokenUsageDashboardSnapshot?,
         database: OpaquePointer
     ) -> (
         output: TokenUsageDashboardSnapshotBuildOutput,
@@ -137,6 +140,9 @@ extension TokenUsageDashboardStore {
         let unfiltered: TokenUsageDashboardSnapshot
         if request.selectedTool == nil {
             unfiltered = filtered
+        } else if let reusableUnfiltered {
+            // Only the tool selection changed, and the unfiltered half never depends on it.
+            unfiltered = reusableUnfiltered
         } else {
             guard let computedUnfiltered = TokenUsageDashboardSnapshot.buildFromSQLAggregates(
                 usageStore: usageStore,

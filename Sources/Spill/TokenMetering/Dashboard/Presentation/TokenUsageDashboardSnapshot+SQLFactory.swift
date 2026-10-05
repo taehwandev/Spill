@@ -93,7 +93,10 @@ extension TokenUsageDashboardSnapshot {
                 failureObserver: failureObserver
             )
 
-        let focused = usageStore.dashboardFocusedTotals(
+        // One scan of the focused scope, grouped by every dimension the dashboard slices on.
+        // The KPI totals, tool/project/model/task/stage/source rows and input accounting below
+        // are exact roll-ups of these aggregate rows instead of a statement each.
+        let aggregate = usageStore.loadDashboardGroupedAggregate(
             startingAt: requestRange.start,
             endingBefore: requestRange.end,
             dashboardToolsOnly: dashboardToolsOnly,
@@ -101,6 +104,7 @@ extension TokenUsageDashboardSnapshot {
             database: database,
             failureObserver: failureObserver
         )
+        let focused = aggregate.focusedTotals()
         let eventCount = focused.eventCount
         let totalTokens = focused.totalTokens
         let inputTokens = focused.inputTokens
@@ -141,27 +145,28 @@ extension TokenUsageDashboardSnapshot {
             )
         }
 
-        let toolTotals = usageStore.groupedInputScopeTotalsByTool(
-            startingAt: requestRange.start,
-            endingBefore: requestRange.end,
-            dashboardToolsOnly: dashboardToolsOnly,
-            visibleTools: visibleTools,
-            database: database,
-            failureObserver: failureObserver
-        ).mapValues { $0.total(for: inputScope) }
         // toolFilters' own totals/count intentionally ignore the single selectedTool narrowing
         // (only visibleTools) -- it needs the period+project scope shared by every tool chip,
         // not the one currently selected, matching how the original init's toolFilterEvents
         // (used for both allToolTotals and totalEvents here) is built from periodEvents without
-        // any selectedTool filter applied.
-        let toolFilterScopeEventCount = selectedDashboardTool == nil ? eventCount : usageStore.dashboardFocusedTotals(
-            startingAt: requestRange.start,
-            endingBefore: requestRange.end,
-            dashboardToolsOnly: dashboardToolsOnly,
-            visibleTools: visibleTools,
-            database: database,
-            failureObserver: failureObserver
-        ).eventCount
+        // any selectedTool filter applied. Without a selected tool that scope is the focused one.
+        let toolTotals: [TokenUsageAITool: Int]
+        let toolFilterScopeEventCount: Int
+        if selectedDashboardTool == nil {
+            toolTotals = aggregate.toolTotals().mapValues { $0.total(for: inputScope) }
+            toolFilterScopeEventCount = eventCount
+        } else {
+            let toolScope = usageStore.loadDashboardToolScope(
+                startingAt: requestRange.start,
+                endingBefore: requestRange.end,
+                dashboardToolsOnly: dashboardToolsOnly,
+                visibleTools: visibleTools,
+                database: database,
+                failureObserver: failureObserver
+            )
+            toolTotals = toolScope.totals.mapValues { $0.total(for: inputScope) }
+            toolFilterScopeEventCount = toolScope.eventCount
+        }
         let toolFilters = Self.toolFilters(
             selectedTool: selectedDashboardTool,
             totals: toolTotals,
@@ -171,14 +176,7 @@ extension TokenUsageDashboardSnapshot {
             language: language
         )
 
-        let projectTotals = usageStore.groupedProjectTotals(
-            startingAt: requestRange.start,
-            endingBefore: requestRange.end,
-            dashboardToolsOnly: dashboardToolsOnly,
-            visibleTools: effectiveVisibleTools,
-            database: database,
-            failureObserver: failureObserver
-        )
+        let projectTotals = aggregate.projectTotals()
         let projectFilters = Self.projectFiltersFromTotals(
             projectTotals,
             selectedProjectID: nil,
@@ -186,14 +184,7 @@ extension TokenUsageDashboardSnapshot {
             language: language
         )
 
-        let inputAccountingSQL = usageStore.inputAccountingTotalsByTool(
-            startingAt: requestRange.start,
-            endingBefore: requestRange.end,
-            dashboardToolsOnly: dashboardToolsOnly,
-            visibleTools: effectiveVisibleTools,
-            database: database,
-            failureObserver: failureObserver
-        )
+        let inputAccountingSQL = aggregate.inputAccountingByTool()
         var accountingTotals = [TokenUsageInputAccountingCategory: Int]()
         var accountingToolTotals = [TokenUsageInputAccountingCategory: [TokenUsageAITool: Int]]()
         for (tool, categories) in inputAccountingSQL {
@@ -220,14 +211,9 @@ extension TokenUsageDashboardSnapshot {
         // Unlike toolFilters' totals (deliberately unfiltered by selectedTool), toolRows must
         // reflect the fully-focused scope -- selectedTool narrowing included -- matching the
         // original init's visibleCapturedToolTokens, which is built from focusedEvents.
-        let toolRowTotals = effectiveVisibleTools == visibleTools ? toolTotals : usageStore.groupedInputScopeTotalsByTool(
-            startingAt: requestRange.start,
-            endingBefore: requestRange.end,
-            dashboardToolsOnly: dashboardToolsOnly,
-            visibleTools: effectiveVisibleTools,
-            database: database,
-            failureObserver: failureObserver
-        ).mapValues { $0.total(for: inputScope) }
+        let toolRowTotals = effectiveVisibleTools == visibleTools
+            ? toolTotals
+            : aggregate.toolTotals().mapValues { $0.total(for: inputScope) }
         let toolRows = TokenUsageDashboardRowBuilder.rows(
             tokenValues: toolRowTotals.filter { tool, _ in visibleTools?.contains(tool) ?? true },
             totalTokens: usageTokensTotal,
@@ -235,14 +221,7 @@ extension TokenUsageDashboardSnapshot {
             label: { $0.dashboardLabel(language: language) }
         )
 
-        let modelTotalsSQL = usageStore.groupedModelInputScopeTotals(
-            startingAt: requestRange.start,
-            endingBefore: requestRange.end,
-            dashboardToolsOnly: dashboardToolsOnly,
-            visibleTools: effectiveVisibleTools,
-            database: database,
-            failureObserver: failureObserver
-        ).mapValues { $0.total(for: inputScope) }
+        let modelTotalsSQL = aggregate.modelTotals().mapValues { $0.total(for: inputScope) }
         let modelRows = TokenUsageDashboardRowBuilder.rows(
             tokenValues: modelTotalsSQL,
             totalTokens: usageTokensTotal,
@@ -250,15 +229,7 @@ extension TokenUsageDashboardSnapshot {
             label: { modelLabel($0, language: language) }
         )
 
-        let taskTotalsSQL = usageStore.groupedInputScopeTotalsByTool(
-            column: "task_type",
-            startingAt: requestRange.start,
-            endingBefore: requestRange.end,
-            dashboardToolsOnly: dashboardToolsOnly,
-            visibleTools: effectiveVisibleTools,
-            database: database,
-            failureObserver: failureObserver
-        )
+        let taskTotalsSQL = aggregate.totalsByTool(key: \.taskType)
         let taskToolTotals = toolSplitTotals(taskTotalsSQL, inputScope: inputScope) {
             TokenUsageTaskType(rawValue: $0) ?? .uncategorized
         }
@@ -270,15 +241,7 @@ extension TokenUsageDashboardSnapshot {
             toolTokens: { taskToolTotals[$0, default: [:]] }
         )
 
-        let stageTotalsSQL = usageStore.groupedInputScopeTotalsByTool(
-            column: "stage",
-            startingAt: requestRange.start,
-            endingBefore: requestRange.end,
-            dashboardToolsOnly: dashboardToolsOnly,
-            visibleTools: effectiveVisibleTools,
-            database: database,
-            failureObserver: failureObserver
-        )
+        let stageTotalsSQL = aggregate.totalsByTool(key: \.stage)
         let stageToolTotals = toolSplitTotals(stageTotalsSQL, inputScope: inputScope) {
             TokenUsageStage(rawValue: $0) ?? .summarize
         }
@@ -290,14 +253,7 @@ extension TokenUsageDashboardSnapshot {
             toolTokens: { stageToolTotals[$0, default: [:]] }
         )
 
-        let sourceTotalsSQL = usageStore.sourceTokenTotals(
-            startingAt: requestRange.start,
-            endingBefore: requestRange.end,
-            dashboardToolsOnly: dashboardToolsOnly,
-            visibleTools: effectiveVisibleTools,
-            database: database,
-            failureObserver: failureObserver
-        )
+        let sourceTotalsSQL = aggregate.sourceTotals()
         var sourceTotals = [TokenUsageSource: Int]()
         for (key, value) in sourceTotalsSQL {
             guard let source = TokenUsageSource(rawValue: key) else { continue }

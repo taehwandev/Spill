@@ -52,6 +52,7 @@ final class TokenUsageDashboardStore: ObservableObject {
     private var hasRebuiltSnapshot = false
     private var isRefreshingCalendarOnly = false
     private var appliedSnapshotDataRevision: UInt64?
+    private var appliedUnfilteredScope: TokenUsageDashboardUnfilteredScope?
     /// Latches on the first external full-refresh request and never resets. A
     /// transient first SQL failure restores `loadState` to `.idle` so the
     /// refresh button can retry, but the dashboard surface that asked is still
@@ -230,6 +231,13 @@ extension TokenUsageDashboardStore {
         )
         let request = snapshotBuildRequest()
         let requestDataRevision = reusesLoadedEvents ? nil : usageStore.dashboardDataRevision
+        let unfilteredScope = TokenUsageDashboardUnfilteredScope(request: request, dataRevision: requestDataRevision)
+        let reusableUnfiltered: TokenUsageDashboardSnapshot? = {
+            guard request.selectedTool != nil, let unfilteredScope,
+                  appliedUnfilteredScope?.admitsReuse(for: unfilteredScope) == true
+            else { return nil }
+            return unfilteredSnapshot
+        }()
         let usesPreviewDataSource = isOnboardingPreviewEnabled
         let usageStore = usageStore
         let snapshotBuildGate = snapshotBuildGate
@@ -251,6 +259,7 @@ extension TokenUsageDashboardStore {
             let panelSummary: TokenUsagePanelSummarySnapshot?
             let dateBounds: TokenUsageDashboardDateBounds
             let inputScope: TokenUsageInputScope
+            let builtFromSQL: Bool
             // canBuildSnapshotFromSQL inspects only project/session selection, so it is safe to
             // gate on the raw request here before availableDateBounds are known: the SQL build derives
             // its own bounds-filled buildRequest internally. Taking the SQL path means dateBounds, the
@@ -263,7 +272,8 @@ extension TokenUsageDashboardStore {
                     request: request,
                     loadsPeriodFilterTotals: true,
                     cachedPeriodFilterTotals: cachedPeriodFilterTotals,
-                    loadsPanelSummary: refreshesPanelSummary
+                    loadsPanelSummary: refreshesPanelSummary,
+                    reusableUnfiltered: reusableUnfiltered
                 ) else {
                     DispatchQueue.main.async { [weak self] in
                         self?.restoreStateAfterFailedSQLBuild(generation: generation, resetLoadState: true)
@@ -277,6 +287,7 @@ extension TokenUsageDashboardStore {
                 panelSummary = sqlResult.panelSummary
                 dateBounds = sqlResult.dateBounds
                 inputScope = request.inputScope
+                builtFromSQL = true
             } else {
                 let resolvedPeriodFilterTotals = cachedPeriodFilterTotals.isEmpty
                     ? Self.loadPeriodFilterTotals(from: usageStore, for: request)
@@ -322,6 +333,7 @@ extension TokenUsageDashboardStore {
                 panelSummary = loadedPanelSummary
                 dateBounds = loadedDateBounds
                 inputScope = buildRequest.inputScope
+                builtFromSQL = false
             }
 
             DispatchQueue.main.async { [weak self] in
@@ -351,7 +363,8 @@ extension TokenUsageDashboardStore {
                     availableDateBounds: dateBounds,
                     snapshotContext: snapshotOutput.context,
                     snapshotContextKey: snapshotOutput.contextKey,
-                    dataRevision: requestDataRevision
+                    dataRevision: requestDataRevision,
+                    unfilteredScope: builtFromSQL ? unfilteredScope : nil
                 )
             }
         }
@@ -651,10 +664,14 @@ extension TokenUsageDashboardStore {
         availableDateBounds nextAvailableDateBounds: TokenUsageDashboardDateBounds? = nil,
         snapshotContext nextSnapshotContext: TokenUsageDashboardSnapshotBuildContext? = nil,
         snapshotContextKey nextSnapshotContextKey: TokenUsageDashboardContextCacheKey? = nil,
-        dataRevision: UInt64? = nil
+        dataRevision: UInt64? = nil,
+        unfilteredScope: TokenUsageDashboardUnfilteredScope? = nil
     ) {
         events = loadedEvents
         if let dataRevision { appliedSnapshotDataRevision = dataRevision }
+        // Paths that publish an unfiltered half without recording its scope must not leave a
+        // stale scope behind: it would let a later tool switch reuse the wrong snapshot.
+        appliedUnfilteredScope = unfilteredScope
         if let nextLoadedEventsDateRange {
             loadedEventsDateRange = nextLoadedEventsDateRange
         }
