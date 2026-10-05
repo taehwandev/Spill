@@ -774,6 +774,7 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(localizationSource.contains("variations: [String: [String: StringCatalogVariation]]?"))
     }
 
+    #if DEBUG
     func testTokenMeteringStringCatalogFallbackAcceptsVariationsEntries() throws {
         let catalogJSON = """
         {
@@ -835,6 +836,7 @@ final class TokenUsageStoreTests: XCTestCase {
             "One item"
         )
     }
+    #endif
 
     func testBuildAppCopiesSwiftPMResourceBundle() throws {
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)

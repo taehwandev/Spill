@@ -1,6 +1,8 @@
 import XCTest
 @testable import Spill
 
+// The animator's testing hooks are compiled only in DEBUG builds.
+#if DEBUG
 @MainActor
 final class TriggerIconAnimatorTests: XCTestCase {
     func testStartStopAreIdempotent() {
@@ -99,3 +101,4 @@ final class TriggerIconAnimatorTests: XCTestCase {
         XCTAssertEqual(frameCount, 20)
     }
 }
+#endif
