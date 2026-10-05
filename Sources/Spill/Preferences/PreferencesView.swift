@@ -31,7 +31,7 @@ struct PreferencesView: View {
             VStack(alignment: .leading, spacing: 0) {
                 // Top Tab Title
                 HStack {
-                    Text(tabTitle(for: navigationState.selectedTab))
+                    Text(t(navigationState.selectedTab.pageTitleKey))
                         .font(.system(size: 16, weight: .bold))
                         .foregroundStyle(.primary)
                     Spacer()
@@ -64,36 +64,23 @@ struct PreferencesView: View {
 }
 
 private extension PreferencesView {
-    private func tabTitle(for tab: String) -> String {
-        switch tab {
-        case "general": return t(.general)
-        case "menubar": return t(.menuBarAndNotch)
-        case "tokens": return t(.tokenMetering)
-        case "windows": return t(.windowManagement)
-        case "status_caffeine": return t(.statusAndCaffeine)
-        case "developer" where SpillBuildOptions.developerOptionsEnabled:
-            return t(.developerOptions)
-        default: return ""
-        }
-    }
-
     @ViewBuilder
-    private func detailContent(for tab: String) -> some View {
+    private func detailContent(for tab: PreferencesTab) -> some View {
         switch tab {
-        case "general":
+        case .general:
             GeneralPreferencesSection(
                 settings: settings,
                 updateStore: updateStore,
                 loginItemError: $loginItemError,
                 language: settings.appLanguage
             )
-        case "menubar":
+        case .menuBar:
             MenuBarPreferencesSection(
                 settings: settings,
                 language: settings.appLanguage
             )
-        case "tokens":
-            PreferenceCard(title: t(.tokenMetering), symbolName: "chart.bar.xaxis", iconColor: .teal) {
+        case .tokenMetering:
+            PreferenceCard(title: t(.tokenMetering), symbolName: tab.symbolName, iconColor: .teal) {
                 TokenMeteringPreferencesSection(
                     settings: settings,
                     tokenUsageStore: tokenUsageStore,
@@ -103,24 +90,24 @@ private extension PreferencesView {
                     preparePrivateUsageUploadAction: preparePrivateUsageUploadAction
                 )
             }
-        case "windows":
+        case .windowManagement:
             WindowManagementPreferencesSection(
                 settings: settings,
                 accessibilityTrusted: $accessibilityTrusted,
                 language: settings.appLanguage
             )
-        case "status_caffeine":
+        case .statusCaffeine:
             StatusCaffeinePreferencesSection(
                 settings: settings,
                 language: settings.appLanguage
             )
-        case "developer" where SpillBuildOptions.developerOptionsEnabled:
+        case .developer where tab.isAvailable:
             DeveloperOptionsPreferencesSection(
                 settings: settings,
                 tokenUsageStore: tokenUsageStore,
                 language: settings.appLanguage
             )
-        default:
+        case .developer:
             EmptyView()
         }
     }

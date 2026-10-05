@@ -38,6 +38,7 @@ extension PreferencesL10n {
             .clockAreaSplitGroups: "Split Status Groups",
             .clockAreaSplitGroupsDetail: "Experimental: separates Main, System, and AI. macOS may still leave empty space or hide other menu extras.",
             .clockAreaTextBold: "Bold Clock Text",
+            .clockAreaTokenDisplay: "Token Display",
             .clockAreaTextSize: "Clock Text Size",
             .layout: "Layout",
             .decimals: "CPU/MEM Decimals",

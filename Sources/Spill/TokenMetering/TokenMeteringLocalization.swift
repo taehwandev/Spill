@@ -232,8 +232,6 @@ enum TokenMeteringTextKey: String {
     case aiToolVisibilityState
     case aiToolVisibilityVisible
     case aiToolVisibilityHidden
-    case menuBarTokenDisplayModeTitle
-    case menuBarTokenDisplayModeDetail
     case copyInstallPrompt
     case copyWebSetup
     case dashboard

@@ -104,6 +104,7 @@ extension PreferencesTextKey {
     static let clockAreaSplitGroups = Self(rawValue: "clockAreaSplitGroups")
     static let clockAreaSplitGroupsDetail = Self(rawValue: "clockAreaSplitGroupsDetail")
     static let clockAreaTextBold = Self(rawValue: "clockAreaTextBold")
+    static let clockAreaTokenDisplay = Self(rawValue: "clockAreaTokenDisplay")
     static let clockAreaTextSize = Self(rawValue: "clockAreaTextSize")
     static let layout = Self(rawValue: "layout")
     static let decimals = Self(rawValue: "decimals")

@@ -9,7 +9,6 @@ final class SpillSettingsTests: XCTestCase {
         let settings = SpillSettings(defaults: defaults)
 
         XCTAssertEqual(settings.appLanguage, .automatic)
-        XCTAssertEqual(settings.statusModuleOrder, [.cpu, .memory, .storage, .network, .gpu])
         XCTAssertEqual(settings.enabledStatusModules, [.cpu, .memory, .storage, .network, .gpu])
         XCTAssertEqual(settings.enabledMenuBarStatusItems, [.cpu, .memory])
         XCTAssertFalse(settings.tokenUsageDashboardOnboardingPreviewEnabled)
@@ -105,8 +104,8 @@ final class SpillSettingsTests: XCTestCase {
         XCTAssertTrue(settings.isTokenUsageAIToolVisible(.openAI))
         XCTAssertEqual(settings.hiddenTokenUsageAITools, [.claude])
 
-        settings.setTokenUsageAITool(.antigravity, isVisible: false)
-        settings.setTokenUsageAITool(.claude, isVisible: true)
+        settings.setLocalAITool(.antigravity, isVisible: false)
+        settings.setLocalAITool(.claude, isVisible: true)
 
         XCTAssertTrue(settings.isTokenUsageAIToolVisible(.claude))
         XCTAssertFalse(settings.isTokenUsageAIToolVisible(.antigravity))
@@ -153,11 +152,10 @@ final class SpillSettingsTests: XCTestCase {
         XCTAssertTrue(reloadedSettings.privateUsageUploadEnabled)
     }
 
-    func testPowerFooterDefaultsToVisibleAndSleepGuardDisplayAwakeDefaultsOn() {
+    func testSleepGuardDisplayAwakeDefaultsOn() {
         let defaults = makeDefaults()
         let settings = SpillSettings(defaults: defaults)
 
-        XCTAssertTrue(settings.showPowerFooter)
         XCTAssertTrue(settings.sleepGuardKeepsDisplayAwake)
         XCTAssertFalse(settings.sleepGuardShowsRemainingInMenuBar)
         XCTAssertEqual(settings.sleepGuardDefaultDuration, .fifteenMinutes)
@@ -208,13 +206,11 @@ final class SpillSettingsTests: XCTestCase {
         let defaults = makeDefaults()
         let settings = SpillSettings(defaults: defaults)
 
-        settings.showPowerFooter = false
         settings.sleepGuardKeepsDisplayAwake = true
         settings.sleepGuardShowsRemainingInMenuBar = true
         settings.sleepGuardAllowsIndefinite = true
         settings.sleepGuardDefaultDuration = .indefinitely
 
-        XCTAssertFalse(defaults.bool(forKey: "showPowerFooter"))
         XCTAssertTrue(defaults.bool(forKey: "sleepGuardKeepsDisplayAwake"))
         XCTAssertTrue(defaults.bool(forKey: "sleepGuardShowsRemainingInMenuBar"))
         XCTAssertTrue(defaults.bool(forKey: "sleepGuardAllowsIndefinite"))
@@ -257,15 +253,6 @@ final class SpillSettingsTests: XCTestCase {
 
         XCTAssertEqual(allowedSettings.sleepGuardDefaultDuration, .fifteenMinutes)
         XCTAssertFalse(allowedSettings.availableSleepGuardDurations.contains(.indefinitely))
-    }
-
-    func testStatusModuleOrderNormalizesUnknownDuplicateAndMissingValues() {
-        let defaults = makeDefaults()
-        defaults.set(["memory", "unknown", "memory"], forKey: "statusModuleOrder")
-
-        let settings = SpillSettings(defaults: defaults)
-
-        XCTAssertEqual(settings.statusModuleOrder, [.memory, .cpu, .storage, .network, .gpu])
     }
 
     func testStatusModuleEnabledStatePersists() {
@@ -357,12 +344,10 @@ final class SpillSettingsTests: XCTestCase {
 
     func testLegacyGPUStatusModuleSettingsPreserveGPUAndStorage() {
         let defaults = makeDefaults()
-        defaults.set(["gpu", "memory"], forKey: "statusModuleOrder")
         defaults.set(["gpu", "cpu"], forKey: "enabledStatusModules")
 
         let settings = SpillSettings(defaults: defaults)
 
-        XCTAssertEqual(settings.statusModuleOrder, [.gpu, .memory, .cpu, .storage, .network])
         XCTAssertEqual(settings.enabledStatusModules, [.gpu, .cpu, .storage, .network])
         XCTAssertTrue(settings.isStatusModuleEnabled(.gpu))
     }
@@ -803,16 +788,6 @@ final class SpillSettingsTests: XCTestCase {
         XCTAssertEqual(settings.shortcutKey(for: .leftHalf), .off)
         XCTAssertEqual(settings.shortcutKey(for: .rightHalf), .leftArrow)
         XCTAssertEqual(settings.shortcutKey(for: .previousDisplay), .leftArrow)
-    }
-
-    func testStatusModuleOrderPersistsAfterMove() {
-        let defaults = makeDefaults()
-        let settings = SpillSettings(defaults: defaults)
-
-        settings.moveStatusModule(.memory, direction: -1)
-
-        XCTAssertEqual(settings.statusModuleOrder, [.memory, .cpu, .storage, .network, .gpu])
-        XCTAssertEqual(defaults.stringArray(forKey: "statusModuleOrder"), ["memory", "cpu", "storage", "network", "gpu"])
     }
 
     private func makeDefaults() -> UserDefaults {

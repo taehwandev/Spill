@@ -38,6 +38,7 @@ extension PreferencesL10n {
             .clockAreaSplitGroups: "状態グループを分離",
             .clockAreaSplitGroupsDetail: "実験的機能: メイン、システム、AI を分離します。macOS は空きスペースを残したり、他のメニューバー項目を隠したりする場合があります。",
             .clockAreaTextBold: "時計横テキストを太字",
+            .clockAreaTokenDisplay: "トークン表示",
             .clockAreaTextSize: "時計横テキストサイズ",
             .layout: "レイアウト",
             .decimals: "CPU/MEM 小数",

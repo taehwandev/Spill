@@ -121,7 +121,7 @@ final class ReleaseNotarizationContractTests: XCTestCase {
 
     func testAutomaticUpdateBindingsAvoidReleaseCompilerActorThunkCrash() throws {
         let automaticUpdateView = try read(
-            "Sources/Spill/Preferences/AutomaticUpdatePreferencesView.swift"
+            "Sources/Spill/Preferences/General/AutomaticUpdatePreferencesView.swift"
         )
 
         XCTAssertTrue(automaticUpdateView.contains(
@@ -257,7 +257,7 @@ final class ReleaseNotarizationContractTests: XCTestCase {
 
     func testReleaseBuildCanGatePrivateUsageUploadSurface() throws {
         let uploadModels = try privateUsageUploadModelSources()
-        let preferencesSection = try read("Sources/Spill/Preferences/TokenMeteringPreferencesSection.swift")
+        let preferencesSection = try read("Sources/Spill/Preferences/TokenMetering/TokenMeteringPreferencesSection.swift")
         let privateUsageUploadSection = try read("Sources/Spill/Preferences/TokenMetering/Sections/PrivateUsageUploadPreferencesSection.swift")
         let tokenMeteringCoordinator = try read("Sources/Spill/TokenMetering/TokenMeteringCoordinator.swift")
 

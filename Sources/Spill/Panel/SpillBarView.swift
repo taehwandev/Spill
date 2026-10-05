@@ -305,16 +305,16 @@ extension SpillBarView {
 
                         Text(status.value)
                             .font(.system(
-                                size: settings.statusValueFontSize,
-                                weight: settings.statusValueBold ? .bold : .regular,
-                                design: settings.statusFontDesign.fontDesign
+                                size: settings.panelStatusValueFontSize,
+                                weight: settings.panelStatusValueBold ? .bold : .regular,
+                                design: settings.panelStatusFontDesign.fontDesign
                             ))
                             .monospacedDigit()
                             .foregroundStyle(metricValueTint(for: module, state: status.state))
                     }
 
                     Text(subtitleText(status.subtitle))
-                        .font(.system(size: 10, weight: .medium, design: settings.statusFontDesign.fontDesign))
+                        .font(.system(size: 10, weight: .medium, design: settings.panelStatusFontDesign.fontDesign))
                         .lineLimit(1)
                         .minimumScaleFactor(0.72)
                         .foregroundStyle(metricSubtitleTint(for: module))

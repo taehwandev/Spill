@@ -45,30 +45,6 @@ enum SpillStatusModule: String, CaseIterable, Identifiable, Sendable {
     static let primaryPanelModules: [SpillStatusModule] = defaultOrder
     static let defaultEnabled: Set<SpillStatusModule> = Set(primaryPanelModules)
 
-    static func normalizedOrder(from rawValues: [String]?) -> [SpillStatusModule] {
-        guard let rawValues else {
-            return defaultOrder
-        }
-
-        return normalizedOrder(rawValues.compactMap(SpillStatusModule.init(rawValue:)))
-    }
-
-    static func normalizedOrder(_ modules: [SpillStatusModule]) -> [SpillStatusModule] {
-        var seen = Set<SpillStatusModule>()
-        var result: [SpillStatusModule] = []
-
-        for module in modules where defaultOrder.contains(module) && !seen.contains(module) {
-            seen.insert(module)
-            result.append(module)
-        }
-
-        for module in defaultOrder where !seen.contains(module) {
-            result.append(module)
-        }
-
-        return result
-    }
-
     static func normalizedEnabled(from rawValues: [String]?) -> Set<SpillStatusModule> {
         guard let rawValues else {
             return defaultEnabled

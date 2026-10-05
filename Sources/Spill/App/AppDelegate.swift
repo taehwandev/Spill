@@ -418,7 +418,7 @@ extension AppDelegate {
 
     private func showPreferences(source: String = "unknown", selectedTab: String? = nil) {
         SpillTelemetry.shared.track("settings_opened", props: ["source": source])
-        preferencesWindowController.show(selectedTab: selectedTab)
+        preferencesWindowController.show(selectedTab: selectedTab.flatMap(PreferencesTab.init(rawValue:)))
     }
 
     private func openTokenDashboard(source: String = "unknown") {

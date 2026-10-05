@@ -118,7 +118,7 @@ extension TokenUsageStoreTests {
             defaults.removePersistentDomain(forName: defaultsName)
         }
         let settings = SpillSettings(defaults: defaults)
-        settings.setTokenUsageAITool(.codex, isVisible: false)
+        settings.setLocalAITool(.codex, isVisible: false)
 
         let cacheDirectoryURL = temporaryDirectoryURL()
         try FileManager.default.createDirectory(
@@ -552,9 +552,10 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(dashboardView.contains("markStyle: nil"))
         XCTAssertFalse(dashboardView.contains("Image(systemName: \"chart.bar.xaxis\")"))
 
-        let statusModulesPreferences = try Self.source(named: "StatusModulesPreferencesSection.swift")
-        XCTAssertTrue(statusModulesPreferences.contains("triggerStyle: settings.menuBarTriggerIconStyle"))
-        XCTAssertTrue(statusModulesPreferences.contains("MenuBarTriggerIconRenderer.image("))
+        let clockAreaPreferences = try Self.source(named: "ClockAreaStatusPreferencesSection.swift")
+        let clockAreaPreview = try Self.source(named: "ClockAreaStatusPreviewSupport.swift")
+        XCTAssertTrue(clockAreaPreferences.contains("triggerStyle: settings.menuBarTriggerIconStyle"))
+        XCTAssertTrue(clockAreaPreview.contains("MenuBarTriggerIconRenderer.image("))
     }
 
     func testBrandResourceBundleResolverUsesPackagedAppResourceLocationBeforeDebugFallback() {
@@ -577,7 +578,7 @@ final class TokenUsageStoreTests: XCTestCase {
     }
 
     func testWebDashboardLinkIsAvailableFromSettingsAndLocalDashboard() throws {
-        let preferencesSection = try String(contentsOf: Self.repositoryRootURL().appendingPathComponent("Sources/Spill/Preferences/TokenMeteringPreferencesSection.swift"))
+        let preferencesSection = try String(contentsOf: Self.repositoryRootURL().appendingPathComponent("Sources/Spill/Preferences/TokenMetering/TokenMeteringPreferencesSection.swift"))
         let uploadSection = try Self.source(named: "PrivateUsageUploadPreferencesSection.swift")
         let dashboardView = try Self.source(named: "TokenMeteringDashboardView.swift")
         let webConnection = try Self.source(named: "PrivateUsageWebConnection.swift")
@@ -1340,7 +1341,7 @@ final class TokenUsageStoreTests: XCTestCase {
         let sessionsTable = try Self.source(named: "TokenMeteringDashboardSessionsTable.swift")
         let trendChart = try Self.source(named: "TokenMeteringDashboardTrendChart.swift")
         let trendBucketBuilder = try Self.source(named: "TokenUsageDashboardTrendBucketBuilder.swift")
-        let preferencesSection = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Preferences/TokenMeteringPreferencesSection.swift"))
+        let preferencesSection = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Preferences/TokenMetering/TokenMeteringPreferencesSection.swift"))
         let localDataSection = try Self.source(named: "TokenMeteringLocalDataManagementSection.swift")
         let developerOptionsSection = try Self.source(named: "DeveloperOptionsPreferencesSection.swift")
         let preferencesView = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Preferences/PreferencesView.swift"))
@@ -1397,7 +1398,7 @@ final class TokenUsageStoreTests: XCTestCase {
 
     func testPreferencesSetupGuidanceIsAlwaysVisible() throws {
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let preferencesSection = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Preferences/TokenMeteringPreferencesSection.swift"))
+        let preferencesSection = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Preferences/TokenMetering/TokenMeteringPreferencesSection.swift"))
         let setupSection = try Self.source(named: "TokenMeteringSetupSection.swift")
         let promptCard = try Self.source(named: "TokenMeteringPromptInstructionCard.swift")
         let localSyncSection = try Self.source(named: "TokenMeteringLocalSyncSettingsSection.swift")
@@ -1411,8 +1412,7 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(promptCard.contains("t(.promptInstructionCardDetail)"))
         XCTAssertFalse(preferencesSection.contains("TokenMeteringGlobalSetup.prompt("))
         XCTAssertFalse(preferencesSection.contains("Text(TokenMeteringSetupInstaller.setupCommand())"))
-        XCTAssertTrue(localSyncSection.contains("t(.menuBarTokenDisplayModeTitle)"))
-        XCTAssertTrue(localSyncSection.contains("t(.menuBarTokenDisplayModeDetail)"))
+        XCTAssertFalse(localSyncSection.contains("menuBarTokenDisplayMode"))
         XCTAssertFalse(localSyncSection.contains("t(.localEventQueue)"))
         XCTAssertFalse(localSyncSection.contains("t(.copyPath)"))
         XCTAssertFalse(localSyncSection.contains("TokenUsageStore.defaultInboxURL"))
@@ -1491,7 +1491,7 @@ final class TokenUsageStoreTests: XCTestCase {
         let sessionsTable = try Self.source(named: "TokenMeteringDashboardSessionsTable.swift")
         let appDelegate = try String(contentsOf: root.appendingPathComponent("Sources/Spill/App/AppDelegate.swift"))
         let preferencesView = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Preferences/PreferencesView.swift"))
-        let tokenMeteringPreferencesSection = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Preferences/TokenMeteringPreferencesSection.swift"))
+        let tokenMeteringPreferencesSection = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Preferences/TokenMetering/TokenMeteringPreferencesSection.swift"))
         let localSyncSettingsSection = try Self.source(named: "TokenMeteringLocalSyncSettingsSection.swift")
         let historyImportSection = try Self.source(named: "TokenUsageHistoryImportSection.swift")
         let localDataSection = try Self.source(named: "TokenMeteringLocalDataManagementSection.swift")
@@ -1604,8 +1604,7 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertFalse(tokenMeteringPreferencesSection.contains("debugDeveloperOptionsSection"))
         XCTAssertFalse(tokenMeteringPreferencesSection.contains("$settings.tokenUsageDashboardOnboardingPreviewEnabled"))
         XCTAssertTrue(preferencesView.contains("DeveloperOptionsPreferencesSection("))
-        XCTAssertTrue(preferencesSidebar.contains("if SpillBuildOptions.developerOptionsEnabled"))
-        XCTAssertTrue(preferencesSidebar.contains("sidebarItem(title: t(.developerOptions)"))
+        XCTAssertTrue(preferencesSidebar.contains("PreferencesTab.available"))
         XCTAssertTrue(developerOptionsSection.contains("$settings.tokenUsageDashboardOnboardingPreviewEnabled"))
         XCTAssertTrue(developerOptionsSection.contains("t(.aiDashboardOnboardingPreview)"))
         XCTAssertTrue(dashboardStore.contains("func refreshAsync("))
@@ -1630,7 +1629,7 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(infoButton.contains("struct TokenMeteringInfoButton"))
         XCTAssertTrue(infoButton.contains(".focusable(false)"))
         XCTAssertTrue(infoButton.contains(".accessibilityLabel(title)"))
-        XCTAssertTrue(preferencesSidebar.contains("private func sidebarItem"))
+        XCTAssertTrue(preferencesSidebar.contains("private struct PreferencesSidebarItem"))
         XCTAssertTrue(preferencesSidebar.contains(".focusEffectDisabled()"))
         XCTAssertTrue(dashboardStore.contains("@Published private(set) var unfilteredSnapshot"))
         XCTAssertFalse(dashboardStore.contains("var unfilteredSnapshot: TokenUsageDashboardSnapshot {"))
@@ -6582,22 +6581,6 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertEqual(store.loadEvents(), [event])
     }
 
-    @MainActor
-    func testTokenUsageBridgeSettingDefaultsOffAndPersists() throws {
-        let suiteName = "TokenUsageBridgeSetting.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-        defaults.removePersistentDomain(forName: suiteName)
-
-        let settings = SpillSettings(defaults: defaults)
-        XCTAssertFalse(settings.tokenUsageBridgeEnabled)
-
-        settings.tokenUsageBridgeEnabled = true
-        let reloadedSettings = SpillSettings(defaults: defaults)
-        XCTAssertTrue(reloadedSettings.tokenUsageBridgeEnabled)
-
-        defaults.removePersistentDomain(forName: suiteName)
-    }
-
     func testBridgeResponsesReadAppendRejectAndClearEvents() throws {
         let store = TokenUsageStore(fileURL: temporaryEventsURL())
         let server = TokenUsageBridgeServer(store: store)
@@ -6750,7 +6733,7 @@ final class TokenUsageStoreTests: XCTestCase {
             ].map(Self.source(named:)).joined(separator: "\n")
         let claudeHook = try String(contentsOf: root.appendingPathComponent("adapters/claude-code/spill-hook.py"))
         let bundledClaudeHook = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Resources/adapters/claude-code/spill-hook.py"))
-        let preferencesSection = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Preferences/TokenMeteringPreferencesSection.swift"))
+        let preferencesSection = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Preferences/TokenMetering/TokenMeteringPreferencesSection.swift"))
         let adapterDiagnostics = try String(contentsOf: root.appendingPathComponent("Sources/Spill/Preferences/TokenMetering/Support/TokenMeteringAdapterConnectionDiagnostics.swift"))
 
         XCTAssertTrue(setup.contains("Install or repair Spill token metering now"))

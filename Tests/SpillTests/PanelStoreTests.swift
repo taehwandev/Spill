@@ -11,9 +11,8 @@ final class PanelStoreTests: XCTestCase {
         store.send(.setStatusDetailTarget(.system(.cpu)))
         let refreshed = expectation(description: "Settings propagate")
         let subscription = store.$state.dropFirst().sink { state in
-            if state.visibleStatusModules == [.storage, .cpu, .network, .gpu] { refreshed.fulfill() }
+            if state.visibleStatusModules == [.cpu, .storage, .network, .gpu] { refreshed.fulfill() }
         }
-        settings.setStatusModuleOrder([.storage, .memory, .cpu])
         settings.setStatusModule(.memory, enabled: false)
         await fulfillment(of: [refreshed], timeout: 1)
         XCTAssertEqual(store.state.actionFeedback?.result, .permissionRequired("Accessibility"))

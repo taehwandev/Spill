@@ -38,6 +38,7 @@ extension PreferencesL10n {
             .clockAreaSplitGroups: "상태 그룹 분리",
             .clockAreaSplitGroupsDetail: "실험적 기능: 메인, 시스템, AI를 분리합니다. macOS가 여전히 빈 공간을 남기거나 다른 메뉴 막대 항목을 숨길 수 있습니다.",
             .clockAreaTextBold: "시계 옆 텍스트 굵게",
+            .clockAreaTokenDisplay: "토큰 표시",
             .clockAreaTextSize: "시계 옆 텍스트 크기",
             .layout: "레이아웃",
             .decimals: "CPU/MEM 소수점",

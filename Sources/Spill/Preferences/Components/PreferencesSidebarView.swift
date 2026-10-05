@@ -4,7 +4,7 @@ struct PreferencesSidebarView: View {
     let language: SpillAppLanguage
     let currentVersion: String
     @ObservedObject var navigationState: PreferencesNavigationState
-    @State private var hoveredTab: String?
+    @State private var hoveredTab: PreferencesTab?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -45,26 +45,16 @@ struct PreferencesSidebarView: View {
 
     private var navigationList: some View {
         VStack(spacing: 4) {
-            sidebarItem(title: t(.general), imageName: "gearshape.fill", tag: "general")
-            sidebarItem(title: t(.menuBar), imageName: "menubar.rectangle", tag: "menubar")
-            sidebarItem(title: t(.tokenMetering), imageName: "chart.bar.xaxis", tag: "tokens")
-            sidebarItem(title: t(.windowManagement), imageName: "macwindow", tag: "windows")
-            sidebarItem(title: t(.statusAndCaffeine), imageName: "cup.and.saucer.fill", tag: "status_caffeine")
-            if SpillBuildOptions.developerOptionsEnabled {
-                sidebarItem(title: t(.developerOptions), imageName: "hammer.fill", tag: "developer")
+            ForEach(PreferencesTab.available) { tab in
+                PreferencesSidebarItem(
+                    title: t(tab.sidebarTitleKey),
+                    tab: tab,
+                    navigationState: navigationState,
+                    hoveredTab: $hoveredTab
+                )
             }
         }
         .padding(.horizontal, 8)
-    }
-
-    private func sidebarItem(title: String, imageName: String, tag: String) -> some View {
-        PreferencesSidebarItem(
-            title: title,
-            imageName: imageName,
-            tag: tag,
-            navigationState: navigationState,
-            hoveredTab: $hoveredTab
-        )
     }
 
     private func t(_ key: PreferencesTextKey) -> String {
@@ -74,22 +64,21 @@ struct PreferencesSidebarView: View {
 
 private struct PreferencesSidebarItem: View {
     let title: String
-    let imageName: String
-    let tag: String
+    let tab: PreferencesTab
     @ObservedObject var navigationState: PreferencesNavigationState
-    @Binding var hoveredTab: String?
+    @Binding var hoveredTab: PreferencesTab?
 
     var body: some View {
-        let isSelected = navigationState.selectedTab == tag
-        let isHovered = hoveredTab == tag
+        let isSelected = navigationState.selectedTab == tab
+        let isHovered = hoveredTab == tab
 
         Button {
             withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
-                navigationState.selectedTab = tag
+                navigationState.selectedTab = tab
             }
         } label: {
             HStack(spacing: 8) {
-                Image(systemName: imageName)
+                Image(systemName: tab.symbolName)
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(isSelected ? .white : (isHovered ? .primary : .primary.opacity(0.65)))
                     .frame(width: 16, height: 16)
@@ -125,7 +114,7 @@ private struct PreferencesSidebarItem: View {
         .focusEffectDisabled()
         .onHover { hovering in
             withAnimation(.easeOut(duration: 0.15)) {
-                hoveredTab = hovering ? tag : nil
+                hoveredTab = hovering ? tab : nil
             }
         }
     }

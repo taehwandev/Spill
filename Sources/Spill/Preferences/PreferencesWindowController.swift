@@ -41,7 +41,7 @@ final class PreferencesWindowController: NSObject, NSWindowDelegate {
 }
 
 extension PreferencesWindowController {
-    func show(selectedTab: String? = nil) {
+    func show(selectedTab: PreferencesTab? = nil) {
         if let selectedTab {
             navigationState.selectedTab = selectedTab
         }

@@ -362,7 +362,9 @@ Rules:
   Sensor-key decoding, fan control, privileged helpers, and numeric temperature
   or RPM values are outside this slice.
 - Settings impact map for the GPU panel module: `SpillSettings` owns
-  `statusModuleOrder` and `enabledStatusModules` in UserDefaults. A one-time
+  `enabledStatusModules` in UserDefaults (the panel order is the fixed
+  `SpillStatusModule.defaultOrder`; the never-written `statusModuleOrder` key was
+  retired and any stored value is inert). A one-time
   migration enables GPU on existing installations; later Preferences opt-out
   persists. The main-process `PanelStore` reads these published settings to
   compose the compact panel, while `SystemStatusStore` reads the enabled set on
@@ -1812,3 +1814,47 @@ controls. Token display options precede optional setup/history/privacy disclosur
 groups. Existing features and stored settings remain available. Dashboard Beta
 is independent of experimental Limits. Verify toggles, restoration expiry and
 filters with focused tests, then render the actual Preferences and dashboard.
+
+## Settings Structure And Impact Map
+
+Persistence owner: `SpillSettings` only. Every setting is a `@Published`
+property that persists through a typed `SettingKey` and loads once at init through
+the same key. A key carries the stored name, the default, and the normalization
+for out-of-range or unknown stored values, so decoding is total. Domains keep
+their keys, migrations, and logic in `SpillSettings+<Domain>.swift` (General,
+SleepGuard, PanelStatus, MenuBar, Shortcuts, TokenMetering, SharedDefaults). Stored
+key names never change; renaming a property is free, renaming a key resets that
+setting for existing users, and `SettingKeyTests` pins every name.
+
+Defaults and migrations: unchanged. One-time migrations (sleep-guard display-awake
+default, Network and GPU panel modules, legacy window shortcuts, per-item menu bar
+styles) run inside the domain loaders with their existing flags.
+
+Retired without replacement: `showPowerFooter`, `tokenUsageBridgeEnabled`, and
+`statusModuleOrder`. Nothing read them; the bridge is enabled by smoke mode and the
+`SPILL_TOKEN_USAGE_BRIDGE_DISABLED` environment variable. `launchAtLogin` is no
+longer persisted: the system login-item state is the source of truth and the stored
+copy was never read. Old stored values remain inert and are not cleaned up.
+
+Renamed properties (stored keys unchanged): `panelStatusValueBold`,
+`panelStatusFontDesign`, `panelStatusValueFontSize`; `panelSectionSpacing` is
+unchanged. Properties with no Preferences control by design: `refreshInterval` and
+`tokenUsageShowAdvancedTools`.
+
+Preferences layout: one folder per tab (General, MenuBar, TokenMetering,
+WindowManagement, StatusCaffeine, Developer) beside shared Components, Legal, and
+Localization. Tabs are the `PreferencesTab` enum; its raw values are the identifiers
+other processes already send to open a tab. The menu bar token display choice
+(`menuBarTokenDisplayMode`: today only, total, both, auto-cycle) moved from the
+Token Metering tab to the Menu Bar tab, shown while the AI clock-area item is on.
+
+Reading processes: unchanged. The main app reads settings in process; the
+standalone dashboard helper reads the same shared defaults suite and uses the
+existing distributed-notification bridge for AI tool visibility. No new timer,
+collector, polling, network, or sync path is introduced.
+
+Affected surfaces for the moved AI setting: Preferences (control relocated; the
+setting and its key are unchanged) and the clock-adjacent AI glance (consumes the
+mode). The compact panel AI summary shows the mode label and is unchanged. Not
+applicable: the separate AI Token Metering dashboard helper, web dashboard, Private
+Usage Upload, sync payloads, and agent summaries, because none consumes it.

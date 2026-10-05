@@ -18,29 +18,6 @@ struct TokenMeteringLocalSyncSettingsSection: View {
             )
 
             usageInputScopeRow
-
-            Divider()
-
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(t(.menuBarTokenDisplayModeTitle))
-                        .font(.system(size: 12, weight: .bold))
-                    Text(t(.menuBarTokenDisplayModeDetail))
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                        .lineSpacing(2)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer()
-                Picker("", selection: $settings.menuBarTokenDisplayMode) {
-                    ForEach(MenuBarTokenDisplayMode.allCases) { mode in
-                        Text(mode.title(appLanguage: settings.appLanguage)).tag(mode)
-                    }
-                }
-                .pickerStyle(.menu)
-                .labelsHidden()
-                .frame(width: 140)
-            }
         }
         .padding(10)
         .background(tokenMeteringOptionBackground)

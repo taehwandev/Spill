@@ -15,7 +15,6 @@ final class PanelStore: ObservableObject {
         self.windowActionPerformer = windowActionPerformer
         state = PanelState(visibleStatusModules: settings.visiblePanelStatusModules)
         let publishers: [AnyPublisher<Void, Never>] = [
-            settings.$statusModuleOrder.map { _ in () }.eraseToAnyPublisher(),
             settings.$enabledStatusModules.map { _ in () }.eraseToAnyPublisher()
         ]
         Publishers.MergeMany(publishers)
