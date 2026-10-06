@@ -20,28 +20,44 @@ final class TokenUsageLimitInboxMonitor: @unchecked Sendable {
     /// re-read without polling the snapshot file.
     static let limitsDidChangeNotification = Notification.Name("app.spill.token-usage-limits.did-change")
 
+    /// Every status line render writes a temp file and renames it, which is
+    /// several directory events per render and renders arrive continuously
+    /// while a session runs. Captures closer together than this collapse into
+    /// one trailing capture that reads whatever the file holds by then.
+    static let defaultMinimumCaptureInterval: TimeInterval = 2
+
     private let directoryURL: URL
     private let capture: (TokenUsageLimitSnapshotStore) -> Bool
     private let snapshotStore: TokenUsageLimitSnapshotStore
     private let notificationCenter: NotificationCenter
+    private let minimumCaptureInterval: TimeInterval
     private let queue = DispatchQueue(label: "app.spill.token-usage-limit-inbox-monitor")
     private let lock = NSLock()
     private var source: DispatchSourceFileSystemObject?
     private var isCapturing = false
     private var isStopped = true
+    // Confined to `queue`.
+    private var lastCaptureStartedAt: Date?
+    private var isTrailingCaptureScheduled = false
 
     init(
         directoryURL: URL = TokenUsageLimitInboxMonitor.defaultDirectoryURL(),
         snapshotStore: TokenUsageLimitSnapshotStore = TokenUsageLimitSnapshotStore(),
         notificationCenter: NotificationCenter = .default,
-        capture: @escaping (TokenUsageLimitSnapshotStore) -> Bool = { store in
-            TokenUsageClaudeStatuslineCapture().captureLatestSnapshots(into: store)
-        }
+        minimumCaptureInterval: TimeInterval = TokenUsageLimitInboxMonitor.defaultMinimumCaptureInterval,
+        capture: @escaping (TokenUsageLimitSnapshotStore) -> Bool = TokenUsageLimitInboxMonitor.defaultCapture()
     ) {
         self.directoryURL = directoryURL
         self.snapshotStore = snapshotStore
         self.notificationCenter = notificationCenter
+        self.minimumCaptureInterval = minimumCaptureInterval
         self.capture = capture
+    }
+
+    /// Resolves the reading location once instead of on every directory event.
+    private static func defaultCapture() -> (TokenUsageLimitSnapshotStore) -> Bool {
+        let statuslineCapture = TokenUsageClaudeStatuslineCapture()
+        return { store in statuslineCapture.captureLatestSnapshots(into: store) }
     }
 
     deinit {
@@ -110,7 +126,29 @@ final class TokenUsageLimitInboxMonitor: @unchecked Sendable {
             return
         }
         queue.async { [weak self] in
-            self?.captureIfNeeded()
+            self?.captureOrCoalesce()
+        }
+    }
+
+    /// Runs on `queue`. A request inside the minimum interval schedules one
+    /// trailing capture and absorbs every later request until it fires, so a
+    /// burst of renders costs one read however long it lasts.
+    private func captureOrCoalesce() {
+        guard !isTrailingCaptureScheduled else {
+            return
+        }
+        let elapsed = lastCaptureStartedAt.map { Date().timeIntervalSince($0) } ?? .infinity
+        guard elapsed < minimumCaptureInterval else {
+            captureIfNeeded()
+            return
+        }
+        isTrailingCaptureScheduled = true
+        queue.asyncAfter(deadline: .now() + (minimumCaptureInterval - elapsed)) { [weak self] in
+            guard let self else {
+                return
+            }
+            isTrailingCaptureScheduled = false
+            captureIfNeeded()
         }
     }
 
@@ -125,6 +163,7 @@ final class TokenUsageLimitInboxMonitor: @unchecked Sendable {
         guard shouldCapture else {
             return
         }
+        lastCaptureStartedAt = Date()
         defer {
             lock.withLock { isCapturing = false }
         }

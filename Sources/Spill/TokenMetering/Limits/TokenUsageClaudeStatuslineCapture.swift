@@ -47,12 +47,38 @@ struct TokenUsageClaudeStatuslineCapture {
         guard let capturedAt = snapshots.first?.capturedAt else {
             return false
         }
-        let newestStored = store.snapshots(for: .claude).map(\.capturedAt).max()
-        if let newestStored, newestStored >= capturedAt {
-            return false
+        let stored = store.storedSnapshots().filter { $0.aiTool == .claude && $0.source != .estimated }
+        if let newestStored = stored.map(\.capturedAt).max() {
+            if newestStored >= capturedAt {
+                return false
+            }
+            if Self.repeatsStoredReading(snapshots, stored: stored) {
+                return false
+            }
         }
         store.mergeSnapshots(for: .claude, with: snapshots)
         return true
+    }
+
+    /// How far a reading's timestamp may advance with nothing else changing
+    /// before it is stored anyway, so its age still tracks a tool that is
+    /// running. The status line re-renders far more often than the numbers move.
+    static let unchangedReadingRefreshInterval: TimeInterval = 60
+
+    private static func repeatsStoredReading(
+        _ incoming: [TokenUsageLimitSnapshot],
+        stored: [TokenUsageLimitSnapshot]
+    ) -> Bool {
+        incoming.allSatisfy { snapshot in
+            guard let existing = stored.first(where: { $0.limitKey == snapshot.limitKey }) else {
+                return false
+            }
+            return existing.usedPercent == snapshot.usedPercent
+                && existing.windowMinutes == snapshot.windowMinutes
+                && existing.resetsAt == snapshot.resetsAt
+                && existing.source == snapshot.source
+                && snapshot.capturedAt.timeIntervalSince(existing.capturedAt) < unchangedReadingRefreshInterval
+        }
     }
 
     func latestSnapshots() -> [TokenUsageLimitSnapshot] {

@@ -2,6 +2,17 @@ import Foundation
 import XCTest
 @testable import Spill
 
+private final class LimitCaptureCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+
+    var value: Int { lock.withLock { count } }
+
+    func increment() {
+        lock.withLock { count += 1 }
+    }
+}
+
 final class TokenUsageLimitTests: XCTestCase {
     func testSnapshotStoreRoundTripsAndMergesPerLimitInsteadOfReplacing() throws {
         let fileURL = temporaryDirectory().appendingPathComponent("limit-snapshots.json")
@@ -531,6 +542,7 @@ final class TokenUsageLimitTests: XCTestCase {
             directoryURL: inbox,
             snapshotStore: store,
             notificationCenter: center,
+            minimumCaptureInterval: 0,
             capture: { _ in
                 captureCount += 1
                 return captureResults.isEmpty ? false : captureResults.removeFirst()
@@ -573,6 +585,75 @@ final class TokenUsageLimitTests: XCTestCase {
         // The directory is created rather than assumed, so a cold install can
         // watch it before the adapter has ever run.
         XCTAssertTrue(FileManager.default.fileExists(atPath: inbox.path))
+    }
+
+    func testLimitInboxMonitorCoalescesABurstOfWritesIntoOneTrailingCapture() throws {
+        let root = temporaryDirectory()
+        let inbox = root.appendingPathComponent("limit-inbox", isDirectory: true)
+        let captureCount = LimitCaptureCounter()
+        let monitor = TokenUsageLimitInboxMonitor(
+            directoryURL: inbox,
+            snapshotStore: TokenUsageLimitSnapshotStore(
+                fileURL: root.appendingPathComponent("limit-snapshots.json")
+            ),
+            notificationCenter: NotificationCenter(),
+            minimumCaptureInterval: 0.4,
+            capture: { _ in
+                captureCount.increment()
+                return false
+            }
+        )
+        monitor.start()
+        defer { monitor.stop() }
+
+        let reading = inbox.appendingPathComponent("claude-statusline.json")
+        for index in 0..<30 {
+            try "{\"n\":\(index)}".write(to: reading, atomically: true, encoding: .utf8)
+        }
+        let started = Date()
+        while Date().timeIntervalSince(started) < 1.2 {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.02))
+        }
+
+        // The start-up capture, then a single trailing one for the whole burst.
+        XCTAssertGreaterThanOrEqual(captureCount.value, 2)
+        XCTAssertLessThanOrEqual(captureCount.value, 3)
+    }
+
+    func testStatuslineReadingThatRepeatsTheStoredValuesIsNotRewritten() throws {
+        let root = temporaryDirectory()
+        let readingURL = root.appendingPathComponent("claude-statusline.json")
+        let storeURL = root.appendingPathComponent("limit-snapshots.json")
+        let store = TokenUsageLimitSnapshotStore(
+            fileURL: storeURL,
+            now: { Date(timeIntervalSince1970: 1_800_000_000) }
+        )
+        let firstAt = Date(timeIntervalSince1970: 1_799_990_000)
+        func writeReading(at date: Date, usedPercent: Int) throws {
+            try JSONSerialization.data(withJSONObject: [
+                "captured_at": ISO8601DateFormatter.tokenUsage.string(from: date),
+                "windows": [["window_minutes": 300, "used_percent": usedPercent]] as [[String: Any]],
+            ]).write(to: readingURL)
+        }
+        func capture(at date: Date) -> Bool {
+            TokenUsageClaudeStatuslineCapture(readingURL: readingURL, now: { date })
+                .captureLatestSnapshots(into: store)
+        }
+
+        try writeReading(at: firstAt, usedPercent: 31)
+        XCTAssertTrue(capture(at: firstAt))
+
+        // Same numbers a few seconds later: nothing worth a disk write.
+        try writeReading(at: firstAt.addingTimeInterval(5), usedPercent: 31)
+        XCTAssertFalse(capture(at: firstAt.addingTimeInterval(5)))
+
+        // A changed number lands immediately.
+        try writeReading(at: firstAt.addingTimeInterval(6), usedPercent: 32)
+        XCTAssertTrue(capture(at: firstAt.addingTimeInterval(6)))
+
+        // Unchanged numbers still refresh the timestamp once it is a minute old.
+        try writeReading(at: firstAt.addingTimeInterval(90), usedPercent: 32)
+        XCTAssertTrue(capture(at: firstAt.addingTimeInterval(90)))
     }
 
     func testMostConstrainedPicksTheLowestRemainingPercentage() {
