@@ -28,6 +28,8 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
     private var cancellables = Set<AnyCancellable>()
     private var presentationGeneration = 0
     private var layoutResizeScheduled = false
+    private let idleReleaseDelay: Duration
+    private var idleReleaseTask: Task<Void, Never>?
 
     override init() {
         fatalError("Use init(settings:panelStore:sleepGuard:).")
@@ -41,6 +43,7 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
         tokenUsageDashboardStore: TokenUsageDashboardStore,
         windowActionStore: WindowActionStore = WindowActionStore(), updateStore: UpdateCheckStore = UpdateCheckStore(),
         sleepGuard: SleepGuardController,
+        idleReleaseDelay: Duration = .seconds(60),
         visibilityChanged: @escaping (Bool) -> Void = { _ in },
         settingsAction: @escaping () -> Void = {},
         tokenMeteringDetailAction: @escaping () -> Void = {}
@@ -54,6 +57,7 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
         self.windowActionStore = windowActionStore
         self.updateStore = updateStore
         self.sleepGuard = sleepGuard
+        self.idleReleaseDelay = idleReleaseDelay
         self.visibilityChanged = visibilityChanged
         self.settingsAction = settingsAction
         self.tokenMeteringDetailAction = tokenMeteringDetailAction
@@ -65,8 +69,9 @@ final class SpillPanelController: NSObject, NSWindowDelegate {
         isPresented
     }
 
-    func prepare() {
-        _ = ensurePanel()
+    /// Whether the panel's window and SwiftUI tree currently exist.
+    var hasPanel: Bool {
+        panel != nil
     }
 }
 
@@ -138,6 +143,8 @@ extension SpillPanelController {
         }
 
         panelStore.send(.refreshDerivedState)
+        idleReleaseTask?.cancel()
+        idleReleaseTask = nil
         let panel = ensurePanel()
         let finalFrame = panelFrame()
         let startFrame = finalFrame.offsetBy(dx: 0, dy: 8)
@@ -196,7 +203,31 @@ extension SpillPanelController {
         }, completion: { [weak self] in
             guard let self, presentationGeneration == generation, !isPresented else { return }
             panel.orderOut(nil)
+            scheduleIdleRelease()
         })
+    }
+
+    /// A hidden panel keeps its whole SwiftUI tree alive, which most sessions
+    /// never need again soon after closing it. Dropping it after an idle
+    /// delay returns that memory; the next show rebuilds it.
+    private func scheduleIdleRelease() {
+        idleReleaseTask?.cancel()
+        idleReleaseTask = Task { [weak self, idleReleaseDelay] in
+            try? await Task.sleep(for: idleReleaseDelay)
+            guard !Task.isCancelled, let self, !isPresented else { return }
+            releasePanel()
+        }
+    }
+
+    private func releasePanel() {
+        guard let panel, !isPresented else { return }
+        idleReleaseTask = nil
+        dismissController.stop()
+        panel.delegate = nil
+        panel.orderOut(nil)
+        panel.contentView = nil
+        panelVisualEffectView = nil
+        self.panel = nil
     }
 }
 

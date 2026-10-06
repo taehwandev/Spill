@@ -168,7 +168,6 @@ extension AppDelegate {
             startSmokeTestExitTimer()
         } else {
             configureHotKey()
-            prewarmPanel()
             if DashboardUpdateRestoration().consumeReopenRequest() {
                 openTokenDashboard(source: "update_restore")
             }
@@ -460,12 +459,6 @@ extension AppDelegate {
 }
 
 extension AppDelegate {
-    private func prewarmPanel() {
-        DispatchQueue.main.async { [weak self] in
-            self?.spillPanelController.prepare()
-        }
-    }
-
     private func performWindowAction(_ kind: WindowActionKind) {
         if !AccessibilityPermission.isTrusted {
             SpillTelemetry.shared.track("accessibility_prompt_shown", props: ["source": "window_action_hotkey"])
