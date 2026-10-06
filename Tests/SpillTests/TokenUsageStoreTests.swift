@@ -379,6 +379,31 @@ extension TokenUsageStoreTests {
 
 extension TokenUsageStoreTests {
     @MainActor
+    func testAIUsageWorkOnlyRunsWhileTheWidgetOrPanelShowsIt() throws {
+        let defaultsName = "spill.tests.ai-widget-gate.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: defaultsName))
+        defer { defaults.removePersistentDomain(forName: defaultsName) }
+        let settings = SpillSettings(defaults: defaults)
+        let coordinator = TokenMeteringCoordinator(
+            settings: settings,
+            cloudServiceStatusStore: CloudServiceStatusStore(),
+            aiStatusStore: AIStatusStore(statuses: []),
+            usageStore: TokenUsageStore(fileURL: temporaryEventsURL())
+        )
+
+        settings.enabledMenuBarStatusItems = []
+        XCTAssertFalse(coordinator.shouldRefreshMenuBarTokenTotal)
+
+        coordinator.setSpillPanelVisible(true)
+        XCTAssertTrue(coordinator.shouldRefreshMenuBarTokenTotal)
+        coordinator.setSpillPanelVisible(false)
+        XCTAssertFalse(coordinator.shouldRefreshMenuBarTokenTotal)
+
+        settings.enabledMenuBarStatusItems = [.ai]
+        XCTAssertTrue(coordinator.shouldRefreshMenuBarTokenTotal)
+    }
+
+    @MainActor
     func testMenuBarAITokenStatusKeepsLastValueWhenStoreReadTemporarilyFails() async throws {
         let eventsURL = temporaryEventsURL()
         let storeDirectoryURL = eventsURL.deletingLastPathComponent()
@@ -2667,7 +2692,7 @@ final class TokenUsageStoreTests: XCTestCase {
         XCTAssertTrue(usageStoreNotifications.contains("DistributedNotificationCenter.default().postNotificationName"))
         XCTAssertTrue(tokenMeteringCoordinator.contains("TokenUsageStore.distributedEventsDidChangeNotification"))
         XCTAssertTrue(tokenMeteringCoordinator.contains("tokenUsageEventsDidChangeFromDistributedNotification"))
-        XCTAssertTrue(tokenMeteringCoordinator.contains("private var shouldRefreshMenuBarTokenTotal"))
+        XCTAssertTrue(tokenMeteringCoordinator.contains("var shouldRefreshMenuBarTokenTotal: Bool"))
         XCTAssertTrue(tokenMeteringCoordinator.contains("settings.enabledMenuBarStatusItems.contains(.ai)"))
         XCTAssertTrue(tokenMeteringCoordinator.contains("usageStore.menuBarTokenTotals("))
         XCTAssertTrue(tokenMeteringCoordinator.contains("inputScope: inputScope"))

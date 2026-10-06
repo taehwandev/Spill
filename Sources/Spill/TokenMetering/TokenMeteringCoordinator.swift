@@ -86,8 +86,15 @@ extension TokenMeteringCoordinator {
         syncVisibleAITools()
         observeUsageEvents()
         observeAIToolVisibility()
+        observeAIWidgetEnabled()
         inboxMonitor.start()
-        requestCollection(reason: "app_launch")
+        // The importers rescan session archives, which is only worth doing at launch for
+        // someone watching the AI widget. Otherwise the panel, the dashboard and the widget
+        // being turned on each request their own pass, and queued hook events still arrive
+        // through the inbox monitor above.
+        if shouldRefreshMenuBarTokenTotal {
+            requestCollection(reason: "app_launch")
+        }
         configureBridge()
         registerPrivateUsageConnectionURLHandler()
         observePrivateUsageUploadOpportunities()
@@ -283,7 +290,9 @@ extension TokenMeteringCoordinator {
         return port
     }
 
-    private var shouldRefreshMenuBarTokenTotal: Bool {
+    /// Whether anything is showing AI usage right now (the menu bar widget or the open panel).
+    /// While nothing is, per-event recomputation and the launch-time archive scan are skipped.
+    var shouldRefreshMenuBarTokenTotal: Bool {
         isSpillPanelVisible || settings.enabledMenuBarStatusItems.contains(.ai)
     }
 
@@ -318,7 +327,7 @@ extension TokenMeteringCoordinator {
         )
         .receive(on: RunLoop.main)
         .sink { [weak self] _ in
-            self?.refreshMenuBarTokenTotal(force: true)
+            self?.refreshMenuBarTokenTotalIfShown()
         }
         .store(in: &cancellables)
 
@@ -326,7 +335,7 @@ extension TokenMeteringCoordinator {
             .dropFirst()
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
-                self?.refreshMenuBarTokenTotal(force: true)
+                self?.refreshMenuBarTokenTotalIfShown()
             }
             .store(in: &cancellables)
 
@@ -336,6 +345,32 @@ extension TokenMeteringCoordinator {
             name: TokenUsageStore.distributedEventsDidChangeNotification,
             object: nil
         )
+    }
+
+    /// Every usage event (each agent turn) lands here, and the total only feeds the menu bar
+    /// widget and the open panel. With neither showing it, recomputing it per event is a
+    /// database read nobody sees; turning the widget on refreshes it then.
+    private func refreshMenuBarTokenTotalIfShown() {
+        guard shouldRefreshMenuBarTokenTotal else {
+            return
+        }
+        refreshMenuBarTokenTotal(force: true)
+    }
+
+    /// Without the AI widget nothing asks for the collectors' periodic pass, so turning it on
+    /// has to catch up on what accumulated while it was off.
+    private func observeAIWidgetEnabled() {
+        settings.$enabledMenuBarStatusItems
+            .map { $0.contains(.ai) }
+            .removeDuplicates()
+            .dropFirst()
+            .filter { $0 }
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.refreshMenuBarTokenTotal(force: true)
+                self?.requestCollection(reason: "manual_refresh")
+            }
+            .store(in: &cancellables)
     }
 
     private func observeAIToolVisibility() {
@@ -572,6 +607,9 @@ extension TokenMeteringCoordinator {
         }
 
         isDashboardLaunchInProgress = true
+        // With the AI widget off nothing has scanned the session archives since launch, so the
+        // dashboard being opened is the moment to catch up.
+        requestCollection(reason: "manual_refresh")
         dashboardLauncher.open(
             fallback: { [weak self] in
                 self?.presentDashboardWindow(
