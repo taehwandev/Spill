@@ -149,7 +149,32 @@ function numeric(value) {
   return typeof parsed === "number" && Number.isFinite(parsed) ? parsed : null;
 }
 
+// Claude Code renders the status line far more often than its limits move, and
+// every write here wakes the app's directory watcher. A reading that repeats the
+// stored numbers is skipped until its timestamp is stale enough to be worth
+// refreshing, so the app still sees that Claude Code is running.
+async function repeatsStoredReading(reading) {
+  // Declared here, not at module level: the top-level `await harvest(...)` above runs
+  // before module-level constants below it are initialized.
+  const unchangedRefreshMilliseconds = 30_000;
+  try {
+    const stored = JSON.parse(await readFile(join(outputDirectory, "claude-statusline.json"), "utf8"));
+    const age = Date.parse(reading.captured_at) - Date.parse(stored.captured_at);
+    return (
+      Number.isFinite(age) &&
+      age >= 0 &&
+      age < unchangedRefreshMilliseconds &&
+      JSON.stringify(stored.windows) === JSON.stringify(reading.windows)
+    );
+  } catch {
+    return false;
+  }
+}
+
 async function writeReading(reading) {
+  if (await repeatsStoredReading(reading)) {
+    return;
+  }
   await mkdir(outputDirectory, { recursive: true });
   const temporaryPath = join(outputDirectory, `.claude-statusline-${process.pid}.tmp`);
   await writeFile(temporaryPath, JSON.stringify(reading), { encoding: "utf8", mode: 0o600 });
