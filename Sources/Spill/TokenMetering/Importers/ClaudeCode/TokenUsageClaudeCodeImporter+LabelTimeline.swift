@@ -63,6 +63,7 @@ extension TokenUsageClaudeCodeImporter {
         /// Kept sorted by `updatedAt` so each import does not re-sort the whole history.
         var completedEntries: [LabelTimeline.Entry] = []
         var pendingLineData = Data()
+        var projectIDPool = Set<String>()
 
         mutating func appendEntries(_ newEntries: [LabelTimeline.Entry]) {
             guard !newEntries.isEmpty else {
@@ -105,18 +106,33 @@ extension TokenUsageClaudeCodeImporter {
         }
         defer { try? handle.close() }
 
-        guard (try? handle.seek(toOffset: labelTimelineCache.byteOffset)) != nil,
-              let appendedData = try? handle.readToEnd(),
-              !appendedData.isEmpty
-        else {
+        guard (try? handle.seek(toOffset: labelTimelineCache.byteOffset)) != nil else {
             return cachedLabelTimeline()
         }
 
-        labelTimelineCache.byteOffset += UInt64(appendedData.count)
-        labelTimelineBytesRead += appendedData.count
+        // The first launch reads the whole history (tens of MB). Reading it in bounded chunks
+        // keeps the transient Data and parsed Foundation objects small instead of peaking at
+        // several times the file size.
+        while true {
+            var chunk: Data?
+            autoreleasepool {
+                chunk = try? handle.read(upToCount: Self.labelTimelineChunkSize)
+            }
+            guard let chunk, !chunk.isEmpty else {
+                break
+            }
+            labelTimelineCache.byteOffset += UInt64(chunk.count)
+            labelTimelineBytesRead += chunk.count
+            appendLabelTimelineChunk(chunk)
+        }
+        return cachedLabelTimeline()
+    }
 
-        // Prepend a carried partial line only when there is one; otherwise this would copy the
-        // whole appended read (tens of MB on a first launch) just to concatenate nothing.
+    static let labelTimelineChunkSize = 1 << 20
+
+    /// Splits one read into complete lines, parses them, and carries a trailing partial line.
+    private func appendLabelTimelineChunk(_ appendedData: Data) {
+        // Prepend a carried partial line only when there is one.
         let combinedData: Data
         if labelTimelineCache.pendingLineData.isEmpty {
             combinedData = appendedData
@@ -154,7 +170,6 @@ extension TokenUsageClaudeCodeImporter {
             batchStart = batchEnd
         }
         labelTimelineCache.appendEntries(parsedEntries)
-        return cachedLabelTimeline()
     }
 
     private func cachedLabelTimeline() -> LabelTimeline {
@@ -185,7 +200,7 @@ extension TokenUsageClaudeCodeImporter {
         let stage = (object["stage"] as? String).flatMap(TokenUsageStage.init(rawValue:))
         guard taskType != nil || stage != nil else { return nil }
 
-        let projectID = safeOpaqueID(object["project_id"] as? String) ?? "project_global"
+        let projectID = internedProjectID(safeOpaqueID(object["project_id"] as? String) ?? "project_global")
         let updatedAt = (object["updated_at"] as? String).flatMap(ISO8601DateFormatter.parseTokenUsageDate(from:))
         let expiresAt = (object["expires_at"] as? String).flatMap(ISO8601DateFormatter.parseTokenUsageDate(from:))
         guard let updatedAt, let expiresAt else { return nil }
@@ -197,6 +212,16 @@ extension TokenUsageClaudeCodeImporter {
             updatedAt: updatedAt,
             expiresAt: expiresAt
         )
+    }
+
+    /// The history holds a handful of projects across hundreds of thousands of entries, so the
+    /// entries share one string per project instead of each owning a copy.
+    private func internedProjectID(_ id: String) -> String {
+        if let existing = labelTimelineCache.projectIDPool.firstIndex(of: id) {
+            return labelTimelineCache.projectIDPool[existing]
+        }
+        labelTimelineCache.projectIDPool.insert(id)
+        return id
     }
 
     private func safeOpaqueID(_ value: String?) -> String? {
