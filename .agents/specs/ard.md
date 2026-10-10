@@ -899,6 +899,36 @@ Usage limit snapshots:
 - No Antigravity credits gauge exists: the `modelCredits` state value is an
   internal sentinel (`availableCreditsSentinelKey`), not a user-facing
   balance.
+- `TokenUsageAntigravityLimitCapture` runs the installed native CLI's
+  `-p /usage --output-format json` status command (requires version >=1.1.11).
+  It validates `SUCCESS`, command `usage`, zero turns, and finite fractions in
+  0...1. A dedicated parser accepts only Gemini/Claude-GPT five-hour/weekly
+  quota fields and mints fixed `agy_quota:<pool>:<window>` keys and labels.
+  Each valid complete pool replaces only its own prefix in the existing
+  snapshot store; failed or malformed pools preserve their previous readings.
+  Readings use successful completion time and `client_cache`, withdrawing an
+  expired percentage until re-read instead of deriving full allowance.
+- The AGY command runner uses an empty private temporary working directory,
+  a 90-second deadline, a 1 MiB output bound, discarded stderr, and an owned
+  process group that is terminated on completion, timeout, or cancellation.
+  An inherited private ownership marker identifies new same-user helper
+  processes that detach from that group; cleanup compares only that exact
+  marker, skipping argument bytes and never decoding or logging other process
+  environment fields. Existing processes are excluded from ownership discovery.
+  It never reads credentials or calls a vendor endpoint directly. The CLI owns
+  status authentication/networking; no model turn or usage event is generated.
+  A nonblocking local capture lock and 15-second snapshot reuse prevent
+  simultaneous main processes from duplicating a status fetch. It reuses the
+  collector's enabled-tool filter, 20-minute pacing floor, and forced refresh
+  reasons. No new polling, watcher, setting, upload, or token schema is added.
+- Surface impact: Preferences retains the existing AGY visibility control;
+  the helper dashboard receives AGY limits through the existing collection
+  completion notification and shared snapshot file. The compact panel and
+  clock-adjacent AI glance currently do not consume limit snapshots, so their
+  token summaries stay unaffected. Web dashboard, Private Usage Upload, and
+  agent-facing token summaries are unaffected because limits stay local and
+  separate from usage events. Hiding AGY propagates through the existing
+  shared-defaults/distributed-notification bridge and cancels pending capture.
 - No estimated gauge exists. `TokenUsageEstimatedLimitCapture` derived a
   percentage from the tool's own observed high-water burn, which is a different
   quantity from the vendor limit percentage the chip appears to report; beside a
@@ -919,21 +949,28 @@ Usage limit snapshots:
   named/model-specific, with no schema field added. A named-only slot includes
   both pool identity and the compact window label instead of displaying an
   ambiguous bare `Wk` or `5h`. Extras, unwindowed limits, and credits sit behind
-  `+n` in the popover. Every source is passive — each gauge comes from a file
-  the tool writes while it runs — so each visible gauge states its own age past
+  `+n` in the popover. File sources are passive; AGY uses its bounded native
+  status command. Each visible gauge states its own age past
   30 minutes and dims once it outlives its window. An older model pool cannot
   age or dim a fresh account-wide gauge or the whole chip. A chip is drawn for
   every unhidden tool that can report a limit, whether or not a reading exists
   yet, because a chip that comes and goes is harder to read than one that is
   blank until its tool reports. Antigravity is excluded from that placeholder
-  set because it persists no window percentage, so its blank would mean never
-  rather than not yet; the exclusion is display-only, and any tool with an
+  set so an unavailable or unsigned-in CLI does not render an empty chip;
+  the exclusion is display-only, and any tool with an
   actual reading renders regardless of the placeholder set. The strip consumes
   snapshots pre-filtered through the same
   `TokenUsageDashboardToolVisibility.visibleTools` rule as every other
   dashboard surface, so user-hidden tools render no limit chips.
 - The dashboard's Limits strip renders per-tool chips from the snapshot file
   and refreshes on the existing panel-summary publisher — no dedicated timer.
+  The presentation uses equal-width `TokenMeteringDashboardLimitCard` views
+  in a single equal-width row, with prominent remaining values and separate reset
+  lines. The localized heading has no experimental qualifier. The AGY display
+  filters snapshots to `agy_quota:gemini:` before grouping, so only its five-hour
+  and weekly windows appear, without a Claude/GPT popover or extra count.
+  Capture/storage still validates both pools independently. Cards receive
+  caller-formatted strings and preserve native button focus and popovers.
   Ring thresholds are shared surface-wide: warning at 20% remaining, critical
   at 5%; estimated readings always carry a `~` prefix.
 - If the read-only stats helper shows usage records while native UI is empty or

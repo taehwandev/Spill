@@ -113,6 +113,9 @@ struct TokenUsageLimitSnapshot: Codable, Equatable {
     /// every limit key, so this is a local naming convention and not a vendor
     /// string being matched.
     var isScopedVariant: Bool {
+        if aiTool == .antigravity, limitKey.hasPrefix("agy_quota:") {
+            return true
+        }
         if limitKey.hasPrefix("weekly_scoped_") {
             return true
         }

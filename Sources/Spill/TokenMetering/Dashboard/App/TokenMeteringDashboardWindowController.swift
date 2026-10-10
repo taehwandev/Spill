@@ -215,6 +215,18 @@ extension TokenMeteringDashboardWindowController {
         contentView.layoutSubtreeIfNeeded()
         contentView.displayIfNeeded()
         window.displayIfNeeded()
+        if ProcessInfo.processInfo.environment["SPILL_TOKEN_DASHBOARD_RENDER_IMAGE"] == "1",
+           let image = contentView.bitmapImageRepForCachingDisplay(in: contentView.bounds) {
+            contentView.cacheDisplay(in: contentView.bounds, to: image)
+            if let data = image.representation(using: .png, properties: [:]) {
+                let url = FileManager.default.temporaryDirectory
+                    .appendingPathComponent("spill-token-dashboard-render-\(ProcessInfo.processInfo.processIdentifier).png")
+                do {
+                    try data.write(to: url)
+                    print("SPILL_TOKEN_DASHBOARD_RENDER_IMAGE \(url.path)")
+                } catch {}
+            }
+        }
         return contentView.bounds.size
     }
 

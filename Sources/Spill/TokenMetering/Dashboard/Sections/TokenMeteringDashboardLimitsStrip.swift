@@ -1,16 +1,14 @@
 import SwiftUI
 
-/// One-row strip of per-tool remaining-limit chips under the dashboard
-/// header. Each chip shows the shared remaining-ratio ring for every window
-/// the tool actually reports, plus how old the reading is; clicking opens a
-/// popover naming every limit and its remaining value. Reset time, capture
-/// stamp and source live in each row's tooltip rather than under it, because
-/// a second line on every row read as noise instead of as context. Tools
+/// Per-tool remaining-limit cards under the dashboard
+/// header. Each card separates window labels, remaining values and reset times;
+/// clicking opens a popover with the visible tool's extra limits. Capture
+/// stamps and source detail remain available through tooltips. Tools
 /// without snapshots render nothing, so the strip disappears entirely when no
 /// limits are known.
 ///
-/// Nothing here refreshes on a clock, because none of the sources do: every
-/// gauge comes from a file the tool itself writes while it runs. A chip is
+/// Nothing here adds a refresh clock: file captures and AGY's native status
+/// command share the existing collector. A card is
 /// therefore always an "as of" reading, and says so once it stops being
 /// recent. Age and dimming apply to each gauge independently so an old model
 /// pool cannot make a fresh account-wide limit look stale.
@@ -27,27 +25,22 @@ struct TokenMeteringDashboardLimitsStrip: View {
     private static let toolOrder: [TokenUsageAITool] = [.codex, .claude, .antigravity]
 
     /// Tools that hold a blank chip while waiting for a reading, because a
-    /// reading can still arrive for them. Antigravity fetches its window
-    /// percentages live and persists none, so a blank chip there would mean
-    /// "never" rather than "not yet" — it is left out of the row instead. It
-    /// is not special-cased anywhere else: the moment a real Antigravity
-    /// reading exists it appears here on its own, with no code change.
+    /// reading can still arrive for them. AGY needs a supported, signed-in
+    /// native status CLI, so it appears only after an actual reading arrives.
     private static let placeholderTools: Set<TokenUsageAITool> = [.codex, .claude]
 
     var body: some View {
         let groups = toolGroups
         if !groups.isEmpty {
-            HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 8) {
                 Text(TokenMeteringL10n.text(.limitsTitle, language: language))
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.secondary)
-                    .help(TokenMeteringL10n.text(.limitsExperimentalDetail, language: language))
-
-                ForEach(groups, id: \.tool) { group in
-                    limitChip(for: group)
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(minimum: 0), spacing: 8, alignment: .top), count: groups.count), spacing: 8) {
+                    ForEach(groups, id: \.tool) { group in
+                        limitChip(for: group)
+                    }
                 }
-
-                Spacer(minLength: 0)
             }
         }
     }
@@ -97,13 +90,16 @@ extension TokenMeteringDashboardLimitsStrip {
     }
 
     var toolGroups: [ToolGroup] {
+        let displaySnapshots = snapshots.filter {
+            $0.aiTool != .antigravity || $0.limitKey.hasPrefix("agy_quota:gemini:")
+        }
         // Tools that get a blank placeholder, plus every tool that actually
         // has a reading. The second half is what lets a tool with no
         // placeholder still appear once its data exists.
         let visible = tools.intersection(Self.placeholderTools)
-            .union(snapshots.map(\.aiTool))
+            .union(displaySnapshots.map(\.aiTool))
         return Self.toolOrder.filter(visible.contains).map { tool in
-            let toolSnapshots = snapshots.filter { $0.aiTool == tool }
+            let toolSnapshots = displaySnapshots.filter { $0.aiTool == tool }
             var gauges = Self.slotGauges(in: toolSnapshots)
             if gauges.isEmpty,
                let fallback = toolSnapshots.first(where: { $0.remainingCredits != nil })
@@ -126,58 +122,27 @@ extension TokenMeteringDashboardLimitsStrip {
 private extension TokenMeteringDashboardLimitsStrip {
     func limitChip(for group: ToolGroup) -> some View {
         let now = Date()
-        return Button {
+        return TokenMeteringDashboardLimitCard(
+            title: group.tool == .antigravity ? "AGY · Gemini" : compactToolName(group.tool),
+            tint: group.tool.dashboardTint,
+            remainingCaption: TokenMeteringL10n.text(.limitsRemaining, language: language),
+            items: group.gauges.map { gauge in
+                TokenMeteringDashboardLimitCard.Item(
+                    snapshot: gauge, title: slotLabel(for: gauge), value: headlineValue(for: gauge),
+                    reset: gauge.resetsAt.map {
+                        TokenMeteringL10n.limitsResetsAt(resetStamp(for: $0), language: language)
+                    },
+                    age: Self.ageLabel(for: gauge, at: now, language: language),
+                    tooltip: chipTooltip(for: gauge),
+                    dimmed: Self.outlivesWindow(gauge, at: now)
+                )
+            },
+            emptyText: TokenMeteringL10n.text(Self.emptyReason(for: group), language: language),
+            extraText: group.extraCount > 0 && !group.gauges.isEmpty ? "+\(group.extraCount)" : nil,
+            accessibilityText: accessibilityText(for: group)
+        ) {
             popoverTool = group.tool
-        } label: {
-            HStack(spacing: 6) {
-                Text(compactToolName(group.tool))
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.primary.opacity(0.8))
-
-                if group.gauges.isEmpty {
-                    // No value to show. The chip stays so the row keeps its
-                    // shape, but it states nothing rather than inventing a
-                    // percentage the tool never reported.
-                    Text("—")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.secondary)
-                        .help(TokenMeteringL10n.text(Self.emptyReason(for: group), language: language))
-                }
-
-                ForEach(group.gauges, id: \.limitKey) { gauge in
-                    HStack(spacing: 4) {
-                        TokenUsageLimitRing(snapshot: gauge, diameter: 12)
-                        Text(gaugeText(for: gauge))
-                            .font(.system(size: 11, weight: .medium))
-                            .monospacedDigit()
-                            .foregroundStyle(.primary.opacity(0.8))
-                            .lineLimit(1)
-                        if let age = Self.ageLabel(for: gauge, at: now, language: language) {
-                            Text(age)
-                                .font(.system(size: 10))
-                                .monospacedDigit()
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .help(chipTooltip(for: gauge))
-                    .opacity(Self.outlivesWindow(gauge, at: now) ? 0.6 : 1)
-                }
-
-                if group.extraCount > 0, !group.gauges.isEmpty {
-                    Text("+\(group.extraCount)")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(Color.primary.opacity(0.05))
-            )
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(Text(accessibilityText(for: group)))
         .popover(
             isPresented: Binding(
                 get: { popoverTool == group.tool },
@@ -196,7 +161,13 @@ private extension TokenMeteringDashboardLimitsStrip {
         let now = Date()
         let gauges = group.gauges
             .map { gauge in
-                let value = "\(slotLabel(for: gauge)) \(headlineValue(for: gauge))"
+                let remaining = gauge.remainingPercent.map {
+                    TokenMeteringL10n.limitsPercentLeft(formattedPercent($0), language: language)
+                } ?? headlineValue(for: gauge)
+                var value = "\(slotLabel(for: gauge)) \(remaining)"
+                if let reset = gauge.resetsAt {
+                    value += ", " + TokenMeteringL10n.limitsResetsAt(resetStamp(for: reset), language: language)
+                }
                 guard let age = Self.ageLabel(for: gauge, at: now, language: language) else {
                     return value
                 }
@@ -279,6 +250,7 @@ extension TokenMeteringDashboardLimitsStrip {
         guard let windowLabel = Self.slotLabel(windowMinutes: gauge.windowMinutes) else {
             return gauge.label
         }
+        if gauge.aiTool == .antigravity { return windowLabel }
         guard gauge.isScopedVariant else {
             return windowLabel
         }

@@ -255,7 +255,7 @@ enum TokenMeteringSetupInstaller {
             sourceURL: scriptURL,
             destination: defaultInstallURL()
         )
-        _ = try? refreshInstalledHelperIfPresent(
+        _ = try? refreshInstalledStatsHelperIfPresent(
             sourceURL: statsScriptURL,
             destination: defaultStatsInstallURL()
         )
@@ -287,6 +287,45 @@ enum TokenMeteringSetupInstaller {
 }
 
 extension TokenMeteringSetupInstaller {
+    static func installStatsHelper(
+        from sourceURL: URL?,
+        to destination: URL,
+        fileManager: FileManager = .default
+    ) throws {
+        guard let sourceURL else {
+            throw TokenMeteringAdapterInstallError.scriptNotFound("Stats helper")
+        }
+        let modules = [
+            "spill-token-metering-stats-accounting.mjs",
+            "spill-token-metering-stats-presentation.mjs",
+        ].map { sourceURL.deletingLastPathComponent().appendingPathComponent($0) }
+        for module in modules {
+            guard fileManager.fileExists(atPath: module.path) else {
+                throw TokenMeteringAdapterInstallError.scriptNotFound(module.lastPathComponent)
+            }
+        }
+        for module in modules {
+            try copyPrivateResource(
+                from: module,
+                to: destination.deletingLastPathComponent().appendingPathComponent(module.lastPathComponent),
+                permissions: 0o600,
+                fileManager: fileManager
+            )
+        }
+        try copyExecutableScript(from: sourceURL, to: destination, fileManager: fileManager)
+    }
+
+    @discardableResult
+    static func refreshInstalledStatsHelperIfPresent(
+        sourceURL: URL?,
+        destination: URL,
+        fileManager: FileManager = .default
+    ) throws -> Bool {
+        guard fileManager.fileExists(atPath: destination.path) else { return false }
+        try installStatsHelper(from: sourceURL, to: destination, fileManager: fileManager)
+        return true
+    }
+
     @discardableResult
     static func refreshInstalledRuntimeInstructionIfPresent(
         sourceURL: URL?,
@@ -331,7 +370,7 @@ extension TokenMeteringSetupInstaller {
         let statsDestination = destination
             .deletingLastPathComponent()
             .appendingPathComponent(statsScriptFileName)
-        try copyExecutableScript(from: statsURL, to: statsDestination)
+        try installStatsHelper(from: statsURL, to: statsDestination)
         try copyPrivateResource(
             from: runtimeInstructionURL,
             to: destination.deletingLastPathComponent().appendingPathComponent(runtimeInstructionFileName),

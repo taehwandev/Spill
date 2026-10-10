@@ -163,7 +163,11 @@ private extension TokenUsageLimitSnapshotStore {
         let temporaryURL = directory.appendingPathComponent(".limit-snapshots-\(UUID().uuidString).tmp")
         do {
             try data.write(to: temporaryURL)
-            _ = try FileManager.default.replaceItemAt(fileURL, withItemAt: temporaryURL)
+            if FileManager.default.fileExists(atPath: fileURL.path) {
+                _ = try FileManager.default.replaceItemAt(fileURL, withItemAt: temporaryURL)
+            } else {
+                try FileManager.default.moveItem(at: temporaryURL, to: fileURL)
+            }
         } catch {
             try? FileManager.default.removeItem(at: temporaryURL)
         }

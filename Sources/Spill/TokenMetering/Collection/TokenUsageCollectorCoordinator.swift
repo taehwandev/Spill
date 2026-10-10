@@ -19,6 +19,7 @@ final class TokenUsageCollectorCoordinator: TokenUsageExternalCollecting, @unche
     ) -> TokenUsageClaudeCodeImportSummary
     typealias FinalizationBoundaryHook = @Sendable () -> Void
     typealias LimitCaptureRunner = () -> Void
+    typealias CancellableLimitCaptureRunner = (@escaping () -> Bool) -> Void
 
     static let collectionDidFinishNotification = Notification.Name("app.spill.token-usage-collector.collection-did-finish")
 
@@ -48,11 +49,13 @@ final class TokenUsageCollectorCoordinator: TokenUsageExternalCollecting, @unche
     private var currentRequestForcesImporters = false
     private let codexLimitCaptureRunner: LimitCaptureRunner
     private let claudeLimitCaptureRunner: LimitCaptureRunner
+    private let antigravityLimitCaptureRunner: CancellableLimitCaptureRunner
     private var enabledTools: Set<TokenUsageAITool>
     private var lastAntigravityImportAt: Date?
     private var lastClaudeCodeImportAt: Date?
     private var lastCodexLimitCaptureAt: Date?
     private var lastClaudeLimitCaptureAt: Date?
+    private var lastAntigravityLimitCaptureAt: Date?
     private var isStopping = false
     private var collectionCompletionHandlers: [@Sendable () -> Void] = []
 
@@ -66,6 +69,7 @@ final class TokenUsageCollectorCoordinator: TokenUsageExternalCollecting, @unche
         finalizationBoundaryHook: FinalizationBoundaryHook? = nil,
         codexLimitCaptureRunner: LimitCaptureRunner? = nil,
         claudeLimitCaptureRunner: LimitCaptureRunner? = nil,
+        antigravityLimitCaptureRunner: CancellableLimitCaptureRunner? = nil,
         enabledTools: Set<TokenUsageAITool> = TokenMeteringToolAvailability.supportedTools
     ) {
         self.activeImporterMinimumInterval = activeImporterMinimumInterval
@@ -76,6 +80,10 @@ final class TokenUsageCollectorCoordinator: TokenUsageExternalCollecting, @unche
         let codexCapture = TokenUsageCodexLimitCapture()
         let claudeCapture = TokenUsageClaudeLimitCapture()
         let claudeStatuslineCapture = TokenUsageClaudeStatuslineCapture()
+        let antigravityCapture = TokenUsageAntigravityLimitCapture()
+        self.antigravityLimitCaptureRunner = antigravityLimitCaptureRunner ?? { shouldCancel in
+            antigravityCapture.captureLatestSnapshots(into: snapshotStore, shouldCancel: shouldCancel)
+        }
         self.codexLimitCaptureRunner = codexLimitCaptureRunner ?? {
             codexCapture.captureLatestSnapshots(into: snapshotStore)
         }
@@ -171,7 +179,10 @@ extension TokenUsageCollectorCoordinator {
         lock.withLock {
             let newlyEnabled = tools.subtracting(enabledTools)
             enabledTools = tools
-            if newlyEnabled.contains(.antigravity) { lastAntigravityImportAt = nil }
+            if newlyEnabled.contains(.antigravity) {
+                lastAntigravityImportAt = nil
+                lastAntigravityLimitCaptureAt = nil
+            }
             if newlyEnabled.contains(.claude) {
                 lastClaudeCodeImportAt = nil
                 lastClaudeLimitCaptureAt = nil
@@ -215,6 +226,7 @@ extension TokenUsageCollectorCoordinator {
 
             runCodexLimitCapture()
             runClaudeLimitCapture()
+            runAntigravityLimitCapture()
 
             let postPassAction = lock.withLock {
                 if !isStopping, hasPendingRequest {
@@ -282,6 +294,17 @@ extension TokenUsageCollectorCoordinator {
         guard shouldRunImporter(lastImportAt: \.lastClaudeLimitCaptureAt) else { return }
         claudeLimitCaptureRunner()
         lock.withLock { lastClaudeLimitCaptureAt = now() }
+    }
+
+    private func runAntigravityLimitCapture() {
+        guard !shouldStop, isToolEnabled(.antigravity),
+              shouldRunImporter(lastImportAt: \.lastAntigravityLimitCaptureAt)
+        else { return }
+        antigravityLimitCaptureRunner { [weak self] in
+            guard let self else { return true }
+            return self.shouldStop || !self.isToolEnabled(.antigravity)
+        }
+        lock.withLock { lastAntigravityLimitCaptureAt = now() }
     }
 
     private func isToolEnabled(_ tool: TokenUsageAITool) -> Bool {

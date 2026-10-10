@@ -1863,7 +1863,8 @@ final class TokenUsageStoreTests: XCTestCase {
                 )
             },
             antigravityLookbackInterval: 3600,
-            claudeCodeImportRunner: { _, _ in TokenUsageClaudeCodeImportSummary(scannedFiles: 0, parsedTurns: 0, importedEvents: 0, skippedDuplicateEvents: 0, cursorAdvancedFiles: 0, failedToWriteEvents: false) }
+            claudeCodeImportRunner: { _, _ in TokenUsageClaudeCodeImportSummary(scannedFiles: 0, parsedTurns: 0, importedEvents: 0, skippedDuplicateEvents: 0, cursorAdvancedFiles: 0, failedToWriteEvents: false) },
+            antigravityLimitCaptureRunner: { _ in }
         )
         let beforeRequest = Date()
         let notification = expectation(description: "collection finished notification")
@@ -1920,7 +1921,8 @@ final class TokenUsageStoreTests: XCTestCase {
                 )
             },
             activeImporterMinimumInterval: 30,
-            now: { lock.withLock { currentDate } }
+            now: { lock.withLock { currentDate } },
+            antigravityLimitCaptureRunner: { _ in }
         )
 
         // First timer request runs both importers (no prior run to pace against).
@@ -2065,7 +2067,8 @@ final class TokenUsageStoreTests: XCTestCase {
             claudeCodeImportRunner: { _, _ in
                 lock.withLock { didRunImporter = true }
                 return TokenUsageClaudeCodeImportSummary(scannedFiles: 0, parsedTurns: 0, importedEvents: 0, skippedDuplicateEvents: 0, cursorAdvancedFiles: 0, failedToWriteEvents: false)
-            }
+            },
+            antigravityLimitCaptureRunner: { _ in }
         )
         let notification = expectation(description: "collection finished")
         let observer = NotificationCenter.default.addObserver(
@@ -2098,7 +2101,8 @@ final class TokenUsageStoreTests: XCTestCase {
                     failedToWriteEvents: false
                 )
             },
-            claudeCodeImportRunner: { _, _ in TokenUsageClaudeCodeImportSummary(scannedFiles: 0, parsedTurns: 0, importedEvents: 0, skippedDuplicateEvents: 0, cursorAdvancedFiles: 0, failedToWriteEvents: false) }
+            claudeCodeImportRunner: { _, _ in TokenUsageClaudeCodeImportSummary(scannedFiles: 0, parsedTurns: 0, importedEvents: 0, skippedDuplicateEvents: 0, cursorAdvancedFiles: 0, failedToWriteEvents: false) },
+            antigravityLimitCaptureRunner: { _ in }
         )
         let notification = expectation(description: "collection finished notification")
         let observer = NotificationCenter.default.addObserver(
@@ -2152,7 +2156,8 @@ final class TokenUsageStoreTests: XCTestCase {
                     cursorAdvancedFiles: 0,
                     failedToWriteEvents: false
                 )
-            }
+            },
+            antigravityLimitCaptureRunner: { _ in }
         )
 
         await collector.requestCollectionAndWait(reason: "test")
@@ -2553,7 +2558,8 @@ final class TokenUsageStoreTests: XCTestCase {
                     failedToWriteEvents: false
                 )
             },
-            claudeCodeImportRunner: { _, _ in TokenUsageClaudeCodeImportSummary(scannedFiles: 0, parsedTurns: 0, importedEvents: 0, skippedDuplicateEvents: 0, cursorAdvancedFiles: 0, failedToWriteEvents: false) }
+            claudeCodeImportRunner: { _, _ in TokenUsageClaudeCodeImportSummary(scannedFiles: 0, parsedTurns: 0, importedEvents: 0, skippedDuplicateEvents: 0, cursorAdvancedFiles: 0, failedToWriteEvents: false) },
+            antigravityLimitCaptureRunner: { _ in }
         )
 
         collector.stop()

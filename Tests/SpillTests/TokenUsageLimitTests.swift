@@ -269,7 +269,7 @@ final class TokenUsageLimitTests: XCTestCase {
             snapshots: [
                 codex,
                 TokenUsageLimitSnapshot(
-                    aiTool: .antigravity, limitKey: "week_all", label: "Weekly",
+                    aiTool: .antigravity, limitKey: "agy_quota:gemini:weekly", label: "Gemini Weekly",
                     usedPercent: 12, remainingCredits: nil, windowMinutes: 10_080,
                     resetsAt: nil, capturedAt: capturedAt, source: .serverExact
                 ),
@@ -893,11 +893,11 @@ final class TokenUsageLimitTests: XCTestCase {
         XCTAssertFalse(strip.contains("fiveHourWindowMinutes"))
         XCTAssertFalse(strip.contains("weeklyWindowMinutes"))
         XCTAssertTrue(strip.contains("Dictionary(grouping: windowed) { $0.windowMinutes ?? 0 }"))
-        XCTAssertTrue(strip.contains(#"Text("+\(group.extraCount)")"#))
+        XCTAssertTrue(strip.contains(#"? "+\(group.extraCount)" : nil"#))
         // A count of limits is only meaningful beside a value. With no gauges
         // the dash already stands for every one of them, so "— +3" would read
         // as a contradiction rather than as a hint.
-        XCTAssertTrue(strip.contains("group.extraCount > 0, !group.gauges.isEmpty"))
+        XCTAssertTrue(strip.contains("group.extraCount > 0 && !group.gauges.isEmpty"))
     }
 
     func testClaudeCaptureReadsExactCachedUtilization() {

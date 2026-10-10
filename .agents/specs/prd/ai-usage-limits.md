@@ -27,7 +27,7 @@ instead of pretending all three are equal.
 | --- | --- | --- | --- |
 | Codex | Named limit windows (`limit_id`, `limit_name`, `used_percent`, `window_minutes`, `resets_at`) plus credits `balance`. Accounts carry a variable set — the observed reference account shows a general weekly limit and a separate model-specific weekly limit — so the set of gauges is data-driven, never hardcoded to five-hour/weekly | `~/.codex/sessions/**/*.jsonl` `rate_limits` snapshots inside `token_count` events, written on every turn; the incremental Codex importer already reads these files | Exact, server-authoritative |
 | Claude Code | Two sources. The status line payload carries `rate_limits` on every render while Claude Code runs, which is the live one and the reason no manual `/usage` is needed; an installed adapter harvests it and chains whatever status line was already configured. The cached utilization below remains as the fallback for a machine with no adapter. Server-computed used percent and reset time per window (session, weekly all-model, weekly model-scoped), cached by the client only when something fetches usage — it does not refresh on its own while the tool is simply in use, so a reading ages until the next fetch | `~/.claude.json`, read-only. The payload is located by shape rather than by key name — `cachedUsageUtilization` is tried first, then top-level values are scanned for an object holding limit entries — because the client has already renamed this state once. Only `kind`, `percent`, `resets_at`, and the safe scoped model display name are decoded | Exact as of `fetchedAtMs`; snapshots tagged `client_cache`. There is no fallback: when no exact payload can be located the chip stays but reports nothing, and a content-free diagnostic records which of the two happened |
-| Antigravity | Per-group window percentages are fetched live by `/usage` and are not cached locally, so no window gauge can be derived. The `modelCredits` state value is a sentinel (`availableCreditsSentinelKey`), not a user-facing balance — no credits gauge is derived from it | None found locally | No gauge; the chip renders blank |
+| Antigravity | Gemini and Claude/GPT quota groups, each with reported five-hour and weekly remaining fractions and reset times | Installed CLI (1.1.11 or newer), `agy -p /usage --output-format json`, a native status command that does not start an agent turn or spend quota | Exact at successful command completion; `client_cache` freshness semantics because collection is on demand |
 
 Explicitly out of scope for this PRD: calling any vendor endpoint with the
 tool's OAuth credentials. That would require credential access and network
@@ -135,13 +135,24 @@ as a separate, explicitly opt-in PRD.
      units it reads as fact and misleads. The chip stays and reports nothing.
 
 4. **Antigravity gauges**
-   - No window gauge, and no chip. Antigravity fetches its percentages live and
-     persists none of them, so a blank chip there would read as "not yet" when
-     it means "never". It is left out of the limits row rather than shown
-     empty, and is not excluded anywhere else in the dashboard.
-   - This is a display rule, not a capability removal: Antigravity is not
-     special-cased in capture or storage, and the moment a real Antigravity
-     reading exists its chip appears with no code change.
+   - Use the installed, already authenticated CLI's native `/usage` command.
+     Spill reads no vendor credential and calls no vendor endpoint directly.
+     The CLI owns any authentication and networking required for status.
+     [Official CLI changelog](https://antigravity.google/docs/changelog)
+     establishes native JSON `/usage` support from 1.1.11 with no agent turn.
+   - Only a successful `usage` command with zero turns and numeric fractions
+     from known Gemini/Claude-GPT five-hour/weekly buckets produces snapshots.
+     Persist fixed pool/window labels and numeric readings only; ignore the
+     surrounding conversation metadata and free-form descriptions.
+   - Run in an empty temporary directory with bounded output and timeout.
+     Clean up its owned process group, including helper children. Serialize
+     simultaneous app captures and reuse a reading captured within 15 seconds.
+   - Hidden AGY disables capture. Reuse the existing collection cadence and
+     explicit refresh, without adding a timer or setting. Show an AGY chip only
+     once a real reading exists. The dashboard shows only Gemini five-hour and
+     weekly limits; Claude/GPT buckets remain internal capture data and are
+     excluded from the AGY card and its popover. Missing CLI, unsupported versions, offline/error responses,
+     malformed numbers, and cancellation preserve the last valid readings.
    - No credits gauge. The `modelCredits` state value decodes, but its key
      (`availableCreditsSentinelKey`) marks it as an internal sentinel and the
      user confirmed Antigravity's own UI exposes no credits balance. Showing
@@ -153,10 +164,14 @@ as a separate, explicitly opt-in PRD.
      carry embedded numbers; the percent, limit name, reset time, source
      badge, and captured-at age live in the adjacent text or tooltip
      appropriate to each surface.
-   - **Token metering dashboard (most detail)**: a single-row "Limits" strip
-     directly under the header — one compact chip per tool, each slot with
-     its own ring, remaining percent (`~` prefix on estimates), and reset
-     stamp when one is known (`5h ~31% (20:00) · Wk 29% (8/8)`).
+   - **Token metering dashboard (most detail)**: a "Limits" section directly
+     under the header with one equal-width card per tool. The heading contains
+     no experimental qualifier. Each window has its own label, prominent
+     remaining percent, ring, and separate visible reset line. Three compact
+     cards stay in one row within the dashboard's main column and keep their
+     detail popover and keyboard focus. AGY's
+     header names Gemini once; its windows read `5h` and `Wk` without repeated
+     model names or a hidden Claude/GPT extra count.
    - Slots are **derived from the windows present in the data**, shortest
      window first, capped at two per chip. Ordering by window length is the
      point: a "most constrained" headline made every tool read on a different
@@ -176,21 +191,22 @@ as a separate, explicitly opt-in PRD.
      percents floor rather than round — 99.8% remaining reads "99", never a
      false "100". Extra named limits, unwindowed limits, and credit balances
      appear as a `+n` indicator; clicking the chip opens a popover listing
-     every limit for that tool with countdowns, source badges, and captured-at
-     freshness. No large card.
+     every displayed limit for that tool with countdowns, source badges, and
+     captured-at freshness. AGY's display scope remains Gemini only.
    - **Compact panel (medium)**: the existing AI-section tool rows gain a
      trailing ring plus a short percent (for example `Codex 1M ◕40%`). No new
      rows; details stay in the dashboard.
    - Menu bar: out of MVP; revisit after the dashboard and compact-panel
      surfaces prove useful.
 6. **Freshness and trust**
-   - Every source here is passive: each gauge comes from a file the tool
+   - Codex and Claude sources are passive: each gauge comes from a file the tool
      itself writes while it runs, so nothing refreshes while a tool sits
      unused. That is not a polling defect and cannot be fixed by polling
      harder; a live reading would need a network call to the vendor's usage
      endpoint with the user's credentials, which the local read-only privacy
-     contract does not permit. The answer is an honest **as-of** display, not
-     a fabricated current one.
+     contract does not permit. AGY is the bounded native status-command
+     exception above; its CLI owns the fetch. All gauges retain an honest
+     **as-of** display.
    - A gauge is therefore always a reading "as of" a moment. Each visible
      gauge states its own age once it exceeds 30 minutes and dims when its
      reading is older than the window it describes. A stale named/model pool
@@ -200,9 +216,13 @@ as a separate, explicitly opt-in PRD.
      Codex session line's own timestamp. Stamping the scan time would make
      every server-exact gauge look permanently fresh however long ago the tool
      last ran, which is exactly what the as-of display exists to prevent. Only
-     estimates are stamped now, because an estimate genuinely is computed now.
-   - **Closed windows resolve locally instead of disappearing.** Once a
-     window's `resets_at` has passed, its allowance is known to have been full
+     a successful live AGY status command is stamped at completion. Failed
+     commands never advance freshness. AGY uses `client_cache`: after a reset
+     its old percentage becomes unknown until another successful reading,
+     rather than claiming a locally derived 100%.
+   - **Continuously reported windows resolve locally instead of disappearing.**
+     For `server_exact` sources, once `resets_at` has passed, its allowance is
+     known to have been full
      again at that moment — derivable exactly, with no source needed. The
      gauge is re-stamped at the reset moment, marked `window reset`, and
      renders 100% remaining. It claims **no** next reset time, because a
@@ -222,9 +242,11 @@ as a separate, explicitly opt-in PRD.
   timestamps, and enum labels. No prompts, transcripts, commands, paths, or
   account identifiers are read or stored; the AGY parser extracts numeric
   varints only.
-- All reads are read-only and local. No network, no credentials, no new
-  daemons. Snapshots stay local-only and are excluded from any usage-event
-  sync payload.
+- File reads remain read-only and local. The AGY native status CLI is the
+  explicit exception for a vendor-owned fetch; Spill accesses no credentials,
+  makes no direct vendor request, and starts no agent turn or daemon. Raw
+  status output remains in memory only. Snapshots stay local-only and are
+  excluded from any usage-event sync payload.
 
 ## Defaults and migration
 
@@ -252,6 +274,11 @@ as a separate, explicitly opt-in PRD.
   percentage, and nothing is substituted for the missing reading.
 - With Antigravity installed and no Antigravity reading available, no
   Antigravity chip appears in the limits row; supplying one restores it.
+- A supported, signed-in AGY CLI produces Gemini and Claude/GPT five-hour and
+  weekly gauges matching native `/usage`. Only Gemini's two limits are visible
+  in the AGY card and popover. Invalid fractions and non-success/non-usage/agent
+  responses are rejected; failure preserves capture timestamps. Disabling AGY
+  during a status command cancels it and prevents storing its result.
 - Quitting the tools, disconnecting the network, or deleting a snapshot store
   never breaks metering; limits are additive and fail silent.
 - All gauges re-render countdowns through existing dashboard and compact-panel
@@ -263,8 +290,8 @@ as a separate, explicitly opt-in PRD.
 
 - Whether Codex credits (`balance`) deserve their own gauge or stay a tooltip
   detail (MVP: tooltip detail).
-- Antigravity `/usage` per-group server percentages via opt-in authenticated
-  fetch — deferred to a separate PRD if users ask for exact AGY windows.
+- Direct authenticated vendor endpoint access remains deferred; the native
+  AGY status command is authorized within the existing visible-tool setting.
 
 ## Phasing
 

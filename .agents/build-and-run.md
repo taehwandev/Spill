@@ -134,6 +134,11 @@ Smoke-test startup must skip this refresh and leave real installed adapters and
 instructions unchanged. Isolated smoke data is not permission to refresh global
 runtime files.
 
+The stats helper is installed and refreshed together with its sibling accounting
+and presentation modules. Startup refresh repairs missing modules when the stats
+entry script is already installed; it leaves an absent stats installation alone.
+Modules are copied before the entry script and retain owner-only permissions.
+
 The Preferences and token-dashboard direct setup buttons are explicit user
 approval to refresh the bundled helper resources and run that installed helper
 with `--apply --metering-only`. This basic mode preserves existing workflow
@@ -372,7 +377,23 @@ launch-to-render interval is `1500 ms` or more. This complements
 `SPILL_TOKEN_DASHBOARD_SMOKE_NO_WINDOW=1` and therefore cannot detect SwiftUI
 layout hangs.
 
+For a full-window image when OS screen capture is unavailable, launch the
+render smoke helper with `SPILL_TOKEN_DASHBOARD_RENDER_IMAGE=1`. The existing
+smoke render method writes its AppKit content-view PNG to the temporary
+directory and prints the image path. This opt-in test path captures no other
+windows and does not run collectors.
+
 ## Common Failure Modes
+
+AGY Limits uses the installed CLI (>=1.1.11) native JSON `/usage` status
+command, separate from imported token totals. It runs on existing collection
+and manual refresh paths only for visible AGY. Verify Gemini and Claude/GPT
+five-hour/weekly percentages and provider reset times in the Limits cards.
+AGY displays only Gemini 5h/week; its Claude/GPT buckets are not shown.
+Missing login, offline/error output, or unsupported CLI preserves prior
+readings; expired on-demand readings become unknown until refreshed. Never
+dump raw CLI JSON for diagnosis. Quota snapshots remain local and are not
+token usage events. Tests inject status runners and do not call the real CLI.
 
 - `swift build` passed, but the app did not change: the `.app` bundle was not
   rebuilt with `./scripts/build-app.sh`.
