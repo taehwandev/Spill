@@ -25,7 +25,7 @@ labels in Antigravity's label context instead of Codex's label context.
 For multi-step work, use the active `AGENTS.md` start hook shape:
 
 ```bash
-TAO_ROOT="${TAO_HOME:-$HOME/git/tao-agent-os}"
+TAO_ROOT="${TAO_HOME:-$HOME/git/moru-core}"
 SPILL_AI_TOOL=antigravity python3 "${TAO_ROOT}/scripts/agent-hook.py" start --project "$(pwd)" --rules "${TAO_ROOT}" --command <command> --request "<USER_REQUEST>"
 ```
 

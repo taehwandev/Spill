@@ -6,14 +6,14 @@ changes.
 
 Shared rules source:
 
-Default: `~/git/tao-agent-os`
+Default: `~/git/moru-core`
 
 If the checkout lives elsewhere, set `TAO_HOME` to that root.
 
 Required command shape:
 
 ```bash
-npx --yes @taehwandev/vibeguard audit . --rules "${TAO_HOME:-$HOME/git/tao-agent-os}"
+npx --yes @taehwandev/vibeguard audit . --rules "${TAO_HOME:-$HOME/git/moru-core}"
 ```
 
 Use `--fix` only for low-risk VibeGuard fixes, then inspect the diff.

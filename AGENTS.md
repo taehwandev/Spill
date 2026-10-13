@@ -154,8 +154,8 @@ requires missed-gate recovery.
 Do not load every shared document by default.
 Replace `${TAO_HOME}` with a portable root reference. In committed
 repo-local instructions, use `${TAO_HOME}` for shared local installs
-or a repo-relative pinned path such as `.agents/tao-agent-os`; do not commit a
-personal absolute path such as `/Users/.../tao-agent-os`. Full local paths
+or a repo-relative pinned path such as `.agents/moru-core`; do not commit a
+personal absolute path such as `/Users/.../moru-core`. Full local paths
 belong only in shell environment setup, one-shot prompts, or uncommitted
 user-level runtime bridges. Use legacy `${KEYFLOW_AGENT_ROOT}` only when the
 environment already provides it.
@@ -182,10 +182,10 @@ Shared Tao Agent OS library:
 - For personal shared installs, set `TAO_HOME` in the runtime
   environment.
 - For a future team-pinned install, use a repo-relative checkout such as
-  `.agents/tao-agent-os` only after explicit approval.
+  `.agents/moru-core` only after explicit approval.
 
 ```bash
-TAO_ROOT="${TAO_HOME:-$HOME/git/tao-agent-os}"
+TAO_ROOT="${TAO_HOME:-$HOME/git/moru-core}"
 ```
 
 Use the managed routing block above for shared workflow selection and lifecycle
