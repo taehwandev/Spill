@@ -73,6 +73,7 @@ extension PrivateUsageUploadCoordinator {
             if let checkpoint {
                 state.acknowledgedCiphertextHashesByBucketKey = [:]
                 state.acknowledgedSharedSummaryHashesByBucketKey = [:]
+                state.acknowledgedLimitUsageHashesByDay = [:]
                 state.lastSuccessfulUploadAt = nil
                 state.lastFailedUploadAt = nil
                 state.lastFailureReason = nil

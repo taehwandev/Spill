@@ -245,8 +245,11 @@ as a separate, explicitly opt-in PRD.
 - File reads remain read-only and local. The AGY native status CLI is the
   explicit exception for a vendor-owned fetch; Spill accesses no credentials,
   makes no direct vendor request, and starts no agent turn or daemon. Raw
-  status output remains in memory only. Snapshots stay local-only and are
-  excluded from any usage-event sync payload.
+  status output remains in memory only. Latest snapshots stay local-only and
+  are excluded from usage-event payloads. A separate observed daily percentage
+  summary may be included in an opt-in Private Usage Upload daily aggregate
+  and shared summary. It carries only tool, limit key, safe label, first and
+  last used percentages, peak, observed consumption delta, and capture time.
 
 ## Defaults and migration
 

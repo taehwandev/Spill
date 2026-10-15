@@ -4,11 +4,13 @@ struct PrivateUsageDailyBucketBuilder: Sendable {
     let calendar: Calendar
     let timeZone: TimeZone
     private let sealer: PrivateUsageBucketSealing
+    let dailyLimitUsageStore: TokenUsageLimitSnapshotStore?
     private let encoder: JSONEncoder
 
     init(
         calendar: Calendar = .autoupdatingCurrent,
         timeZone: TimeZone = .autoupdatingCurrent,
+        dailyLimitUsageStore: TokenUsageLimitSnapshotStore? = nil,
         sealer: PrivateUsageBucketSealing
     ) {
         var calendar = calendar
@@ -16,6 +18,7 @@ struct PrivateUsageDailyBucketBuilder: Sendable {
         self.calendar = calendar
         self.timeZone = timeZone
         self.sealer = sealer
+        self.dailyLimitUsageStore = dailyLimitUsageStore
 
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
@@ -129,6 +132,7 @@ extension PrivateUsageDailyBucketBuilder {
     ) -> [PrivateUsageDailyAggregate] {
         let todayStart = calendar.startOfDay(for: now)
         let earliestDayStart = earliestBucketStart.map { calendar.startOfDay(for: $0) }
+        let dailyLimitUsageByDay = Dictionary(grouping: dailyLimitUsageStore?.allDailyUsage() ?? [], by: \.bucketKey)
         let deduplicatedEvents = Self.deduplicateBySpanID(events)
         let groupedEvents = Dictionary(grouping: deduplicatedEvents.compactMap { event -> (Date, TokenUsageEvent)? in
             guard let date = ISO8601DateFormatter.parseTokenUsageDate(from: event.createdAt),
@@ -168,12 +172,16 @@ extension PrivateUsageDailyBucketBuilder {
                 dayStart: dayStart,
                 dayEnd: dayEnd,
                 events: dayEvents.sorted(by: Self.eventPrecedes),
-                generatedAt: generatedAt
+                generatedAt: generatedAt,
+                dailyLimitUsage: dailyLimitUsageByDay[Self.localDayID(for: dayStart, timeZone: timeZone)] ?? []
             )
         }
 
         var existingDayIDs = Set(aggregates.map { String($0.bucketKey.prefix(10)) })
-        for dayID in requiredDayIDs.sorted() where !existingDayIDs.contains(dayID) {
+        let extraDayIDs = Set(requiredDayIDs).union(
+            requiredDayIDs.isEmpty ? Set(dailyLimitUsageByDay.keys) : []
+        )
+        for dayID in extraDayIDs.sorted() where !existingDayIDs.contains(dayID) {
             guard let interval = localDayInterval(for: dayID),
                   interval.start < todayStart || (includeCurrentDay && interval.start <= now)
             else {
@@ -190,7 +198,8 @@ extension PrivateUsageDailyBucketBuilder {
                     dayStart: interval.start,
                     dayEnd: interval.end,
                     events: [],
-                    generatedAt: interval.start
+                    generatedAt: interval.start,
+                    dailyLimitUsage: dailyLimitUsageByDay[dayID] ?? []
                 )
             )
             existingDayIDs.insert(dayID)
@@ -203,7 +212,8 @@ extension PrivateUsageDailyBucketBuilder {
         dayStart: Date,
         dayEnd: Date,
         events: [TokenUsageEvent],
-        generatedAt: Date
+        generatedAt: Date,
+        dailyLimitUsage: [TokenUsageDailyLimitUsage]
     ) -> PrivateUsageDailyAggregate {
         var totals = PrivateUsageTokenTotals.zero
         var sourceTotals = [
@@ -247,7 +257,10 @@ extension PrivateUsageDailyBucketBuilder {
             bucketStartAt: Self.localTimestamp(for: dayStart, timeZone: timeZone),
             bucketEndAt: Self.localTimestamp(for: dayEnd, timeZone: timeZone),
             timezone: timeZone.identifier,
-            generatedAt: ISO8601DateFormatter.tokenUsage.string(from: generatedAt),
+            generatedAt: ISO8601DateFormatter.tokenUsage.string(from:
+                dailyLimitUsage.compactMap { ISO8601DateFormatter.parseTokenUsageDate(from: $0.updatedAt) }
+                    .max().map { max(generatedAt, $0) } ?? generatedAt
+            ),
             totals: totals,
             sourceTotals: sourceTotals,
             toolTotals: toolTotals,
@@ -259,6 +272,9 @@ extension PrivateUsageDailyBucketBuilder {
                 lhs.totals.totalTokens == rhs.totals.totalTokens
                     ? lhs.id < rhs.id
                     : lhs.totals.totalTokens > rhs.totals.totalTokens
+            },
+            dailyLimitUsage: dailyLimitUsage.isEmpty ? nil : dailyLimitUsage.sorted {
+                ($0.aiTool.rawValue, $0.limitKey) < ($1.aiTool.rawValue, $1.limitKey)
             }
         )
     }

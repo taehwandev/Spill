@@ -1387,6 +1387,77 @@ final class PrivateUsageUploadTests: XCTestCase {
         XCTAssertTrue(usageStore.loadPrivateUsageEventChanges(afterChangeID: 0).changes.isEmpty)
     }
 
+    func testQuotaOnlyDayUploadsAndReuploadsWhenItsReadingChanges() async throws {
+        let timeZone = try XCTUnwrap(TimeZone(identifier: "UTC"))
+        let calendar = fixedCalendar(timeZone: timeZone)
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 8, hour: 9)))
+        let first = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 7, hour: 12)))
+        let second = first.addingTimeInterval(3_600)
+        let third = second.addingTimeInterval(3_600)
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SpillQuotaUploadTests-\(UUID().uuidString)", isDirectory: true)
+        let limitStore = TokenUsageLimitSnapshotStore(
+            fileURL: directory.appendingPathComponent("limit-snapshots.json"),
+            timeZone: timeZone,
+            now: { now }
+        )
+        func reading(_ percent: Double, at date: Date) -> TokenUsageLimitSnapshot {
+            TokenUsageLimitSnapshot(
+                aiTool: .codex, limitKey: "codex:primary", label: "Weekly",
+                usedPercent: percent, remainingCredits: nil, windowMinutes: 10_080,
+                resetsAt: now.addingTimeInterval(10_000), capturedAt: date,
+                source: .serverExact
+            )
+        }
+        limitStore.mergeSnapshots(for: .codex, with: [reading(10, at: first)])
+        limitStore.mergeSnapshots(for: .codex, with: [reading(30, at: second)])
+
+        let credentialStore = InMemoryPrivateUsageCredentialStore()
+        try credentialStore.saveCredential(PrivateUsageDeviceCredential(
+            deviceID: "device_server", credential: "spill_device_v1_secret",
+            tokenType: "spill_device_v1", createdAt: now
+        ))
+        try credentialStore.saveKeyWrappingSecret(PrivateUsageKeyWrappingSecret(rawValue: testWrappingSecret))
+        let relayClient = FakePrivateUsageRelayClient()
+        let sealer = RecordingPrivateUsageSealer()
+        let coordinator = PrivateUsageUploadCoordinator(
+            usageStore: makeUsageStore(), credentialStore: credentialStore,
+            stateStore: PrivateUsageUploadStateStore(defaults: makeDefaults()),
+            relayClient: relayClient,
+            bucketBuilder: PrivateUsageDailyBucketBuilder(
+                calendar: calendar, timeZone: timeZone,
+                dailyLimitUsageStore: limitStore, sealer: sealer
+            ),
+            sealer: sealer
+        )
+
+        let firstResult = try await coordinator.performUpload(isEnabled: true, now: now)
+        XCTAssertEqual(firstResult.accepted, 1)
+        let firstAggregate = try JSONDecoder().decode(
+            PrivateUsageDailyAggregate.self, from: XCTUnwrap(sealer.plaintexts.last)
+        )
+        XCTAssertEqual(firstAggregate.totals.eventCount, 0)
+        XCTAssertEqual(firstAggregate.dailyLimitUsage?.first?.consumedDeltaPercent, 20)
+        let sharedSummary = PrivateUsageSharedSummary(aggregate: firstAggregate)
+        XCTAssertEqual(sharedSummary.dailyLimitUsage, firstAggregate.dailyLimitUsage)
+        let sharedJSON = try XCTUnwrap(String(data: JSONEncoder().encode(sharedSummary), encoding: .utf8))
+        XCTAssertTrue(sharedJSON.contains("daily_limit_usage"))
+        XCTAssertFalse(sharedJSON.contains("remaining_credits"))
+        let noChange = try await coordinator.performUpload(isEnabled: true, now: now)
+        XCTAssertEqual(noChange.accepted, 0)
+
+        limitStore.mergeSnapshots(for: .codex, with: [reading(50, at: third)])
+        let changed = try await coordinator.performUpload(isEnabled: true, now: now)
+        XCTAssertEqual(changed.accepted, 1)
+        let updated = try JSONDecoder().decode(
+            PrivateUsageDailyAggregate.self, from: XCTUnwrap(sealer.plaintexts.last)
+        )
+        XCTAssertEqual(updated.dailyLimitUsage?.first?.endPercent, 50)
+        XCTAssertEqual(updated.dailyLimitUsage?.first?.consumedDeltaPercent, 40)
+        XCTAssertEqual(relayClient.uploadedBucketKeys,
+                       [["2026-06-07:daily"], ["2026-06-07:daily"]])
+    }
+
     func testCoordinatorUploadsZeroAggregateAfterLastEventForDayIsDeleted() async throws {
         let timeZone = try XCTUnwrap(TimeZone(identifier: "UTC"))
         let calendar = fixedCalendar(timeZone: timeZone)

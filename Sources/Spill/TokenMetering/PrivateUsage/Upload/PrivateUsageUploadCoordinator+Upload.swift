@@ -6,6 +6,7 @@ struct PrivateUsageUploadPlan: Sendable {
     let processedDayIDs: [String]
     let remainingPendingDayIDs: [String]
     let maxChangeID: Int64
+    let limitUsageHashesByDay: [String: String]
 }
 
 extension PrivateUsageUploadCoordinator {
@@ -122,7 +123,8 @@ extension PrivateUsageUploadCoordinator {
                 sharedSummaries: [],
                 processedDayIDs: [],
                 remainingPendingDayIDs: state.pendingDirtyDayIDs ?? [],
-                maxChangeID: state.lastProcessedEventChangeID ?? 0
+                maxChangeID: state.lastProcessedEventChangeID ?? 0,
+                limitUsageHashesByDay: [:]
             )
         }
 
@@ -134,6 +136,23 @@ extension PrivateUsageUploadCoordinator {
                 continue
             }
             pendingDayIDs.insert(bucketBuilder.localDayID(for: eventDate))
+        }
+        let limitUsageByDay = Dictionary(
+            grouping: bucketBuilder.dailyLimitUsageStore?.allDailyUsage() ?? [],
+            by: \.bucketKey
+        )
+        var limitUsageHashesByDay = [String: String]()
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        for (dayID, readings) in limitUsageByDay {
+            let sorted = readings.sorted {
+                ($0.aiTool.rawValue, $0.limitKey) < ($1.aiTool.rawValue, $1.limitKey)
+            }
+            let hash = try Self.limitUsageHash(for: sorted, encoder: encoder)
+            limitUsageHashesByDay[dayID] = hash
+            if state.acknowledgedLimitUsageHashesByDay?[dayID] != hash {
+                pendingDayIDs.insert(dayID)
+            }
         }
 
         let todayID = bucketBuilder.localDayID(for: now)
@@ -148,6 +167,13 @@ extension PrivateUsageUploadCoordinator {
             return true
         }.sorted()
         let processedDayIDs = Array(eligibleDayIDs.prefix(limit))
+        guard !processedDayIDs.isEmpty else {
+            return PrivateUsageUploadPlan(
+                buckets: [], sharedSummaries: [], processedDayIDs: [],
+                remainingPendingDayIDs: pendingDayIDs.sorted(),
+                maxChangeID: changes.maxChangeID, limitUsageHashesByDay: [:]
+            )
+        }
 
         var events = [TokenUsageEvent]()
         for dayID in processedDayIDs {
@@ -183,8 +209,19 @@ extension PrivateUsageUploadCoordinator {
             sharedSummaries: sharedSummaries,
             processedDayIDs: processedDayIDs,
             remainingPendingDayIDs: pendingDayIDs.sorted(),
-            maxChangeID: changes.maxChangeID
+            maxChangeID: changes.maxChangeID,
+            limitUsageHashesByDay: limitUsageHashesByDay.filter {
+                processedDayIDs.contains($0.key)
+            }
         )
+    }
+
+    private static func limitUsageHash(
+        for readings: [TokenUsageDailyLimitUsage],
+        encoder: JSONEncoder
+    ) throws -> String {
+        let data = try encoder.encode(readings)
+        return PrivateUsageDailyBucketBuilder.sha256Hex(data)
     }
 
     func performManualSync(

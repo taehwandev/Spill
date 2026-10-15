@@ -54,6 +54,13 @@ downloads cloud usage data.
 - Encrypted daily buckets include token accounting totals used for local cost
   estimates, grouped by tool, model, task, stage, workflow coverage, and Work
   Item. Only aggregate counts and safe labels are uploaded.
+- When exact limit readings are available, encrypted daily buckets and their
+  plaintext shared summaries may include optional per-tool, per-limit daily
+  percentage usage: start, end, peak, observed consumption delta, and last
+  capture time. A reset within a day preserves the accumulated delta and the
+  last observed percentage. A day with limit readings but no token events is
+  still uploadable. The first reading establishes a baseline; unobserved usage
+  before it is not inferred.
 - Aggregation preserves distinct local span identities, including events with
   identical timestamps and numeric usage. Re-delivery of an identical span may
   be collapsed locally; span identifiers remain excluded from upload payloads.

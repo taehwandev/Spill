@@ -856,6 +856,13 @@ Usage limit snapshots:
   value. An exact reading outranks an estimate, and a still-fresh exact reading
   is not downgraded when a cache goes missing for one pass. Corrupt or missing
   files render no gauges and never affect metering.
+- The same capture pass writes a separate local daily limit-usage file keyed
+  by Gregorian local day, tool, and limit key. Each newer exact percentage
+  reading advances the day's end and peak and adds the observed positive
+  difference. A known or observed window reset adds the new window's used
+  percentage instead of discarding prior accumulation. The first reading is a
+  baseline, not an invented zero. This history stays separate from the strict
+  token-usage event schema and latest-snapshot display file.
 - `TokenUsageCodexLimitCapture` tail-reads only the newest few Codex session
   files during the collector's paced pass (same pacing state as the active
   importers), selects the newest complete payload independently per `limit_id`,
@@ -925,10 +932,11 @@ Usage limit snapshots:
   the helper dashboard receives AGY limits through the existing collection
   completion notification and shared snapshot file. The compact panel and
   clock-adjacent AI glance currently do not consume limit snapshots, so their
-  token summaries stay unaffected. Web dashboard, Private Usage Upload, and
-  agent-facing token summaries are unaffected because limits stay local and
-  separate from usage events. Hiding AGY propagates through the existing
-  shared-defaults/distributed-notification bridge and cancels pending capture.
+  token summaries stay unaffected. Latest snapshots and agent-facing token
+  summaries stay local. A separate observed daily percentage summary can flow
+  through opt-in Private Usage Upload to the web dashboard. Hiding AGY
+  propagates through the existing shared-defaults/distributed-notification
+  bridge and cancels pending capture.
 - No estimated gauge exists. `TokenUsageEstimatedLimitCapture` derived a
   percentage from the tool's own observed high-water burn, which is a different
   quantity from the vendor limit percentage the chip appears to report; beside a
@@ -1099,6 +1107,13 @@ Rules:
   grouped tool, model, task, stage, workflow, and Work Item totals. Unknown or
   legacy rows without accounting are counted as unclassified input so model
   pricing can remain honest without pretending cache splits were known.
+- Daily bucket building also reads the optional local daily limit history.
+  It places a safe numeric limit summary in both the encrypted aggregate and
+  plaintext shared summary. The upload planner compares per-day history hashes
+  with acknowledged hashes, so a limit-only day or a later limit reading
+  triggers the existing bounded upload path without a token event or new timer.
+  Acknowledged hashes advance only after relay acceptance or a verified no-op;
+  reconnecting to a new target clears them for resync.
 - Dirty shared summaries are a plaintext aggregate mirror for member-readable
   dashboards and fallback views. They must include the same safe Work Item
   aggregate list as the encrypted daily aggregate so dashboards do not lose

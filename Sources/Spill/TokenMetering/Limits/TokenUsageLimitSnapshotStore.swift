@@ -17,14 +17,21 @@ final class TokenUsageLimitSnapshotStore: @unchecked Sendable {
     }
 
     private let fileURL: URL
+    private let dailyUsageFileURL: URL
     private let lock = NSLock()
     private let now: () -> Date
+    private let timeZone: TimeZone
 
     init(
         fileURL: URL = TokenUsageLimitSnapshotStore.defaultFileURL(),
+        dailyUsageFileURL: URL? = nil,
+        timeZone: TimeZone = .autoupdatingCurrent,
         now: @escaping () -> Date = Date.init
     ) {
         self.fileURL = fileURL
+        self.dailyUsageFileURL = dailyUsageFileURL ?? fileURL.deletingLastPathComponent()
+            .appendingPathComponent("limit-daily-usage.json")
+        self.timeZone = timeZone
         self.now = now
     }
 
@@ -44,15 +51,22 @@ final class TokenUsageLimitSnapshotStore: @unchecked Sendable {
         let moment = now()
         lock.withLock {
             var kept = loadLocked().filter { !Self.hasAgedOut($0, at: moment) }
+            var dailyUsage = loadDailyUsageLocked()
             for snapshot in incoming {
                 if let index = kept.firstIndex(where: {
                     $0.aiTool == tool && $0.limitKey == snapshot.limitKey
                 }) {
+                    guard snapshot.capturedAt >= kept[index].capturedAt else { continue }
+                    if snapshot.capturedAt > kept[index].capturedAt {
+                        record(snapshot, after: kept[index], in: &dailyUsage)
+                    }
                     kept[index] = snapshot
                 } else {
+                    record(snapshot, after: nil, in: &dailyUsage)
                     kept.append(snapshot)
                 }
             }
+            saveDailyUsageLocked(dailyUsage)
             saveLocked(kept)
         }
     }
@@ -70,6 +84,7 @@ final class TokenUsageLimitSnapshotStore: @unchecked Sendable {
         let moment = now()
         lock.withLock {
             var kept = loadLocked().filter { !Self.hasAgedOut($0, at: moment) }
+            var dailyUsage = loadDailyUsageLocked()
             for group in groups {
                 let newestStored = kept
                     .filter { $0.aiTool == tool && $0.limitKey.hasPrefix(group.keyPrefix) }
@@ -79,15 +94,31 @@ final class TokenUsageLimitSnapshotStore: @unchecked Sendable {
                     continue
                 }
 
+                let previous = kept.filter {
+                    $0.aiTool == tool && $0.limitKey.hasPrefix(group.keyPrefix)
+                }
                 kept.removeAll {
                     $0.aiTool == tool && $0.limitKey.hasPrefix(group.keyPrefix)
                 }
-                kept.append(contentsOf: group.snapshots.filter {
+                let accepted = group.snapshots.filter {
                     $0.aiTool == tool && $0.limitKey.hasPrefix(group.keyPrefix)
-                })
+                }
+                for snapshot in accepted {
+                    record(snapshot, after: previous.first { $0.limitKey == snapshot.limitKey }, in: &dailyUsage)
+                }
+                kept.append(contentsOf: accepted)
             }
+            saveDailyUsageLocked(dailyUsage)
             saveLocked(kept)
         }
+    }
+
+    func allDailyUsage() -> [TokenUsageDailyLimitUsage] {
+        lock.withLock { loadDailyUsageLocked() }
+    }
+
+    func dailyUsage(for bucketKey: String) -> [TokenUsageDailyLimitUsage] {
+        allDailyUsage().filter { $0.bucketKey == bucketKey }
     }
 
     /// Display-ready snapshots: aged-out limits removed and closed windows
@@ -145,6 +176,83 @@ extension TokenUsageLimitSnapshotStore {
 }
 
 private extension TokenUsageLimitSnapshotStore {
+    func record(
+        _ snapshot: TokenUsageLimitSnapshot,
+        after previous: TokenUsageLimitSnapshot?,
+        in dailyUsage: inout [TokenUsageDailyLimitUsage]
+    ) {
+        guard snapshot.source != .estimated,
+              let used = snapshot.usedPercent,
+              used.isFinite, (0...100).contains(used)
+        else { return }
+
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let day = calendar.dateComponents([.year, .month, .day], from: snapshot.capturedAt)
+        guard let year = day.year, let month = day.month, let date = day.day else { return }
+        let bucketKey = String(format: "%04d-%02d-%02d", year, month, date)
+        let previousUsed = previous?.usedPercent
+        let previousReset = previous?.resetsAt.map { $0 <= snapshot.capturedAt } ?? false
+        let baseline = previousReset ? 0 : (previousUsed ?? used)
+        let increment: Double
+        if let previousUsed {
+            increment = previousReset || used < previousUsed
+                ? used
+                : max(0, used - previousUsed)
+        } else {
+            increment = 0
+        }
+        let updatedAt = ISO8601DateFormatter.tokenUsage.string(from: snapshot.capturedAt)
+
+        if let index = dailyUsage.firstIndex(where: {
+            $0.bucketKey == bucketKey && $0.aiTool == snapshot.aiTool && $0.limitKey == snapshot.limitKey
+        }) {
+            guard dailyUsage[index].updatedAt < updatedAt else { return }
+            dailyUsage[index].label = snapshot.label
+            dailyUsage[index].endPercent = used
+            dailyUsage[index].peakPercent = max(dailyUsage[index].peakPercent, used)
+            dailyUsage[index].consumedDeltaPercent += increment
+            dailyUsage[index].updatedAt = updatedAt
+        } else {
+            dailyUsage.append(TokenUsageDailyLimitUsage(
+                bucketKey: bucketKey,
+                aiTool: snapshot.aiTool,
+                limitKey: snapshot.limitKey,
+                label: snapshot.label,
+                startPercent: baseline,
+                endPercent: used,
+                peakPercent: used,
+                consumedDeltaPercent: increment,
+                updatedAt: updatedAt
+            ))
+        }
+    }
+
+    func loadDailyUsageLocked() -> [TokenUsageDailyLimitUsage] {
+        guard let data = try? Data(contentsOf: dailyUsageFileURL) else { return [] }
+        return (try? JSONDecoder().decode([TokenUsageDailyLimitUsage].self, from: data)) ?? []
+    }
+
+    func saveDailyUsageLocked(_ usage: [TokenUsageDailyLimitUsage]) {
+        guard let data = try? JSONEncoder.tokenUsageLimit.encode(usage.sorted(by: {
+            ($0.bucketKey, $0.aiTool.rawValue, $0.limitKey) <
+                ($1.bucketKey, $1.aiTool.rawValue, $1.limitKey)
+        })) else { return }
+        let directory = dailyUsageFileURL.deletingLastPathComponent()
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let temporaryURL = directory.appendingPathComponent(".limit-daily-usage-\(UUID().uuidString).tmp")
+        do {
+            try data.write(to: temporaryURL)
+            if FileManager.default.fileExists(atPath: dailyUsageFileURL.path) {
+                _ = try FileManager.default.replaceItemAt(dailyUsageFileURL, withItemAt: temporaryURL)
+            } else {
+                try FileManager.default.moveItem(at: temporaryURL, to: dailyUsageFileURL)
+            }
+        } catch {
+            try? FileManager.default.removeItem(at: temporaryURL)
+        }
+    }
+
     func loadLocked() -> [TokenUsageLimitSnapshot] {
         guard let data = try? Data(contentsOf: fileURL) else {
             return []

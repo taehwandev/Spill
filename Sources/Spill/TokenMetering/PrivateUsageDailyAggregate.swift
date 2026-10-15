@@ -16,6 +16,7 @@ struct PrivateUsageDailyAggregate: Codable, Equatable, Sendable {
     let stageTotals: [String: PrivateUsageTokenTotals]
     let workflowUsageTotals: PrivateUsageWorkflowUsageTotals
     let workItems: [PrivateUsageWorkItemAggregate]
+    let dailyLimitUsage: [TokenUsageDailyLimitUsage]?
 
     enum CodingKeys: String, CodingKey {
         case schemaVersion = "schema_version"
@@ -33,6 +34,7 @@ struct PrivateUsageDailyAggregate: Codable, Equatable, Sendable {
         case stageTotals = "stage_totals"
         case workflowUsageTotals = "workflow_usage_totals"
         case workItems = "work_items"
+        case dailyLimitUsage = "daily_limit_usage"
     }
 
     init(
@@ -50,7 +52,8 @@ struct PrivateUsageDailyAggregate: Codable, Equatable, Sendable {
         taskTypeTotals: [String: PrivateUsageTokenTotals],
         stageTotals: [String: PrivateUsageTokenTotals],
         workflowUsageTotals: PrivateUsageWorkflowUsageTotals,
-        workItems: [PrivateUsageWorkItemAggregate] = []
+        workItems: [PrivateUsageWorkItemAggregate] = [],
+        dailyLimitUsage: [TokenUsageDailyLimitUsage]? = nil
     ) {
         self.schemaVersion = schemaVersion
         self.bucketKind = bucketKind
@@ -67,6 +70,7 @@ struct PrivateUsageDailyAggregate: Codable, Equatable, Sendable {
         self.stageTotals = stageTotals
         self.workflowUsageTotals = workflowUsageTotals
         self.workItems = workItems
+        self.dailyLimitUsage = dailyLimitUsage
     }
 
     init(from decoder: Decoder) throws {
@@ -92,6 +96,10 @@ struct PrivateUsageDailyAggregate: Codable, Equatable, Sendable {
             [PrivateUsageWorkItemAggregate].self,
             forKey: .workItems
         ) ?? []
+        dailyLimitUsage = try container.decodeIfPresent(
+            [TokenUsageDailyLimitUsage].self,
+            forKey: .dailyLimitUsage
+        )
     }
 
     func encode(to encoder: Encoder) throws {
@@ -111,5 +119,6 @@ struct PrivateUsageDailyAggregate: Codable, Equatable, Sendable {
         try container.encode(stageTotals, forKey: .stageTotals)
         try container.encode(workflowUsageTotals, forKey: .workflowUsageTotals)
         try container.encode(workItems, forKey: .workItems)
+        try container.encodeIfPresent(dailyLimitUsage, forKey: .dailyLimitUsage)
     }
 }

@@ -25,6 +25,7 @@ struct PrivateUsageSharedSummary: Codable, Equatable, Sendable {
     let stageTotals: [String: PrivateUsageTokenTotals]
     let workflowUsageTotals: PrivateUsageWorkflowUsageTotals
     let workItems: [PrivateUsageWorkItemAggregate]
+    let dailyLimitUsage: [TokenUsageDailyLimitUsage]?
 
     enum CodingKeys: String, CodingKey {
         case schemaVersion = "schema_version"
@@ -43,6 +44,7 @@ struct PrivateUsageSharedSummary: Codable, Equatable, Sendable {
         case stageTotals = "stage_totals"
         case workflowUsageTotals = "workflow_usage_totals"
         case workItems = "work_items"
+        case dailyLimitUsage = "daily_limit_usage"
     }
 
     init(aggregate: PrivateUsageDailyAggregate) {
@@ -62,6 +64,7 @@ struct PrivateUsageSharedSummary: Codable, Equatable, Sendable {
         stageTotals = Self.compactTokenTotalsMap(aggregate.stageTotals, limit: Self.maxStageTotals)
         workflowUsageTotals = aggregate.workflowUsageTotals
         workItems = Self.compactWorkItems(aggregate.workItems, limit: Self.maxWorkItems, bucketKey: aggregate.bucketKey)
+        dailyLimitUsage = aggregate.dailyLimitUsage
     }
 
     func canonicalHash() throws -> String {

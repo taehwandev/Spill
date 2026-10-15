@@ -14,6 +14,42 @@ private final class LimitCaptureCounter: @unchecked Sendable {
 }
 
 final class TokenUsageLimitTests: XCTestCase {
+    func testDailyLimitUsageKeepsResetConsumptionAcrossDays() throws {
+        let fileURL = temporaryDirectory().appendingPathComponent("limit-snapshots.json")
+        let times = [
+            "2026-10-14T09:00:00Z", "2026-10-14T09:10:00Z",
+            "2026-10-14T10:20:00Z", "2026-10-14T10:30:00Z",
+            "2026-10-15T00:10:00Z"
+        ].compactMap(ISO8601DateFormatter.parseTokenUsageDate(from:))
+        XCTAssertEqual(times.count, 5)
+        let store = TokenUsageLimitSnapshotStore(
+            fileURL: fileURL,
+            timeZone: TimeZone(secondsFromGMT: 0)!,
+            now: { times[4].addingTimeInterval(3_600) }
+        )
+        for (index, percent) in [10.0, 20, 5, 35, 45].enumerated() {
+            store.mergeSnapshots(for: .codex, with: [
+                snapshot(tool: .codex, key: "codex:primary", label: "Weekly",
+                         usedPercent: percent, capturedAt: times[index])
+            ])
+        }
+        store.mergeSnapshots(for: .codex, with: [
+            snapshot(tool: .codex, key: "codex:primary", label: "Weekly",
+                     usedPercent: 45, capturedAt: times[4])
+        ])
+
+        let reader = TokenUsageLimitSnapshotStore(fileURL: fileURL, timeZone: TimeZone(secondsFromGMT: 0)!)
+        let first = try XCTUnwrap(reader.dailyUsage(for: "2026-10-14").first)
+        XCTAssertEqual(first.startPercent, 10)
+        XCTAssertEqual(first.endPercent, 35)
+        XCTAssertEqual(first.peakPercent, 35)
+        XCTAssertEqual(first.consumedDeltaPercent, 45)
+        let second = try XCTUnwrap(reader.dailyUsage(for: "2026-10-15").first)
+        XCTAssertEqual(second.startPercent, 0)
+        XCTAssertEqual(second.endPercent, 45)
+        XCTAssertEqual(second.consumedDeltaPercent, 45)
+    }
+
     func testSnapshotStoreRoundTripsAndMergesPerLimitInsteadOfReplacing() throws {
         let fileURL = temporaryDirectory().appendingPathComponent("limit-snapshots.json")
         let capturedAt = Date(timeIntervalSince1970: 1_000_000)

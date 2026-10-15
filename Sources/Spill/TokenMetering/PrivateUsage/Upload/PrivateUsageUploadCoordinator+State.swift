@@ -51,6 +51,9 @@ extension PrivateUsageUploadCoordinator {
             plan.maxChangeID
         )
         state.pendingDirtyDayIDs = plan.remainingPendingDayIDs
+        var acknowledged = state.acknowledgedLimitUsageHashesByDay ?? [:]
+        acknowledged.merge(plan.limitUsageHashesByDay) { _, new in new }
+        state.acknowledgedLimitUsageHashesByDay = acknowledged
         return state.lastProcessedEventChangeID ?? 0
     }
 

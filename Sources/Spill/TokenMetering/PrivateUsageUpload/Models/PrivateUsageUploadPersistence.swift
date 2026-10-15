@@ -1,6 +1,7 @@
 struct PrivateUsageUploadPersistence: Codable, Equatable, Sendable {
     var acknowledgedCiphertextHashesByBucketKey: [String: String] = [:]
     var acknowledgedSharedSummaryHashesByBucketKey: [String: String] = [:]
+    var acknowledgedLimitUsageHashesByDay: [String: String]?
     var lastSuccessfulUploadAt: String?
     var lastFailedUploadAt: String?
     var lastFailureReason: String?

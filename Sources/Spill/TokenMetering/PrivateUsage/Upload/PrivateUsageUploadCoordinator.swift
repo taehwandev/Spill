@@ -46,7 +46,10 @@ final class PrivateUsageUploadCoordinator: @unchecked Sendable {
             credentialStore: credentialStore,
             stateStore: PrivateUsageUploadStateStore(environment: resolvedEnvironment),
             relayClient: relayClient,
-            bucketBuilder: PrivateUsageDailyBucketBuilder(sealer: sealer),
+            bucketBuilder: PrivateUsageDailyBucketBuilder(
+                dailyLimitUsageStore: TokenUsageLimitSnapshotStore(),
+                sealer: sealer
+            ),
             sealer: sealer
         )
     }
