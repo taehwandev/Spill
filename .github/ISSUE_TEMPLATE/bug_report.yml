@@ -1,0 +1,40 @@
+name: Bug report
+description: Something in Spill does not work as expected.
+title: "[Bug] "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Issues here are public. Do not include API keys, tokens, passwords or private code.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe the problem and what you expected instead. You can attach screenshots here.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1.
+        2.
+        3.
+  - type: input
+    id: version
+    attributes:
+      label: Spill version
+      placeholder: "e.g. 0.9.0"
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: "macOS version and Mac model, and which AI tools you use (Codex, Claude Code, Antigravity)"
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Paste relevant output. Remove secrets first.
+      render: text
