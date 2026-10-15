@@ -127,15 +127,22 @@ Bundles that do not support the web connection can leave the flag at `0`; the
 login/sync UI is hidden and the web URL can remain empty.
 The GitHub release workflow reads `SPILL_BUILD_PRIVATE_USAGE_FEATURE_ENABLED`
 from repository variables and defaults to `0`. Set it to `1` only when the
-production web URL is configured. For production at `https://spill.thdev.app/`,
+production web URL is configured. For production at `https://getmoru.com/`,
 configure these GitHub Actions repository variables:
 
 - `SPILL_BUILD_PRIVATE_USAGE_FEATURE_ENABLED`: `1`.
-- `SPILL_BUILD_PRIVATE_USAGE_WEB_URL`: `https://spill.thdev.app/`.
+- `SPILL_BUILD_PRIVATE_USAGE_WEB_URL`: `https://getmoru.com/`.
 
 The relay endpoint is not a separate build variable. The app derives
 `/api/private-usage-relay` from `SPILL_BUILD_PRIVATE_USAGE_WEB_URL`, which keeps
 local and release builds tied to the same web origin.
+The connection and dashboard paths are `/connect-device` and `/spill/dashboard`.
+For existing release configuration, the standard HTTPS `spill.thdev.app` origin
+is resolved to `getmoru.com` before deriving these URLs and the relay endpoint.
+Custom preview/development origins and runtime override precedence are preserved;
+missing configuration still disables the optional connection. Existing device
+credentials and encryption keys are retained because the Moru portal reuses the
+same hosted receiver and upload protocol.
 
 Spill appends only fixed
 connection hints (`source=macos` and `callback_url=spill://private-usage/connect`)
@@ -175,7 +182,7 @@ Developer ID release example:
 SPILL_VERSION=2026.21.2 \
 SPILL_BUILD_PRIVATE_USAGE_FEATURE_ENABLED=1 \
 SPILL_BUILD_PRIVATE_USAGE_ENVIRONMENT=production \
-SPILL_BUILD_PRIVATE_USAGE_WEB_URL=https://spill.thdev.app/ \
+SPILL_BUILD_PRIVATE_USAGE_WEB_URL=https://getmoru.com/ \
 SPILL_SIGN_IDENTITY="Developer ID Application: Example Name (TEAMID)" \
 ./scripts/package-release.sh
 ```
@@ -189,7 +196,7 @@ outside the repository and pass its ignored path only to the notarization script
 SPILL_VERSION=2026.21.2 \
 SPILL_BUILD_PRIVATE_USAGE_FEATURE_ENABLED=1 \
 SPILL_BUILD_PRIVATE_USAGE_ENVIRONMENT=production \
-SPILL_BUILD_PRIVATE_USAGE_WEB_URL=https://spill.thdev.app/ \
+SPILL_BUILD_PRIVATE_USAGE_WEB_URL=https://getmoru.com/ \
 SPILL_SIGN_IDENTITY="Developer ID Application: Example Name (TEAMID)" \
 ./scripts/build-app.sh
 
@@ -328,9 +335,10 @@ files.
 
 ### Hosted Web And Download Site
 
-The hosted web portal, landing surface, and public token-metering setup paths
-are deployed from the private `taehwandev/Spill-web` repository at
-`https://spill.thdev.app/`. This repository no longer deploys GitHub Pages.
+The hosted account portal, dashboard, and private-usage receiver are owned by
+`taehwandev/moru-web` at `https://getmoru.com/`. The token-metering installer keeps
+its existing `spill.thdev.app` setup URL. This repository no longer deploys
+GitHub Pages.
 
 The web download flow should link to the latest stable release asset:
 

@@ -107,11 +107,11 @@ validate_private_usage_url() {
         exit 2
     fi
 
-    if [[ "$value" =~ ^https://[^[:space:]]+$ || "$value" =~ ^http://localhost(:[0-9]+)?([/?#].*)?$ ]]; then
+    if [[ "$value" =~ ^https://[^[:space:]]+$ || "$value" =~ ^http://(localhost|127\.0\.0\.1)(:[0-9]+)?([/?#].*)?$ ]]; then
         return
     fi
 
-    echo "$name must be https or local http://localhost." >&2
+    echo "$name must be https or local http://localhost / http://127.0.0.1." >&2
     exit 2
 }
 

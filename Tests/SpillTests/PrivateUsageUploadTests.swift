@@ -2553,7 +2553,7 @@ final class PrivateUsageUploadTests: XCTestCase {
                     PrivateUsageWebConnection.webURLOverrideEnvironmentKey: "http://localhost/#/connect-device"
                 ]
             )?.absoluteString,
-            Optional("http://localhost/#/connect-device?source=macos&callback_url=spill://private-usage/connect")
+            Optional("http://localhost/connect-device?source=macos&callback_url=spill://private-usage/connect")
         )
         XCTAssertEqual(
             PrivateUsageWebConnection.connectDeviceURL(
@@ -2562,7 +2562,7 @@ final class PrivateUsageUploadTests: XCTestCase {
                     PrivateUsageWebConnection.webURLInfoDictionaryKey: "https://web.example.test/#/connect-device"
                 ]
             )?.absoluteString,
-            Optional("https://web.example.test/#/connect-device?source=macos&callback_url=spill://private-usage/connect")
+            Optional("https://web.example.test/connect-device?source=macos&callback_url=spill://private-usage/connect")
         )
         XCTAssertNil(
             PrivateUsageWebConnection.connectDeviceURL(
@@ -2594,7 +2594,7 @@ final class PrivateUsageUploadTests: XCTestCase {
                     PrivateUsageWebConnection.webURLOverrideEnvironmentKey: "https://web.example.test/#/connect-device?source=browser&callback_url=https%3A%2F%2Fexample.test%2Fdone"
                 ]
             )?.absoluteString,
-            Optional("https://web.example.test/#/connect-device?source=macos&callback_url=spill://private-usage/connect")
+            Optional("https://web.example.test/connect-device?source=macos&callback_url=spill://private-usage/connect")
         )
     }
 
@@ -2606,7 +2606,7 @@ final class PrivateUsageUploadTests: XCTestCase {
                     PrivateUsageWebConnection.webURLOverrideEnvironmentKey: "https://web.example.test/#/connect-device"
                 ]
             )?.absoluteString,
-            Optional("https://web.example.test/dashboard")
+            Optional("https://web.example.test/spill/dashboard")
         )
         XCTAssertEqual(
             PrivateUsageWebConnection.dashboardURL(
@@ -2614,7 +2614,7 @@ final class PrivateUsageUploadTests: XCTestCase {
                     PrivateUsageWebConnection.webURLOverrideEnvironmentKey: "http://localhost:5173/"
                 ]
             )?.absoluteString,
-            Optional("http://localhost:5173/dashboard")
+            Optional("http://localhost:5173/spill/dashboard")
         )
         XCTAssertNil(
             PrivateUsageWebConnection.dashboardURL(
@@ -2666,7 +2666,7 @@ final class PrivateUsageUploadTests: XCTestCase {
                 processEnvironment: [:],
                 bundleInfo: bundleInfo
             )?.absoluteString,
-            Optional("https://preview.example.com/#/connect-device?source=macos&callback_url=spill://private-usage/connect")
+            Optional("https://preview.example.com/connect-device?source=macos&callback_url=spill://private-usage/connect")
         )
         XCTAssertEqual(
             PrivateUsageRelayEndpoint.relayURL(
@@ -2683,7 +2683,7 @@ final class PrivateUsageUploadTests: XCTestCase {
                 ],
                 bundleInfo: bundleInfo
             )?.absoluteString,
-            Optional("http://localhost/#/connect-device?source=macos&callback_url=spill://private-usage/connect")
+            Optional("http://localhost/connect-device?source=macos&callback_url=spill://private-usage/connect")
         )
         XCTAssertEqual(
             PrivateUsageRelayEndpoint.relayURL(

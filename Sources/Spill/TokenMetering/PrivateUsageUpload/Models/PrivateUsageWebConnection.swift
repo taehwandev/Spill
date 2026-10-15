@@ -19,7 +19,7 @@ extension PrivateUsageWebConnection {
             return nil
         }
 
-        return appendingConnectionParameters(to: url)
+        return appendingConnectionParameters(to: appendingPath("/connect-device", to: url))
     }
 
     static func dashboardURL(
@@ -33,7 +33,7 @@ extension PrivateUsageWebConnection {
             return nil
         }
 
-        return appendingPath("/dashboard", to: url)
+        return appendingPath("/spill/dashboard", to: url)
     }
 
     static func configuredWebURL(
@@ -59,19 +59,24 @@ extension PrivateUsageWebConnection {
 private extension PrivateUsageWebConnection {
     private static func sanitizedConnectDeviceURL(_ rawValue: String) -> URL? {
         let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let url = URL(string: trimmed),
-              let scheme = url.scheme,
-              let host = url.host
+        guard var components = URLComponents(string: trimmed),
+              let scheme = components.scheme?.lowercased(),
+              let host = components.host?.lowercased(),
+              !host.isEmpty
         else {
             return nil
         }
 
         if scheme == "https" {
-            return url
+            if host == "spill.thdev.app", components.port == nil || components.port == 443 {
+                components.host = "getmoru.com"
+                components.port = nil
+            }
+            return components.url
         }
 
-        if scheme == "http", host == "localhost" {
-            return url
+        if scheme == "http", ["localhost", "127.0.0.1"].contains(host) {
+            return components.url
         }
 
         return nil
@@ -98,44 +103,8 @@ private extension PrivateUsageWebConnection {
             URLQueryItem(name: "callback_url", value: callbackURL)
         ]
 
-        if let fragment = components.percentEncodedFragment, !fragment.isEmpty {
-            components.percentEncodedFragment = fragmentByAppending(connectionItems, to: fragment)
-        } else {
-            components.queryItems = appending(connectionItems, to: components.queryItems ?? [])
-        }
+        components.queryItems = connectionItems
 
         return components.url ?? url
-    }
-
-    private static func fragmentByAppending(
-        _ newItems: [URLQueryItem],
-        to fragment: String
-    ) -> String {
-        let path: String
-        let query: String?
-        if let queryStart = fragment.firstIndex(of: "?") {
-            path = String(fragment[..<queryStart])
-            query = String(fragment[fragment.index(after: queryStart)...])
-        } else {
-            path = fragment
-            query = nil
-        }
-
-        var components = URLComponents()
-        components.percentEncodedQuery = query
-        components.queryItems = appending(newItems, to: components.queryItems ?? [])
-
-        guard let encodedQuery = components.percentEncodedQuery, !encodedQuery.isEmpty else {
-            return path
-        }
-        return "\(path)?\(encodedQuery)"
-    }
-
-    private static func appending(
-        _ newItems: [URLQueryItem],
-        to existingItems: [URLQueryItem]
-    ) -> [URLQueryItem] {
-        let newNames = Set(newItems.map(\.name))
-        return existingItems.filter { !newNames.contains($0.name) } + newItems
     }
 }

@@ -1043,6 +1043,21 @@ Rules:
 - The Sign In and Connect button opens only a configured safe web URL. If the
   web URL is absent or invalid, the button is disabled instead of falling back
   to a hardcoded production URL.
+- `moru-web` owns `/connect-device`, `/spill/dashboard`, and the same-origin
+  `/api/private-usage-relay` native API. Configured legacy hash routes normalize
+  to these path routes. The former `https://spill.thdev.app` production origin
+  on its standard HTTPS port migrates to `https://getmoru.com`; explicit custom
+  origins and runtime-over-bundle precedence remain intact. HTTP is permitted
+  only for `localhost` and `127.0.0.1` development origins.
+- Configuration impact: existing build variables and bundle `Info.plist` keys
+  remain the persistence owner, with runtime environment overrides for debugging.
+  Missing configuration stays disabled; no Preferences, credential, encryption
+  key, or upload acknowledgement state is migrated. Preferences connection and
+  dashboard links, the dashboard helper's web link, and the main-process upload
+  coordinator use the shared URL resolver. The compact panel and clock-adjacent
+  AI glance do not read these URLs and remain unaffected. Configuration becomes
+  effective at process launch; links resolve it when activated. No new settings
+  transport, notification, polling, collector, or network path is introduced.
 - Deep-link connection handling may be registered in app builds, but it stores
   only the write-only device credential returned by the configured relay.
 - Private Usage Upload secrets use one Keychain generic-password item per
@@ -1504,10 +1519,10 @@ Implementation order:
 
 Decision:
 
-The open-source macOS app and shared token-only contracts remain public. The
-hosted Spill web portal implementation lives in the private
-`taehwandev/Spill-web` repository so hosted UI implementation, deployment
-wiring, and product experiments stay out of the public source tree.
+The open-source macOS app and shared token-only contracts remain in Spill.
+The hosted account portal, dashboard, native relay proxy, and Supabase receiver
+are owned by `taehwandev/moru-web`. Spill owns the native connection and upload
+contract; hosted implementation and deployment wiring remain in the web repo.
 
 Browser-delivered JavaScript and HTML are never a trusted secret boundary. Route
 guards and hidden navigation are presentation controls only; every protected
@@ -1516,11 +1531,10 @@ still be enforced by Supabase RLS or the `private-usage-relay` Edge Function.
 
 Rationale:
 
-Open-source users should be able to inspect and run the Mac app and local
-token-metering safety contract. Hosted account surfaces have different product
-and abuse considerations. Separating hosted web source can reduce public
-implementation exposure, but it does not replace server-side session, role, and
-account authorization.
+Users should be able to inspect and run the Mac app and local token-metering
+safety contract. Hosted account surfaces have separate deployment and runtime
+owners; that separation does not replace server-side session, role, and account
+authorization.
 
 Rules:
 

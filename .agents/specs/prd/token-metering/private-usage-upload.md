@@ -92,7 +92,7 @@ downloads cloud usage data.
 - Unchanged days do not upload again, failed days remain retryable, and deleted
   content produces a deterministic zero aggregate.
 - Detailed relay, E2EE key custody, storage backend, and retry behavior remain
-  aligned with the private Spill-web PRD and follow-on ARD.
+  aligned with the moru-web receiver and shared Web Companion Contract.
 
 ## Verification
 

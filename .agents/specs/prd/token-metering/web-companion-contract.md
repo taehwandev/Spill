@@ -11,9 +11,9 @@
 
 ## Repository Boundary
 
-The hosted portal implementation lives in the private `taehwandev/Spill-web`
-repository. This public repository documents only shared contracts and privacy
-guarantees that affect the open-source app.
+The hosted account portal, dashboard, native relay proxy, and Supabase receiver
+live in `taehwandev/moru-web`. This repository documents the native app's shared
+contracts and privacy guarantees.
 
 ## Connection Requirements
 
@@ -27,6 +27,14 @@ guarantees that affect the open-source app.
   or deep link.
 - The app receives a write-only device upload credential, not OAuth access or
   refresh tokens.
+- Connection opens `/connect-device` with the fixed native callback hints;
+  the web dashboard opens `/spill/dashboard`. Both use the configured origin,
+  and the native relay is derived from that same origin at
+  `/api/private-usage-relay`.
+- Existing standard HTTPS configuration for `spill.thdev.app` migrates to
+  `getmoru.com`. Missing configuration remains disabled and custom origins keep
+  their explicit host and port. Device credentials and encryption keys remain
+  environment-scoped and are not cleared by this endpoint migration.
 
 ## Dashboard And Freshness Requirements
 

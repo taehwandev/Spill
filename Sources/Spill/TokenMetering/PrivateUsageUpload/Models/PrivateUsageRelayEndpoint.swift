@@ -29,7 +29,7 @@ enum PrivateUsageRelayEndpoint {
             return true
         }
 
-        if url.scheme == "http", url.host == "localhost" {
+        if url.scheme == "http", let host = url.host, ["localhost", "127.0.0.1"].contains(host) {
             return true
         }
 

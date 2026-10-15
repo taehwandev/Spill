@@ -609,7 +609,7 @@ final class TokenUsageStoreTests: XCTestCase {
         let webConnection = try Self.source(named: "PrivateUsageWebConnection.swift")
 
         XCTAssertTrue(webConnection.contains("static func dashboardURL("))
-        XCTAssertTrue(webConnection.contains("appendingPath(\"/dashboard\""))
+        XCTAssertTrue(webConnection.contains("appendingPath(\"/spill/dashboard\""))
         XCTAssertTrue(preferencesSection.contains("openWebDashboardAction: openPrivateUsageWebDashboard"))
         XCTAssertTrue(uploadSection.contains("Label(t(.privateUsageUploadOpenDashboard), systemImage: \"safari\")"))
         XCTAssertTrue(uploadSection.contains("PreferencesSyncLegalLinksView(language: preferencesLanguage)"))
