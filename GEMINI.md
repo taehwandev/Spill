@@ -1,8 +1,8 @@
 <!-- BEGIN MANAGED TAO AGENT OS POINTER -->
-## Tao Agent OS Pointer
+## Moru Core Pointer
 
 Read this repository's `AGENTS.md` first. It contains the active shared
-Tao Agent OS routing block and repo-local priority rules. Keep this file thin:
+Moru Core routing block and repo-local priority rules. Keep this file thin:
 only runtime-specific notes should live here, and shared workflow or skill
 guidance must route through `AGENTS.md`.
 
@@ -17,7 +17,7 @@ At the very beginning of every user turn (after request classification and befor
 node ~/Library/Application\ Support/Spill/adapters/setup/spill-token-metering-setup.mjs --label antigravity --task-type <task_type> --stage <stage> --if-absent
 ```
 
-When running Tao Agent OS workflow, preflight, or finish commands from
+When running Moru Core workflow, preflight, or finish commands from
 Antigravity/AGY, use `SPILL_AI_TOOL=antigravity` or rely on the user-level
 environment installed by Spill token metering setup. This keeps safe workflow
 labels in Antigravity's label context instead of Codex's label context.

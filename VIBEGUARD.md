@@ -34,7 +34,7 @@ Use `--fix` only for low-risk VibeGuard fixes, then inspect the diff.
   confirm the source file and explain the generated-artifact limitation.
 - Current VibeGuard scans SwiftPM `.build` artifacts and does not expose an
   ignore-dir setting. `maxFileLines` is raised in `.vibeguard.json` to avoid
-  generated-artifact false blocks; use Tao Agent OS review and Spill workflow
+  generated-artifact false blocks; use Moru Core review and Spill workflow
   gates to flag oversized source files.
 - Spill is a local macOS app. Adding backend services, analytics, paid APIs,
   model calls, telemetry, or recurring infrastructure requires explicit

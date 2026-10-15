@@ -1,8 +1,8 @@
 <!-- BEGIN MANAGED TAO AGENT OS POINTER -->
-## Tao Agent OS Pointer
+## Moru Core Pointer
 
 Read this repository's `AGENTS.md` first. It contains the active shared
-Tao Agent OS routing block and repo-local priority rules. Keep this file thin:
+Moru Core routing block and repo-local priority rules. Keep this file thin:
 only runtime-specific notes should live here, and shared workflow or skill
 guidance must route through `AGENTS.md`.
 
