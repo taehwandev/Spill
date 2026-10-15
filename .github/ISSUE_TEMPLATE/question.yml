@@ -1,0 +1,20 @@
+name: Question
+description: Ask how to use Spill, or whether something is expected.
+title: "[Question] "
+labels: [question]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Issues here are public. Do not include API keys, tokens, passwords or private code.
+  - type: textarea
+    id: question
+    attributes:
+      label: Your question
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: What have you tried?
+      description: "Links, commands or settings that help us answer. macOS version and Mac model, and which AI tools you use (Codex, Claude Code, Antigravity)"
