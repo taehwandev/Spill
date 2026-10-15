@@ -71,6 +71,17 @@ adapters. The token-metering smoke check compares all adapter files in the main
 app and nested helper, including their SwiftPM bundle copies, with the resource
 source tree before running collection checks.
 
+Bundle identifiers: `./scripts/build-app.sh` defaults to
+`dev.spill.Spill.local` (helper `dev.spill.Spill.local.TokenDashboard`), while
+`./scripts/package-release.sh` and the release workflow pass the shipped
+`dev.spill.Spill`. macOS tracks the Launch at Login item by bundle identifier
+and follows the most recently launched copy, so a local build that shared the
+release identifier could move the installed app's login item to a repo or
+`/tmp` path that later disappears. The local identifier also has its own
+preferences, Launch at Login state, and Accessibility grant; Application
+Support data under `Spill` is still shared with the installed app, so avoid
+running both copies at once. Set `SPILL_BUNDLE_ID` only to override both.
+
 ## Menu Bar App Behavior
 
 Spill is an `LSUIElement` menu bar utility. A successful launch normally has no

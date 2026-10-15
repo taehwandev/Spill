@@ -21,7 +21,9 @@ HELPER_CONTENTS_DIR="$HELPER_APP_DIR/Contents"
 HELPER_MACOS_DIR="$HELPER_CONTENTS_DIR/MacOS"
 HELPER_RESOURCES_DIR="$HELPER_CONTENTS_DIR/Resources"
 HELPER_FRAMEWORKS_DIR="$HELPER_CONTENTS_DIR/Frameworks"
-BUNDLE_ID="${SPILL_BUNDLE_ID:-dev.spill.Spill}"
+# Local builds default to a separate bundle id so a repo or scratch build never takes over the
+# installed app's login item, preferences, or permissions. Release packaging passes dev.spill.Spill.
+BUNDLE_ID="${SPILL_BUNDLE_ID:-dev.spill.Spill.local}"
 HELPER_BUNDLE_ID="${BUNDLE_ID}.TokenDashboard"
 DEFAULT_VERSION="$(date -u +%G.%V.1)"
 VERSION="${SPILL_VERSION:-$DEFAULT_VERSION}"
@@ -258,6 +260,7 @@ case "$DEVELOPER_OPTIONS_ENABLED" in
 esac
 
 if [[ "$SIGN_IDENTITY" == "-" ]]; then
+    mkdir -p "$(dirname "$ENTITLEMENTS_PATH")"
     cat > "$ENTITLEMENTS_PATH" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

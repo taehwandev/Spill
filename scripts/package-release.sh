@@ -5,6 +5,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEFAULT_VERSION="$(date -u +%G.%V.1)"
 VERSION="${SPILL_VERSION:-$DEFAULT_VERSION}"
 BUILD_NUMBER="${SPILL_BUILD:-$VERSION}"
+# Release artifacts must keep the shipped bundle id; build-app.sh defaults to a local-only id.
+export SPILL_BUNDLE_ID="${SPILL_BUNDLE_ID:-dev.spill.Spill}"
 APP_DIR="$ROOT_DIR/.build/Spill.app"
 ARTIFACTS_DIR="$ROOT_DIR/.build/release-artifacts"
 DMG_PATH="$ARTIFACTS_DIR/Spill-$VERSION-macos.dmg"
