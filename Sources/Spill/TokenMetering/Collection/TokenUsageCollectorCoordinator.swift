@@ -32,10 +32,12 @@ final class TokenUsageCollectorCoordinator: TokenUsageExternalCollecting, @unche
         "panel_open",
         "manual_refresh",
         "private_usage_upload",
+        "tool_activity",
     ]
 
     private let store: TokenUsageStore
     private let antigravityImportRunner: AntigravityImportRunner
+    private let antigravityActivityDateProvider: () -> Date?
     private let claudeCodeImportRunner: ClaudeCodeImportRunner
     private let antigravityLookbackInterval: TimeInterval
     private let activeImporterMinimumInterval: TimeInterval
@@ -52,16 +54,21 @@ final class TokenUsageCollectorCoordinator: TokenUsageExternalCollecting, @unche
     private let antigravityLimitCaptureRunner: CancellableLimitCaptureRunner
     private var enabledTools: Set<TokenUsageAITool>
     private var lastAntigravityImportAt: Date?
+    private var lastObservedAntigravityActivityAt: Date?
+    private var lastAntigravityImportedEventsAt: Date?
     private var lastClaudeCodeImportAt: Date?
     private var lastCodexLimitCaptureAt: Date?
     private var lastClaudeLimitCaptureAt: Date?
     private var lastAntigravityLimitCaptureAt: Date?
     private var isStopping = false
     private var collectionCompletionHandlers: [@Sendable () -> Void] = []
+    private var activityTimer: DispatchSourceTimer?
+    private var eventsDidChangeObserver: NSObjectProtocol?
 
     init(
         store: TokenUsageStore,
         antigravityImportRunner: AntigravityImportRunner? = nil,
+        antigravityActivityDateProvider: (() -> Date?)? = nil,
         antigravityLookbackInterval: TimeInterval = 24 * 60 * 60,
         claudeCodeImportRunner: ClaudeCodeImportRunner? = nil,
         activeImporterMinimumInterval: TimeInterval = TokenMeteringRefreshPolicy.activeImporterMinimumInterval,
@@ -95,6 +102,7 @@ final class TokenUsageCollectorCoordinator: TokenUsageExternalCollecting, @unche
         self.store = store
         if let antigravityImportRunner {
             self.antigravityImportRunner = antigravityImportRunner
+            self.antigravityActivityDateProvider = antigravityActivityDateProvider ?? { nil }
         } else {
             let importer = TokenUsageAntigravityImporter()
             self.antigravityImportRunner = { store, startDate, shouldCancel in
@@ -103,6 +111,12 @@ final class TokenUsageCollectorCoordinator: TokenUsageExternalCollecting, @unche
                     since: startDate,
                     shouldCancel: shouldCancel
                 )
+            }
+            self.antigravityActivityDateProvider = antigravityActivityDateProvider ?? {
+                let startDate = now().addingTimeInterval(-antigravityLookbackInterval)
+                return importer.discoverConversationDatabases(modifiedSince: startDate)
+                    .map(\.modifiedAt)
+                    .max()
             }
         }
         self.antigravityLookbackInterval = antigravityLookbackInterval
@@ -117,6 +131,19 @@ final class TokenUsageCollectorCoordinator: TokenUsageExternalCollecting, @unche
                 )
             }
         }
+        let isLiveCoordinator = antigravityImportRunner == nil
+            && claudeCodeImportRunner == nil
+            && codexLimitCaptureRunner == nil
+            && claudeLimitCaptureRunner == nil
+            && antigravityLimitCaptureRunner == nil
+            && ProcessInfo.processInfo.environment["SPILL_SMOKE_TEST"] != "1"
+        if isLiveCoordinator {
+            startLiveActivityMonitoring()
+        }
+    }
+
+    deinit {
+        stop()
     }
 }
 
@@ -169,9 +196,18 @@ extension TokenUsageCollectorCoordinator {
     }
 
     func stop() {
-        lock.withLock {
+        let (timer, observer) = lock.withLock { () -> (DispatchSourceTimer?, NSObjectProtocol?) in
             isStopping = true
             hasPendingRequest = false
+            let currentTimer = activityTimer
+            let currentObserver = eventsDidChangeObserver
+            activityTimer = nil
+            eventsDidChangeObserver = nil
+            return (currentTimer, currentObserver)
+        }
+        timer?.cancel()
+        if let observer {
+            NotificationCenter.default.removeObserver(observer)
         }
     }
 
@@ -181,6 +217,8 @@ extension TokenUsageCollectorCoordinator {
             enabledTools = tools
             if newlyEnabled.contains(.antigravity) {
                 lastAntigravityImportAt = nil
+                lastObservedAntigravityActivityAt = nil
+                lastAntigravityImportedEventsAt = nil
                 lastAntigravityLimitCaptureAt = nil
             }
             if newlyEnabled.contains(.claude) {
@@ -254,15 +292,30 @@ extension TokenUsageCollectorCoordinator {
 extension TokenUsageCollectorCoordinator {
     private func runAntigravityActiveImporter() {
         guard isToolEnabled(.antigravity) else { return }
-        guard shouldRunImporter(lastImportAt: \.lastAntigravityImportAt) else {
+        let latestActivity = antigravityActivityDateProvider()
+        guard shouldRunImporter(lastImportAt: \.lastAntigravityImportAt)
+                || hasNewerAntigravityActivity(latestActivity)
+        else {
             return
         }
         let startDate = now().addingTimeInterval(-antigravityLookbackInterval)
-        _ = antigravityImportRunner(store, startDate) { [weak self] in
+        let summary = antigravityImportRunner(store, startDate) { [weak self] in
             guard let self else { return true }
             return self.shouldStop || !self.isToolEnabled(.antigravity)
         }
-        lock.withLock { lastAntigravityImportAt = now() }
+        let finishedAt = now()
+        lock.withLock {
+            lastAntigravityImportAt = finishedAt
+            if let latestActivity {
+                lastObservedAntigravityActivityAt = max(
+                    lastObservedAntigravityActivityAt ?? .distantPast,
+                    latestActivity
+                )
+            }
+            if summary.importedEvents > 0 || summary.parsedUsageEvents > 0 {
+                lastAntigravityImportedEventsAt = finishedAt
+            }
+        }
     }
 
     private func runClaudeCodeActiveImporter() {
@@ -299,12 +352,72 @@ extension TokenUsageCollectorCoordinator {
     private func runAntigravityLimitCapture() {
         guard !shouldStop, isToolEnabled(.antigravity),
               shouldRunImporter(lastImportAt: \.lastAntigravityLimitCaptureAt)
+                || hasUncapturedAntigravityEvents()
         else { return }
         antigravityLimitCaptureRunner { [weak self] in
             guard let self else { return true }
             return self.shouldStop || !self.isToolEnabled(.antigravity)
         }
         lock.withLock { lastAntigravityLimitCaptureAt = now() }
+    }
+
+    private func hasNewerAntigravityActivity(_ latestActivity: Date?) -> Bool {
+        guard let latestActivity else { return false }
+        return lock.withLock {
+            guard let observed = lastObservedAntigravityActivityAt else { return true }
+            return latestActivity > observed
+        }
+    }
+
+    private func hasUncapturedAntigravityEvents() -> Bool {
+        lock.withLock {
+            guard let importedAt = lastAntigravityImportedEventsAt else { return false }
+            guard let capturedAt = lastAntigravityLimitCaptureAt else { return true }
+            return importedAt >= capturedAt
+        }
+    }
+
+    private func startLiveActivityMonitoring() {
+        let timer = DispatchSource.makeTimerSource(queue: queue)
+        timer.schedule(deadline: .now() + .seconds(15), repeating: .seconds(15))
+        timer.setEventHandler { [weak self] in
+            self?.pollToolActivityIfNeeded()
+        }
+        let observer = NotificationCenter.default.addObserver(
+            forName: TokenUsageStore.eventsDidChangeNotification,
+            object: store,
+            queue: nil
+        ) { [weak self] _ in
+            self?.scheduleCodexLimitRefreshAfterStoreChange()
+        }
+        lock.withLock {
+            activityTimer = timer
+            eventsDidChangeObserver = observer
+        }
+        timer.resume()
+    }
+
+    func pollToolActivityIfNeeded() {
+        guard !shouldStop, isToolEnabled(.antigravity) else { return }
+        let latestActivity = antigravityActivityDateProvider()
+        guard hasNewerAntigravityActivity(latestActivity) else { return }
+        requestCollection(reason: "dashboard_refresh")
+    }
+
+    private func scheduleCodexLimitRefreshAfterStoreChange() {
+        queue.async { [weak self] in
+            guard let self, !self.shouldStop, self.isToolEnabled(.codex) else { return }
+            let canCapture = self.lock.withLock { () -> Bool in
+                if let last = self.lastCodexLimitCaptureAt,
+                   self.now().timeIntervalSince(last) < 5 {
+                    return false
+                }
+                self.lastCodexLimitCaptureAt = self.now()
+                return true
+            }
+            guard canCapture else { return }
+            self.codexLimitCaptureRunner()
+        }
     }
 
     private func isToolEnabled(_ tool: TokenUsageAITool) -> Bool {

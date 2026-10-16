@@ -18,6 +18,7 @@ final class TokenUsageLimitSnapshotStore: @unchecked Sendable {
 
     private let fileURL: URL
     private let dailyUsageFileURL: URL
+    private let postsChangeNotifications: Bool
     private let lock = NSLock()
     private let now: () -> Date
     private let timeZone: TimeZone
@@ -25,12 +26,15 @@ final class TokenUsageLimitSnapshotStore: @unchecked Sendable {
     init(
         fileURL: URL = TokenUsageLimitSnapshotStore.defaultFileURL(),
         dailyUsageFileURL: URL? = nil,
+        postsChangeNotifications: Bool? = nil,
         timeZone: TimeZone = .autoupdatingCurrent,
         now: @escaping () -> Date = Date.init
     ) {
         self.fileURL = fileURL
         self.dailyUsageFileURL = dailyUsageFileURL ?? fileURL.deletingLastPathComponent()
             .appendingPathComponent("limit-daily-usage.json")
+        self.postsChangeNotifications = postsChangeNotifications
+            ?? (fileURL.standardizedFileURL == Self.defaultFileURL().standardizedFileURL)
         self.timeZone = timeZone
         self.now = now
     }
@@ -49,8 +53,9 @@ final class TokenUsageLimitSnapshotStore: @unchecked Sendable {
             return
         }
         let moment = now()
-        lock.withLock {
-            var kept = loadLocked().filter { !Self.hasAgedOut($0, at: moment) }
+        let didChange = lock.withLock { () -> Bool in
+            let original = loadLocked()
+            var kept = original.filter { !Self.hasAgedOut($0, at: moment) }
             var dailyUsage = loadDailyUsageLocked()
             for snapshot in incoming {
                 if let index = kept.firstIndex(where: {
@@ -68,6 +73,10 @@ final class TokenUsageLimitSnapshotStore: @unchecked Sendable {
             }
             saveDailyUsageLocked(dailyUsage)
             saveLocked(kept)
+            return kept != original
+        }
+        if didChange {
+            postLimitsDidChangeNotificationIfNeeded()
         }
     }
 
@@ -82,8 +91,9 @@ final class TokenUsageLimitSnapshotStore: @unchecked Sendable {
             return
         }
         let moment = now()
-        lock.withLock {
-            var kept = loadLocked().filter { !Self.hasAgedOut($0, at: moment) }
+        let didChange = lock.withLock { () -> Bool in
+            let original = loadLocked()
+            var kept = original.filter { !Self.hasAgedOut($0, at: moment) }
             var dailyUsage = loadDailyUsageLocked()
             for group in groups {
                 let newestStored = kept
@@ -110,6 +120,10 @@ final class TokenUsageLimitSnapshotStore: @unchecked Sendable {
             }
             saveDailyUsageLocked(dailyUsage)
             saveLocked(kept)
+            return kept != original
+        }
+        if didChange {
+            postLimitsDidChangeNotificationIfNeeded()
         }
     }
 
@@ -252,7 +266,9 @@ private extension TokenUsageLimitSnapshotStore {
             try? FileManager.default.removeItem(at: temporaryURL)
         }
     }
+}
 
+private extension TokenUsageLimitSnapshotStore {
     func loadLocked() -> [TokenUsageLimitSnapshot] {
         guard let data = try? Data(contentsOf: fileURL) else {
             return []
@@ -279,6 +295,22 @@ private extension TokenUsageLimitSnapshotStore {
         } catch {
             try? FileManager.default.removeItem(at: temporaryURL)
         }
+    }
+
+    func postLimitsDidChangeNotificationIfNeeded() {
+        guard postsChangeNotifications else {
+            return
+        }
+        NotificationCenter.default.post(
+            name: TokenUsageLimitInboxMonitor.limitsDidChangeNotification,
+            object: nil
+        )
+        DistributedNotificationCenter.default().postNotificationName(
+            TokenUsageLimitInboxMonitor.limitsDidChangeNotification,
+            object: nil,
+            userInfo: nil,
+            deliverImmediately: true
+        )
     }
 }
 

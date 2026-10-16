@@ -8,11 +8,27 @@ final class TokenUsageDashboardLimitStore: ObservableObject {
     private let read: @Sendable () -> [TokenUsageLimitSnapshot]
     private var isReading = false
     private var needsRefresh = false
+    private nonisolated(unsafe) var distributedLimitsDidChangeObserver: NSObjectProtocol?
 
     init(read: @escaping @Sendable () -> [TokenUsageLimitSnapshot] = {
         TokenUsageLimitSnapshotStore().allSnapshots()
     }) {
         self.read = read
+        self.distributedLimitsDidChangeObserver = DistributedNotificationCenter.default().addObserver(
+            forName: TokenUsageLimitInboxMonitor.limitsDidChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.refresh()
+            }
+        }
+    }
+
+    deinit {
+        if let distributedLimitsDidChangeObserver {
+            DistributedNotificationCenter.default().removeObserver(distributedLimitsDidChangeObserver)
+        }
     }
 
     func refresh() {

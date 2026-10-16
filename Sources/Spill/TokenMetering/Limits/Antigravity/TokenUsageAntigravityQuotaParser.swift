@@ -35,7 +35,7 @@ enum TokenUsageAntigravityQuotaParser {
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
         guard data.count <= 1_048_576,
-              let report = try? decoder.decode(Report.self, from: data),
+              let report = decodeReport(from: data, using: decoder),
               report.status == "SUCCESS", report.command.name == "usage",
               report.numTurns == 0
         else { return [] }
@@ -101,6 +101,16 @@ enum TokenUsageAntigravityQuotaParser {
         case "weekly": return ("weekly", "Weekly", 10_080)
         default: return nil
         }
+    }
+
+    private static func decodeReport(from data: Data, using decoder: JSONDecoder) -> Report? {
+        if let report = try? decoder.decode(Report.self, from: data) {
+            return report
+        }
+        guard let braceIndex = data.firstIndex(of: UInt8(ascii: "{")) else {
+            return nil
+        }
+        return try? decoder.decode(Report.self, from: data[braceIndex...])
     }
 
     private static func parseDate(_ value: String) -> Date? {

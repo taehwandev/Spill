@@ -138,12 +138,25 @@ final class TokenUsageAntigravityQuotaTests: XCTestCase {
     }
 
     func testVersionGateRejectsUnknownAndOldCLI() {
-        for version in ["1.1.11", "1.3.3\n", "2.0.0"] {
+        for version in [
+            "1.1.11",
+            "1.3.3\n",
+            "2.0.0",
+            "Applying update to v1.4.0...\nUpdate applied! Restarting...\n1.4.0\n",
+        ] {
             XCTAssertTrue(TokenUsageAntigravityQuotaCommand.supportsNativeUsage(Data(version.utf8)))
         }
         for version in ["1.1.10", "1.0.999", "0.99.99", "unknown", "1.3.3-beta"] {
             XCTAssertFalse(TokenUsageAntigravityQuotaCommand.supportsNativeUsage(Data(version.utf8)))
         }
+    }
+
+    func testParserSkipsCLIUpdatePreambleBeforeJSON() throws {
+        var prefixed = Data("Applying update to v1.4.0...\nUpdate applied! Restarting...\n".utf8)
+        prefixed.append(try Self.report())
+        let groups = TokenUsageAntigravityQuotaParser.parse(prefixed, capturedAt: capturedAt)
+        XCTAssertEqual(groups.count, 2)
+        XCTAssertEqual(groups.flatMap(\.snapshots).count, 4)
     }
 
     @MainActor

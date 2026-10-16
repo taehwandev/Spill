@@ -115,6 +115,55 @@ final class TokenUsageCollectorCoordinatorTests: XCTestCase {
         XCTAssertEqual(state.snapshot.antigravityLimitCaptures, 2)
     }
 
+    func testAntigravityActivityBypassesImporterFloorAndRefreshesLimitsWhenEventsAreImported() async {
+        let state = CollectorRaceState()
+        let lock = NSLock()
+        var activityDate = Date(timeIntervalSince1970: 10_000)
+        var importedCount = 0
+        let collector = TokenUsageCollectorCoordinator(
+            store: TokenUsageStore(fileURL: temporaryEventsURL()),
+            antigravityImportRunner: { _, _, _ in
+                state.recordAntigravityRun()
+                let imported = lock.withLock { importedCount }
+                return TokenUsageAntigravityImportSummary(
+                    scannedDatabases: 1,
+                    scannedGenerationRows: imported,
+                    parsedUsageEvents: imported,
+                    importedEvents: imported,
+                    skippedDuplicateEvents: 0,
+                    unsupportedRecords: 0,
+                    splitOutputFallbackEvents: 0,
+                    cursorAdvancedDatabases: imported > 0 ? 1 : 0,
+                    failedToWriteEvents: false
+                )
+            },
+            antigravityActivityDateProvider: { lock.withLock { activityDate } },
+            claudeCodeImportRunner: { _, _ in Self.emptyClaudeSummary },
+            activeImporterMinimumInterval: 1_200,
+            now: { Date(timeIntervalSince1970: 10_000) },
+            antigravityLimitCaptureRunner: { _ in state.recordAntigravityLimitCapture() },
+            enabledTools: [.antigravity]
+        )
+
+        await collector.requestCollectionAndWait(reason: "dashboard_refresh")
+        XCTAssertEqual(state.snapshot.antigravityRuns, 1)
+        XCTAssertEqual(state.snapshot.antigravityLimitCaptures, 1)
+
+        // Unchanged conversation activity inside the 20m floor stays quiet.
+        await collector.requestCollectionAndWait(reason: "dashboard_refresh")
+        XCTAssertEqual(state.snapshot.antigravityRuns, 1)
+        XCTAssertEqual(state.snapshot.antigravityLimitCaptures, 1)
+
+        // Advancing the conversation database modification date and importing a turn refreshes both.
+        lock.withLock {
+            activityDate = Date(timeIntervalSince1970: 10_015)
+            importedCount = 1
+        }
+        await collector.requestCollectionAndWait(reason: "dashboard_refresh")
+        XCTAssertEqual(state.snapshot.antigravityRuns, 2)
+        XCTAssertEqual(state.snapshot.antigravityLimitCaptures, 2)
+    }
+
     private func temporaryEventsURL() -> URL {
         URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent(UUID().uuidString)

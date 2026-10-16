@@ -14,7 +14,7 @@ enum TokenUsageAntigravityQuotaCommand {
         defer { try? FileManager.default.removeItem(at: directory) }
         guard let version = TokenUsageAntigravityQuotaProcess.output(
             executable: executable, arguments: ["--version"], directory: directory,
-            timeout: 3, maximumBytes: 4096, shouldCancel: shouldCancel
+            timeout: 15, maximumBytes: 4096, shouldCancel: shouldCancel
         ), supportsNativeUsage(version) else { return nil }
         return TokenUsageAntigravityQuotaProcess.output(
             executable: executable,
@@ -24,10 +24,14 @@ enum TokenUsageAntigravityQuotaCommand {
     }
 
     static func supportsNativeUsage(_ data: Data) -> Bool {
-        guard let text = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
-              text.range(of: #"^[0-9]+\.[0-9]+\.[0-9]+$"#, options: .regularExpression) != nil
+        guard let rawText = String(data: data, encoding: .utf8),
+              let versionLine = rawText
+                  .split(whereSeparator: \.isNewline)
+                  .map({ $0.trimmingCharacters(in: .whitespacesAndNewlines) })
+                  .last(where: { !$0.isEmpty }),
+              versionLine.range(of: #"^[0-9]+\.[0-9]+\.[0-9]+$"#, options: .regularExpression) != nil
         else { return false }
-        let parts = text.split(separator: ".").compactMap { Int($0) }
+        let parts = versionLine.split(separator: ".").compactMap { Int($0) }
         guard parts.count == 3 else { return false }
         return parts[0] > 1 || (parts[0] == 1 && (parts[1] > 1 || (parts[1] == 1 && parts[2] >= 11)))
     }
