@@ -99,11 +99,11 @@ extension UpdateChecker {
     }
 
     func outcome(for manifest: UpdateManifest) throws -> UpdateCheckOutcome {
-        guard let latestVersion = DottedVersion(manifest.latestVersion) else {
+        guard let latestVersion = DottedVersion(release: manifest.latestVersion) else {
             throw UpdateCheckError.invalidLatestVersion(manifest.latestVersion)
         }
 
-        let current = DottedVersion(currentVersion) ?? .zero
+        let current = DottedVersion(release: currentVersion) ?? .zero
         let update = AvailableUpdate(
             currentVersion: currentVersion,
             latestVersion: manifest.latestVersion,
@@ -254,10 +254,26 @@ struct DottedVersion: Comparable, CustomStringConvertible, Equatable, Sendable {
     // build number placeholder), substitutes the short version string so cross-week comparisons work.
     init?(normalizing version: String, bundleVersion: String, shortVersion: String) {
         let resolved = version == bundleVersion && !shortVersion.isEmpty ? shortVersion : version
-        guard let parsed = DottedVersion(resolved) else {
+        guard let parsed = DottedVersion(release: resolved) else {
             return nil
         }
         self = parsed
+    }
+
+    // Release versions may name the ISO year with two digits (26.43.0) while bundle
+    // versions keep four (2026.43.0) so installed apps still see newer builds. Compare
+    // both on the four-digit scale; never use this for macOS versions.
+    init?(release version: String) {
+        guard let parsed = DottedVersion(version) else {
+            return nil
+        }
+        guard parsed.components.count == 3, parsed.components[0] < 100 else {
+            self = parsed
+            return
+        }
+        var components = parsed.components
+        components[0] += 2000
+        self.init(components: components)
     }
 
     private init(components: [Int]) {

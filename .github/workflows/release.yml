@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       release_count:
-        description: "Per-week release count. Version becomes ISO-year.ISO-week.count, for example 2026.20.1"
+        description: "Per-week release count. Version becomes two-digit ISO-year.ISO-week.count, for example 26.20.1"
         required: false
         default: "1"
         type: string
@@ -55,7 +55,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          version_pattern='^[0-9]{4}\.[0-9]{2}\.[0-9]+$'
+          version_pattern='^([0-9]{2}|[0-9]{4})\.[0-9]{2}\.[0-9]+$'
 
           if [[ "${GITHUB_REF_TYPE:-}" == "tag" ]]; then
             tag="$GITHUB_REF_NAME"
@@ -67,18 +67,23 @@ jobs:
               exit 2
             fi
 
-            year="$(date -u +%G)"
+            year="$(date -u +%g)"
             week="$(date -u +%V)"
             version="$year.$week.$release_count"
             tag="v$version"
           fi
 
           if ! [[ "$version" =~ $version_pattern ]]; then
-            echo "Release version must use ISO-year.ISO-week.count, for example 2026.20.1." >&2
+            echo "Release version must use ISO-year.ISO-week.count, for example 26.20.1." >&2
             exit 2
           fi
 
+          # Installed apps compare CFBundleVersion, which stays on the four-digit year
+          # so a 26.43.1 release still reads as newer than 2026.42.0.
           build="$version"
+          if [[ "$version" =~ ^([0-9]{2})(\.[0-9]+\.[0-9]+)$ ]]; then
+            build="20${BASH_REMATCH[1]}${BASH_REMATCH[2]}"
+          fi
 
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"

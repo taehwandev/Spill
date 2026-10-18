@@ -99,7 +99,7 @@ final class SparkleVersionComparator: NSObject, SUVersionComparison {
 
     func compareVersion(_ versionA: String, toVersion versionB: String) -> ComparisonResult {
         let a = DottedVersion(normalizing: versionA, bundleVersion: localBundleVersion, shortVersion: localShortVersion) ?? .zero
-        let b = DottedVersion(versionB) ?? .zero
+        let b = DottedVersion(release: versionB) ?? .zero
 
         if a < b {
             return .orderedAscending

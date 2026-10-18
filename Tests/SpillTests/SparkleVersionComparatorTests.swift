@@ -55,6 +55,29 @@ final class SparkleVersionComparatorTests: XCTestCase {
         XCTAssertEqual(comparator.compareVersion("2026.25.1", toVersion: "2026.25.2"), .orderedAscending)
     }
 
+    // MARK: - Two-digit release year
+
+    func testTwoDigitYearInstallMatchesItsOwnFourDigitAppcastBuild() {
+        // 26.43.1 release: ShortVersionString="26.43.1", CFBundleVersion="2026.43.1".
+        let comparator = makeComparator(bundleVersion: "2026.43.1", shortVersion: "26.43.1")
+
+        XCTAssertEqual(comparator.compareVersion("2026.43.1", toVersion: "2026.43.1"), .orderedSame)
+        XCTAssertEqual(comparator.compareVersion("2026.43.1", toVersion: "2026.42.0"), .orderedDescending)
+    }
+
+    func testTwoDigitYearInstallDetectsNewerBuildInEitherYearForm() {
+        let comparator = makeComparator(bundleVersion: "2026.43.1", shortVersion: "26.43.1")
+
+        XCTAssertEqual(comparator.compareVersion("2026.43.1", toVersion: "2026.44.1"), .orderedAscending)
+        XCTAssertEqual(comparator.compareVersion("2026.43.1", toVersion: "26.44.1"), .orderedAscending)
+    }
+
+    func testFourDigitYearInstallDetectsTwoDigitYearRelease() {
+        let comparator = makeComparator(bundleVersion: "2026.42.0", shortVersion: "2026.42.0")
+
+        XCTAssertEqual(comparator.compareVersion("2026.42.0", toVersion: "26.43.1"), .orderedAscending)
+    }
+
     // MARK: - DottedVersion normalizing initializer
 
     func testNormalizingInitSubstitutesShortVersionWhenBundleVersionMatches() {

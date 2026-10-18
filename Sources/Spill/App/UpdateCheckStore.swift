@@ -214,8 +214,8 @@ private extension UpdateCheckStore {
               now.timeIntervalSince(Date(timeIntervalSince1970: timestamp)) < automaticDashboardCheckInterval,
               let data = defaults.data(forKey: dashboardManifestCacheKey),
               let manifest = try? JSONDecoder().decode(UpdateManifest.self, from: data),
-              let cachedLatestVersion = DottedVersion(manifest.latestVersion),
-              let currentVersion = DottedVersion(checker.currentVersion),
+              let cachedLatestVersion = DottedVersion(release: manifest.latestVersion),
+              let currentVersion = DottedVersion(release: checker.currentVersion),
               cachedLatestVersion >= currentVersion,
               let outcome = try? checker.outcome(for: manifest)
         else {

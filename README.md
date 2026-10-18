@@ -154,7 +154,7 @@ Keychain item so macOS should not ask for separate authorization for each secret
 
 This writes:
 
-- `.build/release-artifacts/Spill-2026.20.1-macos.dmg`
+- `.build/release-artifacts/Spill-26.20.1-macos.dmg`
 - `.build/release-artifacts/Spill-macos.dmg`
 - `.build/release-artifacts/update.json`
 - `.build/release-artifacts/checksums.txt`
@@ -179,7 +179,7 @@ open /Applications/Spill.app
 Developer ID release example:
 
 ```bash
-SPILL_VERSION=2026.21.2 \
+SPILL_VERSION=26.21.2 \
 SPILL_BUILD_PRIVATE_USAGE_FEATURE_ENABLED=1 \
 SPILL_BUILD_PRIVATE_USAGE_ENVIRONMENT=production \
 SPILL_BUILD_PRIVATE_USAGE_WEB_URL=https://getmoru.com/ \
@@ -193,7 +193,7 @@ without rebuilding, then notarize the packaged DMG artifact. Keep the `.p8` file
 outside the repository and pass its ignored path only to the notarization script:
 
 ```bash
-SPILL_VERSION=2026.21.2 \
+SPILL_VERSION=26.21.2 \
 SPILL_BUILD_PRIVATE_USAGE_FEATURE_ENABLED=1 \
 SPILL_BUILD_PRIVATE_USAGE_ENVIRONMENT=production \
 SPILL_BUILD_PRIVATE_USAGE_WEB_URL=https://getmoru.com/ \
@@ -205,7 +205,7 @@ APPLE_NOTARYTOOL_API_KEY_ID=EXAMPLE123 \
 APPLE_NOTARYTOOL_API_ISSUER=00000000-0000-0000-0000-000000000000 \
 ./scripts/notarize-release-artifacts.sh --app .build/Spill.app
 
-SPILL_VERSION=2026.21.2 \
+SPILL_VERSION=26.21.2 \
 SPILL_SKIP_BUILD=1 \
 SPILL_SIGN_IDENTITY="Developer ID Application: Example Name (TEAMID)" \
 ./scripts/package-release.sh
@@ -216,10 +216,13 @@ APPLE_NOTARYTOOL_API_ISSUER=00000000-0000-0000-0000-000000000000 \
 ./scripts/notarize-release-artifacts.sh --artifacts .build/release-artifacts
 ```
 
-Release versions use `ISO-year.ISO-week.release-count`, such as `2026.20.1`.
+Release versions use `ISO-year.ISO-week.release-count` with a two-digit ISO
+year, such as `26.20.1`; four-digit years such as `2026.20.1` remain accepted.
 The default local version is the current ISO year/week with release count `1`.
-`SPILL_BUILD` defaults to the full version string, so
-`SPILL_VERSION=2026.21.2` uses build `2026.21.2` unless overridden. Use `SPILL_VERSION`,
+`SPILL_BUILD` (`CFBundleVersion`) defaults to the same version on the four-digit
+year, so `SPILL_VERSION=26.21.2` uses build `2026.21.2` unless overridden.
+Installed apps compare that build number to find Sparkle updates, so it must
+keep growing past the last four-digit release (`2026.42.0`). Use `SPILL_VERSION`,
 `SPILL_BUILD`, and `SPILL_BUNDLE_ID` to override release metadata.
 
 ### GitHub Releases
@@ -227,8 +230,8 @@ The default local version is the current ISO year/week with release count `1`.
 Push a version tag to create or update a GitHub Release:
 
 ```bash
-git tag -a v2026.20.1 -m "Release 2026.20.1"
-git push origin v2026.20.1
+git tag -a v26.20.1 -m "Release 26.20.1"
+git push origin v26.20.1
 ```
 
 The `Release` workflow builds the macOS app, runs the package script, verifies the

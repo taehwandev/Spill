@@ -25,9 +25,18 @@ HELPER_FRAMEWORKS_DIR="$HELPER_CONTENTS_DIR/Frameworks"
 # installed app's login item, preferences, or permissions. Release packaging passes dev.spill.Spill.
 BUNDLE_ID="${SPILL_BUNDLE_ID:-dev.spill.Spill.local}"
 HELPER_BUNDLE_ID="${BUNDLE_ID}.TokenDashboard"
-DEFAULT_VERSION="$(date -u +%G.%V.1)"
+# Release versions may use a two-digit ISO year (26.43.1). CFBundleVersion keeps the
+# four-digit year (2026.43.1) because installed apps compare it to find updates.
+canonical_build_number() {
+    if [[ "$1" =~ ^([0-9]{2})(\.[0-9]+\.[0-9]+)$ ]]; then
+        echo "20${BASH_REMATCH[1]}${BASH_REMATCH[2]}"
+    else
+        echo "$1"
+    fi
+}
+DEFAULT_VERSION="$(date -u +%g.%V.1)"
 VERSION="${SPILL_VERSION:-$DEFAULT_VERSION}"
-BUILD_NUMBER="${SPILL_BUILD:-$VERSION}"
+BUILD_NUMBER="${SPILL_BUILD:-$(canonical_build_number "$VERSION")}"
 SIGN_IDENTITY="${SPILL_SIGN_IDENTITY:--}"
 APTABASE_APP_KEY="${SPILL_APTABASE_APP_KEY:-}"
 APTABASE_INFO_PLIST_ENTRY=""

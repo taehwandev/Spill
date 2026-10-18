@@ -49,6 +49,43 @@ final class UpdateCheckerTests: XCTestCase {
         XCTAssertEqual(outcome, .upToDate(currentVersion: "2026.20.2", manifest: manifest))
     }
 
+    func testOutcomeComparesTwoDigitAndFourDigitReleaseYears() throws {
+        let checker = UpdateChecker(
+            currentVersion: "26.43.1",
+            currentMacOS: DottedVersion("14.5.0")!,
+            dataLoader: { _ in Data() }
+        )
+
+        let sameManifest = makeManifest(latestVersion: "2026.43.1")
+        XCTAssertEqual(
+            try checker.outcome(for: sameManifest),
+            .upToDate(currentVersion: "26.43.1", manifest: sameManifest)
+        )
+        let olderManifest = makeManifest(latestVersion: "2026.42.0")
+        XCTAssertEqual(
+            try checker.outcome(for: olderManifest),
+            .upToDate(currentVersion: "26.43.1", manifest: olderManifest)
+        )
+        guard case .available = try checker.outcome(for: makeManifest(latestVersion: "26.44.1")) else {
+            return XCTFail("26.44.1 should be newer than 26.43.1")
+        }
+
+        let fourDigitChecker = UpdateChecker(
+            currentVersion: "2026.42.0",
+            currentMacOS: DottedVersion("14.5.0")!,
+            dataLoader: { _ in Data() }
+        )
+        guard case .available = try fourDigitChecker.outcome(for: makeManifest(latestVersion: "26.43.1")) else {
+            return XCTFail("26.43.1 should be newer than 2026.42.0")
+        }
+    }
+
+    func testReleaseVersionLeavesMacOSStyleVersionsUnchanged() {
+        XCTAssertEqual(DottedVersion(release: "26.43.1"), DottedVersion("2026.43.1"))
+        XCTAssertEqual(DottedVersion(release: "2026.43.1"), DottedVersion("2026.43.1"))
+        XCTAssertEqual(DottedVersion(release: "14.0"), DottedVersion("14.0"))
+    }
+
     func testOutcomeIgnoresMinimumMacOSWhenNoNewerVersionExists() throws {
         let manifest = makeManifest(latestVersion: "2026.20.2", minimumMacOS: "15.0")
         let checker = UpdateChecker(
