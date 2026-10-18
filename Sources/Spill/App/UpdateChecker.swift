@@ -262,9 +262,11 @@ struct DottedVersion: Comparable, CustomStringConvertible, Equatable, Sendable {
 
     // Release versions may name the ISO year with two digits (26.43.0) while bundle
     // versions keep four (2026.43.0) so installed apps still see newer builds. Compare
-    // both on the four-digit scale; never use this for macOS versions.
+    // both on the four-digit scale; never use this for macOS versions. A build
+    // suffix such as `-dev` names the same release, so it is ignored.
     init?(release version: String) {
-        guard let parsed = DottedVersion(version) else {
+        let numeric = version.split(separator: "-", maxSplits: 1).first.map(String.init) ?? version
+        guard let parsed = DottedVersion(numeric) else {
             return nil
         }
         guard parsed.components.count == 3, parsed.components[0] < 100 else {

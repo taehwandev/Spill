@@ -86,6 +86,20 @@ final class UpdateCheckerTests: XCTestCase {
         XCTAssertEqual(DottedVersion(release: "14.0"), DottedVersion("14.0"))
     }
 
+    func testDevelopmentBuildSuffixDoesNotReportItsOwnReleaseAsUpdate() throws {
+        XCTAssertEqual(DottedVersion(release: "26.43.0-dev"), DottedVersion("2026.43.0"))
+        let checker = UpdateChecker(
+            currentVersion: "26.43.0-dev",
+            currentMacOS: DottedVersion("14.5.0")!,
+            dataLoader: { _ in Data() }
+        )
+        let manifest = makeManifest(latestVersion: "26.43.0")
+        XCTAssertEqual(
+            try checker.outcome(for: manifest),
+            .upToDate(currentVersion: "26.43.0-dev", manifest: manifest)
+        )
+    }
+
     func testOutcomeIgnoresMinimumMacOSWhenNoNewerVersionExists() throws {
         let manifest = makeManifest(latestVersion: "2026.20.2", minimumMacOS: "15.0")
         let checker = UpdateChecker(

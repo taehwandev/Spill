@@ -72,6 +72,13 @@ final class SparkleVersionComparatorTests: XCTestCase {
         XCTAssertEqual(comparator.compareVersion("2026.43.1", toVersion: "26.44.1"), .orderedAscending)
     }
 
+    func testDevelopmentBuildMatchesItsReleaseBuild() {
+        let comparator = makeComparator(bundleVersion: "2026.43.0", shortVersion: "26.43.0-dev")
+
+        XCTAssertEqual(comparator.compareVersion("2026.43.0", toVersion: "2026.43.0"), .orderedSame)
+        XCTAssertEqual(comparator.compareVersion("2026.43.0", toVersion: "2026.43.1"), .orderedAscending)
+    }
+
     func testFourDigitYearInstallDetectsTwoDigitYearRelease() {
         let comparator = makeComparator(bundleVersion: "2026.42.0", shortVersion: "2026.42.0")
 
