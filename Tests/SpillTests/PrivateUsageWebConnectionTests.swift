@@ -58,8 +58,37 @@ final class PrivateUsageWebConnectionTests: XCTestCase {
         )?.absoluteString, "http://127.0.0.1:5173/api/private-usage-relay")
     }
 
+    func testLocalhostUsesOneIPv4OriginAcrossConnectionSurfaces() throws {
+        for (configured, origin) in [
+            ("http://localhost:5173/#/connect-device", "http://127.0.0.1:5173"),
+            ("http://LOCALHOST:4173/old?source=browser#dashboard", "http://127.0.0.1:4173"),
+            ("http://localhost/", "http://127.0.0.1")
+        ] {
+            for useRuntimeOverride in [false, true] {
+                let overrides = useRuntimeOverride
+                    ? [PrivateUsageWebConnection.webURLOverrideEnvironmentKey: configured] : [:]
+                let configuration = [PrivateUsageWebConnection.webURLInfoDictionaryKey:
+                    useRuntimeOverride ? "https://getmoru.com/" : configured]
+                let connection = try XCTUnwrap(PrivateUsageWebConnection.connectDeviceURL(
+                    processEnvironment: overrides, bundleInfo: configuration
+                ))
+                XCTAssertEqual(connection.absoluteString,
+                    origin + "/connect-device?source=macos&callback_url=spill://private-usage/connect")
+                XCTAssertEqual(PrivateUsageWebConnection.dashboardURL(
+                    processEnvironment: overrides, bundleInfo: configuration
+                )?.absoluteString, origin + "/spill/dashboard")
+                XCTAssertEqual(PrivateUsageRelayEndpoint.relayURL(
+                    environment: .development, processEnvironment: overrides, bundleInfo: configuration
+                )?.absoluteString, origin + "/api/private-usage-relay")
+            }
+        }
+    }
+
     func testLegacyMigrationDoesNotRewriteCustomPortsOrSimilarHosts() {
-        for origin in ["https://spill.thdev.app:8443", "https://preview.spill.thdev.app", "https://spill.thdev.app.example.test"] {
+        for origin in [
+            "https://spill.thdev.app:8443", "https://preview.spill.thdev.app",
+            "https://spill.thdev.app.example.test", "https://localhost:5173"
+        ] {
             let overrides = [PrivateUsageWebConnection.webURLOverrideEnvironmentKey: origin]
             XCTAssertEqual(PrivateUsageRelayEndpoint.relayURL(
                 environment: .production, processEnvironment: overrides, bundleInfo: nil

@@ -1048,7 +1048,10 @@ Rules:
   to these path routes. The former `https://spill.thdev.app` production origin
   on its standard HTTPS port migrates to `https://getmoru.com`; explicit custom
   origins and runtime-over-bundle precedence remain intact. HTTP is permitted
-  only for `localhost` and `127.0.0.1` development origins.
+  only for `localhost` and `127.0.0.1` development origins. HTTP `localhost`
+  normalizes to `127.0.0.1` with its port preserved, matching the Moru local
+  OAuth callback origin and keeping connection, dashboard, and relay traffic
+  on one browser origin. HTTPS hostnames are not rewritten by this local rule.
 - Configuration impact: existing build variables and bundle `Info.plist` keys
   remain the persistence owner, with runtime environment overrides for debugging.
   Missing configuration stays disabled; no Preferences, credential, encryption

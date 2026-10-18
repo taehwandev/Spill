@@ -2553,7 +2553,7 @@ final class PrivateUsageUploadTests: XCTestCase {
                     PrivateUsageWebConnection.webURLOverrideEnvironmentKey: "http://localhost/#/connect-device"
                 ]
             )?.absoluteString,
-            Optional("http://localhost/connect-device?source=macos&callback_url=spill://private-usage/connect")
+            Optional("http://127.0.0.1/connect-device?source=macos&callback_url=spill://private-usage/connect")
         )
         XCTAssertEqual(
             PrivateUsageWebConnection.connectDeviceURL(
@@ -2614,7 +2614,7 @@ final class PrivateUsageUploadTests: XCTestCase {
                     PrivateUsageWebConnection.webURLOverrideEnvironmentKey: "http://localhost:5173/"
                 ]
             )?.absoluteString,
-            Optional("http://localhost:5173/spill/dashboard")
+            Optional("http://127.0.0.1:5173/spill/dashboard")
         )
         XCTAssertNil(
             PrivateUsageWebConnection.dashboardURL(
@@ -2683,7 +2683,7 @@ final class PrivateUsageUploadTests: XCTestCase {
                 ],
                 bundleInfo: bundleInfo
             )?.absoluteString,
-            Optional("http://localhost/connect-device?source=macos&callback_url=spill://private-usage/connect")
+            Optional("http://127.0.0.1/connect-device?source=macos&callback_url=spill://private-usage/connect")
         )
         XCTAssertEqual(
             PrivateUsageRelayEndpoint.relayURL(
@@ -2693,7 +2693,7 @@ final class PrivateUsageUploadTests: XCTestCase {
                 ],
                 bundleInfo: bundleInfo
             )?.absoluteString,
-            Optional("http://localhost/api/private-usage-relay")
+            Optional("http://127.0.0.1/api/private-usage-relay")
         )
     }
 
@@ -2716,7 +2716,7 @@ final class PrivateUsageUploadTests: XCTestCase {
                 ],
                 bundleInfo: nil
             )?.absoluteString,
-            Optional("http://localhost:5173/api/private-usage-relay")
+            Optional("http://127.0.0.1:5173/api/private-usage-relay")
         )
     }
 

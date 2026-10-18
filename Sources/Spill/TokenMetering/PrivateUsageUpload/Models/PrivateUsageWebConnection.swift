@@ -76,6 +76,7 @@ private extension PrivateUsageWebConnection {
         }
 
         if scheme == "http", ["localhost", "127.0.0.1"].contains(host) {
+            components.host = "127.0.0.1"
             return components.url
         }
 

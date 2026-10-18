@@ -35,6 +35,10 @@ contracts and privacy guarantees.
   `getmoru.com`. Missing configuration remains disabled and custom origins keep
   their explicit host and port. Device credentials and encryption keys remain
   environment-scoped and are not cleared by this endpoint migration.
+- HTTP development URLs configured with `localhost` normalize to `127.0.0.1`,
+  preserving the port. Connection, dashboard, and native relay requests use this
+  same origin so browser login cookies and OAuth callbacks do not split across
+  the two loopback hostnames. HTTPS origins retain their configured hostname.
 
 ## Dashboard And Freshness Requirements
 
