@@ -46,6 +46,23 @@ final class MenuBarMetricSparklineViewTests: XCTestCase {
         XCTAssertEqual(view.renderedImages.count, 2)
     }
 
+    func testRasterizedImageFillsWholeViewBounds() throws {
+        let view = MenuBarMetricSparklineView(
+            series: [.init(role: .status, values: [1, 1, 1, 1])],
+            kind: .cpu,
+            statusColor: .systemGreen
+        )
+        view.frame = NSRect(x: 0, y: 0, width: 40, height: 13)
+        render(view)
+
+        let key = try XCTUnwrap(view.renderCacheKey)
+        let image = try XCTUnwrap(view.renderedImages[key])
+        let bitmap = try XCTUnwrap(image.representations.first as? NSBitmapImageRep)
+        // Full-height bars reach the top-right part of the bitmap only when drawing is scaled to points.
+        let topRight = try XCTUnwrap(bitmap.colorAt(x: bitmap.pixelsWide * 3 / 4, y: bitmap.pixelsHigh / 4))
+        XCTAssertGreaterThan(topRight.alphaComponent, 0.1)
+    }
+
     private func render(_ view: NSView) {
         guard let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else {
             return XCTFail("missing bitmap for \(view.bounds)")

@@ -106,11 +106,10 @@ final class MenuBarMetricSparklineView: NSView {
                   bytesPerRow: 0,
                   bitsPerPixel: 0
               ),
-              let context = NSGraphicsContext(bitmapImageRep: bitmap)
+              let context = Self.drawingContext(for: bitmap, pointSize: key.size)
         else {
             return nil
         }
-        bitmap.size = key.size
 
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = context
@@ -123,6 +122,13 @@ final class MenuBarMetricSparklineView: NSView {
         let image = NSImage(size: key.size)
         image.addRepresentation(bitmap)
         return image
+    }
+
+    /// The context takes its point-to-pixel scale from the bitmap's size when it is created, so
+    /// the size must be set first; otherwise drawing in points fills only the bottom-left quarter.
+    private static func drawingContext(for bitmap: NSBitmapImageRep, pointSize: NSSize) -> NSGraphicsContext? {
+        bitmap.size = pointSize
+        return NSGraphicsContext(bitmapImageRep: bitmap)
     }
 
     private func drawContent() {

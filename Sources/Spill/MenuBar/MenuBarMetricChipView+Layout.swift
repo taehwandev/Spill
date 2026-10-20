@@ -56,13 +56,13 @@ extension MenuBarMetricChipView {
             )
             addSubview(sparkline)
             NSLayoutConstraint.activate([
-                iconView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 5),
+                iconView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 3),
                 iconView.centerYAnchor.constraint(equalTo: centerYAnchor),
                 iconView.widthAnchor.constraint(equalToConstant: iconSize),
                 iconView.heightAnchor.constraint(equalToConstant: iconSize),
 
                 sparkline.leadingAnchor.constraint(equalTo: iconView.trailingAnchor, constant: 3),
-                sparkline.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -5),
+                sparkline.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -3),
                 sparkline.centerYAnchor.constraint(equalTo: centerYAnchor),
                 sparkline.heightAnchor.constraint(equalToConstant: 13)
             ])
@@ -98,13 +98,13 @@ extension MenuBarMetricChipView {
         addSubview(valueLabel)
 
         NSLayoutConstraint.activate([
-            iconView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 5.5),
+            iconView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 3),
             iconView.centerYAnchor.constraint(equalTo: centerYAnchor),
             iconView.widthAnchor.constraint(equalToConstant: iconSize),
             iconView.heightAnchor.constraint(equalToConstant: iconSize),
 
-            valueLabel.leadingAnchor.constraint(equalTo: iconView.trailingAnchor, constant: 3.5),
-            valueLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -5.5),
+            valueLabel.leadingAnchor.constraint(equalTo: iconView.trailingAnchor, constant: 3),
+            valueLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -3),
             valueLabel.centerYAnchor.constraint(equalTo: centerYAnchor)
         ])
     }

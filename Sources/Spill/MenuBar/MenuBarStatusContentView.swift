@@ -13,11 +13,13 @@ final class MenuBarStatusContentView: NSView {
     private static let compactStackChipMinWidth: CGFloat = 32
     private static let compactStackHorizontalPadding: CGFloat = 12
     fileprivate static let compactStackIconSize: CGFloat = 7
-    private static let verticalChipMinWidth: CGFloat = 31
-    private static let verticalHorizontalPadding: CGFloat = 7
+    private static let verticalChipMinWidth: CGFloat = 28
+    private static let verticalHorizontalPadding: CGFloat = 4
     private static let compactIconValueMinWidth: CGFloat = 22
     private static let compactIconValueHorizontalPadding: CGFloat = 5
     static let sparklineWidth: CGFloat = 30
+    /// Leading inset, 13pt icon, icon-to-value spacing and trailing inset of an inline metric chip.
+    static let metricChipChromeWidth: CGFloat = 22
     static let defaultTextFontSize: CGFloat = 13.5
     static let minimumTextFontSize: CGFloat = 10
     static let maximumTextFontSize: CGFloat = 15
@@ -426,7 +428,7 @@ extension MenuBarStatusContentView {
             return iconOnlyChipWidth
         }
         if segment.usesChartPresentation {
-            return sparklineWidth + 23
+            return sparklineWidth + metricChipChromeWidth
         }
 
         if segment.isValueOnly {
@@ -435,7 +437,7 @@ extension MenuBarStatusContentView {
         }
 
         let textWidth = Self.measuredTextWidth(segment.value, font: textFont(textFontSize: textFontSize, textIsBold: textIsBold))
-        return ceil(textWidth) + 29
+        return ceil(textWidth) + metricChipChromeWidth
     }
 
     private static func chipHeight(for segment: MenuBarStatusSegment) -> CGFloat {
@@ -953,8 +955,8 @@ private final class MenuBarVerticalMetricChipView: NSView {
 
         NSLayoutConstraint.activate([
             titleLabel.topAnchor.constraint(equalTo: topAnchor, constant: 1),
-            titleLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 3),
-            titleLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -3),
+            titleLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 2),
+            titleLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -2),
             titleLabel.heightAnchor.constraint(equalToConstant: 8),
 
             contentView.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: -1),
