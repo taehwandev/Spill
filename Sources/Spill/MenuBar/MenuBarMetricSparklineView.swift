@@ -7,7 +7,7 @@ final class MenuBarMetricSparklineView: NSView {
         let color: NSColor
     }
 
-    struct RenderCacheKey: Equatable {
+    struct RenderCacheKey: Hashable {
         let size: NSSize
         let scale: CGFloat
         let appearanceName: NSAppearance.Name
@@ -16,7 +16,8 @@ final class MenuBarMetricSparklineView: NSView {
     let series: [RenderedSeries]
     let kind: MenuBarStatusSegment.Kind
     private(set) var renderCacheKey: RenderCacheKey?
-    private var renderedImage: NSImage?
+    private(set) var renderedImages = [RenderCacheKey: NSImage]()
+    private static let maximumCachedImages = 4
 
     var scaleFactor: CGFloat {
         return window?.backingScaleFactor ?? 2.0
@@ -56,38 +57,40 @@ final class MenuBarMetricSparklineView: NSView {
     }
 
     /// The status bar re-renders the whole item into a replicant per display whenever any part
-    /// of it changes (including every trigger animation frame), so the bars and gradients are
-    /// rasterized once per size/scale/appearance and later passes only blit the bitmap.
+    /// of it changes, so the bars and gradients are rasterized once per size/scale/appearance and
+    /// later passes only blit the bitmap. Each display's menu bar can use a different appearance,
+    /// so images are kept per appearance instead of being replaced: replicant passes that
+    /// alternate light/dark must not re-render or invalidate the view. AppKit already marks the
+    /// view for display on a real appearance change, so this view deliberately does not override
+    /// `viewDidChangeEffectiveAppearance`; setting `needsDisplay` there fed back into another
+    /// replicant pass on multi-display setups and kept the main thread redrawing continuously.
     override func draw(_ dirtyRect: NSRect) {
         guard bounds.width > 0, bounds.height > 0 else {
             return
         }
 
+        let appearance = NSAppearance.currentDrawing()
         let key = RenderCacheKey(
             size: bounds.size,
             scale: max(scaleFactor, 2.0),
-            appearanceName: effectiveAppearance.name
+            appearanceName: appearance.name
         )
-        if renderCacheKey != key || renderedImage == nil {
-            renderedImage = renderImage(for: key)
-            renderCacheKey = key
+        renderCacheKey = key
+        if renderedImages[key] == nil {
+            if renderedImages.count >= Self.maximumCachedImages {
+                renderedImages.removeAll()
+            }
+            renderedImages[key] = renderImage(for: key, appearance: appearance)
         }
 
-        if let renderedImage {
+        if let renderedImage = renderedImages[key] {
             renderedImage.draw(in: bounds)
         } else {
             drawContent()
         }
     }
 
-    override func viewDidChangeEffectiveAppearance() {
-        super.viewDidChangeEffectiveAppearance()
-        renderedImage = nil
-        renderCacheKey = nil
-        needsDisplay = true
-    }
-
-    private func renderImage(for key: RenderCacheKey) -> NSImage? {
+    private func renderImage(for key: RenderCacheKey, appearance: NSAppearance) -> NSImage? {
         let pixelsWide = Int((key.size.width * key.scale).rounded(.up))
         let pixelsHigh = Int((key.size.height * key.scale).rounded(.up))
         guard pixelsWide > 0, pixelsHigh > 0,
@@ -111,7 +114,7 @@ final class MenuBarMetricSparklineView: NSView {
 
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = context
-        effectiveAppearance.performAsCurrentDrawingAppearance {
+        appearance.performAsCurrentDrawingAppearance {
             drawContent()
         }
         context.flushGraphics()

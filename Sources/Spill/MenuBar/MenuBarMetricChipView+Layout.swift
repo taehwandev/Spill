@@ -114,12 +114,12 @@ extension MenuBarMetricChipView {
 extension MenuBarMetricChipView {
     func refreshColors() {
         let color = statusColor
-        valueLabel.textColor = segment.state == .unavailable ? .secondaryLabelColor : .labelColor
+        valueLabel.setTextColorIfChanged(segment.state == .unavailable ? .secondaryLabelColor : .labelColor)
         if hasCustomTriggerIcon {
             // Trigger icons use fixed colors, so an appearance change needs no CoreGraphics re-render.
-            iconView.contentTintColor = nil
+            iconView.setContentTintColorIfChanged(nil)
         } else {
-            iconView.contentTintColor = color.withAlphaComponent(segment.state == .unavailable ? 0.5 : 1.0)
+            iconView.setContentTintColorIfChanged(color.withAlphaComponent(segment.state == .unavailable ? 0.5 : 1.0))
         }
     }
 

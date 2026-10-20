@@ -693,12 +693,12 @@ extension MenuBarMainTriggerChipView {
     private func refreshColors() {
         if triggerUsesCustomIcon {
             // Trigger icons use fixed colors, so an appearance change needs no CoreGraphics re-render.
-            triggerIconView.contentTintColor = nil
+            triggerIconView.setContentTintColorIfChanged(nil)
         } else {
-            triggerIconView.contentTintColor = triggerColor
+            triggerIconView.setContentTintColorIfChanged(triggerColor)
         }
-        caffeineIconView.contentTintColor = caffeineColor
-        badgeLabel.textColor = caffeineColor
+        caffeineIconView.setContentTintColorIfChanged(caffeineColor)
+        badgeLabel.setTextColorIfChanged(caffeineColor)
     }
 
     private func registerForAnimationFramesIfNeeded() {
@@ -871,7 +871,7 @@ extension MenuBarCompactStackMetricChipView {
 
     private func refreshColors() {
         segmentLabels.forEach { pair in
-            pair.label.textColor = textColor(for: pair.segment)
+            pair.label.setTextColorIfChanged(textColor(for: pair.segment))
         }
     }
 
@@ -990,8 +990,8 @@ private final class MenuBarVerticalMetricChipView: NSView {
     }
 
     private func refreshColors() {
-        titleLabel.textColor = .labelColor
-        valueLabel.textColor = valueColor
+        titleLabel.setTextColorIfChanged(.labelColor)
+        valueLabel.setTextColorIfChanged(valueColor)
     }
 
     private var valueColor: NSColor {

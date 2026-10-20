@@ -24,6 +24,28 @@ final class MenuBarMetricSparklineViewTests: XCTestCase {
         XCTAssertEqual(view.renderCacheKey?.size, NSSize(width: 52, height: 13))
     }
 
+    func testAlternatingAppearancesReuseOneImagePerAppearance() throws {
+        let view = MenuBarMetricSparklineView(
+            series: [.init(role: .status, values: [0.2, 0.95, 0.5, 0.75])],
+            kind: .cpu,
+            statusColor: .systemGreen
+        )
+        view.frame = NSRect(x: 0, y: 0, width: 40, height: 13)
+        let light = try XCTUnwrap(NSAppearance(named: .aqua))
+        let dark = try XCTUnwrap(NSAppearance(named: .darkAqua))
+
+        for _ in 0..<3 {
+            for appearance in [light, dark] {
+                view.appearance = appearance
+                view.viewDidChangeEffectiveAppearance()
+                render(view)
+                XCTAssertEqual(view.renderCacheKey?.appearanceName, appearance.name)
+            }
+        }
+
+        XCTAssertEqual(view.renderedImages.count, 2)
+    }
+
     private func render(_ view: NSView) {
         guard let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else {
             return XCTFail("missing bitmap for \(view.bounds)")
