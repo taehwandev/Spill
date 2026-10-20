@@ -21,7 +21,6 @@ extension MenuBarMetricChipView {
             )
         }
         valueLabel.alignment = segment.isValueOnly || segment.isBadge ? .center : .right
-        valueLabel.lineBreakMode = .byClipping
         valueLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
         valueLabel.setContentHuggingPriority(.required, for: .horizontal)
     }

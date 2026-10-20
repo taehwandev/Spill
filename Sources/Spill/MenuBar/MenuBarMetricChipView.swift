@@ -12,7 +12,7 @@ final class MenuBarMetricChipView: NSView {
     let textFontSize: CGFloat
     let textIsBold: Bool
     let iconView = NSImageView()
-    let valueLabel = NSTextField(labelWithString: "")
+    let valueLabel = MenuBarStatusTextView(labelWithString: "")
 
     init(segment: MenuBarStatusSegment, textFontSize: CGFloat, textIsBold: Bool) {
         self.segment = segment
@@ -33,11 +33,6 @@ final class MenuBarMetricChipView: NSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
-    }
-
-    override func viewDidChangeEffectiveAppearance() {
-        super.viewDidChangeEffectiveAppearance()
-        refreshColors()
     }
 
     func configureIcon() {

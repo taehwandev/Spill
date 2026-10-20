@@ -72,7 +72,7 @@ procedure. This checklist is the Spill-specific quick gate before closeout.
 - [ ] `git push origin v<version>`
 - [ ] GitHub Actions repository variables are set for production private usage
       upload: `SPILL_BUILD_PRIVATE_USAGE_FEATURE_ENABLED=1`,
-      `SPILL_BUILD_PRIVATE_USAGE_WEB_URL=https://spill.thdev.app/`. The app
+      `SPILL_BUILD_PRIVATE_USAGE_WEB_URL=https://getmoru.com/`. The app
       derives the relay URL from the web origin.
 - [ ] GitHub Secrets include `SPILL_APTABASE_APP_KEY` when public metrics are
       expected. `SPILL_WEB_APTABASE_APP_KEY` and
@@ -94,7 +94,7 @@ procedure. This checklist is the Spill-specific quick gate before closeout.
 - [ ] Latest stable DMG URL resolves.
 - [ ] Latest `update.json` URL resolves.
 - [ ] Latest `appcast.xml` URL resolves.
-- [ ] `https://spill.thdev.app/` resolves when the hosted web portal is part
+- [ ] `https://getmoru.com/` resolves when the hosted web portal is part
       of the release scope.
 - [ ] Sparkle-enabled Check for Updates can download and replace the app from an
       older build.

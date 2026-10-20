@@ -117,7 +117,7 @@ final class MenuBarStatusContentViewTests: XCTestCase {
         let chip = try XCTUnwrap(view.subviews.first)
 
         XCTAssertEqual(chip.subviews.compactMap { $0 as? NSImageView }.count, 2)
-        XCTAssertTrue(chip.subviews.compactMap { $0 as? NSTextField }.isEmpty)
+        XCTAssertTrue(chip.subviews.compactMap { $0 as? MenuBarStatusTextView }.isEmpty)
     }
 
     func testInactiveCaffeineInMainChipUsesNormalIconColor() throws {
@@ -248,7 +248,7 @@ final class MenuBarStatusContentViewTests: XCTestCase {
         )
         let valueLabel = view.subviews
             .flatMap(\.subviews)
-            .compactMap { $0 as? NSTextField }
+            .compactMap { $0 as? MenuBarStatusTextView }
             .first
 
         XCTAssertEqual(valueLabel?.font?.pointSize, 15)
@@ -430,7 +430,7 @@ final class MenuBarStatusContentViewTests: XCTestCase {
         let view = MenuBarStatusContentView(segments: [cpu, memory])
         let chip = try XCTUnwrap(view.subviews.first)
         let icons = chip.subviews.compactMap { $0 as? NSImageView }
-        let labels = chip.subviews.compactMap { $0 as? NSTextField }.map(\.stringValue)
+        let labels = chip.subviews.compactMap { $0 as? MenuBarStatusTextView }.map(\.stringValue)
 
         XCTAssertEqual(icons.count, 2)
         XCTAssertEqual(labels, ["90.0%", "90.0%"])
@@ -442,7 +442,7 @@ final class MenuBarStatusContentViewTests: XCTestCase {
         let chip = try XCTUnwrap(view.subviews.first)
 
         XCTAssertEqual(chip.subviews.compactMap { $0 as? NSImageView }.count, 1)
-        XCTAssertEqual(chip.subviews.compactMap { $0 as? NSTextField }.map(\.stringValue), ["1.44M"])
+        XCTAssertEqual(chip.subviews.compactMap { $0 as? MenuBarStatusTextView }.map(\.stringValue), ["1.44M"])
     }
 
     func testCompactAITokenCanStackWithAnotherMetric() throws {
@@ -453,7 +453,7 @@ final class MenuBarStatusContentViewTests: XCTestCase {
 
         XCTAssertEqual(view.subviews.count, 1)
         XCTAssertEqual(chip.subviews.compactMap { $0 as? NSImageView }.count, 2)
-        XCTAssertEqual(chip.subviews.compactMap { $0 as? NSTextField }.map(\.stringValue), ["72%", "1.44M"])
+        XCTAssertEqual(chip.subviews.compactMap { $0 as? MenuBarStatusTextView }.map(\.stringValue), ["72%", "1.44M"])
     }
 
     func testCompactCaffeineUsesBadgeInsteadOfDroppingRemainingTime() throws {
@@ -462,7 +462,7 @@ final class MenuBarStatusContentViewTests: XCTestCase {
         let chip = try XCTUnwrap(view.subviews.first)
 
         XCTAssertEqual(chip.subviews.compactMap { $0 as? NSImageView }.count, 1)
-        XCTAssertEqual(chip.subviews.compactMap { $0 as? NSTextField }.map(\.stringValue), ["15"])
+        XCTAssertEqual(chip.subviews.compactMap { $0 as? MenuBarStatusTextView }.map(\.stringValue), ["15"])
         XCTAssertLessThanOrEqual(
             MenuBarStatusContentView.preferredWidth(for: [caffeine]),
             26
@@ -475,7 +475,7 @@ final class MenuBarStatusContentViewTests: XCTestCase {
         let chip = try XCTUnwrap(view.subviews.first)
 
         XCTAssertEqual(chip.subviews.compactMap { $0 as? NSImageView }.count, 1)
-        XCTAssertEqual(chip.subviews.compactMap { $0 as? NSTextField }.map(\.stringValue), ["1:59"])
+        XCTAssertEqual(chip.subviews.compactMap { $0 as? MenuBarStatusTextView }.map(\.stringValue), ["1:59"])
         XCTAssertLessThanOrEqual(
             MenuBarStatusContentView.preferredWidth(for: [caffeine]),
             26
@@ -490,7 +490,7 @@ final class MenuBarStatusContentViewTests: XCTestCase {
             groupsMainCaffeine: true
         )
         let chip = try XCTUnwrap(view.subviews.first)
-        let label = try XCTUnwrap(chip.subviews.compactMap { $0 as? NSTextField }.first)
+        let label = try XCTUnwrap(chip.subviews.compactMap { $0 as? MenuBarStatusTextView }.first)
         view.frame = NSRect(
             x: 0,
             y: 0,
@@ -513,7 +513,7 @@ final class MenuBarStatusContentViewTests: XCTestCase {
         let view = MenuBarStatusContentView(segments: [cpu, memory], layoutStyle: .stacked)
         let labels = view.subviews
             .flatMap(\.subviews)
-            .compactMap { $0 as? NSTextField }
+            .compactMap { $0 as? MenuBarStatusTextView }
             .map(\.stringValue)
 
         XCTAssertEqual(labels, ["CPU", "5%", "RAM", "20%"])
@@ -524,7 +524,7 @@ final class MenuBarStatusContentViewTests: XCTestCase {
         let view = MenuBarStatusContentView(segments: [ai], layoutStyle: .stacked)
         let labels = view.subviews
             .flatMap(\.subviews)
-            .compactMap { $0 as? NSTextField }
+            .compactMap { $0 as? MenuBarStatusTextView }
             .map(\.stringValue)
 
         XCTAssertEqual(labels, ["AI", "1.44M"])
@@ -536,7 +536,7 @@ final class MenuBarStatusContentViewTests: XCTestCase {
         let view = MenuBarStatusContentView(segments: [cpu, memory], layoutStyle: .stacked)
         let labels = view.subviews
             .flatMap(\.subviews)
-            .compactMap { $0 as? NSTextField }
+            .compactMap { $0 as? MenuBarStatusTextView }
 
         XCTAssertEqual(labels[0].textColor, .labelColor)
         XCTAssertEqual(labels[2].textColor, .labelColor)
@@ -607,7 +607,7 @@ final class MenuBarStatusContentViewTests: XCTestCase {
 
         XCTAssertTrue(chart.usesChartPresentation)
         XCTAssertEqual(chip.subviews.compactMap { $0 as? MenuBarMetricSparklineView }.count, 1)
-        XCTAssertFalse(chip.subviews.compactMap { $0 as? NSTextField }.contains { $0.stringValue == "20.0%" })
+        XCTAssertFalse(chip.subviews.compactMap { $0 as? MenuBarStatusTextView }.contains { $0.stringValue == "20.0%" })
     }
 
     func testNetworkHistoryRendersDualSeriesSparkline() throws {
@@ -654,7 +654,7 @@ final class MenuBarStatusContentViewTests: XCTestCase {
         let chip = try XCTUnwrap(view.subviews.first)
 
         XCTAssertEqual(chip.subviews.compactMap { $0 as? MenuBarMetricSparklineView }.count, 1)
-        XCTAssertFalse(chip.subviews.compactMap { $0 as? NSTextField }.contains { $0.stringValue == "60.0%" })
+        XCTAssertFalse(chip.subviews.compactMap { $0 as? MenuBarStatusTextView }.contains { $0.stringValue == "60.0%" })
     }
 
     func testPresentationStylesTransformEachGraphMetricIndependently() {

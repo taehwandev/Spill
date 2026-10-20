@@ -65,8 +65,8 @@ LOCALIZED_CONTENT_FILES = {
     "Sources/Spill/Settings/SpillAppLanguage.swift",
     "Sources/Spill/Settings/SpillSettings.swift",
     "Sources/Spill/App/AppLocalization.swift",
-    "Sources/Spill/Preferences/PreferencesLegalLocalization.swift",
-    "Sources/Spill/Preferences/PreferencesLocalization.swift",
+    "Sources/Spill/Preferences/Localization/PreferencesLegalLocalization.swift",
+    "Sources/Spill/Preferences/Localization/PreferencesLocalization.swift",
     "Sources/Spill/TokenMetering/TokenMeteringLocalization.swift",
     "Sources/Spill/TokenMetering/TokenMeteringDashboardView.swift",
 }
@@ -82,7 +82,7 @@ def is_localized_content_file(relative_path: Path) -> bool:
         normalized.startswith("Sources/Spill/App/AppLocalization+")
         and re.fullmatch(r"AppLocalization\+[A-Za-z]+TextPart[0-9]+\.swift", name)
     ) or (
-        normalized.startswith("Sources/Spill/Preferences/PreferencesLocalization+")
+        normalized.startswith("Sources/Spill/Preferences/Localization/PreferencesLocalization+")
         and re.fullmatch(r"PreferencesLocalization\+[A-Za-z]+TextPart[0-9]+\.swift", name)
     )
 
@@ -113,7 +113,7 @@ def tao_root() -> Path:
     return Path(
         os.environ.get(
             "TAO_HOME",
-            str(Path.home() / "git" / "tao-agent-os"),
+            str(Path.home() / "git" / "moru-core"),
         )
     ).expanduser()
 

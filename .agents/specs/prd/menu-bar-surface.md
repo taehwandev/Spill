@@ -39,6 +39,10 @@ The quick-actions PRD owns that removal boundary and retained window controls.
   recent-peak scaling so low traffic remains visually meaningful.
 - Menu bar graphs reuse the system status store history and refresh cadence;
   they do not create independent timers, probes, or permission requirements.
+- Rendering status items on multiple displays must not feed appearance or
+  layout changes back into continuous redraws. Read-only metric text keeps the
+  same typography, semantic colors, accessibility, and hit targets across
+  display appearances.
 - Existing global Text/Chart preferences migrate to each graph-capable metric;
   new installations keep CPU and memory on Text while Network remains Off.
 - Caffeine is part of the main menu bar surface, not a standalone status group.
@@ -82,3 +86,8 @@ The quick-actions PRD owns that removal boundary and retained window controls.
 - Verify single-item and split-item modes independently from compact rendering.
 - Verify graph-capable settings migrate without enabling Network by default.
 - Verify status chips reuse existing provider history and do not add timers.
+- Verify repeated light/dark display snapshots preserve text metrics, chip
+  frames, and hit targets without entering `NSTextField` control layout.
+- Compare live CPU with one and three displays before claiming the reported
+  multi-display performance regression is resolved; offscreen rendering tests
+  alone do not prove that result.

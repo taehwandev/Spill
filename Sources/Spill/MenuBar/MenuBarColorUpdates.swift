@@ -1,9 +1,8 @@
 import AppKit
 
-/// Menu bar views re-apply colors from `viewDidChangeEffectiveAppearance`, which AppKit can call
-/// repeatedly while rendering status item replicants for each display. Assigning only real
-/// changes keeps those callbacks from invalidating the views again.
-extension NSTextField {
+/// Assign semantic colors only when their value changes. Drawing resolves their appearance;
+/// status-item replicant passes must not reassign them from appearance callbacks.
+extension MenuBarStatusTextView {
     func setTextColorIfChanged(_ color: NSColor?) {
         guard textColor != color else {
             return

@@ -555,7 +555,7 @@ private final class MenuBarMainTriggerChipView: NSView {
     private let caffeine: MenuBarStatusSegment?
     private let triggerIconView = NSImageView()
     private let caffeineIconView = NSImageView()
-    private let badgeLabel = NSTextField(labelWithString: "")
+    private let badgeLabel = MenuBarStatusTextView(labelWithString: "")
 
     init(trigger: MenuBarStatusSegment, caffeine: MenuBarStatusSegment?) {
         self.trigger = trigger
@@ -574,11 +574,6 @@ private final class MenuBarMainTriggerChipView: NSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
-    }
-
-    override func viewDidChangeEffectiveAppearance() {
-        super.viewDidChangeEffectiveAppearance()
-        refreshColors()
     }
 
     var hasCaffeine: Bool {
@@ -644,7 +639,6 @@ extension MenuBarMainTriggerChipView {
             textIsBold: true
         )
         badgeLabel.alignment = .center
-        badgeLabel.lineBreakMode = .byClipping
         badgeLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
         badgeLabel.setContentHuggingPriority(.required, for: .horizontal)
     }
@@ -765,9 +759,9 @@ private final class MenuBarCompactStackMetricChipView: NSView {
     private let segments: [MenuBarStatusSegment]
     private let textFontSize: CGFloat
     private let textIsBold: Bool
-    private var segmentLabels: [(segment: MenuBarStatusSegment, label: NSTextField)] = []
+    private var segmentLabels: [(segment: MenuBarStatusSegment, label: MenuBarStatusTextView)] = []
 
-    var labelledSegments: [(segment: MenuBarStatusSegment, label: NSTextField)] {
+    var labelledSegments: [(segment: MenuBarStatusSegment, label: MenuBarStatusTextView)] {
         segmentLabels
     }
 
@@ -785,11 +779,6 @@ private final class MenuBarCompactStackMetricChipView: NSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
-    }
-
-    override func viewDidChangeEffectiveAppearance() {
-        super.viewDidChangeEffectiveAppearance()
-        refreshColors()
     }
 
 }
@@ -854,25 +843,18 @@ extension MenuBarCompactStackMetricChipView {
         return icon
     }
 
-    private func makeLabel(for segment: MenuBarStatusSegment) -> NSTextField {
-        let label = NSTextField(labelWithString: segment.value)
+    private func makeLabel(for segment: MenuBarStatusSegment) -> MenuBarStatusTextView {
+        let label = MenuBarStatusTextView(labelWithString: segment.value)
         label.translatesAutoresizingMaskIntoConstraints = false
         label.font = MenuBarStatusContentView.compactStackTextFont(
             textFontSize: textFontSize,
             textIsBold: textIsBold
         )
         label.alignment = .center
-        label.lineBreakMode = .byClipping
         label.setContentCompressionResistancePriority(.required, for: .horizontal)
         label.setContentHuggingPriority(.required, for: .horizontal)
         label.textColor = textColor(for: segment)
         return label
-    }
-
-    private func refreshColors() {
-        segmentLabels.forEach { pair in
-            pair.label.setTextColorIfChanged(textColor(for: pair.segment))
-        }
     }
 
     private func textColor(for segment: MenuBarStatusSegment) -> NSColor {
@@ -909,8 +891,8 @@ private final class MenuBarVerticalMetricChipView: NSView {
     private let segment: MenuBarStatusSegment
     private let textFontSize: CGFloat
     private let textIsBold: Bool
-    private let titleLabel = NSTextField(labelWithString: "")
-    private let valueLabel = NSTextField(labelWithString: "")
+    private let titleLabel = MenuBarStatusTextView(labelWithString: "")
+    private let valueLabel = MenuBarStatusTextView(labelWithString: "")
 
     var chipSegment: MenuBarStatusSegment {
         segment
@@ -933,17 +915,11 @@ private final class MenuBarVerticalMetricChipView: NSView {
         fatalError("init(coder:) has not been implemented")
     }
 
-    override func viewDidChangeEffectiveAppearance() {
-        super.viewDidChangeEffectiveAppearance()
-        refreshColors()
-    }
-
     private func configureLabels() {
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         titleLabel.stringValue = MenuBarStatusContentView.verticalTitle(for: segment)
         titleLabel.font = MenuBarStatusContentView.verticalTitleFont(textFontSize: textFontSize)
         titleLabel.alignment = .center
-        titleLabel.lineBreakMode = .byClipping
         titleLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
         titleLabel.setContentHuggingPriority(.required, for: .horizontal)
 
@@ -954,7 +930,6 @@ private final class MenuBarVerticalMetricChipView: NSView {
             textIsBold: textIsBold
         )
         valueLabel.alignment = .center
-        valueLabel.lineBreakMode = .byClipping
         valueLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
         valueLabel.setContentHuggingPriority(.required, for: .horizontal)
 

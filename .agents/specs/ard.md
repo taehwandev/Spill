@@ -72,6 +72,15 @@ Rules:
   itself too small for reliable direct interaction.
 - System and AI values must share the same provider stores and refresh cadence
   as the Main app state instead of starting independent timers.
+- Menu bar labels use `MenuBarStatusTextView`, a read-only `NSView` that draws
+  semantic text colors in the current appearance. `NSTextField` control layout
+  must stay outside the status-item subtree: multi-display replicant snapshots
+  repeatedly entered that appearance-dependent layout even after chart caching.
+  Text metrics change only with text/font inputs; drawing and appearance changes
+  do not mutate fonts, colors, constraints, or intrinsic size. Chip geometry,
+  hit targets, tooltips, and accessibility values remain unchanged. This is a
+  menu bar rendering boundary only, with no settings, persistence, timers,
+  provider, helper-dashboard, panel, or upload changes.
 - `MenuBarStatusSummary` carries formatted text plus semantic graph series to
   AppKit status chips. `SpillSettings` persists a presentation style per
   graph-capable metric and coordinates Off with the existing enabled-item set.
