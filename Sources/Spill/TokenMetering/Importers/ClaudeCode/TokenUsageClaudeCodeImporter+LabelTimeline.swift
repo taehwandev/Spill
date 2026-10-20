@@ -2,12 +2,64 @@ import Foundation
 
 extension TokenUsageClaudeCodeImporter {
     struct LabelTimeline {
+        /// A history holds 100k+ entries but only a few hundred distinct label combinations, so
+        /// each entry stores an index into `LabelTable` and raw timestamps (24 bytes) instead of
+        /// three strings and two `Date`s (64 bytes).
         struct Entry {
-            let taskType: TokenUsageTaskType?
-            let stage: TokenUsageStage?
-            let projectID: String
-            let updatedAt: Date
-            let expiresAt: Date
+            private let labelIndex: UInt32
+            private let updatedAtInterval: TimeInterval
+            private let expiresAtInterval: TimeInterval
+
+            init(
+                taskType: TokenUsageTaskType?,
+                stage: TokenUsageStage?,
+                projectID: String,
+                updatedAt: Date,
+                expiresAt: Date
+            ) {
+                labelIndex = LabelTable.shared.index(
+                    for: LabelTable.Label(taskType: taskType, stage: stage, projectID: projectID)
+                )
+                updatedAtInterval = updatedAt.timeIntervalSinceReferenceDate
+                expiresAtInterval = expiresAt.timeIntervalSinceReferenceDate
+            }
+
+            var taskType: TokenUsageTaskType? { LabelTable.shared.label(at: labelIndex).taskType }
+            var stage: TokenUsageStage? { LabelTable.shared.label(at: labelIndex).stage }
+            var projectID: String { LabelTable.shared.label(at: labelIndex).projectID }
+            var updatedAt: Date { Date(timeIntervalSinceReferenceDate: updatedAtInterval) }
+            var expiresAt: Date { Date(timeIntervalSinceReferenceDate: expiresAtInterval) }
+        }
+
+        /// Process-wide, append-only table of distinct entry labels shared by every timeline read.
+        final class LabelTable: @unchecked Sendable {
+            struct Label: Hashable {
+                let taskType: TokenUsageTaskType?
+                let stage: TokenUsageStage?
+                let projectID: String
+            }
+
+            static let shared = LabelTable()
+
+            private let lock = NSLock()
+            private var labels = [Label]()
+            private var indexByLabel = [Label: UInt32]()
+
+            func index(for label: Label) -> UInt32 {
+                lock.withLock {
+                    if let index = indexByLabel[label] {
+                        return index
+                    }
+                    let index = UInt32(labels.count)
+                    labels.append(label)
+                    indexByLabel[label] = index
+                    return index
+                }
+            }
+
+            func label(at index: UInt32) -> Label {
+                lock.withLock { labels[Int(index)] }
+            }
         }
 
         let entries: [Entry]
@@ -63,7 +115,6 @@ extension TokenUsageClaudeCodeImporter {
         /// Kept sorted by `updatedAt` so each import does not re-sort the whole history.
         var completedEntries: [LabelTimeline.Entry] = []
         var pendingLineData = Data()
-        var internedStrings = Set<String>()
 
         mutating func appendEntries(_ newEntries: [LabelTimeline.Entry]) {
             guard !newEntries.isEmpty else {
@@ -210,11 +261,11 @@ extension TokenUsageClaudeCodeImporter {
             return nil
         }
 
-        let taskType = (object["task_type"] as? String).map(internedString).flatMap(TokenUsageTaskType.init(rawValue:))
-        let stage = (object["stage"] as? String).map(internedString).flatMap(TokenUsageStage.init(rawValue:))
+        let taskType = (object["task_type"] as? String).flatMap(TokenUsageTaskType.init(rawValue:))
+        let stage = (object["stage"] as? String).flatMap(TokenUsageStage.init(rawValue:))
         guard taskType != nil || stage != nil else { return nil }
 
-        let projectID = internedString(safeOpaqueID(object["project_id"] as? String) ?? "project_global")
+        let projectID = safeOpaqueID(object["project_id"] as? String) ?? "project_global"
         let updatedAt = (object["updated_at"] as? String).flatMap(ISO8601DateFormatter.parseTokenUsageDate(from:))
         let expiresAt = (object["expires_at"] as? String).flatMap(ISO8601DateFormatter.parseTokenUsageDate(from:))
         guard let updatedAt, let expiresAt else { return nil }
@@ -226,17 +277,6 @@ extension TokenUsageClaudeCodeImporter {
             updatedAt: updatedAt,
             expiresAt: expiresAt
         )
-    }
-
-    /// The history holds a handful of projects, task types and stages across hundreds of
-    /// thousands of entries, so the entries share one string per value instead of each owning a
-    /// heap copy (values over 15 UTF-8 bytes, such as `build_verification`, are not inline).
-    private func internedString(_ value: String) -> String {
-        if let existing = labelTimelineCache.internedStrings.firstIndex(of: value) {
-            return labelTimelineCache.internedStrings[existing]
-        }
-        labelTimelineCache.internedStrings.insert(value)
-        return value
     }
 
     private func safeOpaqueID(_ value: String?) -> String? {

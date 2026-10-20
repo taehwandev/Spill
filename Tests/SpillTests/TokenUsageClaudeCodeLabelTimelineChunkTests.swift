@@ -42,4 +42,23 @@ final class TokenUsageClaudeCodeLabelTimelineChunkTests: XCTestCase {
         _ = importer.readLabelTimeline()
         XCTAssertEqual(importer.labelTimelineBytesRead, data.count)
     }
+
+    func testEntryStaysCompactAndRoundTripsFields() {
+        typealias Entry = TokenUsageClaudeCodeImporter.LabelTimeline.Entry
+        let updatedAt = Date(timeIntervalSince1970: 1_780_000_000.25)
+        let entry = Entry(
+            taskType: .debugging,
+            stage: .implement,
+            projectID: "project_compact_entry",
+            updatedAt: updatedAt,
+            expiresAt: updatedAt.addingTimeInterval(1_800)
+        )
+
+        XCTAssertLessThanOrEqual(MemoryLayout<Entry>.stride, 24)
+        XCTAssertEqual(entry.taskType, .debugging)
+        XCTAssertEqual(entry.stage, .implement)
+        XCTAssertEqual(entry.projectID, "project_compact_entry")
+        XCTAssertEqual(entry.updatedAt, updatedAt)
+        XCTAssertEqual(entry.expiresAt, updatedAt.addingTimeInterval(1_800))
+    }
 }
