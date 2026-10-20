@@ -63,7 +63,7 @@ extension TokenUsageClaudeCodeImporter {
         /// Kept sorted by `updatedAt` so each import does not re-sort the whole history.
         var completedEntries: [LabelTimeline.Entry] = []
         var pendingLineData = Data()
-        var projectIDPool = Set<String>()
+        var internedStrings = Set<String>()
 
         mutating func appendEntries(_ newEntries: [LabelTimeline.Entry]) {
             guard !newEntries.isEmpty else {
@@ -75,6 +75,16 @@ extension TokenUsageClaudeCodeImporter {
             } else {
                 completedEntries.append(contentsOf: sortedNewEntries)
             }
+        }
+
+        /// Growth by appending leaves up to ~2x spare capacity after a first full read; copy into
+        /// an exactly sized buffer when the spare part is large enough to matter. Callers trim
+        /// only after bulk reads so small incremental appends do not regrow and recopy each time.
+        mutating func trimExcessCapacity() {
+            guard completedEntries.capacity - completedEntries.count > 4_096 else {
+                return
+            }
+            completedEntries = completedEntries.withUnsafeBufferPointer { Array($0) }
         }
     }
 
@@ -110,6 +120,7 @@ extension TokenUsageClaudeCodeImporter {
             return cachedLabelTimeline()
         }
 
+        let bytesReadBefore = labelTimelineBytesRead
         // The first launch reads the whole history (tens of MB). Reading it in bounded chunks
         // keeps the transient Data and parsed Foundation objects small instead of peaking at
         // several times the file size.
@@ -124,6 +135,9 @@ extension TokenUsageClaudeCodeImporter {
             labelTimelineCache.byteOffset += UInt64(chunk.count)
             labelTimelineBytesRead += chunk.count
             appendLabelTimelineChunk(chunk)
+        }
+        if labelTimelineBytesRead - bytesReadBefore >= Self.labelTimelineChunkSize {
+            labelTimelineCache.trimExcessCapacity()
         }
         return cachedLabelTimeline()
     }
@@ -196,11 +210,11 @@ extension TokenUsageClaudeCodeImporter {
             return nil
         }
 
-        let taskType = (object["task_type"] as? String).flatMap(TokenUsageTaskType.init(rawValue:))
-        let stage = (object["stage"] as? String).flatMap(TokenUsageStage.init(rawValue:))
+        let taskType = (object["task_type"] as? String).map(internedString).flatMap(TokenUsageTaskType.init(rawValue:))
+        let stage = (object["stage"] as? String).map(internedString).flatMap(TokenUsageStage.init(rawValue:))
         guard taskType != nil || stage != nil else { return nil }
 
-        let projectID = internedProjectID(safeOpaqueID(object["project_id"] as? String) ?? "project_global")
+        let projectID = internedString(safeOpaqueID(object["project_id"] as? String) ?? "project_global")
         let updatedAt = (object["updated_at"] as? String).flatMap(ISO8601DateFormatter.parseTokenUsageDate(from:))
         let expiresAt = (object["expires_at"] as? String).flatMap(ISO8601DateFormatter.parseTokenUsageDate(from:))
         guard let updatedAt, let expiresAt else { return nil }
@@ -214,14 +228,15 @@ extension TokenUsageClaudeCodeImporter {
         )
     }
 
-    /// The history holds a handful of projects across hundreds of thousands of entries, so the
-    /// entries share one string per project instead of each owning a copy.
-    private func internedProjectID(_ id: String) -> String {
-        if let existing = labelTimelineCache.projectIDPool.firstIndex(of: id) {
-            return labelTimelineCache.projectIDPool[existing]
+    /// The history holds a handful of projects, task types and stages across hundreds of
+    /// thousands of entries, so the entries share one string per value instead of each owning a
+    /// heap copy (values over 15 UTF-8 bytes, such as `build_verification`, are not inline).
+    private func internedString(_ value: String) -> String {
+        if let existing = labelTimelineCache.internedStrings.firstIndex(of: value) {
+            return labelTimelineCache.internedStrings[existing]
         }
-        labelTimelineCache.projectIDPool.insert(id)
-        return id
+        labelTimelineCache.internedStrings.insert(value)
+        return value
     }
 
     private func safeOpaqueID(_ value: String?) -> String? {

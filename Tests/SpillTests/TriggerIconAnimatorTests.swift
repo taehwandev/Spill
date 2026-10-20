@@ -76,6 +76,32 @@ final class TriggerIconAnimatorTests: XCTestCase {
         XCTAssertTrue(animator.hasFrameTimerForTesting)
     }
 
+    func testUsageRatioJumpRightAfterBurstWaitsForMinimumGap() {
+        var currentTime = Date(timeIntervalSince1970: 1_000)
+        let animator = TriggerIconAnimator.makeForTesting(now: { currentTime })
+        defer { animator.stop() }
+
+        animator.start()
+        animator.startBurstForTesting()
+        for _ in 0..<20 {
+            animator.advanceFrameForTesting()
+        }
+        XCTAssertFalse(animator.isBurstingForTesting)
+
+        animator.noteUsageRatio(0.10)
+        currentTime.addTimeInterval(2)
+        animator.noteUsageRatio(0.90)
+
+        XCTAssertFalse(animator.isBurstingForTesting)
+        XCTAssertFalse(animator.hasFrameTimerForTesting)
+
+        currentTime.addTimeInterval(6)
+        animator.noteUsageRatio(0.10)
+
+        XCTAssertTrue(animator.isBurstingForTesting)
+        XCTAssertTrue(animator.hasFrameTimerForTesting)
+    }
+
     func testFrameAdvanceCompletesBurstAndReturnsToRest() {
         let animator = TriggerIconAnimator.makeForTesting()
         var frameCount = 0

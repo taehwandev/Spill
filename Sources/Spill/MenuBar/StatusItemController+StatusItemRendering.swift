@@ -50,20 +50,29 @@ extension StatusItemController {
         isVisible: Bool,
         rebuildsContentView: Bool
     ) {
-        item.isVisible = isVisible
+        // Every status item mutation makes AppKit re-render the item's replicant on each
+        // display, so periodic refreshes only touch properties whose values actually changed.
+        if item.isVisible != isVisible {
+            item.isVisible = isVisible
+        }
         guard isVisible, let button = item.button else {
-            item.length = 0
+            if item.length != 0 {
+                item.length = 0
+            }
             removeStatusContentView(&contentView)
             return
         }
 
-        item.length = MenuBarStatusContentView.preferredWidth(
+        let length = MenuBarStatusContentView.preferredWidth(
             for: segments,
             layoutStyle: layoutStyle,
             textFontSize: textFontSize,
             textIsBold: textIsBold,
             groupsMainCaffeine: groupsMainCaffeine
         )
+        if item.length != length {
+            item.length = length
+        }
         configureAppearance(
             for: button,
             contentView: &contentView,
@@ -88,13 +97,10 @@ extension StatusItemController {
         groupsMainCaffeine: Bool,
         rebuildsContentView: Bool
     ) {
-        button.image = nil
-        button.imagePosition = .noImage
-        button.title = ""
-        button.attributedTitle = NSAttributedString(string: "")
-        button.isBordered = false
-
         if !segments.isEmpty {
+            if rebuildsContentView || contentView == nil {
+                clearButtonContent(button)
+            }
             installStatusContentView(
                 on: button,
                 contentView: &contentView,
@@ -105,11 +111,23 @@ extension StatusItemController {
                 groupsMainCaffeine: groupsMainCaffeine,
                 rebuildsContentView: rebuildsContentView
             )
-            button.setAccessibilityLabel(statusTooltip.isEmpty ? "Spill" : statusTooltip)
+            let accessibilityLabel = statusTooltip.isEmpty ? "Spill" : statusTooltip
+            if button.accessibilityLabel() != accessibilityLabel {
+                button.setAccessibilityLabel(accessibilityLabel)
+            }
             return
         }
 
+        clearButtonContent(button)
         configureIconAppearance(for: button, contentView: &contentView)
+    }
+
+    private func clearButtonContent(_ button: NSStatusBarButton) {
+        button.image = nil
+        button.imagePosition = .noImage
+        button.title = ""
+        button.attributedTitle = NSAttributedString(string: "")
+        button.isBordered = false
     }
 
     func configureIconAppearance(

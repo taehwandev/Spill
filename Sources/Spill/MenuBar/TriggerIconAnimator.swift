@@ -13,6 +13,9 @@ import Foundation
 /// A burst can also be triggered early, and run a bit faster, when the system's combined
 /// CPU/memory/network load jumps by a meaningful amount between refreshes (see `noteUsageRatio`),
 /// so the icon's motion loosely tracks real activity without being literally proportional to it.
+/// Early bursts respect the same minimum gap as idle ones: every frame re-renders the whole
+/// status item on every display, which itself moves CPU load, so an uncapped load trigger
+/// can feed back into near-continuous animation.
 @MainActor
 final class TriggerIconAnimator {
     static let shared = TriggerIconAnimator()
@@ -32,8 +35,12 @@ final class TriggerIconAnimator {
     private var burstSpeedMultiplier: CGFloat = 1
     private var lastUsageRatio: Double?
     private var isRunning = false
+    private var lastBurstEndedAt: Date?
+    private let now: () -> Date
 
-    private init() {}
+    private init(now: @escaping () -> Date = Date.init) {
+        self.now = now
+    }
 
     /// Idempotent — safe to call every refresh tick. Does nothing if already running.
     func start() {
@@ -57,6 +64,7 @@ final class TriggerIconAnimator {
         let shouldRedrawAtRest = phase != 0
         phase = 0
         lastUsageRatio = nil
+        lastBurstEndedAt = nil
         if shouldRedrawAtRest {
             onFrame?()
         }
@@ -71,6 +79,9 @@ final class TriggerIconAnimator {
         guard let previousUsageRatio = lastUsageRatio else { return }
         let delta = abs(ratio - previousUsageRatio)
         guard delta >= Self.usageChangeBurstThreshold else { return }
+        if let lastBurstEndedAt, now().timeIntervalSince(lastBurstEndedAt) < Self.idleDelayRange.lowerBound {
+            return
+        }
         let multiplier = 1 + min(Self.maximumBurstSpeedMultiplier - 1, delta)
         startBurst(speedMultiplier: multiplier)
     }
@@ -104,6 +115,7 @@ final class TriggerIconAnimator {
             frameTimer?.invalidate()
             frameTimer = nil
             isBursting = false
+            lastBurstEndedAt = now()
             onFrame?()
             scheduleNextIdleBurst()
             return
@@ -114,8 +126,8 @@ final class TriggerIconAnimator {
 
 #if DEBUG
 extension TriggerIconAnimator {
-    static func makeForTesting() -> TriggerIconAnimator {
-        TriggerIconAnimator()
+    static func makeForTesting(now: @escaping () -> Date = Date.init) -> TriggerIconAnimator {
+        TriggerIconAnimator(now: now)
     }
 
     var isRunningForTesting: Bool {

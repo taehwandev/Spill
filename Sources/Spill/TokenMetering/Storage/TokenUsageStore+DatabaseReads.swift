@@ -47,8 +47,9 @@ extension TokenUsageStore {
         }
 
         var events = [TokenUsageEvent]()
+        var columnStrings = RepeatedColumnStrings()
         while sqlite3_step(statement) == SQLITE_ROW {
-            if let event = Self.event(from: statement, startingAt: 0) {
+            if let event = Self.event(from: statement, startingAt: 0, columnStrings: &columnStrings) {
                 events.append(event)
             }
         }
@@ -76,29 +77,58 @@ extension TokenUsageStore {
 
         var events = [TokenUsageEvent]()
         var maxRowID = rowID
+        var columnStrings = RepeatedColumnStrings()
         while sqlite3_step(statement) == SQLITE_ROW {
             let currentRowID = sqlite3_column_int64(statement, 0)
             if currentRowID > maxRowID {
                 maxRowID = currentRowID
             }
-            if let event = Self.event(from: statement, startingAt: 1) {
+            if let event = Self.event(from: statement, startingAt: 1, columnStrings: &columnStrings) {
                 events.append(event)
             }
         }
         return (events, maxRowID)
     }
 
-    static func event(from statement: OpaquePointer, startingAt offset: Int32) -> TokenUsageEvent? {
+    /// Dashboard loads decode 100k+ rows whose device, project, artifact, run, label and model
+    /// columns mostly repeat the previous row's values; reusing the previous String when the
+    /// bytes match keeps each long value from becoming its own heap allocation per event, and
+    /// costs one byte comparison instead of a hash lookup.
+    struct RepeatedColumnStrings {
+        private var previousValues = [Int32: String]()
+
+        mutating func string(_ statement: OpaquePointer, _ index: Int32) -> String? {
+            guard sqlite3_column_type(statement, index) != SQLITE_NULL,
+                  let text = sqlite3_column_text(statement, index)
+            else {
+                return nil
+            }
+            let byteCount = Int(sqlite3_column_bytes(statement, index))
+            if let previous = previousValues[index], previous.utf8.count == byteCount,
+               previous.utf8.elementsEqual(UnsafeBufferPointer(start: text, count: byteCount)) {
+                return previous
+            }
+            let value = String(cString: text)
+            previousValues[index] = value
+            return value
+        }
+    }
+
+    static func event(
+        from statement: OpaquePointer,
+        startingAt offset: Int32,
+        columnStrings: inout RepeatedColumnStrings
+    ) -> TokenUsageEvent? {
         guard let spanID = columnString(statement, offset + 0),
-              let deviceID = columnString(statement, offset + 1),
-              let projectID = columnString(statement, offset + 2),
-              let artifactID = columnString(statement, offset + 3),
-              let runID = columnString(statement, offset + 4),
+              let deviceID = columnStrings.string(statement, offset + 1),
+              let projectID = columnStrings.string(statement, offset + 2),
+              let artifactID = columnStrings.string(statement, offset + 3),
+              let runID = columnStrings.string(statement, offset + 4),
               let createdAt = columnString(statement, offset + 5),
               let aiToolRaw = columnString(statement, offset + 6),
-              let taskTypeRaw = columnString(statement, offset + 7),
-              let stageRaw = columnString(statement, offset + 8),
-              let model = columnString(statement, offset + 9),
+              let taskTypeRaw = columnStrings.string(statement, offset + 7),
+              let stageRaw = columnStrings.string(statement, offset + 8),
+              let model = columnStrings.string(statement, offset + 9),
               let taskType = TokenUsageTaskType(rawValue: taskTypeRaw),
               let stage = TokenUsageStage(rawValue: stageRaw)
         else {

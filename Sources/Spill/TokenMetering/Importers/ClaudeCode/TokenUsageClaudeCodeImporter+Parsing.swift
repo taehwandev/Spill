@@ -79,17 +79,27 @@ extension TokenUsageClaudeCodeImporter {
             return true
         }
 
-        while let chunk = try? handle.read(upToCount: Self.transcriptReadChunkSize), !chunk.isEmpty {
-            pending.append(chunk)
-            guard let lastNewline = pending.lastIndex(of: newline) else {
-                continue
+        // FileHandle reads and JSONSerialization both autorelease their Foundation objects;
+        // without a per-chunk pool a first scan of a 100MB+ transcript holds all of them until
+        // the import finishes, peaking near 300MB and leaving the freed heap fragmented.
+        var reachedEnd = false
+        while !reachedEnd {
+            autoreleasepool {
+                guard let chunk = try? handle.read(upToCount: Self.transcriptReadChunkSize), !chunk.isEmpty else {
+                    reachedEnd = true
+                    return
+                }
+                pending.append(chunk)
+                guard let lastNewline = pending.lastIndex(of: newline) else {
+                    return
+                }
+                for lineData in pending[..<lastNewline].split(separator: newline, omittingEmptySubsequences: true) {
+                    _ = parse(lineData)
+                }
+                let consumedEnd = pending.index(after: lastNewline)
+                newByteOffset += pending.distance(from: pending.startIndex, to: consumedEnd)
+                pending = Data(pending[consumedEnd...])
             }
-            for lineData in pending[..<lastNewline].split(separator: newline, omittingEmptySubsequences: true) {
-                _ = parse(lineData)
-            }
-            let consumedEnd = pending.index(after: lastNewline)
-            newByteOffset += pending.distance(from: pending.startIndex, to: consumedEnd)
-            pending = Data(pending[consumedEnd...])
         }
 
         // A final line without a trailing newline is consumed only once it parses completely.

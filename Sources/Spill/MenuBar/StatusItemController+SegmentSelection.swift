@@ -76,13 +76,23 @@ extension StatusItemController {
             rebuildsContentView: changes.aiSegmentsChanged || changes.styleChanged
         )
 
-        triggerItem.button?.state = self.isSpillBarVisible ? .on : .off
-        triggerItem.button?.toolTip = tooltip(
-            statusTooltip: statusTooltip,
-            isSpillBarVisible: self.isSpillBarVisible
+        let triggerState: NSControl.StateValue = self.isSpillBarVisible ? .on : .off
+        if let button = triggerItem.button, button.state != triggerState {
+            button.state = triggerState
+        }
+        Self.setToolTipIfChanged(
+            triggerItem.button,
+            tooltip(statusTooltip: statusTooltip, isSpillBarVisible: self.isSpillBarVisible)
         )
-        systemItem.button?.toolTip = segmentTooltip(for: state.systemSegments)
-        aiItem.button?.toolTip = segmentTooltip(for: state.aiSegments)
+        Self.setToolTipIfChanged(systemItem.button, segmentTooltip(for: state.systemSegments))
+        Self.setToolTipIfChanged(aiItem.button, segmentTooltip(for: state.aiSegments))
+    }
+
+    private static func setToolTipIfChanged(_ button: NSStatusBarButton?, _ toolTip: String) {
+        guard let button, button.toolTip != toolTip else {
+            return
+        }
+        button.toolTip = toolTip
     }
 }
 
