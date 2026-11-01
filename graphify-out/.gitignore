@@ -1,5 +1,0 @@
-# Generated Graphify output is local by default.
-# A repository may explicitly allowlist reviewed, reproducible, public-safe
-# graph.json/report/HTML/wiki artifacts when they are intentional products.
-/*
-!/.gitignore
