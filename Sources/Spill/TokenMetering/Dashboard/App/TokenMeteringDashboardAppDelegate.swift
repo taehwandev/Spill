@@ -2,7 +2,7 @@ import AppKit
 
 @MainActor
 final class TokenMeteringDashboardAppDelegate: NSObject, NSApplicationDelegate {
-    private let settings = SpillSettings.shared
+    private let settings: SpillSettings
     private lazy var cloudServiceStatusStore = CloudServiceStatusStore(
         remoteRefreshRequest: { [weak self] force in
             self?.requestCloudServiceStatusRefresh(force: force)
@@ -18,8 +18,13 @@ final class TokenMeteringDashboardAppDelegate: NSObject, NSApplicationDelegate {
     private var windowController: TokenMeteringDashboardWindowController?
     private var hasRequestedMainAppLaunch = false
 
-    override init() {
-        tokenUsageStore = Self.makeTokenUsageStore()
+    override convenience init() {
+        self.init(settings: .shared, tokenUsageStore: Self.makeTokenUsageStore())
+    }
+
+    init(settings: SpillSettings, tokenUsageStore: TokenUsageStore) {
+        self.settings = settings
+        self.tokenUsageStore = tokenUsageStore
         super.init()
     }
 
@@ -209,13 +214,14 @@ extension TokenMeteringDashboardAppDelegate {
         cloudServiceStatusStore.reloadFromCacheIfNewer()
     }
 
-    @objc private func settingsDidChangeFromMainApp(_ notification: Notification) {
+    @objc func settingsDidChangeFromMainApp(_ notification: Notification) {
         let settingsKey = notification.userInfo?[TokenMeteringDashboardProcess.settingsKeyUserInfoKey] as? String
         let supportedSettingsKeys = [
             TokenMeteringDashboardProcess.appLanguageSettingsKey,
             TokenMeteringDashboardProcess.appearanceThemeSettingsKey,
             TokenMeteringDashboardProcess.tokenUsageDashboardOnboardingPreviewSettingsKey,
-            TokenMeteringDashboardProcess.tokenUsageInputScopeSettingsKey
+            TokenMeteringDashboardProcess.tokenUsageInputScopeSettingsKey,
+            TokenMeteringDashboardProcess.privateUsageUploadSettingsKey
         ]
         guard settingsKey == nil || supportedSettingsKeys.contains(settingsKey ?? "") else {
             return
@@ -240,6 +246,10 @@ extension TokenMeteringDashboardAppDelegate {
 
         if settingsKey == nil || settingsKey == TokenMeteringDashboardProcess.tokenUsageInputScopeSettingsKey {
             settings.reloadTokenUsageInputScopeFromDefaults()
+        }
+
+        if settingsKey == nil || settingsKey == TokenMeteringDashboardProcess.privateUsageUploadSettingsKey {
+            settings.reloadPrivateUsageUploadSettingsFromDefaults()
         }
     }
 

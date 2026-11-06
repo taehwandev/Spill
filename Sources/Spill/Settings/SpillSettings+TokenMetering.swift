@@ -65,6 +65,19 @@ extension SpillSettings {
     func reloadTokenUsageInputScopeFromDefaults() {
         reload(\.tokenUsageInputScope, from: .tokenUsageInputScope)
     }
+
+    /// Reload the environment and its own consent together after the main app persists them.
+    func reloadPrivateUsageUploadSettingsFromDefaults() {
+        defaults.synchronize()
+        let environment = Self.loadPrivateUsageUploadEnvironment(from: defaults)
+        let isEnabled = defaults.value(for: .privateUsageUploadEnabled(for: environment))
+        if privateUsageUploadEnvironment != environment {
+            privateUsageUploadEnvironment = environment
+        }
+        if privateUsageUploadEnabled != isEnabled {
+            privateUsageUploadEnabled = isEnabled
+        }
+    }
 }
 
 // MARK: - AI tool visibility

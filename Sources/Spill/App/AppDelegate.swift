@@ -598,79 +598,26 @@ extension AppDelegate {
 
 extension AppDelegate {
     private func observeMenuBarAppearanceSettings() {
-        settings.$menuBarStatusLayoutStyle
-            .dropFirst()
-            .sink { [weak self] _ in
-                SpillTelemetry.shared.track("preference_changed", props: ["name": "menu_bar_status_layout_style"])
-                self?.statusItemController?.refresh()
+        MenuBarAppearanceObservation.observe(settings: settings) { [weak self] name in
+            guard let self else { return }
+            SpillTelemetry.shared.track("preference_changed", props: ["name": name])
+            if name == "menu_bar_token_display_mode" {
+                tokenMeteringCoordinator.refreshMenuBarTokenTotal(force: true)
             }
-            .store(in: &cancellables)
-
-        settings.$menuBarMetricPresentationStyles
-            .dropFirst()
-            .sink { [weak self] _ in
-                SpillTelemetry.shared.track(
-                    "preference_changed",
-                    props: ["name": "menu_bar_metric_presentation_styles"]
-                )
-                self?.statusItemController?.refresh()
+            statusItemController?.refresh()
+            if name == "menu_bar_trigger_icon_style" {
+                configureStatusRefreshLoop()
             }
-            .store(in: &cancellables)
-
-        settings.$menuBarStatusCompactMode
-            .dropFirst()
-            .sink { [weak self] _ in
-                SpillTelemetry.shared.track("preference_changed", props: ["name": "menu_bar_status_compact_mode"])
-                self?.statusItemController?.refresh()
-            }
-            .store(in: &cancellables)
-
-        settings.$menuBarStatusSplitGroups
-            .dropFirst()
-            .sink { [weak self] _ in
-                SpillTelemetry.shared.track("preference_changed", props: ["name": "menu_bar_status_split_groups"])
-                self?.statusItemController?.refresh()
-            }
-            .store(in: &cancellables)
-
-        settings.$menuBarStatusPrecision
-            .dropFirst()
-            .sink { [weak self] _ in
-                SpillTelemetry.shared.track("preference_changed", props: ["name": "menu_bar_status_precision"])
-                self?.statusItemController?.refresh()
-            }
-            .store(in: &cancellables)
-
-        settings.$menuBarStatusHighlightThreshold
-            .dropFirst()
-            .sink { [weak self] _ in
-                SpillTelemetry.shared.track("preference_changed", props: ["name": "menu_bar_status_highlight_threshold"])
-                self?.statusItemController?.refresh()
-            }
-            .store(in: &cancellables)
-
-        settings.$menuBarTriggerIconStyle
-            .dropFirst()
-            .sink { [weak self] _ in
-                SpillTelemetry.shared.track("preference_changed", props: ["name": "menu_bar_trigger_icon_style"])
-                self?.statusItemController?.refresh()
-                self?.configureStatusRefreshLoop()
-            }
-            .store(in: &cancellables)
-
-        settings.$menuBarTokenDisplayMode
-            .dropFirst()
-            .sink { [weak self] _ in
-                SpillTelemetry.shared.track("preference_changed", props: ["name": "menu_bar_token_display_mode"])
-                self?.tokenMeteringCoordinator.refreshMenuBarTokenTotal(force: true)
-                self?.statusItemController?.refresh()
-            }
+        }
             .store(in: &cancellables)
     }
 }
 
 extension AppDelegate {
     private func observeAppSettings() {
+        TokenMeteringDashboardProcess.observePrivateUsageUploadSettings(settings: settings)
+            .store(in: &cancellables)
+
         settings.$refreshInterval
             .dropFirst()
             .sink { [weak self] _ in

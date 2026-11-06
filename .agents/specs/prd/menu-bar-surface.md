@@ -39,6 +39,9 @@ The quick-actions PRD owns that removal boundary and retained window controls.
   recent-peak scaling so low traffic remains visually meaningful.
 - Menu bar graphs reuse the system status store history and refresh cadence;
   they do not create independent timers, probes, or permission requirements.
+- Animation, text size, bold text, and other menu bar appearance changes apply
+  after the setting is saved, without waiting for a status tick. Animation can
+  be stopped or restarted while the panel is closed and all status values are off.
 - Rendering status items on multiple displays must not feed appearance or
   layout changes back into continuous redraws. Read-only metric text keeps the
   same typography, semantic colors, accessibility, and hit targets across
@@ -88,6 +91,8 @@ The quick-actions PRD owns that removal boundary and retained window controls.
 - Verify status chips reuse existing provider history and do not add timers.
 - Verify repeated light/dark display snapshots preserve text metrics, chip
   frames, and hit targets without entering `NSTextField` control layout.
+- Verify appearance callbacks observe the newly saved values, including rapid
+  changes and cancellation; animation toggles work with no periodic status timer.
 - Compare live CPU with one and three displays before claiming the reported
   multi-display performance regression is resolved; offscreen rendering tests
   alone do not prove that result.

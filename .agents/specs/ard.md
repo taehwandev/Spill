@@ -1908,6 +1908,42 @@ filters with focused tests, then render the actual Preferences and dashboard.
 
 ## Settings Structure And Impact Map
 
+### Live menu bar appearance and upload-consent propagation
+
+The existing `SpillSettings`/typed keys remain the persistence owner. Defaults,
+stored names, and environment-scoped upload consent are unchanged. Preferences
+write these values in the main process; the helper keeps its own settings object.
+
+`MenuBarAppearanceObservation` owns Combine observation for menu bar appearance,
+including animation, text size and bold text. It delivers on the next main
+run-loop turn, after `@Published` will-set emission and did-set persistence.
+`AppDelegate` retains the cancellable and refreshes the existing controller;
+trigger-style and token-display side effects remain in the same owner. The
+existing animator starts/stops during refresh even when no status timer runs.
+
+The dashboard process bridge observes upload environment and consent, flushes
+the writer's defaults, then posts one grouped settings key through the existing
+distributed notification transport. The helper reloads environment first and its
+scoped consent next, then its published state invalidates the existing badge.
+Full settings notifications also reload this group. Delivery is the next main
+run-loop turn plus IPC dispatch, without restart, reopen or manual refresh.
+
+Impact: Preferences are affected writers; the separate AI dashboard is affected
+by upload consent/environment only; the clock-adjacent glance is affected by
+menu bar typography and the trigger by animation. The compact panel shares the
+main settings instance but gains no new upload state or typography behavior.
+Web/Private Usage Upload payloads and agent summaries are not affected: the
+existing main uploader remains the sole network owner, and presentation settings
+stay local. No recurring timer, polling, collector, request or settings-sync path
+is introduced.
+
+Verification uses two already-existing settings objects and the actual
+notification handler, plus post-assignment appearance callbacks, rapid changes,
+cancellation and controller animation with optional values disabled. Bundled
+panel/helper rendering and the full Swift suite cover integration.
+
+### Existing settings structure
+
 Persistence owner: `SpillSettings` only. Every setting is a `@Published`
 property that persists through a typed `SettingKey` and loads once at init through
 the same key. A key carries the stored name, the default, and the normalization

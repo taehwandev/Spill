@@ -96,6 +96,10 @@ timezone. Local token events and local dashboard history remain intact.
 - The native token monitoring UI can expose optional sign-in without implying
   login is required for local metering.
 - Cloud upload can be disabled without affecting local metering.
+- An already-open AI Token Metering dashboard updates its WEB SYNC / LOCAL ONLY
+  badge after upload consent, environment, or disconnect changes in Preferences.
+  The badge follows the selected environment's saved consent without reopening
+  the helper; this does not add a separate uploader or change consent semantics.
 - No raw events or content-like data are uploaded.
 - Server-side plaintext token totals are not required for the web dashboard.
 - Unchanged days do not upload again, failed days remain retryable, and deleted
@@ -111,3 +115,5 @@ timezone. Local token events and local dashboard history remain intact.
 - Verify exact cutoff, local-midnight and daylight-saving boundaries, expired
   backlog cleanup, quota-only days, no-op cursor advancement, failure retry,
   and preservation of all local events.
+- Verify a running helper reloads consent and environment through the shared
+  settings bridge, including opt-in, opt-out, environment switch and full reload.

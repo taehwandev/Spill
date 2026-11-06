@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 
 enum TokenMeteringDashboardProcess {
@@ -25,6 +26,7 @@ enum TokenMeteringDashboardProcess {
     static let appearanceThemeSettingsKey = "appearanceTheme"
     static let tokenUsageDashboardOnboardingPreviewSettingsKey = "tokenUsageDashboardOnboardingPreviewEnabled"
     static let tokenUsageInputScopeSettingsKey = "tokenUsageInputScope"
+    static let privateUsageUploadSettingsKey = "privateUsageUpload"
 
     static var isDashboardProcess: Bool {
         let processInfo = ProcessInfo.processInfo
@@ -92,6 +94,21 @@ enum TokenMeteringDashboardProcess {
 }
 
 extension TokenMeteringDashboardProcess {
+    @MainActor
+    static func observePrivateUsageUploadSettings(
+        settings: SpillSettings,
+        postChange: @escaping () -> Void = postPrivateUsageUploadSettingsDidChange
+    ) -> AnyCancellable {
+        settings.$privateUsageUploadEnvironment
+            .combineLatest(settings.$privateUsageUploadEnabled)
+            .dropFirst()
+            .receive(on: RunLoop.main)
+            .sink { _ in
+                settings.defaults.synchronize()
+                postChange()
+            }
+    }
+
     static func postOpenPreferencesRequest(tab: String = tokenMeteringPreferencesTab) {
         DistributedNotificationCenter.default().postNotificationName(
             openPreferencesNotification,
@@ -160,6 +177,15 @@ extension TokenMeteringDashboardProcess {
             settingsDidChangeNotification,
             object: nil,
             userInfo: [settingsKeyUserInfoKey: tokenUsageInputScopeSettingsKey],
+            deliverImmediately: true
+        )
+    }
+
+    static func postPrivateUsageUploadSettingsDidChange() {
+        DistributedNotificationCenter.default().postNotificationName(
+            settingsDidChangeNotification,
+            object: nil,
+            userInfo: [settingsKeyUserInfoKey: privateUsageUploadSettingsKey],
             deliverImmediately: true
         )
     }
