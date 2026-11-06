@@ -1106,7 +1106,10 @@ final class PrivateUsageUploadTests: XCTestCase {
         )
         PrivateUsageConnectionResultNotification.postSuccess(environment: .production)
 
-        try await waitForPrivateUsageStore(store) { $0.status.isConnected && !$0.isConnecting }
+        try await waitForPrivateUsageStore(store) {
+            $0.status.isConnected && !$0.isConnecting &&
+                relayClient.checkedConnectionDeviceIDs.contains("device_server")
+        }
         XCTAssertTrue(settings.privateUsageUploadEnabled)
         XCTAssertEqual(store.message, TokenMeteringL10n.text(.privateUsageUploadConnectedMessage))
         XCTAssertNil(store.errorMessage)
@@ -1177,8 +1180,8 @@ final class PrivateUsageUploadTests: XCTestCase {
     func testUploadStoreRunsLocalFreshnessPassBeforeManualSync() async throws {
         let timeZone = try XCTUnwrap(TimeZone(identifier: "UTC"))
         let calendar = fixedCalendar(timeZone: timeZone)
-        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 8, hour: 9)))
-        let yesterday = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 7, hour: 12)))
+        let now = Date()
+        let yesterday = try XCTUnwrap(calendar.date(byAdding: .day, value: -1, to: now))
         let usageStore = makeUsageStore()
         try usageStore.replaceEvents([
             makeEvent(
@@ -1240,8 +1243,8 @@ final class PrivateUsageUploadTests: XCTestCase {
     func testUploadStoreIgnoresSyncNowWhileSyncIsAlreadyRunning() async throws {
         let timeZone = try XCTUnwrap(TimeZone(identifier: "UTC"))
         let calendar = fixedCalendar(timeZone: timeZone)
-        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 8, hour: 9)))
-        let yesterday = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 7, hour: 12)))
+        let now = Date()
+        let yesterday = try XCTUnwrap(calendar.date(byAdding: .day, value: -1, to: now))
         let usageStore = makeUsageStore()
         try usageStore.replaceEvents([
             makeEvent(
@@ -2102,7 +2105,7 @@ final class PrivateUsageUploadTests: XCTestCase {
         XCTAssertEqual(relayClient.uploadedBucketKeys, [["2026-06-09:daily"]])
     }
 
-    func testManualSyncDrainsMultipleUploadBatchesBehindOneUserAction() async throws {
+    func testManualSyncBoundsHistoricalBackfillWithoutDeletingLocalHistory() async throws {
         let timeZone = try XCTUnwrap(TimeZone(identifier: "UTC"))
         let calendar = fixedCalendar(timeZone: timeZone)
         let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 10, hour: 9)))
@@ -2135,10 +2138,11 @@ final class PrivateUsageUploadTests: XCTestCase {
         )
         let relayClient = FakePrivateUsageRelayClient()
         let sealer = RecordingPrivateUsageSealer()
+        let stateStore = PrivateUsageUploadStateStore(defaults: makeDefaults())
         let coordinator = PrivateUsageUploadCoordinator(
             usageStore: usageStore,
             credentialStore: credentialStore,
-            stateStore: PrivateUsageUploadStateStore(defaults: makeDefaults()),
+            stateStore: stateStore,
             relayClient: relayClient,
             bucketBuilder: PrivateUsageDailyBucketBuilder(
                 calendar: calendar,
@@ -2150,9 +2154,13 @@ final class PrivateUsageUploadTests: XCTestCase {
 
         let result = try await coordinator.syncNow(isEnabled: true, now: now)
 
-        XCTAssertEqual(result.accepted, 35)
-        XCTAssertEqual(result.attemptedBucketCount, 35)
-        XCTAssertEqual(relayClient.uploadedBucketCounts, [31, 4])
+        XCTAssertEqual(result.accepted, 6)
+        XCTAssertEqual(result.attemptedBucketCount, 6)
+        XCTAssertEqual(relayClient.uploadedBucketCounts, [6])
+        XCTAssertEqual(relayClient.uploadedBucketKeys, [(4...9).map { "2026-06-0\($0):daily" }])
+        XCTAssertEqual(usageStore.loadEvents().count, 35)
+        XCTAssertEqual(stateStore.load().pendingDirtyDayIDs, [])
+        XCTAssertTrue(usageStore.loadPrivateUsageEventChanges(afterChangeID: 0).changes.isEmpty)
     }
 
     func testAutomaticUploadRetriesSameDayAfterTransientFailure() async throws {
@@ -2837,6 +2845,225 @@ final class PrivateUsageUploadTests: XCTestCase {
             using: wrappingSecret
         )
         XCTAssertEqual(unwrappedKey, Data(repeating: 9, count: 32))
+    }
+
+    func testUploadRetentionUsesLocalCalendarDaysAcrossDSTAndMidnight() async throws {
+        for identifier in ["America/New_York", "Asia/Seoul"] {
+            let timeZone = try XCTUnwrap(TimeZone(identifier: identifier))
+            let calendar = fixedCalendar(timeZone: timeZone)
+            let now = try XCTUnwrap(calendar.date(from: DateComponents(
+                year: 2026, month: 3, day: 10, hour: 0, minute: 5
+            )))
+            let cutoff = try XCTUnwrap(calendar.date(from: DateComponents(
+                year: 2026, month: 3, day: 4
+            )))
+            let fixture = try makeRetentionFixture(
+                calendar: calendar, now: now,
+                dates: [cutoff.addingTimeInterval(-1), cutoff, now.addingTimeInterval(-60)]
+            )
+
+            let result = try await fixture.coordinator.syncNow(isEnabled: true, now: now)
+
+            XCTAssertEqual(result.accepted, 2, identifier)
+            XCTAssertEqual(fixture.relay.uploadedBucketKeys, [["2026-03-04:daily", "2026-03-10:daily"]], identifier)
+            XCTAssertEqual(fixture.relay.uploadedSharedSummaryKeys, fixture.relay.uploadedBucketKeys, identifier)
+            XCTAssertEqual(fixture.usageStore.loadEvents().count, 3, identifier)
+            XCTAssertEqual(fixture.stateStore.load().pendingDirtyDayIDs, [], identifier)
+        }
+    }
+
+    func testAutomaticUploadRetentionLeavesOnlyTodayPending() async throws {
+        let calendar = fixedCalendar(timeZone: try XCTUnwrap(TimeZone(identifier: "UTC")))
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 10, hour: 12)))
+        let dates = try (0...9).map { offset in
+            try XCTUnwrap(calendar.date(byAdding: .day, value: -offset, to: now.addingTimeInterval(-60)))
+        }
+        let fixture = try makeRetentionFixture(calendar: calendar, now: now, dates: dates)
+
+        let result = await fixture.coordinator.runAutomaticUploadIfNeeded(isEnabled: true, now: now)
+
+        XCTAssertEqual(result?.accepted, 6)
+        XCTAssertEqual(fixture.relay.uploadedBucketKeys, [(4...9).map { "2026-06-0\($0):daily" }])
+        XCTAssertEqual(fixture.stateStore.load().pendingDirtyDayIDs, ["2026-06-10"])
+        XCTAssertEqual(fixture.usageStore.loadEvents().count, 10)
+
+        let manualResult = try await fixture.coordinator.syncNow(isEnabled: true, now: now)
+        XCTAssertEqual(manualResult.accepted, 1)
+        XCTAssertEqual(fixture.relay.uploadedBucketKeys.last, ["2026-06-10:daily"])
+        XCTAssertEqual(fixture.stateStore.load().pendingDirtyDayIDs, [])
+    }
+
+    func testUploadRetentionClampsPermissiveAndHonorsStricterCallerBounds() throws {
+        let calendar = fixedCalendar(timeZone: try XCTUnwrap(TimeZone(identifier: "UTC")))
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 10, hour: 12)))
+        let dates = try [3, 4, 7, 9].map { day in
+            try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: day, hour: 12)))
+        }
+        let fixture = try makeRetentionFixture(calendar: calendar, now: now, dates: dates)
+        let permissive = try fixture.coordinator.makeUploadPlan(
+            state: .empty, now: now, limit: 31,
+            earliestBucketStart: now.addingTimeInterval(-40 * 86_400), includeCurrentDay: true
+        )
+        XCTAssertEqual(permissive.processedDayIDs, ["2026-06-04", "2026-06-07", "2026-06-09"])
+
+        let stricter = try fixture.coordinator.makeUploadPlan(
+            state: .empty, now: now, limit: 31,
+            earliestBucketStart: try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 8))),
+            includeCurrentDay: true
+        )
+        XCTAssertEqual(stricter.processedDayIDs, ["2026-06-09"])
+        XCTAssertEqual(stricter.remainingPendingDayIDs, ["2026-06-04", "2026-06-07"])
+    }
+
+    func testExpiredUploadRetentionAdvancesCursorWithoutUploadOrLocalDeletion() async throws {
+        let calendar = fixedCalendar(timeZone: try XCTUnwrap(TimeZone(identifier: "UTC")))
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 10, hour: 12)))
+        var state = PrivateUsageUploadPersistence.empty
+        state.pendingDirtyDayIDs = ["2026-05-01", "2026-06-03"]
+        let fixture = try makeRetentionFixture(
+            calendar: calendar, now: now, dates: [now.addingTimeInterval(-20 * 86_400)], state: state
+        )
+        let expectedCursor = fixture.usageStore.loadPrivateUsageEventChanges(afterChangeID: 0).maxChangeID
+        XCTAssertGreaterThan(expectedCursor, 0)
+
+        let result = try await fixture.coordinator.syncNow(isEnabled: true, now: now)
+
+        XCTAssertEqual(result.accepted, 0)
+        XCTAssertEqual(result.processedDayCount, 0)
+        XCTAssertTrue(fixture.relay.uploadedBucketCounts.isEmpty)
+        XCTAssertEqual(fixture.stateStore.load().lastProcessedEventChangeID, expectedCursor)
+        XCTAssertEqual(fixture.stateStore.load().pendingDirtyDayIDs, [])
+        XCTAssertTrue(fixture.usageStore.loadPrivateUsageEventChanges(afterChangeID: 0).changes.isEmpty)
+        XCTAssertEqual(fixture.usageStore.loadEvents().count, 1)
+    }
+
+    func testUploadRetentionFailurePreservesStateAndReevaluatesExpiryOnRetry() async throws {
+        let calendar = fixedCalendar(timeZone: try XCTUnwrap(TimeZone(identifier: "UTC")))
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 10, hour: 12)))
+        let dates = try [3, 4, 9].map { day in
+            try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: day, hour: 12)))
+        }
+        var state = PrivateUsageUploadPersistence.empty
+        state.pendingDirtyDayIDs = ["2026-06-03", "2026-06-04"]
+        state.lastProcessedEventChangeID = 0
+        let fixture = try makeRetentionFixture(calendar: calendar, now: now, dates: dates, state: state)
+        fixture.relay.uploadError = PrivateUsageUploadError.relay(status: 503, reason: nil)
+
+        do {
+            _ = try await fixture.coordinator.syncNow(isEnabled: true, now: now)
+            XCTFail("Expected the simulated transport failure")
+        } catch {
+            XCTAssertNotNil(error as? PrivateUsageUploadError)
+        }
+        XCTAssertEqual(fixture.stateStore.load().pendingDirtyDayIDs, state.pendingDirtyDayIDs)
+        XCTAssertEqual(fixture.stateStore.load().lastProcessedEventChangeID, 0)
+        XCTAssertTrue(fixture.stateStore.load().acknowledgedCiphertextHashesByBucketKey.isEmpty)
+        XCTAssertFalse(fixture.usageStore.loadPrivateUsageEventChanges(afterChangeID: 0).changes.isEmpty)
+
+        fixture.relay.uploadError = nil
+        let nextDay = try XCTUnwrap(calendar.date(byAdding: .day, value: 1, to: now))
+        let result = try await fixture.coordinator.syncNow(isEnabled: true, now: nextDay)
+        XCTAssertEqual(result.accepted, 1)
+        XCTAssertEqual(fixture.relay.uploadedBucketKeys, [["2026-06-09:daily"]])
+        XCTAssertEqual(fixture.stateStore.load().pendingDirtyDayIDs, [])
+        XCTAssertEqual(fixture.usageStore.loadEvents().count, 3)
+    }
+
+    func testQuotaOnlyUploadRetentionSkipsExpiredReadingsWithoutDeletingHistory() async throws {
+        let calendar = fixedCalendar(timeZone: try XCTUnwrap(TimeZone(identifier: "UTC")))
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 10, hour: 12)))
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SpillQuotaRetentionTests-\(UUID().uuidString)", isDirectory: true)
+        let limitStore = TokenUsageLimitSnapshotStore(
+            fileURL: directory.appendingPathComponent("limits.json"), timeZone: calendar.timeZone, now: { now }
+        )
+        for day in [3, 4] {
+            let capturedAt = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: day, hour: 12)))
+            limitStore.mergeSnapshots(for: .codex, with: [TokenUsageLimitSnapshot(
+                aiTool: .codex, limitKey: "codex:primary", label: "Weekly", usedPercent: Double(day * 10),
+                remainingCredits: nil, windowMinutes: 10_080, resetsAt: now.addingTimeInterval(86_400),
+                capturedAt: capturedAt, source: .serverExact
+            )])
+        }
+        let fixture = try makeRetentionFixture(
+            calendar: calendar, now: now, dates: [], dailyLimitUsageStore: limitStore
+        )
+
+        let result = try await fixture.coordinator.syncNow(isEnabled: true, now: now)
+
+        XCTAssertEqual(result.accepted, 1)
+        XCTAssertEqual(fixture.relay.uploadedBucketKeys, [["2026-06-04:daily"]])
+        XCTAssertEqual(fixture.relay.uploadedSharedSummaryKeys, fixture.relay.uploadedBucketKeys)
+        XCTAssertEqual(Set(fixture.stateStore.load().acknowledgedLimitUsageHashesByDay?.keys.map { $0 } ?? []), ["2026-06-04"])
+        XCTAssertEqual(Set(limitStore.allDailyUsage().map(\.bucketKey)), ["2026-06-03", "2026-06-04"])
+        XCTAssertEqual(fixture.stateStore.load().pendingDirtyDayIDs, [])
+    }
+
+    func testReconnectUploadRetentionDoesNotResendExpiredHistory() async throws {
+        let calendar = fixedCalendar(timeZone: try XCTUnwrap(TimeZone(identifier: "UTC")))
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 10, hour: 12)))
+        let dates = try [3, 4, 9].map { day in
+            try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: day, hour: 12)))
+        }
+        let fixture = try makeRetentionFixture(calendar: calendar, now: now, dates: dates)
+        let connectionCode = "spill-v1:grant_secret:\(testWrappingSecret)"
+        _ = try await fixture.coordinator.exchangeGrantCode(connectionCode)
+        _ = try await fixture.coordinator.syncNow(isEnabled: true, now: now)
+        try fixture.coordinator.clearConnection()
+
+        _ = try await fixture.coordinator.exchangeGrantCode(connectionCode)
+        let result = try await fixture.coordinator.syncNow(isEnabled: true, now: now)
+
+        XCTAssertEqual(result.accepted, 2)
+        XCTAssertEqual(fixture.relay.uploadedBucketKeys, [
+            ["2026-06-04:daily", "2026-06-09:daily"],
+            ["2026-06-04:daily", "2026-06-09:daily"]
+        ])
+        XCTAssertEqual(fixture.stateStore.load().pendingDirtyDayIDs, [])
+        XCTAssertEqual(fixture.usageStore.loadEvents().count, 3)
+    }
+
+    private func makeRetentionFixture(
+        calendar: Calendar,
+        now: Date,
+        dates: [Date],
+        state: PrivateUsageUploadPersistence = .empty,
+        dailyLimitUsageStore: TokenUsageLimitSnapshotStore? = nil
+    ) throws -> (
+        coordinator: PrivateUsageUploadCoordinator,
+        usageStore: TokenUsageStore,
+        stateStore: PrivateUsageUploadStateStore,
+        relay: FakePrivateUsageRelayClient
+    ) {
+        let usageStore = makeUsageStore()
+        try usageStore.replaceEvents(dates.enumerated().map { index, date in
+            makeEvent(
+                spanID: "span_retention_\(index)", runID: "run_retention_\(index)", aiTool: .codex,
+                taskType: "testing", stage: "verify", model: "gpt-5", input: 3, output: 4, createdAt: date
+            )
+        })
+        let credentials = InMemoryPrivateUsageCredentialStore()
+        try credentials.saveConnection(
+            credential: PrivateUsageDeviceCredential(
+                deviceID: "device_retention", credential: "spill_device_v1_secret", tokenType: "spill_device_v1",
+                createdAt: now.addingTimeInterval(-40 * 86_400)
+            ),
+            keyWrappingSecret: PrivateUsageKeyWrappingSecret(rawValue: testWrappingSecret)
+        )
+        let stateStore = PrivateUsageUploadStateStore(defaults: makeDefaults())
+        var state = state
+        state.hasSavedConnection = true
+        stateStore.save(state)
+        let relay = FakePrivateUsageRelayClient()
+        let sealer = RecordingPrivateUsageSealer()
+        let coordinator = PrivateUsageUploadCoordinator(
+            usageStore: usageStore, credentialStore: credentials, stateStore: stateStore, relayClient: relay,
+            bucketBuilder: PrivateUsageDailyBucketBuilder(
+                calendar: calendar, timeZone: calendar.timeZone, dailyLimitUsageStore: dailyLimitUsageStore, sealer: sealer
+            ),
+            sealer: sealer
+        )
+        return (coordinator, usageStore, stateStore, relay)
     }
 
     private func fixedCalendar(timeZone: TimeZone) -> Calendar {

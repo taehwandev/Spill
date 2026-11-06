@@ -128,6 +128,14 @@ extension PrivateUsageUploadCoordinator {
             )
         }
 
+        let todayStart = bucketBuilder.calendar.startOfDay(for: now)
+        let retentionStart = bucketBuilder.calendar.date(byAdding: .day, value: -6, to: todayStart) ?? todayStart
+        let retentionDayID = bucketBuilder.localDayID(for: retentionStart)
+        let todayID = bucketBuilder.localDayID(for: now)
+        let earliestDayID = max(
+            retentionDayID,
+            earliestBucketStart.map { bucketBuilder.localDayID(for: $0) } ?? retentionDayID
+        )
         let cursor = state.lastProcessedEventChangeID ?? 0
         let changes = usageStore.loadPrivateUsageEventChanges(afterChangeID: cursor)
         var pendingDayIDs = Set(state.pendingDirtyDayIDs ?? [])
@@ -137,6 +145,8 @@ extension PrivateUsageUploadCoordinator {
             }
             pendingDayIDs.insert(bucketBuilder.localDayID(for: eventDate))
         }
+        // Retire expired upload work, never the underlying local usage history.
+        pendingDayIDs = pendingDayIDs.filter { $0 >= retentionDayID }
         let limitUsageByDay = Dictionary(
             grouping: bucketBuilder.dailyLimitUsageStore?.allDailyUsage() ?? [],
             by: \.bucketKey
@@ -145,6 +155,7 @@ extension PrivateUsageUploadCoordinator {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         for (dayID, readings) in limitUsageByDay {
+            guard dayID >= retentionDayID else { continue }
             let sorted = readings.sorted {
                 ($0.aiTool.rawValue, $0.limitKey) < ($1.aiTool.rawValue, $1.limitKey)
             }
@@ -155,13 +166,11 @@ extension PrivateUsageUploadCoordinator {
             }
         }
 
-        let todayID = bucketBuilder.localDayID(for: now)
-        let earliestDayID = earliestBucketStart.map { bucketBuilder.localDayID(for: $0) }
         let eligibleDayIDs = pendingDayIDs.filter { dayID in
             guard dayID < todayID || (includeCurrentDay && dayID == todayID) else {
                 return false
             }
-            if let earliestDayID, dayID < earliestDayID {
+            if dayID < earliestDayID {
                 return false
             }
             return true

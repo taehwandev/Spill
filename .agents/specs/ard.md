@@ -1093,6 +1093,19 @@ Rules:
   pending day ids, selects at most one bounded batch, and loads events only for
   those local-day intervals. Ineligible current-day or pre-connection automatic
   work remains pending instead of being lost when the journal cursor advances.
+- The planner applies a seven-local-calendar-day upload window before hashing
+  quota history or loading event intervals: today and the preceding six days,
+  using the bucket builder's calendar and timezone, never a fixed seconds offset.
+  It drops expired pending/journal days from the plan and advances the existing
+  cursor only after full relay acknowledgement or a verified no-op. A caller's
+  later earliest-bucket bound remains effective but cannot widen this window.
+  Reconnect/history backfill passes through the same planner. Local event rows,
+  accounting, dashboard history, and quota history are never deleted by this rule.
+  This changes no setting, IPC, timer, collector, auth, payload schema, or upload
+  cadence. Preferences controls, compact panel, helper dashboard, menu-bar AI
+  glance, and agent summaries continue reading complete local data; the existing
+  main-process uploader limits the next cloud sync. Server expiration and web
+  availability labeling follow in the hosted repository after the app release.
 - Persisted local-day ids are Gregorian `yyyy-MM-dd` values. Both formatting
   and interval parsing use a Gregorian calendar with the bucket timezone;
   `Calendar.autoupdatingCurrent` may still define local midnight boundaries but

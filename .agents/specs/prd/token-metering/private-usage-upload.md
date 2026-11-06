@@ -15,6 +15,10 @@ Private Usage Upload is an optional app policy applied after local collection.
 The native app uploads encrypted aggregates and never uploads raw token events or
 downloads cloud usage data.
 
+Cloud usage is a recent-activity view, not a permanent archive. Uploads are
+limited to today and the preceding six local calendar days in the bucket's
+timezone. Local token events and local dashboard history remain intact.
+
 ## Requirements
 
 - The native app should avoid repeated macOS Keychain prompts during connection,
@@ -71,7 +75,12 @@ downloads cloud usage data.
 - Shared summaries must not include prompts, responses, commands, file paths,
   repo names, branch names, terminal output, logs, diffs, source content,
   environment values, secrets, raw event ids, `run_id`, or `span_id`.
-- Multi-day backlogs remain queued locally and may upload later in one or more batches.
+- Multi-day backlogs within the seven-day window remain queued locally and may
+  upload later in one or more batches. Expired days are retired from upload
+  retry state without deleting local usage, even after reconnect or history import.
+- Automatic, manual, initial-connection, and reconnect upload plans enforce the
+  same seven-day lower bound. A stricter automatic connection-date bound may
+  defer a retained day to manual sync, but cannot expand the retention window.
 - Existing installations may enqueue one one-time historical change-journal
   backfill after upgrading. Later syncs are limited to inserted, effectively
   updated, or removed local event days.
@@ -99,3 +108,6 @@ downloads cloud usage data.
 - Verify opt-in, disconnected, offline, retry, no-op, partial-day, and zero-day paths.
 - Verify the strict aggregate allowlist and rejection of raw event identifiers.
 - Verify cursor persistence precedes pruning and changed targets force bounded resync.
+- Verify exact cutoff, local-midnight and daylight-saving boundaries, expired
+  backlog cleanup, quota-only days, no-op cursor advancement, failure retry,
+  and preservation of all local events.

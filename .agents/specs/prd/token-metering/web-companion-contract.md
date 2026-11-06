@@ -45,6 +45,11 @@ contracts and privacy guarantees.
 - The web dashboard shows per-device statistics and combined account totals
   after browser-side decryption.
 - Delayed data is labeled as last backed up, not realtime presence.
+- The shared retention policy is today plus the preceding six local calendar
+  days. Native upload bounds ship first; the hosted receiver must subsequently
+  enforce expiration and reject expired re-entry for both encrypted buckets and
+  shared summaries. Web views must state the seven-day availability boundary
+  and direct users to the local app for complete retained local history.
 
 ## Role And Authorization Requirements
 
