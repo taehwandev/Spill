@@ -47,7 +47,21 @@ as trigger state or a compact badge on the Main trigger instead of a separate
 chip in the main item. System and AI values use their own compact status items
 only when the user enables split groups.
 `MenuBarTriggerIconStyle` owns the Main trigger mark: the droplet remains the
-default, and the symbolized Spill S mark is an alternate user-selected mark.
+default, and the characters (cat, bunny, fish) are alternate user-selected
+marks. `MenuBarTriggerIconCharacterRenderer` draws each as a monochrome
+template glyph, so AppKit tints it to the menu bar like an SF Symbol, with the
+eyes cut out as holes. Only a silhouette survives 13pt, so identity comes from
+the outline: the cat is a sitting side profile with pointed ears and a raised
+tail, the bunny has long ears, the fish has a V tail and back fin. The bunny and
+fish move one body part per `TriggerIconAnimator` burst and are at rest at phase
+0. The cat uses the animator's continuous loop (`start(loopsContinuously:)`):
+one frame timer at a fixed 12fps, four tail sways and one blink per loop, and
+combined load only scales the phase step (eased, 1x–3x), never the frame rate,
+so faster motion adds no redraws and cannot feed back into the load it reads.
+The loop pauses on display sleep or an inactive session. Their raw
+values (`drop_cat`, …) are new, so the retired `cat`, `liquid` and
+`symbolized_s` values normalize to the droplet. The Spill animation setting,
+not system "Reduce motion", decides whether triggers move.
 
 Rationale:
 
@@ -953,7 +967,7 @@ Usage limit snapshots:
   snapshot store filters any `estimated` row still on disk out of every read so
   retired values cannot resurface. The `estimated` source case survives only so
   older snapshot files keep decoding.
-- The dashboard Limits strip derives its chip slots from the windows present
+- The dashboard tool-tab limit line derives its chip slots from the windows present
   in the data — shortest `window_minutes` first, at most two, labels derived
   from the number (`300` → `5h`, `10080` → `Wk`) — instead of a per-tool "most
   constrained" headline. Ordering by window length keeps every tool on the same
@@ -979,11 +993,13 @@ Usage limit snapshots:
   snapshots pre-filtered through the same
   `TokenUsageDashboardToolVisibility.visibleTools` rule as every other
   dashboard surface, so user-hidden tools render no limit chips.
-- The dashboard's Limits strip renders per-tool chips from the snapshot file
+- The dashboard renders limits inside each AI tool tab from the snapshot file
   and refreshes on the existing panel-summary publisher — no dedicated timer.
-  The presentation uses equal-width `TokenMeteringDashboardLimitCard` views
-  in a single equal-width row, with prominent remaining values and separate reset
-  lines. The localized heading has no experimental qualifier. The AGY display
+  `TokenMeteringDashboardLimitsPresentation` owns grouping, slot selection and
+  formatting as a plain value; `TokenMeteringDashboardToolTabLimits` draws one
+  tool's line (window label, ring, remaining value, a clock mark past the stale
+  threshold) as a button sibling to the tab's select button, never nested in
+  it. Reset times, capture age and source live in the tooltip and popover. The AGY display
   filters snapshots to `agy_quota:gemini:` before grouping, so only its five-hour
   and weekly windows appear, without a Claude/GPT popover or extra count.
   Capture/storage still validates both pools independently. Cards receive

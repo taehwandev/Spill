@@ -70,6 +70,10 @@ extension TokenMeteringDashboardDetailPanel {
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
+            // Escape returns to the rail the selection replaced.
+            .keyboardShortcut(.cancelAction)
+            .help(t(.closeWorkItemDetail))
+            .accessibilityLabel(Text(t(.closeWorkItemDetail)))
         }
     }
 

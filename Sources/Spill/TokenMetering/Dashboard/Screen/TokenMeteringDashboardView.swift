@@ -17,7 +17,6 @@ struct TokenMeteringDashboardView: View {
     @State private var pendingClearRequest: TokenUsageClearRequest?
     @State private var aliasText = ""
     @State private var resolvedLanguage: TokenMeteringLanguage
-    @State private var hoveredKPI: String? = nil
     @State private var aiToolVisibilityObserver: NSObjectProtocol?
     @State private var visibleAIToolsSyncTask: Task<Void, Never>?
     @StateObject private var limitStore = TokenUsageDashboardLimitStore()
@@ -31,11 +30,6 @@ struct TokenMeteringDashboardView: View {
     var body: some View {
         VStack(spacing: 0) {
             topHeader
-
-            Divider()
-                .background(Color.primary.opacity(0.05))
-
-            topFilterBar
 
             Divider()
                 .background(Color.primary.opacity(0.05))
@@ -185,49 +179,104 @@ extension TokenMeteringDashboardView {
         return TokenUsageAITool.antigravity.dashboardTint.opacity(1.15)
     }
 
+    /// Two columns under the header. The left column is the analysis: tool
+    /// tabs (with each tool's limits) and periods stay pinned, and the usage
+    /// sections scroll beneath them. The right column runs from the top as
+    /// its own scrolling sidebar, so status and setup never read as part of
+    /// the analysis flow.
     private var dashboardBody: some View {
-        ZStack(alignment: .top) {
-            HStack(alignment: .top, spacing: 16) {
-                ScrollView(.vertical, showsIndicators: true) {
-                    LazyVStack(alignment: .leading, spacing: 16) {
-                        TokenMeteringDashboardLimitsStrip(
-                            snapshots: visibleLimitSnapshots,
-                            tools: visibleLimitTools,
-                            language: currentLanguage
-                        )
-                        kpiStrip
-                        analyticsGrid
-                        sessionsTable
+        HStack(alignment: .top, spacing: 0) {
+            VStack(spacing: 0) {
+                topFilterBar
+
+                Divider()
+                    .background(Color.primary.opacity(0.05))
+
+                ZStack(alignment: .top) {
+                    analysisScroll
+                        .modifier(EmptyDashboardDimming(isActive: showsEmptyDashboardOverlay))
+
+                    if showsEmptyDashboardOverlay {
+                        emptyDashboardGuide
+                            .frame(maxWidth: 680)
+                            .padding(.top, 42)
+                            .padding(.horizontal, 32)
+                            .shadow(color: Color.black.opacity(0.18), radius: 20, x: 0, y: 12)
+                            .transition(.opacity.combined(with: .scale(scale: 0.98)))
                     }
-                    .padding(.vertical, 18)
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
-                }
-
-                if let selectedSession = store.snapshot.selectedSession,
-                   !showsDashboardPlaceholder {
-                    receiverPanel(selectedSession)
-                } else {
-                    rightRail
-                        .frame(width: 286)
                 }
             }
-            .opacity(showsEmptyDashboardOverlay ? 0.58 : 1)
-            .saturation(showsEmptyDashboardOverlay ? 0.55 : 1)
-            .blur(radius: showsEmptyDashboardOverlay ? 0.4 : 0)
-            .disabled(showsEmptyDashboardOverlay)
-            .accessibilityHidden(showsEmptyDashboardOverlay)
+            .padding(.leading, 18)
+            .padding(.trailing, 16)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
 
-            if showsEmptyDashboardOverlay {
-                emptyDashboardGuide
-                    .frame(maxWidth: 680)
-                    .padding(.top, 42)
-                    .padding(.horizontal, 48)
-                    .shadow(color: Color.black.opacity(0.18), radius: 20, x: 0, y: 12)
-                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
-            }
+            Divider()
+                .background(Color.primary.opacity(0.05))
+
+            sideColumn
+                .padding(.leading, 16)
+                .padding(.trailing, 18)
+                .modifier(EmptyDashboardDimming(isActive: showsEmptyDashboardOverlay))
         }
-        .padding(.horizontal, 18)
+        .animation(.easeOut(duration: 0.18), value: store.selectedSessionID)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    /// Reading order: how much was used (totals, trend), where the tokens
+    /// went, which work dominated, then Work Items. Limits are not repeated
+    /// here; they sit pinned inside each tool tab.
+    private var analysisScroll: some View {
+        ScrollView(.vertical, showsIndicators: true) {
+            LazyVStack(alignment: .leading, spacing: 16) {
+                kpiStrip
+
+                if showsDashboardPlaceholder || hasAnyDashboardEvents {
+                    TokenMeteringDashboardTrendSection(
+                        store: store,
+                        language: currentLanguage,
+                        showsPlaceholder: showsDashboardPlaceholder
+                    )
+
+                    TokenMeteringDashboardAttributionSection(
+                        store: store,
+                        language: currentLanguage,
+                        showsPlaceholder: showsDashboardPlaceholder
+                    )
+
+                    TokenMeteringDashboardWorkBreakdownSection(
+                        store: store,
+                        language: currentLanguage,
+                        showsPlaceholder: showsDashboardPlaceholder
+                    )
+                } else {
+                    emptyDashboardGuide
+                }
+
+                sessionsTable
+            }
+            .padding(.vertical, 18)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+        }
+    }
+
+    @ViewBuilder
+    private var sideColumn: some View {
+        if let selectedSession = store.snapshot.selectedSession,
+           !showsDashboardPlaceholder {
+            receiverPanel(selectedSession)
+                .padding(.vertical, 12)
+                .transition(.opacity)
+        } else {
+            TokenMeteringDashboardRightRail(
+                store: store,
+                aiStatusStore: aiStatusStore,
+                settings: settings,
+                language: currentLanguage,
+                showsPlaceholder: showsDashboardPlaceholder
+            )
+            .frame(width: 286)
+            .transition(.opacity)
+        }
     }
 
 }
@@ -253,79 +302,57 @@ extension TokenMeteringDashboardView {
     }
 
     private var topHeader: some View {
-        HStack(spacing: 12) {
-            SpillBrandLockupView(
-                subtitle: nil,
-                markStyle: nil,
-                showsAIMark: true,
-                iconSize: 28,
-                titleFontSize: 18,
-                titleWeight: .bold,
-                subtitleFontSize: 11,
-                subtitleWeight: .semibold,
-                subtitleColor: .secondary,
-                spacing: 12
-            )
-
-            HStack(spacing: 8) {
-                betaBadge
-                syncStateBadge
-
-                Text("•")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.secondary.opacity(0.5))
-
-                Text(t(.dashboardSubtitle))
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-
-                if let overallUpdated = store.snapshot.overallLastUpdatedString {
-                    Text("•")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.secondary.opacity(0.5))
-
-                    Text("\(t(.lastUpdatedLabel)): \(overallUpdated)")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-            }
-
-            Spacer(minLength: 16)
-
-            HStack(spacing: 8) {
-                serviceStatusButton
-
-                headerActionButton(
-                    systemImage: "safari",
-                    accessibilityLabel: t(.privateUsageUploadOpenDashboard),
-                    helpText: t(.privateUsageUploadOpenDashboardDetail),
-                    isEnabled: PrivateUsageWebConnection.dashboardURL() != nil,
-                    action: openWebDashboard
-                )
-
-                headerActionButton(
-                    systemImage: (store.loadState == .loading || store.isRefreshing) ? "arrow.triangle.2.circlepath" : "arrow.clockwise",
-                    accessibilityLabel: t(.refresh),
-                    helpText: t(.refresh),
-                    isEnabled: !(store.loadState == .loading || store.isRefreshing),
-                    action: refreshLocalTokenData
-                )
-
-                headerActionButton(
-                    systemImage: "gearshape",
-                    accessibilityLabel: AppL10n.text(.settings, appLanguage: settings.appLanguage),
-                    helpText: AppL10n.text(.settings, appLanguage: settings.appLanguage),
-                    action: settingsAction
-                )
-            }
+        TokenMeteringDashboardHeader(
+            language: currentLanguage,
+            appLanguage: settings.appLanguage,
+            lastUpdated: store.snapshot.overallLastUpdatedString,
+            isPrivateUsageUploadActive: isPrivateUsageUploadActive,
+            isRefreshing: store.loadState == .loading || store.isRefreshing,
+            isWebDashboardAvailable: PrivateUsageWebConnection.dashboardURL() != nil,
+            onOpenWebDashboard: openWebDashboard,
+            onRefresh: refreshLocalTokenData,
+            onOpenSettings: settingsAction
+        ) {
+            serviceStatusButton
         }
-        .padding(.leading, 78)
-        .padding(.trailing, 18)
-        .padding(.vertical, 14)
     }
 
+    private var kpiStrip: some View {
+        TokenMeteringDashboardKPIStrip(
+            kpis: store.snapshot.usageKPIs(for: store.snapshotInputScope, language: currentLanguage),
+            totalComparison: store.snapshot.usageComparison(for: store.snapshotInputScope),
+            comparisonCaption: store.snapshot.comparisonTotalTokens.map {
+                "\(comparisonPeriodLabel): \(TokenUsageDashboardSnapshot.formatTokens($0))"
+            },
+            accent: selectedControlAccent,
+            showsPlaceholder: showsDashboardPlaceholder,
+            marker: store.liveUpdateMarker,
+            isLiveUpdated: { store.isLiveUpdated($0) }
+        )
+    }
+
+    private var limitsPresentation: TokenMeteringDashboardLimitsPresentation {
+        TokenMeteringDashboardLimitsPresentation(
+            snapshots: visibleLimitSnapshots,
+            tools: visibleLimitTools,
+            language: currentLanguage
+        )
+    }
+}
+
+/// While the empty-state guide floats over the dashboard, the content behind
+/// it stays visible as a muted preview and cannot be operated.
+private struct EmptyDashboardDimming: ViewModifier {
+    let isActive: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(isActive ? 0.58 : 1)
+            .saturation(isActive ? 0.55 : 1)
+            .blur(radius: isActive ? 0.4 : 0)
+            .disabled(isActive)
+            .accessibilityHidden(isActive)
+    }
 }
 
 extension TokenMeteringDashboardView {
@@ -428,7 +455,8 @@ extension TokenMeteringDashboardView {
             language: currentLanguage,
             appLanguage: settings.appLanguage,
             selectedControlAccent: selectedControlAccent,
-            selectedControlAccentHighlight: selectedControlAccentHighlight
+            selectedControlAccentHighlight: selectedControlAccentHighlight,
+            limitsPresentation: limitsPresentation
         )
     }
 
@@ -480,114 +508,6 @@ extension TokenMeteringDashboardView {
 }
 
 extension TokenMeteringDashboardView {
-    private var kpiStrip: some View {
-        HStack(spacing: 12) {
-            ForEach(store.snapshot.usageKPIs(for: store.snapshotInputScope, language: currentLanguage)) { kpi in
-                let liveUpdateID = "kpi:\(kpi.id)"
-                let isLiveUpdated = store.isLiveUpdated(liveUpdateID)
-                let isHovered = hoveredKPI == kpi.id
-
-                VStack(alignment: .leading, spacing: 7) {
-                    HStack(spacing: 6) {
-                        Image(systemName: kpiIcon(for: kpi.id))
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundStyle(kpiColor(for: kpi.id))
-
-                        Text(kpi.title.uppercased())
-                            .font(.system(size: 9.5, weight: .black))
-                            .tracking(1.0)
-                            .foregroundStyle(.secondary.opacity(0.85))
-                            .lineLimit(1)
-                        TokenMeteringLiveUpdateDot(isActive: isLiveUpdated, marker: store.liveUpdateMarker)
-                        Spacer(minLength: 0)
-                        if kpi.id == "total",
-                           let comparison = store.snapshot.usageComparison(for: store.snapshotInputScope) {
-                            let delta = comparison.delta
-                            let pct = comparison.percentage
-                            HStack(spacing: 2) {
-                                Image(systemName: delta >= 0 ? "arrow.up.right" : "arrow.down.right")
-                                    .font(.system(size: 7, weight: .black))
-                                Text(String(format: "%.0f%%", abs(pct)))
-                                    .font(.system(size: 8, weight: .black))
-                            }
-                            .foregroundStyle(delta >= 0 ? Color.green : Color.red)
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 2)
-                            .background((delta >= 0 ? Color.green : Color.red).opacity(0.1), in: Capsule())
-                        }
-                    }
-                    Text(kpi.value)
-                        .font(.system(size: 23, weight: .heavy, design: .rounded))
-                        .foregroundStyle(kpi.id == "total" ? selectedControlAccent : .primary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.72)
-                        .contentTransition(.numericText())
-                        .animation(.snappy(duration: 0.35), value: kpi.value)
-                    HStack(spacing: 4) {
-                        Text(kpi.detail)
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundStyle(.secondary.opacity(0.8))
-                            .lineLimit(1)
-                        if kpi.id == "total",
-                           let comparison = store.snapshot.comparisonTotalTokens {
-                            Text("· \(comparisonPeriodLabel): \(TokenUsageDashboardSnapshot.formatTokens(comparison))")
-                                .font(.system(size: 10, weight: .medium))
-                                .foregroundStyle(.secondary.opacity(0.55))
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.82)
-                        }
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(14)
-                .background(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(
-                            isHovered
-                                ? (kpi.id == "total" ? selectedControlAccent.opacity(0.08) : Color.primary.opacity(0.05))
-                                : Color(NSColor.controlBackgroundColor).opacity(0.65)
-                        )
-                )
-                .overlay {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .stroke(
-                            LinearGradient(
-                                colors: isHovered
-                                    ? (kpi.id == "total" ? [selectedControlAccent.opacity(0.35), selectedControlAccent.opacity(0.12)] : [Color.primary.opacity(0.12), Color.primary.opacity(0.04)])
-                                    : [Color.primary.opacity(0.09), Color.primary.opacity(0.03)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ),
-                            lineWidth: 0.5
-                        )
-                }
-                .onHover { hovering in
-                    hoveredKPI = hovering ? kpi.id : nil
-                }
-                .modifier(TokenMeteringLiveUpdateEffect(isActive: isLiveUpdated && !isHovered, marker: store.liveUpdateMarker, cornerRadius: 12))
-            }
-        }
-        .redacted(reason: showsDashboardPlaceholder ? .placeholder : [])
-    }
-
-    private func kpiIcon(for id: String) -> String {
-        switch id {
-        case "total": return "sparkles"
-        case "input": return "arrow.down.right.circle.fill"
-        case "output": return "arrow.up.right.circle.fill"
-        default: return "chart.bar.fill"
-        }
-    }
-
-    private func kpiColor(for id: String) -> Color {
-        switch id {
-        case "total": return selectedControlAccent
-        case "input": return Color.blue
-        case "output": return Color.purple
-        default: return .primary
-        }
-    }
-
     private var hasAnyDashboardEvents: Bool {
         store.hasDashboardEvents
     }
@@ -599,9 +519,6 @@ extension TokenMeteringDashboardView {
         store.loadState == .idle || store.loadState == .loading
     }
 
-}
-
-extension TokenMeteringDashboardView {
     private var showsEmptyDashboardOverlay: Bool {
         guard aiStatusStore.statuses.isEmpty else {
             return false
@@ -636,17 +553,6 @@ extension TokenMeteringDashboardView {
         }
     }
 
-    private var analyticsGrid: some View {
-        TokenMeteringDashboardAnalyticsGrid(
-            store: store,
-            language: currentLanguage,
-            showsPlaceholder: showsDashboardPlaceholder,
-            hasEvents: hasAnyDashboardEvents,
-            settingsAction: settingsAction,
-            developerOptionsAction: developerOptionsAction
-        )
-    }
-
     private var emptyDashboardGuide: some View {
         TokenMeteringDashboardOnboardingGuide(
             language: currentLanguage,
@@ -654,81 +560,6 @@ extension TokenMeteringDashboardView {
             settingsAction: settingsAction,
             developerOptionsAction: developerOptionsAction
         )
-    }
-
-    private var rightRail: some View {
-        ScrollView(.vertical, showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 14) {
-                agentStatusPanel
-                modelPanel
-                workflowUsagePanel
-                setupPanel
-            }
-            .padding(.vertical, 18)
-        }
-    }
-
-    private var agentStatusPanel: some View {
-        TokenMeteringDashboardAgentStatusPanel(
-            aiStatusStore: aiStatusStore,
-            settings: settings,
-            language: currentLanguage,
-            appLanguage: settings.appLanguage
-        )
-    }
-
-    private var setupPanel: some View {
-        TokenMeteringDashboardSetupPanel(
-            aiStatusStore: aiStatusStore,
-            language: currentLanguage
-        )
-    }
-
-}
-
-extension TokenMeteringDashboardView {
-    private var modelPanel: some View {
-        TokenMeteringDashboardRailPanel(
-            title: t(.modelBreakdown),
-            infoTitle: t(.modelInfoTitle),
-            infoDetail: t(.modelInfoDetail)
-        ) {
-            VStack(spacing: 8) {
-                if showsDashboardPlaceholder {
-                    TokenMeteringDashboardCompactLoadingRows()
-                } else {
-                    TokenMeteringDashboardCompactSummaryRows(
-                        rows: store.snapshot.modelRows.prefix(5),
-                        emptyText: t(.noModelData),
-                        idPrefix: "model",
-                        marker: store.liveUpdateMarker,
-                        isLiveUpdated: { store.isLiveUpdated($0) }
-                    )
-                }
-            }
-        }
-    }
-
-    private var workflowUsagePanel: some View {
-        TokenMeteringDashboardRailPanel(
-            title: t(.workflowUsage),
-            infoTitle: t(.workflowUsageInfoTitle),
-            infoDetail: t(.workflowUsageInfoDetail)
-        ) {
-            VStack(spacing: 8) {
-                if showsDashboardPlaceholder {
-                    TokenMeteringDashboardCompactLoadingRows()
-                } else {
-                    TokenMeteringDashboardCompactSummaryRows(
-                        rows: store.snapshot.workflowUsage.rows,
-                        emptyText: t(.noWorkflowUsageData),
-                        idPrefix: "workflow_usage",
-                        marker: store.liveUpdateMarker,
-                        isLiveUpdated: { store.isLiveUpdated($0) }
-                    )
-                }
-            }
-        }
     }
 
     private var sessionsTable: some View {
@@ -752,112 +583,8 @@ extension TokenMeteringDashboardView {
         pendingClearRequest = TokenUsageClearRequest(scope: scope, preview: preview)
     }
 
-    private var betaBadge: some View {
-        Text(t(.previewBadge).uppercased())
-            .font(.system(size: 8, weight: .bold))
-            .tracking(0.8)
-            .foregroundStyle(.orange.opacity(0.85))
-            .padding(.horizontal, 6)
-            .frame(height: 17)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(Color.orange.opacity(0.08))
-            )
-            .overlay {
-                Capsule(style: .continuous)
-                    .stroke(Color.orange.opacity(0.15), lineWidth: 0.5)
-            }
-    }
-
     private var isPrivateUsageUploadActive: Bool {
         PrivateUsageUploadFeatureAvailability.isEnabledInCurrentBuild
             && settings.privateUsageUploadEnabled
-    }
-
-    private var syncStateBadgeText: String {
-        isPrivateUsageUploadActive ? t(.webSyncEnabled) : t(.localOnly)
-    }
-
-    private var syncStateBadgeColor: Color {
-        isPrivateUsageUploadActive ? .blue : .green
-    }
-
-}
-
-extension TokenMeteringDashboardView {
-    private var syncStateBadge: some View {
-        Text(syncStateBadgeText.uppercased())
-            .font(.system(size: 8, weight: .bold))
-            .tracking(0.8)
-            .foregroundStyle(syncStateBadgeColor.opacity(0.85))
-            .padding(.horizontal, 6)
-            .frame(height: 17)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(syncStateBadgeColor.opacity(0.08))
-            )
-            .overlay {
-                Capsule(style: .continuous)
-                    .stroke(syncStateBadgeColor.opacity(0.15), lineWidth: 0.5)
-            }
-    }
-
-    private func headerActionButton(
-        systemImage: String,
-        accessibilityLabel: String,
-        helpText: String,
-        isEnabled: Bool = true,
-        isActive: Bool = false,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            Image(systemName: systemImage)
-        }
-        .buttonStyle(HeaderActionButtonStyle(isEnabled: isEnabled, isActive: isActive))
-        .disabled(!isEnabled)
-        .help(helpText)
-        .accessibilityLabel(Text(accessibilityLabel))
-        .accessibilityHint(Text(helpText))
-        .accessibilityAddTraits(isActive ? .isSelected : [])
-    }
-}
-
-private struct HeaderActionButtonStyle: ButtonStyle {
-    let isEnabled: Bool
-    var isActive = false
-    @State private var isHovered = false
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(size: 12, weight: .semibold))
-            .foregroundStyle(
-                isActive
-                    ? AnyShapeStyle(.tint)
-                    : AnyShapeStyle(isEnabled ? Color.primary.opacity(0.72) : Color.primary.opacity(0.28))
-            )
-            .frame(width: 28, height: 28)
-            .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(
-                        configuration.isPressed
-                            ? Color.primary.opacity(0.12)
-                            : (isHovered && isEnabled ? Color.primary.opacity(0.08) : Color.primary.opacity(0.04))
-                    )
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(
-                        isHovered && isEnabled
-                            ? Color.primary.opacity(0.14)
-                            : Color.primary.opacity(0.08),
-                        lineWidth: 0.5
-                    )
-            }
-            .scaleEffect(configuration.isPressed ? 0.96 : 1.0)
-            .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
-            .animation(.easeOut(duration: 0.15), value: isHovered)
-            .onHover { hovering in
-                isHovered = hovering
-            }
     }
 }

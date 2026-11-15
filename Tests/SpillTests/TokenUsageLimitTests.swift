@@ -193,7 +193,7 @@ final class TokenUsageLimitTests: XCTestCase {
 
     func testAnExpiredClaudeReadingLosesItsSlotWithoutDimmingWeeklyGauge() throws {
         let capturedAt = Date().addingTimeInterval(-21 * 3_600)
-        let strip = TokenMeteringDashboardLimitsStrip(
+        let strip = TokenMeteringDashboardLimitsPresentation(
             snapshots: [
                 TokenUsageLimitSnapshot(
                     aiTool: .claude, limitKey: "session_5h", label: "5-hour",
@@ -219,10 +219,10 @@ final class TokenUsageLimitTests: XCTestCase {
         XCTAssertEqual(group.extraCount, 1)
         // The hidden, expired five-hour value cannot dim the valid weekly
         // reading. Its age remains available in the detail popover.
-        XCTAssertFalse(TokenMeteringDashboardLimitsStrip.outlivesWindow(
+        XCTAssertFalse(TokenMeteringDashboardLimitsPresentation.outlivesWindow(
             group.gauges[0], at: Date()
         ))
-        XCTAssertNotNil(TokenMeteringDashboardLimitsStrip.ageLabel(
+        XCTAssertNotNil(TokenMeteringDashboardLimitsPresentation.ageLabel(
             for: group.gauges[0], at: Date(), language: .english
         ))
     }
@@ -283,7 +283,7 @@ final class TokenUsageLimitTests: XCTestCase {
             usedPercent: 43, remainingCredits: nil, windowMinutes: 10_080,
             resetsAt: nil, capturedAt: capturedAt, source: .serverExact
         )
-        let strip = TokenMeteringDashboardLimitsStrip(
+        let strip = TokenMeteringDashboardLimitsPresentation(
             snapshots: [codex],
             tools: [.codex, .claude, .antigravity],
             language: .english
@@ -301,7 +301,7 @@ final class TokenUsageLimitTests: XCTestCase {
 
         // But it is not blocked: a real Antigravity reading brings its chip
         // back on its own, so nothing needs editing if that day comes.
-        let withAntigravity = TokenMeteringDashboardLimitsStrip(
+        let withAntigravity = TokenMeteringDashboardLimitsPresentation(
             snapshots: [
                 codex,
                 TokenUsageLimitSnapshot(
@@ -350,8 +350,8 @@ final class TokenUsageLimitTests: XCTestCase {
 
     func testABlankChipSaysWhetherAReadingWentStaleOrNeverArrived() {
         let capturedAt = Date(timeIntervalSince1970: 1_000_000)
-        func group(_ snapshots: [TokenUsageLimitSnapshot]) -> TokenMeteringDashboardLimitsStrip.ToolGroup {
-            let strip = TokenMeteringDashboardLimitsStrip(
+        func group(_ snapshots: [TokenUsageLimitSnapshot]) -> TokenMeteringDashboardLimitsPresentation.ToolGroup {
+            let strip = TokenMeteringDashboardLimitsPresentation(
                 snapshots: snapshots,
                 tools: [.codex, .claude],
                 language: .english
@@ -361,7 +361,7 @@ final class TokenUsageLimitTests: XCTestCase {
 
         // Nothing was ever read for this tool: the value has not arrived yet.
         XCTAssertEqual(
-            TokenMeteringDashboardLimitsStrip.emptyReason(for: group([])),
+            TokenMeteringDashboardLimitsPresentation.emptyReason(for: group([])),
             .limitsNoReading
         )
 
@@ -379,7 +379,7 @@ final class TokenUsageLimitTests: XCTestCase {
         let expiredGroup = group([closedUnread])
         XCTAssertTrue(expiredGroup.gauges.isEmpty)
         XCTAssertEqual(
-            TokenMeteringDashboardLimitsStrip.emptyReason(for: expiredGroup),
+            TokenMeteringDashboardLimitsPresentation.emptyReason(for: expiredGroup),
             .limitsWindowClosedUnread
         )
     }
@@ -480,7 +480,7 @@ final class TokenUsageLimitTests: XCTestCase {
         ).resolved(at: now)
         XCTAssertTrue(closedUnread.isExpiredReading)
 
-        let group = TokenMeteringDashboardLimitsStrip(
+        let group = TokenMeteringDashboardLimitsPresentation(
             snapshots: [liveWeekly, closedUnread],
             tools: [.claude],
             language: .english
@@ -490,10 +490,10 @@ final class TokenUsageLimitTests: XCTestCase {
         // five-hour reading remains available in the detail popover.
         XCTAssertEqual(group?.gauges.map(\.limitKey), ["week_all"])
         XCTAssertEqual(
-            TokenMeteringDashboardLimitsStrip.ageLabel(for: liveWeekly, at: now, language: .english),
+            TokenMeteringDashboardLimitsPresentation.ageLabel(for: liveWeekly, at: now, language: .english),
             TokenMeteringL10n.limitsAge("2h", language: .english)
         )
-        XCTAssertTrue(TokenMeteringDashboardLimitsStrip.outlivesWindow(closedUnread, at: now))
+        XCTAssertTrue(TokenMeteringDashboardLimitsPresentation.outlivesWindow(closedUnread, at: now))
     }
 
     func testOverflowLimitDoesNotAgeVisibleGauges() throws {
@@ -512,7 +512,7 @@ final class TokenUsageLimitTests: XCTestCase {
         // The model-scoped weekly only ever arrives with the on-demand cache,
         // so it lags by however long ago usage was last fetched. It sits behind
         // `+1` and must not make the two live gauges look three days old.
-        let group = try XCTUnwrap(TokenMeteringDashboardLimitsStrip(
+        let group = try XCTUnwrap(TokenMeteringDashboardLimitsPresentation(
             snapshots: [
                 claude("session_5h", "5-hour", 8, 300, ageHours: 0),
                 claude("week_all", "Weekly", 8, 10_080, ageHours: 0),
@@ -525,13 +525,13 @@ final class TokenUsageLimitTests: XCTestCase {
         XCTAssertEqual(group.gauges.map(\.limitKey), ["session_5h", "week_all"])
         XCTAssertEqual(group.extraCount, 1)
         for gauge in group.gauges {
-            XCTAssertNil(TokenMeteringDashboardLimitsStrip.ageLabel(for: gauge, at: now, language: .english))
-            XCTAssertFalse(TokenMeteringDashboardLimitsStrip.outlivesWindow(gauge, at: now))
+            XCTAssertNil(TokenMeteringDashboardLimitsPresentation.ageLabel(for: gauge, at: now, language: .english))
+            XCTAssertFalse(TokenMeteringDashboardLimitsPresentation.outlivesWindow(gauge, at: now))
         }
         // The older model-scoped weekly stays behind +1 and cannot affect
         // the displayed gauges' age or tint.
         let overflow = try XCTUnwrap(group.snapshots.first { $0.limitKey == "weekly_scoped_fable" })
-        XCTAssertNotNil(TokenMeteringDashboardLimitsStrip.ageLabel(
+        XCTAssertNotNil(TokenMeteringDashboardLimitsPresentation.ageLabel(
             for: overflow, at: now, language: .english
         ))
     }
@@ -550,19 +550,19 @@ final class TokenUsageLimitTests: XCTestCase {
             resetsAt: now.addingTimeInterval(6 * 86_400),
             capturedAt: now.addingTimeInterval(-120), source: .serverExact
         )
-        let group = try XCTUnwrap(TokenMeteringDashboardLimitsStrip(
+        let group = try XCTUnwrap(TokenMeteringDashboardLimitsPresentation(
             snapshots: [oldSpark, freshWeekly], tools: [.codex], language: .english
         ).toolGroups.first)
 
         XCTAssertEqual(group.gauges.map(\.limitKey), ["codex_bengalfox:primary", "codex:primary"])
         XCTAssertEqual(freshWeekly.remainingPercent, 57)
         XCTAssertEqual(
-            TokenMeteringDashboardLimitsStrip.ageLabel(for: oldSpark, at: now, language: .english),
+            TokenMeteringDashboardLimitsPresentation.ageLabel(for: oldSpark, at: now, language: .english),
             TokenMeteringL10n.limitsAge("5d", language: .english)
         )
-        XCTAssertTrue(TokenMeteringDashboardLimitsStrip.outlivesWindow(oldSpark, at: now))
-        XCTAssertNil(TokenMeteringDashboardLimitsStrip.ageLabel(for: freshWeekly, at: now, language: .english))
-        XCTAssertFalse(TokenMeteringDashboardLimitsStrip.outlivesWindow(freshWeekly, at: now))
+        XCTAssertTrue(TokenMeteringDashboardLimitsPresentation.outlivesWindow(oldSpark, at: now))
+        XCTAssertNil(TokenMeteringDashboardLimitsPresentation.ageLabel(for: freshWeekly, at: now, language: .english))
+        XCTAssertFalse(TokenMeteringDashboardLimitsPresentation.outlivesWindow(freshWeekly, at: now))
     }
 
     func testLimitInboxMonitorCapturesOnWriteAndAnnouncesOnlyRealChanges() throws {
@@ -908,7 +908,7 @@ final class TokenUsageLimitTests: XCTestCase {
             encoding: .utf8
         )
 
-        XCTAssertTrue(dashboardView.contains("TokenMeteringDashboardLimitsStrip("))
+        XCTAssertTrue(dashboardView.contains("TokenMeteringDashboardLimitsPresentation("))
         // Refresh rides the panel-summary publisher; no dedicated timer.
         XCTAssertTrue(dashboardView.contains(".onReceive(store.$panelSummary)"))
         // The strip honors the tool-hiding setting like every other surface.
@@ -929,11 +929,17 @@ final class TokenUsageLimitTests: XCTestCase {
         XCTAssertFalse(strip.contains("fiveHourWindowMinutes"))
         XCTAssertFalse(strip.contains("weeklyWindowMinutes"))
         XCTAssertTrue(strip.contains("Dictionary(grouping: windowed) { $0.windowMinutes ?? 0 }"))
-        XCTAssertTrue(strip.contains(#"? "+\(group.extraCount)" : nil"#))
         // A count of limits is only meaningful beside a value. With no gauges
-        // the dash already stands for every one of them, so "— +3" would read
-        // as a contradiction rather than as a hint.
-        XCTAssertTrue(strip.contains("group.extraCount > 0 && !group.gauges.isEmpty"))
+        // the empty reason already stands for every one of them, so the `+n`
+        // count lives only in the branch that draws gauges.
+        let tabLimits = try String(
+            contentsOf: root.appendingPathComponent(
+                "Sources/Spill/TokenMetering/Dashboard/Navigation/TokenMeteringDashboardToolTabLimits.swift"
+            ),
+            encoding: .utf8
+        )
+        XCTAssertTrue(tabLimits.contains("if group.extraCount > 0 && !group.gauges.isEmpty {"))
+        XCTAssertTrue(tabLimits.contains(#"Text("+\(group.extraCount)")"#))
     }
 
     func testClaudeCaptureReadsExactCachedUtilization() {
@@ -1114,7 +1120,7 @@ final class TokenUsageLimitTests: XCTestCase {
         // five-hour placeholder: Codex sends `secondary: null` for those plans.
         let weeklyOnly = [gauge("codex:primary", "Weekly", 2, 10_080)]
         XCTAssertEqual(
-            TokenMeteringDashboardLimitsStrip.slotGauges(in: weeklyOnly).map(\.limitKey),
+            TokenMeteringDashboardLimitsPresentation.slotGauges(in: weeklyOnly).map(\.limitKey),
             ["codex:primary"]
         )
 
@@ -1124,14 +1130,14 @@ final class TokenUsageLimitTests: XCTestCase {
             gauge("codex:secondary", "Weekly", 2, 10_080),
         ]
         XCTAssertEqual(
-            TokenMeteringDashboardLimitsStrip.slotGauges(in: both).map(\.limitKey),
+            TokenMeteringDashboardLimitsPresentation.slotGauges(in: both).map(\.limitKey),
             ["codex:primary", "codex:secondary"]
         )
 
         // A window length nobody hardcoded still takes a slot.
         let daily = [gauge("codex:daily", "Daily", 10, 1_440)]
         XCTAssertEqual(
-            TokenMeteringDashboardLimitsStrip.slotGauges(in: daily).map(\.limitKey),
+            TokenMeteringDashboardLimitsPresentation.slotGauges(in: daily).map(\.limitKey),
             ["codex:daily"]
         )
 
@@ -1142,13 +1148,13 @@ final class TokenUsageLimitTests: XCTestCase {
             gauge("c", "Weekly", 10, 10_080),
         ]
         XCTAssertEqual(
-            TokenMeteringDashboardLimitsStrip.slotGauges(in: three).map(\.limitKey),
+            TokenMeteringDashboardLimitsPresentation.slotGauges(in: three).map(\.limitKey),
             ["a", "b"]
         )
 
         // A gauge with no window length never takes a slot.
         let unwindowed = [gauge("kind_weekly_burst", "Weekly Burst", 4, nil)]
-        XCTAssertTrue(TokenMeteringDashboardLimitsStrip.slotGauges(in: unwindowed).isEmpty)
+        XCTAssertTrue(TokenMeteringDashboardLimitsPresentation.slotGauges(in: unwindowed).isEmpty)
     }
 
     func testSharedWindowPrefersTheUnscopedLimitThenTheTightestOne() {
@@ -1166,7 +1172,7 @@ final class TokenUsageLimitTests: XCTestCase {
         // the slot so the chip means the same thing on every tool.
         let claude = [weekly(.claude, "week_all", 30), weekly(.claude, "weekly_scoped_fable", 71)]
         XCTAssertEqual(
-            TokenMeteringDashboardLimitsStrip.representative(of: claude)?.limitKey,
+            TokenMeteringDashboardLimitsPresentation.representative(of: claude)?.limitKey,
             "week_all"
         )
 
@@ -1174,7 +1180,7 @@ final class TokenUsageLimitTests: XCTestCase {
         // the representative even when a separate Spark pool is tighter.
         let codex = [weekly(.codex, "codex:primary", 20), weekly(.codex, "spark:primary", 90)]
         XCTAssertEqual(
-            TokenMeteringDashboardLimitsStrip.representative(of: codex)?.limitKey,
+            TokenMeteringDashboardLimitsPresentation.representative(of: codex)?.limitKey,
             "codex:primary"
         )
         XCTAssertFalse(codex[0].isScopedVariant)
@@ -1182,7 +1188,7 @@ final class TokenUsageLimitTests: XCTestCase {
     }
 
     func testChipTextRendersTheValueSourceAndResetAUserActuallyReads() throws {
-        let strip = TokenMeteringDashboardLimitsStrip(snapshots: [], language: .english)
+        let strip = TokenMeteringDashboardLimitsPresentation(snapshots: [], language: .english)
         let resetsAt = Date(timeIntervalSince1970: 1_000_000)
 
         // Exact server reading: no tilde, window label from the number.
@@ -1251,17 +1257,17 @@ final class TokenUsageLimitTests: XCTestCase {
     }
 
     func testWindowAndAgeLabelsAreDerivedFromTheNumbers() {
-        XCTAssertEqual(TokenMeteringDashboardLimitsStrip.slotLabel(windowMinutes: 300), "5h")
-        XCTAssertEqual(TokenMeteringDashboardLimitsStrip.slotLabel(windowMinutes: 10_080), "Wk")
-        XCTAssertEqual(TokenMeteringDashboardLimitsStrip.slotLabel(windowMinutes: 1_440), "1d")
-        XCTAssertEqual(TokenMeteringDashboardLimitsStrip.slotLabel(windowMinutes: 20_160), "2w")
-        XCTAssertEqual(TokenMeteringDashboardLimitsStrip.slotLabel(windowMinutes: 90), "90m")
-        XCTAssertNil(TokenMeteringDashboardLimitsStrip.slotLabel(windowMinutes: nil))
+        XCTAssertEqual(TokenMeteringDashboardLimitsPresentation.slotLabel(windowMinutes: 300), "5h")
+        XCTAssertEqual(TokenMeteringDashboardLimitsPresentation.slotLabel(windowMinutes: 10_080), "Wk")
+        XCTAssertEqual(TokenMeteringDashboardLimitsPresentation.slotLabel(windowMinutes: 1_440), "1d")
+        XCTAssertEqual(TokenMeteringDashboardLimitsPresentation.slotLabel(windowMinutes: 20_160), "2w")
+        XCTAssertEqual(TokenMeteringDashboardLimitsPresentation.slotLabel(windowMinutes: 90), "90m")
+        XCTAssertNil(TokenMeteringDashboardLimitsPresentation.slotLabel(windowMinutes: nil))
 
-        XCTAssertEqual(TokenMeteringDashboardLimitsStrip.compactDuration(30), "1m")
-        XCTAssertEqual(TokenMeteringDashboardLimitsStrip.compactDuration(45 * 60), "45m")
-        XCTAssertEqual(TokenMeteringDashboardLimitsStrip.compactDuration(3 * 3_600), "3h")
-        XCTAssertEqual(TokenMeteringDashboardLimitsStrip.compactDuration(50 * 3_600), "2d")
+        XCTAssertEqual(TokenMeteringDashboardLimitsPresentation.compactDuration(30), "1m")
+        XCTAssertEqual(TokenMeteringDashboardLimitsPresentation.compactDuration(45 * 60), "45m")
+        XCTAssertEqual(TokenMeteringDashboardLimitsPresentation.compactDuration(3 * 3_600), "3h")
+        XCTAssertEqual(TokenMeteringDashboardLimitsPresentation.compactDuration(50 * 3_600), "2d")
     }
 
     private static func claudeEvent(spanID: String, totalTokens: Int) -> TokenUsageEvent {
@@ -1327,6 +1333,52 @@ final class TokenUsageLimitTests: XCTestCase {
         "primary":{"used_percent":\(usedPercent),"window_minutes":\(windowMinutes),"resets_at":\(resetsAt)},\
         "secondary":\(secondary),"credits":{"has_credits":false,"unlimited":false,"balance":"0"}}}}
         """
+    }
+
+    func testToolTabLimitGroupMatchesEachTabTool() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let claudeSession = TokenUsageLimitSnapshot(
+            aiTool: .claude, limitKey: "claude:5h", label: "5-hour",
+            usedPercent: 29, remainingCredits: nil, windowMinutes: 300,
+            resetsAt: now.addingTimeInterval(3_600),
+            capturedAt: now.addingTimeInterval(-60), source: .serverExact
+        )
+        let presentation = TokenMeteringDashboardLimitsPresentation(
+            snapshots: [claudeSession],
+            tools: [.codex, .claude, .antigravity],
+            language: .english
+        )
+
+        // Each tab looks up only its own tool's readings.
+        XCTAssertEqual(presentation.group(for: .claude)?.gauges.map(\.limitKey), ["claude:5h"])
+        // Codex keeps a blank slot so its tab does not change shape when a
+        // reading arrives; AGY has no slot until a reading exists.
+        XCTAssertEqual(presentation.group(for: .codex)?.gauges.count, 0)
+        XCTAssertNil(presentation.group(for: .antigravity))
+    }
+
+    func testToolTabsCarryLimitsInsteadOfASeparateStrip() throws {
+        let toolTab = try Self.source(named: "TokenMeteringDashboardToolTab.swift")
+        let tabLimits = try Self.source(named: "TokenMeteringDashboardToolTabLimits.swift")
+        let dashboardView = try Self.source(named: "TokenMeteringDashboardView.swift")
+
+        XCTAssertTrue(toolTab.contains("limitsPresentation.group(for:)"))
+        XCTAssertTrue(toolTab.contains("TokenMeteringDashboardToolTabLimits(group: limitGroup"))
+        // Selection and limit detail are sibling buttons, not nested ones.
+        XCTAssertTrue(tabLimits.contains(".popover(isPresented: $isPopoverPresented)"))
+        XCTAssertFalse(tabLimits.contains("setSelectedTool"))
+        // Limits no longer repeat as a scrolling section.
+        XCTAssertFalse(dashboardView.contains("limitsStrip"))
+    }
+
+    private static func source(named fileName: String) throws -> String {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Sources/Spill")
+        let enumerator = try XCTUnwrap(FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil))
+        for case let url as URL in enumerator where url.lastPathComponent == fileName {
+            return try String(contentsOf: url, encoding: .utf8)
+        }
+        throw XCTSkip("Missing source \(fileName)")
     }
 
     private func temporaryDirectory() -> URL {

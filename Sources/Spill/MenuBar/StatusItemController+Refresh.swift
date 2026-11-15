@@ -53,9 +53,10 @@ extension StatusItemController {
     /// touch faster) when real system activity jumps, without requiring those stat modules to
     /// be polled just for this (the reading is simply `.calm`/0 if they aren't already active).
     private func updateTriggerIconAnimator(usageRatio: Double) {
-        let shouldAnimate = settings.useSpillAnimation && settings.menuBarTriggerIconStyle.animates
+        let style = settings.menuBarTriggerIconStyle
+        let shouldAnimate = settings.useSpillAnimation && style.animates
         if shouldAnimate {
-            TriggerIconAnimator.shared.start()
+            TriggerIconAnimator.shared.start(loopsContinuously: style.loopsContinuously)
             TriggerIconAnimator.shared.noteUsageRatio(usageRatio)
         } else {
             TriggerIconAnimator.shared.stop()

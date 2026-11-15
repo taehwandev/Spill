@@ -1,54 +1,41 @@
 import SwiftUI
 
-/// Per-tool remaining-limit cards under the dashboard
-/// header. Each card separates window labels, remaining values and reset times;
-/// clicking opens a popover with the visible tool's extra limits. Capture
-/// stamps and source detail remain available through tooltips. Tools
-/// without snapshots render nothing, so the strip disappears entirely when no
-/// limits are known.
+// The file keeps its historical name; the separate Limits strip it once drew
+// is gone, and the rules it owned now serve the AI tool tabs.
+
+/// Limit reading rules for the dashboard: which tools hold a limit slot, which
+/// gauges a tool shows, and how each reading is labeled. The AI tool tabs draw
+/// these readings inline, so limits stay pinned beside the tool they belong
+/// to instead of repeating the tool list in a separate strip.
 ///
 /// Nothing here adds a refresh clock: file captures and AGY's native status
-/// command share the existing collector. A card is
-/// therefore always an "as of" reading, and says so once it stops being
-/// recent. Age and dimming apply to each gauge independently so an old model
-/// pool cannot make a fresh account-wide limit look stale.
-struct TokenMeteringDashboardLimitsStrip: View {
+/// command share the existing collector. A reading is therefore always an
+/// "as of" value, and says so once it stops being recent. Age and dimming
+/// apply to each gauge independently so an old model pool cannot make a
+/// fresh account-wide limit look stale.
+struct TokenMeteringDashboardLimitsPresentation {
     let snapshots: [TokenUsageLimitSnapshot]
-    /// Every tool the user has not hidden. A chip is drawn for each one even
-    /// with no reading, because a chip that comes and goes is harder to read
-    /// than one that is simply blank until its tool reports again.
+    /// Every tool the user has not hidden. Codex and Claude keep a limit slot
+    /// even with no reading, because a slot that comes and goes is harder to
+    /// read than one that is simply blank until its tool reports again.
     var tools: Set<TokenUsageAITool> = []
     let language: TokenMeteringLanguage
 
-    @State private var popoverTool: TokenUsageAITool?
-
     private static let toolOrder: [TokenUsageAITool] = [.codex, .claude, .antigravity]
 
-    /// Tools that hold a blank chip while waiting for a reading, because a
+    /// Tools that hold a blank slot while waiting for a reading, because a
     /// reading can still arrive for them. AGY needs a supported, signed-in
     /// native status CLI, so it appears only after an actual reading arrives.
     private static let placeholderTools: Set<TokenUsageAITool> = [.codex, .claude]
 
-    var body: some View {
-        let groups = toolGroups
-        if !groups.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(TokenMeteringL10n.text(.limitsTitle, language: language))
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible(minimum: 0), spacing: 8, alignment: .top), count: groups.count), spacing: 8) {
-                    ForEach(groups, id: \.tool) { group in
-                        limitChip(for: group)
-                    }
-                }
-            }
-        }
+    func group(for tool: TokenUsageAITool) -> ToolGroup? {
+        toolGroups.first { $0.tool == tool }
     }
 }
 
 /// Chip grouping, kept internal so the rule that every visible tool holds a
 /// chip can be verified directly rather than through a rendered view.
-extension TokenMeteringDashboardLimitsStrip {
+extension TokenMeteringDashboardLimitsPresentation {
     struct ToolGroup {
         let tool: TokenUsageAITool
         let snapshots: [TokenUsageLimitSnapshot]
@@ -117,42 +104,9 @@ extension TokenMeteringDashboardLimitsStrip {
 
 }
 
-// MARK: - Chip rendering
+// MARK: - Accessibility
 
-private extension TokenMeteringDashboardLimitsStrip {
-    func limitChip(for group: ToolGroup) -> some View {
-        let now = Date()
-        return TokenMeteringDashboardLimitCard(
-            title: group.tool == .antigravity ? "AGY · Gemini" : compactToolName(group.tool),
-            tint: group.tool.dashboardTint,
-            remainingCaption: TokenMeteringL10n.text(.limitsRemaining, language: language),
-            items: group.gauges.map { gauge in
-                TokenMeteringDashboardLimitCard.Item(
-                    snapshot: gauge, title: slotLabel(for: gauge), value: headlineValue(for: gauge),
-                    reset: gauge.resetsAt.map {
-                        TokenMeteringL10n.limitsResetsAt(resetStamp(for: $0), language: language)
-                    },
-                    age: Self.ageLabel(for: gauge, at: now, language: language),
-                    tooltip: chipTooltip(for: gauge),
-                    dimmed: Self.outlivesWindow(gauge, at: now)
-                )
-            },
-            emptyText: TokenMeteringL10n.text(Self.emptyReason(for: group), language: language),
-            extraText: group.extraCount > 0 && !group.gauges.isEmpty ? "+\(group.extraCount)" : nil,
-            accessibilityText: accessibilityText(for: group)
-        ) {
-            popoverTool = group.tool
-        }
-        .popover(
-            isPresented: Binding(
-                get: { popoverTool == group.tool },
-                set: { if !$0 { popoverTool = nil } }
-            )
-        ) {
-            limitPopover(for: group)
-        }
-    }
-
+extension TokenMeteringDashboardLimitsPresentation {
     func accessibilityText(for group: ToolGroup) -> String {
         guard !group.gauges.isEmpty else {
             return "\(group.tool.dashboardLabel(language: language)) "
@@ -183,7 +137,7 @@ private extension TokenMeteringDashboardLimitsStrip {
 /// Pure slot and label rules, kept out of the view body so they can be
 /// verified directly: which gauges a chip shows is now a function of the
 /// windows present in the data, not of a hardcoded pair.
-extension TokenMeteringDashboardLimitsStrip {
+extension TokenMeteringDashboardLimitsPresentation {
     /// One gauge per window length the tool actually reports, shortest window
     /// first, capped at the chip's slot count.
     ///
@@ -301,47 +255,13 @@ extension TokenMeteringDashboardLimitsStrip {
 
 // MARK: - Popover and text formatting
 
-private extension TokenMeteringDashboardLimitsStrip {
-    func limitPopover(for group: ToolGroup) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(group.tool.dashboardLabel(language: language))
-                .font(.system(size: 12, weight: .semibold))
-
-            if group.snapshots.isEmpty {
-                Text(TokenMeteringL10n.text(.limitsNoReading, language: language))
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-            }
-
-            ForEach(group.snapshots, id: \.limitKey) { snapshot in
-                HStack(spacing: 8) {
-                    TokenUsageLimitRing(snapshot: snapshot, diameter: 12)
-                    Text(detailTitle(for: snapshot))
-                        .font(.system(size: 11, weight: .medium))
-                        .monospacedDigit()
-                }
-                .help(chipTooltip(for: snapshot))
-            }
-        }
-        .padding(12)
-        .frame(minWidth: 160, alignment: .leading)
-    }
-
+extension TokenMeteringDashboardLimitsPresentation {
     /// Same-day resets show the clock time; later resets show the date.
     func resetStamp(for resetsAt: Date) -> String {
         if Calendar.autoupdatingCurrent.isDate(resetsAt, inSameDayAs: Date()) {
             return TokenUsageLimitSnapshot.shortTimeFormatter.string(from: resetsAt)
         }
         return TokenUsageLimitSnapshot.shortDayFormatter.string(from: resetsAt)
-    }
-
-    func compactToolName(_ tool: TokenUsageAITool) -> String {
-        switch tool {
-        case .antigravity:
-            return "AGY"
-        default:
-            return tool.dashboardLabel(language: language)
-        }
     }
 
     func chipTooltip(for snapshot: TokenUsageLimitSnapshot) -> String {
@@ -396,7 +316,7 @@ private extension TokenMeteringDashboardLimitsStrip {
 
 // MARK: - Detail rows and value formatting
 
-private extension TokenMeteringDashboardLimitsStrip {
+extension TokenMeteringDashboardLimitsPresentation {
     func detailTitle(for snapshot: TokenUsageLimitSnapshot) -> String {
         "\(snapshot.label) \(headlineValue(for: snapshot))"
     }

@@ -624,25 +624,25 @@ final class SpillSettingsTests: XCTestCase {
     }
 
     func testMenuBarTriggerIconStylesExposeBrandSymbolOptions() {
-        XCTAssertEqual(MenuBarTriggerIconStyle.selectableCases, [.spill, .symbolizedS])
+        XCTAssertEqual(MenuBarTriggerIconStyle.selectableCases, [.spill, .dropCat, .dropBunny, .dropFish])
+        XCTAssertEqual(MenuBarTriggerIconStyle.normalized(rawValue: "drop_cat"), .dropCat)
+        XCTAssertEqual(MenuBarTriggerIconStyle.dropCat.character, .cat)
+        XCTAssertNil(MenuBarTriggerIconStyle.spill.character)
         XCTAssertEqual(MenuBarTriggerIconStyle.spill.title, "Drop")
-        XCTAssertEqual(MenuBarTriggerIconStyle.symbolizedS.title, "Symbolized S")
-        XCTAssertEqual(MenuBarTriggerIconStyle.symbolizedS.subtitle, "Uses the symbolized Spill S mark.")
-        XCTAssertEqual(MenuBarTriggerIconStyle.symbolizedS.symbolName(isActive: false), "s.circle")
-        XCTAssertEqual(MenuBarTriggerIconStyle.symbolizedS.symbolName(isActive: true), "s.circle.fill")
         XCTAssertTrue(MenuBarTriggerIconStyle.spill.usesCustomRenderer)
-        XCTAssertTrue(MenuBarTriggerIconStyle.symbolizedS.usesCustomRenderer)
+        XCTAssertTrue(MenuBarTriggerIconStyle.dropCat.usesCustomRenderer)
+        XCTAssertEqual(MenuBarTriggerIconStyle.dropCat.title, "Cat")
         XCTAssertEqual(MenuBarTriggerIconStyle.normalized(rawValue: "spill"), .spill)
-        XCTAssertEqual(MenuBarTriggerIconStyle.normalized(rawValue: "symbolized_s"), .symbolizedS)
+        XCTAssertEqual(MenuBarTriggerIconStyle.normalized(rawValue: "symbolized_s"), .spill)
         XCTAssertEqual(MenuBarTriggerIconStyle.normalized(rawValue: "cat"), .spill)
         XCTAssertEqual(MenuBarTriggerIconStyle.normalized(rawValue: "liquid"), .spill)
 
         let defaults = makeDefaults()
-        defaults.set("symbolized_s", forKey: "menuBarTriggerIconStyle")
+        defaults.set("drop_bunny", forKey: "menuBarTriggerIconStyle")
 
         let settings = SpillSettings(defaults: defaults)
 
-        XCTAssertEqual(settings.menuBarTriggerIconStyle, .symbolizedS)
+        XCTAssertEqual(settings.menuBarTriggerIconStyle, .dropBunny)
     }
 
     func testWindowActionShortcutsPersistAndResolveConflicts() {

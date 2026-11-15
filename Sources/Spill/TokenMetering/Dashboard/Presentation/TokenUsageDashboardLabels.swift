@@ -19,6 +19,18 @@ extension TokenUsageAITool {
             return "OpenAI"
         }
     }
+
+    /// Short name for dense detail areas (breakdown rows, per-tool legends,
+    /// trend rows). The tool tabs above keep the full `dashboardLabel`, so
+    /// "agy" is already introduced there as Antigravity.
+    func compactDashboardLabel(language: TokenMeteringLanguage) -> String {
+        switch self {
+        case .antigravity:
+            return "agy"
+        default:
+            return dashboardLabel(language: language)
+        }
+    }
 }
 
 extension TokenUsageTaskType {

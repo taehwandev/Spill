@@ -90,6 +90,8 @@ enum TokenMeteringTextKey: String {
     case workflowAssistedWork
     case workflowAssistedTokens
     case noWorkflowUsageData
+    case showFewerRows
+    case closeWorkItemDetail
     case workflowBreakdown
     case workflowBreakdownSubtitle
     case stageBreakdown
@@ -269,6 +271,8 @@ enum TokenMeteringTextKey: String {
     case hookConfig
     case agentConnectionStatus
     case agentStatusSubtitle
+    case agentDetailsShow
+    case agentDetailsHide
     case agentStatusInfoTitle
     case agentStatusInfoDetail
     case agentStatusDetected
@@ -410,6 +414,10 @@ extension TokenMeteringL10n {
 
     static func localEventsDetail(eventCount: Int, language: TokenMeteringLanguage = .current()) -> String {
         localizedFormat("format.local_events_detail", language: language, formattedCount(eventCount))
+    }
+
+    static func showAllRows(count: Int, language: TokenMeteringLanguage = .current()) -> String {
+        localizedFormat("format.show_all_rows", language: language, formattedCount(count))
     }
 
     static func spansDetail(

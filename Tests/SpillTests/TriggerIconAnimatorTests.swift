@@ -48,6 +48,82 @@ final class TriggerIconAnimatorTests: XCTestCase {
         XCTAssertFalse(animator.hasFrameTimerForTesting)
     }
 
+    func testContinuousLoopRunsWithoutIdleGapsAndWraps() {
+        let animator = TriggerIconAnimator.makeForTesting()
+        defer { animator.stop() }
+
+        animator.start(loopsContinuously: true)
+
+        XCTAssertTrue(animator.hasFrameTimerForTesting)
+        XCTAssertFalse(animator.hasIdleTimerForTesting)
+
+        for _ in 0..<200 {
+            animator.advanceFrameForTesting()
+        }
+
+        XCTAssertTrue(animator.hasFrameTimerForTesting, "the loop never stops on its own")
+        XCTAssertGreaterThanOrEqual(animator.phase, 0)
+        XCTAssertLessThan(animator.phase, 1)
+    }
+
+    func testContinuousLoopEasesTowardFasterSpeedUnderLoad() {
+        let animator = TriggerIconAnimator.makeForTesting()
+        defer { animator.stop() }
+
+        animator.start(loopsContinuously: true)
+        animator.noteUsageRatio(0.95)
+        animator.advanceFrameForTesting()
+
+        let firstStep = animator.loopSpeedMultiplierForTesting
+        XCTAssertGreaterThan(firstStep, 1)
+        XCTAssertLessThan(firstStep, 3, "speed eases in instead of jumping")
+
+        for _ in 0..<120 {
+            animator.advanceFrameForTesting()
+        }
+        XCTAssertEqual(animator.loopSpeedMultiplierForTesting, 3, accuracy: 0.01)
+
+        animator.noteUsageRatio(0.2)
+        for _ in 0..<120 {
+            animator.advanceFrameForTesting()
+        }
+        XCTAssertEqual(animator.loopSpeedMultiplierForTesting, 1, accuracy: 0.01)
+    }
+
+    func testLoopSpeedMapsLoadOntoRestToFullSpeed() {
+        XCTAssertEqual(TriggerIconAnimator.loopSpeedMultiplier(forUsageRatio: 0), 1)
+        XCTAssertEqual(TriggerIconAnimator.loopSpeedMultiplier(forUsageRatio: 0.45), 1)
+        XCTAssertEqual(TriggerIconAnimator.loopSpeedMultiplier(forUsageRatio: 0.675), 2, accuracy: 1e-9)
+        XCTAssertEqual(TriggerIconAnimator.loopSpeedMultiplier(forUsageRatio: 1), 3)
+        XCTAssertEqual(TriggerIconAnimator.loopSpeedMultiplier(forUsageRatio: .nan), 1)
+    }
+
+    func testContinuousLoopPausesWhileScreensSleep() {
+        let animator = TriggerIconAnimator.makeForTesting()
+        defer { animator.stop() }
+
+        animator.start(loopsContinuously: true)
+        animator.setScreensAsleepForTesting(true)
+        XCTAssertFalse(animator.hasFrameTimerForTesting)
+        XCTAssertTrue(animator.isRunningForTesting)
+
+        animator.setScreensAsleepForTesting(false)
+        XCTAssertTrue(animator.hasFrameTimerForTesting)
+    }
+
+    func testSwitchingModeRestartsInTheNewMode() {
+        let animator = TriggerIconAnimator.makeForTesting()
+        defer { animator.stop() }
+
+        animator.start(loopsContinuously: true)
+        animator.advanceFrameForTesting()
+        animator.start(loopsContinuously: false)
+
+        XCTAssertEqual(animator.phase, 0)
+        XCTAssertTrue(animator.hasIdleTimerForTesting)
+        XCTAssertFalse(animator.hasFrameTimerForTesting)
+    }
+
     func testFirstUsageRatioAfterStartOnlySetsBaseline() {
         let animator = TriggerIconAnimator.makeForTesting()
         defer { animator.stop() }

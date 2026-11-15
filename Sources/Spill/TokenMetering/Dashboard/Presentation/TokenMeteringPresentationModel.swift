@@ -211,7 +211,7 @@ struct TokenUsageDashboardSnapshot: Equatable {
             tokenValues: visibleCapturedToolTokens,
             totalTokens: capturedUsageTokens,
             id: { $0.rawValue },
-            label: { $0.dashboardLabel(language: language) }
+            label: { $0.compactDashboardLabel(language: language) }
         )
 
         let modelTokens = Self.tokenTotals(events: focusedEvents, inputScope: inputScope) {

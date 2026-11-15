@@ -20,7 +20,7 @@ final class MenuBarAppearanceObservationTests: XCTestCase {
         await assertChange(\.menuBarStatusHighlightThreshold, key: .menuBarStatusHighlightThreshold,
                            value: .ninety, name: "menu_bar_status_highlight_threshold")
         await assertChange(\.menuBarTriggerIconStyle, key: .menuBarTriggerIconStyle,
-                           value: .symbolizedS, name: "menu_bar_trigger_icon_style")
+                           value: .dropCat, name: "menu_bar_trigger_icon_style")
         await assertChange(\.menuBarTokenDisplayMode, key: .menuBarTokenDisplayMode,
                            value: .total, name: "menu_bar_token_display_mode")
         await assertChange(\.useSpillAnimation, key: .useSpillAnimation,

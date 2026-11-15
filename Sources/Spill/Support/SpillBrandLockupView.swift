@@ -46,14 +46,10 @@ struct SpillBrandLockupView: View {
         .accessibilityLabel(Text(accessibilityLabelText))
     }
 
-    @ViewBuilder
+    /// The lockup always shows the brand droplet; menu bar characters are a
+    /// trigger choice, not an alternate brand mark.
     private func brandMark(_ markStyle: MenuBarTriggerIconStyle) -> some View {
-        switch markStyle {
-        case .spill:
-            SpillBrandIconView()
-        case .symbolizedS:
-            SpillBrandSMarkView()
-        }
+        SpillBrandIconView()
     }
 
     @ViewBuilder

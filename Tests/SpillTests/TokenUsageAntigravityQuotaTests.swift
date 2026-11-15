@@ -163,7 +163,7 @@ final class TokenUsageAntigravityQuotaTests: XCTestCase {
     func testAGYCardShowsOnlyGeminiTwoWindowsWithoutOtherPoolExtras() throws {
         let snapshots = TokenUsageAntigravityQuotaParser.parse(try Self.report(), capturedAt: capturedAt)
             .flatMap(\.snapshots)
-        let strip = TokenMeteringDashboardLimitsStrip(snapshots: snapshots, tools: [.antigravity], language: .english)
+        let strip = TokenMeteringDashboardLimitsPresentation(snapshots: snapshots, tools: [.antigravity], language: .english)
         let group = try XCTUnwrap(strip.toolGroups.first)
         XCTAssertEqual(group.tool, .antigravity)
         XCTAssertEqual(group.gauges.map(\.windowMinutes), [300, 10_080])
@@ -172,7 +172,7 @@ final class TokenUsageAntigravityQuotaTests: XCTestCase {
         XCTAssertEqual(group.extraCount, 0)
         XCTAssertEqual(strip.slotLabel(for: group.gauges[0]), "5h")
         XCTAssertEqual(strip.slotLabel(for: group.gauges[1]), "Wk")
-        let onlyOtherPool = TokenMeteringDashboardLimitsStrip(
+        let onlyOtherPool = TokenMeteringDashboardLimitsPresentation(
             snapshots: snapshots.filter { $0.limitKey.hasPrefix("agy_quota:claude_gpt:") },
             tools: [.antigravity], language: .english
         )

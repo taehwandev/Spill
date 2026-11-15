@@ -2,12 +2,21 @@ import SwiftUI
 
 struct TokenMeteringDashboardChartPlaceholder: View {
     let tint: Color
+    var rowCount: Int = 5
 
     private let ratios: [CGFloat] = [0.84, 0.62, 0.76, 0.48, 0.68]
 
+    /// Height of one placeholder row (label 10 + gap 6 + bar 9) plus the 13pt row spacing.
+    static let rowPitch: CGFloat = 38
+
+    /// Rows that fit in `height` without overflowing into the panel header.
+    static func rowCount(fitting height: CGFloat) -> Int {
+        max(1, Int((height + 13) / rowPitch))
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 13) {
-            ForEach(Array(ratios.enumerated()), id: \.offset) { index, ratio in
+            ForEach(Array(ratios.prefix(rowCount).enumerated()), id: \.offset) { index, ratio in
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 8) {
                         TokenMeteringDashboardPlaceholderCapsule(

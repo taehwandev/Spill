@@ -110,6 +110,38 @@
 - The first read answers whether usage was large, whether cost came mostly from
   input or output, which model/tool/work type/stage dominated, and whether
   workflow labels covered the selected records.
+- Below the header the window splits into two columns. The left analysis column
+  pins the AI tool tabs and period controls, then scrolls: usage totals and the
+  period comparison, the trend (multi-day scopes only), where tokens went (AI
+  tool and raw input accounting), Work Type and Work Step, then Work Items. The
+  right column starts level with the tool tabs and scrolls on its own.
+- Limits live inside each AI tool tab, not in a separate section, so they stay
+  visible while the analysis scrolls. A tab shows up to two window gauges
+  (label, threshold-colored ring, remaining value); further readings collapse
+  to `+n`. The limit line is its own button, separate from tool selection, and
+  opens every reading for that tool with reset times. Codex and Claude keep a
+  blank limit line with the empty reason until a reading arrives; AGY shows one
+  only after a reading exists.
+- Tool tabs share the column width evenly whatever the number of visible
+  tools; All keeps a compact fixed width and wraps its record/token summary.
+  When the column is narrow, period totals drop from the period controls first,
+  then the "Aggregation period" label.
+- Distribution panels show their top five rows by default and expand the rest
+  in place with a "Show all" control, so every row stays reachable without
+  pushing Work Items off the first screen. Share badges are neutral; color
+  stays reserved for tool identity and series.
+- The header carries brand, Beta and sync state, and last update time; the
+  one-line dashboard description is the brand tooltip, not a header column.
+- AI tool tabs show usage, share, and limits; last activity is the tab's
+  tooltip. Running state is the tab's
+  sparkle color (with an accessibility value); process counts stay in Agent
+  Connection Status, and a cloud service badge appears on a tab only when the
+  provider reports a problem.
+- Agent Connection Status shows one compact card per agent with its state and a
+  single processes/CPU/memory line. Version, source, and per-process rows sit
+  behind a per-agent disclosure.
+- Selecting a Work Item replaces the right rail with its detail panel; the
+  panel's close control has an accessible label and Escape returns to the rail.
 - Raw input accounting appears separately from token detail and workflow labels.
   Copy explains that cache discounts and cost weighting belong in cost display,
   not raw storage or default totals.
@@ -131,6 +163,9 @@
 - First-class tools use one consistent color identity across panel summary,
   tool tabs, distribution rows, tool cards, and process status: Codex teal,
   Claude orange/coral, and Antigravity/AGY blue.
+- Tool tabs name Antigravity in full as "Antigravity (agy)"; dense detail areas
+  below them (distribution rows, per-tool split legends, trend rows) use the
+  short "agy", with the full name kept in hover help.
 - Summary cards prioritize total, input, output, event count, average event size,
   and peak event size before token detail categories.
 - Workflow label coverage appears as a measurement-quality signal. Usage remains

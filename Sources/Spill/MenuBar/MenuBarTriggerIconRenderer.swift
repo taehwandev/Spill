@@ -37,11 +37,9 @@ enum MenuBarTriggerIconRenderer {
     }
 
     private static func render(style: MenuBarTriggerIconStyle, phase: CGFloat, size: CGFloat) -> NSImage? {
-        switch style {
-        case .spill:
-            return MenuBarTriggerIconDropletRenderer.image(phase: phase, size: size)
-        case .symbolizedS:
-            return MenuBarTriggerIconSymbolizedSRenderer.image(phase: phase, size: size)
+        if let character = style.character {
+            return MenuBarTriggerIconCharacterRenderer.image(character: character, phase: phase, size: size)
         }
+        return MenuBarTriggerIconDropletRenderer.image(phase: phase, size: size)
     }
 }

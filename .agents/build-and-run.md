@@ -399,7 +399,7 @@ windows and does not run collectors.
 AGY Limits uses the installed CLI (>=1.1.11) native JSON `/usage` status
 command, separate from imported token totals. It runs on existing collection
 and manual refresh paths only for visible AGY. Verify Gemini and Claude/GPT
-five-hour/weekly percentages and provider reset times in the Limits cards.
+five-hour/weekly percentages and provider reset times in the AI tool tab limit lines.
 AGY displays only Gemini 5h/week; its Claude/GPT buckets are not shown.
 Missing login, offline/error output, or unsupported CLI preserves prior
 readings; expired on-demand readings become unknown until refreshed. Never

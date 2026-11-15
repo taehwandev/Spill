@@ -18,8 +18,15 @@ The quick-actions PRD owns that removal boundary and retained window controls.
 ## Requirements
 
 - A small fixed-width Spill icon appears in the menu bar as the primary Main
-  item. The droplet remains the default trigger mark, and users may choose the
-  symbolized Spill S mark as an alternate trigger mark.
+  item. The droplet remains the default trigger mark, and users may choose a
+  character as an alternate trigger mark: a cat that wags its tail and
+  blinks, a bunny that flops one ear, or a fish that swishes its tail. Each is
+  a monochrome silhouette tinted like the system menu bar icons (a sitting cat
+  in profile, for instance), so it stays readable at menu bar size. The cat
+  sways its tail continuously, faster as combined system load rises, and pauses
+  while the displays sleep or the login session is inactive; the bunny and fish
+  move only during the trigger's short animation bursts. Every character stays
+  still when the Spill animation setting is off.
 - By default, enabled menu bar values render in one horizontal status item with
   the Spill trigger, preserving the classic compact menu bar presentation.
 - Compact rendering and functional group splitting are independent Preferences

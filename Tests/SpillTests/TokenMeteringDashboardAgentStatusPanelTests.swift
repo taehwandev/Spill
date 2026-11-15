@@ -14,6 +14,9 @@ final class TokenMeteringDashboardAgentStatusPanelTests: XCTestCase {
         XCTAssertFalse(source.contains("private var summaryColumns: [GridItem]"))
         XCTAssertTrue(source.contains(".transition(.opacity)"))
         XCTAssertFalse(source.contains(".move(edge: .top)"))
+        // Version, source, and per-process rows sit behind a per-agent disclosure.
+        XCTAssertTrue(source.contains("@State private var expandedAgentIDs: Set<String> = []"))
+        XCTAssertTrue(source.contains("if isExpanded {"))
     }
 
     func testAgentStatusSummaryCombinesMultipleAgentsWithProcessRows() throws {

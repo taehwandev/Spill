@@ -1,5 +1,13 @@
 import SwiftUI
 
+/// One AI tool filter tab. The tab answers "how much did this tool use and
+/// how much is left": usage on top, the tool's limit readings underneath.
+/// Running state stays a small sparkle on the droplet, and the cloud service
+/// badge appears only when the provider reports a problem. Process counts and
+/// healthy service states live in the Agent Connection Status rail.
+///
+/// Selecting the tool and opening limit detail are two sibling buttons inside
+/// one card, never nested, so each keeps its own hit area and focus.
 struct TokenMeteringDashboardToolTab: View {
     let filter: TokenUsageDashboardToolFilter
     @ObservedObject var store: TokenUsageDashboardStore
@@ -8,6 +16,7 @@ struct TokenMeteringDashboardToolTab: View {
     let appLanguage: SpillAppLanguage
     let selectedControlAccent: Color
     let selectedControlAccentHighlight: Color
+    let limitsPresentation: TokenMeteringDashboardLimitsPresentation
     @State private var isHovered = false
 }
 
@@ -16,55 +25,68 @@ extension TokenMeteringDashboardToolTab {
         let liveUpdateID = "filter:tool:\(filter.id)"
         let isLiveUpdated = store.isLiveUpdated(liveUpdateID)
         let isSelected = store.selectedTool == filter.tool
-        let toolLastUpdated = lastUpdatedString(for: filter.tool)
         let serviceStatus = filter.tool.flatMap(serviceStatus)
         let hasServerIssue = serviceStatus?.health.isServerIssue ?? false
         let statusTint = serviceStatus?.health.serverStatusTint ?? Color.teal
         let toolTint = filter.tool?.dashboardTint ?? selectedControlAccent
         let tabAccent = hasServerIssue ? statusTint : toolTint
+        let limitGroup = filter.tool.flatMap(limitsPresentation.group(for:))
 
-        return Button {
-            store.setSelectedTool(filter.tool)
-        } label: {
-            HStack(spacing: 8) {
-                leadingStatusIndicator(tabAccent: tabAccent)
+        return VStack(alignment: .leading, spacing: 10) {
+            Button {
+                store.setSelectedTool(filter.tool)
+            } label: {
+                HStack(spacing: 8) {
+                    leadingStatusIndicator(tabAccent: tabAccent)
 
-                tabLabel(
-                    detail: filter.detail,
-                    shareLabel: filter.shareLabel,
-                    lastUpdated: toolLastUpdated,
-                    serviceStatus: serviceStatus,
-                    isActive: isLiveUpdated,
-                    isSelected: isSelected,
-                    tint: tabAccent
-                )
-            }
-            .padding(.horizontal, 11)
-            .frame(minWidth: filter.tool == nil ? 88 : 124, minHeight: 46, alignment: .leading)
-            .foregroundStyle(isSelected ? tabAccent : .primary)
-            .background {
-                if isSelected {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(tabAccent.opacity(0.14))
-                } else {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(hasServerIssue ? tabAccent.opacity(0.10) : Color.primary.opacity(isHovered ? 0.06 : 0.03))
-                }
-            }
-            .overlay {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(
-                        isSelected ? tabAccent.opacity(0.28) : (hasServerIssue ? tabAccent.opacity(0.30) : Color.primary.opacity(isHovered ? 0.10 : 0.045)),
-                        lineWidth: isSelected ? 0.75 : 0.5
+                    tabLabel(
+                        detail: filter.detail,
+                        shareLabel: filter.shareLabel,
+                        issueStatus: hasServerIssue ? serviceStatus : nil,
+                        isActive: isLiveUpdated,
+                        isSelected: isSelected,
+                        tint: tabAccent
                     )
+
+                    Spacer(minLength: 0)
+                }
+                .foregroundStyle(isSelected ? tabAccent : .primary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
             }
-            .onHover { hovering in
-                isHovered = hovering
+            .buttonStyle(.plain)
+            .focusEffectDisabled()
+            .help(lastUpdatedHelp)
+            .accessibilityValue(Text(runningAccessibilityValue))
+
+            if let limitGroup {
+                TokenMeteringDashboardToolTabLimits(group: limitGroup, presentation: limitsPresentation)
             }
-            .modifier(TokenMeteringLiveUpdateEffect(isActive: isLiveUpdated && !isSelected, marker: store.liveUpdateMarker, cornerRadius: 8))
         }
-        .buttonStyle(.plain)
-        .focusEffectDisabled()
+        .padding(.horizontal, 12)
+        .padding(.vertical, 11)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(tabBackground(isSelected: isSelected, hasServerIssue: hasServerIssue, tabAccent: tabAccent))
+        .overlay {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(
+                    isSelected ? tabAccent.opacity(0.28) : (hasServerIssue ? tabAccent.opacity(0.30) : Color.primary.opacity(isHovered ? 0.10 : 0.045)),
+                    lineWidth: isSelected ? 0.75 : 0.5
+                )
+        }
+        .onHover { hovering in
+            isHovered = hovering
+        }
+        .modifier(TokenMeteringLiveUpdateEffect(isActive: isLiveUpdated && !isSelected, marker: store.liveUpdateMarker, cornerRadius: 8))
+    }
+
+    private func tabBackground(isSelected: Bool, hasServerIssue: Bool, tabAccent: Color) -> some View {
+        RoundedRectangle(cornerRadius: 10, style: .continuous)
+            .fill(
+                isSelected
+                    ? tabAccent.opacity(0.14)
+                    : (hasServerIssue ? tabAccent.opacity(0.10) : Color.primary.opacity(isHovered ? 0.06 : 0.03))
+            )
     }
 }
 
@@ -89,7 +111,7 @@ extension TokenMeteringDashboardToolTab {
                 .frame(width: dropWidth, height: dropHeight)
 
             if filter.tool != nil {
-                // AI tool tab: sparkle accessory
+                // AI tool tab: the sparkle turns green while the tool runs.
                 Image(systemName: "sparkle")
                     .font(.system(size: 6.5, weight: .bold))
                     .foregroundStyle(
@@ -99,13 +121,6 @@ extension TokenMeteringDashboardToolTab {
                     )
                     .shadow(color: Color.black.opacity(0.25), radius: 1, x: 0, y: 0.5)
                     .offset(x: 3.5, y: 2.5)
-            } else if isToolRunning {
-                // All tab running status dot
-                Circle()
-                    .fill(Color.green)
-                    .frame(width: 4.5, height: 4.5)
-                    .shadow(color: Color.green.opacity(0.4), radius: 1)
-                    .offset(x: 2, y: 2)
             }
         }
         .frame(width: 16, height: 16)
@@ -114,13 +129,12 @@ extension TokenMeteringDashboardToolTab {
     private func tabLabel(
         detail: String,
         shareLabel: String?,
-        lastUpdated: String?,
-        serviceStatus: CloudServiceStatusItem?,
+        issueStatus: CloudServiceStatusItem?,
         isActive: Bool,
         isSelected: Bool,
         tint: Color
     ) -> some View {
-        VStack(alignment: .leading, spacing: 2.5) {
+        VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 5) {
                 Text(filter.title)
                     .font(.system(size: 11, weight: isSelected ? .bold : .semibold))
@@ -128,30 +142,29 @@ extension TokenMeteringDashboardToolTab {
                     .layoutPriority(1)
                     .minimumScaleFactor(0.78)
 
-                toolAgentStatusBadge(localStatus: localStatus)
-
-                if hasServiceStatusAccessory(serviceStatus: serviceStatus, tool: filter.tool) {
-                    toolServiceStatusAccessory(serviceStatus: serviceStatus, tool: filter.tool)
+                if let issueStatus {
+                    CloudServiceStatusBadge(item: issueStatus, appLanguage: appLanguage)
+                        .fixedSize(horizontal: true, vertical: false)
                 }
             }
 
             HStack(spacing: 5) {
-                Text(detail)
-                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(isSelected ? tint.opacity(0.85) : .secondary)
-                    .lineLimit(1)
-                    .layoutPriority(1)
+                // All has no limit line, so its "records / tokens" summary
+                // stacks one part per line in the free vertical space instead
+                // of widening the tab or truncating.
+                VStack(alignment: .leading, spacing: 3) {
+                    ForEach(detailLines(detail), id: \.self) { line in
+                        Text(line)
+                            .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(isSelected ? tint.opacity(0.85) : .secondary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                    }
+                }
+                .layoutPriority(1)
 
                 if let shareLabel {
                     toolShareBadge(shareLabel, isSelected: isSelected, tint: tint)
-                }
-
-                if let lastUpdated {
-                    Text("· \(lastUpdated)")
-                        .font(.system(size: 8.5, weight: .semibold, design: .rounded))
-                        .foregroundStyle(isSelected ? tint.opacity(0.78) : .secondary)
-                        .lineLimit(1)
-                        .layoutPriority(0.8)
                 }
 
                 TokenMeteringLiveUpdateDot(
@@ -170,6 +183,7 @@ extension TokenMeteringDashboardToolTab {
     ) -> some View {
         Text(value)
             .font(.system(size: 8.5, weight: .black, design: .rounded))
+            .fixedSize()
             .lineLimit(1)
             .padding(.horizontal, 5)
             .frame(height: 16)
@@ -186,25 +200,22 @@ extension TokenMeteringDashboardToolTab {
 }
 
 extension TokenMeteringDashboardToolTab {
-    private func hasServiceStatusAccessory(
-        serviceStatus: CloudServiceStatusItem?,
-        tool: TokenUsageAITool?
-    ) -> Bool {
-        serviceStatus != nil || CloudServiceStatusPresentation.hasCloudService(for: tool)
+    /// The per-tool capture time moved off the tab face to make room for
+    /// limits; it stays one hover away.
+    private func detailLines(_ detail: String) -> [String] {
+        guard filter.tool == nil else { return [detail] }
+        let parts = detail
+            .split(separator: "/")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        return parts.isEmpty ? [detail] : parts
     }
 
-    @ViewBuilder
-    private func toolServiceStatusAccessory(
-        serviceStatus: CloudServiceStatusItem?,
-        tool: TokenUsageAITool?
-    ) -> some View {
-        if let serviceStatus {
-            CloudServiceStatusBadge(item: serviceStatus, appLanguage: appLanguage)
-                .fixedSize(horizontal: true, vertical: false)
-        } else if CloudServiceStatusPresentation.hasCloudService(for: tool) {
-            aiServerPendingBadge()
-                .fixedSize(horizontal: true, vertical: false)
+    private var lastUpdatedHelp: String {
+        guard let lastUpdated = lastUpdatedString(for: filter.tool) else {
+            return filter.title
         }
+        return "\(filter.title) · \(lastUpdated)"
     }
 
     private func lastUpdatedString(for tool: TokenUsageAITool?) -> String? {
@@ -228,29 +239,6 @@ extension TokenMeteringDashboardToolTab {
         )
     }
 
-    private func aiServerPendingBadge() -> some View {
-        let tint = cloudServiceStatusStore.isLoading ? Color.blue : Color.secondary
-        let value = cloudServiceStatusStore.isLoading
-            ? AppL10n.text(.checking, appLanguage: appLanguage)
-            : AppL10n.text(.server, appLanguage: appLanguage)
-
-        return HStack(spacing: 4) {
-            Image(systemName: cloudServiceStatusStore.isLoading ? "arrow.triangle.2.circlepath" : "cloud.fill")
-                .font(.system(size: 8, weight: .bold))
-
-            Text(value)
-                .font(.system(size: 8.5, weight: .bold, design: .rounded))
-                .lineLimit(1)
-        }
-        .padding(.horizontal, 5)
-        .frame(height: 18)
-        .foregroundStyle(tint)
-        .background(tint.opacity(0.10), in: Capsule())
-        .help(AppL10n.text(.serverStatusPendingHelp, appLanguage: appLanguage))
-    }
-}
-
-extension TokenMeteringDashboardToolTab {
     private var localStatus: LocalAIToolStatus? {
         guard let kind = filter.tool?.localAIToolKind else { return nil }
         return aiStatusStore.statuses.first(where: { $0.kind == kind })
@@ -260,60 +248,13 @@ extension TokenMeteringDashboardToolTab {
         localStatus?.hasRunningProcesses ?? false
     }
 
-    private var runningToolCount: Int {
-        visibleStatuses.filter(\.hasRunningProcesses).count
-    }
-
-    private var visibleStatuses: [LocalAIToolStatus] {
-        let visibleKinds = Set(store.snapshot.toolFilters.compactMap { $0.tool?.localAIToolKind })
-        return aiStatusStore.statuses.filter { visibleKinds.contains($0.kind) }
-    }
-
-    @ViewBuilder
-    private func toolAgentStatusBadge(localStatus: LocalAIToolStatus?) -> some View {
-        if let localStatus {
-            let isRunning = localStatus.hasRunningProcesses
-            let procCount = localStatus.processSummary.processCount
-            let badgeText: String = {
-                if isRunning {
-                    return procCount > 1 ? "\(procCount) proc" : localStatus.value
-                } else {
-                    return localStatus.value.isEmpty ? AppL10n.text(.idle, appLanguage: appLanguage) : localStatus.value
-                }
-            }()
-            agentStatusBadge(text: badgeText, isRunning: isRunning)
-        } else if filter.tool == nil {
-            let runningCount = runningToolCount
-            if runningCount > 0 {
-                agentStatusBadge(text: String(runningCount), isRunning: true)
-                    .accessibilityLabel(AppL10n.aiProcessSummary(
-                        runningToolCount: runningCount,
-                        processCount: visibleStatuses.reduce(0) { $0 + $1.processSummary.processCount },
-                        appLanguage: appLanguage
-                    ))
-            }
+    /// The visual running cue is a color change only, so VoiceOver gets the
+    /// same state as text.
+    private var runningAccessibilityValue: String {
+        guard let localStatus else { return "" }
+        if localStatus.hasRunningProcesses {
+            return localStatus.value
         }
-    }
-
-    private func agentStatusBadge(text: String, isRunning: Bool) -> some View {
-        HStack(spacing: 3) {
-            Circle()
-                .fill(isRunning ? Color.green : Color.secondary.opacity(0.5))
-                .frame(width: isRunning ? 4.5 : 3.5, height: isRunning ? 4.5 : 3.5)
-            Text(text)
-                .font(.system(size: 8, weight: isRunning ? .bold : .medium, design: .rounded))
-                .lineLimit(1)
-        }
-        .foregroundStyle(isRunning ? Color.green : Color.secondary.opacity(0.8))
-        .padding(.horizontal, 4.5)
-        .frame(height: 15)
-        .background(
-            Capsule(style: .continuous)
-                .fill(isRunning ? Color.green.opacity(0.12) : Color.primary.opacity(0.04))
-        )
-        .overlay {
-            Capsule(style: .continuous)
-                .stroke(isRunning ? Color.green.opacity(0.24) : Color.primary.opacity(0.06), lineWidth: 0.5)
-        }
+        return localStatus.value.isEmpty ? AppL10n.text(.idle, appLanguage: appLanguage) : localStatus.value
     }
 }

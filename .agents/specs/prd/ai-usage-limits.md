@@ -255,7 +255,7 @@ as a separate, explicitly opt-in PRD.
 
 | Concern | Decision |
 | --- | --- |
-| Feature flag | Limits strip on by default in the dashboard; compact-panel rings render whenever a snapshot exists (they add no space, so no separate toggle) |
+| Feature flag | Limits on by default inside the dashboard AI tool tabs; compact-panel rings render whenever a snapshot exists (they add no space, so no separate toggle) |
 | New settings | `limitGaugeClaudeWindowTokens` (optional user-entered limits), `limitGaugeAntigravityPlanCredits` (optional) |
 | Schema | New local snapshot store; `token_usage_events` unchanged |
 | Estimation | No estimated gauge exists. A percentage is shown only when a tool reported one; otherwise the chip reports nothing |

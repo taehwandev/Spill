@@ -218,7 +218,7 @@ extension TokenUsageDashboardSnapshot {
             tokenValues: toolRowTotals.filter { tool, _ in visibleTools?.contains(tool) ?? true },
             totalTokens: usageTokensTotal,
             id: { $0.rawValue },
-            label: { $0.dashboardLabel(language: language) }
+            label: { $0.compactDashboardLabel(language: language) }
         )
 
         let modelTotalsSQL = aggregate.modelTotals().mapValues { $0.total(for: inputScope) }

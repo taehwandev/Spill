@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 
 /// Drives the menu bar trigger icon's animation phase independently of `MenuBarMetricChipView`.
 /// That view gets torn down and rebuilt almost every refresh (its segment includes live CPU /
@@ -16,6 +16,10 @@ import Foundation
 /// Early bursts respect the same minimum gap as idle ones: every frame re-renders the whole
 /// status item on every display, which itself moves CPU load, so an uncapped load trigger
 /// can feed back into near-continuous animation.
+///
+/// Styles that loop continuously (the cat's tail) instead keep one frame timer running and
+/// never pause. Load only changes how far the phase moves per frame, never the frame rate, so
+/// faster motion costs no extra redraws and cannot feed back into the load it reads.
 @MainActor
 final class TriggerIconAnimator {
     static let shared = TriggerIconAnimator()
@@ -28,26 +32,102 @@ final class TriggerIconAnimator {
     private static let idleDelayRange: ClosedRange<TimeInterval> = 7...18
     private static let usageChangeBurstThreshold: Double = 0.20
     private static let maximumBurstSpeedMultiplier: CGFloat = 1.6
+    /// One loop is about 6.4s at rest; the cat sways its tail four times per loop.
+    private static let loopStepPerFrame: CGFloat = 0.013
+    private static let maximumLoopSpeedMultiplier: CGFloat = 3
+    /// Combined load at or below the lower bound loops at rest speed, at or above the upper
+    /// bound at full speed. Memory alone usually sits near the lower bound on macOS.
+    private static let loopSpeedUsageRange: ClosedRange<Double> = 0.45...0.9
+    /// Fraction of the remaining gap to the target speed closed each frame (~1s to settle).
+    private static let loopSpeedEasing: CGFloat = 0.08
 
     private var frameTimer: Timer?
     private var idleTimer: Timer?
     private var isBursting = false
     private var burstSpeedMultiplier: CGFloat = 1
+    private var loopSpeedMultiplier: CGFloat = 1
+    private var targetLoopSpeedMultiplier: CGFloat = 1
     private var lastUsageRatio: Double?
     private var isRunning = false
+    private var loopsContinuously = false
     private var lastBurstEndedAt: Date?
+    private var areScreensAsleep = false
+    private var isSessionInactive = false
+    private var workspaceObservers: [NSObjectProtocol] = []
     private let now: () -> Date
 
     private init(now: @escaping () -> Date = Date.init) {
         self.now = now
+        observeWorkspaceVisibility()
     }
 
-    /// Idempotent — safe to call every refresh tick. Does nothing if already running.
-    func start() {
+    /// Nobody can see the menu bar while the displays sleep or another user's session is in
+    /// front, so the continuous loop pauses there instead of ticking 12 times a second.
+    private var isLoopSuspended: Bool {
+        areScreensAsleep || isSessionInactive
+    }
+
+    private func observeWorkspaceVisibility() {
+        let center = NSWorkspace.shared.notificationCenter
+        let names: [Notification.Name] = [
+            NSWorkspace.screensDidSleepNotification,
+            NSWorkspace.screensDidWakeNotification,
+            NSWorkspace.sessionDidResignActiveNotification,
+            NSWorkspace.sessionDidBecomeActiveNotification,
+        ]
+        workspaceObservers = names.map { name in
+            center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    self?.noteWorkspaceVisibility(name)
+                }
+            }
+        }
+    }
+
+    private func noteWorkspaceVisibility(_ name: Notification.Name) {
+        switch name {
+        case NSWorkspace.screensDidSleepNotification:
+            areScreensAsleep = true
+        case NSWorkspace.screensDidWakeNotification:
+            areScreensAsleep = false
+        case NSWorkspace.sessionDidResignActiveNotification:
+            isSessionInactive = true
+        case NSWorkspace.sessionDidBecomeActiveNotification:
+            isSessionInactive = false
+        default:
+            return
+        }
+        applyLoopSuspension()
+    }
+
+    private func applyLoopSuspension() {
+        guard isRunning, loopsContinuously else { return }
+        if isLoopSuspended {
+            frameTimer?.invalidate()
+            frameTimer = nil
+        } else if frameTimer == nil {
+            startFrameTimer()
+        }
+    }
+
+    /// Idempotent — safe to call every refresh tick. Does nothing if already running in the
+    /// same mode; switching between bursts and a continuous loop restarts from rest.
+    func start(loopsContinuously: Bool = false) {
+        if isRunning, self.loopsContinuously != loopsContinuously {
+            stop()
+        }
         guard !isRunning else { return }
         isRunning = true
+        self.loopsContinuously = loopsContinuously
         lastUsageRatio = nil
-        scheduleNextIdleBurst()
+        if loopsContinuously {
+            loopSpeedMultiplier = 1
+            targetLoopSpeedMultiplier = 1
+            phase = 0
+            applyLoopSuspension()
+        } else {
+            scheduleNextIdleBurst()
+        }
     }
 
     /// Idempotent. Cancels any in-flight burst/wait and resets phase, so the icon renders at
@@ -75,7 +155,12 @@ final class TriggerIconAnimator {
     /// Safe to call whether or not the animator is running.
     func noteUsageRatio(_ ratio: Double) {
         defer { lastUsageRatio = ratio }
-        guard isRunning, !isBursting else { return }
+        guard isRunning else { return }
+        if loopsContinuously {
+            targetLoopSpeedMultiplier = Self.loopSpeedMultiplier(forUsageRatio: ratio)
+            return
+        }
+        guard !isBursting else { return }
         guard let previousUsageRatio = lastUsageRatio else { return }
         let delta = abs(ratio - previousUsageRatio)
         guard delta >= Self.usageChangeBurstThreshold else { return }
@@ -101,6 +186,10 @@ final class TriggerIconAnimator {
         isBursting = true
         burstSpeedMultiplier = speedMultiplier
         phase = 0
+        startFrameTimer()
+    }
+
+    private func startFrameTimer() {
         let timer = Timer(timeInterval: Self.frameInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.advanceFrame() }
         }
@@ -108,7 +197,23 @@ final class TriggerIconAnimator {
         frameTimer = timer
     }
 
+    static func loopSpeedMultiplier(forUsageRatio ratio: Double) -> CGFloat {
+        guard ratio.isFinite else { return 1 }
+        let range = loopSpeedUsageRange
+        let progress = ((ratio - range.lowerBound) / (range.upperBound - range.lowerBound)).clamped(to: 0...1)
+        return 1 + (maximumLoopSpeedMultiplier - 1) * CGFloat(progress)
+    }
+
     private func advanceFrame() {
+        if loopsContinuously {
+            loopSpeedMultiplier += (targetLoopSpeedMultiplier - loopSpeedMultiplier) * Self.loopSpeedEasing
+            phase += Self.loopStepPerFrame * loopSpeedMultiplier
+            if phase >= 1 {
+                phase -= 1
+            }
+            onFrame?()
+            return
+        }
         phase += Self.baseStepPerFrame * burstSpeedMultiplier
         if phase >= 1 {
             phase = 0
@@ -146,12 +251,21 @@ extension TriggerIconAnimator {
         idleTimer != nil
     }
 
+    var loopSpeedMultiplierForTesting: CGFloat {
+        loopSpeedMultiplier
+    }
+
     func startBurstForTesting(speedMultiplier: CGFloat = 1) {
         startBurst(speedMultiplier: speedMultiplier)
     }
 
     func advanceFrameForTesting() {
         advanceFrame()
+    }
+
+    func setScreensAsleepForTesting(_ asleep: Bool) {
+        areScreensAsleep = asleep
+        applyLoopSuspension()
     }
 }
 #endif

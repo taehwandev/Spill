@@ -258,7 +258,7 @@ private extension TokenUsageDashboardTrendBucketBuilder {
                 tokenValues: visibleToolTotals,
                 totalTokens: totalTokens,
                 id: { $0.rawValue },
-                label: { $0.dashboardLabel(language: language) }
+                label: { $0.compactDashboardLabel(language: language) }
             )
         }
     }

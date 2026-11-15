@@ -9,19 +9,17 @@ struct TokenMeteringDashboardFilterBar: View {
     let appLanguage: SpillAppLanguage
     let selectedControlAccent: Color
     let selectedControlAccentHighlight: Color
+    let limitsPresentation: TokenMeteringDashboardLimitsPresentation
     @State private var hoveredPeriodID: String? = nil
 }
 
 extension TokenMeteringDashboardFilterBar {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                Text(t(.aiToolHeader))
-                    .font(.system(size: 9, weight: .black))
-                    .tracking(1.0)
-                    .foregroundStyle(.secondary)
-                    .frame(width: 78, alignment: .leading)
-
+            // Tool tabs split the column evenly, so two or three tools fill
+            // the row instead of leaving a gap. All keeps a compact fixed
+            // width because it carries no limit line.
+            EqualToolTabsLayout(spacing: 8) {
                 ForEach(store.snapshot.toolFilters) { filter in
                     TokenMeteringDashboardToolTab(
                         filter: filter,
@@ -30,33 +28,70 @@ extension TokenMeteringDashboardFilterBar {
                         aiStatusStore: aiStatusStore,
                         appLanguage: appLanguage,
                         selectedControlAccent: selectedControlAccent,
-                        selectedControlAccentHighlight: selectedControlAccentHighlight
+                        selectedControlAccentHighlight: selectedControlAccentHighlight,
+                        limitsPresentation: limitsPresentation
                     )
+                    .layoutValue(key: FixedToolTabWidth.self, value: filter.tool == nil ? Self.allTabWidth : nil)
                 }
-
-                Spacer(minLength: 0)
             }
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel(t(.aiToolHeader))
 
-            HStack(spacing: 8) {
-                activeWindowHeader
-
-                Spacer(minLength: 8)
-
-                ForEach(store.snapshot.periodFilters) { filter in
-                    periodPill(filter)
-                }
-
-                TokenMeteringDashboardCalendarControl(
-                    store: store,
-                    isPresented: $isCalendarPickerPresented,
-                    language: language,
-                    selectedControlAccent: selectedControlAccent
-                )
+            // The column narrows beside the rail, so the period row steps
+            // down: first the period totals go, then the "period" label.
+            ViewThatFits(in: .horizontal) {
+                periodRow(showsLabel: true, showsTotals: true)
+                periodRow(showsLabel: true, showsTotals: false)
+                periodRow(showsLabel: false, showsTotals: false)
             }
         }
-        .padding(.horizontal, 18)
         .padding(.vertical, 12)
     }
+
+    private static let allTabWidth: CGFloat = 138
+}
+
+/// One row of tool tabs: a tab tagged with `FixedToolTabWidth` keeps that
+/// width and every other tab gets an exactly equal share of the rest. An
+/// `HStack` cannot promise that — it hands extra room to whichever tab has
+/// the widest fixed-size content, so a tab with two limit gauges squeezed its
+/// neighbour's share badge. Every tab takes the row's tallest height.
+private struct EqualToolTabsLayout: Layout {
+    var spacing: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = proposal.width ?? subviews.reduce(0) { $0 + $1.sizeThatFits(.unspecified).width }
+        let widths = columnWidths(totalWidth: width, subviews: subviews)
+        let height = zip(subviews, widths)
+            .map { subview, width in subview.sizeThatFits(ProposedViewSize(width: width, height: nil)).height }
+            .max() ?? 0
+        return CGSize(width: width, height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var x = bounds.minX
+        for (subview, width) in zip(subviews, columnWidths(totalWidth: bounds.width, subviews: subviews)) {
+            subview.place(
+                at: CGPoint(x: x, y: bounds.minY),
+                anchor: .topLeading,
+                proposal: ProposedViewSize(width: width, height: bounds.height)
+            )
+            x += width + spacing
+        }
+    }
+
+    private func columnWidths(totalWidth: CGFloat, subviews: Subviews) -> [CGFloat] {
+        guard !subviews.isEmpty else { return [] }
+        let fixed = subviews.map { $0[FixedToolTabWidth.self] }
+        let flexibleCount = fixed.filter { $0 == nil }.count
+        let available = totalWidth - spacing * CGFloat(subviews.count - 1) - fixed.compactMap { $0 }.reduce(0, +)
+        let share = flexibleCount > 0 ? max(0, available / CGFloat(flexibleCount)) : 0
+        return fixed.map { $0 ?? share }
+    }
+}
+
+private struct FixedToolTabWidth: LayoutValueKey {
+    static let defaultValue: CGFloat? = nil
 }
 
 extension TokenMeteringDashboardFilterBar {
@@ -104,14 +139,35 @@ extension TokenMeteringDashboardFilterBar {
         }
     }
 
-    private var activeWindowHeader: some View {
+    private func periodRow(showsLabel: Bool, showsTotals: Bool) -> some View {
+        HStack(spacing: 8) {
+            activeWindowHeader(showsLabel: showsLabel)
+
+            Spacer(minLength: 8)
+
+            ForEach(store.snapshot.periodFilters) { filter in
+                periodPill(filter, showsTotal: showsTotals)
+            }
+
+            TokenMeteringDashboardCalendarControl(
+                store: store,
+                isPresented: $isCalendarPickerPresented,
+                language: language,
+                selectedControlAccent: selectedControlAccent
+            )
+        }
+    }
+
+    private func activeWindowHeader(showsLabel: Bool) -> some View {
         HStack(spacing: 6) {
             Image(systemName: "calendar")
                 .font(.system(size: 11, weight: .bold))
                 .foregroundStyle(.teal)
-            Text("\(t(.activeWindowLabel)): \(activeAccumulationWindowText)")
+            Text(showsLabel ? "\(t(.activeWindowLabel)): \(activeAccumulationWindowText)" : activeAccumulationWindowText)
                 .font(.system(size: 11, weight: .bold))
                 .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .fixedSize()
 
             if store.selectedCalendarDayID == nil {
                 HStack(spacing: 4) {
@@ -149,7 +205,7 @@ extension TokenMeteringDashboardFilterBar {
 }
 
 extension TokenMeteringDashboardFilterBar {
-    private func periodPill(_ filter: TokenUsageDashboardPeriodFilter) -> some View {
+    private func periodPill(_ filter: TokenUsageDashboardPeriodFilter, showsTotal: Bool) -> some View {
         let isHovered = hoveredPeriodID == filter.id
         let isSelected = store.selectedCalendarDayID == nil && store.selectedPeriod == filter.period
         return Button {
@@ -159,11 +215,16 @@ extension TokenMeteringDashboardFilterBar {
                 Text(filter.title)
                     .font(.system(size: 10, weight: .bold))
                     .lineLimit(1)
-                Text(filter.detail)
-                    .font(.system(size: 9, weight: .bold, design: .monospaced))
-                    .foregroundStyle(isSelected ? selectedControlAccent.opacity(0.82) : .secondary)
-                    .lineLimit(1)
+                // Period totals stay for at-a-glance comparison, but read as a
+                // caption so the period name remains the control's label.
+                if showsTotal {
+                    Text(filter.detail)
+                        .font(.system(size: 9, weight: .medium, design: .monospaced))
+                        .foregroundStyle(isSelected ? selectedControlAccent.opacity(0.7) : Color.secondary.opacity(0.75))
+                        .lineLimit(1)
+                }
             }
+            .fixedSize()
             .foregroundStyle(isSelected ? selectedControlAccent : .primary)
             .padding(.horizontal, 10)
             .frame(height: 30)
